@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.bootstrap import get_shipment_application_service_core
 from app.fastapi_routes.domains.shipment import shipment_agent_runtime as _shipment_agent_runtime
+from app.fastapi_routes.tools_execute import _capability_http_receipt
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
@@ -124,7 +125,7 @@ def shipment_generate_batch(request: Request, payload: dict[str, Any] = Body(def
         params={"shipments": shipments},
         route_path="/api/shipment/generate-batch",
     )
-    return JSONResponse(jsonable_encoder(result), status_code=200)
+    return JSONResponse(*_capability_http_receipt(jsonable_encoder(result)))
 
 
 @router.post("/api/shipment/generate")
@@ -152,7 +153,7 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
             },
             route_path="/api/shipment/generate",
         )
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
+        return JSONResponse(*_capability_http_receipt(result))
     except RECOVERABLE_ERRORS:
         logger.exception("shipment generate failed")
         return JSONResponse(
@@ -191,7 +192,7 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
             },
             route_path="/api/shipment/print",
         )
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
+        return JSONResponse(*_capability_http_receipt(result))
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS:
@@ -235,7 +236,7 @@ def shipment_orders_clear_shipment(
         params={"purchase_unit": purchase_unit},
         route_path="/api/shipment/orders/clear-shipment",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.get("/api/shipment/orders")
@@ -271,7 +272,7 @@ def shipment_orders_set_sequence(
         params={"sequence": sequence},
         route_path="/api/shipment/orders/set-sequence",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.post("/api/shipment/orders/reset-sequence")
@@ -282,7 +283,7 @@ def shipment_orders_reset_sequence(request: Request):
         params={},
         route_path="/api/shipment/orders/reset-sequence",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.delete("/api/shipment/orders/clear-all")
@@ -293,7 +294,7 @@ def shipment_orders_clear_all(request: Request):
         params={},
         route_path="/api/shipment/orders/clear-all",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.get("/api/shipment/orders/{order_number}")
@@ -384,7 +385,7 @@ def shipment_records_create(request: Request, payload: dict[str, Any] = Body(...
         },
         route_path="/api/shipment/shipment-records/record",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.patch("/api/shipment/shipment-records/record")
@@ -406,7 +407,7 @@ def shipment_records_patch(request: Request, payload: dict[str, Any] = Body(...)
         },
         route_path="/api/shipment/shipment-records/record",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 404)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.delete("/api/shipment/shipment-records/record")
@@ -420,7 +421,7 @@ def shipment_records_delete(request: Request, payload: dict[str, Any] = Body(...
         params={"id": int(record_id)},
         route_path="/api/shipment/shipment-records/record",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 404)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.get("/api/shipment/shipment-records/export")

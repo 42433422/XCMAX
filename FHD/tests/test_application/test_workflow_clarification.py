@@ -326,11 +326,22 @@ class TestErpClarification:
         items = detect_erp_clarification(plan, user_message="冲销这笔分录")
         assert any(i["reason"] == "reversal_confirm" for i in items)
 
-    def test_new_write_tools_in_fallback(self):
-        from app.application.workflow.clarification_node import _WRITE_REQUIRED_FALLBACK
-
-        assert ("sales", "quote") in _WRITE_REQUIRED_FALLBACK
-        assert ("finance", "journal_entry_create") in _WRITE_REQUIRED_FALLBACK
+    def test_write_tools_require_inputs_from_registered_contracts(self):
+        plan = PlanGraph(
+            plan_id="required-write-inputs",
+            intent="write",
+            nodes=[
+                WorkflowNode("quote", "sales", "quote", params={}),
+                WorkflowNode("journal", "finance", "journal_entry_create", params={}),
+            ],
+        )
+        assert {
+            (item["tool_id"], item["action"]): item["missing_fields"]
+            for item in needs_clarification(plan, {})
+        } == {
+            ("sales", "quote"): ["customer_name", "items"],
+            ("finance", "journal_entry_create"): ["lines"],
+        }
 
 
 _SHIPMENT_ITEM = {
@@ -421,7 +432,7 @@ def test_shipment_inputs_shared_by_clarification_and_execution(params, expected,
         assert run.status == "blocked" and all(key in run.error for key in expected)
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True}
-    with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+    with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
         result = _registered_router_shipment_records("create", params, {}, "admin", "")
     assert result["success"] is (not expected)
     assert svc.create_shipment.call_count == (0 if expected else 1)

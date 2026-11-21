@@ -7,12 +7,12 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
-from app.application.user_memory.policy import (
+from app.application.user_memory.protocols import MemoryOperation
+from app.domain.user_memory.policy import (
     is_recallable_memory,
     is_scoped_memory_owner,
     memory_statement,
 )
-from app.application.user_memory.protocols import MemoryOperation
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

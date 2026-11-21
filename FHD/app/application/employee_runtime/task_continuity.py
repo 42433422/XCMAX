@@ -7,7 +7,6 @@ Dialogue, model text, and compression summaries are not execution results.
 from __future__ import annotations
 
 import asyncio
-import fcntl
 import hashlib
 import json
 import os
@@ -20,6 +19,11 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
+
+# Windows workspace ledgers intentionally reject writes (ENOTSUP) before flock.
+# Keep the module importable for the cross-platform read/execute contracts.
+if os.name != "nt":
+    import fcntl
 
 from app.application.agent_orchestrator.context_window_manager import (
     ContextWindowManager,
@@ -625,6 +629,10 @@ class TaskContinuityRuntime:
             return child
         if not child["parent_task_id"]:
             return self._fail(child, "not_a_child", "只有子任务可以回传")
+        if bound_task_parent(self.state, child) is None:
+            return self._fail(
+                child, "parent_binding_changed", "原父任务归属或子任务清单已改变，未回传"
+            )
         self._execute_pending(child, actor, limit=None)
         step = child["steps"][0] if child["steps"] else None
         ok = step is not None and step["status"] == "success"
@@ -638,12 +646,16 @@ class TaskContinuityRuntime:
                 "" if ok else str((step or {}).get("error_message") or "子任务失败")
             )
         self._touch(child)
-        parent = self.state["tasks"].get(child["parent_task_id"])
+        parent = bound_task_parent(self.state, child)
         if parent is not None:
             self._aggregate_parent(parent)
             self._touch(parent)
         self._event("child_returned", child)
         self._write()
+        if parent is None:
+            return self._fail(
+                child, "parent_binding_changed", "原父任务归属或子任务清单已改变，未回传"
+            )
         business = child["status"] == _TERMINAL_OK
         return self._envelope(child, business=business)
 
@@ -987,6 +999,16 @@ class TaskContinuityRuntime:
                 delegated_tool=step["tool"],
                 delegated_action=step["action"],
                 delegated_params=params,
+                parent_run_id=(
+                    str(
+                        self.state["handoffs"][
+                            chain["completed"][chain["steps"][index - 1]["step_id"]]
+                        ]["result_payload"].get("child_run_id")
+                        or ""
+                    )
+                    if index
+                    else ""
+                ),
             )
             record["chain_step_id"] = step_id
             if not self._complete_chain_handoff(task, record):
@@ -1069,6 +1091,7 @@ class TaskContinuityRuntime:
         delegated_tool: str = "",
         delegated_action: str = "",
         delegated_params: dict[str, Any] | None = None,
+        parent_run_id: str = "",
     ) -> dict[str, Any]:
         target_card, identity_error = self._handoff_identity(target, task)
         source_card, source_error = self._handoff_identity(source, task)
@@ -1161,6 +1184,11 @@ class TaskContinuityRuntime:
                 task["task_id"],
                 runtime_context={
                     **self._trusted_context,
+                    **(
+                        {"run_id": parent_run_id, "agent_run_id": parent_run_id}
+                        if parent_run_id
+                        else {}
+                    ),
                     "tenant_id": task["tenant_id"],
                     "user_id": task["user_id"],
                     "employee_id": source,
@@ -1419,29 +1447,33 @@ class TaskContinuityRuntime:
         current[key] = value
 
     def _aggregate_parent(self, parent: dict[str, Any]) -> None:
-        children = [
-            self.state["tasks"][cid]
-            for cid in parent["child_task_ids"]
-            if cid in self.state["tasks"]
-        ]
+        children, unavailable = bound_task_children(self.state, parent)
         aggregate = {
             "success": sum(child["status"] == _TERMINAL_OK for child in children),
             "failure": sum(child["status"] == "failed" for child in children),
-            "incomplete": sum(
-                child["status"] not in {_TERMINAL_OK, "failed"} for child in children
-            ),
+            "incomplete": unavailable
+            + sum(child["status"] not in {_TERMINAL_OK, "failed"} for child in children),
         }
         parent["aggregate"] = aggregate
         if parent["status"] == "paused":
             return
         if parent["completion_condition"] != "all_children_success":
             return
-        if aggregate["failure"]:
+        if unavailable:
+            parent.update(
+                status="recovering",
+                error_code="child_result_unavailable",
+                error_message="原子任务清单缺失或归属不一致，须核对原记录；未确认父任务完成",
+                result_payload={},
+            )
+        elif aggregate["failure"]:
             parent["status"] = "failed"
             parent["error_code"] = "child_failed"
             parent["error_message"] = "子任务失败，父任务不能记为成功"
+            parent["result_payload"] = {}
         elif aggregate["incomplete"] or aggregate["success"] != len(children):
             parent["status"] = "running"
+            parent["result_payload"] = {}
         elif children:
             parent["status"] = _TERMINAL_OK
             parent["error_code"] = ""
@@ -1871,6 +1903,48 @@ class TaskContinuityRuntime:
         state = _empty_state()
         state.update(loaded if isinstance(loaded, dict) else {})
         self.state = state
+
+
+def bound_task_parent(state: dict[str, Any], child: dict[str, Any]) -> dict[str, Any] | None:
+    parent = state["tasks"].get(child.get("parent_task_id"))
+    if (
+        not isinstance(parent, dict)
+        or parent.get("task_id") != child.get("parent_task_id")
+        or child.get("task_id") not in (parent.get("child_task_ids") or [])
+        or any(
+            parent.get(key) != child.get(key) for key in ("user_id", "tenant_id", "root_task_id")
+        )
+    ):
+        return None
+    return parent
+
+
+def bound_task_children(
+    state: dict[str, Any], parent: dict[str, Any]
+) -> tuple[list[dict[str, Any]], int]:
+    """Read the complete required child set; a missing/foreign row is never omitted."""
+    ids = parent.get("child_task_ids")
+    if not isinstance(ids, list):
+        return [], 1
+    children = []
+    seen: set[str] = set()
+    unavailable = 0
+    for child_id in ids:
+        if not isinstance(child_id, str) or not child_id or child_id in seen:
+            unavailable += 1
+            continue
+        seen.add(child_id)
+        child = state["tasks"].get(child_id)
+        if not isinstance(child, dict) or (
+            child.get("task_id") != child_id
+            or child.get("parent_task_id") != parent.get("task_id")
+            or child.get("root_task_id") != parent.get("root_task_id")
+            or any(child.get(key) != parent.get(key) for key in ("user_id", "tenant_id"))
+        ):
+            unavailable += 1
+        else:
+            children.append(child)
+    return children, unavailable
 
 
 def _step_from(task_id: str, raw: dict[str, Any], index: int) -> dict[str, Any]:

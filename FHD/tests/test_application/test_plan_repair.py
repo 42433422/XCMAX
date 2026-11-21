@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import copy
 import json
+from dataclasses import asdict
 from unittest.mock import Mock
 
 import pytest
 
 from app.application.workflow.llm_plan_generation import (
     _decode_completion,
-    _load_model_json,
+    _load_complete_json_object,
     build_plan_from_payload,
 )
 from app.application.workflow.plan_repair import (
@@ -20,6 +21,7 @@ from app.application.workflow.plan_repair import (
 )
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.infrastructure.llm.response_completion import load_model_json
 from tests.fixtures.planner_model import goal_review_response
 
 
@@ -253,8 +255,49 @@ def test_enforce_scope_allows_fixing_mentioned_node() -> None:
 
 
 def test_model_json_falls_back_to_repair() -> None:
-    parsed = _load_model_json('{"mode":"workflow","nodes":[{"node_id":"n1",}]}')
+    parsed = load_model_json('{"mode":"workflow","nodes":[{"node_id":"n1",}]}')
     assert parsed["nodes"][0]["node_id"] == "n1"
+
+
+@pytest.mark.parametrize("wrapper", ["{}", "```json\n{}\n```", "结果如下：\n{}\n以上是计划。"])
+def test_model_json_extracts_one_complete_object_without_changing_values(wrapper) -> None:
+    payload = {"mode": "workflow", "nodes": [{"params": {"formula": '=COUNTIFS(A:A,"}]}")'}}]}
+    assert _load_complete_json_object(wrapper.format(json.dumps(payload))) == payload
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"mode":"workflow","nodes":[{"node_id":"n1",}]}',
+        '{"mode":"workflow","nodes":[{"tool_id":"products","action":"delete"}',
+        '{"mode":"workflow","mode":"reply"}',
+        '{"params":{"count":1,"count":2}}',
+        '{"a": NaN}',
+        '{"a": 1e999}',
+        "{} {}",
+        "{} [1]",
+        "[{}]",
+        '"{\\"a\\": 1}"',
+        '{"a":"bare\x01control"}',
+    ],
+)
+def test_model_json_never_repairs_truncation_ambiguity_or_business_values(raw):
+    assert _load_complete_json_object(raw) is None
+
+
+def test_schema_error_diagnostics_do_not_persist_rejected_model_values():
+    from app.application.workflow.llm_plan_generation import model_plan_schema_error
+
+    reason = model_plan_schema_error(
+        {
+            "mode": "workflow",
+            "nodes": [
+                {"tool_id": "products", "action": "query", "params": "private customer data"}
+            ],
+        }
+    )
+    assert reason and "nodes.0.params" in reason
+    assert "private customer data" not in reason
 
 
 def test_planner_records_repair_trace(monkeypatch) -> None:
@@ -376,6 +419,98 @@ def test_repair_preserves_provider_failure_reason():
     assert diagnostic["error_type"] == "MarketModelError"
     assert diagnostic["error_length"] == len(diagnostic["message"])
     assert len(diagnostic["error_sha256"]) == 64
+
+
+@pytest.mark.parametrize("failure", ["transport", "budget", "rate", "context", "authorization"])
+def test_repair_request_failures_keep_typed_roots_without_another_format_attempt(failure):
+    import httpx
+
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded
+    from app.domain.model_admission_errors import ModelRateLimitError
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    errors = {
+        "transport": (httpx.ReadTimeout("private upstream URL"), "model_unavailable"),
+        "budget": (PlanningBudgetExceeded("limit"), "planning_budget_exhausted"),
+        "rate": (ModelRateLimitError(10), "model_unavailable"),
+        "context": (ContextWindowExceeded("private input"), "planner_error"),
+        "authorization": (MarketModelError({"status": 403}), "model_unavailable"),
+    }
+    error, kind = errors[failure]
+    complete = Mock(side_effect=error)
+    context = {}
+    fixed, trace = repair_plan(
+        planned=_plan(_node("n1")),
+        plan_id="p1",
+        message="查门",
+        context=context,
+        tool_registry={},
+        validate=lambda _: "节点 n1 缺少参数",
+        complete=complete,
+    )
+    assert fixed is None and trace["failure_kind"] == kind
+    assert trace["attempts"] == complete.call_count == 1
+    assert "private" not in json.dumps(trace)
+    if failure == "authorization":
+        assert trace["status_code"] == 403
+    if failure == "rate":
+        assert context["_planning_failure_code"] == "model_rate_limited"
+
+
+@pytest.mark.parametrize("stage", ["generation", "repair", "shape", "clarification"])
+def test_deleted_conversation_never_retries_or_degrades_to_a_format_error(stage):
+    from app.application.workflow.llm_plan_generation import LlmPlanGeneration
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+    complete = Mock(side_effect=ConversationRevisionError("conversation was deleted"))
+    generator = LlmPlanGeneration(Mock(get_context=Mock(return_value=None)), complete, Mock())
+    with pytest.raises(ConversationRevisionError):
+        if stage == "generation":
+            generator.generate("p1", "u1", "查询产品", {}, {})
+        elif stage == "repair":
+            repair_plan(
+                planned=_plan(_node("n1")),
+                plan_id="p1",
+                message="查门",
+                context={},
+                tool_registry={},
+                validate=lambda _: "节点 n1 缺少参数",
+                complete=complete,
+            )
+        elif stage == "shape":
+            generator._repair_output_shape(
+                plan_id="p1",
+                message="查门",
+                context={},
+                raw_content="invalid",
+                error="invalid",
+            )
+        else:
+            generator.extract_clarification_parameters(
+                user_id="u1",
+                original_message="查产品",
+                answer="门",
+                tool_id="products",
+                action="query",
+                current_params={},
+                allowed_fields={"keyword"},
+                context={},
+            )
+    assert complete.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_deleted_conversation_aborts_reply_stream_instead_of_returning_partial_success():
+    from app.application.workflow.llm_plan_generation import _consume_reply_stream
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+    async def stream():
+        yield '{"mode":"reply","reply":"未完成'
+        raise ConversationRevisionError("conversation was deleted")
+
+    with pytest.raises(ConversationRevisionError):
+        await _consume_reply_stream(stream(), Mock())
 
 
 @pytest.mark.parametrize("requested, expected", [(999, 3), (0, 0), (-1, 0)])
@@ -542,6 +677,138 @@ def test_planner_repair_failure_is_not_mislabeled_model_unavailable(monkeypatch)
     assert trace["errors"][-1]["code"] == "unparsable_repair"
 
 
+@pytest.mark.parametrize("fake_action", ["sheet_add_column.add_column", "COUNTIFS.统计数量"])
+def test_excel_phantom_action_recovers_after_malformed_repair_using_real_registry(fake_action):
+    from app.application.workflow.planning_graph_policy import validate_required_params
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry()
+    original = _plan(
+        _node("read", tool_id="excel_analysis", action="read", params={"file_path": "report.xlsx"}),
+        _node(
+            "count",
+            tool_id="excel_analysis",
+            action=fake_action,
+            params={"file_path": "report.xlsx"},
+        ),
+    )
+    original.nodes[1].depends_on = ["read"]
+    candidate = copy.deepcopy(original)
+    candidate.nodes[1].action = "statistics"
+    responses = Mock(
+        side_effect=[
+            {"choices": [{"message": {"content": '{"mode":"workflow","nodes":['}}]},
+            _completion({"mode": "workflow", "nodes": [asdict(node) for node in candidate.nodes]}),
+        ]
+    )
+    fixed, trace = repair_plan(
+        planned=original,
+        plan_id="p1",
+        message="读取报表并统计数量",
+        context={},
+        tool_registry=registry,
+        validate=lambda plan: validate_required_params(plan, registry),
+        complete=responses,
+    )
+    assert fixed is not None and trace["fixed"] and trace["attempts"] == 2
+    assert fixed.nodes[1].action == "statistics" and fixed.nodes[1].depends_on == ["read"]
+    assert asdict(fixed.nodes[0]) == asdict(original.nodes[0])
+    assert original.nodes[1].action == fake_action
+    first, second = [call.kwargs for call in responses.call_args_list]
+    assert first["response_format"] == second["response_format"] == {"type": "json_object"}
+    assert "max_tokens" not in first  # Routed model capacity owns the output cap.
+    prompt = json.loads(second["messages"][1]["content"])
+    assert prompt["previous_response_error"]["reason"] == "invalid_json"
+    assert prompt["original_plan"]["nodes"][1]["action"] == fake_action
+    assert prompt["error"]["code"] == "unauthorized_action"
+
+
+def test_malformed_repair_exhaustion_does_not_authorize_the_phantom_action():
+    from app.application.workflow.planning_graph_policy import validate_required_params
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry()
+    original = _plan(_node("n1", tool_id="sheet_add_column", action="add_column"))
+    complete = Mock(return_value={"choices": [{"message": {"content": "invalid"}}]})
+    fixed, trace = repair_plan(
+        planned=original,
+        plan_id="p1",
+        message="Excel 新增列",
+        context={},
+        tool_registry=registry,
+        validate=lambda plan: validate_required_params(plan, registry),
+        complete=complete,
+        max_attempts=2,
+    )
+    assert fixed is None and not trace["fixed"]
+    assert trace["attempts"] == complete.call_count == 2
+    assert validate_required_params(original, registry)
+    prompt = json.loads(complete.call_args.kwargs["messages"][1]["content"])
+    advertised = {spec["tool_id"] for spec in prompt["tool_registry"]}
+    assert "sheet_add_column" not in advertised and "excel_analysis" in advertised
+
+
+def test_format_retry_does_not_expand_scope_to_valid_nodes():
+    original = _plan(_node("n1"), _node("n2", params={"keyword": "A1"}))
+    nodes = [asdict(node) for node in original.nodes]
+    nodes[0]["params"] = {"keyword": "B2"}
+    nodes[1]["params"] = {"keyword": "unauthorized change"}
+    complete = Mock(
+        side_effect=[
+            {"choices": [{"message": {"content": "invalid"}}]},
+            _completion({"mode": "workflow", "nodes": nodes}),
+        ]
+    )
+    fixed, trace = repair_plan(
+        planned=original,
+        plan_id="p1",
+        message="查产品",
+        context={},
+        tool_registry={},
+        validate=lambda _: "节点 n1 缺少 required_params: keyword",
+        complete=complete,
+    )
+    assert fixed is None and trace["attempts"] == 2
+    assert trace["errors"][-1]["code"] == "scope_violation"
+    assert original.nodes[1].params == {"keyword": "A1"}
+
+
+def test_shape_repair_retries_invalid_json_with_authorized_catalog(monkeypatch):
+    from app.application.workflow.llm_plan_generation import LlmPlanGeneration
+
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "0")
+    registry = {"excel_analysis": {"actions": {"statistics": {}}}}
+    complete = Mock(
+        side_effect=[
+            _completion({"mode": "workflow"}),
+            {"choices": [{"message": {"content": '{"mode":'}}]},
+            _completion(
+                {
+                    "mode": "workflow",
+                    "nodes": [
+                        {
+                            "node_id": "n1",
+                            "tool_id": "excel_analysis",
+                            "action": "statistics",
+                            "params": {"file_path": "report.xlsx"},
+                        }
+                    ],
+                }
+            ),
+        ]
+    )
+    context = {}
+    generator = LlmPlanGeneration(Mock(get_context=Mock(return_value=None)), complete, Mock())
+    result = generator.generate("p1", "u1", "Excel 统计", registry, context)
+    assert result is not None and result.nodes[0].action == "statistics"
+    assert complete.call_count == 3
+    trace = context["plan_shape_repair_trace"]
+    assert trace["fixed"] and trace["attempts"] == 2
+    prompt = json.loads(complete.call_args.kwargs["messages"][1]["content"])
+    assert [spec["tool_id"] for spec in prompt["tool_registry"]] == ["excel_analysis"]
+    assert prompt["previous_response_error"]["reason"] == "invalid_json"
+
+
 def test_failed_repair_trace_redacts_validator_and_provider_secrets(caplog):
     secret = "sk-private-repair-credential"
     email = "private.person@example.com"
@@ -600,7 +867,21 @@ def test_planner_discards_prior_turn_failure_diagnostics(monkeypatch):
     }
 
     def generate(plan_id, user_id, message, registry, current):
-        assert current == {"session_id": "s1"}
+        assert {
+            key: value
+            for key, value in current.items()
+            if key not in {"_planner_model_budget", "planning_diagnostics"}
+        } == {"session_id": "s1"}
+        assert current["session_id"] == "s1"
+        assert not any(
+            key in current
+            for key in (
+                "planning_failure_reason",
+                "planning_failure_kind",
+                "plan_repair_trace",
+                "goal_coverage_rejected",
+            )
+        )
         current["planning_failure_kind"] = "plan_format_invalid"
         return None
 
@@ -613,11 +894,29 @@ def test_planner_discards_prior_turn_failure_diagnostics(monkeypatch):
     assert context["planning_failure_reason"] == "old failure"
 
 
-def test_replanning_repair_balance_failure_keeps_recharge_response(monkeypatch):
+@pytest.mark.parametrize("failure_kind", ["balance", "context", "revision"])
+def test_replanning_repair_preserves_typed_failure(monkeypatch, failure_kind):
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
     from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
     from app.application.facades.tools_facade import get_workflow_tool_registry
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
     from app.infrastructure.modstore_transport import MarketModelError
 
+    failure, code, status, public_message = {
+        "balance": (MarketModelError({"status": 402}), "model_balance_insufficient", 402, "充值"),
+        "context": (
+            ContextWindowExceeded("系统指令和工具定义超过模型的上下文预算。"),
+            "context_window_exceeded",
+            413,
+            "上下文预算",
+        ),
+        "revision": (
+            ConversationRevisionError("private-revision-detail"),
+            "conversation_changed",
+            409,
+            "会话已更新或删除",
+        ),
+    }[failure_kind]
     message = "查询产品 A1"
     node = {
         "node_id": "n1",
@@ -642,7 +941,7 @@ def test_replanning_repair_balance_failure_keeps_recharge_response(monkeypatch):
                 }
             ),
             _completion({"nodes": [{**node, "action": "query.invalid"}]}),
-            MarketModelError({"status": 402}),
+            failure,
         ]
     )
     planner = LLMWorkflowPlanner(
@@ -661,9 +960,13 @@ def test_replanning_repair_balance_failure_keeps_recharge_response(monkeypatch):
     assert "coverage_feedback" in json.loads(
         completion.call_args_list[2].kwargs["messages"][1]["content"]
     )
-    assert result["data"]["planning_failure_kind"] == "model_unavailable"
-    assert result["data"]["error_code"] == "workflow_plan_unavailable"
-    assert "余额不足" in result["response"] and "充值" in result["response"]
+    assert result["data"]["planning_failure_kind"] == code
+    assert result["data"]["error_code"] == code
+    assert result["data"]["planning_failure_status"] == status
+    assert result["data"]["planning_failure_retryable"] is False
+    assert result["data"]["planning_failure_stage"] == "repair"
+    assert public_message in result["response"]
+    assert "private-revision-detail" not in json.dumps(result, ensure_ascii=False)
     assert result["data"]["execution_started"] is False
     risk_gate.evaluate.assert_not_called()
     assert approval.method_calls == []

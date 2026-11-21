@@ -73,8 +73,15 @@ def pending_approval():
         ("employee_tool_allowlist", ["customers"]),
         ("employee_tool_allowlist", []),
         ("mutation_policy", "allow_once"),
+        ("service_source", "fastapi_product_compat_route"),
+        ("template_base_dir", "/different/template-root"),
+        ("route_module", "different.implementation"),
         ("_bulk_preview_scope", {"tool": "customers", "digest": "replacement"}),
         ("_bulk_preview_scopes", {"customers": "replacement"}),
+        (
+            "_credential_authorization",
+            {"kind": "aiopen", "credential_id": "replacement", "scopes": ["*"]},
+        ),
     ],
 )
 def test_scope_change_requires_new_approval(pending_approval, field, value):
@@ -83,6 +90,23 @@ def test_scope_change_requires_new_approval(pending_approval, field, value):
 
     with pytest.raises(ApprovalGrantError):
         validate_approval_grant(token, run=run, principal_id="7")
+
+
+@pytest.mark.parametrize("field", ["service_source", "template_base_dir", "route_module"])
+def test_resume_cannot_select_another_service_or_template_store(pending_approval, field):
+    from app.application.agent_orchestrator.runtime_context import (
+        RuntimeContextOwnershipError,
+        merge_runtime_context,
+    )
+    from app.application.agent_orchestrator.tool_permission import overlay_resume_context
+
+    run, _ = pending_approval
+    stored = run.metadata["runtime_context"]
+    assert field not in overlay_resume_context(stored, {field: "caller-selected"})
+    with pytest.raises(RuntimeContextOwnershipError):
+        merge_runtime_context(run, {field: "caller-selected"})
+    stored[field] = "server-selected"
+    assert overlay_resume_context(stored, {field: "caller-selected"})[field] == "server-selected"
 
 
 @pytest.mark.parametrize(
@@ -278,8 +302,9 @@ def test_queued_approval_and_retry_do_not_execute_after_scope_drift(monkeypatch,
             [step.output for step in finished.steps],
         )
         assert finished.steps[0].output["success"] is True
+        assert finished.metadata["verification"]["accepted"] is False
         assert (
-            finished.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
+            finished.metadata["verification"]["steps"][0]["code"] == "result_verifier_unavailable"
         )
     else:
         assert finished.status == "waiting_user", (
@@ -391,7 +416,7 @@ def test_trusted_mutation_policy_and_preview_reach_the_real_executor(
     from app.application.agent_orchestrator.tool_permission import merge_turn_context
     from app.application.chat_turn_guard import scope_snapshot
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.db.models import Product
+    from app.db.models.purchase_unit import PurchaseUnit
     from app.fastapi_routes.domains.agent.route_support import without_runtime_identity
     from app.infrastructure.tenant_scope import tenant_scope
 
@@ -399,11 +424,11 @@ def test_trusted_mutation_policy_and_preview_reach_the_real_executor(
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     actor = trusted_actor(role="admin")
     with actor.factory.begin() as db:
-        db.add(Product(id=1, name="approved preview", tenant_id=actor.tenant_id))
+        db.add(PurchaseUnit(id=1, unit_name="approved preview", tenant_id=actor.tenant_id))
     context = {**actor.context, "mutation_policy": policy}
     with tenant_scope(actor.tenant_id):
-        context["_bulk_preview_scopes"] = {"products": scope_snapshot(context)[3]}
-    forged = {"mutation_policy": "allow", "_bulk_preview_scopes": {"products": "forged"}}
+        context["_bulk_preview_scopes"] = {"customers": scope_snapshot(context)[2]}
+    forged = {"mutation_policy": "allow", "_bulk_preview_scopes": {"customers": "forged"}}
     assert without_runtime_identity(forged) == {}
     assert merge_turn_context(context, forged)["mutation_policy"] == policy
     repo = InMemoryAgentRunRepository()
@@ -413,7 +438,7 @@ def test_trusted_mutation_policy_and_preview_reach_the_real_executor(
     orchestrator = AgentOrchestrator(repository=repo)
     run = orchestrator.start_run_from_plan(
         user_id=str(actor.user_id),
-        message="delete approved product",
+        message="delete approved customer",
         runtime_context=context,
         plan=PlanGraph(
             "approved-delete",
@@ -421,7 +446,7 @@ def test_trusted_mutation_policy_and_preview_reach_the_real_executor(
             nodes=[
                 WorkflowNode(
                     "delete",
-                    "products",
+                    "customers",
                     "batch_delete",
                     {"ids": [1]},
                 )
@@ -434,7 +459,7 @@ def test_trusted_mutation_policy_and_preview_reach_the_real_executor(
         exists = (
             db.connection()
             .exec_driver_sql(
-                "select id from products where id = 1 and tenant_id = ?", (actor.tenant_id,)
+                "select id from purchase_units where id = 1 and tenant_id = ?", (actor.tenant_id,)
             )
             .first()
             is not None
@@ -445,6 +470,7 @@ def test_trusted_mutation_policy_and_preview_reach_the_real_executor(
         assert (
             finished.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
         )
+        assert finished.metadata["verification"]["accepted"] is False
         assert exists is False
     else:
         assert finished.steps[0].output["error_code"] == "mutation_blocked"

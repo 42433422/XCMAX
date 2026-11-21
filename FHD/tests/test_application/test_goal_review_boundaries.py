@@ -98,6 +98,7 @@ def test_batch_execute_binds_verified_selection_before_goal_review(shape):
             if admitted
             else _response({"unknown": True}),
         ]
+        + ([] if admitted else [_response({"unknown": True})])
     )
     plan = _planner(completion).plan("owner", "导入", get_workflow_tool_registry(), context)
     if admitted:
@@ -109,6 +110,28 @@ def test_batch_execute_binds_verified_selection_before_goal_review(shape):
     else:
         assert plan.metadata["planning_rejected"] is True
         assert plan.metadata["planning_failure_kind"] == "plan_repair_failed"
+        assert completion.call_count == 3
+        assert plan.metadata["plan_repair"]["attempts"] == 2
+        repairs = [
+            json.loads(call.kwargs["messages"][-1]["content"])
+            for call in completion.call_args_list[1:]
+        ]
+        assert all(request["task"] != "audit_goal_coverage" for request in repairs)
+        assert all(
+            [node["params"] for node in request["original_plan"]["nodes"]]
+            == [node["params"] for node in nodes]
+            for request in repairs
+        )
+        assert not plan.nodes  # A rejected graph cannot create a fresh clarification wait.
+        callbacks, risk = Mock(), Mock()
+        callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+        result = PlannedWorkflowDispatch(
+            {}, callbacks, Mock(plan=Mock(return_value=plan)), risk, Mock()
+        ).handle("owner", "导入", "chat", context, "导入")
+        assert result["success"] is False
+        assert result["execution"]["outcome"] == "not_executed"
+        risk.evaluate.assert_not_called()
+        callbacks._capture_agent_run_interaction.assert_not_called()
 
 
 @pytest.mark.parametrize("params", [{}, {"answer_key": "confirmed", "target_node_id": ""}])
@@ -125,14 +148,34 @@ def test_only_a_standalone_model_question_can_skip_goal_review(with_business_nod
     ]
     if with_business_node:
         nodes.append({"node_id": "write", "tool_id": "products", "action": "clear", "params": {}})
-    completion = Mock(side_effect=[_response({"mode": "workflow", "nodes": nodes}), None])
+    completion = Mock(side_effect=[_response({"mode": "workflow", "nodes": nodes}), None, None])
     plan = _planner(completion).plan("owner", "清空数据库", get_workflow_tool_registry())
     if with_business_node:
         assert plan.metadata["planning_rejected"] is True
-        assert completion.call_count == 2
-        assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
-            "audit_goal_coverage"
+        assert plan.metadata["planning_failure_kind"] == "goal_review_unavailable"
+        assert not plan.metadata.get("goal_coverage_rejected")
+        assert completion.call_count == 3
+        assert plan.metadata["goal_coverage_trace"]["attempts"] == 2
+        reviews = [
+            json.loads(call.kwargs["messages"][-1]["content"])
+            for call in completion.call_args_list[1:]
+        ]
+        assert all(request["task"] == "audit_goal_coverage" for request in reviews)
+        assert all(
+            [(node["tool_id"], node["action"]) for node in request["plan"]["nodes"]]
+            == [("clarify", "ask"), ("products", "clear")]
+            for request in reviews
         )
+        assert not plan.nodes  # A rejected graph cannot create a fresh clarification wait.
+        callbacks, risk = Mock(), Mock()
+        callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+        result = PlannedWorkflowDispatch(
+            {}, callbacks, Mock(plan=Mock(return_value=plan)), risk, Mock()
+        ).handle("owner", "清空数据库", "chat", {}, "清空数据库")
+        assert result["success"] is False
+        assert result["execution"]["outcome"] == "not_executed"
+        risk.evaluate.assert_not_called()
+        callbacks._capture_agent_run_interaction.assert_not_called()
     else:
         assert completion.call_count == 1
         assert plan.metadata["planning_clarification"] is True
@@ -152,11 +195,11 @@ def test_short_scope_answer_supplies_authorized_history_to_independent_review():
         request = json.loads(kwargs["messages"][-1]["content"])
         calls.append(request)
         assert request["user_message"] == "全部的"
-        if request["task"] == "audit_goal_coverage":
-            assert request["context"]["prior_conversation"] == history
-            return goal_review_response(
-                request, source="全部的", node_ids=["model_reply"], outcome="unsupported"
-            )
+        if request["task"] == "audit_reply":
+            assert request["conversation_history"] == history
+            assert "prior_conversation" not in request["context"]
+            assert request["reply"] == reply
+            return _response({"violations": []})
         assert request["recent_messages"] == history
         assert "prior_conversation" not in request["context"]
         assert any("整库重置" in rule for rule in request["rules"])
@@ -176,7 +219,8 @@ def test_short_scope_answer_supplies_authorized_history_to_independent_review():
     )
     assert len(calls) == 2
     assert plan.metadata["reply"] == reply
-    assert plan.metadata["goal_coverage"]["goals"][0]["outcome"] == "unsupported"
+    assert plan.metadata["goal_coverage"]["goals"][0]["outcome"] == "reply"
+    assert [(node.tool_id, node.action) for node in plan.nodes] == [("conversation", "reply")]
 
 
 def test_rejected_business_plan_preserves_a_durable_question_without_business_nodes():
@@ -200,6 +244,26 @@ def test_rejected_business_plan_preserves_a_durable_question_without_business_no
     assert plan.metadata["planning_clarification"] is True
     assert [(node.tool_id, node.action) for node in plan.nodes] == [("clarify", "ask")]
     assert plan.nodes[0].params["question"] == question
+
+
+@pytest.mark.parametrize("violations", [[], ["缺少查询对象"]])
+def test_reply_review_question_enters_durable_clarification_even_without_violations(violations):
+    question = "请提供要查询的客户名称。"
+    completion = Mock(
+        side_effect=[
+            _response({"mode": "reply", "reply": question}),
+            _response({"violations": violations, "clarification_question": question}),
+        ]
+    )
+    plan = _planner(completion).plan("owner", "查询客户资料", get_workflow_tool_registry())
+    assert completion.call_count == 2
+    assert plan.metadata["planning_clarification"] is True
+    assert not plan.metadata.get("planning_rejected")
+    assert [(node.tool_id, node.action) for node in plan.nodes] == [("clarify", "ask")]
+    assert plan.nodes[0].params["question"] == question
+    assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
+        "audit_reply"
+    )
 
 
 @pytest.mark.parametrize("clarification_question", [None, "   "])

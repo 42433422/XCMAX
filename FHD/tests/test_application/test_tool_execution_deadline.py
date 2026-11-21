@@ -9,6 +9,15 @@ from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
 
 
+@pytest.fixture(autouse=True)
+def isolated_circuit_state(monkeypatch):
+    from collections import OrderedDict
+
+    from app.utils.resilience import rate_limiter
+
+    monkeypatch.setattr(rate_limiter, "_tool_breakers", OrderedDict())
+
+
 def _step():
     return AgentStep(node_id="read", tool_id="business_db", action="read")
 
@@ -116,6 +125,50 @@ def test_reconciliation_receipt_keeps_top_level_delivery_only_when_returned_with
         assert result["io_reconciliation"] == (
             [{"kind": "http_timeout", "method": "POST"}] if condition == "unknown_io" else []
         )
+
+
+@pytest.mark.parametrize(
+    "pending",
+    [
+        {"execution_state": "queued"},
+        {"execution_accepted": True},
+        {"result": {"status": "blocked"}},
+    ],
+)
+@pytest.mark.parametrize("uncertainty", ["none", "receipt", "truthy_receipt", "io"])
+def test_timely_pending_receipt_keeps_state_without_hiding_unknown_effect(
+    monkeypatch, pending, uncertainty
+):
+    from app.application.tool_execution_deadline import _DEADLINE
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    raw = {"success": True, "agent_run_id": "original-child", **pending}
+    if uncertainty in {"receipt", "truthy_receipt"}:
+        raw["output"] = {"requires_reconciliation": True if uncertainty == "receipt" else "yes"}
+    calls = []
+
+    def execute(*_args, **_kwargs):
+        calls.append(True)
+        if uncertainty == "io":
+            _DEADLINE.get().uncertain.append({"kind": "http_timeout", "method": "POST"})
+        return raw
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=30,
+    )
+    assert result["success"] is False and result["retryable"] is False
+    evidence = result["reconciliation_evidence"] if uncertainty == "io" else result
+    assert evidence["agent_run_id"] == "original-child" and calls == [True]
+    if uncertainty == "none":
+        assert execution_result_pending_state(result) == execution_result_pending_state(raw)
+        assert not result.get("reconciliation_required") and result.get("outcome") != "unknown"
+    else:
+        assert result["outcome"] == "unknown" and result["reconciliation_required"] is True
+    assert raw["success"] is True
 
 
 @pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
@@ -395,6 +448,11 @@ def test_remote_write_failure_cannot_be_hidden_by_employee_success(monkeypatch, 
         return httpx.Response(failure, json={"message": "result unavailable"})
 
     monkeypatch.setattr(httpx.AsyncClient, "request", request)
+    # Keep this stubbed transport independent of the host's proxy environment.
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kwargs: client_type(trust_env=False, **kwargs)
+    )
 
     def execute(*args, **kwargs):
         _, post = build_http_helpers()
@@ -410,8 +468,9 @@ def test_remote_write_failure_cannot_be_hidden_by_employee_success(monkeypatch, 
         runtime_context={},
         timeout_seconds=30,
     )
-    assert calls == ["POST"]
+    assert calls == ["POST"], result
     assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert result["error_code"] == "tool_result_unknown"
     assert result["reconciliation_evidence"]["success"] is True
     assert result["io_reconciliation"] == [
         {
@@ -513,47 +572,3 @@ def test_on_time_receipt_cannot_hide_unknown_effect(monkeypatch, marker):
         assert result["error_code"] == marker["error_code"]
         assert result["message"] == marker["message"]
     assert raw["success"] is True  # A projection must not rewrite the original evidence.
-
-
-@pytest.mark.parametrize(
-    "pending",
-    [
-        {"execution_state": "queued"},
-        {"execution_accepted": True},
-        {"result": {"status": "blocked"}},
-    ],
-)
-@pytest.mark.parametrize("uncertainty", ["none", "receipt", "truthy_receipt", "io"])
-def test_timely_pending_receipt_keeps_state_without_hiding_unknown_effect(
-    monkeypatch, pending, uncertainty
-):
-    from app.application.tool_execution_deadline import _DEADLINE
-    from app.domain.task_lifecycle.results import execution_result_pending_state
-
-    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
-    raw = {"success": True, "agent_run_id": "original-child", **pending}
-    if uncertainty in {"receipt", "truthy_receipt"}:
-        raw["output"] = {"requires_reconciliation": True if uncertainty == "receipt" else "yes"}
-    calls = []
-
-    def execute(*_args, **_kwargs):
-        calls.append(True)
-        if uncertainty == "io":
-            _DEADLINE.get().uncertain.append({"kind": "http_timeout", "method": "POST"})
-        return raw
-
-    result = execute_with_tool_deadline(
-        SimpleNamespace(execute=execute),
-        _step(),
-        runtime_context={},
-        timeout_seconds=30,
-    )
-    assert result["success"] is False and result["retryable"] is False
-    evidence = result["reconciliation_evidence"] if uncertainty == "io" else result
-    assert evidence["agent_run_id"] == "original-child" and calls == [True]
-    if uncertainty == "none":
-        assert execution_result_pending_state(result) == execution_result_pending_state(raw)
-        assert not result.get("reconciliation_required") and result.get("outcome") != "unknown"
-    else:
-        assert result["outcome"] == "unknown" and result["reconciliation_required"] is True
-    assert raw["success"] is True

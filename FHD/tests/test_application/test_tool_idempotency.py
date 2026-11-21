@@ -245,7 +245,7 @@ def test_fresh_process_retains_a_crashed_workers_committed_effect(claims):
         {"status": "accepted"},
     ],
 )
-def test_unknown_receipt_is_retained_across_restart(claims, output):
+def test_unsettled_receipt_is_retained_across_restart(claims, output):
     key, replay = _begin()
     assert replay is None
     permissions.finish_idempotent_replay(key, output)
@@ -253,8 +253,12 @@ def test_unknown_receipt_is_retained_across_restart(claims, output):
     assert permissions.recover_idempotent_claims()["retained_unknown"] == 1
     _key, replay = _begin()
     assert replay["success"] is False
-    assert replay["outcome"] == "unknown" and replay["retryable"] is False
-    assert replay["reconciliation_required"] is True
+    assert replay["retryable"] is False
+    if output.get("status") == "accepted":
+        assert replay == {**output, "success": False, "retryable": False}
+    else:
+        assert replay["outcome"] == "unknown"
+        assert replay["reconciliation_required"] is True
     _key, conflict = permissions.begin_idempotent_replay(
         CONTEXT, "products", "create", {**PARAMS, "name": "changed"}
     )

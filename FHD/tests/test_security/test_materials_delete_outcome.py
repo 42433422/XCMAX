@@ -114,7 +114,7 @@ def test_confirmed_partial_delete_count_and_receipt_are_not_replaced(monkeypatch
                 "agent_status": "waiting_approval",
                 "run_id": "pending-run",
             },
-            200,
+            202,
         ),
     ],
 )
@@ -125,7 +125,7 @@ def test_material_batch_delete_http_preserves_execution_receipt(monkeypatch, rec
 
     def run(**kwargs):
         calls.append(kwargs)
-        return dict(receipt)
+        return dict(receipt), status
 
     monkeypatch.setattr(materials, "_run_materials_agent", run)
     app = FastAPI()

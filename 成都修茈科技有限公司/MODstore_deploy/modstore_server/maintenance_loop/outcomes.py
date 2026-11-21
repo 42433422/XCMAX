@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -129,6 +130,8 @@ def _reconcile_requested_merge_feedback(
         if not isinstance(run, dict):
             continue
         if str(run.get("status") or "") != "completed_merge_requested":
+            continue
+        if "deployment_scope" in run and run["deployment_scope"] != deployment._deployment_scope():
             continue
         task_id = str(run.get("para_task_id") or "").strip()
         if not task_id or task_id in checked_task_ids:
@@ -317,6 +320,28 @@ def _reconcile_requested_merge_feedback(
 
 def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     memory = store._load_loop_memory()
+    if memory.get("execution_state_unavailable"):
+        raise ValueError("execution_state_unavailable")
+    pending = memory.get("pending_execution") or {}
+    projection_id = None
+    if pending.get("outcome_recoverable") is True:
+        if (
+            pending.get("state") != "recording_outcome"
+            or pending.get("final_outcome") != final
+            or pending.get("final_gate") != gate
+            or not final.get("run_id")
+        ):
+            raise ValueError("original_outcome_projection_mismatch")
+        projection_id = hashlib.sha256(store._dumps_ledger([final, gate]).encode()).hexdigest()
+        previous = [
+            row
+            for row in memory.get("recent_runs", [])
+            if isinstance(row, dict) and row.get("run_id") == final["run_id"]
+        ]
+        if previous:
+            if any(row.get("outcome_projection_id") != projection_id for row in previous):
+                raise ValueError("original_outcome_projection_conflict")
+            return
     recent_runs = memory.get("recent_runs")
     if not isinstance(recent_runs, list):
         recent_runs = []
@@ -448,7 +473,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         memory, final, memory_domain._close_open_items_in_memory
     )
     resolution_record = _close_items_resolved_by_final(memory, final)
-    knowledge_record = self_evolution_knowledge.record_loop_evolution_knowledge(final, gate)
+    knowledge_record = self_evolution_knowledge.record_loop_evolution_knowledge(
+        {**final, "outcome_projection_id": projection_id} if projection_id else final, gate
+    )
     salvage_summary: Optional[Dict[str, Any]] = None
     try:
         para_task_id = final.get("para_task_id") or ""
@@ -542,6 +569,12 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                 else []
             ),
             "run_id": final.get("run_id"),
+            "outcome_projection_id": projection_id,
+            **(
+                {"deployment_scope": decision["deployment_scope"]}
+                if isinstance(decision.get("deployment_scope"), dict)
+                else {}
+            ),
             "status": final.get("status"),
             "structured_gate": (
                 decision.get("structured_gate")

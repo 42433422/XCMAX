@@ -9,6 +9,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,6 +28,7 @@ spec = importlib.util.spec_from_file_location(
     "publish_para_candidate", ROOT / "FHD/scripts/autonomy/publish_para_candidate.py"
 )
 publisher = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = publisher
 spec.loader.exec_module(publisher)
 REQUEST = "11111111-2222-4333-8444-555555555555"
 ATTEMPT = "a" * 32
@@ -313,6 +315,7 @@ def test_publication_binds_run_attempt_workflow_and_authoritative_receipt():
     state = {**WORKSPACE, "publication_candidate": value, "finished": False}
     run = {
         "id": 123,
+        "workflow_id": 55,
         "head_sha": "b" * 40,
         "head_branch": "main",
         "run_attempt": 1,

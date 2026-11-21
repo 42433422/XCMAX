@@ -48,10 +48,14 @@ def pending_run(repository):
     return repository.save(run)
 
 
-def completed_receipt(repository):
+def completed_receipt(repository, *, pending=False):
     run = pending_run(repository)
     run.steps[0].status = run.tool_calls[0].status = "completed"
-    run.steps[0].output = {"success": True, "id": 17}
+    run.steps[0].output = (
+        {"success": False, "execution_state": "pending", "request_id": "original"}
+        if pending
+        else {"success": True, "id": 17}
+    )
     run.tool_calls[0].output = copy.deepcopy(run.steps[0].output)
     bind_execution_receipt(run.tool_calls[0])
     return repository.save(run)
@@ -72,8 +76,11 @@ def test_pending_to_receipt_then_reverification_keeps_original_fact(repository):
     "change",
     ["output", "status", "params", "identity", "attempt", "contract", "digest", "new_call"],
 )
-def test_successful_receipt_conflicts_cannot_overwrite_committed_evidence(repository, change):
-    run = completed_receipt(repository)
+@pytest.mark.parametrize("pending", [False, True])
+def test_successful_receipt_conflicts_cannot_overwrite_committed_evidence(
+    repository, change, pending
+):
+    run = completed_receipt(repository, pending=pending)
     original = repository.get(run.run_id)
     call = run.tool_calls[0]
     if change == "output":
@@ -135,8 +142,38 @@ def test_legacy_calls_without_verification_contract_keep_previous_save_behavior(
     assert repository.get(run.run_id).tool_calls[0].params["name"] == "legacy update"
 
 
-def _saved_preview(repository, monkeypatch):
-    """A host-bound report for testing repository invariants, without dispatch."""
+def test_plain_save_or_unverified_cas_cannot_clear_pending_effect(repository):
+    run = completed_receipt(repository, pending=True)
+    run.status = "blocked"
+    run.metadata.update(non_retryable=True, recovery={"state": "result_pending"})
+    previous = repository.save(run)
+    for cas in (False, True):
+        candidate = copy.deepcopy(previous)
+        candidate.metadata.pop("non_retryable")
+        candidate.metadata.pop("recovery")
+        if cas:
+            assert repository.save_if_unchanged(candidate, previous)
+        else:
+            repository.save(candidate)
+        previous = repository.get(run.run_id)
+        assert previous.metadata["non_retryable"] is True
+        assert previous.metadata["recovery"]["state"] == "result_pending"
+
+
+@pytest.fixture(params=["memory", "sqlite"])
+def parallel_repository(request, tmp_path):
+    if request.param == "memory":
+        yield InMemoryAgentRunRepository()
+        return
+    engine = create_engine(f"sqlite:///{tmp_path / 'verification.db'}")
+    try:
+        yield SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+    finally:
+        engine.dispose()
+
+
+def _saved_preview(parallel_repository, monkeypatch):
+    """A host-bound report for testing parallel_repository invariants, without dispatch."""
     step = AgentStep(
         node_id="preview",
         tool_id="elt_import",
@@ -164,11 +201,33 @@ def _saved_preview(repository, monkeypatch):
     )
     run = AgentRun(user_id="1", message="preview", status="waiting_user", steps=[step])
     run.tool_calls = [call]
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    plan = PlanGraph(
+        plan_id="bound-preview",
+        intent="elt_import",
+        nodes=[
+            WorkflowNode(
+                node_id=step.node_id,
+                tool_id=step.tool_id,
+                action=step.action,
+                params=copy.deepcopy(step.params),
+                risk=step.risk,
+                depends_on=list(step.depends_on),
+            )
+        ],
+    )
+    run.plan_id = plan.plan_id
+    run.metadata["plan"] = plan_to_dict(plan)
+    # Repository invariants isolate business admission; the grant still binds the full real plan.
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_permission.actor_tool_denial", lambda *_: None
+    )
     monkeypatch.setattr(
         "app.application.agent_orchestrator.verification_readback.verify_independent_result",
         lambda **_: {
             "status": "verified",
-            "code": "result_verified",
+            "code": "verified_elt_preview_admission",
             "checks": [
                 {
                     "check_id": "preview",
@@ -185,22 +244,29 @@ def _saved_preview(repository, monkeypatch):
     freeze_verification_contract(run, step, call, get_tool_action_spec("elt_import", "preview"), {})
     bind_execution_receipt(call)
     assert verify_step_result(run=run, step=step, call=call, context={})["accepted"]
-    return repository.save(run)
+    _prepare_bound_preview(run)
+    return parallel_repository.save(run)
 
 
-def _append_approved_preview(run):
+def _prepare_bound_preview(run):
     from app.application.agent_orchestrator.approval_grant import approval_receipt_claims
+    from app.application.agent_orchestrator.run_lifecycle import prepare_user_decision_params
 
-    old, step = run.tool_calls[-1], run.steps[0]
-    step.params.update(old.output["resume_params"])
-    step.attempt_count += 1
-    step.status = run.status = "running"
+    step = run.steps[0]
+    assert prepare_user_decision_params(run, step, {}) == ""
     run.metadata["approval_receipt"] = {
         "step_id": step.step_id,
         "tool_id": step.tool_id,
         "action": step.action,
         **approval_receipt_claims(run, step),
     }
+
+
+def _append_approved_preview(run):
+    old, step = run.tool_calls[-1], run.steps[0]
+    assert step.params == {**old.params, **old.output["resume_params"]}
+    step.attempt_count += 1
+    step.status = run.status = "running"
     new = ToolCall(
         step_id=step.step_id,
         node_id=step.node_id,
@@ -215,19 +281,19 @@ def _append_approved_preview(run):
 
 
 def test_approved_preview_adds_a_fresh_call_and_retains_the_original_receipt(
-    repository, monkeypatch
+    parallel_repository, monkeypatch
 ):
-    run = _saved_preview(repository, monkeypatch)
+    run = _saved_preview(parallel_repository, monkeypatch)
     original = copy.deepcopy(run.tool_calls[0].to_dict())
     new = _append_approved_preview(run)
-    stored = repository.save(run)
+    stored = parallel_repository.save(run)
     assert len(stored.tool_calls) == 2
     assert stored.tool_calls[0].to_dict() == original
     assert stored.tool_calls[1].call_id == new.call_id
     assert not stored.tool_calls[1].output
     # An omitted continuation pointer is restored, never silently detached.
     run.tool_calls[1].metadata.pop("continued_from_call_id")
-    stored = repository.save(run)
+    stored = parallel_repository.save(run)
     assert stored.tool_calls[1].metadata["continued_from_call_id"] == original["call_id"]
 
 
@@ -247,9 +313,9 @@ def test_approved_preview_adds_a_fresh_call_and_retains_the_original_receipt(
     ],
 )
 def test_preview_continuation_cannot_replace_receipts_or_invent_an_attempt(
-    repository, monkeypatch, change
+    parallel_repository, monkeypatch, change
 ):
-    run = _saved_preview(repository, monkeypatch)
+    run = _saved_preview(parallel_repository, monkeypatch)
     original = copy.deepcopy(run.to_dict())
     new = _append_approved_preview(run)
     if change == "missing_link":
@@ -275,16 +341,16 @@ def test_preview_continuation_cannot_replace_receipts_or_invent_an_attempt(
     else:
         new.metadata["verification_contract"]["scope"]["owner_id"] = "other"
     with pytest.raises(ValueError, match="verification"):
-        repository.save(run)
-    assert repository.get(run.run_id).to_dict() == original
+        parallel_repository.save(run)
+    assert parallel_repository.get(run.run_id).to_dict() == original
 
 
 def test_continuation_must_link_the_latest_saved_preview_and_cannot_change_old_links(
-    repository, monkeypatch
+    parallel_repository, monkeypatch
 ):
-    run = _saved_preview(repository, monkeypatch)
+    run = _saved_preview(parallel_repository, monkeypatch)
     second = _append_approved_preview(run)
-    repository.save(run)
+    parallel_repository.save(run)
     step = run.steps[0]
     second.output = {**step.output, "resume_params": {"accept_suggested": True}}
     second.status = "completed"
@@ -292,19 +358,20 @@ def test_continuation_must_link_the_latest_saved_preview_and_cannot_change_old_l
     step.status = run.status = "waiting_user"
     bind_execution_receipt(second)
     assert verify_step_result(run=run, step=step, call=second, context={})["accepted"]
-    repository.save(run)
+    _prepare_bound_preview(run)
+    parallel_repository.save(run)
     original = copy.deepcopy(run.to_dict())
     third = _append_approved_preview(run)
     third.metadata["continued_from_call_id"] = run.tool_calls[0].call_id
     with pytest.raises(ValueError, match="verification"):
-        repository.save(run)
-    assert repository.get(run.run_id).to_dict() == original
+        parallel_repository.save(run)
+    assert parallel_repository.get(run.run_id).to_dict() == original
     for index in (0, 1):
-        changed = repository.get(run.run_id)
+        changed = parallel_repository.get(run.run_id)
         changed.tool_calls[index].metadata["continued_from_call_id"] = "rewritten-history"
         with pytest.raises(ValueError, match="verification"):
-            repository.save(changed)
-    assert repository.get(run.run_id).to_dict() == original
+            parallel_repository.save(changed)
+    assert parallel_repository.get(run.run_id).to_dict() == original
 
 
 @pytest.mark.parametrize(
@@ -322,9 +389,11 @@ def test_continuation_must_link_the_latest_saved_preview_and_cannot_change_old_l
         "rejected",
     ],
 )
-def test_stale_preview_snapshot_cannot_bypass_a_persisted_hold(repository, monkeypatch, hold):
-    stale = _saved_preview(repository, monkeypatch)
-    held = repository.get(stale.run_id)
+def test_stale_preview_snapshot_cannot_bypass_a_persisted_hold(
+    parallel_repository, monkeypatch, hold
+):
+    stale = _saved_preview(parallel_repository, monkeypatch)
+    held = parallel_repository.get(stale.run_id)
     if hold == "non_retryable":
         held.metadata[hold] = True
     elif hold == "manual_reconciliation_required":
@@ -333,13 +402,13 @@ def test_stale_preview_snapshot_cannot_bypass_a_persisted_hold(repository, monke
         held.metadata[hold] = {"worker_pending": True, "business_outcome": "unknown"}
     else:
         held.status = hold
-    repository.save(held)
-    persisted = repository.get(stale.run_id).to_dict()
+    parallel_repository.save(held)
+    persisted = parallel_repository.get(stale.run_id).to_dict()
     _append_approved_preview(stale)
     # The stale worker has a valid new grant and has never seen the saved hold.
     assert not stale.metadata.get("non_retryable")
     assert not stale.metadata.get("recovery")
     assert not stale.metadata.get("stream_interruption")
     with pytest.raises(ValueError, match="verification"):
-        repository.save(stale)
-    assert repository.get(stale.run_id).to_dict() == persisted
+        parallel_repository.save(stale)
+    assert parallel_repository.get(stale.run_id).to_dict() == persisted

@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 from app.application.local_duty_graph_health import build_local_duty_graph_health
 from app.fastapi_routes.xcmax_admin import router
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_routes.test_admin_employee_admission import admin_employee as admin_employee
 
 
 @pytest.fixture
@@ -167,50 +169,23 @@ class TestLocalDutyGraphRoutes:
         permission.assert_called_once()
         assert permission.call_args.kwargs["route"] == "/local/employees/cron/execute"
 
-    def test_employee_execute_ok(self, client: TestClient) -> None:
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sess",
-            ),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=MagicMock(id=1),
-            ),
-            patch(
-                "app.application.session_account_meta.enrich_session_meta_with_tenant",
-                return_value={"tenant_id": 1, "account_kind": "admin"},
-            ),
-            patch(
-                "app.domain.app_pure.auth_permission_resolver.require_allowed",
-                return_value=None,
-            ),
-            patch(
-                "app.application.employee_runtime.executor.execute_employee_task_local",
-                return_value={"success": True, "employee_id": "seo-sitemap-curator"},
-            ) as execute,
-            patch(
-                "app.application.employee_runtime.result_verifier.verify_employee_run_result",
-                return_value=(True, "ok"),
-            ),
-            patch(
-                "app.application.employee_runtime.run_ledger.create_employee_run_log",
-                return_value="run-1",
-            ),
-            patch(
-                "app.application.employee_runtime.run_ledger.finish_employee_run_log",
-                return_value=None,
-            ),
-        ):
-            resp = client.post(
-                "/api/xcmax/local/employees/seo-sitemap-curator/execute",
-                json={"task": "生成 sitemap", "input_data": {"site": "https://example.com"}},
-            )
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+    def test_employee_execute_ok(self, client: TestClient, admin_employee) -> None:
+        entry = admin_employee
+        resp = client.post(
+            "/api/xcmax/local/employees/seo-sitemap-curator/execute",
+            json={
+                "task": "生成 sitemap",
+                "input_data": {"site": "https://example.com"},
+                "idempotency_key": "sitemap-original",
+            },
+            headers=entry.actor.headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is False and resp.json()["execution_state"] == "unknown"
         assert resp.json()["source"] == "local"
-        assert execute.call_args.args[0] == "seo-sitemap-curator"
-        assert execute.call_args.args[1] == "生成 sitemap"
+        entry.invocation.assert_called_once()
+        assert entry.invocation.call_args.args[:2] == ("seo-sitemap-curator", "生成 sitemap")
+        assert entry.repository.get(resp.json()["run_id"]).user_id == str(entry.actor.user_id)
 
     def test_employee_manifest_404_when_missing(self, client: TestClient) -> None:
         with (

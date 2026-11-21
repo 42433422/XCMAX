@@ -17,6 +17,13 @@
     "claude-sonnet-4-5": 200000,
     "claude-sonnet-4-6": 1000000,
     "mimo-v2.6-flash": 1000000,
-    "xiaomi/mimo-v2.6-flash": 1000000
+    "xiaomi/mimo-v2.6-flash": 1000000,
+    "xcmax-doubao-code": 1024000,
+    "xcmax-kimi-code": 1048576,
+    "xcmax-kimi-k3-256k": 262144,
+    "xcmax-kimi-k3-1-pro": 262144,
+    "xcmax-xiaomi-fast": 1048576,
+    "xcmax-xiaomi-code": 1048576,
+    "xcmax-para-coding": 200000
   }
 }

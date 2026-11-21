@@ -25,25 +25,32 @@ async function post(url, token, body, fetchControl) {
 
 export async function beginWorkspacePhase({ env, accepted, fetchControl = fetch }) {
   const binding = accepted.strategic_budget;
+  const repair = accepted.kind === 'original_pr_repair';
+  const kind = repair ? 'original_pr_repair' : KIND;
+  const schema = repair ? 'strategic-pr-repair/v1' : SCHEMA;
   const request = env.PARA_GITHUB_REQUEST_ID;
   const base = `${controlServiceBase(env)}/strategic-runs/${request}`;
   const identity = { run_id: Number(env.GITHUB_RUN_ID), run_attempt: 1,
     repository: env.GITHUB_REPOSITORY, source_sha: env.GITHUB_SHA,
     phase: env.PARA_GITHUB_STAGE, execution_isolation: OPENCODE_CREDENTIAL_ISOLATION };
   if (env.DEVFLEET_FORCE_OPENCODE !== '1' || env.PARA_PLATFORM_POOL !== '1'
-      || binding?.kind !== KIND || binding.request_id !== request || binding.source_sha !== env.GITHUB_SHA
+      || binding?.kind !== kind || binding.request_id !== request
+      || (repair ? binding.controller_sha : binding.source_sha) !== env.GITHUB_SHA
+      || (repair && (binding.schema !== schema || binding.source_sha !== accepted.source_sha
+        || env.PARA_GITHUB_STAGE !== 'execute'))
       || accepted.model_allocation?.execution_isolation !== OPENCODE_CREDENTIAL_ISOLATION
       || binding.model !== accepted.model_allocation?.model || binding.provider !== accepted.model_allocation?.provider) {
     throw new Error('workspace_requires_original_isolated_budget_binding');
   }
   const grant = await post(`${base}/claim`, env.MODSTORE_PARA_DISPATCH_TOKEN, identity, fetchControl);
-  if (grant.schema !== SCHEMA || grant.kind !== KIND || grant.request_id !== request
+  if (grant.schema !== schema || grant.kind !== kind || grant.request_id !== request
       || grant.binding_id !== binding.binding_id || grant.model !== binding.model
       || Object.keys(identity).some(key => grant[key] !== identity[key])
       || grant.gateway_url !== `${base}/v1` || !grant.device_id
       || typeof grant.bootstrap_token !== 'string' || grant.bootstrap_token.length < 32
       || !Number.isFinite(Date.parse(grant.deadline))) throw new Error('workspace_phase_grant_mismatch');
   const phaseEnv = { PARA_STRATEGIC_REQUEST_ID: request,
+    PARA_STRATEGIC_KIND: kind,
     PARA_STRATEGIC_BOOTSTRAP_TOKEN: grant.bootstrap_token, PARA_STRATEGIC_DEVICE_ID: grant.device_id,
     PARA_STRATEGIC_BINDING_ID: binding.binding_id, PARA_STRATEGIC_DEADLINE: grant.deadline,
     PARA_PLATFORM_GATEWAY_URL: grant.gateway_url, PARA_PLATFORM_MODEL: grant.model,
@@ -56,6 +63,8 @@ export async function bindWorkspaceTask(task, { env = process.env, fetchControl 
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now } = {}) {
   const request = env.PARA_STRATEGIC_REQUEST_ID;
   if (!request) return null;
+  const repair = env.PARA_STRATEGIC_KIND === 'original_pr_repair';
+  const schema = repair ? 'strategic-pr-repair/v1' : SCHEMA;
   const marker = createHash('sha256').update(request).digest('hex').slice(0, 32);
   const match = String(task.title || '').match(/^\[xcmax:([0-9a-f]{32}):([0-9a-f]{32})\]/);
   if (env.GITHUB_ACTIONS !== 'true' || env.DEVFLEET_FORCE_OPENCODE !== '1'
@@ -78,9 +87,10 @@ export async function bindWorkspaceTask(task, { env = process.env, fetchControl 
       await sleep(1000);
     }
   }
-  if (grant.schema !== SCHEMA || grant.request_id !== request
+  if (grant.schema !== schema || grant.request_id !== request
       || ['phase', 'run_id', 'task_id', 'subtask_id', 'attempt_id', 'device_id'].some(key => grant[key] !== identity[key])
-      || !Number.isSafeInteger(grant.event_id) || grant.event_id < 1
+      || (repair ? (grant.kind !== 'original_pr_repair' || Object.hasOwn(grant, 'event_id')
+        || grant.source_sha !== task.base_branch) : (!Number.isSafeInteger(grant.event_id) || grant.event_id < 1))
       || !/^[0-9a-f]{32}$/.test(grant.grant_id) || grant.gateway_url !== `${base}/v1`
       || grant.model !== env.PARA_OPENCODE_MODEL || typeof grant.model_token !== 'string'
       || grant.model_token.length < 32) throw new Error('workspace_task_grant_mismatch');

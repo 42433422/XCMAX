@@ -252,7 +252,8 @@ def test_revoked_life_claim_cannot_create_retort(reflection, change):
         assert session.scalar(select(func.count()).select_from(RetortEvolutionRun)) == 0
 
 
-def test_original_owner_and_request_binding_cannot_be_replaced(reflection):
+@pytest.mark.parametrize("template_id", ["restore", ""])
+def test_original_owner_and_request_binding_cannot_be_replaced(reflection, template_id):
     _, claim, goal, *_ = reflection
     linked = evolution.propose(claim, goal)
     with pytest.raises(LifePolicyError, match="责任人"):
@@ -263,7 +264,8 @@ def test_original_owner_and_request_binding_cannot_be_replaced(reflection):
     with pytest.raises(LifePolicyError, match="原授权任务"):
         life.update_settings(
             LifeUpdate(
-                expected_revision=life.read_state()["revision"], policy={"daily_cycle_limit": 8}
+                expected_revision=life.read_state()["revision"],
+                policy={"daily_cycle_limit": 8, "retort_template_id": template_id},
             ),
             actor_user_id=8,
         )

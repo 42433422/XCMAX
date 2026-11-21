@@ -14,8 +14,10 @@ from typing import Any, cast
 
 import pandas as pd
 
-from app.application.tools.workflow_tools.contracts import ExcelIO, NaturalQuery, Payload
+from app.application.tools.workflow_tools.contracts import ExcelIO, Payload
 from app.infrastructure.excel.date_norm import cn_date, date_like_columns, to_number
+from app.infrastructure.excel.schema_service import dataframe_schema_snapshot
+from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS = 1000
@@ -334,7 +336,6 @@ def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
 @dataclass(frozen=True)
 class ExcelAnalysis:
     io: ExcelIO
-    query: NaturalQuery
     filter_frame: Callable[[pd.DataFrame, str], pd.DataFrame]
     customer_hint: Callable[[str, str | None], str]
     logger: logging.Logger
@@ -348,6 +349,25 @@ class ExcelAnalysis:
         header = self.io.header(args)
         if not file_path:
             return {"success": False, "error": "file_path is required"}
+        expression = args.get("query_expression")
+        question = args.get("question")
+        if action == "query" and "query_expression" in args and "question" in args:
+            return {
+                "success": False,
+                "error_code": "ambiguous_query_input",
+                "message": "查询问题与筛选表达式只能选择一种",
+            }
+        if action == "query" and not (
+            isinstance(expression, str)
+            and expression.strip()
+            or isinstance(question, str)
+            and question.strip()
+        ):
+            return {
+                "success": False,
+                "error_code": "missing_query_expression",
+                "message": "查询需要非空的问题或受限筛选表达式",
+            }
         root = workspace_root or str(Path.cwd())
         if action == "export":
             return self.export_table(args, root)
@@ -390,18 +410,24 @@ class ExcelAnalysis:
                 "header_row": header,
             }
         offset, max_rows = page_budget(args)
-        if action == "excel_query":
-            out = self.query(
-                df,
-                str(args.get("natural_language") or "").strip(),
-                file_path=file_path,
-                offset=offset,
-                max_rows=max_rows,
-            )
-            out["action"] = "excel_query"
-            out["header_row"] = header
-            return out
         base = {"success": True, "action": action, "file_path": file_path}
+        if action == "structure":
+            snapshot = dataframe_schema_snapshot(df)
+            return {
+                **base,
+                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
+                "header_row": header if header is not None else 1,
+                "data": json_safe(snapshot),
+                "row_count": snapshot["row_count"],
+                "columns": snapshot["columns"],
+                "dtypes": snapshot["dtypes"],
+                "sample_rows": snapshot["sample_rows"],
+                "numeric_columns": [
+                    str(name) for name in df.select_dtypes(include="number").columns
+                ],
+                "date_like_columns": date_like_columns(df),
+                "suspected_total_rows": _suspected_total_rows(df),
+            }
         if action == "read":
             out = {
                 **base,
@@ -421,7 +447,26 @@ class ExcelAnalysis:
             out["header_row"] = header if header is not None else 1
             return out
         if action == "query":
-            result = self.filter_frame(df, str(args.get("query_expression") or "").strip())
+            if isinstance(question, str) and question.strip():
+                from app.infrastructure.excel.pandas_translator import LLMPandasTranslator
+
+                result = natural_language_query(
+                    df,
+                    question.strip(),
+                    LLMPandasTranslator().translate,
+                    execute_query_plan,
+                    offset=offset,
+                    max_rows=max_rows,
+                )
+                return {**base, "header_row": header, **result}
+            try:
+                result = self.filter_frame(df, str(expression).strip())
+            except ValueError as exc:
+                return {
+                    "success": False,
+                    "error_code": "invalid_query_expression",
+                    "message": str(exc),
+                }
             return {**base, **table_result(result, offset=offset, max_rows=max_rows)}
         if action == "aggregate":
             try:
@@ -439,24 +484,6 @@ class ExcelAnalysis:
                 **base,
                 **table_result(result, offset=offset, max_rows=max_rows),
                 "source_row_count": len(df),
-            }
-        if action == "structure":
-            from app.infrastructure.excel.schema_service import dataframe_schema_snapshot
-
-            snapshot = dataframe_schema_snapshot(df)
-            return {
-                **base,
-                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
-                "header_row": header,
-                "row_count": snapshot["row_count"],
-                "columns": snapshot["columns"],
-                "dtypes": snapshot["dtypes"],
-                "sample_rows": snapshot["sample_rows"],
-                "numeric_columns": [
-                    str(name) for name in df.select_dtypes(include="number").columns
-                ],
-                "date_like_columns": date_like_columns(df),
-                "suspected_total_rows": _suspected_total_rows(df),
             }
         if action == "statistics":
             numeric = df.select_dtypes(include="number")

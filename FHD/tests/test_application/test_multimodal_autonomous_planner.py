@@ -190,12 +190,10 @@ def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
                 final = orchestrator.continue_run(waiting.run_id, approved_by=principal.user_id)
             assert execute.call_count == 2
 
-            assert final.status == {
-                "failed": "failed",
-                "unknown": "blocked",
-                "outcome_unknown": "blocked",
-                "requires_reconciliation": "blocked",
-            }.get(outcome, "completed")
+            # A bare failure after a write is not evidence that no effect happened.
+            assert final.status == (
+                "completed" if outcome in {"completed", "missing_approval"} else "blocked"
+            )
             # Approving business imports authorizes those imports, not knowledge
             # writes or destinations supplied by an untrusted model artifact.
             ingest.assert_not_called()

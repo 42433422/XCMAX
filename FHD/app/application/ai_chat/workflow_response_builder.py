@@ -1,16 +1,199 @@
-"""Workflow response formatting mixin for AIChatWorkflowResponseMixin."""
+"""Workflow receipt projection and response formatting for AI chat."""
 
 from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.application import agent_task_context
 from app.application.agent_orchestrator.public_step_errors import public_step_error
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
+if TYPE_CHECKING:
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.workflow.workflow_types import PlanGraph
+
 _PUBLIC_WORKFLOW_FAILURE = "工作流执行失败，详细信息已记录"
+
+
+def _control_reply(
+    text: str,
+    action: str,
+    data: dict[str, Any] | None = None,
+    *,
+    success: bool = True,
+    message: str = "处理完成",
+    display_text: str | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    payload = {
+        "success": success,
+        "message": message,
+        "response": text,
+        "data": {
+            "text": text if display_text is None else display_text,
+            "action": action,
+            "data": {} if data is None else data,
+        },
+    }
+    run_id = str((data or {}).get("run_id") or "")
+    if run_id:
+        # Chat tracing must associate a response with its existing wait, not
+        # create another waiting run from an unresolved clarification receipt.
+        payload.update(run_id=run_id, agent_run_id=run_id)
+    return True, payload
+
+
+def _plan_change_items(before: PlanGraph, after: PlanGraph) -> list[str]:
+    """Report paths, never customer values or arbitrary model-authored keys."""
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.application.workflow.workflow_types import plan_fingerprint, plan_to_dict
+
+    if plan_fingerprint(before) == plan_fingerprint(after):
+        return []
+    old, new = plan_to_dict(before), plan_to_dict(after)
+    changed = [key for key in old if key != "nodes" and old[key] != new[key]]
+    if len(before.nodes) != len(after.nodes):
+        changed.append("nodes.count")
+    for index, (left, right) in enumerate(zip(old["nodes"], new["nodes"])):
+        prefix = f"nodes[{index}]"
+        if left["node_id"] != right["node_id"]:
+            changed.append(f"{prefix}.identity")
+            continue
+        changed.extend(
+            f"{prefix}.{key}" for key in left if key != "params" and left[key] != right[key]
+        )
+        if left["params"] == right["params"]:
+            continue
+        spec = get_tool_action_spec(left["tool_id"], left["action"])
+        schema = spec.input_schema if spec and isinstance(spec.input_schema, dict) else {}
+        fields = schema.get("properties") or {}
+        names = sorted(left["params"].keys() | right["params"].keys())
+        for key in names:
+            if (key in left["params"], left["params"].get(key)) == (
+                key in right["params"],
+                right["params"].get(key),
+            ):
+                continue
+            public = (
+                key in fields
+                and key.lower() not in {"key", "api_key"}
+                and not any(
+                    part in key.lower()
+                    for part in (
+                        "token",
+                        "secret",
+                        "password",
+                        "credential",
+                        "authorization",
+                        "cookie",
+                    )
+                )
+            )
+            path = f"{prefix}.params.{key}" if public else f"{prefix}.params"
+            if path not in changed:
+                changed.append(path)
+    return changed[:20]
+
+
+def stale_confirmation_reply(
+    *,
+    plan: PlanGraph | None,
+    run_id: str,
+    current: AgentRun | None,
+    owner_ids: set[str],
+    runtime_context: dict[str, Any],
+    step_id: str = "",
+    previous: AgentRun | None = None,
+    action: str = "workflow_confirmation_stale",
+) -> dict[str, Any]:
+    """Explain a failed original-run guard without approving or replaying it."""
+    from app.application.workflow.workflow_types import plan_from_dict
+
+    reason, items, detail = "run_missing", ["task_record"], "原任务记录不可用"
+    if current is not None:
+        scope = current.metadata.get("runtime_context") or {}
+
+        def session(ctx: dict[str, Any]) -> str:
+            return str(ctx.get("session_id") or ctx.get("conversation_id") or "")
+
+        if (
+            current.user_id not in owner_ids
+            or str(scope.get("tenant_id") or "") != str(runtime_context.get("tenant_id") or "")
+            or session(scope) != session(runtime_context)
+        ):
+            reason, items, detail = (
+                "scope_mismatch",
+                ["authorization_scope"],
+                "当前账号或会话与原确认范围不匹配",
+            )
+        else:
+            try:
+                persisted = plan_from_dict(current.metadata.get("plan"))
+            except (ValueError, TypeError, KeyError, AttributeError):
+                persisted = None
+            step = next((s for s in current.steps if step_id in {s.step_id, s.node_id}), None)
+            items = _plan_change_items(plan, persisted) if plan and persisted else []
+            if (
+                current.status != "waiting_user"
+                or step is not None
+                and step.status != "waiting_user"
+            ):
+                reason, detail = "already_handled", "原澄清已处理或任务已离开待确认状态"
+                items = ["task.status", "clarification.status", *items][:20]
+            elif plan is None or persisted is None:
+                reason, items, detail = "plan_missing", ["plan"], "原任务的可核对计划缺失"
+            elif items or current.plan_id != plan.plan_id:
+                reason, detail = "plan_changed", "原计划的素材、参数或执行步骤已变化"
+                items = items or ["plan_id"]
+            elif step is None or (step.tool_id, step.action) != ("clarify", "ask"):
+                reason, items, detail = "step_changed", ["clarification.step"], "原待答复步骤已变化"
+            elif previous is not None and previous.to_dict() != current.to_dict():
+                reason, items, detail = (
+                    "concurrent_update",
+                    ["task.revision"],
+                    "答复期间原任务已被更新",
+                )
+            else:
+                reason, items, detail = (
+                    "resume_rejected",
+                    ["resume_admission"],
+                    "原任务的续跑校验未通过",
+                )
+    text = f"{detail}（变化项：{'、'.join(items)}）；本次答复未再次触发执行。请打开原任务查看最新计划和待办后继续，无需重复提交业务请求。"
+    data = {
+        "run_id": run_id,
+        "plan_id": getattr(plan, "plan_id", ""),
+        "reason": reason,
+        "changed_items": items,
+    }
+    reply = _control_reply(text, action, data, success=False, message="原确认需要重新核对")[1]
+    reply.update(run_id=run_id, agent_run_id=run_id, execution_state="blocked")
+    reply["data"].update(error_code="workflow_confirmation_stale", **data, execution_started=False)
+    reply["execution"] = {"committed": False, "effect": "none", "outcome": "not_executed"}
+    return reply
+
+
+def agent_run_execution_state(agent_run: Any) -> tuple[str, bool]:
+    """Classify the existing receipt without rendering or synthesizing an answer."""
+    from app.domain.task_lifecycle.results import (
+        execution_result_error,
+        execution_result_pending_state,
+    )
+
+    recovery = (agent_run.metadata or {}).get("recovery")
+    result = {
+        "output": getattr(agent_run, "final_output", None),
+        "outputs": [step.output for step in getattr(agent_run, "steps", []) or []],
+    }
+    pending = execution_result_pending_state(result)
+    uncertain = (
+        isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+    ) or pending == "unknown"
+    execution_state = "unknown" if uncertain else pending or str(agent_run.status or "unknown")
+    if execution_state == "completed" and execution_result_error(result):
+        execution_state = "failed"
+    return execution_state, uncertain
 
 
 def _customer_query_summary(output: Any) -> str | None:
@@ -297,18 +480,7 @@ class AIChatWorkflowResponseMixin:
                 else:
                     lines.append(f"- {step.node_id}: {step.status}（{_PUBLIC_WORKFLOW_FAILURE}）")
 
-        recovery = (agent_run.metadata or {}).get("recovery")
-        result = {
-            "output": getattr(agent_run, "final_output", None),
-            "outputs": [step.output for step in getattr(agent_run, "steps", []) or []],
-        }
-        pending = execution_result_pending_state(result)
-        uncertain = (
-            isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
-        ) or pending == "unknown"
-        execution_state = "unknown" if uncertain else pending or str(agent_run.status or "unknown")
-        if execution_state == "completed" and execution_result_error(result):
-            execution_state = "failed"
+        execution_state, uncertain = agent_run_execution_state(agent_run)
         success = execution_state == "completed"
         state_message = {
             "completed": "处理完成",

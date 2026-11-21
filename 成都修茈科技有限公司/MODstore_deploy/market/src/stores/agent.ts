@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue'
+import { ref, computed, shallowRef, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { AgentMessage, ButlerMode, OrchestrationSession, PendingAction } from '../types/agent'
 import { useAuthStore } from './auth'
@@ -53,6 +53,7 @@ export const useAgentStore = defineStore('agent', () => {
   const isLoading = ref(false)
   const currentConversationId = ref<number | null>(null)
   const conversationGeneration = ref(0)
+  const requestController = shallowRef<AbortController | null>(null)
   const orchestrationSession = ref<OrchestrationSession | null>(null)
 
   /** 未读消息（面板关闭时积累）*/
@@ -146,10 +147,12 @@ export const useAgentStore = defineStore('agent', () => {
 
   function stopRequest() {
     conversationGeneration.value += 1
+    requestController.value?.abort()
+    requestController.value = null
     pendingAction.value?.resolve(false)
     pendingAction.value = null
     messages.value = messages.value.map((message) =>
-      message.isLoading ? { ...message, content: '已停止接收本轮回复。原请求的结果尚未确认。', isLoading: false } : message,
+      message.isLoading ? { ...message, content: '已停止接收本轮回复。原请求的结果尚未确认。', isLoading: false, isError: true } : message,
     )
     isLoading.value = false
     mode.value = 'idle'
@@ -168,11 +171,11 @@ export const useAgentStore = defineStore('agent', () => {
     () => {
       clearMessages()
       orchestrationSession.value = null
-      // Historical action logs have no owner; never transfer them to another account.
+      // Legacy records have no owner. Never restore or transfer them to an account.
       try {
         sessionStorage.removeItem('xc_butler_action_log')
       } catch {
-        // Storage can be unavailable in private browsing.
+        /* storage unavailable */
       }
     },
     { flush: 'sync', immediate: true },
@@ -206,6 +209,7 @@ export const useAgentStore = defineStore('agent', () => {
     isLoading,
     currentConversationId,
     conversationGeneration,
+    requestController,
     orchestrationSession,
     unreadCount,
     focusFilesDrawer,

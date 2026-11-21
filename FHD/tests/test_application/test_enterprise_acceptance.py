@@ -156,6 +156,105 @@ def _approve_and_execute(actor, repository, queue, dispatcher, run):
     return result, grant["grant"]
 
 
+@pytest.mark.parametrize("phase", ["before_stage", "before_dispatch"])
+def test_sql_approval_cannot_forget_its_original_enterprise_binding(
+    trusted_actor, tmp_path, monkeypatch, phase
+):
+    from app.application.agent_orchestrator.approval_grant import validate_approval_grant
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    actor = trusted_actor(role="admin")
+    monkeypatch.setattr("app.db.SessionLocal", actor.factory)
+    order_id, item_id, warehouse_id, ledger_id = _seed_order(actor)
+    scope = {"tenant_id": actor.tenant_id, "actor_id": str(actor.user_id), "mod_id": ""}
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
+    executor = SimpleNamespace(execute=AgentToolExecutor().execute)
+    goals = GoalService(actor.factory, projections=ProjectionService(session_factory=actor.factory))
+    service = EnterpriseExecutionService(
+        goals=goals,
+        orchestrator=AgentOrchestrator(repository=repository, tool_executor=executor),
+        planner=OrderPlanner(order_id, item_id, warehouse_id),
+    )
+    with tenant_scope(actor.tenant_id):
+        goal = goals.create(
+            {
+                "goal_id": "bound-order-approval",
+                "objective": "审批后交付原订单的剩余数量",
+                "entity_type": "order",
+                "entity_id": str(order_id),
+                "metric": "remaining_quantity",
+                "unit": "件",
+                "direction": "decrease",
+                "target": "0",
+            },
+            **scope,
+        )
+        run = service.plan(
+            goal["goal_id"],
+            "original-approval",
+            "先审批确认订单，再审批交付全部数量",
+            **scope,
+            runtime_context=actor.context,
+        )
+        grant = issue_approval_grant(run, principal_id=str(actor.user_id))
+        claims = validate_approval_grant(grant["grant"], run=run, principal_id=str(actor.user_id))
+        assert claims["enterprise_binding_sha256"]
+        if phase == "before_dispatch":
+            run = approve_and_enqueue(
+                repository,
+                queue,
+                run_id=run.run_id,
+                token=grant["grant"],
+                principal_id=str(actor.user_id),
+                runtime_context={},
+                authenticated_binding=actor.principal.mod_authorization,
+            )
+            assert (
+                run.metadata["approval_receipt"]["enterprise_binding_sha256"]
+                == (claims["enterprise_binding_sha256"])
+            )
+        # Persist a downgraded snapshot without changing the approved action or
+        # actor. Recomputing its plan hash must not erase the original consent.
+        run.metadata["runtime_context"].pop("enterprise_cognition")
+        run.metadata["plan"]["metadata"].pop("enterprise_cognition")
+        run.metadata["plan_sha256"] = canonical_hash(run.metadata["plan"])
+        repository.save(run)
+        repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+        recovered = repository.get(run.run_id)
+        assert "enterprise_cognition" not in recovered.metadata["runtime_context"]
+        if phase == "before_stage":
+            with pytest.raises(ApprovalGrantError):
+                AgentOrchestrator(repository=repository, tool_executor=executor).stage_approved_run(
+                    run.run_id,
+                    approved_by=str(actor.user_id),
+                    approved_step_id=run.steps[0].step_id,
+                    approval_claims=claims,
+                    authenticated_binding=actor.principal.mod_authorization,
+                )
+        else:
+            owner = "recovered-approval-worker"
+            claim = queue.claim(owner, run_id=run.run_id, lease_seconds=30)
+            assert claim is not None
+            AgentTaskDispatcher(
+                execution_repository=queue,
+                run_repository=repository,
+                orchestrator_factory=lambda repo: AgentOrchestrator(
+                    repository=repo, tool_executor=executor
+                ),
+            )._execute_claim(claim, owner)
+        with actor.factory() as db:
+            assert db.get(SalesOrder, order_id).state == "quote"
+            assert db.get(SalesOrderItem, item_id).delivered_quantity == 0
+            assert db.get(InventoryLedger, ledger_id).quantity == 20
+        persisted = repository.get(run.run_id)
+        assert persisted.status == "waiting_user" and not persisted.tool_calls
+        if phase == "before_dispatch":
+            assert persisted.steps[0].output["error_code"] == "approval_scope_changed"
+
+
 def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
     trusted_actor, tmp_path, monkeypatch
 ):

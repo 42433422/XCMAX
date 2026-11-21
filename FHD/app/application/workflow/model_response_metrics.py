@@ -51,7 +51,10 @@ def observe_model_response(
         started = perf_counter()
         completed = False
         try:
-            response = fn(*args, **kwargs)
+            from .retry_policy import planning_model_call
+
+            with planning_model_call():
+                response = fn(*args, **kwargs)
             completed = True
             evidence = _evidence.get()
             if evidence is not None and isinstance(response, dict):

@@ -641,6 +641,10 @@ def test_concurrent_parent_saves_keep_child_receipts_and_reject_rebinding(tmp_pa
         assert repo.get(parent.run_id).metadata["child_results"] == receipts
         # A stale writer cannot erase the other child's result or rewind completion.
         stale = copy.deepcopy(snapshots[0])
+        stale.metadata["runtime_context"].update(
+            untrusted_sources=[{"source": "tool", "text": "returned after child commit"}],
+            context_summary={"system": "", "data": []},
+        )
         stale.metadata["child_results"]["child-0"].update(status="running", final_output={})
         repo.save(stale)
         assert repo.get(parent.run_id).metadata["child_results"] == receipts

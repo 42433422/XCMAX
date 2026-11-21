@@ -11,10 +11,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "ActivateRequest": ("app.fastapi_routes.lan_routes", "ActivateRequest"),
     "CrmSyncError": ("app.domain.shared_services.user_cs_crm_store", "CrmSyncError"),
     "EventPriority": ("app.neuro_bus.events.events_base", "EventPriority"),
-    "ExcelSchemaUnderstandingService": (
-        "app.infrastructure.excel.schema_service",
-        "ExcelSchemaUnderstandingService",
-    ),
     "IssueKeyRequest": ("app.fastapi_routes.lan_admin_routes", "IssueKeyRequest"),
     "LanSettingsUpdate": ("app.fastapi_routes.lan_settings_routes", "LanSettingsUpdate"),
     "NeuroEvent": ("app.neuro_bus.events.events_base", "NeuroEvent"),
@@ -42,10 +38,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.fastapi_routes.domains.db.queries",
         "_customers_schema_hint_if_empty",
     ),
-    "_handle_import_excel_to_database": (
-        "app.application.tools.workflow",
-        "_handle_import_excel_to_database",
-    ),
     "_load_customers_rows": (
         "app.fastapi_routes.domains.db.queries",
         "_load_customers_rows",
@@ -54,16 +46,11 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.fastapi_routes.domains.db.product_queries",
         "_load_products_list_impl_pg",
     ),
-    "_parse_excel_header_row_1based": (
-        "app.application.tools.workflow",
-        "_parse_excel_header_row_1based",
-    ),
     "_primary_contact_name": (
         "app.domain.shared_services.user_cs_intake_notice",
         "_primary_contact_name",
     ),
     "_proxy_json": ("app.fastapi_routes.market_account", "_proxy_json"),
-    "_read_excel_dataframe": ("app.application.tools.workflow", "_read_excel_dataframe"),
     "_shared_resolve_table_spec": (
         "app.application.office_plaintext_generate",
         "resolve_table_spec",
@@ -174,14 +161,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.service_contract_fill",
         "generate_contract_docx",
     ),
-    "fill_document_from_template": (
-        "app.domain.shared_services.kitten_ai_document.template_fill",
-        "fill_document_from_template",
-    ),
-    "generate_office_file": (
-        "app.domain.shared_services.kitten_ai_document.generate",
-        "generate_office_file",
-    ),
     "generated_contracts_dir": (
         "app.domain.shared_services.service_contract_fill",
         "generated_contracts_dir",
@@ -199,10 +178,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "get_enterprise_credentials": (
         "app.domain.shared_services.user_cs_enterprise_credentials",
         "get_enterprise_credentials",
-    ),
-    "get_excel_vector_ingest_app_service": (
-        "app.application",
-        "get_excel_vector_ingest_app_service",
     ),
     "get_llm_client": ("app.infrastructure.llm.client", "get_llm_client"),
     "get_mod_registry": ("app.infrastructure.mods.registry", "get_mod_registry"),
@@ -222,11 +197,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "get_shipment_application_service_core": (
         "app.bootstrap",
         "get_shipment_application_service_core",
-    ),
-    "handle_excel_analysis": ("app.application.tools.workflow", "handle_excel_analysis"),
-    "handle_excel_schema_understand": (
-        "app.application.tools.workflow",
-        "handle_excel_schema_understand",
     ),
     "host_info": ("app.fastapi_routes.lan_routes", "host_info"),
     "import_mod_backend_py": ("app.infrastructure.mods.mod_manager", "import_mod_backend_py"),
@@ -370,10 +340,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.application.office_plaintext_generate",
         "resolve_presentation_spec",
     ),
-    "resolve_safe_excel_path": (
-        "app.application.tools.workflow",
-        "resolve_safe_excel_path",
-    ),
     "resolve_table_spec": ("app.application.office_plaintext_generate", "resolve_table_spec"),
     "resolve_word_document_spec": (
         "app.application.office_plaintext_generate",
@@ -384,7 +350,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "revoke_allowlist_endpoint",
     ),
     "revoke_key_endpoint": ("app.fastapi_routes.lan_admin_routes", "revoke_key_endpoint"),
-    "run_bulk_import": ("app.domain.app_pure.excel_imports", "run_bulk_import"),
     "run_user_cs_employee": (
         "app.domain.shared_services.user_cs_employee_runner",
         "run_user_cs_employee",
@@ -410,10 +375,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "shipment_records_units",
     ),
     "status": ("app.fastapi_routes.lan_routes", "status"),
-    "store_document_pickup": (
-        "app.domain.shared_services.kitten_ai_document.pickup",
-        "store_document_pickup",
-    ),
     "svc": ("app.application.approval_workspace_app_service", ""),
     "sync_crm_from_pipeline_doc": (
         "app.domain.shared_services.user_cs_crm_store",

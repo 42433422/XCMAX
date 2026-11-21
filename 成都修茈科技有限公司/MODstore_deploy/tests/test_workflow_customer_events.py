@@ -45,6 +45,7 @@ def private_outbox(monkeypatch, tmp_path):
         "workflow.execution.feedback_started",
         "workflow.customer.delivery_started",
         "workflow.customer.delivery_produced",
+        "workflow.customer.graph_returned",
     ],
 )
 def test_real_dispatch_bus_dlq_and_admin_replay_only_publish_fixed_public_projection(
@@ -66,6 +67,8 @@ def test_real_dispatch_bus_dlq_and_admin_replay_only_publish_fixed_public_projec
             "policy": {"internal_only": True},
         },
         "artifacts": [{"output_path": "outputs/private-customer-order.csv"}],
+        "node_output": {"employee_result": {"customer_input": "private-customer-order"}},
+        "output_json": '{"private_graph":"private-customer-order"}',
         "public_payload": {"customer_input": "private-customer-order"},
         "redact": False,  # No payload-controlled switch can broaden the fixed projection.
     }

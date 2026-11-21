@@ -19,6 +19,7 @@ from app.fastapi_routes import label_jobs, print_routes
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.infrastructure.printing import label_pdf_printer as pdf_printer
 from app.middleware.csrf import CSRFMiddleware
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 OWNER = (11, 7)
 PAYLOAD = {
@@ -267,10 +268,15 @@ def test_expired_failed_and_uncertain_submissions_have_distinct_retry_rules(
     env.service.file(OWNER, job["id"])
 
 
-def test_submit_uses_real_agent_and_authenticated_identity(env, monkeypatch, local_tools):
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+def test_submit_uses_real_agent_and_authenticated_identity(
+    env, monkeypatch, local_tools, trusted_actor
+):
+    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+    from app.infrastructure.tenant_scope import tenant_scope
 
     repo = InMemoryAgentRunRepository()
+    actor = trusted_actor(user_id=OWNER[1], tenant_id=OWNER[0], permissions=["print.label"])
     from app.domain.shared_services.printer_service import PrinterService
 
     service = PrinterService.__new__(PrinterService)
@@ -278,33 +284,59 @@ def test_submit_uses_real_agent_and_authenticated_identity(env, monkeypatch, loc
     service.printer_utils._resolve_cups_printer_name.return_value = "LabelPrinter"
     service.printer_utils._run_cups.return_value = SimpleNamespace(returncode=0)
     monkeypatch.setattr(pdf_printer, "sys", SimpleNamespace(platform="darwin"))
-    monkeypatch.setattr(print_routes, "_svc", lambda: service)
+    monkeypatch.setattr("app.application.facades.print_facade.printer_service", service)
+    monkeypatch.setattr(jobs, "get_app_data_dir", lambda: str(env.tmp))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(env.tmp / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
     job = create(env)
     confirmation = env.service.confirmation(OWNER, job["id"], "LabelPrinter")
+    headers = {
+        **actor.headers,
+        "X-User-Id": "spoofed-user",
+        "Idempotency-Key": confirmation["request_id"],
+    }
+    url = f"/api/print/label-jobs/{job['id']}/submit"
+    body = {"confirm_token": confirmation["confirm_token"]}
     with patch(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
         return_value=repo,
     ):
         response = env.client.post(
-            f"/api/print/label-jobs/{job['id']}/submit",
-            json={"confirm_token": confirmation["confirm_token"]},
-            headers={"X-User-Id": "spoofed-user"},
+            url,
+            json=body,
+            headers=headers,
         )
-    assert response.status_code == 200, response.text
-    result = response.json()["job"]
-    assert result["status"] == "submitted"
-    run = repo.get(result["run_id"])
+        replay = env.client.post(url, json=body, headers=headers)
+        assert response.status_code == replay.status_code == 202, response.text
+        receipt = response.json()
+        assert receipt["pending_approval"] is True and receipt["success"] is False
+        assert receipt["job"]["status"] == "waiting_approval"
+        assert replay.json()["run_id"] == receipt["run_id"]
+        assert replay.json()["approval_request_id"] == receipt["approval_request_id"]
+        service.printer_utils._run_cups.assert_not_called()
+        run = repo.get(receipt["run_id"])
+        issue_approval_grant(run, principal_id=str(actor.user_id))
+        with tenant_scope(OWNER[0]):
+            done = AgentOrchestrator(repository=repo).continue_run(
+                run.run_id,
+                approved_by=str(actor.user_id),
+                runtime_context=run.metadata["runtime_context"],
+                approval_request_id=run.metadata["approval_request_id"],
+            )
+        after = env.client.post(url, json=body, headers=headers)
+    assert after.status_code == 202, after.text
+    assert after.json()["job"]["status"] == "submitted"
+    assert after.json()["run_id"] == run.run_id
+    assert done.status == "blocked"  # Queue receipt does not verify physical output.
+    assert done.tool_calls[0].output["execution_state"] == "pending"
     assert run.user_id == "7"
-    assert {"step.waiting_user", "step.approved", "tool.completed"} <= {
-        e.event_type for e in run.events
-    }
-    assert set(run.tool_calls[0].params) == {"file_path", "printer_name", "copies"}
+    assert "step.approved" in {e.event_type for e in done.events}
+    assert set(done.tool_calls[0].params) == {"job_id", "confirm_token"}
     service.printer_utils._run_cups.assert_called_once()
     _, persisted = env.service._read(OWNER, job["id"])
     assert persisted["dispatch_claimed"] is True
+    assert persisted["run_id"] == run.run_id
     assert "dispatch_hash" not in persisted
     service.print_label(str(env.service.file(OWNER, job["id"])), "LabelPrinter", 1)
     assert service.printer_utils._run_cups.call_count == 1
@@ -458,11 +490,14 @@ def test_product_selection_uses_same_tenant_source_with_search_and_pagination(en
     assert env.client.get(base).status_code == 401
 
 
-def test_legacy_routes_cannot_print_controlled_job_without_internal_dispatch(env, monkeypatch):
+def test_legacy_routes_cannot_print_controlled_job_without_internal_dispatch(
+    env, monkeypatch, trusted_actor
+):
     from app.domain.shared_services.printer_service import PrinterService
     from app.utils.path_io.print_utils import PrinterUtils
 
     job = create(env)
+    actor = trusted_actor(user_id=OWNER[1], tenant_id=OWNER[0], permissions=["print.label"])
     path = str(env.service.file(OWNER, job["id"]))
     service = PrinterService.__new__(PrinterService)
     service.printer_utils = MagicMock()
@@ -486,8 +521,9 @@ def test_legacy_routes_cannot_print_controlled_job_without_internal_dispatch(env
                 "copies": 1,
                 "require_confirm": False,
             },
+            headers={**actor.headers, "Idempotency-Key": "reject-managed-pdf"},
         )
-    assert response.json()["success"] is False
+    assert response.status_code == 403, response.text
     service.printer_utils._run_cups.assert_not_called()
     service.printer_utils.print_file.assert_not_called()
     service.enhanced_utils = MagicMock()

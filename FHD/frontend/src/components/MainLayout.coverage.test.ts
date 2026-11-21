@@ -19,7 +19,7 @@
  * Mock 最小化：仅 mock 外部边界（stores / composables / utils / 子组件）。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { DOMWrapper, mount } from '@vue/test-utils'
 import { flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
@@ -39,6 +39,7 @@ const testState = vi.hoisted(() => {
       name: 'chat' as string | undefined,
       meta: {} as Record<string, unknown>,
       path: '/chat',
+      fullPath: '/chat',
       matched: [] as Array<{ path: string }>,
     }),
     // 教程 store 状态（reactive 以便 watch 触发）
@@ -220,7 +221,10 @@ vi.mock('@/router/registerModRoutes', () => ({
 vi.mock('./Sidebar.vue', () => ({
   default: {
     name: 'Sidebar',
-    template: '<nav class="sidebar-stub" @change-view="$emit(\'change-view\', $event)"><slot /></nav>',
+    template: `<nav class="sidebar-stub" @change-view="$emit('change-view', $event)">
+      <button class="sidebar-chat" @click="$emit('change-view', 'chat')">智能对话</button>
+      <button class="sidebar-settings" @click="$emit('change-view', 'settings')">系统设置</button>
+    </nav>`,
     props: ['activeView'],
     emits: ['change-view'],
   },
@@ -269,6 +273,7 @@ function resetTestState() {
   testState.route.name = 'chat'
   testState.route.meta = {}
   testState.route.path = '/chat'
+  testState.route.fullPath = '/chat'
   testState.route.matched = []
   testState.onboardingTutorialStore.active = false
   testState.tutorialStore.isActive = false
@@ -300,7 +305,7 @@ function resetTestState() {
 }
 
 /** 创建带路由的 MainLayout wrapper */
-async function mountMainLayout(props: Record<string, unknown> = {}) {
+async function mountMainLayout(props: Record<string, unknown> = {}, attached = false) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const router = createRouter({
@@ -326,9 +331,11 @@ async function mountMainLayout(props: Record<string, unknown> = {}) {
   testRouter = router
 
   const wrapper = mount(MainLayout, {
+    ...(attached ? { attachTo: document.body } : {}),
     global: {
       plugins: [pinia, router],
       stubs: {
+        ...(attached ? { transition: false } : {}),
         RouterView: { template: '<div class="router-view-stub" />' },
         RouterLink: { template: '<a><slot /></a>' },
       },
@@ -571,6 +578,7 @@ describe('MainLayout.vue - coverage ramp', () => {
 
     it('启动前初始位置 / 无名称时仍默认 chat', async () => {
       testState.route.path = '/'
+      testState.route.fullPath = '/'
       testState.route.name = ''
       testState.route.matched = []
 
@@ -637,7 +645,7 @@ describe('MainLayout.vue - coverage ramp', () => {
     it('onResizeEnd 回调：sidebar 禁用时不 schedule', async () => {
       // 通过 matchMedia 禁用 sidebar（匹配 SIDEBAR_DISABLE_MQ）
       window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(max-width: 767px)',
+        matches: query === '(max-width: 768px)',
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -1156,9 +1164,133 @@ describe('MainLayout.vue - coverage ramp', () => {
     })
   })
 
-  // ════════════════════════════════════════════════════════════════════
-  // topKickerText
-  // ════════════════════════════════════════════════════════════════════
+  describe('mobile admin navigation and keyboard viewport', () => {
+    let viewport: EventTarget & { height: number; offsetTop: number; scale: number }
+    let media: EventTarget & { matches: boolean; media: string }
+    let originalViewport: PropertyDescriptor | undefined
+
+    beforeEach(() => {
+      testState.adminConsoleSpa = true
+      media = Object.assign(new EventTarget(), { matches: true, media: '(max-width: 768px)' })
+      window.matchMedia = vi.fn(() => media as unknown as MediaQueryList)
+      viewport = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 })
+      originalViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport')
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport })
+    })
+
+    afterEach(() => {
+      if (originalViewport) Object.defineProperty(window, 'visualViewport', originalViewport)
+      else Reflect.deleteProperty(window, 'visualViewport')
+    })
+
+    it('opens one sidebar, supports close, and closes on same-page and new-page selection', async () => {
+      const { wrapper, router } = await mountMainLayout({}, true)
+      try {
+        const toggle = wrapper.get('[aria-label="打开管理端导航"]')
+        expect(toggle.attributes('aria-expanded')).toBe('false')
+        expect(wrapper.find('.sidebar-shell').exists()).toBe(false)
+        expect(wrapper.find('.mobile-bottom-nav-stub').exists()).toBe(false)
+        await toggle.trigger('click')
+        await flushPromises()
+        expect(toggle.attributes('aria-expanded')).toBe('true')
+        expect(wrapper.findAllComponents({ name: 'Sidebar' })).toHaveLength(1)
+        const close = document.querySelector('.mobile-sidebar-drawer .el-drawer__close-btn')
+        expect(close).not.toBeNull()
+        await new DOMWrapper(close!).trigger('click')
+        await vi.waitFor(() => expect(toggle.attributes('aria-expanded')).toBe('false'))
+        await toggle.trigger('click')
+        await flushPromises()
+        await wrapper.findComponent({ name: 'Sidebar' }).get('.sidebar-chat').trigger('click')
+        await flushPromises()
+        expect(router.currentRoute.value.name).toBe('chat')
+        expect(toggle.attributes('aria-expanded')).toBe('false')
+        await toggle.trigger('click')
+        await flushPromises()
+        await wrapper.findComponent({ name: 'Sidebar' }).get('.sidebar-settings').trigger('click')
+        await flushPromises()
+        expect(router.currentRoute.value.name).toBe('settings')
+        expect(toggle.attributes('aria-expanded')).toBe('false')
+      } finally {
+        wrapper.unmount()
+      }
+    })
+
+    it('closes after external navigation and desktop resize without leaving duplicate sidebars', async () => {
+      const { wrapper } = await mountMainLayout({}, true)
+      try {
+        await wrapper.get('.mobile-sidebar-toggle').trigger('click')
+        await flushPromises()
+        testState.route.fullPath = '/settings?section=models'
+        await nextTick()
+        expect(wrapper.get('.mobile-sidebar-toggle').attributes('aria-expanded')).toBe('false')
+        await wrapper.get('.mobile-sidebar-toggle').trigger('click')
+        await flushPromises()
+        media.matches = false
+        media.dispatchEvent(Object.assign(new Event('change'), { matches: media.matches }))
+        await nextTick()
+        expect(wrapper.find('.mobile-sidebar-toggle').exists()).toBe(false)
+        expect(wrapper.find('.sidebar-shell .sidebar-stub').exists()).toBe(true)
+        expect(wrapper.findAllComponents({ name: 'Sidebar' })).toHaveLength(1)
+        expect(document.querySelector('.mobile-sidebar-drawer')).toBeNull()
+        media.matches = true
+        media.dispatchEvent(Object.assign(new Event('change'), { matches: media.matches }))
+        await nextTick()
+        expect(wrapper.get('.mobile-sidebar-toggle').attributes('aria-expanded')).toBe('false')
+        expect(wrapper.find('.sidebar-shell').exists()).toBe(false)
+      } finally {
+        wrapper.unmount()
+      }
+    })
+
+    it('initializes navigation and keyboard tracking before the profile request finishes, then cleans listeners', async () => {
+      let finishProfile!: () => void
+      testState.accountProfileStore.loaded = false
+      testState.accountProfileStore.refreshFromServer = vi.fn(() => new Promise<void>(resolve => { finishProfile = resolve }))
+      const add = vi.spyOn(viewport, 'addEventListener')
+      const remove = vi.spyOn(viewport, 'removeEventListener')
+      const addMedia = vi.spyOn(media, 'addEventListener')
+      const removeMedia = vi.spyOn(media, 'removeEventListener')
+      const { wrapper } = await mountMainLayout({}, true)
+      try {
+        expect(testState.accountProfileStore.refreshFromServer).toHaveBeenCalledOnce()
+        await wrapper.get('.mobile-sidebar-toggle').trigger('click')
+        expect(wrapper.get('.mobile-sidebar-toggle').attributes('aria-expanded')).toBe('true')
+        const shell = wrapper.get('.main-container').element as HTMLElement
+        expect(shell.style.getPropertyValue('--mobile-viewport-height')).toBe('844px')
+        viewport.height = 420
+        viewport.offsetTop = 18
+        viewport.dispatchEvent(new Event('resize'))
+        await nextTick()
+        expect(shell.style.getPropertyValue('--mobile-viewport-height')).toBe('420px')
+        expect(shell.style.getPropertyValue('--mobile-viewport-top')).toBe('18px')
+        viewport.offsetTop = 36
+        viewport.dispatchEvent(new Event('scroll'))
+        await nextTick()
+        expect(shell.style.getPropertyValue('--mobile-viewport-top')).toBe('36px')
+        // A landscape phone still needs keyboard tracking after crossing the sidebar breakpoint.
+        media.matches = false
+        media.dispatchEvent(Object.assign(new Event('change'), { matches: false }))
+        viewport.height = 180
+        viewport.offsetTop = 0
+        viewport.dispatchEvent(new Event('resize'))
+        await nextTick()
+        expect(wrapper.find('.sidebar-shell').exists()).toBe(true)
+        expect(shell.style.getPropertyValue('--mobile-viewport-height')).toBe('180px')
+        expect(shell.style.getPropertyValue('--mobile-viewport-top')).toBe('0px')
+        viewport.scale = 2
+        viewport.dispatchEvent(new Event('resize'))
+        await nextTick()
+        expect(shell.style.getPropertyValue('--mobile-viewport-height')).toBe('')
+        expect(shell.style.getPropertyValue('--mobile-viewport-top')).toBe('')
+      } finally {
+        wrapper.unmount()
+        finishProfile()
+        await flushPromises()
+      }
+      for (const [type, listener] of add.mock.calls) expect(remove).toHaveBeenCalledWith(type, listener)
+      for (const call of addMedia.mock.calls) expect(removeMedia).toHaveBeenCalledWith(...call)
+    })
+  })
 
   describe('topKickerText', () => {
     it('adminConsoleSpa 时返回 ADMIN_OPERATOR_BRAND_SUBTITLE', async () => {

@@ -144,7 +144,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     product_delete_spec = specs[("products", "delete")]
     assert product_delete_spec.risk == "high"
-    assert product_delete_spec.permission == "tool.products.delete"
+    assert product_delete_spec.permission == "product.edit"
 
     product_batch_spec = specs[("products", "batch_create")]
     assert product_batch_spec.risk == "high"
@@ -193,10 +193,11 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
     assert finance_delete_spec.permission == "tool.finance.delete_transaction"
     assert finance_delete_spec.test_fixtures[0]["input"]["transaction_id"] == 31
 
-    assert specs[("shipment_orders", "generate")].permission == "shipment.create"
+    assert specs[("shipment_orders", "generate")].permission == "shipment.edit"
     shipment_create_spec = specs[("shipment_records", "create")]
     assert shipment_create_spec.risk == "high"
-    assert shipment_create_spec.required_params == ["unit_name"]
+    assert shipment_create_spec.required_params == []
+    assert shipment_create_spec.input_schema["required"] == []
     assert len(shipment_create_spec.input_schema["allOf"]) == 2
     assert shipment_create_spec.test_fixtures[0]["output"]["data"]["id"] == 7
 
@@ -210,7 +211,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_generate_spec = specs[("shipment_orders", "generate")]
     assert shipment_order_generate_spec.risk == "high"
-    assert shipment_order_generate_spec.permission == "shipment.create"
+    assert shipment_order_generate_spec.permission == "shipment.edit"
     assert shipment_order_generate_spec.required_params == ["unit_name", "products"]
     assert shipment_order_generate_spec.input_schema["required"] == ["unit_name", "products"]
     assert shipment_order_generate_spec.test_fixtures[0]["output"]["record_id"] == 7
@@ -222,7 +223,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_print_spec = specs[("shipment_orders", "print")]
     assert shipment_order_print_spec.risk == "high"
-    assert shipment_order_print_spec.permission == "tool.shipment_orders.print"
+    assert shipment_order_print_spec.permission == "shipment.edit"
     assert shipment_order_print_spec.output_schema["required"] == [
         "success",
         "file_path",
@@ -247,7 +248,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_clear_all_spec = specs[("shipment_orders", "clear_all")]
     assert shipment_order_clear_all_spec.risk == "high"
-    assert shipment_order_clear_all_spec.permission == "tool.shipment_orders.clear_all"
+    assert shipment_order_clear_all_spec.permission == "shipment.edit"
     assert shipment_order_clear_all_spec.test_fixtures[0]["output"]["deleted_count"] == 5
 
     shipment_order_delete_spec = specs[("shipment_orders", "delete")]
@@ -264,7 +265,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
     print_document_spec = specs[("print", "print_document")]
     assert print_document_spec.risk == "high"
     assert print_document_spec.required_params == ["file_path"]
-    assert print_document_spec.permission == "tool.print.print_document"
+    assert print_document_spec.permission == "print.label"
     assert print_document_spec.test_fixtures[0]["input"]["printer_name"] == "DocPrinter"
 
     print_label_spec = specs[("print", "print_label")]
@@ -279,7 +280,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     print_selection_spec = specs[("print", "save_printer_selection")]
     assert print_selection_spec.risk == "medium"
-    assert print_selection_spec.permission == "tool.print.save_printer_selection"
+    assert print_selection_spec.permission == "print.label"
     assert print_selection_spec.test_fixtures[0]["output"]["document_printer"] == "DocPrinter"
 
     print_workflow_spec = specs[("print", "workflow_label_dispatch")]
@@ -435,8 +436,11 @@ def test_build_tool_specs_v2_exposes_excel_vector_contract() -> None:
     assert template_delete_spec.test_fixtures[0]["output"]["deleted"]["id"] == "db:1"
 
     index_spec = specs[("excel_vector_index", "execute")]
-    assert index_spec.risk == "low"
+    assert index_spec.risk == "medium"
     assert index_spec.idempotent is True
+    assert index_spec.read_only is False
+    assert index_spec.policy["requires_write_approval"] is True
+    assert index_spec.policy["data_scope"] == "legacy_global"
     assert index_spec.required_params == ["file_path"]
     assert index_spec.permission == "tool.excel_vector_index.execute"
     assert index_spec.input_schema["required"] == ["file_path"]
@@ -494,7 +498,7 @@ def test_build_tool_specs_v2_exposes_aiopen_mcp_contracts() -> None:
     chat_spec = specs[("aiopen", "chat")]
     assert chat_spec.risk == "medium"
     assert chat_spec.idempotent is False
-    assert chat_spec.required_params == ["message"]
+    assert chat_spec.required_params == ["message", "request_id"]
 
     click = specs[("aiopen", "ui_click")]
     assert click.risk == "high" and click.idempotent is False and click.read_only is False
@@ -745,13 +749,15 @@ def test_schema_failure_only_releases_a_certain_read_claim(
         result = execute_with_tool_deadline(
             executor, step, runtime_context=context, timeout_seconds=60
         )
-        evidence = result["reconciliation_evidence"] if unknown_io else result
+        evidence = result.get("reconciliation_evidence", result)
         assert evidence["error_code"] == "output_schema_validation_failed"
         assert evidence["raw_error_code"] == raw_output.get("error_code")
         assert result["success"] is False
         if unknown_io:
             assert result["error_code"] == "tool_timeout_unknown"
             assert result["io_reconciliation"] == [{"kind": "http_timeout", "method": "GET"}]
+        elif not unknown:
+            assert "reconciliation_evidence" not in result
         if unknown:
             assert result["outcome"] == "unknown" and result["retryable"] is False
             assert result["reconciliation_required"] is True
@@ -765,9 +771,7 @@ def test_schema_failure_only_releases_a_certain_read_claim(
             assert replay["reconciliation_required"] is True
             assert replay["error_code"] == "output_schema_validation_failed"
             assert replay["raw_error_code"] == evidence["raw_error_code"]
-            if "reconciliation_evidence" in replay:
-                assert replay["reconciliation_evidence"]["error_code"] == evidence["error_code"]
-                assert replay["reconciliation_evidence"] is not replay
+            assert replay["reconciliation_evidence"] == evidence
         else:
             assert result["message"] == "工具输出 缺少字段：data"
             assert not result.get("reconciliation_required") and result.get("outcome") != "unknown"
@@ -876,13 +880,18 @@ def test_business_db_read_materials_accepts_material_view(trusted_actor, monkeyp
     assert denied is not None and denied["error_code"] == "tool_permission_denied"
 
 
-def test_shipment_order_generate_uses_shipment_create_permission(trusted_actor, monkeypatch):
+def test_shipment_order_generate_uses_existing_legacy_store_scope(trusted_actor, monkeypatch):
     from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    actor = trusted_actor(permissions=["shipment.create"])
-    assert actor_tool_denial("shipment_orders", "generate", actor.context, {}) is None
-
+    spec = get_tool_action_spec("shipment_orders", "generate")
+    assert spec.permission == "shipment.edit"
+    assert spec.policy["data_scope"] == "legacy_global"
+    actor = trusted_actor(permissions=["shipment.edit"])
+    denied = actor_tool_denial("shipment_orders", "generate", actor.context, {})
+    assert denied is not None and denied["reason"] == "legacy_store_not_scoped"
+    platform_admin = trusted_actor(tenant_id=None, role="admin", tier="admin")
+    assert actor_tool_denial("shipment_orders", "generate", platform_admin.context, {}) is None
     viewer = trusted_actor(permissions=["shipment.view"], role="viewer")
     denied = actor_tool_denial("shipment_orders", "generate", viewer.context, {})
-    assert denied is not None and denied["reason"] == "permission_denied"
+    assert denied is not None

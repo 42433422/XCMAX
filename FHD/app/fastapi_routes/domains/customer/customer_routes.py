@@ -24,7 +24,6 @@ from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.persistence.compat_db.compat_db_base import (
     _business_mod_json_block,
     _customer_body_name_contact,
-    _customers_write_raise,
 )
 from app.infrastructure.persistence.compat_db.queries import (
     _customer_find_by_id,
@@ -32,10 +31,6 @@ from app.infrastructure.persistence.compat_db.queries import (
     _customer_row_matches_keyword,
     _customers_schema_hint_if_empty,
     _load_customers_rows,
-)
-from app.infrastructure.persistence.compat_db.writes import (
-    _customer_pg_insert,
-    _customer_pg_update,
 )
 from app.neuro_bus.route_event_publisher import (
     RouteEvents,
@@ -95,61 +90,6 @@ async def _customer_permission(request: Request):
 
 router = APIRouter(tags=["xcagi-compat"], dependencies=[Depends(_customer_permission)])
 logger = logging.getLogger(__name__)
-
-
-def _execute_customers_route_action(
-    action: str, params: dict[str, Any], *, runtime_context=None
-) -> dict[str, Any]:
-    if action == "create":
-        name = str(
-            params.get("customer_name") or params.get("unit_name") or params.get("name") or ""
-        ).strip()
-        if not name:
-            return {"success": False, "message": "客户名称不能为空"}
-        data = _customer_pg_insert(
-            name,
-            str(params.get("contact_person") or ""),
-            str(params.get("contact_phone") or ""),
-            str(params.get("contact_address") or params.get("address") or ""),
-        )
-        return {"success": True, "data": data}
-
-    if action == "update":
-        customer_id = int(params.get("id") or params.get("customer_id") or 0)
-        if customer_id <= 0:
-            return {"success": False, "message": "缺少 id"}
-        name = str(
-            params.get("customer_name") or params.get("unit_name") or params.get("name") or ""
-        ).strip()
-        if not name:
-            return {"success": False, "message": "客户名称不能为空"}
-        data = _customer_pg_update(
-            customer_id,
-            name,
-            str(params.get("contact_person") or ""),
-            str(params.get("contact_phone") or ""),
-            str(params.get("contact_address") or params.get("address") or ""),
-        )
-        return {"success": True, "data": data}
-
-    if action in {"delete", "batch_delete"}:
-        from app.application import get_customer_app_service
-
-        ids = params.get("ids") or params.get("customer_ids") or []
-        if action == "delete":
-            ids = [params.get("id") or params.get("customer_id")]
-        if (
-            not isinstance(ids, list)
-            or not ids
-            or any(type(value) is not int or value <= 0 for value in ids)
-        ):
-            return {"success": False, "message": "ids 须为非空正整数数组", "deleted_count": 0}
-        result = get_customer_app_service().batch_delete(
-            ids, **({"runtime_context": runtime_context} if runtime_context else {})
-        )
-        return {**result, "deleted": result.get("deleted_count", 0)}
-
-    return {"success": False, "message": f"未注册的 customers route 动作: {action}"}
 
 
 @router.get("/customers", response_model=None)
@@ -323,26 +263,11 @@ def customers_get_one(request: Request, customer_id: int) -> dict | JSONResponse
 @router.post("/customers")
 @router.post("/customers/", include_in_schema=False)
 @publish_route_event(RouteEvents.DB_QUERY, domain="customers")
-def customers_create(request: Request, body: dict = Body(default_factory=dict)) -> dict:
-    try:
-        from app.mod_sdk.erp_customers_facade import (
-            customers_create as customers_create_via_service,
-        )
-        from app.mod_sdk.erp_customers_facade import (
-            is_erp_customers_via_service_enabled,
-        )
-
-        if is_erp_customers_via_service_enabled():
-            return customers_create_via_service(request, body)
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.debug("customers create via service skipped", exc_info=True)
-    _customers_write_raise(request)
+def customers_create(request: Request, body: dict = Body(default_factory=dict)) -> JSONResponse:
     name, cp, ph, addr = _customer_body_name_contact(body)
     if not name:
         raise HTTPException(status_code=400, detail="客户名称不能为空")
-    result = _run_customers_agent(
+    result, status = _run_customers_agent(
         request=request,
         action="create",
         params={
@@ -366,104 +291,96 @@ def customers_create(request: Request, body: dict = Body(default_factory=dict)) 
             domain="customers",
         )
 
-    return result
+    return JSONResponse(result, status_code=status)
 
 
 @router.put("/customers/{customer_id}")
 @router.put("/customers/{customer_id}/", include_in_schema=False)
 def customers_update(
     request: Request, customer_id: int, body: dict = Body(default_factory=dict)
-) -> dict:
-    try:
-        from app.mod_sdk.erp_customers_facade import (
-            customers_update as customers_update_via_service,
-        )
-        from app.mod_sdk.erp_customers_facade import (
-            is_erp_customers_via_service_enabled,
-        )
-
-        if is_erp_customers_via_service_enabled():
-            return customers_update_via_service(request, customer_id, body)
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.debug("customers update via service skipped", exc_info=True)
-    _customers_write_raise(request)
+) -> JSONResponse:
     name, cp, ph, addr = _customer_body_name_contact(body)
     if not name:
         raise HTTPException(status_code=400, detail="客户名称不能为空")
-    return _run_customers_agent(
-        request=request,
-        action="update",
-        params={
-            "id": customer_id,
-            "customer_name": name,
-            "unit_name": name,
-            "contact_person": cp,
-            "contact_phone": ph,
-            "contact_address": addr,
-        },
-        route_path="/customers/{customer_id}",
+    return JSONResponse(
+        *_run_customers_agent(
+            request=request,
+            action="update",
+            params={
+                "id": customer_id,
+                "customer_name": name,
+                "unit_name": name,
+                "contact_person": cp,
+                "contact_phone": ph,
+                "contact_address": addr,
+            },
+            route_path="/customers/{customer_id}",
+        )
     )
 
 
 @router.delete("/customers/{customer_id}")
 @router.delete("/customers/{customer_id}/", include_in_schema=False)
-def customers_delete(request: Request, customer_id: int, cascade: bool = False) -> dict:
-    try:
-        from app.mod_sdk.erp_customers_facade import (
-            customers_delete as customers_delete_via_service,
+def customers_delete(request: Request, customer_id: int, cascade: bool = False) -> JSONResponse:
+    return JSONResponse(
+        *_run_customers_agent(
+            request=request,
+            action="delete",
+            params={"id": customer_id, **({"force": True} if cascade else {})},
+            route_path="/customers/{customer_id}",
         )
-        from app.mod_sdk.erp_customers_facade import (
-            is_erp_customers_via_service_enabled,
-        )
-
-        if cascade or is_erp_customers_via_service_enabled():
-            return customers_delete_via_service(request, customer_id, cascade)
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.debug("customers delete via service skipped", exc_info=True)
-    _customers_write_raise(request)
-    return _run_customers_agent(
-        request=request,
-        action="delete",
-        params={"id": customer_id},
-        route_path="/customers/{customer_id}",
     )
 
 
 @router.post("/customers/batch-delete")
 @router.post("/customers/batch-delete/", include_in_schema=False)
-def customers_batch_delete(request: Request, body: dict = Body(default_factory=dict)) -> dict:
-    _customers_write_raise(request)
+def customers_batch_delete(
+    request: Request, body: dict = Body(default_factory=dict)
+) -> JSONResponse:
     ids = body.get("ids") or body.get("customer_ids") or []
     if not isinstance(ids, list) or not ids:
         raise HTTPException(status_code=400, detail="ids 须为非空数组")
-    return _run_customers_agent(
-        request=request,
-        action="batch_delete",
-        params={"ids": ids},
-        route_path="/customers/batch-delete",
+    return JSONResponse(
+        *_run_customers_agent(
+            request=request,
+            action="batch_delete",
+            params={"ids": ids},
+            route_path="/customers/batch-delete",
+        )
     )
 
 
 @router.post("/customers/import")
 @router.post("/customers/import/", include_in_schema=False)
-async def customers_import(request: Request, file: UploadFile = File(...)) -> dict:
-    _customers_write_raise(request)
-    gate = _business_mod_json_block()
-    if gate:
-        return cast("dict[Any, Any]", gate)
+async def customers_import(request: Request, file: UploadFile = File(...)) -> JSONResponse:
+    from starlette.concurrency import run_in_threadpool
+
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+    from app.utils.path_io.upload_helpers import stage_capability_upload
+
+    context = request_runtime_context(request)
     try:
         content = await file.read()
+        params = await run_in_threadpool(
+            stage_capability_upload,
+            content,
+            file.filename or "",
+            context,
+            namespace="customer-import",
+            suffixes=frozenset({".xlsx", ".xlsm"}),
+        )
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=400, detail="客户导入文件无效") from exc
     except RECOVERABLE_ERRORS as exc:
         logger.exception("customer import upload read failed")
         raise HTTPException(status_code=400, detail="读取上传文件失败") from exc
-    from app.domain.app_pure.excel_imports import run_customers_excel_import_bytes
-
-    out = run_customers_excel_import_bytes(content)
-    if not out.get("success"):
-        msg = str(out.get("message") or out.get("error") or "导入失败")
-        raise HTTPException(status_code=400, detail=msg)
-    return {"success": True, "data": out}
+    finally:
+        await file.close()
+    result, status = await run_in_threadpool(
+        _run_customers_agent,
+        request=request,
+        action="import",
+        params=params,
+        route_path="/customers/import",
+    )
+    return JSONResponse(result, status_code=status)

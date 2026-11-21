@@ -46,7 +46,7 @@ def _scope_matches(run: Any, step: Any, call: Any, context: dict[str, Any]) -> b
     tenant = str(context.get("tenant_id") or "")
     owner = str(context.get("user_id") or "")
     return bool(
-        tenant
+        (tenant or (step.tool_id, step.action) == ("products", "import_price_list_template"))
         and owner
         and isinstance(saved, dict)
         and str(saved.get("tenant_id") or "") == tenant
@@ -488,29 +488,47 @@ def verify_independent_result(
     from app.application.agent_orchestrator.verification_sales import SALES_ACTIONS
 
     sales_action = step.tool_id == "sales" and step.action in SALES_ACTIONS
+    from app.application.agent_orchestrator.verification_purchase import PURCHASE_ACTIONS
+
+    purchase_action = step.tool_id == "purchase" and step.action in PURCHASE_ACTIONS
     cognition_action = step.tool_id == "enterprise_cognition" and step.action in {
         "bind_goal",
         "plan",
         "evaluate",
     }
     kellai_action = action == ("kellai", "send")
-    elt_preview = action == ("elt_import", "preview")
     from app.application.agent_orchestrator.verification_surface import (
         supports_surface_verification,
     )
 
     surface_action = supports_surface_verification(step.tool_id, step.action)
+    from app.application.agent_orchestrator.verification_multitask import (
+        OPERATIONS,
+        employee_payload,
+    )
+
+    employee_completion = (
+        action == ("employee", "execute")
+        and str(employee_payload(step.params).get("continuity_action") or "").strip() in OPERATIONS
+    )
     employee_admission = action == ("employee", "execute") and employee == "clerk"
+    price_template_action = action == ("products", "import_price_list_template")
+    elt_preview = action == ("elt_import", "preview")
+    elt_execute = action == ("elt_import", "execute")
     if not (
         action == ("customers", "create")
         or catalog_action
         or file_action
         or sales_action
+        or purchase_action
         or cognition_action
         or kellai_action
         or surface_action
         or employee_admission
+        or price_template_action
         or elt_preview
+        or elt_execute
+        or employee_completion
     ):
         return _report("inconclusive", "result_verifier_unavailable", "host_registry")
     if not _scope_matches(run, step, call, context):
@@ -539,13 +557,31 @@ def verify_independent_result(
         if elt_preview:
             from app.application.agent_orchestrator.verification_elt import verify_elt_preview
 
-            return verify_elt_preview(step, output, context)
+            return verify_elt_preview(call, output, context)
+        if elt_execute:
+            from app.application.agent_orchestrator.verification_elt_execution import (
+                verify_elt_execution,
+            )
+
+            return verify_elt_execution(call, output, context)
+        if employee_completion:
+            from app.application.agent_orchestrator.verification_multitask import (
+                verify_employee_completion,
+            )
+
+            return verify_employee_completion(run, step, call, output, context, employee)
         if employee_admission:
             return _employee_admission(run, step, call, output, context)
         if sales_action:
             from app.application.agent_orchestrator.verification_sales import verify_sales_result
 
             return verify_sales_result(step, call, output, context)
+        if purchase_action:
+            from app.application.agent_orchestrator.verification_purchase import (
+                verify_purchase_result,
+            )
+
+            return verify_purchase_result(step, call, output, context)
         if cognition_action:
             from app.application.agent_orchestrator.verification_cognition import (
                 verify_cognition_result,
@@ -558,6 +594,31 @@ def verify_independent_result(
             )
 
             return verify_kellai_delivery(run, step, call, context)
+        if price_template_action:
+            from app.application.facades.session_facade import get_auth_service
+            from app.infrastructure.auth.business_scope_gate import (
+                check_legacy_business_user_permission,
+            )
+            from app.infrastructure.documents.price_list_export import (
+                read_price_list_docx_template_digest,
+            )
+
+            check_legacy_business_user_permission(actor, "product.view")
+            if not get_auth_service().has_permission(actor, "product.view"):
+                return _report("inconclusive", "result_read_permission_unavailable", "task_scope")
+            expected = str(step.params.get("sha256") or "")
+            actual = read_price_list_docx_template_digest()
+            if len(expected) != 64 or expected != actual:
+                return _report("failed", "result_template_mismatch", "price_list_template")
+            return _report(
+                "verified",
+                "result_verified",
+                "price_list_template",
+                sha256=actual,
+                saved_name=step.params.get("saved_name"),
+                owner_user_id=str(actor.id),
+                run_id=run.run_id,
+            )
         if action == ("customers", "create"):
             from app.infrastructure.auth.business_scope_gate import (
                 check_owned_business_permission,

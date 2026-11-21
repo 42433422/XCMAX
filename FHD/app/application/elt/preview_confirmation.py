@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import true
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.application.elt.errors import EltConflict
 from app.application.elt.service_source import SourceServiceMixin
@@ -223,7 +223,59 @@ def record_confirmation(run: EltRun, revision: str, *, valid_rows_only: bool) ->
         "preview_revision": revision,
         "valid_rows_only": valid_rows_only,
     }
+    if (db := object_session(run)) is not None:
+        db.flush()
+        details[CONFIRMATION_KEY]["plan_sha256"] = execution_plan_sha256(db, run)
     run.summary_json = dump_json(details)
+
+
+def execution_plan_sha256(db: Session, run: EltRun) -> str:
+    """Retain approved inputs after execution replaces row references and after images."""
+    with db.no_autoflush:
+        digest = hashlib.sha256(
+            dump_json(
+                {
+                    "run_id": run.id,
+                    "upload_id": run.upload_id,
+                    "file_sha256": run.file_sha256,
+                    "target_type": run.target_type,
+                    "template_version_id": run.template_version_id,
+                    "draft": load_json(run.draft_json, {}),
+                    "source_features": load_json(run.source_features_json, {}),
+                    "counts": [
+                        run.total_rows,
+                        run.new_rows,
+                        run.update_rows,
+                        run.skip_rows,
+                        run.error_rows,
+                    ],
+                }
+            ).encode()
+        )
+        rows = (
+            db.query(EltRunRow)
+            .filter_by(run_id=run.id, tenant_id=run.tenant_id, owner_user_id=run.owner_user_id)
+            .order_by(EltRunRow.id)
+        )
+        for row in rows.yield_per(500):
+            digest.update(
+                dump_json(
+                    [
+                        row.id,
+                        row.source_sheet,
+                        row.source_row,
+                        row.source_slice,
+                        load_json(row.source_json, {}),
+                        load_json(row.normalized_json, {}),
+                        load_json(row.provenance_json, {}),
+                        load_json(row.validation_json, []),
+                        row.final_action,
+                        load_json(row.before_json, {}),
+                        row.match_ref if row.final_action != "new" else None,
+                    ]
+                ).encode()
+            )
+    return digest.hexdigest()
 
 
 def verify_execution(db: Session, run: EltRun, *, valid_rows_only: bool) -> dict[str, Any] | None:

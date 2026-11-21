@@ -173,9 +173,15 @@ def test_router_passes_mature_fallback_and_cooldown_params(monkeypatch):
     assert captured["routing_strategy"]
 
 
-def test_normalize_response_marks_fallback():
+@pytest.mark.parametrize("finish_reason", ["stop", "length", "content_filter"])
+def test_normalize_response_marks_fallback(finish_reason):
     response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="hello", reasoning_content=None))],
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content="hello", reasoning_content=None),
+                finish_reason=finish_reason,
+            )
+        ],
         usage={"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
         model="deepseek-chat",
         _hidden_params={"additional_headers": {"x-litellm-attempted-fallbacks": "1"}},
@@ -187,6 +193,7 @@ def test_normalize_response_marks_fallback():
 
     assert out["ok"] is True
     assert out["content"] == "hello"
+    assert out["finish_reason"] == finish_reason
     assert out["fallback_used"] is True
     assert out["usage"]["total_tokens"] == 3
 

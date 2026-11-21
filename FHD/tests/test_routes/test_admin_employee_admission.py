@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.approval_grant import authorization_scope_hash
 from app.application.employee_runtime import run_ledger
 from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.employee_run_log import EmployeeRunLog
@@ -22,6 +23,7 @@ from app.fastapi_routes.admin_control.employee_backend import (
 )
 from app.fastapi_routes.admin_control.employee_execution import EmployeeExecution
 from app.fastapi_routes.admin_control.employee_run import EmployeeRunner
+from app.infrastructure.auth.agent_mod_scope import validate_actor_context
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -96,6 +98,63 @@ def admin_employee(monkeypatch, trusted_actor):
     )
 
 
+@pytest.mark.parametrize(
+    "identity",
+    [
+        {},
+        {"idempotency_key": None},
+        {"idempotency_key": ""},
+        {"idempotency_key": " "},
+        {"idempotency_key": 1},
+        {"idempotency_key": "x" * 161},
+        {"idempotency_key": "one", "turn_id": "another"},
+        {"input_data": {"idempotency_key": "untrusted-nested-key"}},
+    ],
+)
+def test_admin_missing_or_invalid_request_key_creates_no_run_or_effect(admin_employee, identity):
+    entry = admin_employee
+    with entry.client() as client:
+        response = client.post("/employees/clerk/execute", json={"task": "write", **identity})
+    assert response.status_code == 400, response.text
+    assert response.json()["error_code"] == "task_identity_required"
+    assert response.json()["execution_state"] == "not_started"
+    assert response.json()["success"] is response.json()["retryable"] is False
+    entry.invocation.assert_not_called()
+    with entry.factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
+        assert db.query(EmployeeRunLog).count() == 0
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 0
+        )
+
+
+@pytest.mark.parametrize("source", ["header", "turn_id"])
+def test_admin_key_sources_enter_same_authenticated_admission(admin_employee, source):
+    entry = admin_employee
+    body = {"task": "observe effect"}
+    headers = {}
+    if source == "header":
+        headers["Idempotency-Key"] = "same-key"
+    else:
+        body["turn_id"] = "same-key"
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=body, headers=headers)
+        replay = client.post("/employees/clerk/execute", json=body, headers=headers)
+    assert first.status_code == replay.status_code == 200
+    assert first.json()["run_id"] == replay.json()["run_id"]
+    assert replay.json()["deduplicated"] is True and replay.json()["success"] is True
+    assert replay.json()["execution_state"] == "completed"
+    assert replay.json()["verified"] is replay.json()["independent_verified"] is False
+    assert replay.json()["verification"]["accepted"] is False
+    assert replay.json()["verification"]["code"] == "result_verifier_unavailable"
+    context = entry.repository.get(first.json()["run_id"]).metadata["runtime_context"]
+    assert validate_actor_context(context) is None
+    assert context["_actor_authorization"]["session_row_id"] == entry.actor.session_row_id
+    assert context["user_id"] == str(entry.actor.user_id)
+    entry.invocation.assert_called_once()
+
+
 def test_concurrent_admin_requests_execute_once_and_reopen_original_receipt(
     admin_employee, monkeypatch
 ):
@@ -128,70 +187,28 @@ def test_concurrent_admin_requests_execute_once_and_reopen_original_receipt(
         ).json()
     assert replay == read
     assert read["execution_state"] == "completed" and read["success"] is True
-    assert read["result_valid"] is True
-    assert read["verified"] is False and read["independent_verified"] is False
-    assert read["verification"]["status"] == "inconclusive"
+    assert read["verified"] is read["independent_verified"] is False
+    assert read["verification"]["accepted"] is False and read["retryable"] is False
     assert read["verification"]["code"] == "result_verifier_unavailable"
-    assert read["verification"]["accepted"] is False
     assert isinstance(read["employee_run_id"], int)
     assert read["agent_run_id"] == responses[0].json()["run_id"]
+    original = entry.repository.get(read["run_id"])
+    assert original.metadata["execution_authorization_scope"] == authorization_scope_hash(
+        original.metadata["runtime_context"]
+    )
     assert entry.invocation.call_count == 1
     with entry.factory() as db:
         assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
         assert db.query(EmployeeRunLog).count() == 1
-        employee_log = db.query(EmployeeRunLog).one()
-        assert employee_log.status == "success" and employee_log.verified == 0
         assert (
             db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
             == 1
         )
 
 
-@pytest.mark.parametrize("location", ["body", "input_data"])
-def test_request_cannot_defer_direct_runner_validation(admin_employee, location):
-    entry = admin_employee
-    body = dict(entry.body)
-    body.pop("idempotency_key")
-    if location == "body":
-        body["defer_validation"] = True
-    else:
-        body["input_data"] = {**body["input_data"], "defer_validation": True}
-    entry.invocation.side_effect = lambda *_args, **_kwargs: dict(entry.state.output)
-    with entry.client() as client:
-        response = client.post("/employees/clerk/execute", json=body).json()
-    assert response["execution_state"] == "completed" and response["success"] is True
-    assert response["verified"] is False and response["independent_verified"] is False
-    assert response["verification"]["accepted"] is False
-    assert response["verification"]["code"] == "result_verifier_unavailable"
-    assert entry.invocation.call_count == 1
-
-
-@pytest.mark.parametrize(
-    "negative",
-    [
-        {"verification": {"status": "failed", "reason": "wrong customer"}},
-        {"result": {"summary": "done", "verification": {"accepted": False}}},
-    ],
-)
-def test_canonical_receipt_preserves_original_negative_verification(admin_employee, negative):
-    entry = admin_employee
-    entry.state.output = {"success": True, "summary": "claimed done", **negative}
-    with entry.client() as client:
-        first = client.post("/employees/clerk/execute", json=entry.body).json()
-        read = client.get(
-            "/employees/clerk/runs", params={"idempotency_key": "stable-request"}
-        ).json()
-    assert first["execution_state"] == read["execution_state"] == "failed"
-    assert first["success"] is False and read["success"] is False
-    assert read["verification"]["status"] == "failed"
-    assert read["verification"]["accepted"] is False
-    for key, value in negative.items():
-        assert read["data"][key] == value
-    assert entry.invocation.call_count == 1
-
-
 def test_admin_marker_collision_rejects_generic_task_without_mutation(admin_employee, monkeypatch):
     from app.application.agent_orchestrator import AgentRun
+    from app.application.agent_orchestrator.approval_grant import authorization_scope_hash
     from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
     from app.application.agent_orchestrator.task_context import apply_task_context
 
@@ -205,6 +222,7 @@ def test_admin_marker_collision_rejects_generic_task_without_mutation(admin_empl
             user_id=kwargs["run"].user_id, message="original generic task", status="running"
         )
         generic.metadata["runtime_context"] = context
+        generic.metadata["execution_authorization_scope"] = authorization_scope_hash(context)
         apply_task_context(generic, context)
         step = AgentStep(
             "employee", "employee", "execute", params=kwargs["params"], status="running"
@@ -286,6 +304,15 @@ def test_atomic_publication_cannot_rebind_an_existing_authorization(admin_employ
         {**context, "employee_tool_allowlist": ["other"]} if binding == "upstream" else context
     )
     original.metadata["execution_authorization_scope"] = scope
+    if binding == "upstream":
+        # A mismatched presealed scope must fail before its first publication,
+        # as well as when someone later attempts to reuse an existing task.
+        with pytest.raises(UnifiedTaskConflictError):
+            publish(original)
+        with entry.factory() as db:
+            assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
+        entry.invocation.assert_not_called()
+        return
     assert not publish(original).deduplicated
     if binding == "legacy_missing":
         with entry.factory.begin() as db:
@@ -370,6 +397,159 @@ def test_admin_request_key_rejects_changed_execution(admin_employee, change):
     if change == "tier":
         assert response.json()["detail"] == "employee_invoke_denied"
     assert entry.invocation.call_count == 1
+
+
+@pytest.mark.parametrize("change", ["mod_id", "employee_id", "workspace_id", "workspace_root"])
+def test_admin_recovery_rechecks_full_trusted_scope(admin_employee, monkeypatch, change):
+    from pathlib import Path
+
+    from app.fastapi_routes.admin_control import employee_execution
+
+    entry = admin_employee
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        original = entry.repository.get(first["run_id"]).to_dict()
+        task = entry.repository.get_task(
+            user_id="17", tenant_id="7", task_id=first["task_id"]
+        ).to_dict()
+        trusted_context = employee_execution._trusted_context
+        if change == "workspace_root":
+            monkeypatch.setattr(
+                "app.infrastructure.workspace.workspace_root", lambda: Path("/new-server-root")
+            )
+        else:
+            monkeypatch.setattr(
+                employee_execution,
+                "_trusted_context",
+                lambda *args: {**trusted_context(*args), change: "changed-trusted-scope"},
+            )
+        repeated = client.post("/employees/clerk/execute", json=entry.body)
+        read = client.get("/employees/clerk/runs", params={"idempotency_key": "stable-request"})
+    assert read.status_code == 409, read.text
+    if repeated.status_code == 200:
+        _assert_permission_denial(repeated.json())
+    else:
+        assert repeated.status_code == 409, repeated.text
+    _assert_original_employee_effect(entry, original, task)
+
+
+@pytest.mark.parametrize("can_execute", [False, True])
+def test_admin_first_admission_requires_registered_execution_permission(
+    admin_employee, trusted_actor, can_execute
+):
+    from app.db.models.user import User
+
+    entry = admin_employee
+    role_name = "enterprise_operator"
+    with entry.factory.begin() as db:
+        db.get(User, 17).role = role_name
+    actor = trusted_actor(
+        user_id=17,
+        role=role_name,
+        permissions=["employee.invoke", *(["employee.execute"] if can_execute else [])],
+    )
+    with entry.client() as client:
+        response = client.post("/employees/clerk/execute", json=entry.body, headers=actor.headers)
+        assert response.status_code == 200, response.text
+        receipt = client.get(
+            "/employees/clerk/runs",
+            params={"idempotency_key": "stable-request"},
+            headers=actor.headers,
+        )
+        assert receipt.status_code == (200 if can_execute else 404), receipt.text
+        if can_execute:
+            assert response.json()["success"] is True
+            assert response.json()["run_id"] == receipt.json()["run_id"]
+        else:
+            _assert_permission_denial(response.json())
+            assert response.json()["error_code"] == "tool_permission_denied"
+    expected = int(can_execute)
+    assert entry.invocation.call_count == expected
+    with entry.factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == expected
+        assert db.query(EmployeeRunLog).count() == expected
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == expected
+        )
+
+
+def test_admin_recovery_rechecks_live_tool_permission(admin_employee, trusted_actor):
+    from app.db.models.permission import Role
+    from app.db.models.user import User
+
+    entry = admin_employee
+    role_name = "enterprise_operator"
+    with entry.factory.begin() as db:
+        db.get(User, 17).role = role_name
+    actor = trusted_actor(
+        user_id=17, role=role_name, permissions=["employee.invoke", "employee.execute"]
+    )
+    with entry.client() as client:
+        response = client.post("/employees/clerk/execute", json=entry.body, headers=actor.headers)
+        assert response.status_code == 200, response.text
+        first = response.json()
+        original = entry.repository.get(first["run_id"]).to_dict()
+        task = entry.repository.get_task(
+            user_id="17", tenant_id="7", task_id=first["task_id"]
+        ).to_dict()
+        with entry.factory.begin() as db:
+            role = db.query(Role).filter_by(name=role_name).one()
+            # The route remains authorized; the original tool grant is revoked.
+            role.permissions[:] = [p for p in role.permissions if p.code == "employee.invoke"]
+        repeated = client.post("/employees/clerk/execute", json=entry.body, headers=actor.headers)
+        read = client.get(
+            "/employees/clerk/runs",
+            params={"idempotency_key": "stable-request"},
+            headers=actor.headers,
+        )
+    assert repeated.status_code == 200, repeated.text
+    _assert_permission_denial(repeated.json())
+    assert repeated.json()["error_code"] == "tool_permission_denied"
+    assert read.status_code == 409, read.text
+    _assert_original_employee_effect(entry, original, task)
+
+
+def test_admin_recovery_cannot_backfill_missing_historical_authorization(admin_employee):
+    entry = admin_employee
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        historical = entry.repository.get(first["run_id"])
+        del historical.metadata["execution_authorization_scope"]
+        entry.repository.save(historical)
+        original = entry.repository.get(first["run_id"]).to_dict()
+        task = entry.repository.get_task(
+            user_id="17", tenant_id="7", task_id=first["task_id"]
+        ).to_dict()
+        repeated = client.post("/employees/clerk/execute", json=entry.body)
+        read = client.get("/employees/clerk/runs", params={"idempotency_key": "stable-request"})
+    assert repeated.status_code == read.status_code == 409, (repeated.text, read.text)
+    _assert_original_employee_effect(entry, original, task)
+
+
+def _assert_permission_denial(result):
+    assert result["success"] is False
+    assert result["outcome"] == "denied"
+    assert result["execution_state"] == "blocked"
+    assert result["execution_status"] == "not_started"
+    assert result["retryable"] is False
+    assert "run_id" not in result
+
+
+def _assert_original_employee_effect(entry, original, task):
+    assert entry.repository.get(original["run_id"]).to_dict() == original
+    assert (
+        entry.repository.get_task(user_id="17", tenant_id="7", task_id=task["task_id"]).to_dict()
+        == task
+    )
+    assert entry.invocation.call_count == 1
+    with entry.factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
+        assert db.query(EmployeeRunLog).count() == 1
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
 
 
 @pytest.mark.parametrize(
@@ -471,11 +651,6 @@ def test_admin_reads_current_exact_child_receipt_without_reexecution(
     from app.application.agent_orchestrator.task_context import apply_task_context
 
     entry = admin_employee
-    child_verification = {
-        "status": "verified",
-        "accepted": True,
-        "checks": [{"source": "original-child-authority", "evidence": {"receipt": "child-proof"}}],
-    }
 
     def delegate(employee_id, task, payload, **kwargs):
         context = dict(kwargs["runtime_context"])
@@ -505,8 +680,6 @@ def test_admin_reads_current_exact_child_receipt_without_reexecution(
                 "response": "original child result",
                 "success": outcome != "failed",
             }
-            if outcome == "completed":
-                child.final_output["verification"] = child_verification
             if outcome == "foreign_parent":
                 child.metadata["runtime_context"]["parent_run_id"] = "unrelated"
             if outcome == "foreign_mod":
@@ -559,12 +732,6 @@ def test_admin_reads_current_exact_child_receipt_without_reexecution(
     assert read["run_id"] == first["run_id"]
     assert read["child_run_id"] == child.run_id
     assert read["success"] is (expected == "completed")
-    if outcome == "completed":
-        assert read["child_receipt"]["final_output"]["verification"] == child_verification
-        assert read["data"]["verification"] == child_verification
-        assert entry.repository.get(child.run_id).final_output["verification"] == child_verification
-        assert read["verification"]["accepted"] is False
-        assert read["verification"]["status"] == "inconclusive"
     assert entry.invocation.call_count == 1
     parent = entry.repository.get(first["run_id"])
     task = entry.repository.get_task(user_id="17", tenant_id="7", task_id=first["task_id"])

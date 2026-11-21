@@ -19,6 +19,18 @@ def _reset_cache():
     mcp_registry.reset_mcp_cache_for_tests()
 
 
+@pytest.fixture
+def isolated_oauth_client(monkeypatch):
+    """Mocked OAuth requests must not depend on the runner's proxy packages."""
+    import httpx
+
+    class Client(httpx.AsyncClient):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **{**kwargs, "trust_env": False})
+
+    monkeypatch.setattr(httpx, "AsyncClient", Client)
+
+
 def _config_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: dict) -> Path:
     path = tmp_path / "mcp_servers.json"
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
@@ -234,7 +246,7 @@ def test_resource_actions_are_registered(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_oauth_header_is_cached(monkeypatch) -> None:
+async def test_oauth_header_is_cached(monkeypatch, isolated_oauth_client) -> None:
     from types import SimpleNamespace
 
     from app.infrastructure.mcp import client as mcp_client
@@ -504,7 +516,9 @@ def test_mcp_never_retries_authorization_or_parameter_failures(monkeypatch, erro
 
 
 @pytest.mark.asyncio
-async def test_oauth_scope_and_rotated_secret_do_not_share_token_cache(monkeypatch):
+async def test_oauth_scope_and_rotated_secret_do_not_share_token_cache(
+    monkeypatch, isolated_oauth_client
+):
     from types import SimpleNamespace
 
     from app.infrastructure.mcp import client
@@ -558,7 +572,9 @@ def test_internal_serialization_error_is_never_retried():
 
 
 @pytest.mark.asyncio
-async def test_oauth_network_io_is_cancellable_before_session_start(monkeypatch):
+async def test_oauth_network_io_is_cancellable_before_session_start(
+    monkeypatch, isolated_oauth_client
+):
     import asyncio
 
     import httpx

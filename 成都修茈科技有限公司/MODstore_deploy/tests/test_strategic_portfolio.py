@@ -24,6 +24,7 @@ from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
 def database(tmp_path, monkeypatch):
     from modstore_server import (
         db,
+        employee_executor,
         employee_runtime,
         models,
     )
@@ -56,6 +57,13 @@ def database(tmp_path, monkeypatch):
                 }
             ),
         },
+    )
+    # Restore both the source and its executor facade after each test. Loading
+    # the facade while only the source is patched otherwise keeps that fake.
+    monkeypatch.setattr(
+        employee_executor,
+        "load_employee_pack_resolved",
+        employee_runtime.load_employee_pack_resolved,
     )
     yield factory
     engine.dispose()

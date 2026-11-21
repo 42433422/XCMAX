@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import time
 import uuid
@@ -14,14 +15,30 @@ from app.infrastructure.observability.metrics import observe_plan_stage
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .llm_plan_generation import LlmPlanGeneration, PlannerCompletion, PlannerConversation
-from .model_response_metrics import model_response_scope, record_response_error
-from .planner_llm_gateway import request_planner_completion
+from .clarification_selection import ClarificationExtraction
+from .llm_plan_generation import (
+    LlmPlanGeneration,
+    PlannerCompletion,
+    PlannerConversation,
+    _mark_incomplete_response,
+)
+from .model_response_metrics import (
+    model_response_scope,
+    record_response_error,
+)
+from .planner_llm_gateway import (
+    MODEL_REQUEST_ERRORS,
+    planner_model_budget,
+    record_planning_failure,
+    request_planner_completion,
+)
 from .planner_prompt_profile import attachment_import_manifest
 from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
+from .retry_policy import planning_request_scope, planning_stage
+from .tool_calling import completion_is_incomplete
 from .tool_profile import resolve_tool_execution_profile
 from .workflow_types import PlanGraph, WorkflowNode, plan_fingerprint, validate_plan_graph
 
@@ -126,14 +143,7 @@ def close_planner_http_client() -> None:
 
 
 def _repair_failure_kind(trace: dict[str, Any]) -> str:
-    errors = trace.get("errors") or []
-    if (
-        errors
-        and errors[-1].get("code") == "repair_request_failed"
-        and "余额不足" in str(errors[-1].get("message") or "")
-    ):
-        return "model_unavailable"
-    return "plan_repair_failed"
+    return str(trace.get("model_failure_code") or trace.get("failure_kind") or "plan_repair_failed")
 
 
 class LLMWorkflowPlanner:
@@ -155,15 +165,34 @@ class LLMWorkflowPlanner:
         tool_registry: dict[str, Any],
         context: dict[str, Any] | None = None,
     ) -> PlanGraph:
+        context = dict(context or {})
+        with planner_model_budget(context), planning_request_scope(context):
+            result = self._plan(user_id, message, tool_registry, context)
+        result.metadata["planning_diagnostics"] = copy.deepcopy(context["planning_diagnostics"])
+        return result
+
+    def _plan(
+        self,
+        user_id: str,
+        message: str,
+        tool_registry: dict[str, Any],
+        context: dict[str, Any],
+    ) -> PlanGraph:
         from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
-        context = dict(context or {})
+        context.pop("_planning_snapshot", None)
         context.pop("_planning_failure_code", None)
+        context.pop("_planning_partial_reply", None)
         for key in (
             "planning_failure_reason",
             "planning_failure_kind",
             "plan_repair_trace",
+            "plan_shape_repair_trace",
+            "goal_coverage_trace",
             "goal_coverage_rejected",
+            "planning_failure_retryable",
+            "planning_failure_status",
+            "planning_failure_stage",
         ):
             context.pop(key, None)
         context.pop("prior_conversation", None)
@@ -185,22 +214,11 @@ class LLMWorkflowPlanner:
         context.pop("user_memory_rag", None)
         context.pop("memory_v2", None)
         if context.get("_actor_authorization"):
-            try:
-                from app.domain.shared_services.auth_service import get_auth_service
-                from app.infrastructure.auth.agent_mod_scope import _bound_actor
-                from app.mod_sdk.employee_directory import build_employee_directory
+            from app.application.capability_catalog import discover_capabilities, workflow_registry
 
-                if get_auth_service().has_permission(_bound_actor(context), "employee.list"):
-                    # 与员工工作台/通讯录共用同一目录，避免三处员工名单不一致。
-                    context["available_employees"] = [
-                        {
-                            "employee_id": row["pack_id"],
-                            "description": str(row.get("description") or "")[:200],
-                        }
-                        for row in build_employee_directory()
-                    ][:80]
-            except RECOVERABLE_ERRORS:
-                logger.warning("authorized employee discovery unavailable", exc_info=True)
+            registry_for_plan = workflow_registry(context)
+            discovery = discover_capabilities(context, limit=80)
+            context["available_employees"] = discovery["employees"]
         from app.application.ai_chat.conversation_history import authorized_memory_context
 
         authorized_memory = authorized_memory_context(user_id, context)
@@ -300,31 +318,28 @@ class LLMWorkflowPlanner:
         # Every online business turn is first planned by the configured platform
         # model. Deterministic checks may reject or constrain that plan, but never
         # synthesize an executable replacement when the model output is missing.
-        from app.infrastructure.modstore_transport import MarketModelError
-
         started = time.perf_counter()
+        planning_stage("planning")
         with model_response_scope():
             try:
                 planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
-            except MarketModelError as exc:
-                context["planning_failure_reason"] = str(exc)
-                context["planning_failure_kind"] = "model_unavailable"
+            except MODEL_REQUEST_ERRORS as exc:
+                record_planning_failure(context, exc)
                 planned = None
                 record_response_error()
         repair_trace: dict[str, Any] = {}
         if planned is not None:
-            from app.application.workflow.plan_repair import repair_plan
+            planning_stage("repair")
             from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
             with model_rate_limit_scope(context):
-                planned, repair_trace = repair_plan(
+                planned, repair_trace = self._repair_candidate(
                     planned=planned,
                     plan_id=plan_id,
                     message=message,
                     context=context,
                     tool_registry=registry_for_plan,
                     validate=validate_candidate,
-                    complete=self.complete_messages,
                 )
             if planned is None:
                 errors = repair_trace.get("errors") or []
@@ -334,8 +349,6 @@ class LLMWorkflowPlanner:
                     context["planning_failure_reason"] = str(errors[-1].get("message") or "")
                 logger.warning("计划修复未成功，本轮不执行: %s", repair_trace.get("errors"))
         if planned is not None and planned.metadata.get("planning_tier") != "light":
-            from app.application.ai_chat.dialogue_memory import recent_conversation_messages
-
             from .goal_coverage import review_goal_coverage
 
             # Review the final, repaired graph, never the planner's own claim of completeness.
@@ -345,34 +358,46 @@ class LLMWorkflowPlanner:
                     planned = _clarification_plan(plan_id, question)
                     break
                 with model_rate_limit_scope(context), model_response_scope():
+                    planning_stage("coverage")
+                    review_failure_kind = None
                     try:
-                        review_context = {
-                            **context,
-                            "prior_conversation": recent_conversation_messages(context, limit=12),
-                        }
                         review, error = review_goal_coverage(
-                            planned, message, review_context, self.complete_messages
+                            planned, message, context, self.complete_messages
                         )
-                    except RECOVERABLE_ERRORS:
-                        review, error = None, "目标覆盖核对暂不可用，本轮未执行任何操作"
+                    except RECOVERABLE_ERRORS as exc:
+                        record_planning_failure(context, exc, stage="goal_review")
+                        review, error = None, context["planning_failure_reason"]
+                        review_failure_kind = context["planning_failure_kind"]
                         record_response_error()
-                if error is None and review is not None:
-                    planned.metadata["goal_coverage"] = review.model_dump()
-                    context.pop("goal_coverage_rejected", None)
-                    break
-                if review is not None and review.violations and review.clarification_question:
+                if review is not None and review.clarification_question:
                     planned = _clarification_plan(plan_id, review.clarification_question)
                     context.pop("goal_coverage_rejected", None)
                     context.pop("planning_failure_reason", None)
                     break
+                if error is None and review is not None:
+                    planned.metadata["goal_coverage"] = review.model_dump()
+                    context.pop("goal_coverage_rejected", None)
+                    break
+                if review is None:
+                    if not context.get("_planning_failure_code"):
+                        context.update(
+                            planning_failure_reason=str(error or "目标核对未完成"),
+                            planning_failure_kind="goal_review_unavailable",
+                            _planning_failure_code="goal_review_unavailable",
+                            planning_failure_retryable=False,
+                            planning_failure_stage="goal_review",
+                        )
+                    planned = None
+                    break
                 context["planning_failure_reason"] = str(error or "目标核对未完成")
-                context["planning_failure_kind"] = "goal_coverage_rejected"
+                context["planning_failure_kind"] = review_failure_kind or "goal_coverage_rejected"
                 context["goal_coverage_rejected"] = review is not None
                 if attempt or review is None:
                     planned = None
                     break
                 context.pop("goal_coverage_rejected", None)
                 with model_rate_limit_scope(context), model_response_scope():
+                    planning_stage("replanning")
                     try:
                         planned = self._generation().generate(
                             plan_id,
@@ -382,21 +407,19 @@ class LLMWorkflowPlanner:
                             context,
                             coverage_feedback={"review": review.model_dump(), "error": error},
                         )
-                    except MarketModelError as exc:
-                        context["planning_failure_reason"] = str(exc)
-                        context["planning_failure_kind"] = "model_unavailable"
-                        context.pop("goal_coverage_rejected", None)
+                    except MODEL_REQUEST_ERRORS as exc:
+                        record_planning_failure(context, exc, stage="replanning")
                         planned = None
                         record_response_error()
                     if planned is not None:
-                        planned, repair_trace = repair_plan(
+                        planning_stage("repair")
+                        planned, repair_trace = self._repair_candidate(
                             planned=planned,
                             plan_id=plan_id,
                             message=message,
                             context=context,
                             tool_registry=registry_for_plan,
                             validate=validate_candidate,
-                            complete=self.complete_messages,
                         )
                         if planned is None:
                             context["planning_failure_kind"] = _repair_failure_kind(repair_trace)
@@ -429,6 +452,20 @@ class LLMWorkflowPlanner:
                 planned.metadata["memory_recall"] = recall_meta
             except (AttributeError, TypeError):
                 logger.debug("plan metadata 不支持 memory_recall 附加", exc_info=True)
+        diagnostics = context.get("planning_diagnostics") or {}
+        diagnostics["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        if diagnostics.get("exhausted"):
+            planned = None
+            context["planning_failure_kind"] = "planning_budget_exhausted"
+            context["planning_failure_reason"] = (
+                "规划已达到等待时限或自动重试上限，请重试原请求；本次未执行业务操作"
+            )
+            context.pop("goal_coverage_rejected", None)
+        for key in ("planning_diagnostics", "goal_coverage_trace", "plan_shape_repair_trace"):
+            if isinstance(context.get(key), dict):
+                context[key] = copy.deepcopy(context[key])
+                if planned is not None:
+                    planned.metadata[key] = context[key]
         if planned is not None and "goal_coverage" in planned.metadata:
             reviewed_fingerprint = plan_fingerprint(planned)
         final_plan = finalize_planned_graph(
@@ -440,6 +477,10 @@ class LLMWorkflowPlanner:
             plan_type=PlanGraph,
             node_type=WorkflowNode,
         )
+        if "_planning_partial_reply" in context:
+            # Preserve published text for the failed chat receipt, after graph
+            # logging so conversation bodies do not enter durable plan logs.
+            final_plan.metadata["partial_reply"] = context.get("_planning_partial_reply") or ""
         if planned is None or (final_plan.metadata or {}).get("planning_rejected"):
             valid_outcome = "rejected"
         elif repair_trace.get("first_pass_valid"):
@@ -452,6 +493,44 @@ class LLMWorkflowPlanner:
             duration_ms=(time.perf_counter() - started) * 1000,
         )
         return cast("PlanGraph", final_plan)
+
+    def _repair_candidate(
+        self,
+        *,
+        planned: PlanGraph,
+        plan_id: str,
+        message: str,
+        context: dict[str, Any],
+        tool_registry: dict[str, Any],
+        validate: Callable[[PlanGraph], str | None],
+    ) -> tuple[PlanGraph | None, dict[str, Any]]:
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+        from .plan_repair import repair_plan
+
+        try:
+            return repair_plan(
+                planned=planned,
+                plan_id=plan_id,
+                message=message,
+                context=context,
+                tool_registry=tool_registry,
+                validate=validate,
+                complete=self.complete_messages,
+            )
+        except ConversationRevisionError as exc:
+            # The component propagates this control signal. The plan owner ends
+            # the request here, without another repair or a new clarification wait.
+            record_planning_failure(context, exc, stage="repair")
+            return None, {
+                "model_failure_code": context["_planning_failure_code"],
+                "errors": [
+                    {
+                        "code": "repair_request_failed",
+                        "message": context["planning_failure_reason"],
+                    }
+                ],
+            }
 
     def _generation(self) -> LlmPlanGeneration:
         return LlmPlanGeneration(
@@ -475,15 +554,26 @@ class LLMWorkflowPlanner:
         completion = (
             self._completion if self._completion is not None else request_planner_completion
         )
-        return completion(
-            ai_service=self._ai_service,
-            context=context,
-            messages=messages,
-            http_client_factory=self._http_client_factory or _get_planner_http_client,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **extra,
+        from .model_response_metrics import observe_model_response
+        from .retry_policy import call_with_retry, planner_retry_policy
+
+        response = call_with_retry(
+            lambda: observe_model_response(completion)(
+                ai_service=self._ai_service,
+                context=context,
+                messages=messages,
+                http_client_factory=self._http_client_factory or _get_planner_http_client,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **extra,
+            ),
+            policy=planner_retry_policy(),
         )
+        if completion_is_incomplete(response):
+            if context is not None:
+                _mark_incomplete_response(context)
+            return None
+        return response
 
     def _plan_with_llm(
         self,
@@ -495,7 +585,7 @@ class LLMWorkflowPlanner:
     ) -> PlanGraph | None:
         return self._generation().generate(plan_id, user_id, message, tool_registry, context)
 
-    def extract_clarification_parameters(
+    def extract_clarification_turn(
         self,
         *,
         user_id: str,
@@ -507,11 +597,12 @@ class LLMWorkflowPlanner:
         allowed_fields: set[str],
         context: dict[str, Any],
         candidates: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any] | None:
+        question: str = "",
+    ) -> ClarificationExtraction:
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
         with model_rate_limit_scope(context):
-            return self._generation().extract_clarification_parameters(
+            return self._generation().extract_clarification_turn(
                 user_id=user_id,
                 original_message=original_message,
                 answer=answer,
@@ -521,4 +612,9 @@ class LLMWorkflowPlanner:
                 allowed_fields=allowed_fields,
                 context=context,
                 candidates=candidates,
+                question=question,
             )
+
+    def extract_clarification_parameters(self, **request: Any) -> dict[str, Any] | None:
+        parsed = self.extract_clarification_turn(**request)
+        return parsed.parameters if parsed.turn_kind == "answer" and parsed.resolved else None

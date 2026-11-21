@@ -7,6 +7,8 @@ from typing import Any
 
 from fastapi import Body, Query, Request
 
+from app.fastapi_routes.tools_execute import _capability_http_receipt
+
 
 def _facade() -> Any:
     return sys.modules["app.fastapi_routes.domains.shipment.shipment_orders"]
@@ -46,7 +48,7 @@ def api_orders_create(request: Request, payload: dict[str, Any] = Body(default_f
         },
         route_path="/api/orders",
     )
-    return _facade().JSONResponse(result, status_code=201 if result.get("success") else 400)
+    return _facade().JSONResponse(*_capability_http_receipt(result))
 
 
 @router.delete("/api/orders")
@@ -55,7 +57,7 @@ def api_orders_delete_root(request: Request):
     result = _facade()._run_shipment_orders_agent(
         request=request, action="clear_all", params={}, route_path="/api/orders"
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return _facade().JSONResponse(*_capability_http_receipt(result))
 
 
 @router.get("/api/orders/latest")
@@ -79,7 +81,7 @@ def api_orders_set_sequence(request: Request, payload: dict[str, Any] = Body(def
         params={"sequence": int(payload.get("sequence", 1))},
         route_path="/api/orders/set-sequence",
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return _facade().JSONResponse(*_capability_http_receipt(result))
 
 
 @router.post("/api/orders/reset-sequence")
@@ -87,7 +89,7 @@ def api_orders_reset_sequence(request: Request):
     result = _facade()._run_shipment_orders_agent(
         request=request, action="reset_sequence", params={}, route_path="/api/orders/reset-sequence"
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return _facade().JSONResponse(*_capability_http_receipt(result))
 
 
 @router.get("/api/orders/purchase-units")
@@ -109,7 +111,7 @@ def api_orders_clear_shipment(
         params={"purchase_unit": purchase_unit},
         route_path="/api/orders/clear-shipment",
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return _facade().JSONResponse(*_capability_http_receipt(result))
 
 
 @router.get("/api/orders/export")
@@ -142,7 +144,7 @@ def api_orders_clear_all(request: Request):
     result = _facade()._run_shipment_orders_agent(
         request=request, action="clear_all", params={}, route_path="/api/orders/clear-all"
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return _facade().JSONResponse(*_capability_http_receipt(result))
 
 
 @router.patch("/api/orders/{order_number}")
@@ -179,10 +181,7 @@ def api_orders_update(
         params={key: value for (key, value) in update_params.items() if value is not None},
         route_path="/api/orders/{order_number}",
     )
-    if not result.get("success"):
-        return _facade().JSONResponse(result, status_code=404)
-    result["data"] = _facade()._svc().get_order(str(record_id))
-    return _facade().JSONResponse(_facade().jsonable_encoder(result), status_code=200)
+    return _facade().JSONResponse(*_capability_http_receipt(result))
 
 
 @router.get("/api/orders/webhooks")
@@ -224,7 +223,4 @@ def shipment_orders_delete(request: Request, order_number: str):
         params={"id": shipment_id, "order_number": order_number},
         route_path="/api/shipment/orders/{order_number}",
     )
-    if not result.get("success"):
-        raise _facade().HTTPException(status_code=400, detail=result.get("message", "删除失败"))
-    result["message"] = f"订单 {order_number} 已删除"
-    return result
+    return _facade().JSONResponse(*_capability_http_receipt(result))

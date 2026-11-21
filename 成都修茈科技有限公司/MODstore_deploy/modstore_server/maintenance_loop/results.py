@@ -291,7 +291,7 @@ def _extract_para_meta(
         "para_status": para_result.get("task_status") or para_result.get("status"),
         "subtask_id": first_subtask.get("id") or response.get("subtaskId"),
         "task_id": (
-            output.get("task_id") or output.get("para_task_id")
+            (output.get("task_id") or output.get("para_task_id"))
             if isinstance(output, dict)
             else None
         )

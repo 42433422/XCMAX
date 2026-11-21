@@ -54,11 +54,11 @@ def set_public_workflow_rows(data: Dict[str, Any], rows: List[Any]) -> None:
 def read_manifest(mod_dir: Path) -> Tuple[Dict[str, Any] | None, str | None]:
     p = mod_dir / "manifest.json"
     if not p.is_file():
-        return None, f"缺少 manifest.json: {p}"
+        return None, "缺少 manifest.json"
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
-        return None, f"JSON 无效: {p}: {e}"
+        return None, f"manifest.json JSON 无效（第 {e.lineno} 行，第 {e.colno} 列）"
     if not isinstance(data, dict):
         return None, "manifest 根节点须为对象"
     return data, None

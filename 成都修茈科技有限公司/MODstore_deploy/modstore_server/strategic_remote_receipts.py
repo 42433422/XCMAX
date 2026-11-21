@@ -138,6 +138,11 @@ def reconcile_request(request_id: str) -> bool:
     saved = portfolio["tasks"][binding["opportunity_id"]]
     if result.get("ok") is True and not saved["calls"]:
         raise PortfolioError("remote report has no server-observed model calls")
+    if any(call.get("status") != "settled" for call in saved.get("calls", {}).values()):
+        # Keep the original report recoverable while its accounting reader
+        # settles usage. An unknown bill cannot turn a successful native report
+        # into a permanently failed remote receipt.
+        return False
     opportunity = next(
         item
         for item in portfolio["opportunities"]
@@ -154,7 +159,7 @@ def reconcile_request(request_id: str) -> bool:
     )
     elapsed = max(1, math.ceil((completed - _date(task["started_at"])).total_seconds()))
     _finish(task, result, elapsed, remote_receipt=(request_id, digest(snapshot)))
-    return True
+    return bridge.read_request(request_id)[2] in {"execution_completed", "failed"}
 
 
 def reconcile_portfolio(decision_id: str, *, owner_user_id: int | None = None) -> None:

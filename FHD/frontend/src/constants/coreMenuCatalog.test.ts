@@ -19,7 +19,7 @@ describe('coreMenuCatalog', () => {
     expect(catalog.industry.find(item => item.key === 'template-preview')?.requires_desktop).toBe(false)
   })
 
-  it('shares three employee surfaces without duplicating the admin graph entry', () => {
+  it('shares the three employee surfaces without a duplicate admin graph entry', () => {
     expect(ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN).toEqual([])
     expect(CORE_MENU_ITEMS_BASE.flatMap(item => item.children || []).map(item => item.key)).toEqual([
       'employee-workbench', 'workflow-employee-space', 'workflow-employee-stitch-full',

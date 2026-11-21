@@ -15,7 +15,6 @@ from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBody,
     _extract_excel_paths_from_context,
     _extract_excel_paths_from_message,
-    _looks_like_vector_request,
     _merge_runtime_context_with_message_paths,
     _sse_event_line,
     _thinking_steps_from_planner_stream_text,
@@ -26,7 +25,6 @@ from app.fastapi_routes.domains.conversation.helpers import (
     _xcagi_stream_idle_notice_seconds,
 )
 from app.fastapi_routes.domains.misc.helpers import (
-    _dispatch_tool_for_approval,
     _http_exception_to_json,
     _message_to_dict,
     _require_login_user,
@@ -86,11 +84,6 @@ def test_merge_runtime_context_with_message_paths() -> None:
     merged, found = _merge_runtime_context_with_message_paths({"foo": 1}, "打开 数据.xlsx")
     assert merged.get("foo") == 1
     assert isinstance(found, list)
-
-
-def test_looks_like_vector_request() -> None:
-    assert _looks_like_vector_request("向量检索产品") is True
-    assert _looks_like_vector_request("你好") is False
 
 
 def test_xcagi_timeout_helpers() -> None:
@@ -169,13 +162,6 @@ def test_require_login_user_authenticated() -> None:
         user, err = _require_login_user(req)
     assert user is not None
     assert err is None
-
-
-@patch("app.application.facades.tools_facade.execute_registered_workflow_tool")
-def test_dispatch_tool_for_approval(mock_exec: MagicMock) -> None:
-    mock_exec.return_value = {"success": True}
-    out = _dispatch_tool_for_approval(tool_id="t1", action="run", params={})
-    assert out["success"] is True
 
 
 # ---------------------------------------------------------------------------

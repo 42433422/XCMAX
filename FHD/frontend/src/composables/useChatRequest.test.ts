@@ -25,8 +25,6 @@ function makeDeps() {
     messages: ref([{ role: 'user', content: 'previous message', time: '10:00' }]),
     sessionId: ref('session-1'),
     lastRequestContextSummary: ref(''),
-    plannerWriteUnlockResumeDraft: ref(''),
-    resolveChatDbTokensForPayload: () => ({}),
     injectExcelContextPayload: vi.fn(() => false),
     consumeMultimodalIntoPlannerContext: vi.fn(),
   }
@@ -164,34 +162,25 @@ describe('useChatRequest', () => {
     expect(history.at(-1)?.content).toBe('msg 49')
   })
 
-  it('buildPlannerChatRequestPayload with fromWriteUnlock option', () => {
+  it('does not restore password authorization from retired options or cached tokens', () => {
     const deps = makeDeps()
-    deps.plannerWriteUnlockResumeDraft.value = 'draft content here'
     const req = useChatRequest(deps)
-    const { body } = req.buildPlannerChatRequestPayload('hello', { fromWriteUnlock: true })
-    const ctx = body.context as Record<string, unknown>
-    expect(ctx.chat_db_write_authorized).toBe(true)
-    expect(ctx.db_write_stream_resume).toBeDefined()
-    expect(deps.plannerWriteUnlockResumeDraft.value).toBe('') // should be cleared
-  })
-
-  it('buildPlannerChatRequestPayload with fromWriteUnlock and empty draft', () => {
-    const deps = makeDeps()
-    deps.plannerWriteUnlockResumeDraft.value = ''
-    const req = useChatRequest(deps)
-    const { body } = req.buildPlannerChatRequestPayload('hello', { fromWriteUnlock: true })
-    const ctx = body.context as Record<string, unknown>
-    expect(ctx.db_write_stream_resume).toContain('续跑要求')
-  })
-
-  it('buildPlannerChatRequestPayload truncates long draft', () => {
-    const deps = makeDeps()
-    deps.plannerWriteUnlockResumeDraft.value = 'x'.repeat(10000)
-    const req = useChatRequest(deps)
-    const { body } = req.buildPlannerChatRequestPayload('hello', { fromWriteUnlock: true })
-    const ctx = body.context as Record<string, unknown>
-    const resume = String(ctx.db_write_stream_resume)
-    expect(resume.length).toBeLessThan(10000)
+    localStorage.setItem('xcagi_db_read_token', 'retired-read-secret')
+    localStorage.setItem('xcagi_db_write_token', 'retired-write-secret')
+    const oldOptions = { fromWriteUnlock: true, retryOf: 'original-turn', idempotencyKey: 'original-turn' }
+    try {
+      const { body } = req.buildPlannerChatRequestPayload('hello', oldOptions)
+      const ctx = body.context as Record<string, unknown>
+      expect(ctx.idempotency_key).toBe('original-turn')
+      expect(ctx.chat_db_write_authorized).toBeUndefined()
+      expect(ctx.db_write_stream_resume).toBeUndefined()
+      expect(body.db_read_token).toBeUndefined()
+      expect(body.db_write_token).toBeUndefined()
+      expect(JSON.stringify(body)).not.toContain('retired-')
+    } finally {
+      localStorage.removeItem('xcagi_db_read_token')
+      localStorage.removeItem('xcagi_db_write_token')
+    }
   })
 
   it('buildPlannerChatRequestPayload updates lastRequestContextSummary', () => {
@@ -349,12 +338,13 @@ describe('useChatRequest', () => {
     vi.useRealTimers()
   })
 
-  it('resolveChatDbTokensForPayload is called in buildPlannerChatRequestPayload', () => {
-    const deps = makeDeps()
-    deps.resolveChatDbTokensForPayload = () => ({ db_read_token: 'token123' })
-    const req = useChatRequest(deps)
-    const { body } = req.buildPlannerChatRequestPayload('hello')
-    expect(body.db_read_token).toBe('token123')
+  it('batch requests contain no database password or self-reported authorization', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.sendUnifiedChatBatch).mockResolvedValueOnce({ success: true })
+    await request.requestChatByModeBatch(['first', 'second'])
+    const body = vi.mocked(chatApi.sendUnifiedChatBatch).mock.calls.at(-1)?.[0]
+    expect(body).toBeDefined()
+    expect(JSON.stringify(body)).not.toMatch(/db_read_token|db_write_token|chat_db_write_authorized|db_write_stream_resume/)
   })
 })
 
@@ -387,8 +377,6 @@ describe('useChatRequest page cache', () => {
           messages: ref([]),
           sessionId: ref('session-1'),
           lastRequestContextSummary: ref(''),
-          plannerWriteUnlockResumeDraft: ref(''),
-          resolveChatDbTokensForPayload: () => ({}),
           injectExcelContextPayload: () => false,
           consumeMultimodalIntoPlannerContext: () => undefined,
         })

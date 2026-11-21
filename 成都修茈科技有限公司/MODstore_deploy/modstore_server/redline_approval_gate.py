@@ -192,7 +192,7 @@ def create_redline_request(
 
     except RECOVERABLE_ERRORS as exc:
         logger.exception("create_redline_request failed: %s", exc)
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": "redline_request_failed"}
 
 
 def approve_redline_request(
@@ -231,7 +231,7 @@ def approve_redline_request(
 
     except RECOVERABLE_ERRORS as exc:
         logger.exception("approve_redline_request failed: %s", exc)
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": "redline_approval_failed"}
 
 
 def reject_redline_request(
@@ -274,7 +274,7 @@ def reject_redline_request(
 
     except RECOVERABLE_ERRORS as exc:
         logger.exception("reject_redline_request failed: %s", exc)
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": "redline_rejection_failed"}
 
 
 def get_pending_redline_requests() -> List[Dict[str, Any]]:

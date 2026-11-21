@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { shallowMount } from '@vue/test-utils'
+import { flushPromises, mount, shallowMount } from '@vue/test-utils'
+import { ElDrawer } from 'element-plus'
 import type { TaskItem } from '@/composables/useChatPersistence'
 import ChatConversationPanel from './ChatConversationPanel.vue'
 import ChatSidePanel from './ChatSidePanel.vue'
@@ -17,8 +18,10 @@ const task: TaskItem = {
   updatedAt: 1,
 }
 
-function mountPanel(taskList: TaskItem[] = []) {
-  return shallowMount(ChatSidePanel, {
+function mountPanel(taskList: TaskItem[] = [], renderDrawer = false) {
+  return (renderDrawer ? mount : shallowMount)(ChatSidePanel, {
+    attachTo: renderDrawer ? document.body : undefined,
+    global: { stubs: { ChatTaskPanel: true, ChatConversationPanel: true } },
     props: {
       currentTask: null,
       taskList,
@@ -116,5 +119,30 @@ describe('ChatSidePanel', () => {
 
     await wrapper.findAll('[role="tab"]')[0].trigger('click')
     expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('任务')
+  })
+
+  it('keeps one history panel and closes the mobile drawer after selecting a conversation', async () => {
+    const wrapper = mountPanel([], true)
+    try {
+      await wrapper.setProps({ compact: true, open: true })
+      await flushPromises()
+      const drawer = wrapper.getComponent(ElDrawer)
+      expect(drawer.props('modelValue')).toBe(true)
+      expect(wrapper.emitted('refresh-history')).toHaveLength(1)
+      expect(wrapper.findAllComponents(ChatConversationPanel)).toHaveLength(1)
+
+      wrapper.getComponent(ChatConversationPanel).vm.$emit('load', 'session-mobile')
+      await flushPromises()
+      expect(wrapper.emitted('load-session')?.at(-1)).toEqual(['session-mobile'])
+      expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
+      await wrapper.setProps({ open: false })
+      await wrapper.setProps({ open: true })
+      expect(wrapper.emitted('refresh-history')).toHaveLength(1)
+      await wrapper.setProps({ compact: false })
+      expect(wrapper.getComponent(ChatConversationPanel).exists()).toBe(true)
+      expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
+    } finally {
+      wrapper.unmount()
+    }
   })
 })

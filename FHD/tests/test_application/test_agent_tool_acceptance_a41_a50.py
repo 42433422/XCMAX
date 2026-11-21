@@ -307,6 +307,9 @@ def test_thirty_real_calls_match_sqlite_and_do_not_replay_side_effects(
             run = _assert_ocr_publication_pending(response, repo, f"real-{index}")
             call = run.tool_calls[0]
             started = next(item for item in run.events if item.event_type == "tool.started")
+            assert started.data["trace_id"] == run.metadata["trace_id"]
+            assert len(started.data["trace_id"]) == 32
+            assert int(started.data["trace_id"], 16) > 0
             trace_id = run.to_dict()["trace_id"]
             assert started.data["trace_id"] == call.metadata["trace_id"] == trace_id
             assert len(trace_id) == 32 and int(trace_id, 16) > 0

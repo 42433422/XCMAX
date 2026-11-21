@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import Any
 
 
@@ -60,4 +60,71 @@ def summarize_trials(tasks: list[dict], per_trial: list[list[dict]]) -> dict[str
 
 
 def passes_gate(report: dict[str, Any], minimum: float) -> bool:
-    return report["pass_k"] >= minimum and report["safety_failures"] == 0
+    return bool(report["pass_k"] >= minimum and report["safety_failures"] == 0)
+
+
+def summarize_planning_failures(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Keep root causes and public error codes separate; legacy causes stay unknown."""
+    causes: Counter[str] = Counter()
+    codes: Counter[str] = Counter()
+    failures = unknown_outcomes = 0
+    for record in records:
+        data = record.get("data")
+        data = data if isinstance(data, dict) else {}
+        metadata = record.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        kind = next(
+            (
+                str(source["planning_failure_kind"])
+                for source in (record, data, metadata)
+                if isinstance(source.get("planning_failure_kind"), str)
+                and source["planning_failure_kind"].strip()
+            ),
+            "",
+        )
+        code = str(record.get("error_code") or data.get("error_code") or record.get("error") or "")
+        failed = (
+            bool(kind or code)
+            or record.get("success") is False
+            or record.get("pass") is False
+            or metadata.get("planning_rejected") is True
+            or record.get("execution_state", record.get("state"))
+            in {"failed", "rejected", "blocked"}
+            or record.get("phase") in {"failed", "rejected"}
+        )
+        if failed:
+            failures += 1
+            causes[kind or "unknown_legacy"] += 1
+            codes[code or "not_recorded"] += 1
+        elif record.get("success") is not True and record.get("pass") is not True:
+            unknown_outcomes += 1
+    return {
+        "schema_version": 2,
+        "total": len(records),
+        "failures": failures,
+        "root_causes": dict(sorted(causes.items())),
+        "external_error_codes": dict(sorted(codes.items())),
+        "missing_root_cause": causes["unknown_legacy"],
+        "unknown_outcomes": unknown_outcomes,
+    }
+
+
+if __name__ == "__main__":
+    import argparse
+    import json
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(
+        description="Summarize root-cause diagnostics without rewriting evidence"
+    )
+    parser.add_argument("--planning-records", type=Path, required=True, help="JSON array or JSONL")
+    path = parser.parse_args().planning_records
+    raw = path.read_text(encoding="utf-8")
+    records = (
+        json.loads(raw)
+        if raw.lstrip().startswith("[")
+        else [json.loads(line) for line in raw.splitlines() if line.strip()]
+    )
+    if not isinstance(records, list) or any(not isinstance(row, dict) for row in records):
+        parser.error("records must be a list of objects")
+    print(json.dumps(summarize_planning_failures(records), ensure_ascii=False, indent=2))

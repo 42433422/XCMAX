@@ -21,7 +21,6 @@ from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, val
 from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBody,
     _extract_excel_paths_from_message,
-    _looks_like_vector_request,
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
     _xcagi_chat_http_exc,
@@ -263,11 +262,6 @@ def test_extract_excel_paths_and_merge_context() -> None:
     )
     assert merged["excel_file_path"]
     assert found
-
-
-def test_looks_like_vector_request() -> None:
-    assert _looks_like_vector_request("建立向量索引") is True
-    assert _looks_like_vector_request("普通聊天") is False
 
 
 def test_xcagi_compat_reply_payload_plain_text() -> None:

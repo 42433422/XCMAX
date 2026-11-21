@@ -101,6 +101,31 @@ def test_planner_does_not_mix_global_history_into_an_explicit_conversation():
     assert "FOREIGN_SESSION_MARKER" not in json.dumps(captured["recent_messages"])
 
 
+def test_current_greeting_keeps_light_reply_with_existing_history(monkeypatch, tmp_path):
+    from app.application.workflow.llm_plan_generation import LlmPlanGeneration
+
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
+    completion = Mock(
+        return_value={"choices": [{"message": {"content": '{"mode":"reply","reply":"你好"}'}}]}
+    )
+    history = [{"role": "user", "content": "上轮解释向量概念"}]
+    context = {
+        "local_user_id": 31,
+        "tenant_id": 5,
+        "conversation_id": "greeting-history",
+        "_chat_evidence_authorized": True,
+        "chat_owned_history": history,
+    }
+    generator = LlmPlanGeneration(Mock(get_context=Mock(return_value=None)), completion, Mock())
+    plan = generator.generate("p1", "u1", "你好", {}, context)
+    assert plan.metadata["planning_tier"] == "light"
+    request = json.loads(completion.call_args.kwargs["messages"][1]["content"])
+    assert request["user_message"] == "你好"
+    assert request["conversation_history"] == history
+    assert "tools" not in completion.call_args.kwargs
+    completion.assert_called_once()
+
+
 @pytest.mark.parametrize("light_reply", [False, True])
 def test_long_history_keeps_latest_constraints_in_order(light_reply, monkeypatch, tmp_path):
     from app.application.workflow.llm_plan_generation import LlmPlanGeneration
@@ -545,6 +570,9 @@ class TestPlanWithLLM:
         assert result["success"] is True
         assert result["response"] == "你好，我可以帮你查询业务数据。"
         assert result["data"]["workflow_runtime"] == "xcagi-langgraph"
+        assert result["data"]["execution_started"] is False
+        assert result["execution"]["effect"] == "none"
+        assert result["execution"]["committed"] is False
 
     def test_reply_plan_failure_declares_no_business_write(self):
         from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch

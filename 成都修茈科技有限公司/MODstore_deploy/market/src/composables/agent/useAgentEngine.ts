@@ -10,9 +10,8 @@ import { api } from '../../api'
 import { getMarketPageKnowledge, getStructuredPageSummary } from '../../content/siteKnowledge'
 import { checkXiaoCLifeAction, minimumSkillLevel } from './xiaocLifeActionGuard'
 
-let _msgId = 0
 function nextId() {
-  return `msg-${Date.now()}-${++_msgId}`
+  return `msg-${crypto.randomUUID()}`
 }
 
 function makeUserMsg(content: string): AgentMessage {
@@ -23,8 +22,9 @@ function makeAssistantMsg(content: string, isLoading = false): AgentMessage {
   return { id: nextId(), role: 'assistant', content, timestamp: Date.now(), isLoading }
 }
 
-interface RequestScope {
+interface AgentTurn {
   conversationId: number | null
+  signal: AbortSignal
   isCurrent: () => boolean
   updateReply: (patch: Partial<AgentMessage>) => void
 }
@@ -45,23 +45,27 @@ export function useAgentEngine() {
     const text = userText.trim()
     const uploaded = typeof opts?.imageDataUrl === 'string' ? opts.imageDataUrl.trim() : ''
     if ((!text && !uploaded && !opts?.withScreenshot) || agentStore.isLoading) return
+    const history = agentStore.messages.filter((message) => !message.isLoading && !message.isError).slice(-12)
     const generation = agentStore.conversationGeneration
     const owner = auth.user?.id
-    const isCurrent = () => generation === agentStore.conversationGeneration && owner === auth.user?.id
+    const controller = new AbortController()
+    agentStore.requestController = controller
     agentStore.isLoading = true
     agentStore.setMode('thinking')
 
     const displayText = text || (uploaded || opts?.withScreenshot ? '[图片]' : '')
-    if (!opts?.skipUserInsert) {
-      agentStore.addMessage(makeUserMsg(displayText))
-      agentStore.addMessage(makeAssistantMsg('…', true))
-    }
-    const replyId = agentStore.messages[agentStore.messages.length - 1]?.id
-    const request: RequestScope = {
+    if (opts?.skipUserInsert && history.at(-1)?.role === 'user' && history.at(-1)?.content === displayText) history.pop()
+    if (!opts?.skipUserInsert) agentStore.addMessage(makeUserMsg(displayText))
+    const existingReply = opts?.skipUserInsert ? agentStore.messages.at(-1) : undefined
+    const reply = existingReply?.role === 'assistant' && existingReply.isLoading ? existingReply : makeAssistantMsg('…', true)
+    if (reply !== existingReply) agentStore.addMessage(reply)
+    const isCurrent = () => generation === agentStore.conversationGeneration && owner === auth.user?.id && !controller.signal.aborted
+    const turn: AgentTurn = {
       conversationId: agentStore.currentConversationId,
+      signal: controller.signal,
       isCurrent,
       updateReply: (patch) => {
-        if (isCurrent() && replyId) agentStore.updateMessage(replyId, patch)
+        if (isCurrent()) agentStore.updateMessage(reply.id, patch)
       },
     }
 
@@ -73,59 +77,63 @@ export function useAgentEngine() {
         pageTitle: document.title,
         pageSummary: getStructuredPageSummary({ routeName, domExcerpt }),
         userMessage: text || displayText,
-        history: agentStore.messages.slice(-12),
+        history,
       }
 
       // 有附图时跳过离线技能，直接走 LLM vision
       if (!uploaded && !opts?.withScreenshot) {
         const matchedSkill = skillRegistry.matchByIntent(context)
-        if (matchedSkill && !request.conversationId) {
+        if (matchedSkill && !turn.conversationId) {
           const blocked = await checkXiaoCLifeAction(minimumSkillLevel(matchedSkill.id), isCurrent)
           if (!isCurrent()) return
-          const result = blocked ?? await matchedSkill.execute(context)
-          request.updateReply({
-            content: result.assistantReply || result.message,
-            isLoading: false,
-          })
-          if (isCurrent()) agentStore.setMode('idle')
-          return
+          if (!blocked) {
+            const result = await matchedSkill.execute(context)
+            if (!isCurrent()) return
+            turn.updateReply({ content: result.assistantReply || result.message, isLoading: false, isError: !result.success })
+            agentStore.setMode(result.success ? 'idle' : 'error')
+            return
+          }
+          // An unavailable action does not prevent L1 from answering with advice.
         }
       }
 
       // Phase 3+: LLM brain
-      await callLLMBrain(context, request, {
+      await callLLMBrain(context, turn, {
         withScreenshot: opts?.withScreenshot ?? false,
         imageDataUrl: uploaded || null,
+        requestId: [...agentStore.messages].reverse().find((message) => message.role === 'user')?.id || nextId(),
       })
     } catch (e: unknown) {
       if (!isCurrent()) return
       const msg = e instanceof Error ? e.message : String(e)
-      request.updateReply({ content: `出错了：${msg}`, isLoading: false })
+      turn.updateReply({ content: `出错了：${msg}`, isLoading: false, isError: true })
       agentStore.setMode('error')
     } finally {
       if (isCurrent()) {
+        agentStore.requestController = null
         agentStore.isLoading = false
         if (agentStore.mode === 'thinking') agentStore.setMode('idle')
       }
     }
   }
 
-  async function callLLMBrain(context: AgentContext, request: RequestScope, opts: { withScreenshot: boolean; imageDataUrl?: string | null }) {
+  async function callLLMBrain(context: AgentContext, turn: AgentTurn, opts: { withScreenshot: boolean; imageDataUrl?: string | null; requestId: string }) {
     let screenshotDataUrl: string | null =
       typeof opts.imageDataUrl === 'string' && opts.imageDataUrl.trim() ? opts.imageDataUrl.trim() : null
     if (!screenshotDataUrl && opts.withScreenshot) {
       try {
         const { captureViewport } = await import('../../utils/agent/screenshotCapture')
-        if (!request.isCurrent()) return
-        const captured = await captureViewport()
-        if (captured.ok && captured.kind === 'image' && captured.dataUrl) {
-          screenshotDataUrl = captured.dataUrl
+        if (!turn.isCurrent()) return
+        const captured = await captureViewport({ signal: turn.signal, autoTextFallback: false })
+        if (!captured.ok || captured.kind !== 'image' || !captured.dataUrl?.startsWith('data:image/')) {
+          throw new Error('Missing screenshot')
         }
+        screenshotDataUrl = captured.dataUrl
       } catch {
-        // fallback: no screenshot
+        throw new Error('页面截图未取得，请重新截图或上传图片后再发送。')
       }
     }
-    if (!request.isCurrent()) return
+    if (!turn.isCurrent()) return
 
     // 构建 messages 列表
     const systemMsg = {
@@ -150,60 +158,45 @@ export function useAgentEngine() {
 
     const messages = [systemMsg, ...historyMsgs, userApiMsg]
 
-    let response: LLMResponse
-    try {
-      response = (await api.agentButlerChat({
+    const response = (await api.agentButlerChat(
+      {
         messages,
-        conversation_id: request.conversationId,
+        request_id: opts.requestId,
+        conversation_id: turn.conversationId,
         page_context: context.pageSummary,
-      })) as LLMResponse
-    } catch {
-      if (!request.isCurrent()) return
-      // 降级：关键词匹配兜底
-      const fallbackSkill = skillRegistry.matchByIntent(context)
-      if (fallbackSkill) {
-        const blocked = await checkXiaoCLifeAction(minimumSkillLevel(fallbackSkill.id), request.isCurrent)
-        if (!request.isCurrent()) return
-        const result = blocked ?? await fallbackSkill.execute(context)
-        request.updateReply({
-          content: result.assistantReply || result.message,
-          isLoading: false,
-        })
-      } else {
-        request.updateReply({
-          content: '我暂时无法连接到 AI 大脑，请稍后再试。您也可以直接告诉我要去哪个页面。',
-          isLoading: false,
-        })
-      }
-      return
+      },
+      turn.signal,
+    )) as LLMResponse
+    if (!turn.isCurrent()) return
+    if (!response || response.success === false) {
+      throw new Error(response?.message || '未收到有效回复，请重试本轮对话。')
     }
-    if (!request.isCurrent()) return
 
-    if (response.conversation_id) {
-      agentStore.currentConversationId = response.conversation_id
-    }
+    const tools = Array.isArray(response.tool_calls) ? response.tool_calls : []
+    const replyText = typeof response.text === 'string' ? response.text.trim() : ''
+    if (!tools.length && !replyText) throw new Error('未收到有效回复，请重试本轮对话。')
+    if (response.conversation_id) agentStore.currentConversationId = response.conversation_id
 
     // 处理 tool_calls
-    if (response.tool_calls?.length) {
-      await handleToolCalls(response.tool_calls, request)
+    if (tools.length) {
+      await handleToolCalls(tools, context, turn)
     } else {
-      request.updateReply({ content: response.text || '好的。', isLoading: false })
+      turn.updateReply({ content: replyText, isLoading: false })
     }
   }
 
-  async function handleToolCalls(toolCalls: LLMToolCall[], request: RequestScope) {
-    if (!request.isCurrent()) return
+  async function handleToolCalls(toolCalls: LLMToolCall[], _context: AgentContext, turn: AgentTurn) {
     const firstTool = toolCalls[0]
-    const blocked = await checkXiaoCLifeAction(toolCalls.length > 1 ? 3 : 2, request.isCurrent)
-    if (!request.isCurrent()) return
+    const blocked = await checkXiaoCLifeAction(toolCalls.length > 1 ? 3 : 2, turn.isCurrent)
+    if (!turn.isCurrent()) return
     if (blocked) {
-      request.updateReply({ content: blocked.message, isLoading: false })
+      turn.updateReply({ content: blocked.message, isLoading: false, isError: true })
       return
     }
     const name = firstTool.name
     const args = firstTool.args as Record<string, unknown>
 
-    request.updateReply({ content: `正在执行：${name}…`, isLoading: true })
+    turn.updateReply({ content: `正在执行：${name}…`, isLoading: true })
     agentStore.setMode('operating')
 
     let result
@@ -240,20 +233,22 @@ export function useAgentEngine() {
             userMessage: '',
             history: agentStore.messages.slice(-6),
           }
-          const denied = await checkXiaoCLifeAction(minimumSkillLevel(skill.id), request.isCurrent)
-          if (!request.isCurrent()) return
-          result = denied ?? await skill.execute(ctx, args)
+          const blockedSkill = await checkXiaoCLifeAction(minimumSkillLevel(skill.id), turn.isCurrent)
+          if (!turn.isCurrent()) return
+          result = blockedSkill ?? (await skill.execute(ctx, args))
         } else {
           result = { success: false, message: `未知工具：${name}` }
         }
       }
     }
 
-    request.updateReply({
+    if (!turn.isCurrent()) return
+    turn.updateReply({
       content: result.assistantReply || result.message,
       isLoading: false,
+      isError: !result.success,
     })
-    if (request.isCurrent()) agentStore.setMode('idle')
+    agentStore.setMode(result.success ? 'idle' : 'error')
   }
 
   function buildSystemPrompt(context: AgentContext): string {

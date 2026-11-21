@@ -4,17 +4,10 @@ from __future__ import annotations
 
 from itertools import count
 
+import pytest
+
 from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
 from app.application.aiopen.usage import UsageLedger
-
-
-def _authorization_worker(path, key, ready, proceed):
-    registry = ApiKeyRegistry(
-        RuntimeState({}), lambda: "", lambda _: "unused", lambda: 1000.0, storage=lambda: path
-    )
-    ready.put(registry.authorize(key, "ui_click")["ok"])
-    proceed.get(timeout=10)
-    ready.put(registry.authorize(key, "ui_click")["ok"])
 
 
 def _registry(tmp_path, *, env: str = ""):
@@ -35,6 +28,39 @@ def test_scope_and_expiry_are_enforced(tmp_path):
     assert registry.authorize(key, "ui_click")["code"] == "AIOPEN_SCOPE_DENIED"
     expired = registry.generate("expired", expires_at=500.0)["key"]
     assert registry.authorize(expired, "chat")["code"] == "AIOPEN_KEY_EXPIRED"
+
+
+@pytest.mark.parametrize("expires", [{}, [], True, False, "invalid", float("nan")])
+def test_invalid_execution_expiry_is_rejected_before_actor_lookup(tmp_path, monkeypatch, expires):
+    from unittest.mock import Mock
+
+    lookup = Mock()
+    monkeypatch.setattr("app.infrastructure.auth.agent_mod_scope._bound_actor", lookup)
+    registry = _registry(tmp_path)
+    # Reject booleans by type even when their numeric 0/1 value is in the future.
+    monkeypatch.setattr(registry, "_clock", lambda: -1.0)
+    assert (
+        registry._execution_context(
+            {"expires_at": expires, "credential_id": "owned-key", "execution_context": {}}
+        )
+        is None
+    )
+    lookup.assert_not_called()
+
+
+def test_execution_context_does_not_hide_programmer_type_errors(monkeypatch, tmp_path):
+    from unittest.mock import Mock
+
+    actor = Mock(side_effect=TypeError("unexpected programming error"))
+    monkeypatch.setattr("app.infrastructure.auth.agent_mod_scope._bound_actor", actor)
+    with pytest.raises(TypeError, match="unexpected programming error"):
+        _registry(tmp_path)._execution_context(
+            {
+                "expires_at": 2000.0,
+                "execution_context": {"user_id": "7"},
+                "credential_id": "owned-key",
+            }
+        )
 
 
 def test_rate_limit_and_daily_quota(tmp_path):
@@ -62,6 +88,19 @@ def test_keys_survive_registry_reload(tmp_path):
     assert listed[0]["total_calls"] == 1
 
 
+def test_failed_revocation_persistence_is_reported_and_keeps_original_key(tmp_path, monkeypatch):
+    registry, other_worker = _registry(tmp_path), _registry(tmp_path)
+    key = registry.generate("original")["key"]
+    with monkeypatch.context() as failure:
+        failure.setattr(registry, "_persist", lambda: False)
+        with pytest.raises(OSError, match="revocation"):
+            registry.revoke(key)
+        assert registry.verify(key) is True
+        assert other_worker.authorize(key, "chat")["ok"] is True
+    assert registry.revoke(key) is True
+    assert other_worker.authorize(key, "chat")["ok"] is False
+
+
 def test_client_revocation_is_visible_to_other_workers_and_not_resurrected(tmp_path):
     from app.domain.aiopen.principal import ScreenPrincipal
 
@@ -78,7 +117,12 @@ def test_client_revocation_is_visible_to_other_workers_and_not_resurrected(tmp_p
     assert second.resolve_principal(key) is None
 
 
-def test_revocation_is_visible_in_a_running_separate_process(tmp_path, spawn_context):
+def test_revocation_is_visible_in_a_running_separate_process(tmp_path):
+    """Use a real subprocess: pytest modules are not importable by spawn in CI."""
+    import subprocess
+    import sys
+    import time
+
     from app.domain.aiopen.principal import ScreenPrincipal
 
     registry = _registry(tmp_path)
@@ -86,25 +130,53 @@ def test_revocation_is_visible_in_a_running_separate_process(tmp_path, spawn_con
     key = registry.generate(
         principal=owner, scopes=["ui_click"], expires_at=2000.0, client_key=True
     )["key"]
-    context = spawn_context
-    ready, proceed = context.Queue(), context.Queue()
-    worker = context.Process(
-        target=_authorization_worker, args=(tmp_path / "keys.json", key, ready, proceed)
+    before, after, release = (tmp_path / name for name in ("before.txt", "after.txt", "release"))
+    # No test-module pickling: subprocess imports the production registry directly.
+    script = (
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState\n"
+        "storage, key, before, release, after = sys.argv[1:]\n"
+        "registry = ApiKeyRegistry(RuntimeState({}), lambda: '', lambda _: 'unused', "
+        "lambda: 1000.0, storage=lambda: Path(storage))\n"
+        "Path(before).write_text(str(registry.authorize(key, 'ui_click')['ok']))\n"
+        "deadline = time.monotonic() + 30\n"
+        "while not Path(release).exists() and time.monotonic() < deadline: time.sleep(0.03)\n"
+        "if not Path(release).exists(): sys.exit(2)\n"
+        "Path(after).write_text(str(registry.authorize(key, 'ui_click')['ok']))\n"
     )
-    worker.start()
+    storage = str(tmp_path / "keys.json")
+    worker = subprocess.Popen(
+        [sys.executable, "-c", script, storage, key, str(before), str(release), str(after)],
+        cwd=str(__import__("pathlib").Path(__file__).resolve().parents[2]),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    def read_worker_result(path):
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if path.exists():
+                return path.read_text() == "True"
+            if worker.poll() is not None:
+                raise AssertionError(f"worker exited {worker.returncode}: {worker.stderr.read()}")
+            time.sleep(0.05)
+        raise AssertionError(f"worker did not publish {path.name} within 30s")
+
     try:
-        assert ready.get(timeout=10) is True
+        assert read_worker_result(before) is True
         assert registry.revoke_client_key(owner) is True
-        proceed.put(True)
-        assert ready.get(timeout=10) is False
-        worker.join(timeout=10)
-        assert worker.exitcode == 0
+        release.touch()
+        assert read_worker_result(after) is False
+        worker.wait(timeout=10)
+        assert worker.returncode == 0, worker.stderr.read()
     finally:
-        if worker.is_alive():
-            worker.terminate()
-            worker.join(timeout=5)
-        ready.close()
-        proceed.close()
+        if worker.poll() is None:
+            worker.kill()
+            worker.wait(timeout=5)
+        if worker.stderr is not None:
+            worker.stderr.close()
 
 
 def test_workers_do_not_overwrite_each_others_keys(tmp_path):

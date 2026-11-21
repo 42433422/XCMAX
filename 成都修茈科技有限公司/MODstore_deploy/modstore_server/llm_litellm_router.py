@@ -158,7 +158,8 @@ def _deployment(
         params = {
             "api_key": normalize_minimax_api_key(api_key),
             "api_base": minimax_anthropic_base_url(
-                base_url, prefer_base=isinstance(api_key, PlatformApiKey) and api_key.managed
+                base_url,
+                prefer_base=isinstance(api_key, PlatformApiKey) and api_key.managed,
             ),
             "extra_headers": {"anthropic-version": "2023-06-01"},
         }
@@ -396,8 +397,8 @@ def _budgeted_stream_client(
     def record(chunk):
         if not isinstance(chunk, ChatCompletionChunk):
             return
-        # The Router rewrites chunk.model to its requested alias. Preserve raw
-        # identity, including a mismatch that later frames must not erase.
+        # LiteLLM rewrites chunk.model to its requested alias. Retain raw
+        # identity from every SDK frame; later aliases cannot erase a mismatch.
         if chunk.model and reported.get("model", model) == model:
             reported["model"] = chunk.model
         if values := _usage_dict(chunk):
@@ -419,11 +420,20 @@ def _budgeted_stream_client(
 
         async def post(self, path, **kwargs):
             from modstore_server.strategic_portfolio import PortfolioError
-            from modstore_server.strategic_portfolio_usage import require_call_reservation
+            from modstore_server.strategic_portfolio_usage import (
+                require_call_reservation,
+                transport_headers,
+            )
 
             if path != "/chat/completions" or bool(kwargs.get("stream")) != stream:
                 raise PortfolioError("metered client requires the approved chat request")
             require_call_reservation(provider=provider, model=model, start_transport=True)
+            options = dict(kwargs.get("options") or {})
+            options["headers"] = {
+                **(options.get("headers") or {}),
+                **transport_headers(provider),
+            }
+            kwargs["options"] = options
             if stream:
                 kwargs["stream_cls"] = ReceiptStream
             response = await super().post(path, **kwargs)
@@ -510,6 +520,7 @@ def _normalize_response(
     out: Dict[str, Any] = {
         "ok": True,
         "content": content or reasoning,
+        "finish_reason": getattr(choices[0], "finish_reason", None) if choices else None,
         "usage": usage,
         "provider": provider,
         "model": used_model,
@@ -537,7 +548,10 @@ async def chat(
 ) -> Optional[Dict[str, Any]]:
     """走 LiteLLM Router 的非流式调用；不支持该 provider 时返回 ``None``。"""
 
-    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
+    from modstore_server.strategic_portfolio_usage import (
+        require_call_reservation,
+        scope_active,
+    )
 
     budgeted = scope_active()
     require_manual_life_capability()
@@ -697,7 +711,10 @@ async def _stream_impl(
     tool_choice: Any,
     fallbacks: Optional[List[Dict[str, Any]]],
 ) -> AsyncIterator[Dict[str, Any]]:
-    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
+    from modstore_server.strategic_portfolio_usage import (
+        require_call_reservation,
+        scope_active,
+    )
 
     budgeted = scope_active()
     require_manual_life_capability()
@@ -787,7 +804,11 @@ async def _stream_impl(
     except _UPSTREAM_ERRORS as exc:
         outcome = "error"
         payload = _error_payload(exc, timeout_s=None)
-        yield {"type": "error", "status": payload.get("status"), "error": payload.get("error")}
+        yield {
+            "type": "error",
+            "status": payload.get("status"),
+            "error": payload.get("error"),
+        }
     finally:
         try:
             closer = getattr(response, "aclose", None)
@@ -812,7 +833,10 @@ def stream_events(
     fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[AsyncIterator[Dict[str, Any]]]:
     """返回 LiteLLM 流事件迭代器；不支持时返回 ``None`` 由调用方降级。"""
-    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
+    from modstore_server.strategic_portfolio_usage import (
+        require_call_reservation,
+        scope_active,
+    )
 
     require_manual_life_capability()
     if scope_active():
@@ -865,4 +889,7 @@ __all__ = [
 
 
 def supports(provider: str) -> bool:
-    return provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS or provider in {"anthropic", "google"}
+    return provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS or provider in {
+        "anthropic",
+        "google",
+    }

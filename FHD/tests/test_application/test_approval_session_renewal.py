@@ -411,51 +411,6 @@ def test_durable_resume_rejects_unreconciled_result(waiting_task):
     assert queue.get(run.run_id) is None
 
 
-@pytest.mark.parametrize("confirmed", [False, True])
-def test_resume_reconciles_durable_effects_before_requeue(waiting_task, confirmed):
-    from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
-    from app.domain.task_lifecycle.control import SessionBook
-
-    runs, queue, _, original, previous, _ = waiting_task
-    run = runs.get(original.run_id)
-    run.status = "paused"
-    run.steps[0].status = "completed" if confirmed else "pending"
-    run.steps[0].output = {"success": True, "order_id": "created-once"} if confirmed else {}
-    runs.save(run)
-    with runs.transaction() as db:
-        book = SessionBook(db)
-        body = book.get("agent", "tenant", run.run_id)
-        body["effects"] = [run.steps[0].step_id]
-        book.put("agent", "tenant", run.run_id, body)
-    before = runs.get(run.run_id).to_dict()
-
-    def resume():
-        return resume_and_enqueue(
-            runs,
-            queue,
-            run_id=run.run_id,
-            principal_id="owner",
-            runtime_context={},
-            authenticated_binding={**previous, "session_row_id": 2},
-        )
-
-    if confirmed:
-        result = resume()
-        assert result.status == "queued" and result.run_id == run.run_id
-        assert result.steps[0].to_dict() == run.steps[0].to_dict()
-        assert queue.get(run.run_id).state == "queued"
-    else:
-        with pytest.raises(ApprovalGrantError, match="核对"):
-            resume()
-        assert runs.get(run.run_id).to_dict() == before
-        assert runs.latest_task_control(run.run_id) is None
-        assert queue.get(run.run_id) is None
-    with runs.transaction(read_only=True) as db:
-        assert SessionBook(db).get("agent", "tenant", run.run_id)["effects"] == (
-            [] if confirmed else [run.steps[0].step_id]
-        )
-
-
 @pytest.fixture(params=["", "session-renewal-mod"])
 def real_session_task(request, trusted_actor, monkeypatch):
     from datetime import timedelta
@@ -539,7 +494,7 @@ def test_http_renews_real_actor_and_mod_sessions(
     elif operation == "retry":
         run.status = "failed"
         step = run.steps[0]
-        step.status, step.tool_id, step.action = "pending", "products", "query"
+        step.status, step.tool_id, step.action = "pending", "shipment_records", "query"
         step.params, step.idempotent = {"keyword": "query after renewal"}, True
         plan = PlanGraph(
             plan_id="session-retry",
@@ -589,7 +544,7 @@ def test_http_renews_real_actor_and_mod_sessions(
         )
         result = AgentToolExecutor().execute(renewed.steps[0], runtime_context=context)
         assert result["success"], result
-        assert calls == [("products", "query")]
+        assert calls == [("shipment_records", "query")]
     with task.first.factory() as db:
         assert db.query(AgentApprovalConsumption).count() == (1 if operation == "continue" else 0)
 
@@ -707,3 +662,48 @@ def test_real_actor_renewal_rolls_back_with_queue_failure(real_session_task, mon
         == task.second.principal.actor_authorization
     )
     assert renewed.status == "queued"
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_resume_reconciles_durable_effects_before_requeue(waiting_task, confirmed):
+    from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+    from app.domain.task_lifecycle.control import SessionBook
+
+    runs, queue, _, original, previous, _ = waiting_task
+    run = runs.get(original.run_id)
+    run.status = "paused"
+    run.steps[0].status = "completed" if confirmed else "pending"
+    run.steps[0].output = {"success": True, "order_id": "created-once"} if confirmed else {}
+    runs.save(run)
+    with runs.transaction() as db:
+        book = SessionBook(db)
+        body = book.get("agent", "tenant", run.run_id)
+        body["effects"] = [run.steps[0].step_id]
+        book.put("agent", "tenant", run.run_id, body)
+    before = runs.get(run.run_id).to_dict()
+
+    def resume():
+        return resume_and_enqueue(
+            runs,
+            queue,
+            run_id=run.run_id,
+            principal_id="owner",
+            runtime_context={},
+            authenticated_binding={**previous, "session_row_id": 2},
+        )
+
+    if confirmed:
+        result = resume()
+        assert result.status == "queued" and result.run_id == run.run_id
+        assert result.steps[0].to_dict() == run.steps[0].to_dict()
+        assert queue.get(run.run_id).state == "queued"
+    else:
+        with pytest.raises(ApprovalGrantError, match="核对"):
+            resume()
+        assert runs.get(run.run_id).to_dict() == before
+        assert runs.latest_task_control(run.run_id) is None
+        assert queue.get(run.run_id) is None
+    with runs.transaction(read_only=True) as db:
+        assert SessionBook(db).get("agent", "tenant", run.run_id)["effects"] == (
+            [] if confirmed else [run.steps[0].step_id]
+        )

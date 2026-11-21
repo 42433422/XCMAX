@@ -20,6 +20,7 @@ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRe
 from app.application.agent_orchestrator.step_execution import StepExecution
 from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, ToolValidationResult
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_agent_user_decision_pause import native_preview as native_preview
 
 
 def _receipt(
@@ -84,64 +85,108 @@ def _adapter(monkeypatch, function):
     )
 
 
-def _paused_preview(monkeypatch, *, resume=None, source="elt_preview_snapshot"):
-    # These tests isolate frozen report/approval binding. The separate decision
-    # pause tests exercise the actual SQLite ELT authority and consumed grants.
-    _adapter(
-        monkeypatch,
-        lambda **_: {
-            "status": "verified",
-            "code": "result_verified",
-            "checks": [
-                {
-                    "check_id": "preview",
-                    "status": "passed",
-                    "source": source,
-                    "evidence": {
-                        "verification_scope": "preview_snapshot",
-                        "business_effect_verified": False,
-                    },
-                }
-            ],
-        },
-    )
-    run, step, call, context = _receipt(
+def _paused_preview(actor, native_preview, *, resume=None):
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    output = native_preview(actor)
+    if resume is not None:
+        output["resume_params"] = copy.deepcopy(resume)
+    step = AgentStep(
+        node_id="preview",
         tool_id="elt_import",
         action="preview",
-        params={"file_path": "original-upload"},
-        output={
-            "success": True,
-            "preview": True,
-            "requires_user_decision": True,
-            "question": "Confirm the preview conditions?",
-            "resume_params": {"valid_rows_only": True} if resume is None else resume,
-        },
+        params={"file_path": "@uploads/宗南.xlsx"},
+        risk="medium",
+        idempotent=False,
+        attempt_count=1,
+        status="waiting_user",
+        output=copy.deepcopy(output),
     )
-    assert verify_step_result(run=run, step=step, call=call, context=context)["accepted"]
-    run.status = step.status = "waiting_user"
-    return run, step, call
+    call = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        tool_id=step.tool_id,
+        action=step.action,
+        params=copy.deepcopy(step.params),
+        status="completed",
+        output=copy.deepcopy(output),
+        metadata={"attempt_count": 1},
+    )
+    plan = PlanGraph(
+        plan_id="bound-preview",
+        intent="elt_import",
+        nodes=[
+            WorkflowNode(
+                step.node_id,
+                step.tool_id,
+                step.action,
+                params=copy.deepcopy(step.params),
+                risk=step.risk,
+                idempotent=step.idempotent,
+            )
+        ],
+    )
+    run = AgentRun(
+        user_id=str(actor.user_id),
+        message="Confirm the original preview",
+        status="waiting_user",
+        plan_id=plan.plan_id,
+        steps=[step],
+        tool_calls=[call],
+    )
+    context = {
+        **actor.context,
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+    }
+    run.metadata.update(runtime_context=copy.deepcopy(context), plan=plan_to_dict(plan))
+    freeze_verification_contract(
+        run, step, call, get_tool_action_spec(step.tool_id, step.action), context
+    )
+    bind_execution_receipt(call)
+    verify_step_result(run=run, step=step, call=call, context=context)
+    return run, step, call, context
 
 
 def _approval_for(run, step):
-    from app.application.agent_orchestrator.approval_grant import approval_receipt_claims
+    from app.application.agent_orchestrator.approval_grant import (
+        approval_receipt_claims,
+        consume_approval_grant,
+        issue_approval_grant,
+    )
 
+    grant = issue_approval_grant(run, principal_id=run.user_id)
+    assert grant is not None
+    claims = consume_approval_grant(grant["grant"], run=run, principal_id=run.user_id)
     return {
         "step_id": step.step_id,
         "tool_id": step.tool_id,
         "action": step.action,
-        **approval_receipt_claims(run, step),
+        **approval_receipt_claims(run, step, claims=claims),
     }
 
 
-def test_pending_preview_binding_does_not_itself_authorize_continuation(monkeypatch):
-    from app.application.agent_orchestrator.verification_continuation import (
+def test_pending_preview_binding_does_not_itself_authorize_continuation(
+    trusted_actor, native_preview
+):
+    from app.application.agent_orchestrator.approval_grant import ApprovalGrantError
+    from app.application.agent_orchestrator.run_lifecycle import (
         approved_preview_continuation,
+        continuation_params_bound,
+        prepare_user_decision_params,
     )
 
-    run, step, call = _paused_preview(monkeypatch)
+    actor = trusted_actor(role="admin")
+    run, step, call, context = _paused_preview(actor, native_preview)
+    assert call.metadata["verification"]["code"] == "verified_elt_preview_admission"
     original = copy.deepcopy(call.to_dict())
-    run.metadata["approval_receipt"] = _approval_for(run, step)
-    step.params["valid_rows_only"] = True
+    with pytest.raises(ApprovalGrantError, match="续跑参数尚未绑定"):
+        _approval_for(run, step)
+    assert not approved_preview_continuation(run, step, call)
+    assert prepare_user_decision_params(run, step, context) == ""
+    assert continuation_params_bound(run, step, call)
     assert not step_verification_blocked(run, step)
     assert not approved_preview_continuation(run, step, call)
     run.metadata["approval_receipt"] = _approval_for(run, step)
@@ -160,36 +205,60 @@ def test_pending_preview_binding_does_not_itself_authorize_continuation(monkeypa
         {"valid_rows_only": True, "execute": True},
     ],
 )
-def test_preview_resume_report_cannot_expand_the_parameter_allowlist(monkeypatch, resume):
-    from app.application.agent_orchestrator.verification_continuation import (
+def test_preview_resume_report_cannot_expand_the_parameter_allowlist(
+    trusted_actor, native_preview, resume
+):
+    from app.application.agent_orchestrator.approval_grant import ApprovalGrantError
+    from app.application.agent_orchestrator.run_lifecycle import (
         approved_preview_continuation,
-        preview_resume_matches,
+        continuation_params_bound,
+        prepare_user_decision_params,
     )
 
-    run, step, call = _paused_preview(monkeypatch, resume=resume)
-    step.params.update(resume)
-    run.metadata["approval_receipt"] = _approval_for(run, step)
-    assert not preview_resume_matches(step, call)
+    actor = trusted_actor(role="admin")
+    run, step, call, context = _paused_preview(actor, native_preview, resume=resume)
+    original = copy.deepcopy(call.to_dict())
+    plan = copy.deepcopy(run.metadata["plan"])
+    if prepare_user_decision_params(run, step, context):
+        assert not continuation_params_bound(run, step, call)
+        assert step.params == call.params
+        assert run.metadata["plan"] == plan
+        with pytest.raises(ApprovalGrantError, match="续跑参数尚未绑定"):
+            _approval_for(run, step)
+    else:
+        run.metadata["approval_receipt"] = _approval_for(run, step)
+        assert call.metadata["verification"]["accepted"] is False
+        assert step_verification_blocked(run, step)
     assert not approved_preview_continuation(run, step, call)
+    assert call.to_dict() == original
 
 
 @pytest.mark.parametrize("change", ["source", "extra_param", "changed_upload", "unknown"])
-def test_verified_preview_continuation_still_requires_exact_original_authority(monkeypatch, change):
-    from app.application.agent_orchestrator.verification_continuation import (
+def test_verified_preview_continuation_still_requires_exact_original_authority(
+    monkeypatch, trusted_actor, native_preview, change
+):
+    from app.application.agent_orchestrator.run_lifecycle import (
         approved_preview_continuation,
+        prepare_user_decision_params,
     )
 
-    run, step, call = _paused_preview(
-        monkeypatch, source="other_authority" if change == "source" else "elt_preview_snapshot"
-    )
-    step.params["valid_rows_only"] = True
+    actor = trusted_actor(role="admin")
+    run, step, call, context = _paused_preview(actor, native_preview)
+    assert prepare_user_decision_params(run, step, context) == ""
+    run.metadata["approval_receipt"] = _approval_for(run, step)
+    assert approved_preview_continuation(run, step, call)
+    if change == "source":
+        # A valid report for a different authority is not an ELT preview admission.
+        unrelated = _passed()
+        unrelated["checks"][0]["source"] = "other_authority"
+        _adapter(monkeypatch, lambda **_: unrelated)
+        assert verify_step_result(run=run, step=step, call=call, context=context)["accepted"]
     if change == "extra_param":
         step.params["target_type"] = "other"
     elif change == "changed_upload":
         step.params["file_path"] = "other-upload"
     elif change == "unknown":
         run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
-    run.metadata["approval_receipt"] = _approval_for(run, step)
     if change in {"source", "unknown"}:
         assert not step_verification_blocked(run, step)
     else:
@@ -222,6 +291,124 @@ def test_read_only_contract_is_explicitly_not_independent_verification():
     summary = summarize_verification(run)
     assert summary["independently_verified_steps"] == 0
     assert summary["contract_only_steps"] == 1
+
+
+@pytest.mark.parametrize("confirmation", [False, True], ids=["parameters", "plan"])
+def test_answered_host_clarification_does_not_block_a_verified_business_read(
+    trusted_actor, confirmation
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.clarification_node import build_clarify_node
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    actor = trusted_actor(permissions=["customer.view", "business_db.read", "tool.clarify.ask"])
+    read = WorkflowNode(
+        node_id="read",
+        tool_id="business_db",
+        action="read",
+        params={"entity": "customers"} if confirmation else {},
+        risk="low",
+        idempotent=True,
+    )
+    question = (
+        WorkflowNode(
+            node_id="confirm",
+            tool_id="clarify",
+            action="ask",
+            params={"question": "请确认查询"},
+            risk="low",
+            idempotent=True,
+        )
+        if confirmation
+        else build_clarify_node(
+            "请选择业务实体",
+            ambient={
+                "target_node_id": read.node_id,
+                "clarification": {"reason": "missing_required", "missing_fields": ["entity"]},
+            },
+        )
+    )
+    read.depends_on = [question.node_id]
+    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="查询当前企业客户",
+        plan=PlanGraph(plan_id="confirmed-read", intent="read", nodes=[question, read]),
+        runtime_context=actor.context,
+    )
+    assert run.status == "waiting_user" and not run.tool_calls, (run.error, run.final_output)
+    if confirmation:
+        completed = orchestrator.continue_plan_confirmation(
+            run.run_id,
+            answered_by=str(actor.user_id),
+            clarification_step_id=run.steps[0].step_id,
+            confirmed=True,
+        )
+    else:
+        orchestrator.stage_clarification_answer(
+            run.run_id,
+            step_id=run.steps[0].step_id,
+            parameters={"entity": "customers"},
+            requested_by=str(actor.user_id),
+        )
+        completed = orchestrator.execute_dispatched_run(run.run_id)
+    assert completed.status == "completed"
+    assert completed.metadata["verification"]["accepted"] is True
+    control = completed.metadata["verification"]["steps"][0]
+    assert control["status"] == "not_required"
+    assert control["code"] == "host_control_answer_confirmed"
+    assert len(completed.tool_calls) == 1
+    assert completed.tool_calls[0].tool_id == "business_db"
+
+
+@pytest.mark.parametrize("mismatch", ["no_event", "other_run", "other_step", "business_write"])
+def test_answer_flag_or_unrelated_host_event_cannot_clear_historical_effect(mismatch):
+    run, read, call, context = _receipt(read_only=True)
+    verify_step_result(run=run, step=read, call=call, context=context)
+    historical = AgentStep(
+        node_id="old",
+        tool_id="sales" if mismatch == "business_write" else "clarify",
+        action="quote" if mismatch == "business_write" else "ask",
+        status="completed",
+        output={"success": True, "answer_confirmed": True},
+    )
+    run.steps.insert(0, historical)
+    if mismatch != "no_event":
+        event = run.add_event(
+            "step.clarification_answered",
+            data={"step_id": "other" if mismatch == "other_step" else historical.step_id},
+        )
+        if mismatch == "other_run":
+            event.run_id = "another-run"
+    assert step_verification_blocked(run, historical)
+    assert summarize_verification(run)["accepted"] is False
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_unverified_effect_receipt_preserves_known_pending_or_unknown_without_rewriting(pending):
+    from app.application.agent_orchestrator.result_verification import project_verification
+    from app.application.agent_orchestrator.trace_payloads import agent_node_output
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+    from app.fastapi_routes.tools_execute import _capability_http_receipt
+
+    original = (
+        {"success": False, "execution_state": "pending"} if pending else {"success": True, "id": 1}
+    )
+    run, step, call, context = _receipt(output=original)
+    verify_step_result(run=run, step=step, call=call, context=context)
+    project_verification(run)
+    run.status = "blocked"
+    # A stale final projection must not override the immutable call and its
+    # current host readback; neither variant permits a new dispatch.
+    run.final_output["node_outputs"] = {step.node_id: {"success": True}}
+    projected = agent_node_output(run, step.node_id)
+    state = execution_result_pending_state(projected)
+    assert state == ("pending" if pending else "unknown")
+    payload, status = _capability_http_receipt({**projected, "execution_state": state})
+    assert status == 202 and payload["success"] is False
+    assert payload["retryable"] is False
+    assert bool(payload.get("reconciliation_required")) is (not pending)
+    assert step.output == call.output == original
 
 
 def test_read_only_tool_cannot_bypass_file_verification():
@@ -306,23 +493,51 @@ def test_completed_step_cannot_skip_static_proof_binding(monkeypatch, mutation):
     assert not summarize_verification(run)["accepted"]
 
 
-def test_historical_completed_step_does_not_disappear_from_coverage(monkeypatch):
+@pytest.mark.parametrize("has_call", [False, True])
+def test_historical_completed_step_does_not_disappear_from_coverage(monkeypatch, has_call):
+    from app.application.agent_orchestrator.result_verification import (
+        project_verification,
+        verified_step_output,
+    )
+    from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+    from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+
     _adapter(monkeypatch, lambda **_: _passed())
     run, step, call, context = _receipt()
     verify_step_result(run=run, step=step, call=call, context=context)
-    run.steps.append(
-        AgentStep(
-            node_id="legacy",
-            tool_id="legacy",
-            action="create",
-            status="completed",
-            output={"success": True},
-        )
+    legacy = AgentStep(
+        node_id="legacy",
+        tool_id="legacy",
+        action="create",
+        status="completed",
+        output={"success": True},
     )
-    summary = summarize_verification(run)
+    run.steps.append(legacy)
+    if has_call:
+        run.tool_calls.append(
+            ToolCall(
+                step_id=legacy.step_id,
+                node_id=legacy.node_id,
+                tool_id=legacy.tool_id,
+                action=legacy.action,
+                status="completed",
+                output=copy.deepcopy(legacy.output),
+            )
+        )
+    original_step = copy.deepcopy(legacy.to_dict())
+    original_calls = [copy.deepcopy(item.to_dict()) for item in run.tool_calls]
+    summary = project_verification(run)
     assert summary["status"] == "not_verified"
     assert not summary["accepted"]
     assert len(summary["steps"]) == 2
+    run.status = "blocked"
+    projected = verified_step_output(run, legacy)
+    assert projected["success"] is False and projected["execution_state"] == "unknown"
+    assert projected["reconciliation_required"] is True and projected["retryable"] is False
+    assert dispatched_run_state(run) == ("unknown", "needs_verification")
+    assert requires_retry_reconciliation(run)
+    assert legacy.to_dict() == original_step
+    assert [item.to_dict() for item in run.tool_calls] == original_calls
 
 
 @pytest.mark.parametrize(
@@ -667,3 +882,54 @@ def test_control_answer_cannot_attest_changed_scope_or_business_action(drift):
     else:
         control.tool_id, control.action = "sales", "deliver"
     assert step_verification_blocked(run, control)
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+def test_pending_receipt_requires_real_readback_even_when_read_only(read_only):
+    run, step, call, context = _receipt(
+        read_only=read_only, output={"success": False, "execution_state": "pending"}
+    )
+    report = verify_step_result(run=run, step=step, call=call, context=context)
+    assert not report["accepted"]
+    assert report["code"] == "result_verifier_unavailable"
+    assert step_verification_blocked(run, step)
+
+
+@pytest.mark.parametrize(
+    "state", ["failed", "cancelled", "rejected", "unknown", "waiting_approval"]
+)
+def test_failed_unknown_or_unapproved_receipt_cannot_gain_business_success(monkeypatch, state):
+    _adapter(monkeypatch, lambda **_: pytest.fail("failed receipt must not be upgraded"))
+    run, step, call, context = _receipt(output={"success": False, "execution_state": state})
+    report = verify_step_result(run=run, step=step, call=call, context=context)
+    assert report["code"] == "execution_receipt_not_successful" and not report["accepted"]
+
+
+def test_pending_step_keeps_acknowledgement_and_never_dispatches_twice(tmp_path, monkeypatch):
+    repo, runner, run, step, context, readback, dispatches, charges = _runtime(
+        tmp_path, monkeypatch
+    )
+    dispatch = runner.executor.execute
+
+    def accepted(*args, **kwargs):
+        dispatch(*args, **kwargs)
+        return {"success": False, "execution_state": "pending", "request_id": "accepted-original"}
+
+    runner.executor.execute = accepted
+    _adapter(
+        monkeypatch,
+        lambda **_: {"status": "inconclusive", "code": "provider_pending", "checks": []},
+    )
+    runner.execute_step(run, step, runtime_context=context, node_outputs={})
+    original = copy.deepcopy(step.output)
+    assert run.status == "blocked" and step.status == "completed"
+    assert step.output["execution_state"] == "pending"
+    assert "outcome" not in step.output and "reconciliation_required" not in step.output
+    assert run.metadata["recovery"]["state"] == "result_pending"
+    _adapter(monkeypatch, readback)
+    recovered = repo.get(run.run_id)
+    runner.execute_step(recovered, recovered.steps[0], runtime_context=context, node_outputs={})
+    assert summarize_verification(recovered)["accepted"]
+    assert recovered.tool_calls[0].output == original
+    assert len(dispatches) == len(charges) == 1
+    assert recovered.steps[0].attempt_count == 1

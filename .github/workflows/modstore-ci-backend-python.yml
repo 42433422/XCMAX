@@ -1,7 +1,7 @@
 # CI SSOT: generated from MODstore_deploy/.github/workflows/ci-backend-python.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: CI - Backend Python
-run-name: CI - Backend Python ${{ inputs.release_sha || github.sha }}
+run-name: CI - Backend Python ${{ inputs.release_sha || github.sha }}${{ inputs.delivery_request_id && format(' [delivery:{0}]', inputs.delivery_request_id) || '' }}
 
 on:
   push:
@@ -22,6 +22,11 @@ on:
     inputs:
       release_sha:
         description: Exact main commit to validate after a protected merge
+        required: false
+        default: ""
+        type: string
+      delivery_request_id:
+        description: Original post-merge CI request identity
         required: false
         default: ""
         type: string
@@ -162,7 +167,7 @@ jobs:
       - name: Run mypy type checking
         run: |
           # 与 pyproject.toml 的开发工具版本一致。
-          pip install mypy==2.4.0 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
+          pip install mypy==2.4.1 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
           mypy --no-error-summary
 
       - name: Run tests with coverage (global floor — ratchet)

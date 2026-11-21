@@ -18,7 +18,6 @@ export type ChatRequestScope = {
   taskId?: string
 }
 export type PlannerChatOptions = {
-  fromWriteUnlock?: boolean
   expectedWorkflowPlanId?: string
   retryOf?: string
   idempotencyKey?: string
@@ -29,8 +28,6 @@ export interface UseChatRequestDeps {
   messages: Ref<ChatMessage[]>
   sessionId?: Ref<string>
   lastRequestContextSummary: Ref<string>
-  plannerWriteUnlockResumeDraft: Ref<string>
-  resolveChatDbTokensForPayload: () => { db_read_token?: string; db_write_token?: string }
   injectExcelContextPayload: (ctx: Record<string, unknown>, parts: string[]) => boolean
   consumeMultimodalIntoPlannerContext: (ctx: Record<string, unknown>, parts: string[]) => void
   captureArtifacts?: typeof captureChatArtifacts
@@ -41,8 +38,6 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     messages,
     sessionId,
     lastRequestContextSummary,
-    plannerWriteUnlockResumeDraft,
-    resolveChatDbTokensForPayload,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
     captureArtifacts = captureChatArtifacts,
@@ -132,16 +127,6 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     }
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     if (isActive) lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
-    if (isActive && plannerOpts?.fromWriteUnlock) {
-      contextPayload.chat_db_write_authorized = true
-      const draftRaw = plannerWriteUnlockResumeDraft.value.trim()
-      plannerWriteUnlockResumeDraft.value = ''
-      const cap = 9000
-      const bodyDraft = draftRaw.length > cap ? `${draftRaw.slice(0, cap)}\n…(已截断)` : draftRaw
-      contextPayload.db_write_stream_resume = bodyDraft
-        ? `【上一轮流式可见输出节选】\n${bodyDraft}\n\n【续跑要求】用户已在弹窗完成二级写入授权；本请求 JSON 已附带 db_write_token。请直接调用 import_excel_to_database 完成写入（file_path、sheet_name、header_row 与 excel_analysis / 运行时一致）。除非明显缺字段，不要再次整本重跑 excel_analysis 或重复开场白。`
-        : '【续跑要求】用户已确认二级写入令牌；本请求已附带 db_write_token。请直接调用 import_excel_to_database，避免重复开场白与无谓的 excel_analysis。'
-    }
     return {
       completeArtifacts: artifactBatch.complete,
       body: {
@@ -150,7 +135,6 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         mode: 'basic',
         user_id,
         context: contextPayload,
-        ...resolveChatDbTokensForPayload(),
       },
     }
   }
@@ -213,7 +197,6 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       context: contextPayload,
       source: 'normal' as const,
       mode: 'basic' as const,
-      ...resolveChatDbTokensForPayload(),
     }
     const payload = (await chatApi.sendUnifiedChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
     artifactBatch.complete()

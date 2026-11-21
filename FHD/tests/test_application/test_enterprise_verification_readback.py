@@ -6,7 +6,10 @@ import pytest
 from sqlalchemy import event
 
 from app.application.agent_orchestrator import AgentOrchestrator
-from app.application.agent_orchestrator.result_verification import freeze_verification_contract
+from app.application.agent_orchestrator.result_verification import (
+    freeze_verification_contract,
+    verified_step_output,
+)
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
@@ -191,6 +194,8 @@ def test_plan_verifies_only_original_child_admission_and_preserves_business_appr
     from app.application.agent_orchestrator.business_harness import ensure_terminal_business_result
 
     assert verify(case, queued_receipt)["accepted"]
+    assert verified_step_output(case.run, case.step) == queued_receipt
+    assert case.call.output == queued_receipt
     case.run.status = "completed"
     business = ensure_terminal_business_result(case.run)
     assert business["status"] == "pending" and business["success"] is False

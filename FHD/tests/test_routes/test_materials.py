@@ -79,15 +79,6 @@ def client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClie
 # ---------------------------------------------------------------------------
 
 
-def test_add_material_success(client: TestClient, sample_data_factory, local_tools) -> None:
-    data = sample_data_factory.material()
-    r = client.post("/api/materials", json=data)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["success"] is True
-    assert body["data"]["name"] == data["name"]
-
-
 def test_add_material_empty_name(client: TestClient) -> None:
     r = client.post("/api/materials", json={"name": ""})
     assert r.status_code == 400
@@ -102,15 +93,16 @@ def test_add_material_missing_name(client: TestClient) -> None:
     assert r.json()["success"] is False
 
 
-def test_add_material_propagates_min_quantity_to_min_stock(
-    client: TestClient, fake_service: MagicMock, local_tools
-) -> None:
-    client.post(
-        "/api/materials",
-        json={"name": "阈值料", "quantity": 1.0, "min_quantity": 10.0},
+def test_add_material_propagates_min_quantity_before_shared_admission(client, monkeypatch):
+    submit = MagicMock(return_value=({"success": False, "pending_approval": True}, 202))
+    monkeypatch.setattr(materials_module, "run_tools_execute_agent", submit)
+    response = client.post(
+        "/api/materials", json={"name": "阈值料", "quantity": 1.0, "min_quantity": 10.0}
     )
-    passed = fake_service.create_material.call_args.args[0]
-    assert passed["min_stock"] == 10.0
+    assert response.status_code == 202
+    params = submit.call_args.kwargs["body"]["params"]
+    assert params["min_stock"] == 10.0
+    assert "material_code" not in params  # Business IDs are generated once in the executor.
 
 
 def test_add_material_invalid_json(client: TestClient) -> None:
@@ -184,25 +176,12 @@ def test_get_materials_with_sql_injection_attempt(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_update_material_success(client: TestClient, sample_data_factory, local_tools) -> None:
-    data = sample_data_factory.material({"name": "更新后的原材料"})
-    r = client.put("/api/materials/1", json=data)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["success"] is True
-    assert "更新成功" in body["message"]
-    assert body["data"]["id"] == 1
-    assert body["data"]["name"] == data["name"]
-
-
-def test_update_material_partial_applies_fields(
-    client: TestClient, fake_service: MagicMock, local_tools
-) -> None:
-    r = client.put("/api/materials/1", json={"quantity": 50.0})
-    assert r.status_code == 200
-    fake_service.update_material.assert_called_once()
-    material_id = fake_service.update_material.call_args.args[0]
-    assert material_id == 1
+def test_update_material_preserves_fields_before_shared_admission(client, monkeypatch):
+    submit = MagicMock(return_value=({"success": False, "pending_approval": True}, 202))
+    monkeypatch.setattr(materials_module, "run_tools_execute_agent", submit)
+    response = client.put("/api/materials/9", json={"name": "Updated", "quantity": 12})
+    assert response.status_code == 202
+    assert submit.call_args.kwargs["body"]["params"] == {"id": 9, "name": "Updated", "quantity": 12}
 
 
 def test_update_material_string_id_returns_404_or_422(client: TestClient) -> None:
@@ -215,14 +194,6 @@ def test_update_material_string_id_returns_404_or_422(client: TestClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_delete_material_success(client: TestClient, local_tools) -> None:
-    r = client.delete("/api/materials/1")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["success"] is True
-    assert "删除成功" in body["message"]
-
-
 def test_delete_material_string_id_returns_404_or_422(client: TestClient) -> None:
     r = client.delete("/api/materials/abc")
     assert r.status_code in (404, 405, 422)
@@ -233,48 +204,20 @@ def test_delete_material_string_id_returns_404_or_422(client: TestClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_batch_delete_success(client: TestClient, fake_service: MagicMock, local_tools) -> None:
-    r = client.post("/api/materials/batch-delete", json={"ids": [1, 2, 3]})
-    fake_service.batch_delete_materials.assert_called_once_with([1, 2, 3])
-    assert r.status_code == 200
-    body = r.json()
-    assert body["success"] is True
-    assert "已删除 3 条记录" in body["message"]
-    assert body.get("deleted_count") == 3
+def test_batch_delete_filters_invalid_ids_before_shared_admission(client, monkeypatch):
+    submit = MagicMock(return_value=({"success": False, "pending_approval": True}, 202))
+    monkeypatch.setattr(materials_module, "run_tools_execute_agent", submit)
+    response = client.post("/api/materials/batch-delete", json={"material_ids": ["1", "bad", 2]})
+    assert response.status_code == 202
+    assert submit.call_args.kwargs["body"]["params"] == {"ids": [1, 2]}
 
 
-def test_batch_delete_empty_ids(client: TestClient) -> None:
-    r = client.post("/api/materials/batch-delete", json={"ids": []})
-    assert r.status_code == 200
-    assert "已删除 0 条记录" in r.json()["message"]
-
-
-def test_batch_delete_missing_ids(client: TestClient) -> None:
-    r = client.post("/api/materials/batch-delete", json={})
-    assert r.status_code == 200
-    assert "已删除 0 条记录" in r.json()["message"]
-
-
-def test_batch_delete_with_non_numeric_ids_are_filtered(
-    client: TestClient, fake_service: MagicMock, local_tools
-) -> None:
-    r = client.post(
-        "/api/materials/batch-delete",
-        json={"ids": [1, "abc", None, 2, 2]},
-    )
-    fake_service.batch_delete_materials.assert_called_once_with([1, 2, 2])
-    assert r.status_code == 200
-    assert r.json().get("deleted_count") == 3
-
-
-def test_batch_delete_prefers_material_ids_over_ids(
-    client: TestClient, fake_service: MagicMock, local_tools
-) -> None:
-    client.post(
-        "/api/materials/batch-delete",
-        json={"material_ids": [7, 8], "ids": [1, 2, 3]},
-    )
-    fake_service.batch_delete_materials.assert_called_once_with([7, 8])
+def test_batch_delete_preserves_explicit_material_id_selection(client, monkeypatch):
+    submit = MagicMock(return_value=({"success": False, "pending_approval": True}, 202))
+    monkeypatch.setattr(materials_module, "run_tools_execute_agent", submit)
+    response = client.post("/api/materials/batch-delete", json={"material_ids": [1, 2], "ids": [3]})
+    assert response.status_code == 202
+    assert submit.call_args.kwargs["body"]["params"] == {"ids": [1, 2]}
 
 
 # ---------------------------------------------------------------------------

@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import importlib
+import logging
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 def _facade():
@@ -313,13 +316,21 @@ class _WorkflowEnginePart02Mixin:
                     sub_result = self._execute_http_request_node(node, data, branch)
                     results[branch_name] = {"status": "completed", "data": sub_result}
                 except RECOVERABLE_ERRORS as exc:
-                    results[branch_name] = {"status": "failed", "error": str(exc)}
+                    logger.warning("workflow HTTP branch failed: %s", exc)
+                    results[branch_name] = {
+                        "status": "failed",
+                        "error": "http_request_failed",
+                    }
             elif branch_type == "data_transform":
                 try:
                     sub_result = self._execute_data_transform_node(node, data, branch)
                     results[branch_name] = {"status": "completed", "data": sub_result}
                 except RECOVERABLE_ERRORS as exc:
-                    results[branch_name] = {"status": "failed", "error": str(exc)}
+                    logger.warning("workflow transform branch failed: %s", exc)
+                    results[branch_name] = {
+                        "status": "failed",
+                        "error": "data_transform_failed",
+                    }
             else:
                 results[branch_name] = {
                     "status": "skipped",

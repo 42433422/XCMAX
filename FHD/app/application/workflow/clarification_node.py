@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.tools_execution.registry import (
-    REQUIRED_PARAMS_BY_TOOL_ACTION as _WRITE_REQUIRED_FALLBACK,
-)
-
 from . import clarification_lifecycle as _lifecycle
 from .clarification_inputs import action_input_metadata, input_field_schema, missing_tool_fields
 from .workflow_types import PlanGraph, WorkflowNode
@@ -25,13 +21,7 @@ def _action_metadata(node: WorkflowNode, tool_registry: dict[str, Any] | None) -
     meta = tool_registry
     for key in (node.tool_id, "actions", node.action):
         meta = meta.get(key) if isinstance(meta, dict) else None
-    meta = (
-        meta
-        if isinstance(meta, dict)
-        else {
-            "required_params": list(_WRITE_REQUIRED_FALLBACK.get((node.tool_id, node.action), []))
-        }
-    )
+    meta = meta if isinstance(meta, dict) else {}
     return action_input_metadata(node.tool_id, node.action, meta)
 
 

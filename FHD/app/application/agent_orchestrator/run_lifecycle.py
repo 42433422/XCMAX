@@ -4,7 +4,7 @@ import copy
 from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
-from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall, utc_now_iso
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.domain.task_lifecycle.results import (
     execution_result_error,
@@ -22,6 +22,125 @@ def requires_retry_reconciliation(run: AgentRun) -> bool:
         or (
             isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
         )
+    )
+
+
+def prepare_user_decision_params(run: AgentRun, step: AgentStep, context: dict[str, Any]) -> str:
+    """Validate a continuation before changing its plan; preserve the executed receipt."""
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+    from app.application.workflow.workflow_types import (
+        plan_fingerprint,
+        plan_from_dict,
+        plan_to_dict,
+    )
+
+    proposed = step.output.get("resume_params")
+    if step.output.get("requires_user_decision") is not True or not isinstance(proposed, dict):
+        return ""
+    proposed = copy.deepcopy({**step.params, **proposed})
+    plan = plan_from_dict(run.metadata.get("plan"))
+    node = (
+        next((item for item in plan.nodes if item.node_id == step.node_id), None) if plan else None
+    )
+    if (
+        plan is None
+        or plan.plan_id != run.plan_id
+        or node is None
+        or (node.tool_id, node.action, node.params, node.depends_on)
+        != (step.tool_id, step.action, step.params, step.depends_on)
+    ):
+        return "续跑步骤与持久化计划不一致，未更新参数"
+    validation = validate_tool_call(step.tool_id, step.action, proposed)
+    if not validation.ok:
+        return validation.message or "续跑参数未通过工具契约校验"
+    denial = actor_tool_denial(step.tool_id, step.action, context, proposed)
+    if denial is not None:
+        return str(denial.get("message") or "续跑参数未通过授权校验")
+    if proposed == step.params:
+        return ""
+    step.params, node.params = proposed, copy.deepcopy(proposed)
+    run.metadata["plan"] = plan_to_dict(plan)
+    run.metadata["plan_sha256"] = plan_fingerprint(plan)
+    from app.application.agent_orchestrator.result_verification import latest_step_call
+
+    call = latest_step_call(run, step)
+    if call is not None:
+        run.metadata.setdefault("user_decision_continuations", {})[call.call_id] = (
+            _continuation_binding(run, step, call)
+        )
+    run.add_event(
+        "workflow.plan_node_updated",
+        "待确认续跑参数已校验并保存到完整计划",
+        {"node_id": step.node_id, "plan_sha256": run.metadata["plan_sha256"]},
+    )
+    return ""
+
+
+def _continuation_binding(run: AgentRun, step: AgentStep, call: ToolCall) -> dict[str, Any]:
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
+
+    plan = plan_from_dict(run.metadata.get("plan"))
+    return {
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+        "call_id": call.call_id,
+        "attempt": step.attempt_count,
+        "input_sha256": canonical_hash(call.params),
+        "output_sha256": canonical_hash(call.output),
+        "contract_sha256": (call.metadata.get("verification_contract") or {}).get(
+            "contract_sha256"
+        ),
+        "next_input_sha256": canonical_hash(step.params),
+        "plan_sha256": plan_fingerprint(plan) if plan else "",
+    }
+
+
+def continuation_params_bound(run: AgentRun, step: AgentStep, call: ToolCall) -> bool:
+    """An original receipt may coexist with only its host-validated next proposal."""
+    from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
+
+    proposal = call.output.get("resume_params")
+    plan = plan_from_dict(run.metadata.get("plan"))
+    node = next((n for n in plan.nodes if n.node_id == step.node_id), None) if plan else None
+    return bool(
+        step.status in {"waiting_user", "pending"}
+        and call.status == "completed"
+        and call.output.get("requires_user_decision") is True
+        and isinstance(proposal, dict)
+        and proposal
+        and step.params == {**call.params, **proposal}
+        and step.output == call.output
+        and step.attempt_count == call.metadata.get("attempt_count")
+        and node is not None
+        and plan is not None
+        and plan.plan_id == run.plan_id
+        and (node.tool_id, node.action, node.params, node.depends_on)
+        == (step.tool_id, step.action, step.params, step.depends_on)
+        and run.metadata.get("plan_sha256") == plan_fingerprint(plan)
+        and (run.metadata.get("user_decision_continuations") or {}).get(call.call_id)
+        == _continuation_binding(run, step, call)
+    )
+
+
+def approved_preview_continuation(run: AgentRun, step: AgentStep, call: ToolCall) -> bool:
+    from app.application.agent_orchestrator.approval_grant import approval_scope_matches
+    from app.application.agent_orchestrator.result_verification import step_verification_blocked
+
+    return bool(
+        (step.tool_id, step.action) == ("elt_import", "preview")
+        and (call.metadata.get("verification") or {}).get("code")
+        == "verified_elt_preview_admission"
+        and not step_verification_blocked(run, step)
+        and continuation_params_bound(run, step, call)
+        and approval_scope_matches(run, step)
+        and run.status in {"queued", "running", "waiting_user"}
+        and not run.metadata.get("non_retryable")
+        and not run.metadata.get("stream_interruption")
+        and (run.metadata.get("recovery") or {}).get("state") != "manual_reconciliation_required"
+        and not execution_result_requires_reconciliation(call.output)
     )
 
 
@@ -131,7 +250,10 @@ def safe_continuation_error(
         return "持久化审批节点清单无效，不能恢复"
     for node in plan.nodes:
         step = steps[node.node_id]
-        if execution_result_requires_reconciliation(step.output):
+        from app.application.agent_orchestrator.result_verification import verified_step_output
+
+        observed = verified_step_output(run, step) if step.status == "completed" else step.output
+        if execution_result_requires_reconciliation(observed):
             return "步骤执行结果尚需人工核对，不能恢复执行"
         if (node.tool_id, node.action, node.params, node.depends_on) != (
             step.tool_id,
@@ -141,7 +263,7 @@ def safe_continuation_error(
         ):
             return "原计划与执行步骤已变化，不能恢复"
         if step.status == "completed":
-            if step.output.get("success") is not True or execution_result_error(step.output):
+            if observed.get("success") is not True or execution_result_error(observed):
                 return "已完成步骤缺少成功回执，需要人工核对"
             continue
         if step.status == "skipped":

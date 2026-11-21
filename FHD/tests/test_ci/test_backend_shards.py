@@ -246,6 +246,7 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
         "ssot-drift-gate",
         "backend-quality",
         "backend-test-shard",
+        "agent-postgres-transactions",
     }
     assert gate["if"] == "${{ !cancelled() }}"
     assert gate["outputs"]["skip"] == "${{ needs.classify.outputs.backend_skip }}"
@@ -397,6 +398,7 @@ def test_aggregate_shell_result_semantics(quality, shards, skip, passed):
             EXPECTED_SOURCE_SHA="a" * 40,
             QUALITY=quality,
             SHARDS=shards,
+            AGENT_TRANSACTIONS="success",
             SHOULD_RUN="false" if skip == "true" else "true",
             SKIP=skip,
         ),
@@ -430,6 +432,7 @@ def test_aggregate_shell_rejects_unbound_classification(field, value):
         EXPECTED_SOURCE_SHA="a" * 40,
         QUALITY="success",
         SHARDS="skipped",
+        AGENT_TRANSACTIONS="success",
         SHOULD_RUN="false",
         SKIP="true",
     )

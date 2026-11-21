@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _client() -> TestClient:
@@ -28,7 +29,10 @@ def _write_xlsx(path) -> str:
     return str(path)
 
 
-def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch) -> None:
+def test_skills_analyze_excel_route_executes_agent_run(
+    tmp_path, monkeypatch, trusted_actor
+) -> None:
+    actor = trusted_actor(user_id=7, role="admin")
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -42,28 +46,29 @@ def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch) ->
         response = _client().post(
             "/api/skills/analyze/excel",
             json={"file_path": xlsx_path, "sheet_name": "Sheet1"},
-            headers={"X-User-Id": "tenant-a"},
+            headers={**actor.headers, "X-User-Id": "999", "Idempotency-Key": "excel-skill"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202, response.text
     payload = response.json()
-    assert payload["success"] is True
-    assert payload["agent_status"] == "completed"
+    assert payload["success"] is False
+    assert payload["agent_status"] == "blocked"
     assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["sheet"] == "Sheet1"
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
-    assert run.status == "completed"
-    assert run.intent == "skills_analyze_excel"
+    assert run.user_id == "7"
+    assert run.status == "blocked"
+    assert run.tool_calls[0].output["sheet"] == "Sheet1"
+    assert run.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
     assert run.tool_calls[0].tool_id == "excel_analyzer"
     assert run.tool_calls[0].action == "analyze"
     assert run.tool_calls[0].permission == "tool.excel_analyzer.analyze"
     assert run.tool_calls[0].cost_units == 1
 
 
-def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> None:
+def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch, trusted_actor) -> None:
+    actor = trusted_actor(user_id=7, role="admin")
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -77,7 +82,7 @@ def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> No
         response = _client().post(
             "/api/skills/view/excel",
             json={"file_path": xlsx_path, "action": "view", "sheet_name": "Sheet1"},
-            headers={"X-User-Id": "tenant-a"},
+            headers={**actor.headers, "X-User-Id": "999", "Idempotency-Key": "excel-skill"},
         )
 
     assert response.status_code == 200
@@ -89,9 +94,8 @@ def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> No
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "7"
     assert run.status == "completed"
-    assert run.intent == "skills_view_excel_view"
     assert run.tool_calls[0].tool_id == "excel_toolkit"
     assert run.tool_calls[0].action == "view"
     assert run.tool_calls[0].permission == "tool.excel_toolkit.view"
@@ -99,8 +103,9 @@ def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> No
 
 
 def test_generate_label_template_route_executes_agent_run(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
+    actor = trusted_actor(user_id=7, role="admin")
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -131,21 +136,21 @@ def test_generate_label_template_route_executes_agent_run(
                 "class_name": "ProductLabelTemplate",
                 "enable_ocr": True,
             },
-            headers={"X-User-Id": "tenant-a"},
+            headers={**actor.headers, "X-User-Id": "999", "Idempotency-Key": "excel-skill"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202, response.text
     payload = response.json()
-    assert payload["success"] is True
-    assert payload["agent_status"] == "completed"
+    assert payload["success"] is False
+    assert payload["agent_status"] == "blocked"
     assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["code"].startswith("class ProductLabelTemplate")
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
-    assert run.status == "completed"
-    assert run.intent == "skills_generate_label_template"
+    assert run.user_id == "7"
+    assert run.status == "blocked"
+    assert run.tool_calls[0].output["code"].startswith("class ProductLabelTemplate")
+    assert run.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
     assert run.tool_calls[0].tool_id == "label_template_generator"
     assert run.tool_calls[0].action == "execute"
     assert run.tool_calls[0].permission == "tool.label_template_generator.execute"

@@ -22,6 +22,7 @@ from app.db.models.customer import Customer
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.sales import SalesOrder, SalesOrderItem
 from app.db.models.task_lifecycle import TaskLifecycleRecord
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 NAME = "闭环待审批客户丁"
 REJECTED_NAME = "闭环驳回不应写入"
@@ -287,7 +288,7 @@ def test_ordinary_create_without_lifecycle_still_writes(customers_db) -> None:
     assert str(row.tenant_id) == "11"
 
 
-def test_approved_customer_is_read_back_from_caller_database(customers_db) -> None:
+def test_unsealed_approval_step_id_cannot_create_customer(customers_db) -> None:
     engine, _audit = customers_db
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
@@ -330,8 +331,67 @@ def test_approved_customer_is_read_back_from_caller_database(customers_db) -> No
         approved_step_id=run.steps[0].step_id,
     )
     row = _row(engine, NAME)
-    assert row is not None
-    assert str(row.tenant_id) == "11"
-    assert run.steps[0].status == "completed"
+    assert row is None
+    assert run.steps[0].status != "completed"
     assert run.steps[0].params["unit_name"] == NAME
-    assert int(run.steps[0].output["data"]["id"]) == int(row.id)
+
+
+def test_approved_customer_is_read_back_from_caller_database(
+    trusted_actor, monkeypatch, local_tools
+) -> None:
+    from app.application.agent_orchestrator.approval_grant import (
+        consume_approval_grant,
+        issue_approval_grant,
+    )
+    from app.application.customer_app_service import CustomerApplicationService
+    from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(role="admin")
+    service = CustomerApplicationService()
+    monkeypatch.setattr(service, "_get_session", actor.factory)
+    monkeypatch.setattr("app.application.get_customer_app_service", lambda: service)
+    repository = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
+    engine = actor.factory.kw["bind"]
+    response = json.loads(
+        execute_registered_capability(
+            {
+                "tool_id": "business_db",
+                "action": "write",
+                "params": {
+                    "entity": "customers",
+                    "operation": "create",
+                    "payload": {"unit_name": NAME},
+                },
+            },
+            runtime_context={**actor.context, "idempotency_key": "approved-customer-readback"},
+        )
+    )
+    run = repository.get(response["run_id"])
+    assert run.status == "waiting_user", response
+    assert run.tool_calls == []
+    assert NAME not in _names(engine)
+    with tenant_scope(actor.tenant_id):
+        grant = issue_approval_grant(run, principal_id=str(actor.user_id))
+        claims = consume_approval_grant(grant["grant"], run=run, principal_id=str(actor.user_id))
+        done = AgentOrchestrator(repository=repository).continue_run(
+            run.run_id,
+            approved_by=str(actor.user_id),
+            approved_step_id=claims["step_id"],
+            runtime_context=run.metadata["runtime_context"],
+            approval_request_id=run.metadata["approval_request_id"],
+        )
+    row = _row(engine, NAME)
+    assert row is not None
+    assert row.tenant_id == actor.tenant_id
+    assert len(done.tool_calls) == 1
+    receipt = done.tool_calls[0].output
+    assert receipt["success"] is True, receipt
+    assert receipt["business_verification"]["verified"] is True
+    assert int(receipt["data"]["id"]) == row.id
+    assert done.steps[0].params["payload"]["unit_name"] == NAME

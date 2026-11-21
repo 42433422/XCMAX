@@ -240,6 +240,7 @@ async def budgeted_responses(
             budget.require_call_reservation(
                 provider=provider, model=route["model"], start_transport=True
             )
+            body["extra_headers"] = budget.transport_headers(provider)
             raw = await asyncio.wait_for(
                 client.responses.with_raw_response.create(**body),
                 timeout=reservation["timeout_seconds"],
@@ -294,6 +295,7 @@ async def budgeted_responses_stream(
             budget.require_call_reservation(
                 provider=provider, model=route["model"], start_transport=True
             )
+            body["extra_headers"] = budget.transport_headers(provider)
             raw = await asyncio.wait_for(
                 client.responses.with_raw_response.create(**body),
                 timeout=reservation["timeout_seconds"],

@@ -28,7 +28,11 @@ def workflow(path):
 def test_post_merge_ci_checkout_and_title_share_the_explicit_target(source):
     data = workflow(source)
     assert "release_sha" in data["on"]["workflow_dispatch"]["inputs"]
-    assert data["run-name"] == "CI - Backend Python ${{ inputs.release_sha || github.sha }}"
+    assert "delivery_request_id" in data["on"]["workflow_dispatch"]["inputs"]
+    assert data["run-name"] == (
+        "CI - Backend Python ${{ inputs.release_sha || github.sha }}"
+        "${{ inputs.delivery_request_id && format(' [delivery:{0}]', inputs.delivery_request_id) || '' }}"
+    )
     for job in data["jobs"].values():
         for step in job["steps"]:
             if step.get("uses", "").startswith("actions/checkout@"):

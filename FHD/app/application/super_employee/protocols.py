@@ -121,6 +121,10 @@ class ParaPorts:
 
 @dataclass(frozen=True)
 class MessageSyncPorts:
+    api_url: Callable[[], str]
+    reconcile_dispatch: Callable[[JsonObject], JsonObject]
+    dispatch_reply: Callable[[JsonObject], str]
+    task_reply: Callable[[JsonObject], str]
     fetch_task: Callable[[str], JsonObject | None]
     direct_reply: Callable[[str], str]
     should_reply: Callable[[str, JsonObject], bool]

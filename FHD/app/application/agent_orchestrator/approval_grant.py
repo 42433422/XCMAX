@@ -86,7 +86,34 @@ def _enterprise_claims(run: AgentRun) -> dict[str, str]:
 
 
 def _params_hash(step: AgentStep) -> str:
-    return _approval_digest(step.params or {})
+    return _approval_digest(dict(step.params or {}))
+
+
+def _continuation_claims(run: AgentRun, step: AgentStep) -> dict[str, str]:
+    """A proposal cannot hide edits to the parameters or the frozen execution plan."""
+    output = step.output if isinstance(step.output, dict) else {}
+    resume_params = output.get("resume_params")
+    if output.get("requires_user_decision") is not True or not isinstance(resume_params, dict):
+        return {}
+    from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
+
+    plan = plan_from_dict(run.metadata.get("plan"))
+    node = (
+        next((item for item in plan.nodes if item.node_id == step.node_id), None) if plan else None
+    )
+    if (
+        plan is None
+        or plan.plan_id != run.plan_id
+        or node is None
+        or (node.tool_id, node.action, node.params, node.depends_on)
+        != (step.tool_id, step.action, step.params, step.depends_on)
+        or {**step.params, **resume_params} != step.params
+    ):
+        raise ApprovalGrantError("续跑参数尚未绑定到当前完整计划")
+    return {
+        "resume_params_sha256": _approval_digest(resume_params),
+        "plan_sha256": plan_fingerprint(plan),
+    }
 
 
 def _scope_claims(run: AgentRun, step: AgentStep) -> dict[str, str]:
@@ -109,12 +136,16 @@ def authorization_scope_hash(context: dict[str, Any]) -> str:
             "active_mod_id",
             "employee_id",
             "employee_tool_allowlist",
+            "_credential_authorization",
             "mutation_policy",
             "_bulk_preview_scope",
             "_bulk_preview_scopes",
             "workspace_root",
             "workspace_id",
             "workspace_path",
+            "service_source",
+            "template_base_dir",
+            "route_module",
         )
     }
     # The executor always rebinds this field from server configuration. Bind the
@@ -138,6 +169,7 @@ def authorization_scope_hash(context: dict[str, Any]) -> str:
             "user_id",
             "tenant_id",
             "execution_tenant_id",
+            "market_authorization",
             "role",
             "tier",
             "mod_id",
@@ -176,6 +208,7 @@ def execution_scope_claims(context: dict[str, Any], tool_id: str, action: str) -
                 "timeout_seconds",
                 "required_params",
                 "availability",
+                "policy",
             )
         }
         if spec is not None
@@ -190,6 +223,12 @@ def execution_scope_claims(context: dict[str, Any], tool_id: str, action: str) -
         from app.application.kellai_binding_app_service import connection_identity_sha256
 
         claims["kellai_connection_sha256"] = connection_identity_sha256()
+    if tool_id == "kellai":
+        from app.application.tools.kellai import connection_scope
+
+        claims["external_authorization_sha256"] = _approval_digest(
+            connection_scope(context, action)
+        )
     return claims
 
 
@@ -199,6 +238,15 @@ def approval_receipt_claims(
     expected = {"params_sha256": _params_hash(step), **_enterprise_claims(run)}
     if step.tool_id != "catalog_products_v1":
         expected.update(_scope_claims(run, step))
+        expected.update(_continuation_claims(run, step))
+    if claims is not None and ("resume_params_sha256" in claims) != (
+        "resume_params_sha256" in expected
+    ):
+        raise ApprovalGrantError("审批后的续跑提案已变化")
+    if claims is not None and ("enterprise_binding_sha256" in claims) != (
+        "enterprise_binding_sha256" in expected
+    ):
+        raise ApprovalGrantError("审批后的经营目标绑定已变化")
     return expected if claims is None else {key: str(claims.get(key) or "") for key in expected}
 
 
@@ -207,14 +255,23 @@ def approval_scope_matches(run: AgentRun, step: AgentStep) -> bool:
         # The catalog validates its consumed original grant in its own transaction.
         return True
     receipt = run.metadata.get("approval_receipt")
-    return isinstance(receipt, dict) and all(
-        receipt.get(key) == value
-        for key, value in {
-            "step_id": step.step_id,
-            "tool_id": step.tool_id,
-            "action": step.action,
-            **approval_receipt_claims(run, step),
-        }.items()
+    try:
+        claims = approval_receipt_claims(run, step)
+    except ApprovalGrantError:
+        return False
+    return (
+        isinstance(receipt, dict)
+        and ("resume_params_sha256" in receipt) == ("resume_params_sha256" in claims)
+        and ("enterprise_binding_sha256" in receipt) == ("enterprise_binding_sha256" in claims)
+        and all(
+            receipt.get(key) == value
+            for key, value in {
+                "step_id": step.step_id,
+                "tool_id": step.tool_id,
+                "action": step.action,
+                **claims,
+            }.items()
+        )
     )
 
 
@@ -238,6 +295,7 @@ def _action_claims(run: AgentRun, step: AgentStep, principal_id: str) -> dict[st
     }
     if step.tool_id != "catalog_products_v1":
         claims.update(_scope_claims(run, step))
+        claims.update(_continuation_claims(run, step))
         return claims
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
@@ -278,6 +336,7 @@ def _action_claims(run: AgentRun, step: AgentStep, principal_id: str) -> dict[st
                     "user_id",
                     "tenant_id",
                     "execution_tenant_id",
+                    "market_authorization",
                     "role",
                     "tier",
                     "mod_id",
@@ -348,6 +407,7 @@ def validate_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> 
     expected = _action_claims(run, step, principal_id) if step else {}
     if (
         step is None
+        or ("resume_params_sha256" in claims) != ("resume_params_sha256" in expected)
         or ("enterprise_binding_sha256" in claims) != ("enterprise_binding_sha256" in expected)
         or any(str(claims.get(key) or "") != value for key, value in expected.items())
     ):

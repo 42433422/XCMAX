@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from graphlib import TopologicalSorter
 from typing import Any, Callable, Literal, TypeVar, cast
 
@@ -318,6 +318,7 @@ def mutate_portfolio(
         with get_session_factory()() as session:
             row, proposal, state = _row(session, decision_id, owner_user_id)
             previous = row.execution_result_json
+            previous_updated_at = row.updated_at
             before = json.loads(previous or "{}")
             expected_status, expected_payload, expected_actor = (
                 row.status,
@@ -325,9 +326,16 @@ def mutate_portfolio(
                 row.decided_by,
             )
             result = mutate(row, proposal, state, session)
+            now = datetime.now(UTC)
             values = {
                 "execution_result_json": _json(state),
-                "updated_at": datetime.now(UTC),
+                # Bounded consumers order by this stamp. A stopped/backward
+                # wall clock must not move a checked portfolio to the front.
+                "updated_at": (
+                    max(now, previous_updated_at.replace(tzinfo=UTC) + timedelta(microseconds=1))
+                    if previous_updated_at
+                    else now
+                ),
                 "status": row.status,
                 "decided_by": row.decided_by,
                 "decided_at": row.decided_at,
@@ -343,6 +351,7 @@ def mutate_portfolio(
                         .where(
                             StrategicDecision.decision_id == decision_id,
                             StrategicDecision.execution_result_json == previous,
+                            StrategicDecision.updated_at == previous_updated_at,
                             StrategicDecision.status == expected_status,
                             StrategicDecision.decision_payload_json == expected_payload,
                             StrategicDecision.decided_by == expected_actor,

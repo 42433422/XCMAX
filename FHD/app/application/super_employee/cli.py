@@ -9,7 +9,7 @@ import time
 from collections.abc import AsyncGenerator
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, TextIO, cast
 
 from .output import CliOutput
 from .profiles import SuperEmployeeToolProfile
@@ -52,6 +52,7 @@ class CliExecutionError(RuntimeError):
         if not started and reason != "unavailable" and stage == "cli":
             detail = "启动失败"
             code = "cli_launch_failed"
+        # Raw CLI diagnostics can contain credentials; classify failures without persisting them.
         message = f"{tool}{' CLI' if stage == 'cli' else ''} {detail}。"
         if started:
             message += "任务效果尚未确认，请核对已有变更；不会自动重放。"
@@ -67,8 +68,11 @@ class CliExecutionError(RuntimeError):
             "execution_state": "failed" if started else "not_started",
             "stage": stage,
             "exit_code": exit_code,
+            "returncode": exit_code,
             "termination_reason": reason,
             "partial_text": partial_text,
+            "partial_output": partial_text,
+            "stderr_present": bool(stderr),
             # Keep the receipt shape, but never persist or publish raw diagnostics.
             "stderr": "",
             "retryable": False,
@@ -76,12 +80,30 @@ class CliExecutionError(RuntimeError):
         }
 
     @property
+    def returncode(self) -> int | None:
+        return cast("int | None", self.receipt["exit_code"])
+
+    @property
+    def partial_output(self) -> str:
+        return cast("str", self.receipt["partial_text"])
+
+    def payload(self) -> dict[str, Any]:
+        return {
+            **self.receipt,
+            "returncode": self.returncode,
+            "partial_output": self.partial_output,
+        }
+
+    def reply_body(self) -> str:
+        return self.body
+
+    @property
     def body(self) -> str:
         partial = self.receipt["partial_text"]
         return str(self) + (f"\n\n未确认的部分输出：\n{partial}" if partial else "")
 
     def event(self) -> dict[str, Any]:
-        return {"type": "error", **self.receipt}
+        return {"type": "error", **self.payload()}
 
 
 def require_cli_success(
@@ -89,7 +111,7 @@ def require_cli_success(
 ) -> str:
     reason = killed_reason or (
         "exit_unknown"
-        if returncode is None
+        if type(returncode) is not int
         else "nonzero_exit"
         if returncode != 0
         else "empty_response"
@@ -98,7 +120,11 @@ def require_cli_success(
     )
     if reason:
         raise CliExecutionError(
-            tool, reason, exit_code=returncode, partial_text=text, stderr=stderr
+            tool,
+            reason,
+            exit_code=returncode if type(returncode) is int else None,
+            partial_text=text,
+            stderr=stderr,
         )
     return text
 

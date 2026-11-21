@@ -1,5 +1,6 @@
 import { readActiveExtensionModIdFromStorage } from './xcagiStorageKeys'
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from './csrfCookie'
+import { withExecutionRequestKey } from './networkStability'
 
 /**
  * Mod 列表、loading-status、routes 等读请求上限。
@@ -184,8 +185,8 @@ export function apiFetch(input: string, init?: ApiFetchInit): Promise<Response> 
   const headers: Record<string, string> = {
     ...modsOffHeaders,
     ...modScopeHeaders,
-    ...(typeof userHeaders === 'object' && userHeaders !== null && typeof (userHeaders as Headers).forEach === 'function'
-      ? Object.fromEntries((userHeaders as Headers).entries())
+    ...(userHeaders instanceof Headers || Array.isArray(userHeaders)
+      ? Object.fromEntries(new Headers(userHeaders).entries())
       : ((userHeaders || {}) as Record<string, string>)),
   }
   const method = String((rest as { method?: string }).method || 'GET')
@@ -205,7 +206,7 @@ export function apiFetch(input: string, init?: ApiFetchInit): Promise<Response> 
     signal = userSignal ? mergeAbortSignals(userSignal, to.signal) : to.signal
   }
 
-  const fetchInit: RequestInit = { ...rest, headers, signal, credentials: 'include' }
+  const fetchInit: RequestInit = { ...rest, headers: withExecutionRequestKey(method, headers, rest.body), signal, credentials: 'include' }
 
   const perform = async (): Promise<Response> => {
     try {

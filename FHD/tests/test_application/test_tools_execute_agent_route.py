@@ -14,7 +14,7 @@ def _client(actor) -> TestClient:
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
+    return TestClient(app, raise_server_exceptions=True, headers=actor.headers)
 
 
 def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
@@ -51,24 +51,35 @@ def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
-    assert payload["event"] == "ocr.requested"
+    assert payload["success"] is False
+    assert payload["execution_state"] == "pending"
+    assert not payload.get("reconciliation_required")
+    assert payload["retryable"] is False
     assert payload["agent_run_id"] == payload["run_id"]
 
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == "17"
-    assert run.status == "completed"
-    assert run.intent == "tools_execute_ocr_request"
+    assert run.status == "blocked"
+    assert run.intent == "ERP Agent 请求执行 ocr.request"
     assert run.tool_calls[0].tool_id == "ocr"
     assert run.tool_calls[0].action == "request"
     assert run.tool_calls[0].permission == "tool.ocr.request"
     assert run.tool_calls[0].cost_units == 1
+    assert run.steps[0].output["event"] == "ocr.requested"
+    assert run.steps[0].output["published"] is True
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is False
+    ocr_domain.emit_ocr_requested.assert_called_once_with(
+        request_id="tools-ocr-1",
+        image_url="https://example.invalid/label.png",
+        ocr_type="invoice",
+        user_id="17",
+    )
 
 
-def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
+def test_tools_execute_route_preserves_authenticated_actor(
     tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
@@ -88,12 +99,12 @@ def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
         response = _client(
             trusted_actor(user_id=17, role="ocr-operator", permissions=["tool.ocr.request"])
         ).post(
-            "/api/skills/execute",
+            "/api/tools/execute",
             json={
-                "skill_id": "ocr",
+                "tool_id": "ocr",
                 "action": "request",
                 "params": {
-                    "request_id": "skills-ocr-1",
+                    "request_id": "tools-ocr-actor-1",
                     "image_url": "https://example.invalid/label.png",
                     "ocr_type": "invoice",
                     "user_id": "tenant-a",
@@ -102,17 +113,26 @@ def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
+    assert payload["execution_state"] == "pending"
+    assert not payload.get("reconciliation_required")
     assert payload["agent_run_id"] == payload["run_id"]
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.status == "completed"
-    assert run.intent == "tools_execute_ocr_request"
+    assert run.user_id == "17"
+    assert run.status == "blocked"
+    assert run.intent == "ERP Agent 请求执行 ocr.request"
     assert run.tool_calls[0].tool_id == "ocr"
     assert run.tool_calls[0].action == "request"
+    ocr_domain.emit_ocr_requested.assert_called_once_with(
+        request_id="tools-ocr-actor-1",
+        image_url="https://example.invalid/label.png",
+        ocr_type="invoice",
+        user_id="17",
+    )
 
 
 def test_tools_execute_route_puts_medium_risk_tool_behind_confirmation(
@@ -136,6 +156,7 @@ def test_tools_execute_route_puts_medium_risk_tool_behind_confirmation(
             json={
                 "tool_id": "business_db",
                 "action": "write",
+                "request_id": "approval-route-1",
                 "params": {
                     "entity": "customers",
                     "operation": "create",

@@ -178,7 +178,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
         except RECOVERABLE_ERRORS as e:
             _facade().logger.warning("knowledge_search 节点执行失败: %s", e)
             return {
-                out_var: {"items": [], "count": 0, "error": str(e)},
+                out_var: {"items": [], "count": 0, "error": "knowledge_search_failed"},
                 "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
             }
         items = [c.to_dict() for c in chunks or []]
@@ -274,6 +274,12 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             }
             if isinstance(mapped, dict):
                 base.update(mapped)
+            if handled and execution_id is not None:
+                from modstore_server.workflow_customer_delivery import record_customer_delivery_node
+
+                record_customer_delivery_node(
+                    execution_id=execution_id, node_id=int(node.id), output=base
+                )
             return base
         except RECOVERABLE_ERRORS as e:
             _facade().logger.error("员工执行失败: %s", e)

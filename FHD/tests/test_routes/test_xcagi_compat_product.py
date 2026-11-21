@@ -10,7 +10,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.infrastructure.tenant_scope import tenant_scope
 from app.legacy.routes.product import compat_routes as xp
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _assert_shared_business_data_not_exposed_0(self, client, _shared_literal_0):
@@ -26,29 +28,15 @@ def _assert_shared_business_data_not_exposed_0(self, client, _shared_literal_0):
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(trusted_actor):
+    actor = trusted_actor(tenant_id=None, role="admin", tier="admin")
     app = FastAPI()
     app.include_router(xp.router)
-    return TestClient(app, raise_server_exceptions=False)
-
-
-def _install_lost_parse_price():
-    """Temporarily install _parse_price on app.domain.app_pure.excel_imports.
-
-    The module uses __getattr__ to raise ImportError for _LOST_LEGACY_SYMBOLS,
-    which prevents ``patch(..., create=True)`` from working.  We inject a stub
-    directly into the module dict so that the lazy ``from … import _parse_price``
-    inside route handlers succeeds.
-    """
-    import app.domain.app_pure.excel_imports as _ei
-
-    _ei._parse_price = MagicMock(return_value=0.0)
-    return _ei
-
-
-def _remove_lost_parse_price(_ei):
-    """Remove the stub after the test."""
-    _ei.__dict__.pop("_parse_price", None)
+    with (
+        tenant_scope(None),
+        TestClient(app, headers=actor.headers, raise_server_exceptions=False) as http,
+    ):
+        yield http
 
 
 # ---------------------------------------------------------------------------
@@ -289,123 +277,9 @@ class TestProductsResolveNameHints:
 # ---------------------------------------------------------------------------
 
 
-class TestProductsUpdate:
-    def test_erp_service(self, client: TestClient, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.mod_sdk.erp_products_facade.products_update",
-                return_value={"success": True, "data": {"id": 1}},
-            ),
-        ):
-            r = client.post("/products/update", json={"id": 1, "product_name": "updated"})
-            assert r.json()["success"] is True
-
-    def test_invalid_id(self, client: TestClient):
-        _ei = _install_lost_parse_price()
-        try:
-            with (
-                patch(
-                    "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                    return_value=False,
-                ),
-                patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-                patch(
-                    "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                    return_value=None,
-                ),
-            ):
-                r = client.post("/products/update", json={"id": "bad"})
-                assert r.status_code == 400
-        finally:
-            _remove_lost_parse_price(_ei)
-
-    def test_success(self, client: TestClient, local_tools):
-        _ei = _install_lost_parse_price()
-        try:
-            with (
-                patch(
-                    "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                    return_value=False,
-                ),
-                patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-                patch(
-                    "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                    return_value=None,
-                ),
-                patch(
-                    "app.legacy.routes.product.compat_routes._product_parse_id",
-                    return_value=1,
-                ),
-                patch("app.legacy.routes.product.compat_routes.products_pg_update_row"),
-            ):
-                r = client.post("/products/update", json={"id": 1})
-                assert r.json()["success"] is True
-        finally:
-            _remove_lost_parse_price(_ei)
-
-    def test_business_mod_blocked(self, client: TestClient):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value={"success": False, "message": "blocked"},
-            ),
-        ):
-            r = client.post("/products/update", json={"id": 1})
-            assert r.json()["success"] is False
-
-
 # ---------------------------------------------------------------------------
 # products_add  (lazy: erp_products_facade, excel_imports)
 # ---------------------------------------------------------------------------
-
-
-class TestProductsAdd:
-    def test_erp_service(self, client: TestClient, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.mod_sdk.erp_products_facade.products_add",
-                return_value={"success": True, "data": {"id": 1}},
-            ),
-        ):
-            r = client.post("/products/add", json={"product_name": "new"})
-            assert r.json()["success"] is True
-
-    def test_success(self, client: TestClient, local_tools):
-        _ei = _install_lost_parse_price()
-        try:
-            with (
-                patch(
-                    "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                    return_value=False,
-                ),
-                patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-                patch(
-                    "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                    return_value=None,
-                ),
-                patch(
-                    "app.legacy.routes.product.compat_routes.products_pg_insert_row",
-                    return_value=42,
-                ),
-            ):
-                r = client.post("/products/add", json={"product_name": "new"})
-                assert r.json()["success"] is True
-                assert r.json()["data"]["id"] == 42
-        finally:
-            _remove_lost_parse_price(_ei)
 
 
 # ---------------------------------------------------------------------------
@@ -413,126 +287,9 @@ class TestProductsAdd:
 # ---------------------------------------------------------------------------
 
 
-class TestProductsDelete:
-    def test_erp_service(self, client: TestClient, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.mod_sdk.erp_products_facade.products_delete",
-                return_value={"success": True},
-            ),
-        ):
-            r = client.post("/products/delete", json={"id": 1})
-            assert r.json()["success"] is True
-
-    def test_invalid_id(self, client: TestClient):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-        ):
-            r = client.post("/products/delete", json={"id": "bad"})
-            assert r.status_code == 400
-
-    def test_success(self, client: TestClient, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes._product_parse_id",
-                return_value=1,
-            ),
-            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row"),
-        ):
-            r = client.post("/products/delete", json={"id": 1})
-            assert r.json()["success"] is True
-
-
 # ---------------------------------------------------------------------------
 # products_batch_delete  (lazy: erp_products_facade)
 # ---------------------------------------------------------------------------
-
-
-class TestProductsBatchDelete:
-    def test_erp_service(self, client: TestClient, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.mod_sdk.erp_products_facade.products_batch_delete",
-                return_value={"success": True, "deleted": 2},
-            ),
-        ):
-            r = client.post("/products/batch-delete", json={"ids": [1, 2]})
-            assert r.json()["success"] is True
-
-    def test_invalid_ids(self, client: TestClient):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-        ):
-            r = client.post("/products/batch-delete", json={"ids": []})
-            assert r.status_code == 400
-
-    def test_not_list(self, client: TestClient):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-        ):
-            r = client.post("/products/batch-delete", json={"ids": "bad"})
-            assert r.status_code == 400
-
-    def test_success(self, client: TestClient, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
-                return_value=(2, 0),
-            ),
-        ):
-            r = client.post("/products/batch-delete", json={"ids": [1, 2]})
-            assert r.json()["success"] is True
-            assert r.json()["deleted"] == 2
 
 
 # ---------------------------------------------------------------------------

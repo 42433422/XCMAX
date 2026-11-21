@@ -18,6 +18,8 @@ on:
       - "FHD/app/application/agent_orchestrator/__init__.py"
       - "FHD/app/application/__init__.py"
       - "FHD/app/domain/browser_*.py"
+      - "FHD/app/desktop_automation/computer_browser.py"
+      - "FHD/app/domain/computer_use*.py"
       - "FHD/tests/test_infrastructure/test_browser*.py"
       - "FHD/tests/test_application/test_surface_worker.py"
       - "FHD/tests/test_application/test_browser_agent_e2e.py"
@@ -46,6 +48,8 @@ on:
       - "FHD/app/application/agent_orchestrator/__init__.py"
       - "FHD/app/application/__init__.py"
       - "FHD/app/domain/browser_*.py"
+      - "FHD/app/desktop_automation/computer_browser.py"
+      - "FHD/app/domain/computer_use*.py"
       - "FHD/tests/test_infrastructure/test_browser*.py"
       - "FHD/tests/test_application/test_surface_worker.py"
       - "FHD/tests/test_application/test_browser_agent_e2e.py"
@@ -108,8 +112,9 @@ jobs:
               raise SystemExit("browser extra must pin one Playwright release")
           packages = tomllib.loads(Path("uv.lock").read_text())["package"]
           requirements = list(browser)
-          # Browser imports SQLAlchemy; Computer Use requires Pydantic models.
-          # The parent conftest stays outside confcutdir; no application factory is needed.
+          # infrastructure/__init__.py imports SQLAlchemy; the parent test conftest
+          # is deliberately outside confcutdir and no application factory is needed.
+          # Shared Computer Use contracts validate receipts with Pydantic.
           for name in ("pytest", "pytest-asyncio", "sqlalchemy", "pyyaml", "psutil", "pillow", "pydantic"):
               versions = [p["version"] for p in packages if p["name"] == name]
               if len(versions) != 1:

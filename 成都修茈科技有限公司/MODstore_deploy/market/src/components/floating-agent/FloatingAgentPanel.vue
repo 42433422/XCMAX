@@ -42,7 +42,7 @@
     />
 
     <!-- 状态条 -->
-    <AgentStatusBar v-if="!corpMode && !activityOpen" :mode="mode" @stop="agentStore.setMode('idle')" />
+    <AgentStatusBar v-if="!corpMode && !activityOpen" :mode="mode" @stop="agentStore.stopRequest()" />
 
     <ButlerFilesDrawer v-if="!corpMode && !activityOpen && showFilesDrawer" ref="filesDrawerRef" />
 
@@ -217,7 +217,10 @@ const {
   openImagePicker, clearPendingImage, onImagePicked,
 } = useAgentPanelImage()
 
-const actionLog = computed(() => getActionLog().slice().reverse())
+const actionLog = ref<ReturnType<typeof getActionLog>>([])
+watch([showLog, () => agentStore.conversationGeneration, () => agentStore.isLoading], () => {
+  actionLog.value = getActionLog().slice().reverse()
+}, { immediate: true })
 
 async function sendMessage(text: string, imageDataUrl?: string | null) {
   await handleInput(text, { imageDataUrl: imageDataUrl || null })
@@ -233,6 +236,7 @@ const {
 })
 
 async function sendText() {
+  if (agentStore.isLoading || imagePicking.value) return
   const text = draft.value.trim()
   const imageDataUrl = pendingImageDataUrl.value
   if (!text && !imageDataUrl) return

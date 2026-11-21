@@ -184,6 +184,9 @@ class TestAiChatProjectsRunState:
         assert run.status == "completed", (run.error, run.final_output)
         assert run.steps[0].status == "completed"
         events = orchestrator.list_events(run.run_id)
+        assert events[-1].event_type == "run.observed"
+        assert events[-1].data["status"] == "completed"
+        assert sum(event.event_type == "run.completed" for event in events) == 1
         assert [event.event_type for event in events[-2:]] == ["run.completed", "run.observed"]
         observed = events[-1].data
         assert observed["status"] == "completed" and observed["phase"] == "execution"

@@ -335,7 +335,7 @@ class TestOrchestratorMainLinkWiring:
         mock_recall.assert_not_called()
         assert run.retrieval_calls == []
 
-    def test_terminal_writeback_event_on_completed_run(self):
+    def test_unverified_completed_run_cannot_write_success_memory(self):
         orch = self._build_orchestrator()
         from app.application.agent_orchestrator.run_models import AgentRun
 
@@ -354,10 +354,9 @@ class TestOrchestratorMainLinkWiring:
         ):
             orch._remember_run_outcome_for(run)
 
-        mock_remember.assert_called_once()
-        assert mock_remember.call_args.kwargs["success"] is True
-        assert mock_remember.call_args.kwargs["summary"] == "库存充足"
-        assert any(e.event_type == "runtime.memory_writeback" for e in run.events)
+        mock_remember.assert_not_called()
+        assert run.events[-1].event_type == "runtime.memory_writeback"
+        assert run.events[-1].data["reason"] == "result_not_verified"
 
     def test_writeback_skipped_when_hooks_off(self):
         orch = self._build_orchestrator()
@@ -465,11 +464,17 @@ class TestOrchestratorMainLinkWiring:
             ],
         )
         orch = self._build_orchestrator()
+        from types import SimpleNamespace
+
+        # The runtime/memory seam consumes an executor receipt. Spawned business
+        # workers have their own integration suite; in-process mocks cannot cross it.
+        orch._step_execution.executor = SimpleNamespace(
+            execute=lambda *_args, **_kwargs: {
+                "success": True,
+                "data": [{"model_number": "XG-5003"}],
+            }
+        )
         with (
-            patch(
-                "app.application.facades.tools_facade.execute_registered_workflow_tool",
-                return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
-            ),
             patch(
                 "app.application.agent_runtime.pipeline.remember_run_outcome",
                 return_value=True,

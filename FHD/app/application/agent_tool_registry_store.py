@@ -36,7 +36,7 @@ _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _LOCK = threading.Lock()
 
 
-_SCHEMA_READY: tuple[str, int, int] | None = None
+_SCHEMA_READY: tuple[str, int | None, int | None] | None = None
 
 
 _DB_OVERRIDE: str | None = None
@@ -151,6 +151,15 @@ def db_path() -> Path:
     return Path(tempfile.gettempdir()) / f"xcagi-agent-tool-lifecycle-{os.getpid()}.sqlite3"
 
 
+def _database_identity(path: Path) -> tuple[str, int | None, int | None]:
+    """Scope readiness and cached definitions to the actual configured database."""
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return str(path.resolve()), None, None
+    return str(path.resolve()), stat.st_dev, stat.st_ino
+
+
 def _now() -> tuple[str, str]:
     utc = datetime.now(tz=_SHANGHAI).astimezone(ZoneInfo("UTC")).replace(microsecond=0)
     return utc.strftime("%Y-%m-%dT%H:%M:%SZ"), utc.astimezone(_SHANGHAI).isoformat()
@@ -158,14 +167,13 @@ def _now() -> tuple[str, str]:
 
 def _connect() -> sqlite3.Connection:
     global _SCHEMA_READY, _GENERATION
-    path = db_path()
+    path = db_path().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=30, isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=5000")
     with _LOCK:
-        stat = path.stat()
-        identity = (str(path.resolve()), stat.st_dev, stat.st_ino)
+        identity = _database_identity(path)
         if identity != _SCHEMA_READY:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_DDL)
@@ -183,7 +191,7 @@ def _bump() -> None:
 
 
 def _cached(key: tuple[Any, ...], builder: Callable[[], T]) -> T:
-    full = (_GENERATION, key)
+    full = (_GENERATION, _database_identity(db_path()), key)
     with _LOCK:
         hit = _CACHE.get(full)
     if hit is not None:
@@ -431,4 +439,6 @@ def _runtime_spec(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
     spec = function_spec(row["tool_key"], version["description"], schema)
     spec["tool_id"] = row["id"]
     spec["version_id"] = version["id"]
+    spec["kind"] = "definition"
+    spec["executable"] = False
     return spec

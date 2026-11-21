@@ -101,6 +101,17 @@ def _actor_binding(
         "role": str(user.role or ""),
         "tier": str(user.tier or "").strip().lower(),
         "mod_id": mod_id,
+        # A resumed market task must retain the exact live account grant that
+        # admitted it. Session identity alone survives admin revocation or
+        # impersonation changes and therefore cannot be the whole authority.
+        "market_authorization": {
+            "account_owner_id": getattr(user, "market_user_id", None),
+            "session_owner_id": getattr(row, "market_user_id", None),
+            "session_tenant_id": getattr(row, "tenant_id", None),
+            "is_admin": bool(getattr(row, "market_is_admin", False)),
+            "account_kind": str(getattr(row, "account_kind", None) or ""),
+            "impersonating_owner_id": getattr(row, "impersonating_market_user_id", None),
+        },
     }
     binding["proof"] = _actor_proof(binding)
     return binding

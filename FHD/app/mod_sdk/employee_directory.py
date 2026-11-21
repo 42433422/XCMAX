@@ -104,13 +104,17 @@ def _has_explicit_system_prompt(manifest: dict[str, Any]) -> bool:
 
 
 def build_employee_directory(
-    include_prompt_only: bool = False, *, include_admin: bool = False
+    include_prompt_only: bool = False,
+    *,
+    include_admin: bool = False,
+    include_management: bool = False,
 ) -> list[dict[str, Any]]:
     """返回统一员工目录（已排序）。
 
     ``include_prompt_only`` 仅给展示层使用：没有 direct_python 运行时、但显式
     声明了系统提示词的员工以 ``prompt_only=True`` 纳入目录。
     ``include_admin`` 只由验证过平台管理员的请求适配层开启；默认仍排除宿主管理岗。
+    ``include_management`` 供随后执行账号授权检查的统一能力目录使用。
     """
     from app.mod_sdk.employee_specialized_tools_employee_map import EMPLOYEE_TOOLS
     from app.mod_sdk.employee_ssot import load_enterprise_employees, normalize_enterprise_layer_id
@@ -134,7 +138,7 @@ def build_employee_directory(
     for pack_id, tool in tools.items():
         if not pack_id:
             continue
-        if not include_admin and any(
+        if not (include_admin or include_management) and any(
             EMPLOYEE_TOOLS.get(candidate) for candidate in candidate_pack_ids(pack_id)
         ):
             continue

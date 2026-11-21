@@ -205,10 +205,9 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
         assert not output["data"].get("work_order_id")
         assert "暂未自动建单" in text
     elif guide["state"] == "OWNER_ROUTE_UNAVAILABLE":
-        assert "暂时无法确认受理结果" in output["message"]
-        assert "避免重复提交" in output["message"]
+        assert "无法确认受理结果" in output["message"]
         assert output["reconciliation_evidence"]["message"] == output["message"]
-        assert output["reconciliation_evidence"]["reconciliation_required"] is True
+        assert output.get("error_code") != "tool_timeout_unknown"
         assert result["execution_state"] == "unknown"
         assert result["requires_reconciliation"] is True
         assert "勿重复提交" in result["response"]

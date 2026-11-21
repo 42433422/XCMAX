@@ -163,7 +163,12 @@ def im_cs_inbox_mode(
         )
         return {"success": True, "state": state}
     except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+        message = {
+            "客服接待模式无效": "客服接待模式无效",
+            "客服会话不存在": "客服会话不存在",
+            "user_id required": "user_id required",
+        }.get(str(exc), "客服模式暂时无法更新")
+        return JSONResponse({"success": False, "message": message}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox_mode")
         return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)

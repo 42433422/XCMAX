@@ -220,6 +220,10 @@ def test_result_projection_uses_repository_without_fetching_or_running_cli(tmp_p
         CODEX_PROFILE,
         repository,
         MessageSyncPorts(
+            api_url=_unexpected,
+            reconcile_dispatch=_unexpected,
+            dispatch_reply=_unexpected,
+            task_reply=_unexpected,
             fetch_task=_unexpected,
             direct_reply=_unexpected,
             should_reply=_unexpected,

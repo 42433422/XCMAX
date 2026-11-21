@@ -53,11 +53,15 @@ def _scripted_model_response(task: dict, prompt: dict) -> dict | None:
 
 
 def run_owned_attachment_task(task):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
     from starlette.requests import Request
 
+    from app.application import agent_orchestrator
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
     from app.application.elt.service_uploads import UploadServiceMixin
     from app.db.session import get_db
+    from app.fastapi_routes.approval import router as approval_router
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
     from app.infrastructure.tenant_scope import tenant_scope
@@ -68,7 +72,9 @@ def run_owned_attachment_task(task):
             _check_equal,
             _check_event_types,
             _check_tool_calls,
+            _require_fixture_plan_approval,
             _result,
+            _review_fixture_run,
         )
     except ModuleNotFoundError:
         # 脚本直跑时评测入口模块名为 __main__，避免重复执行
@@ -77,7 +83,9 @@ def run_owned_attachment_task(task):
             _check_equal,
             _check_event_types,
             _check_tool_calls,
+            _require_fixture_plan_approval,
             _result,
+            _review_fixture_run,
         )
 
     expected = task["expected"]
@@ -118,10 +126,29 @@ def run_owned_attachment_task(task):
         prompt = json.loads(kwargs["messages"][1]["content"])
         return _scripted_model_response(task, prompt)
 
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    original_plan = LLMWorkflowPlanner.plan
+
+    def reviewed_plan(planner, *args, **kwargs):
+        return _require_fixture_plan_approval(original_plan(planner, *args, **kwargs))
+
     repo = InMemoryAgentRunRepository()
     checks = []
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as root, ExitStack() as stack:
-        client = SimpleNamespace(headers={})
+        stack.enter_context(patch.object(LLMWorkflowPlanner, "plan", reviewed_plan))
+        app = FastAPI()
+        app.include_router(approval_router)
+        client = stack.enter_context(TestClient(app))
+        stack.enter_context(
+            patch.object(agent_orchestrator, "get_agent_run_repository", return_value=repo)
+        )
+        stack.enter_context(
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            )
+        )
         stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
         stack.enter_context(
             patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=root)
@@ -160,7 +187,12 @@ def run_owned_attachment_task(task):
                 stream=raw,
             )
         context = authenticated_runtime_context(
-            {"attachment_upload_ids": [upload["upload_id"]]}, principal
+            {
+                "attachment_upload_ids": [upload["upload_id"]],
+                "task_id": task["id"],
+                "idempotency_key": task["id"],
+            },
+            principal,
         )
         products = Mock()
         products.get_products.return_value = {"success": True, "data": []}
@@ -199,10 +231,15 @@ def run_owned_attachment_task(task):
         _check_equal(
             checks, "no_business_write_before_approval", products.create_product.call_count, 0
         )
-        if expected.get("continue_after_approval"):
-            run = orchestrator.continue_run(run.run_id, approved_by=principal.user_id) or run
+        if task.get("review_decision") == "approve":
+            run = _review_fixture_run(client, run, repo, checks, expected)
         if kind == "excel":
-            _check_equal(checks, "approved_business_write", products.create_product.call_count, 1)
+            _check_equal(
+                checks,
+                "business_write_count",
+                products.create_product.call_count,
+                expected["business_write_count"],
+            )
         if task.get("explicit_knowledge_import"):
             _check_equal(checks, "explicit_approved_knowledge_write", ingest.call_count, 1)
             _check_equal(

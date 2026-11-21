@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -302,19 +303,16 @@ def request_action(
     return decision, pending
 
 
-def _execute_self_maintenance_merge(payload: dict[str, Any]) -> Any:
-    from modstore_server.self_maintenance_loop_runner import _auto_merge_low_risk_branch
+def _execute_self_maintenance_merge(payload: dict[str, Any]) -> dict[str, Any]:
+    from modstore_server.maintenance_loop.merge import _auto_merge_low_risk_branch
 
-    approval = payload.get("_approval") if isinstance(payload.get("_approval"), dict) else {}
-    if not isinstance(approval, dict):
-        approval = {}
+    # The ledger claim records the human approval; the merge owner still applies
+    # its independent evidence, risk and original branch gates.
     return _auto_merge_low_risk_branch(
         run_id=str(payload.get("run_id") or ""),
         task_id=str(payload.get("task_id") or "") or None,
         branch=str(payload.get("branch") or "") or None,
         steps=payload.get("steps") if isinstance(payload.get("steps"), list) else None,
-        human_approved=True,
-        approved_by=str(approval.get("approver") or "github-environment"),
     )
 
 
@@ -424,8 +422,9 @@ def resume_action(
         )
         outcome = raw_outcome if isinstance(raw_outcome, dict) else {"result": raw_outcome}
         ok = bool(outcome.get("ok", outcome.get("success", True)))
-    except RECOVERABLE_ERRORS as exc:
-        outcome = {"ok": False, "error": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logging.getLogger(__name__).exception("approved action execution failed")
+        outcome = {"ok": False, "error": "action_execution_failed"}
         ok = False
     return complete_action(
         action_id,

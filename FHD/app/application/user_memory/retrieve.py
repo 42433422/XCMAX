@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.application.user_memory.policy import (
+from app.application.user_memory.write import MemoryFactsStore, default_memory_store
+from app.domain.user_memory.policy import (
     is_recallable_memory,
     is_scoped_memory_owner,
     memory_statement,
 )
-from app.application.user_memory.write import MemoryFactsStore, default_memory_store
 
 CONTEXT_HEADER = "【相关记忆】"
 

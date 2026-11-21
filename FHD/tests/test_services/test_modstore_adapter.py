@@ -529,7 +529,8 @@ class TestChatCompletion:
         class _Client:
             is_closed = False
 
-            def stream(self, method, url, json=None, headers=None):
+            def stream(self, method, url, json=None, headers=None, timeout=None):
+                assert isinstance(timeout, httpx.Timeout)
                 calls.append((method, url, json))
                 raise httpx.ConnectError("connection failed")
 
@@ -549,7 +550,8 @@ class TestChatCompletion:
         class _Client:
             is_closed = False
 
-            def stream(self, method, url, json=None, headers=None):
+            def stream(self, method, url, json=None, headers=None, timeout=None):
+                assert isinstance(timeout, httpx.Timeout)
                 calls.append((method, url, json))
 
                 class _Ctx:
@@ -576,7 +578,8 @@ class TestChatCompletion:
         class _Client:
             is_closed = False
 
-            def stream(self, method, url, json=None, headers=None):
+            def stream(self, method, url, json=None, headers=None, timeout=None):
+                assert isinstance(timeout, httpx.Timeout)
                 calls.append((method, url, json))
 
                 class _Ctx:

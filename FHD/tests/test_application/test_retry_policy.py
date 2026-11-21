@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from app.application.workflow.retry_policy import (
@@ -131,3 +132,105 @@ def test_custom_retry_set_cannot_retry_admission_or_parameter_errors(monkeypatch
     with pytest.raises(ModelRateLimitError):
         call_with_retry(fail, policy=RetryPolicy(max_attempts=4), retry_on=(Exception,))
     assert calls == [1]
+
+
+def test_repair_and_review_completions_share_transport_retry_owner(monkeypatch):
+    from unittest.mock import Mock
+
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.application.workflow.retry_policy import planning_request_scope, planning_stage
+
+    monkeypatch.setattr("app.application.workflow.retry_policy.time.sleep", lambda _: None)
+    completion = Mock(side_effect=[httpx.ConnectError("private"), {"choices": []}])
+    planner = LLMWorkflowPlanner(ai_service=Mock(), completion=completion)
+    context = {}
+    with planning_request_scope(context):
+        planning_stage("coverage")
+        assert planner.complete_messages(messages=[], context=context) == {"choices": []}
+    assert completion.call_count == 2
+    assert context["planning_diagnostics"]["model_attempts"] == 2
+    assert context["planning_diagnostics"]["transport_retries"] == 1
+    assert [row["stage"] for row in context["planning_diagnostics"]["stages"]] == ["coverage"] * 2
+
+
+def test_request_call_budget_covers_stages_and_cannot_retry_itself(monkeypatch):
+    from app.application.workflow.retry_policy import (
+        PlanningBudgetExceeded,
+        planning_model_call,
+        planning_request_scope,
+        planning_stage,
+    )
+
+    monkeypatch.setenv("XCAGI_PLAN_MAX_MODEL_CALLS", "2")
+    context = {}
+    calls = []
+    with planning_request_scope(context):
+        for stage in ("planning", "repair"):
+            planning_stage(stage)
+            with planning_model_call():
+                calls.append(stage)
+        with pytest.raises(PlanningBudgetExceeded):
+            call_with_retry(lambda: _attempt(calls), policy=RetryPolicy(max_attempts=4))
+    assert calls == ["planning", "repair"]
+    assert context["planning_diagnostics"]["exhausted"] == "model_call_limit"
+    assert context["planning_diagnostics"]["transport_retries"] == 0
+
+
+def _attempt(calls):
+    from app.application.workflow.retry_policy import planning_model_call
+
+    with planning_model_call():
+        calls.append("not-allowed")
+
+
+def test_expired_wall_clock_never_starts_next_model_call(monkeypatch):
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded, planning_request_scope
+
+    now = [100.0]
+    monkeypatch.setattr("app.application.workflow.retry_policy.time.monotonic", lambda: now[0])
+    monkeypatch.setenv("XCAGI_PLAN_TIMEOUT_SECONDS", "5")
+    context, calls = {}, []
+    with planning_request_scope(context):
+        now[0] += 6
+        with pytest.raises(PlanningBudgetExceeded):
+            call_with_retry(lambda: calls.append(1), policy=RetryPolicy(max_attempts=4))
+    assert calls == []
+    assert context["planning_diagnostics"]["exhausted"] == "deadline"
+
+
+def test_stream_cancellation_is_not_retried():
+    from app.infrastructure.chat_stream_lifetime import (
+        StreamLifetime,
+        StreamStopped,
+        current_lifetime,
+    )
+
+    lifetime = StreamLifetime()
+    lifetime.cancel()
+    token = current_lifetime.set(lifetime)
+    calls = []
+    try:
+        with pytest.raises(StreamStopped):
+            call_with_retry(lambda: calls.append(1), policy=RetryPolicy(max_attempts=4))
+    finally:
+        current_lifetime.reset(token)
+    assert not calls
+
+
+def test_late_synchronous_result_cannot_escape_call_deadline(monkeypatch):
+    from app.application.workflow.retry_policy import (
+        PlanningBudgetExceeded,
+        planning_model_call,
+        planning_request_scope,
+    )
+
+    now = [100.0]
+    monkeypatch.setattr("app.application.workflow.retry_policy.time.monotonic", lambda: now[0])
+    monkeypatch.setenv("XCAGI_PLAN_CALL_TIMEOUT_SECONDS", "2")
+    context = {}
+    with planning_request_scope(context):
+        with pytest.raises(PlanningBudgetExceeded):
+            with planning_model_call():
+                now[0] += 3
+    assert context["planning_diagnostics"]["exhausted"] == "deadline"
+    assert context["planning_diagnostics"]["stages"][0]["outcome"] == "error"

@@ -13,6 +13,7 @@ from app.application.employee_runtime.result_verifier import (
     execution_result_error,
     pending_employee_result,
 )
+from app.application.employee_runtime.write_approval import invoke_employee_gate
 from app.application.tool_execution_deadline import (
     invocation_deadline,
     remaining_invocation_seconds,
@@ -21,19 +22,21 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-# gate 签名：(tool_name, args) -> {"ok": bool, "reason": str}
-GateFn = Callable[[str, dict[str, Any]], dict[str, Any]]
+# Gates may additionally accept the trusted per-call runtime_context keyword.
+GateFn = Callable[..., dict[str, Any]]
 
 _DEFAULT_MAX_ITERATIONS = 6
 
 
-def default_employee_tools() -> list[dict[str, Any]]:
+def default_employee_tools(
+    runtime_context: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """员工默认可用工具：工作流基础工具，剔除「员工包工具」本身以避免递归调用。"""
     try:
         from app.application.tools.workflow import get_workflow_tool_registry
         from app.mod_sdk.employee_tool_registry import is_employee_tool
 
-        reg = get_workflow_tool_registry() or []
+        reg = get_workflow_tool_registry(runtime_context, exclude_tools={"employee"}) or []
         out: list[dict[str, Any]] = []
         for spec in reg:
             name = ""
@@ -315,7 +318,30 @@ def run_employee_agent_loop(
         }
 
     mdl = model or resolve_chat_model()
-    tool_specs = tools if tools is not None else default_employee_tools()
+    tool_specs = tools if tools is not None else default_employee_tools(runtime_context)
+    from app.application.tools.registered_capabilities import ERP_CAPABILITY_TOOL_NAME
+
+    for spec in tool_specs:
+        function = spec.get("function") or {}
+        if function.get("name") == ERP_CAPABILITY_TOOL_NAME:
+            selected = [
+                (
+                    branch["properties"]["tool_id"]["enum"][0],
+                    branch["properties"]["action"]["enum"][0],
+                )
+                for branch in function["parameters"]["anyOf"]
+            ]
+            inherited = (runtime_context or {}).get("employee_tool_allowlist")
+            runtime_context = {
+                **(runtime_context or {}),
+                "employee_tool_allowlist": [
+                    f"{tool_id}.{action}"
+                    for tool_id, action in selected
+                    if inherited is None
+                    or isinstance(inherited, (list, tuple, set, frozenset))
+                    and (f"{tool_id}.{action}" in inherited or tool_id in inherited)
+                ],
+            }
     allowed_tools = {(spec.get("function") or {}).get("name") for spec in tool_specs}
     user_payload = json.dumps({"task": task, "input": input_data or {}}, ensure_ascii=False)[:12000]
     user_content = task.strip() or user_payload
@@ -538,15 +564,37 @@ def run_employee_agent_loop(
                     "repeat_count": repeat_limit,
                 }
 
+            call_context = {
+                **dict(runtime_context or {}),
+                "employee_id": employee_id,
+                "source": "employee_runtime",
+                "call_id": tc_id,
+                "tool_call_id": tc_id,
+            }
+            if workspace_root is not None:
+                call_context["workspace_root"] = workspace_root
             verdict: dict[str, Any] = {
                 "ok": False,
                 "reason": "工具不在员工授权白名单，未执行",
             }
             if tool_name in allowed_tools:
                 verdict = {"ok": True}
-                if gate is not None:
+                from app.application.agent_orchestrator.tool_spec import validate_schema_object
+
+                if tool_name == ERP_CAPABILITY_TOOL_NAME:
+                    projected = next(
+                        spec["function"]["parameters"]
+                        for spec in tool_specs
+                        if spec.get("function", {}).get("name") == tool_name
+                    )
+                    valid, reason = validate_schema_object(projected, args)
+                    if not valid:
+                        verdict = {"ok": False, "reason": reason}
+                if verdict["ok"] and gate is not None:
                     try:
-                        verdict = gate(tool_name, args)
+                        verdict = invoke_employee_gate(
+                            gate, tool_name, args, runtime_context=call_context
+                        )
                     except RECOVERABLE_ERRORS:
                         logger.exception("employee tool gate failed closed: %s", tool_name)
                         verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
@@ -639,13 +687,7 @@ def run_employee_agent_loop(
                             tool_name,
                             args,
                             workspace_root,
-                            runtime_context={
-                                **(runtime_context or {}),
-                                "employee_id": employee_id,
-                                "source": "employee_runtime",
-                                "call_id": tc_id,
-                                "tool_call_id": tc_id,
-                            },
+                            runtime_context=call_context,
                         )
                     )
                 if time.monotonic() >= deadline or budget.uncertain:
@@ -691,6 +733,9 @@ def run_employee_agent_loop(
                     "retryable": False,
                 }
             tool_success, tool_error, verified = _tool_result_state(str(result_raw))
+            if pending:
+                tool_success = False
+                tool_error = tool_error or str(pending["execution_state"])
             if tool_success:
                 for previous in reversed(tool_trace):
                     if (

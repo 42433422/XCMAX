@@ -847,6 +847,7 @@ async def test_async_stream_closes_http_body_on_close_or_cancellation(monkeypatc
 
 
 def test_partial_sync_stream_is_closed_without_retrying_another_model(monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
     calls = []
 
     class Body(httpx.SyncByteStream):

@@ -322,6 +322,24 @@ describe('useActionExecutor', () => {
     expect(button.click).not.toHaveBeenCalled()
   })
 
+  it('停止或清空原轮后，尚未返回的 L2 权限读取不能再触发页面动作', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    let finish!: (state: XiaoCLifeState) => void
+    vi.spyOn(xiaocLifeApi, 'read').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const navigation = useActionExecutor().navigate({ name: 'plans' })
+    useAgentStore().stopRequest()
+    finish({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
+
+    expect((await navigation).success).toBe(false)
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+
   it('暂停后台仍允许 L2 的明确单步请求，L2 不允许发起改写编排', async () => {
     const auth = useAuthStore()
     auth.user = { id: 11, username: 'admin', is_admin: true }

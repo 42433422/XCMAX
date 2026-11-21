@@ -14,6 +14,8 @@ from uuid import uuid4
 from sqlalchemy.exc import SQLAlchemyError
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.xiaoc_life_chat import require_manual_life_capability
+from modstore_server.xiaoc_life_policy import LifePolicyError
 
 logger = logging.getLogger(__name__)
 _GENERATION_ERRORS = (asyncio.CancelledError,) + RECOVERABLE_ERRORS
@@ -168,7 +170,13 @@ async def apply_nl_workflow_graph(
             session=db,
         )
         if result.get("ok") is True or assignment is not None or generation_feedback:
+            if result.get("ok") is True:
+                require_manual_life_capability()
             db.commit()
+    except LifePolicyError:
+        db.rollback()
+        preserve_failed_generation({"ok": False, "error": "life_capability_revoked"})
+        raise
     except RECOVERABLE_ERRORS as exc:
         db.rollback()
         logger.warning(
@@ -290,7 +298,14 @@ async def _generate_graph(
             for (i, p) in enumerate(preset_nodes)
         )
         preset_requirements = f'\n\n【重要约束】本次员工工作流已预先生成了以下真实可执行 ESkill（Python 脚本），你必须在画布中按顺序串接它们：\n{lines}\n规则：\n- 对每个预置 Skill，在 workflow.nodes 中生成一个 node_type="eskill" 节点，config.skill_id 填写对应数字，config.output_var 填写对应 output_var。\n- 这些节点已在数据库中，不需要在 skill_blueprints 中重复定义。\n- 可在这些节点前后增加 condition / variable_set / start / end，但不得删除任何预置节点。\n- 推荐链路：start -> eskill(1) -> eskill(2) -> … -> end。\n'
-    user_msg = f"工作流名称: {wf.name}\n\n工作流说明与需求:\n{brief.strip()}\n\n{_facade()._eskill_catalog_lines(db, user)}\n\n{_facade()._catalog_lines(db, user)}\n\n{employee_node_requirements}{preset_requirements}请先生成 skill_blueprints（仅新增不在上面「重要约束」中的 Skill），再生成 workflow.nodes 与 workflow.edges JSON。"
+    from modstore_server.retort_experiment_surfaces import WORKFLOW_CUSTOMER_MEASUREMENT
+
+    customer_requirements = (
+        _facade().CUSTOMER_DELIVERY_REQUIREMENTS
+        if (assignment or {}).get("measurement_scope") == WORKFLOW_CUSTOMER_MEASUREMENT
+        else ""
+    )
+    user_msg = f"工作流名称: {wf.name}\n\n工作流说明与需求:\n{brief.strip()}\n\n{_facade()._eskill_catalog_lines(db, user)}\n\n{_facade()._catalog_lines(db, user)}\n\n{employee_node_requirements}{preset_requirements}{customer_requirements}请先生成 skill_blueprints（仅新增不在上面「重要约束」中的 Skill），再生成 workflow.nodes 与 workflow.edges JSON。"
     msgs = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_msg},
@@ -606,6 +621,7 @@ def _apply_generated_response(
         }
     id_map: _facade().Dict[str, int] = {}
     temp_to_skill: _facade().Dict[str, int] = {}
+    require_manual_life_capability()
     try:
         temp_to_skill = _facade()._create_generated_skills(db, user, skill_blueprints, warnings)
         for n in nodes_in:

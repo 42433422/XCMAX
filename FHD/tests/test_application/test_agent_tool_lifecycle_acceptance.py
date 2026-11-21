@@ -960,3 +960,19 @@ def test_call_pages_keep_append_order_for_calls_in_the_same_second(tmp_path, mon
         assert service.calls_for(actor, tool["id"], page=3, page_size=1)[0]["id"] == "a"
     finally:
         service.reset_for_tests(None)
+
+
+def test_registry_initialization_and_cache_follow_configured_database(tmp_path, monkeypatch):
+    from app.application import agent_tool_registry_store as store
+
+    monkeypatch.setattr(store, "_DB_OVERRIDE", None)
+    monkeypatch.setattr(store, "_SCHEMA_READY", None)
+    monkeypatch.setattr(store, "_CACHE", {})
+    for name in ("first", "second", "first"):
+        monkeypatch.setenv("XCAGI_AGENT_TOOL_DB", str(tmp_path / f"{name}.sqlite3"))
+        connection = store._connect()
+        try:
+            assert connection.execute("SELECT COUNT(*) FROM tools").fetchone()[0] == 0
+        finally:
+            connection.close()
+        assert store._cached(("same-tool",), lambda: {"database": name}) == {"database": name}

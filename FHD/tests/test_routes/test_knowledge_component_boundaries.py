@@ -6,7 +6,6 @@ import asyncio
 import io
 import logging
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
@@ -17,6 +16,7 @@ from fastapi.responses import JSONResponse
 from app.fastapi_routes import knowledge_v1 as api
 from app.infrastructure.rag.hybrid_retriever import HybridRetriever, RetrievedChunk
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _request() -> Request:
@@ -24,8 +24,10 @@ def _request() -> Request:
 
 
 @pytest.fixture
-def upload_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setattr("app.utils.path_io.path_utils.get_upload_dir", lambda: tmp_path)
+def upload_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, trusted_actor) -> Path:
+    actor = trusted_actor(permissions=["dataset.write"])
+    monkeypatch.setattr(f"{__name__}._request", lambda: actor.request)
+    monkeypatch.setattr("app.utils.path_io.upload_helpers.get_upload_dir", lambda: tmp_path)
     monkeypatch.setattr(
         api, "_run_dataset_rag_agent", lambda **_kwargs: JSONResponse({"success": True})
     )
@@ -66,6 +68,26 @@ async def test_rejected_upload_closes_input_without_saving(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [OSError, ValueError])
+async def test_upload_staging_error_keeps_private_diagnostics_out_of_response(
+    upload_store: Path, monkeypatch: pytest.MonkeyPatch, failure
+) -> None:
+    private = "Traceback /private/knowledge.sqlite token=private-upload"
+
+    def unavailable(*_args, **_kwargs):
+        raise failure(private)
+
+    monkeypatch.setattr("app.fastapi_routes.knowledge.uploads.stage_knowledge_input", unavailable)
+    file = UploadFile(filename="document.txt", file=io.BytesIO(b"private document"))
+    response = await _upload(file)
+    assert response.status_code == 400
+    assert private not in response.body.decode()
+    assert "资料文件暂存或校验失败" in response.body.decode()
+    assert file.file.closed
+    assert not list(upload_store.rglob("*.txt"))
+
+
+@pytest.mark.asyncio
 async def test_cancelled_upload_removes_partial_file(
     upload_store: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -87,7 +109,7 @@ async def test_cancelled_upload_removes_partial_file(
 
 
 @pytest.mark.asyncio
-async def test_upload_dispatch_error_releases_saved_file(
+async def test_upload_dispatch_error_retains_input_for_original_request_recovery(
     upload_store: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def unavailable(**_kwargs: Any) -> JSONResponse:
@@ -98,7 +120,8 @@ async def test_upload_dispatch_error_releases_saved_file(
     with pytest.raises(RuntimeError, match="agent unavailable"):
         await _upload(file)
     assert file.file.closed
-    assert not list(upload_store.rglob("*.txt"))
+    saved = list(upload_store.rglob("*.txt"))
+    assert len(saved) == 1 and saved[0].read_bytes() == b"private document"
 
 
 @pytest.mark.asyncio
@@ -114,15 +137,18 @@ async def test_upload_directory_error_still_closes_input(
 
     monkeypatch.setattr(Path, "mkdir", unavailable)
     file = UploadFile(filename="document.txt", file=io.BytesIO(b"private document"))
-    with pytest.raises(PermissionError, match="upload directory unavailable"):
-        await _upload(file)
+    assert (await _upload(file)).status_code == 400
     assert file.file.closed
 
 
 @pytest.mark.asyncio
-async def test_failed_agent_result_releases_file_even_with_http_200(
+async def test_failed_retry_cannot_remove_an_accepted_input(
     upload_store: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    first = UploadFile(filename="document.txt", file=io.BytesIO(b"private document"))
+    assert (await _upload(first)).status_code == 200
+    accepted = list(upload_store.rglob("*.txt"))
+    assert len(accepted) == 1
     monkeypatch.setattr(
         api,
         "_run_dataset_rag_agent",
@@ -132,7 +158,8 @@ async def test_failed_agent_result_releases_file_even_with_http_200(
     response = await _upload(file)
     assert response.status_code == 200
     assert file.file.closed
-    assert not list(upload_store.rglob("*.txt"))
+    assert list(upload_store.rglob("*.txt")) == accepted
+    assert accepted[0].read_bytes() == b"private document"
 
 
 @pytest.mark.asyncio
@@ -176,7 +203,11 @@ async def test_upload_dataset_segment_cannot_escape_knowledge_directory(upload_s
     assert (await _upload(file, dataset="..")).status_code == 200
     saved = list(upload_store.rglob("*.txt"))
     assert len(saved) == 1
-    assert saved[0].resolve().is_relative_to((upload_store / "knowledge").resolve())
+    assert (
+        saved[0]
+        .resolve()
+        .is_relative_to((upload_store / "capability-inputs" / "knowledge").resolve())
+    )
 
 
 @pytest.mark.parametrize("returned_tenant", ["tenant-b", None])
@@ -221,27 +252,27 @@ def test_real_index_rebuilds_for_each_tenant_without_losing_identical_text(
 async def test_upload_collision_never_overwrites_or_removes_an_existing_input(
     upload_store: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    existing = upload_store / "knowledge" / "docs" / "existing.txt"
-    existing.parent.mkdir(parents=True)
-    existing.write_bytes(b"accepted document from another request")
-    monkeypatch.setattr(
-        "app.fastapi_routes.knowledge.uploads.uuid.uuid4", lambda: SimpleNamespace(hex="existing")
-    )
+    first = UploadFile(filename="document.txt", file=io.BytesIO(b"private document"))
+    assert (await _upload(first)).status_code == 200
+    existing = next(upload_store.rglob("*.txt"))
+    existing.write_bytes(b"changed after the original accepted request")
     dispatch = Mock()
     monkeypatch.setattr(api, "_run_dataset_rag_agent", dispatch)
-    file = UploadFile(filename="document.txt", file=io.BytesIO(b"new private document"))
+    file = UploadFile(filename="document.txt", file=io.BytesIO(b"private document"))
     assert (await _upload(file)).status_code == 400
-    assert existing.read_bytes() == b"accepted document from another request"
+    assert existing.read_bytes() == b"changed after the original accepted request"
     assert file.file.closed
     dispatch.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_upload_component_uses_only_its_injected_dispatch_and_limits(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, trusted_actor
 ) -> None:
     from app.fastapi_routes.knowledge.uploads import DocumentUpload
 
+    actor = trusted_actor(permissions=["dataset.write"])
+    monkeypatch.setattr("app.utils.path_io.upload_helpers.get_upload_dir", lambda: tmp_path)
     facade_dispatch = Mock(side_effect=AssertionError("unexpected facade access"))
     monkeypatch.setattr(api, "_run_dataset_rag_agent", facade_dispatch)
     monkeypatch.setattr(api, "_DATASET_UPLOAD_MAX_BYTES", 1)
@@ -255,7 +286,6 @@ async def test_upload_component_uses_only_its_injected_dispatch_and_limits(
 
     upload = DocumentUpload(
         dispatch=dispatch,
-        directory=lambda: tmp_path,
         extensions=frozenset({".txt"}),
         max_bytes=8,
         logger=logging.getLogger(__name__),
@@ -263,7 +293,7 @@ async def test_upload_component_uses_only_its_injected_dispatch_and_limits(
     file = UploadFile(filename="document.txt", file=io.BytesIO(b"document"))
     response = await upload.ingest(
         "independent",
-        _request(),
+        actor.request,
         file=file,
         source="",
         tenant_id="",

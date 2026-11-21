@@ -178,6 +178,17 @@ def build_chat_failover_candidates(
             if len(out) >= limit:
                 break
 
+    # A gateway can expose several deployment aliases under one provider.
+    # Prefer provider diversity above, then fill the remaining bounded slots.
+    if len(out) < limit:
+        for pid, block in by_provider.items():
+            mids = block.get("runtime_models", block.get("models", []))
+            for mid in mids if isinstance(mids, list) else []:
+                if isinstance(mid, str):
+                    add(pid, mid)
+                if len(out) >= limit:
+                    return out[:limit]
+
     return out[:limit]
 
 

@@ -423,7 +423,10 @@ def test_portfolio_task_larger_than_cycle_reservation_never_dispatches(ports, mo
     monkeypatch.setattr(
         runtime.CyclePorts,
         "approved_portfolio",
-        lambda self: {"goal": {}, "snapshot": before},
+        lambda self: {
+            "goal": {"id": "goal-1", "decision_id": "portfolio-1"},
+            "snapshot": before,
+        },
     )
     monkeypatch.setattr(strategic_portfolio, "plan_portfolio", lambda *a, **k: before["plan"])
     monkeypatch.setattr(strategic_portfolio, "portfolio_status", lambda *a, **k: before)

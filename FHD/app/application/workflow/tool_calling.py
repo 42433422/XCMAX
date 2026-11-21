@@ -9,11 +9,15 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
+from copy import deepcopy
 from typing import Any, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.infrastructure.llm.response_completion import completion_is_incomplete
 
 
 class _Output(BaseModel):
@@ -66,21 +70,80 @@ PLAN_PARSER = PydanticOutputParser(pydantic_object=SubmitWorkflowPlan)
 PLAN_SCHEMA = SubmitWorkflowPlan.model_json_schema()
 
 
-def plan_function_tools() -> list[dict[str, Any]]:
-    return [convert_to_openai_tool(SubmitWorkflowPlan)]
+def plan_output_schema(tool_registry: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Bind the typed transport to exact advertised tool/action pairs per request."""
+    schema = deepcopy(PLAN_SCHEMA)
+    if tool_registry is not None:
+        # clarify.ask is the existing internal control node admitted without a
+        # business registry entry. It asks a question and cannot execute a tool.
+        actions = {
+            tool_id: list(spec.get("actions") or {})
+            for tool_id, spec in tool_registry.items()
+            if spec.get("actions")
+        }
+        actions["clarify"] = ["ask"]
+        variants = [
+            {
+                "properties": {
+                    "tool_id": {"const": tool_id},
+                    "action": {"enum": names},
+                },
+                "required": ["tool_id", "action"],
+            }
+            for tool_id, names in actions.items()
+        ]
+        schema["$defs"]["PlanNode"]["oneOf"] = variants
+    return schema
 
 
-def native_plan_payload(response: dict[str, Any]) -> dict[str, Any] | None:
-    """Unwrap exactly one full-graph call; reject unordered action batches."""
+def plan_function_tools(tool_registry: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    tool = convert_to_openai_tool(SubmitWorkflowPlan)
+    if tool_registry is not None:
+        constraint = plan_output_schema(tool_registry)["$defs"]["PlanNode"]
+        node_schema = tool["function"]["parameters"]["properties"]["nodes"]["items"]
+        node_schema.update({key: constraint[key] for key in ("oneOf", "not") if key in constraint})
+    return [tool]
+
+
+def native_plan_payload(
+    response: dict[str, Any], *, allow_text_reply: bool = False
+) -> dict[str, Any] | None:
+    """Normalize native content or one typed call; never reinterpret rejected calls."""
     if not isinstance(response, dict):
         raise ValueError("原生计划响应必须是对象")
+    if completion_is_incomplete(response):
+        raise ValueError("模型输出未完整生成")
     choices = response.get("choices")
     first = choices[0] if isinstance(choices, list) and choices else None
-    message = first.get("message") if isinstance(first, dict) else None
+    if not isinstance(first, dict):
+        return None
+    message = first.get("message")
     if isinstance(message, dict) and message.get("function_call"):
         raise ValueError("原生计划不支持旧式函数信封")
-    if not isinstance(message, dict) or not message.get("tool_calls"):
+    if not isinstance(message, dict):
         return None
+    if not message.get("tool_calls"):
+        content = message.get("content")
+        raw = content.strip() if isinstance(content, str) else ""
+        if not allow_text_reply or not raw:
+            return None
+        # Ordinary JSON is answer content too. Reserve the plan envelope's
+        # discriminant/payload keys; malformed JSON stays on strict plan repair.
+        structural = re.sub(r"^```(?:json)?\s*", "", raw, count=1, flags=re.I)
+        if structural.startswith(("{", "[")):
+            try:
+                value = json.loads(structural.removesuffix("```").strip())
+                json.dumps(value, allow_nan=False)
+            except ValueError:
+                return None
+            objects = value if isinstance(value, list) else [value]
+            if any(
+                isinstance(item, dict) and {"mode", "nodes", "reply"}.intersection(item)
+                for item in objects
+            ):
+                return None
+        reply = SubmitWorkflowPlan(mode="reply", reply=raw)
+        return {"choices": [{"message": {"content": reply.model_dump_json()}}]}
     calls = message["tool_calls"]
     if not isinstance(calls, list) or len(calls) != 1:
         raise ValueError("原生调用必须一次提交完整依赖图")
@@ -112,7 +175,22 @@ def tool_calls_enabled() -> bool:
     }
 
 
+def request_json_completion(
+    complete: Callable[..., dict[str, Any] | None], **kwargs: Any
+) -> dict[str, Any] | None:
+    """Offer JSON mode; only a proven legacy keyword rejection may omit it."""
+    try:
+        return complete(**kwargs, response_format={"type": "json_object"})
+    except TypeError as error:
+        if not re.search(r"""unexpected keyword argument ['"]response_format['"]""", str(error)):
+            raise
+        return complete(**kwargs)
+
+
 def unsupported_tool_parameter(error: TypeError) -> bool:
     return bool(
-        re.search(r"""unexpected keyword argument ['"](?:tools|tool_choice)['"]""", str(error))
+        re.search(
+            r"""unexpected keyword argument ['"](?:tools|tool_choice|response_format)['"]""",
+            str(error),
+        )
     )

@@ -36,6 +36,16 @@ def _pending_control(value: dict[str, Any]) -> bool:
 
 
 def _control(value: dict[str, Any], source: str) -> ExecutionReceipt | None:
+    status = value.get("status")
+    if isinstance(status, str) and status.strip().lower() in {
+        "unknown",
+        "dispatch_unknown",
+        "execution_unknown",
+        "outcome_unknown",
+    }:
+        # A lost acknowledgement often also carries ok=false/error. Those
+        # transport fields cannot prove the external action did not occur.
+        return ExecutionReceipt("unknown", f"{source}_outcome_unknown")
     if any(
         value.get(key)
         for key in ("error", "cognition_error", "handler_failed", "blocked_by_risk_gate")
@@ -193,6 +203,11 @@ def evaluate_execution_receipt(result: Any) -> ExecutionReceipt:
                 or any(output.get(key) for key in ("output", "response", "answer", "summary"))
             ):
                 issues.append(ExecutionReceipt("unknown", "execution_handler_outcome_missing"))
+    unknown_effect = next(
+        (issue for issue in issues if issue.reason.endswith("_outcome_unknown")), None
+    )
+    if unknown_effect is not None:
+        return unknown_effect
     pending = next((issue for issue in issues if issue.status == "pending"), None)
     if pending is None and any(
         _pending_control(value)

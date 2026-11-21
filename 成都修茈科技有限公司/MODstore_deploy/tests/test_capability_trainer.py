@@ -4,8 +4,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 
 from modstore_server import capability_trainer as trainer
+
+
+@pytest.fixture
+def corpus_key(monkeypatch):
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
 
 
 def _rec(employee="daily-orchestrator", reason="marker_missing", status="failed", ts=None):
@@ -34,53 +40,129 @@ def test_cluster_ignores_old_and_successful_records():
     assert trainer.cluster_failures(records, min_count=1) == []
 
 
-def test_append_cases_is_idempotent(tmp_path):
+def test_append_cases_is_idempotent(tmp_path, corpus_key):
     clusters = trainer.cluster_failures([_rec(), _rec()], min_count=1)
     first = trainer.append_cases(tmp_path, clusters)
     second = trainer.append_cases(tmp_path, clusters)
     assert len(first) == 1
     assert second == []
-    rows = (tmp_path / "daily-orchestrator.jsonl").read_text(encoding="utf-8").splitlines()
-    assert len(rows) == 1
-    persisted = json.loads(rows[0])
+    path = tmp_path / "daily-orchestrator.jsonl"
+    encrypted = path.read_text(encoding="utf-8")
+    assert set(json.loads(encrypted)) == {"schema", "ciphertext"}
+    assert "daily-orchestrator" not in encrypted and "任务正文" not in encrypted
+    assert path.stat().st_mode & 0o777 == 0o600
+    persisted = trainer.load_cases(path)[0]
     assert "employee_id" not in persisted
-    assert "resource_id" not in persisted
+    assert persisted["resource_id"] == "daily-orchestrator"
     assert persisted["surface"] == "employee_prompt"
     assert persisted["task"] == "任务正文"
     assert persisted["case_id"] == first[0]["case_id"] == "292ff0293853d560"
-    # Existing corpora keep their original identity/hash and are not rewritten.
+    assert trainer.load_cases(path) == first
+    assert path.read_text(encoding="utf-8") == encrypted
+    # Legacy records are encrypted without changing their identity, input or hash.
     legacy = {**persisted, "employee_id": "daily-orchestrator"}
     legacy.pop("surface")
-    path = tmp_path / "daily-orchestrator.jsonl"
     path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
     assert trainer.append_cases(tmp_path, clusters) == []
-    assert json.loads(path.read_text(encoding="utf-8")) == legacy
+    assert trainer.load_cases(path) == [legacy]
+    assert "daily-orchestrator" not in path.read_text(encoding="utf-8")
 
 
-def test_workflow_corpus_preserves_context_without_redundant_resource_identity(tmp_path):
-    context = {"target_employee_pack_id": "worker@1.0", "execution_feedback": {"status": "failed"}}
+def test_workflow_corpus_preserves_private_reproduction_input(tmp_path, corpus_key):
     cluster = {
         "surface": "workflow_nl_prompt",
         "resource_id": "workflow_nl_generator",
-        "failure_reason": "execution_failed",
-        "samples": [{"task": "生成工作流", "run_id": "wf-run", "generation_context": context}],
+        "failure_reason": "private-reason-sentinel",
+        "samples": [
+            {
+                "task": "private-task-sentinel\r\n原输入\n",
+                "run_id": "private-run-sentinel",
+                "generation_context": {
+                    "user_id": 7,
+                    "input": "private-context-sentinel",
+                    "target_employee_pack_id": "worker@1.0",
+                    "execution_feedback": {"status": "failed"},
+                },
+            }
+        ],
     }
     original = deepcopy(cluster)
     written = trainer.append_cases(tmp_path, [cluster])
     path = tmp_path / "workflow_nl_prompt-workflow_nl_generator.jsonl"
-    persisted = json.loads(path.read_text(encoding="utf-8"))
-    assert persisted == written[0]
-    assert persisted["surface"] == "workflow_nl_prompt"
-    assert persisted["generation_context"] == context
-    assert persisted["task"] == "生成工作流"
-    assert persisted["source_run"] == "wf-run"
-    assert "employee_id" not in persisted and "resource_id" not in persisted
+    assert "private-" not in path.read_text(encoding="utf-8")
+    assert trainer.load_cases(path) == written
+    assert written[0]["case_id"] == trainer._case_id(cluster, cluster["samples"][0])
+    assert written[0]["surface"] == "workflow_nl_prompt"
+    assert written[0]["resource_id"] == "workflow_nl_generator"
+    assert "employee_id" not in written[0]
+    assert written[0]["source_run"] == "private-run-sentinel"
+    assert written[0]["task"] == cluster["samples"][0]["task"]
+    assert written[0]["generation_context"] == cluster["samples"][0]["generation_context"]
     assert cluster == original
     assert trainer.training_identity(cluster) == ("workflow_nl_prompt", "workflow_nl_generator")
     assert trainer.append_cases(tmp_path, [cluster]) == []
     changed = deepcopy(cluster)
     changed["samples"][0]["generation_context"]["target_employee_pack_id"] = "other-worker@1.0"
-    assert trainer.append_cases(tmp_path, [changed])[0]["case_id"] != persisted["case_id"]
+    added = trainer.append_cases(tmp_path, [changed])
+    assert added[0]["case_id"] != written[0]["case_id"]
+    assert trainer.load_cases(path) == written + added
+    assert "private-" not in path.read_text(encoding="utf-8")
+
+
+def test_corpus_missing_key_preserves_legacy_input_and_refuses_new_plaintext(tmp_path, monkeypatch):
+    monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    path = tmp_path / "daily-orchestrator.jsonl"
+    with pytest.raises(RuntimeError, match="MODSTORE_LLM_MASTER_KEY not configured"):
+        trainer.append_cases(tmp_path, clusters)
+    assert not path.exists()
+    legacy = json.dumps({"case_id": "original-id", "task": "private-task-sentinel"}) + "\n"
+    path.write_text(legacy, encoding="utf-8")
+    with pytest.raises(RuntimeError, match="MODSTORE_LLM_MASTER_KEY not configured"):
+        trainer.load_cases(path)
+    assert path.read_text(encoding="utf-8") == legacy
+    assert not list(tmp_path.glob(".training-corpus-*"))
+
+
+@pytest.mark.parametrize("damage", ["wrong_key", "ciphertext", "schema", "invalid_record"])
+def test_corpus_cannot_discard_unreadable_existing_samples(
+    tmp_path, monkeypatch, corpus_key, damage
+):
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    trainer.append_cases(tmp_path, clusters)
+    path = tmp_path / "daily-orchestrator.jsonl"
+    if damage == "wrong_key":
+        monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
+    else:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if damage == "invalid_record":
+            path.write_text(path.read_text(encoding="utf-8") + "not-json\n", encoding="utf-8")
+        else:
+            record[damage] = "damaged"
+            path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    original = path.read_bytes()
+    clusters[0]["samples"][0]["task"] = "another-private-task"
+    with pytest.raises(ValueError):
+        trainer.append_cases(tmp_path, clusters)
+    assert path.read_bytes() == original
+    assert not list(tmp_path.glob(".training-corpus-*"))
+
+
+def test_corpus_atomic_replace_failure_preserves_old_samples(tmp_path, monkeypatch, corpus_key):
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    trainer.append_cases(tmp_path, clusters)
+    path = tmp_path / "daily-orchestrator.jsonl"
+    original = path.read_bytes()
+
+    def unavailable(*_args):
+        raise OSError("fixture write failure")
+
+    monkeypatch.setattr(trainer.os, "replace", unavailable)
+    clusters[0]["samples"][0]["task"] = "new-private-task"
+    with pytest.raises(OSError, match="fixture write failure"):
+        trainer.append_cases(tmp_path, clusters)
+    assert path.read_bytes() == original
+    assert not list(tmp_path.glob(".training-corpus-*"))
 
 
 def test_mine_cli_reports_counts_without_private_samples(tmp_path, monkeypatch, capsys):

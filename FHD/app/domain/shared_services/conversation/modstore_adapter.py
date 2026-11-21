@@ -516,6 +516,54 @@ class ModstorePlatformAdapter:
         prepared.assert_valid(self._connection())
         return prepared
 
+    async def prepare_chat_failover_routes(
+        self, primary: PreparedChatRoute
+    ) -> AsyncIterator[PreparedChatRoute]:
+        """Revalidate platform candidates without changing the account's selected default."""
+        primary.assert_valid(self._connection())
+        if (
+            primary.native_vision
+            or primary.snapshot.get("key_source") != "platform"
+            or primary.snapshot.get("route_source")
+            not in {"platform_gateway", "platform_configuration", "fallback"}
+            or not completions._allows_failover(ChatInput([], extra={"allow_failover": True}))
+        ):
+            return
+        connection = primary.connection
+        discovery = routing.FailoverDiscovery(
+            connection,
+            self._catalog_gateway(connection).read_sync,
+            _httpx_sync_client,
+            {"provider": primary.route[0], "model": primary.route[1]},
+        )
+        routes = await asyncio.to_thread(discovery.candidates, *primary.route)
+        primary.assert_valid(self._connection())
+        seen = {primary.route}
+        for route in routes:
+            if route in seen:
+                continue
+            primary.assert_valid(self._connection())
+            snapshot = await asyncio.to_thread(
+                routing.resolve_account_route, connection, _httpx_sync_client, route
+            )
+            primary.assert_valid(self._connection())
+            if snapshot.get("key_source") != "platform" or snapshot.get("route_source") not in {
+                "explicit",
+                "platform_gateway",
+                "platform_configuration",
+                "fallback",
+            }:
+                raise _transport.MarketModelError({"status": 403})
+            prepared = PreparedChatRoute(
+                connection, (snapshot["provider"], snapshot["model"]), snapshot
+            )
+            prepared.assert_valid(self._connection())
+            if prepared.route in seen:
+                seen.add(route)
+                continue
+            seen.update((route, prepared.route))
+            yield prepared
+
     @contextmanager
     def _route_observation(self):
         try:

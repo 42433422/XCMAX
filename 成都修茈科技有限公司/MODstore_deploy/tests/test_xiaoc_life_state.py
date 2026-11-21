@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -13,11 +14,14 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 from modstore_server import xiaoc_life_api as api
+from modstore_server import xiaoc_life_reconciliation as reconcile
 from modstore_server import xiaoc_life_store as store
 from modstore_server.api.deps import get_current_user
+from modstore_server.db import db_base
 from modstore_server.db.db_base import Base
 from modstore_server.db.identity import User
 from modstore_server.db.llm_chat import LlmClientRequest
+from modstore_server.db.strategic import StrategicDecision
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
 from modstore_server.xiaoc_life_policy import LifePolicyError, LifeUpdate
 
@@ -32,10 +36,11 @@ def database(tmp_path, monkeypatch):
             XiaoCLifeState.__table__,
             XiaoCLifeEvent.__table__,
             LlmClientRequest.__table__,
+            StrategicDecision.__table__,
         ],
     )
     factory = sessionmaker(bind=engine)
-    for module in (store, api):
+    for module in (store, api, reconcile, db_base):
         monkeypatch.setattr(module, "get_session_factory", lambda: factory)
     with factory() as session:
         session.add_all(
@@ -479,3 +484,78 @@ def test_experience_cursor_preserves_records_with_identical_timestamps(database)
             "/life/experiences", params={"limit": 1, "before": first["next_cursor"]}
         ).json()
     assert [first["items"][0]["id"], second["items"][0]["id"]] == ["b", "a"]
+
+
+@pytest.mark.parametrize("historical_reconciled", [True, False])
+def test_usage_scan_excludes_settled_history_and_rotates_unresolved_batches(
+    database, historical_reconciled
+):
+    configure()
+
+    def seed(current, session):
+        current["budget"].update(
+            reserved_tokens=10 if historical_reconciled else 1010,
+            used_tokens=100 if historical_reconciled else 0,
+        )
+        current["unknown_usage"] = True
+        for index in range(101):
+            event_id = f"cycle:{index:03}"
+            store._event(
+                session,
+                event_id,
+                kind="enterprise",
+                status="unknown",
+                summary="原调用仍待核对",
+                evidence_refs=[],
+                actual_tokens=None,
+                details={
+                    "owner_user_id": 7,
+                    "reservation": 10,
+                    "steps": [{"kind": "model", "request_id": f"original-{index:03}"}],
+                },
+            )
+            if index < 100 and historical_reconciled:
+                store._event(
+                    session,
+                    "reconciled:" + event_id,
+                    kind="reconciliation",
+                    status="verified",
+                    summary="已核对原调用",
+                    evidence_refs=[event_id],
+                    actual_tokens=1,
+                )
+        session.add(
+            LlmClientRequest(
+                user_id=7,
+                client_request_id="original-100",
+                request_sha256="c" * 64,
+                state="completed",
+                done_json=json.dumps({"status": "settled", "actual_tokens": 3}),
+            )
+        )
+
+    store._mutate(seed)
+    if not historical_reconciled:
+        assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 100}
+    assert reconcile.reconcile_usage()["resolved"] == 1
+    assert reconcile.reconcile_usage()["resolved"] == 0
+    state = store.read_state()
+    assert state["budget"]["used_tokens"] == (103 if historical_reconciled else 3)
+    assert state["budget"]["reserved_tokens"] == (0 if historical_reconciled else 1000)
+    with database() as session:
+        assert session.get(XiaoCLifeEvent, "cycle:100").actual_tokens is None
+        assert session.get(XiaoCLifeEvent, "reconciled:cycle:100").actual_tokens == 3
+        if not historical_reconciled:
+            session.add(
+                LlmClientRequest(
+                    user_id=7,
+                    client_request_id="original-000",
+                    request_sha256="d" * 64,
+                    state="completed",
+                    done_json=json.dumps({"status": "settled", "actual_tokens": 2}),
+                )
+            )
+            session.commit()
+    if not historical_reconciled:
+        assert reconcile.reconcile_usage()["resolved"] == 1
+        assert store.read_state()["budget"]["reserved_tokens"] == 990

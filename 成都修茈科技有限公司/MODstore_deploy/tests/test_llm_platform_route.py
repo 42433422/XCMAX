@@ -296,3 +296,38 @@ async def test_scaffold_preserves_explicit_byok_when_gateway_is_configured(datab
         database, user, None, None
     ) == ("xiaomi", "mimo-v2.6-flash", None)
     catalog.assert_not_awaited()
+
+
+def test_stale_non_chat_preference_falls_back_to_platform(database, chat_client):
+    from modstore_server.models import User
+
+    save("xiaomi", base_url=BASE, model="mimo-v2.6-flash")
+    user = database.get(User, 1)
+    user.default_llm_json = json.dumps(
+        {"mode": "explicit", "provider": "xiaomi", "model": "gpt-image-1"}
+    )
+    database.commit()
+    response = chat_client.get("/api/llm/resolve-chat-default")
+    assert response.status_code == 200
+    assert response.json()["model"] == "mimo-v2.6-flash"
+
+
+@pytest.mark.parametrize(
+    "preference",
+    [
+        {"mode": "byok", "provider": "xiaomi", "model": "gpt-image-1"},
+        {"mode": "byok", "provider": "retired-provider", "model": "old-model"},
+    ],
+)
+def test_stale_byok_preference_without_personal_key_never_uses_paid_platform(
+    database, chat_client, preference
+):
+    from modstore_server.models import User
+
+    save("xiaomi", base_url=BASE, model="mimo-v2.6-flash")
+    user = database.get(User, 1)
+    user.default_llm_json = json.dumps(preference)
+    database.commit()
+    response = chat_client.get("/api/llm/resolve-chat-default")
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "NO_BYOK_CHAT_MODEL"

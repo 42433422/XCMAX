@@ -308,19 +308,10 @@ def _drain_background_run(run_id: str) -> AgentRun:
         recovered=claimed.recovery_count > 0,
     )
     assert run is not None
-    state = {
-        "completed": "completed",
-        "failed": "failed",
-        "blocked": "failed",
-        "cancelled": "cancelled",
-        "paused": "paused",
-    }.get(run.status, "blocked")
-    queue.finish(
-        run_id,
-        "route-test-worker",
-        state,
-        error_code="needs_verification" if run.status == "blocked" else "",
-    )
+    from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+
+    state, error_code = dispatched_run_state(run)
+    queue.finish(run_id, "route-test-worker", state, error_code=error_code)
     return run
 
 
@@ -495,6 +486,9 @@ def test_create_get_and_list_agent_run(local_tools, trusted_actor, monkeypatch) 
     assert events_response.status_code == 200
     events_payload = events_response.json()
     assert events_payload["count"] == len(run["events"])
+    assert events_payload["data"][-1]["event_type"] == "run.observed"
+    assert events_payload["data"][-1]["data"]["status"] == "completed"
+    assert sum(event["event_type"] == "run.completed" for event in events_payload["data"]) == 1
     assert [event["event_type"] for event in events_payload["data"][-2:]] == [
         "run.completed",
         "run.observed",
@@ -797,12 +791,12 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
             f"/api/agent/runs/{run_id}/continue",
             json={"approval_grant": grant},
         )
-        assert finished.status_code == 409
-        assert finished.json()["message"] == "任务已结束，不能审批通过后执行"
+        assert finished.status_code == 403
+        assert "approval_grant" in finished.json()["message"]
         execution = get_task_execution_repository().get(run_id)
         assert execution is not None
-        assert execution.state == "failed"
-        assert execution.last_error_code == "needs_verification"
+        # The adapter ran once, but its bare success flag cannot prove the effect.
+        assert execution.state == "unknown"
         assert execution.execution_count == 2
         execute.assert_called_once()
 

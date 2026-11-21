@@ -40,6 +40,7 @@ from app.application.workflow.approval_persistence import (
 from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
 from app.db.db_base import Base
 from app.db.models.approval import ApprovalRequest, ApprovalStatus
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture(params=["sqlite", "postgresql"])
@@ -269,9 +270,10 @@ def test_existing_approval_reuse_requires_same_pending_operation_and_applicant(d
 
 
 @pytest.mark.parametrize("entry", ["capability", "employee_gate"])
-def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch, entry):
+def test_batch_approval_deduplicates_across_service_restarts(trusted_actor, monkeypatch, entry):
     from datetime import timedelta
 
+    from app.application.agent_orchestrator import AgentOrchestrator, SQLAlchemyAgentRunRepository
     from app.application.tools.registered_capabilities import execute_registered_capability
     from app.application.workflow.approval_persistence import (
         claim_batch_dispatch,
@@ -279,46 +281,42 @@ def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch, en
     )
     from app.application.workflow.approval_service import ApprovalService
     from app.db.models.user import Session as UserSession
-    from app.db.models.user import User
-    from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
     from app.infrastructure.tenant_scope import tenant_scope
     from app.utils.time import utc_now_naive
 
-    monkeypatch.setattr("app.db.HostSessionLocal", db)
+    actor = trusted_actor(user_id=1, tenant_id=1, role="admin")
+    db = actor.factory
+    repository = SQLAlchemyAgentRunRepository(session_factory=db)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
     monkeypatch.setattr("app.application.workflow.get_approval_service", ApprovalService)
-    context = {"local_user_id": 1, "user_id": "1", "tenant_id": 1, "turn_id": "turn-1"}
-    with tenant_scope(1):
-        with db.begin() as session:
-            session.add(
-                User(
-                    id=1, username="first", password="x", role="admin", tenant_id=1, is_active=True
-                )
-            )
-            session.add(
-                UserSession(
-                    session_id="session", user_id=1, expires_at=utc_now_naive() + timedelta(hours=1)
-                )
-            )
-        context["_actor_authorization"] = bind_agent_actor_scope(session_id="session", user_id="1")
+    context = {**actor.context, "turn_id": "turn-1"}
+    with tenant_scope(actor.tenant_id):
         if entry == "employee_gate":
             from unittest.mock import Mock
 
-            from app.application.agent_orchestrator import AgentOrchestrator
             from app.application.employee_runtime.write_approval import build_write_approval_gate
 
             dispatch = Mock(
                 side_effect=AssertionError("a write gate only stages the original approval")
             )
             monkeypatch.setattr(AgentOrchestrator, "execute_dispatched_run", dispatch)
-            gate = build_write_approval_gate("employee", context)
+            untrusted_gate = build_write_approval_gate("employee", context)
+            denied = untrusted_gate("products", {"action": "batch_delete", "ids": [1]})
+            assert denied["execution_result"]["error_code"] == "tool_identity_required"
+            assert denied["execution_result"]["execution_status"] == "not_started"
+            assert repository.list_recent(user_id=str(actor.user_id)) == []
+            gate = build_write_approval_gate("employee", runtime_context=context)
 
         def call(ids):
             if entry == "employee_gate":
-                verdict = gate("products", {"action": "batch_delete", "ids": ids})
+                verdict = gate("customers", {"action": "batch_delete", "ids": ids})
                 return verdict.get("execution_result", verdict)
             return json.loads(
                 execute_registered_capability(
-                    {"tool_id": "products", "action": "batch_delete", "params": {"ids": ids}},
+                    {"tool_id": "customers", "action": "batch_delete", "params": {"ids": ids}},
                     runtime_context=context,
                 )
             )
@@ -330,6 +328,17 @@ def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch, en
         assert first["task_id"] == second["task_id"]
         assert first["execution_state"] == "waiting_approval"
         assert not changed.get("pending_approval") and not changed["success"]
+        original = repository.get(first["agent_run_id"])
+        assert original.user_id == str(actor.user_id)
+        assert original.metadata["task_context"]["task_id"] == first["task_id"]
+        assert (
+            original.metadata["runtime_context"]["_actor_authorization"]
+            == context["_actor_authorization"]
+        )
+        assert original.steps[0].params == {"ids": [1]}
+        assert len(repository.list_recent(user_id=str(actor.user_id))) == 1
+        if entry == "employee_gate":
+            dispatch.assert_not_called()
         request_no = first["approval_request_id"]
         with monkeypatch.context() as failure:
             from unittest.mock import Mock
@@ -345,10 +354,19 @@ def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch, en
             )
         snapshot = mark_durable_request_approved_and_load(request_no)
         assert snapshot is not None
+        assert snapshot["agent_run_id"] == original.run_id
+        assert snapshot["approved_step_id"] in {
+            original.steps[0].step_id,
+            original.steps[0].node_id,
+        }
+        assert snapshot["plan_id"] == original.plan_id
+        assert plan_fingerprint(snapshot["plan"]) == plan_fingerprint(
+            plan_from_dict(original.metadata["plan"])
+        )
         assert claim_batch_dispatch(request_no, snapshot["plan"], snapshot["runtime_context"])
         assert not claim_batch_dispatch(request_no, snapshot["plan"], snapshot["runtime_context"])
         with db.begin() as session:
-            session.query(UserSession).filter_by(session_id="session").one().expires_at = (
+            session.query(UserSession).filter_by(session_id=actor.session_id).one().expires_at = (
                 utc_now_naive() - timedelta(seconds=1)
             )
         assert not call([1]).get("pending_approval")
@@ -782,7 +800,6 @@ class TestResumePathNoRawLeakReal:
                 "app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime",
                 return_value=engine,
             ),
-            patch("app.fastapi_routes.domains.misc.helpers._dispatch_tool_for_approval"),
         ):
             out = _resume_pending_ai_workflow_after_approval(
                 request_no="req-resume-leak", opinion="同意"

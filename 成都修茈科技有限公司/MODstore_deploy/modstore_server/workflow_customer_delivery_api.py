@@ -24,8 +24,10 @@ from modstore_server.strategic_customer_delivery import _customer_agreement
 from modstore_server.strategic_portfolio import digest
 from modstore_server.workflow_customer_delivery import (
     ARTIFACT_SOURCE,
+    delivery_node,
     load_completed_delivery,
     read_artifact_bytes,
+    required_delivery_artifacts,
 )
 
 _ARTIFACT = re.compile(r"^workflow-file-([1-9][0-9]*)-([1-9][0-9]*)-([0-9a-f]{24})$")
@@ -39,6 +41,10 @@ def _delivery(
         contract = binding["customer_delivery"]
         if contract["user_id"] != user.id or contract["goal"] != agreement:
             raise ValueError("customer or original agreement differs")
+        match = _ARTIFACT.fullmatch(artifact_id)
+        if match is None or int(match[1]) != execution_id:
+            raise ValueError("artifact does not identify its original execution")
+        contract = delivery_node(contract, int(match[2]))
         rows = [row for row in produced["artifacts"] if row.get("artifact_id") == artifact_id]
         if len(rows) != 1:
             raise ValueError("artifact does not identify one original output")
@@ -55,7 +61,7 @@ def _delivery(
         if produced_at > completed:
             raise ValueError("native delivery occurred after the workflow terminal")
         return contract, artifact, completed
-    except (KeyError, ValueError, TypeError) as exc:
+    except (KeyError, ValueError, TypeError, OSError, VibePathError) as exc:
         raise HTTPException(404, "原工作流交付文件不存在或身份已改变") from exc
 
 
@@ -80,7 +86,11 @@ def list_workflow_deliveries(
         )
         for execution_id in ids[:100]:
             try:
-                _binding, produced = load_completed_delivery(db, execution_id)
+                binding, produced = load_completed_delivery(db, execution_id)
+                required = {
+                    item["artifact_id"]
+                    for item in required_delivery_artifacts(binding["customer_delivery"], produced)
+                }
                 for row in produced["artifacts"]:
                     _contract, artifact, completed = _delivery(
                         db, user, execution_id, row["artifact_id"], agreement
@@ -90,12 +100,13 @@ def list_workflow_deliveries(
                         {
                             "artifact_id": artifact["artifact_id"],
                             "artifact_sha256": artifact["artifact_sha256"],
+                            "requires_acceptance": artifact["artifact_id"] in required,
                             "filename": Path(artifact["output_path"]).name,
                             "download_url": f"{route}?{query}",
                             "completed_at": completed.isoformat(),
                         }
                     )
-            except (ValueError, HTTPException):
+            except (ValueError, OSError, VibePathError, HTTPException):
                 continue
     return {"items": items, "next_cursor": int(ids[99]) if len(ids) > 100 else None}
 

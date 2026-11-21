@@ -87,7 +87,8 @@ export type AgentRunEventType =
   | 'workflow.plan_node_updated'
   | 'workflow.plan_policy_normalized'
   | 'workflow.plan_policy_rejected'
-  | 'workflow.plan_reference_resolved';
+  | 'workflow.plan_reference_resolved'
+  | 'workflow.resume_params_rejected';
 
 export const TERMINAL_AGENT_RUN_EVENT_TYPES: ReadonlySet<AgentRunEventType> = new Set([
   'budget.exceeded',

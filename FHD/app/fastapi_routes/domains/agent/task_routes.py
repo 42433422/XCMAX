@@ -16,6 +16,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
 from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_repository
+from app.application.agent_orchestrator.cross_module_chain import (
+    create_cross_module_task as create_unified_task,
+)
+from app.application.agent_orchestrator.cross_module_chain import (
+    project_rejected_approval,
+)
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.application.agent_orchestrator.run_models import utc_now_iso
 from app.application.agent_orchestrator.run_repository import AgentRunRepository
@@ -32,7 +38,6 @@ from app.application.agent_orchestrator.task_progress import task_progress_snaps
 from app.application.agent_orchestrator.unified_task import (
     UnifiedTaskConflictError,
     UnifiedTaskError,
-    create_unified_task,
     task_capabilities,
 )
 from app.application.enterprise_cognition.service import get_cognition_service
@@ -306,6 +311,7 @@ def _stored_task_replay(run: Any) -> tuple[dict[str, Any], int] | None:
     stored = load_cross_module_http_result(
         str(checkpoint.get("tenant_id") or ""),
         str(checkpoint.get("idempotency_key") or ""),
+        runtime_context=runtime,
     )
     if stored is None:
         return None
@@ -421,34 +427,14 @@ def create_agent_task(
                 params=params,
                 runtime_context=runtime_context,
             )
-            from app.application.agent_orchestrator.cross_module_chain import (
-                begin_cross_module_http,
-                is_cross_module_client_task,
-            )
-
-            if not result.deduplicated and is_cross_module_client_task(message, params):
-                begin_cross_module_http(
-                    AgentOrchestrator(),
-                    result.run,
-                    params=params,
-                    runtime_context=runtime_context,
-                )
-                refreshed = AgentOrchestrator().get_run(result.run.run_id)
-                if refreshed is not None:
-                    result = type(result)(run=refreshed, deduplicated=False)
-            else:
-                from app.application.agent_orchestrator.cross_module_chain import (
-                    project_rejected_approval,
-                )
-
-                projected = project_rejected_approval(result.run)
-                replay = _stored_task_replay(projected)
-                if result.deduplicated and replay is not None:
-                    body, status_code = replay
-                    body["deduplicated"] = True
-                    body["idempotent_replay"] = True
-                    return JSONResponse(body, status_code=status_code)
-                result = type(result)(run=projected, deduplicated=result.deduplicated)
+            projected = project_rejected_approval(result.run)
+            replay = _stored_task_replay(projected)
+            if result.deduplicated and replay is not None:
+                body, status_code = replay
+                body["deduplicated"] = True
+                body["idempotent_replay"] = True
+                return JSONResponse(body, status_code=status_code)
+            result = type(result)(run=projected, deduplicated=result.deduplicated)
         response = run_response(result.run, principal=principal)
         response["deduplicated"] = result.deduplicated
         accepted = {"queued", "waiting_user", "waiting_approval"}

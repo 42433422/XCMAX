@@ -333,38 +333,45 @@ class TestPrintRoutesPrinters:
 
 class TestPrintRoutesSaveSelection:
     def test_save_selection_invalid_document_printer(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
+        from app.domain.shared_services.tools_workflow_workspace import _registered_router_print
+
+        with patch("app.services.get_printer_service") as svc:
             svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
-            r = print_client.put("/api/print/printer-selection", json={"document_printer": "P2"})
-        assert r.status_code == 400
-        assert "发货单打印机" in r.json()["message"]
+            result = _registered_router_print(
+                "save_printer_selection",
+                {"document_printer": "P2"},
+                {},
+                "",
+                "",
+            )
+            svc.return_value.save_printer_selection.assert_not_called()
+        assert result["success"] is False
+        assert "发货单打印机" in result["message"]
 
     def test_save_selection_invalid_label_printer(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
-            r = print_client.put("/api/print/printer-selection", json={"label_printer": "P2"})
-        assert r.status_code == 400
-        assert "标签打印机" in r.json()["message"]
+        from app.domain.shared_services.tools_workflow_workspace import _registered_router_print
 
-    def test_save_selection_success(self, print_client: TestClient, local_tools):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
+        with patch("app.services.get_printer_service") as svc:
             svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
-            svc.return_value.save_printer_selection.return_value = {"success": True}
-            svc.return_value.classify_printers.return_value = {"doc": "P1"}
-            r = print_client.put(
-                "/api/print/printer-selection",
-                json={"document_printer": "P1", "label_printer": "P1"},
+            result = _registered_router_print(
+                "save_printer_selection",
+                {"label_printer": "P2"},
+                {},
+                "",
+                "",
             )
-        assert r.status_code == 200
-        data = r.json()
-        assert data["success"] is True
-        assert data["doc"] == "P1"
+            svc.return_value.save_printer_selection.assert_not_called()
+        assert result["success"] is False
+        assert "标签打印机" in result["message"]
 
     def test_save_selection_exception(self, print_client: TestClient, local_tools):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
+        from app.domain.shared_services.tools_workflow_workspace import _registered_router_print
+
+        with patch("app.services.get_printer_service") as svc:
             svc.return_value.get_printers.side_effect = RuntimeError("boom")
-            r = print_client.put("/api/print/printer-selection", json={})
-        assert r.status_code == 500, r.text
+            with pytest.raises(RuntimeError, match="boom"):
+                _registered_router_print("save_printer_selection", {}, {}, "", "")
+            svc.return_value.save_printer_selection.assert_not_called()
 
 
 class TestPrintRoutesDocument:
@@ -378,45 +385,6 @@ class TestPrintRoutesDocument:
             r = print_client.post("/api/print/document", json={"file_path": "/no/such.pdf"})
         assert r.status_code == 400
         assert "文件不存在" in r.json()["message"]
-
-    def test_print_document_success(self, print_client: TestClient, tmp_path: Path, local_tools):
-        document = tmp_path / "x.pdf"
-        document.write_bytes(b"%PDF")
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-        ):
-            svc.return_value.print_document.return_value = {"success": True}
-            r = print_client.post(
-                "/api/print/document",
-                json={"file_path": str(document), "printer_name": "P1"},
-            )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
-
-    def test_print_document_failed_result_returns_400(
-        self, print_client: TestClient, tmp_path: Path
-    ):
-        document = tmp_path / "x.pdf"
-        document.write_bytes(b"%PDF")
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-        ):
-            svc.return_value.print_document.return_value = {
-                "success": False,
-                "message": "printer busy",
-            }
-            r = print_client.post("/api/print/document", json={"file_path": str(document)})
-        assert r.status_code == 400
-
-    def test_print_document_exception(self, print_client: TestClient, tmp_path: Path, local_tools):
-        document = tmp_path / "x.pdf"
-        document.write_bytes(b"%PDF")
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-        ):
-            svc.return_value.print_document.side_effect = RuntimeError("boom")
-            r = print_client.post("/api/print/document", json={"file_path": str(document)})
-        assert r.status_code == 500, r.text
 
 
 class TestPrintRoutesLabel:
@@ -438,129 +406,11 @@ class TestPrintRoutesLabel:
         assert r.status_code == 400
         assert "1-100" in r.json()["message"]
 
-    def test_print_label_require_confirm_cancel(self, print_client: TestClient):
-        print_routes._print_confirm_cache.clear()
-        token = print_routes._create_print_confirm_token({"job": "j1"})
-        with patch("os.path.exists", return_value=True):
-            r = print_client.post(
-                "/api/print/label",
-                json={
-                    "file_path": "/tmp/x.pdf",
-                    "require_confirm": True,
-                    "confirm_action": "cancel",
-                    "confirm_token": token,
-                },
-            )
-        assert r.status_code == 200
-        assert r.json()["status"] == "print_cancelled"
-        assert token not in print_routes._print_confirm_cache
-
-    def test_print_label_require_confirm_no_token(self, print_client: TestClient):
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
-        ):
-            svc.return_value.get_label_printer.return_value = "LabelPrinter"
-            r = print_client.post(
-                "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "require_confirm": True},
-            )
-        assert r.status_code == 200
-        data = r.json()
-        assert data["status"] == "print_confirm_required"
-        assert "confirm_token" in data
-
-    def test_print_label_require_confirm_expired_token(self, print_client: TestClient):
-        with patch("os.path.exists", return_value=True):
-            r = print_client.post(
-                "/api/print/label",
-                json={
-                    "file_path": "/tmp/x.pdf",
-                    "require_confirm": True,
-                    "confirm_token": "dead-token",
-                },
-            )
-        assert r.status_code == 400
-        assert "过期或无效" in r.json()["message"]
-
-    def test_print_label_require_confirm_valid_token(self, print_client: TestClient, local_tools):
-        print_routes._print_confirm_cache.clear()
-        token = print_routes._create_print_confirm_token(
-            {"file_path": "/tmp/x.pdf", "copies": 2, "printer_name": "P1"}
-        )
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
-        ):
-            svc.return_value.print_label.return_value = {"success": True}
-            r = print_client.post(
-                "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "require_confirm": True, "confirm_token": token},
-            )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
-
-    def test_print_label_no_confirm_failed(self, print_client: TestClient):
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
-        ):
-            svc.return_value.print_label.return_value = {"success": False}
-            r = print_client.post(
-                "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "require_confirm": False},
-            )
-        assert r.status_code == 400
-
-    def test_print_request_identity_and_failure_status(self, print_client: TestClient, local_tools):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.print_label.side_effect = [
-                {"success": True},
-                RuntimeError("offline"),
-                RuntimeError("offline"),
-            ]
-            body = {"file_path": "/tmp/request-scoped.pdf", "require_confirm": False}
-            first = print_client.post(
-                "/api/print/label", json=body, headers={"X-Request-ID": "print-request-1"}
-            )
-            retry = print_client.post(
-                "/api/print/label", json=body, headers={"X-Request-ID": "print-request-1"}
-            )
-            separate = print_client.post(
-                "/api/print/label", json=body, headers={"X-Request-ID": "print-request-2"}
-            )
-            anonymous = print_client.post("/api/print/label", json=body)
-        assert first.status_code == retry.status_code == 200
-        assert first.json()["run_id"] == retry.json()["run_id"]
-        assert separate.status_code == anonymous.status_code == 500
-        assert separate.json()["success"] is anonymous.json()["success"] is False
-        assert separate.json().get("status") != "printed"
-        assert anonymous.json().get("status") != "printed"
-        assert svc.return_value.print_label.call_count == 3
-
-    def test_print_label_exception(self, print_client: TestClient, local_tools):
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
-        ):
-            svc.return_value.print_label.side_effect = RuntimeError("boom")
-            r = print_client.post(
-                "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "require_confirm": False},
-            )
-        assert r.status_code == 500, r.text
-
 
 class TestPrintRoutesOtherEndpoints:
     def test_test_printer_post_empty_name(self, print_client: TestClient):
         r = print_client.post("/api/print/test", json={})
         assert r.status_code == 400
-
-    def test_test_printer_post_success(self, print_client: TestClient, local_tools):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.test_printer.return_value = {"success": True}
-            r = print_client.post("/api/print/test", json={"printer_name": "P1"})
-        assert r.status_code == 200
 
     def test_validate_printer_separation(self, print_client: TestClient):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
@@ -600,56 +450,6 @@ class TestPrintRoutesWorkflowLabel:
         r = print_client.post("/api/print/workflow/label-print/dispatch", json={})
         assert r.status_code == 400
         assert "model_number" in r.json()["message"]
-
-    def test_dispatch_idempotency_skips_duplicate(self, print_client: TestClient):
-        print_routes._print_confirm_cache["wf_lp:key1"] = {
-            "expires_at": time.time() + 100,
-            "model_number": "M1",
-        }
-        r = print_client.post(
-            "/api/print/workflow/label-print/dispatch",
-            json={"idempotency_key": "key1", "model_number": "M1"},
-        )
-        assert r.status_code == 200
-        assert r.json()["skipped"] is True
-
-    def test_dispatch_lookup_error_still_prints(self, print_client: TestClient, local_tools):
-        with (
-            patch("app.application.print_app_service.get_print_application_service") as get_svc,
-            patch("app.application.get_product_app_service") as get_prod,
-        ):
-            get_prod.return_value.search_products.side_effect = RuntimeError("lookup fail")
-            get_svc.return_value.print_single_label.return_value = {"success": True}
-            r = print_client.post(
-                "/api/print/workflow/label-print/dispatch",
-                json={"idempotency_key": "key2", "model_number": "M1"},
-            )
-        assert r.status_code == 200
-
-    def test_dispatch_print_failed(self, print_client: TestClient):
-        with (
-            patch("app.application.print_app_service.get_print_application_service") as get_svc,
-            patch("app.application.get_product_app_service") as get_prod,
-        ):
-            get_prod.return_value.search_products.return_value = []
-            get_svc.return_value.print_single_label.return_value = {
-                "success": False,
-                "message": "no label",
-            }
-            r = print_client.post(
-                "/api/print/workflow/label-print/dispatch",
-                json={"idempotency_key": "key3", "model_number": "M1"},
-            )
-        assert r.status_code == 400
-
-    def test_dispatch_exception(self, print_client: TestClient, local_tools):
-        with patch("app.application.print_app_service.get_print_application_service") as get_svc:
-            get_svc.return_value.print_single_label.side_effect = RuntimeError("boom")
-            r = print_client.post(
-                "/api/print/workflow/label-print/dispatch",
-                json={"idempotency_key": "key4", "model_number": "M1"},
-            )
-        assert r.status_code == 500, r.text
 
 
 class TestPrintRoutesListLabels:

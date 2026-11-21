@@ -321,6 +321,40 @@ def conversation_history_messages(context: Mapping[str, Any] | None) -> list[dic
     )[1:]
 
 
+_QUESTION_HINT = re.compile(r"[?？]|请确认|请选择|请回复|是否(?:要|需要|继续|确认)")
+_AFFIRM_QUESTION_HINT = re.compile(r"请确认|请选择|请回复|是否(?:要|需要|继续|确认)")
+
+
+def last_assistant_question(
+    context: Mapping[str, Any] | None,
+    *,
+    max_chars: int = 600,
+    require_explicit_request: bool = False,
+) -> str | None:
+    """返回最近一条真正在向用户提问的助手消息，用于跨轮续跑。
+
+    ``require_explicit_request`` 为 True 时，只认「请确认/请选择/请回复/是否…」，
+    避免把「还有别的需要吗？」这类寒暄当成待确认操作而重放写操作。
+    """
+    try:
+        messages = conversation_history_messages(context)
+    except RECOVERABLE_ERRORS:
+        return None
+    for item in reversed(messages):
+        if item.get("role") == "user":
+            return None
+        if item.get("role") != "assistant":
+            continue
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        pattern = _AFFIRM_QUESTION_HINT if require_explicit_request else _QUESTION_HINT
+        if pattern.search(content):
+            return content[-max_chars:]
+        return None
+    return None
+
+
 def recent_conversation_messages(
     context: Mapping[str, Any] | None, *, limit: int = 12
 ) -> list[dict[str, str]]:

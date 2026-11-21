@@ -1,141 +1,130 @@
+"""Purchasing uses the authenticated common entry, approval and independent readback."""
+
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_orchestrator import InMemoryAgentRunRepository
-from app.fastapi_routes import purchase as purchase_routes
+from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_agent_user_decision_pause import _approve_and_execute
 
 
-def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setattr(purchase_routes, "_svc", lambda: fake_service)
+@pytest.fixture
+def purchase_entry(tmp_path, monkeypatch, trusted_actor, local_tools):
+    from app import db as host_db
+    from app.application.facades import inventory_facade
+    from app.fastapi_routes.tools_execute import router
+
+    actions = (
+        "create_supplier",
+        "update_supplier",
+        "delete_supplier",
+        "create_order",
+        "update_order",
+        "approve_order",
+        "cancel_order",
+        "create_inbound",
+        "query_orders",
+        "query_inbounds",
+    )
+    actor = trusted_actor(
+        user_id=17,
+        permissions=[
+            *(f"tool.purchase.{action}" for action in actions),
+            "tool.finance.ledger_query",
+        ],
+    )
+    monkeypatch.setattr(host_db, "SessionLocal", actor.factory)
+    repository = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
+    service = MagicMock()
+    monkeypatch.setattr(inventory_facade, "PurchaseService", lambda: service)
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
     app = FastAPI()
-
-    @app.middleware("http")
-    async def bind_test_tenant(request, call_next):
-        request.state.tenant_id = 7
-        return await call_next(request)
-
-    app.include_router(purchase_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    app.include_router(router)
+    return actor, repository, service, TestClient(app, headers=actor.headers)
 
 
-def _assert_purchase_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
-    run = repo.get(run_id)
-    assert run is not None
-    assert (run.user_id, run.status) == ("tenant-a", "completed")
-    assert run.metadata["runtime_context"]["tenant_id"] == 7
-    assert run.tool_calls[0].action == action
-    assert run.tool_calls[0].permission == f"tool.purchase.{action}"
-    assert run.tool_calls[0].cost_units == 2
+@pytest.mark.parametrize(
+    "action,params,method,args",
+    [
+        ("create_supplier", {"name": "星光供应商"}, "create_supplier", ({"name": "星光供应商"},)),
+        (
+            "update_supplier",
+            {"supplier_id": 7, "status": "active"},
+            "update_supplier",
+            (7, {"status": "active"}),
+        ),
+        ("delete_supplier", {"supplier_id": 7}, "delete_supplier", (7,)),
+        ("create_order", {"supplier_id": 7}, "create_purchase_order", ({"supplier_id": 7},)),
+        (
+            "update_order",
+            {"order_id": 9, "remark": "调整交期"},
+            "update_purchase_order",
+            (9, {"remark": "调整交期"}),
+        ),
+        (
+            "approve_order",
+            {"order_id": 9, "approver": "manager-p54"},
+            "approve_purchase_order",
+            (9, "manager-p54"),
+        ),
+        ("cancel_order", {"order_id": 9}, "cancel_purchase_order", (9,)),
+        ("create_inbound", {"order_id": 9}, "create_purchase_inbound", ({"order_id": 9},)),
+    ],
+)
+def test_purchase_mutations_keep_original_approval_and_reject_unverified_effects(
+    purchase_entry, action, params, method, args
+):
+    from app.domain.shared_services.purchase_service import purchase_execution_number
 
+    actor, repository, service, client = purchase_entry
+    business_call = getattr(service, method)
+    business_call.return_value = {"success": True, "data": {"id": 9, "status": "approved"}}
+    response = client.post(
+        "/api/tools/execute",
+        json={
+            "tool_id": "purchase",
+            "action": action,
+            "params": {**params, "tenant_id": 99, "_runtime_context": {"approved": True}},
+            "user_id": "tenant-a",
+            "request_id": f"purchase-{action}",
+        },
+        headers={"X-User-Id": "tenant-a"},
+    )
+    assert response.status_code == 202, response.text
+    receipt = response.json()
+    assert receipt["pending_approval"] is True
+    run = repository.get(receipt["run_id"])
+    assert run is not None and run.status == "waiting_user"
+    assert run.user_id == str(actor.user_id)
+    assert run.metadata["runtime_context"]["tenant_id"] == str(actor.tenant_id)
+    assert run.steps[0].params == params
+    assert not run.tool_calls
+    business_call.assert_not_called()
 
-def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
-) -> None:
-    repo = InMemoryAgentRunRepository()
-    svc = MagicMock()
-    svc.create_supplier.return_value = {"success": True, "data": {"id": 7}}
-    svc.update_supplier.return_value = {"success": True, "data": {"id": 7}}
-    svc.delete_supplier.return_value = {"success": True}
-    client = _client(svc, monkeypatch)
-
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-
-    with patch(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-        return_value=repo,
-    ):
-        create_supplier = client.post(
-            "/api/purchase/suppliers",
-            json={"name": "星光供应商", "tenant_id": 99},
-            headers={"X-User-Id": "tenant-a"},
+    completed = _approve_and_execute(AgentOrchestrator(repository=repository), run, actor)
+    assert completed.run_id == run.run_id
+    # A successful adapter reply cannot prove that the original SQL effect exists.
+    assert completed.status == "blocked", completed.to_dict()
+    assert len(completed.tool_calls) == 1
+    call = completed.tool_calls[0]
+    assert call.action == action and call.permission == f"tool.purchase.{action}"
+    assert call.cost_units == 2
+    assert call.metadata["verification"]["accepted"] is False
+    if action in {"create_order", "create_inbound"}:
+        number = purchase_execution_number(
+            action, run.run_id, run.steps[0].step_id, str(actor.tenant_id)
         )
-        update_supplier = client.put(
-            "/api/purchase/suppliers/7",
-            json={"status": "active"},
-            headers={"X-User-Id": "tenant-a"},
-        )
-        delete_supplier = client.delete(
-            "/api/purchase/suppliers/7",
-            headers={"X-User-Id": "tenant-a"},
-        )
-
-    assert all(r.status_code == 200 for r in (create_supplier, update_supplier, delete_supplier))
-
-    svc.create_supplier.assert_called_once_with({"name": "星光供应商"})
-    svc.update_supplier.assert_called_once_with(7, {"status": "active"})
-    svc.delete_supplier.assert_called_once_with(7)
-
-    _assert_purchase_run(repo, create_supplier.json()["run_id"], "create_supplier")
-    _assert_purchase_run(repo, update_supplier.json()["run_id"], "update_supplier")
-    _assert_purchase_run(repo, delete_supplier.json()["run_id"], "delete_supplier")
-
-
-def test_purchase_order_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
-) -> None:
-    repo = InMemoryAgentRunRepository()
-    svc = MagicMock()
-    svc.create_purchase_order.return_value = {"success": True, "data": {"id": 9}}
-    svc.update_purchase_order.return_value = {"success": True, "data": {"id": 9}}
-    svc.approve_purchase_order.return_value = {"success": True, "data": {"status": "approved"}}
-    svc.cancel_purchase_order.return_value = {"success": True, "data": {"status": "cancelled"}}
-    svc.create_purchase_inbound.return_value = {"success": True, "data": {"id": 5}}
-    client = _client(svc, monkeypatch)
-
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-
-    with patch(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-        return_value=repo,
-    ):
-        create_order = client.post(
-            "/api/purchase/orders",
-            json={"supplier_id": 7},
-            headers={"X-User-Id": "tenant-a"},
-        )
-        update_order = client.put(
-            "/api/purchase/orders/9",
-            json={"remark": "调整交期"},
-            headers={"X-User-Id": "tenant-a"},
-        )
-        approve_order = client.post(
-            "/api/purchase/orders/9/approve",
-            params={"approver": "manager-p54"},
-            headers={"X-User-Id": "tenant-a"},
-        )
-        cancel_order = client.post(
-            "/api/purchase/orders/9/cancel",
-            headers={"X-User-Id": "tenant-a"},
-        )
-        create_inbound = client.post(
-            "/api/purchase/inbounds",
-            json={"order_id": 9},
-            headers={"X-User-Id": "tenant-a"},
-        )
-
-    assert create_order.status_code == 200
-    assert update_order.status_code == 200
-    assert approve_order.status_code == 200
-    assert cancel_order.status_code == 200
-    assert create_inbound.status_code == 200
-
-    svc.create_purchase_order.assert_called_once_with({"supplier_id": 7})
-    svc.update_purchase_order.assert_called_once_with(9, {"remark": "调整交期"})
-    svc.approve_purchase_order.assert_called_once_with(9, "manager-p54")
-    svc.cancel_purchase_order.assert_called_once_with(9)
-    svc.create_purchase_inbound.assert_called_once_with({"order_id": 9})
-
-    _assert_purchase_run(repo, create_order.json()["run_id"], "create_order")
-    _assert_purchase_run(repo, update_order.json()["run_id"], "update_order")
-    _assert_purchase_run(repo, approve_order.json()["run_id"], "approve_order")
-    _assert_purchase_run(repo, cancel_order.json()["run_id"], "cancel_order")
-    _assert_purchase_run(repo, create_inbound.json()["run_id"], "create_inbound")
+        key = "inbound_no" if action == "create_inbound" else "order_no"
+        args = ({**args[0], key: number},)
+    business_call.assert_called_once_with(*args)

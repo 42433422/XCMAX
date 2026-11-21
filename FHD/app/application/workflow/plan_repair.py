@@ -6,7 +6,7 @@
 边界：
 - 只修复计划结构，不绕过风险门、审批、幂等与租户注入。
 - 未出错节点必须逐字段保持一致；禁止删除/新增节点、禁止降低风险。
-- 达到轮数上限仍失败时返回 ``None``，由现有拒绝路径生成澄清，不执行任何业务操作。
+- 达到轮数上限仍失败时返回 ``None``，由现有拒绝路径报告失败，不执行任何业务操作。
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
+import httpx
+
 from app.application.workflow.llm_plan_generation import (
     _decode_completion,
     _has_native_tool_calls,
@@ -30,8 +32,12 @@ from app.application.workflow.llm_plan_generation import (
     build_plan_from_payload,
     model_plan_schema_error,
 )
+from app.application.workflow.planner_llm_gateway import (
+    MODEL_REQUEST_ERRORS,
+    record_planning_failure,
+)
+from app.application.workflow.tool_calling import plan_output_schema, request_json_completion
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
-from app.infrastructure.modstore_transport import MarketModelError
 from app.security.log_redaction import redact_log_text
 
 logger = logging.getLogger(__name__)
@@ -51,6 +57,7 @@ _RULES = (
     "保持 node_id 稳定：只修改报错节点，其他节点的 tool_id/action/params/depends_on/next/branches/risk 必须逐字段不变。",
     "params 中每个 {{节点ID.结果路径}} 引用的节点都必须列入当前节点的 depends_on。",
     "修正后仍要满足 tool_registry 的 input_schema 与 required_params。",
+    "业务节点的 tool_id 与 action 必须分别逐字取自同一条工具契约，不要把工具名、公式名或描述拼进 action。内置 clarify.ask 只用于提问。",
     "仅当确实缺少用户可补充的业务事实时才允许澄清；未知动作、权限或协议错误不得降级为 clarify.ask。",
 )
 
@@ -139,42 +146,29 @@ def build_repair_messages(
     tool_registry: dict[str, Any],
     user_message: str,
     error_code: str,
+    response_error: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     relevant_ids = {str(node.tool_id) for node in plan.nodes or []}
     relevant_ids.update({"clarify", "conversation"})
-    specs = [
-        spec
-        for spec in _tool_specs(tool_registry)
-        if str(spec.get("tool_id") or "") in relevant_ids
-    ]
+    # A fabricated tool is absent from the catalog. Show authorized alternatives
+    # instead of repeating an empty catalog that cannot repair its identifier.
+    has_unknown_tool = bool(relevant_ids - tool_registry.keys() - {"clarify", "conversation"})
+    relevant_registry = {
+        key: spec
+        for key, spec in tool_registry.items()
+        if has_unknown_tool or error_code == "unknown_tool" or key in relevant_ids
+    }
     payload = {
         "task": "修复下列计划中导致校验失败的部分，输出完整计划 JSON。",
         "rules": list(_RULES),
         "error": {"code": error_code, "message": _model_context_value(str(error or "")[:400])},
         "user_message": _model_context_value(str(user_message or "")[:2000]),
         "original_plan": _model_context_value(plan_to_dict(plan)),
-        "tool_registry": specs,
-        "output_schema": {
-            "mode": "workflow",
-            "intent": "string",
-            "todo_steps": ["string"],
-            "risk_level": "low|medium|high",
-            "nodes": [
-                {
-                    "node_id": "string",
-                    "tool_id": "string",
-                    "action": "string",
-                    "params": {},
-                    "risk": "low|medium|high",
-                    "idempotent": "bool",
-                    "description": "string",
-                    "depends_on": ["node_id"],
-                    "next": "node_id or null",
-                    "branches": [{"target": "node_id", "condition": {}}],
-                }
-            ],
-        },
+        "tool_registry": _tool_specs(relevant_registry),
+        "output_schema": plan_output_schema(relevant_registry),
     }
+    if response_error:
+        payload["previous_response_error"] = response_error
     return [
         {"role": "system", "content": _REPAIR_SYSTEM_PROMPT},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -186,8 +180,13 @@ def _repair_decode_diagnostic(response: Any) -> dict[str, Any]:
     if not isinstance(response, dict):
         return {"reason": "response_not_object", "response_length": 0}
     parsed, raw = _model_payload(response)
+    choices = response.get("choices")
+    first = choices[0] if isinstance(choices, list) and choices else None
+    truncated = isinstance(first, dict) and first.get("finish_reason") == "length"
     if _has_native_tool_calls(response):
         reason = "unexpected_tool_call"
+    elif truncated:
+        reason = "output_truncated"
     elif not raw:
         reason = "empty_content"
     elif not isinstance(parsed, dict):
@@ -249,6 +248,7 @@ def repair_plan(
         else max(0, min(_MAX_REPAIR_MAX, int(max_attempts)))
     )
     current = planned
+    response_error = None
     for _ in range(attempts):
         code = classify_plan_error(error)
         trace["errors"].append({"code": code, "message": _diagnostic_text(error)})
@@ -260,22 +260,50 @@ def repair_plan(
             tool_registry=tool_registry,
             user_message=message,
             error_code=code,
+            response_error=response_error,
         )
         # Count issued requests, including malformed responses and failures.
         trace["attempts"] += 1
         try:
-            response = complete(
+            response = request_json_completion(
+                complete,
                 messages=messages,
                 context=context,
                 temperature=0.0,
             )
-        except (ValueError, TypeError, RuntimeError) as exc:
-            raw_error = str(exc)
-            reason = (
-                str(MarketModelError({"status": 402}))
-                if isinstance(exc, MarketModelError) and exc.status_code == 402
-                else "计划修复请求失败，请稍后重试。"
+        except (
+            ValueError,
+            TypeError,
+            RuntimeError,
+            OSError,
+            httpx.TransportError,
+        ) + MODEL_REQUEST_ERRORS as exc:
+            from app.application.agent_orchestrator.context_window_manager import (
+                ContextWindowExceeded,
             )
+            from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+            if isinstance(exc, ConversationRevisionError):
+                raise
+            raw_error = str(exc)
+            reason = "计划修复请求失败，请稍后重试。"
+            trace["failure_kind"] = "plan_repair_failed"
+            if isinstance(
+                exc,
+                (
+                    *MODEL_REQUEST_ERRORS,
+                    ContextWindowExceeded,
+                    ConversationRevisionError,
+                    OSError,
+                    httpx.TransportError,
+                ),
+            ):
+                record_planning_failure(context, exc, stage="repair")
+                trace["model_failure_code"] = context["_planning_failure_code"]
+                kind = context["planning_failure_kind"]
+                trace["failure_kind"] = "model_unavailable" if kind.startswith("model_") else kind
+                trace["status_code"] = context["planning_failure_status"]
+                reason = context["planning_failure_reason"]
             logger.warning("计划修复请求失败: %s", type(exc).__name__)
             trace["errors"].append(
                 {
@@ -291,14 +319,19 @@ def repair_plan(
             break
         decoded = _decode_completion(response) if isinstance(response, dict) else None
         if decoded is None:
+            response_error = _repair_decode_diagnostic(response)
             trace["errors"].append(
                 {
                     "code": "unparsable_repair",
                     "message": "修复输出无法解析",
-                    **_repair_decode_diagnostic(response),
+                    **response_error,
                 }
             )
-            break
+            if response_error["reason"] == "unexpected_tool_call":
+                break
+            # Keep the last deterministic plan and failing-node scope unchanged.
+            # A malformed model answer consumes an attempt, not the whole repair.
+            continue
         parsed, nodes = decoded
         candidate = build_plan_from_payload(
             plan_id=plan_id,
@@ -314,6 +347,7 @@ def repair_plan(
             )
             break
         next_error = validate(candidate)
+        response_error = None
         raw_current = copy.deepcopy(candidate)
         current = candidate
         if not next_error:

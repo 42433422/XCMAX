@@ -6,7 +6,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.application.workflow.goal_coverage import GoalCoverage, coverage_error
+from app.application.workflow.goal_coverage import (
+    GoalCoverage,
+    coverage_error,
+    review_goal_coverage,
+)
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.services.tools_execution.registry import get_workflow_tool_registry
@@ -156,7 +160,8 @@ def test_repeated_semantic_failure_is_bounded_and_never_returns_partial_nodes():
     )
     plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
     assert plan.metadata["planning_rejected"]
-    assert all(node.tool_id == "clarify" for node in plan.nodes)
+    assert plan.metadata["planning_failure_kind"] == "goal_coverage_rejected"
+    assert plan.nodes == []
     assert completion.call_count == 4
 
 
@@ -164,25 +169,62 @@ def test_repeated_semantic_failure_is_bounded_and_never_returns_partial_nodes():
     "verdict", [None, _response({"goals": [], "violations": []}), _response({"approved": True})]
 )
 def test_missing_or_malformed_independent_review_fails_closed(verdict):
-    completion = Mock(side_effect=[_response(_plan_payload()), verdict])
+    completion = Mock(side_effect=[_response(_plan_payload()), verdict, verdict])
     plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
     assert plan.metadata["planning_rejected"]
     assert "目标" in plan.metadata["rejection_reason"]
-    assert completion.call_count == 2
+    assert completion.call_count == 3
+
+
+@pytest.mark.parametrize("review_available", [False, True])
+def test_requested_vector_index_still_requires_business_goal_review(review_available):
+    message = "为 /data/prices.xlsx 建立向量索引"
+    plan_payload = {
+        "mode": "workflow",
+        "nodes": [
+            {
+                "node_id": "index",
+                "tool_id": "excel_vector_index",
+                "action": "execute",
+                "params": {"file_path": "/data/prices.xlsx"},
+            }
+        ],
+    }
+    review = {
+        "goals": [{"goal_id": "g", "source": message, "outcome": "execute", "node_ids": ["index"]}],
+        "violations": [],
+    }
+    completion = Mock(
+        side_effect=[_response(plan_payload)]
+        + ([_response(review)] if review_available else [None, None])
+    )
+    plan = _planner(completion).plan("owner", message, get_workflow_tool_registry(), {})
+    assert bool(plan.metadata.get("planning_rejected")) is not review_available
+    if review_available:
+        assert [(node.tool_id, node.action) for node in plan.nodes] == [
+            ("excel_vector_index", "execute")
+        ]
+    else:
+        assert not any(node.tool_id == "excel_vector_index" for node in plan.nodes)
+    completion.assert_called()
+    assert completion.call_count == (2 if review_available else 3)
+    assert (
+        json.loads(completion.call_args.kwargs["messages"][1]["content"])["task"]
+        == "audit_goal_coverage"
+    )
 
 
 def test_business_reply_cannot_claim_unexecuted_work_completed():
     bad_reply = {"mode": "reply", "reply": "已经完成查询和删除"}
     failure = {
-        "goals": [
-            {"goal_id": "query", "source": "查询 A1", "outcome": "unsupported", "node_ids": []}
-        ],
         "violations": ["无工具结果且用户禁止删除，回复虚构完成"],
+        "clarification_question": None,
     }
     completion = Mock(side_effect=[_response(bad_reply), _response(failure)] * 2)
     plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
     assert plan.metadata["planning_rejected"]
-    assert all(node.tool_id == "clarify" for node in plan.nodes)
+    assert plan.metadata["planning_failure_kind"] == "goal_coverage_rejected"
+    assert plan.nodes == []
 
 
 def test_admitted_graph_executes_in_existing_runtime_in_order_without_replay(monkeypatch, tmp_path):
@@ -274,22 +316,57 @@ def test_unsupported_goal_may_explain_limit_but_cannot_authorize_partial_work():
 
 @pytest.mark.parametrize("choice", [None, [], "invalid", 4])
 def test_provider_message_shape_failure_returns_controlled_rejection(choice):
-    completion = Mock(side_effect=[_response(_plan_payload()), {"choices": [{"message": choice}]}])
+    completion = Mock(
+        side_effect=[_response(_plan_payload()), *[{"choices": [{"message": choice}]}] * 2]
+    )
     plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
     assert plan.metadata["planning_rejected"]
 
 
 def test_english_business_request_is_not_exempt_as_smalltalk():
-    completion = Mock(side_effect=[_response({"mode": "reply", "reply": "Done"}), None])
+    completion = Mock(
+        side_effect=[
+            _response({"mode": "reply", "reply": "Done"}),
+            _response({"violations": ["No receipt supports the completion claim"]}),
+        ]
+        * 2
+    )
     plan = _planner(completion).plan(
         "owner", "Create customer Acme and export orders", get_workflow_tool_registry(), {}
     )
     assert plan.metadata["planning_rejected"]
-    assert completion.call_count == 2
+    assert completion.call_count == 4
     assert (
-        json.loads(completion.call_args.kwargs["messages"][1]["content"])["task"]
-        == "audit_goal_coverage"
+        json.loads(completion.call_args.kwargs["messages"][1]["content"])["task"] == "audit_reply"
     )
+
+
+@pytest.mark.parametrize(
+    "message,answer",
+    [
+        ("解释一下向量数据库的原理", "它把内容映射成数值向量，用距离衡量相似性。"),
+        ("写一段春天的散文", "春风拂过枝头，嫩叶在日光中舒展。"),
+        ("请给 Python 列表索引的示例代码", "```python\nitems = [1, 2]\nprint(items[0])\n```"),
+    ],
+)
+def test_plain_replies_use_evidence_review_without_business_dag_contract(message, answer):
+    completion = Mock(
+        side_effect=[
+            _response({"mode": "reply", "reply": answer}),
+            _response({"violations": [], "clarification_question": None}),
+        ]
+    )
+    plan = _planner(completion).plan("owner", message, get_workflow_tool_registry(), {})
+    assert not plan.metadata.get("planning_rejected")
+    assert plan.metadata["response_mode"] == "reply"
+    assert len(plan.nodes) == 1
+    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("conversation", "reply")
+    assert plan.nodes[0].params == {"response": answer}
+    assert completion.call_count == 2
+    review = json.loads(completion.call_args.kwargs["messages"][1]["content"])
+    assert review["task"] == "audit_reply" and review["reply"] == answer
+    assert "plan" not in review
+    assert set(review["output_schema"]["properties"]) == {"violations", "clarification_question"}
 
 
 def test_semantic_replan_provider_error_stays_a_controlled_rejection():
@@ -325,3 +402,138 @@ def test_graph_changed_after_review_is_not_admitted(monkeypatch):
     plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
     assert plan.metadata["planning_rejected"]
     assert "核对后的计划发生变化" in plan.metadata["rejection_reason"]
+
+
+@pytest.mark.parametrize("wrapper", ["{}", "```json\n{}\n```", "核对结果如下：\n{}\n核对结束。"])
+def test_complete_json_review_accepts_wrapping_without_rewriting_fields(wrapper):
+    raw = wrapper.format(json.dumps(_review(), ensure_ascii=False))
+    complete = Mock(return_value={"choices": [{"message": {"content": raw}}]})
+    context = {}
+    review, error = review_goal_coverage(_graph(), MESSAGE, context, complete)
+    assert (
+        error is None
+        and review.model_dump()["goals"] == GoalCoverage(**_review()).model_dump()["goals"]
+    )
+    assert complete.call_count == 1
+    assert complete.call_args.kwargs["response_format"] == {"type": "json_object"}
+    assert complete.call_args.kwargs.get("max_tokens") is None
+    assert context["goal_coverage_trace"] == {"attempts": 1, "errors": [], "outcome": "accepted"}
+
+
+@pytest.mark.parametrize(
+    ("fault", "reason"),
+    [
+        ("truncated_json", "invalid_json"),
+        ("schema", "schema_invalid"),
+        ("empty", "empty_content"),
+        ("native_tool", "unexpected_tool_call"),
+        ("length", "truncated_response"),
+    ],
+)
+def test_malformed_review_retries_original_request_and_graph_once(fault, reason):
+    bad = _response(_review())
+    choice = bad["choices"][0]
+    if fault == "truncated_json":
+        choice["message"]["content"] = choice["message"]["content"][:-1]
+    elif fault == "schema":
+        choice["message"]["content"] = '{"approved": true}'
+    elif fault == "empty":
+        choice["message"]["content"] = ""
+    elif fault == "native_tool":
+        choice["message"]["tool_calls"] = [{"function": {"name": "delete"}}]
+    else:
+        choice["finish_reason"] = "length"
+    complete = Mock(side_effect=[bad, _response(_review())])
+    context = {}
+    graph = _graph()
+    review, error = review_goal_coverage(graph, MESSAGE, context, complete)
+    assert review is not None and error is None and complete.call_count == 2
+    prompts = [
+        json.loads(call.kwargs["messages"][1]["content"]) for call in complete.call_args_list
+    ]
+    feedback = prompts[1].pop("format_feedback")
+    assert feedback["reason"] == reason and prompts[0] == prompts[1]
+    trace = context["goal_coverage_trace"]
+    assert trace["attempts"] == 2 and trace["outcome"] == "accepted"
+    assert trace["errors"][0]["reason"] == reason
+    assert [node.action for node in graph.nodes] == ["query", "query"]
+    assert graph.nodes[1].depends_on == ["a"]
+
+
+def test_exhausted_review_records_only_digest_and_gives_actionable_system_error():
+    secret = "Bearer example-sensitive-token-for-test"
+    bad = {"choices": [{"message": {"content": f"not JSON {secret}"}}]}
+    complete = Mock(return_value=bad)
+    context = {}
+    review, error = review_goal_coverage(_graph(), MESSAGE, context, complete)
+    assert review is None and "本轮未执行任何操作" in error
+    assert "重试原请求" in error and "无需重新补充条件" in error
+    trace = context["goal_coverage_trace"]
+    assert trace["attempts"] == complete.call_count == 2 and trace["outcome"] == "unavailable"
+    assert all(len(item["response_sha256"]) == 64 for item in trace["errors"])
+    assert secret not in json.dumps(trace) and secret not in error
+    assert secret not in complete.call_args.kwargs["messages"][1]["content"]
+
+
+def test_semantic_rejection_is_returned_to_original_replan_path_without_format_retry():
+    review_payload = _review()
+    review_payload["violations"] = ["遗漏条件，禁止执行部分计划"]
+    complete = Mock(return_value=_response(review_payload))
+    context = {}
+    review, error = review_goal_coverage(_graph(), MESSAGE, context, complete)
+    assert review is not None and error == review_payload["violations"][0]
+    assert complete.call_count == 1 and context["goal_coverage_trace"]["outcome"] == "rejected"
+
+
+@pytest.mark.parametrize(
+    "error", [ValueError("provider rejected context"), PermissionError("revoked")]
+)
+def test_request_errors_are_never_swallowed_or_retried_as_review_format_errors(error):
+    complete = Mock(side_effect=error)
+    with pytest.raises(type(error)) as caught:
+        review_goal_coverage(_graph(), MESSAGE, {}, complete)
+    assert caught.value is error and complete.call_count == 1
+
+
+def test_refusal_is_not_retried_as_format_failure():
+    complete = Mock(return_value={"choices": [{"message": {"refusal": "unavailable"}}]})
+    context = {}
+    review, _ = review_goal_coverage(_graph(), MESSAGE, context, complete)
+    assert review is None and complete.call_count == 1
+    assert context["goal_coverage_trace"]["errors"][0]["reason"] == "model_refusal"
+
+
+def test_planner_admits_original_graph_after_independent_review_format_recovery():
+    completion = Mock(
+        side_effect=[
+            _response(_plan_payload()),
+            _response({"approved": True}),
+            _response(_review()),
+        ]
+    )
+    plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
+    assert not plan.metadata.get("planning_rejected") and completion.call_count == 3
+    assert [node.node_id for node in plan.nodes] == ["a", "b"]
+    assert plan.nodes[1].depends_on == ["a"]
+
+
+@pytest.mark.parametrize(("setting", "attempts"), [("0", 1), ("99", 3), ("bad", 2)])
+def test_invalid_review_attempt_budget_is_always_bounded(monkeypatch, setting, attempts):
+    monkeypatch.setenv("XCAGI_GOAL_COVERAGE_MAX_ATTEMPTS", setting)
+    complete = Mock(return_value=_response({"approved": True}))
+    context = {}
+    review, error = review_goal_coverage(_graph(), MESSAGE, context, complete)
+    assert review is None and error and complete.call_count == attempts
+    assert context["goal_coverage_trace"]["attempts"] == attempts
+
+
+def test_english_business_request_remains_blocked_after_unavailable_reply_reviews():
+    completion = Mock(side_effect=[_response({"mode": "reply", "reply": "Done"}), None, None])
+    plan = _planner(completion).plan(
+        "owner", "Create customer Acme and export orders", get_workflow_tool_registry(), {}
+    )
+    assert plan.metadata["planning_rejected"]
+    assert completion.call_count == 3
+    assert (
+        json.loads(completion.call_args.kwargs["messages"][1]["content"])["task"] == "audit_reply"
+    )

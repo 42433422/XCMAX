@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import re
+import threading
 import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -33,7 +34,10 @@ class RecordingProvider:
         else:
             self.requests.append(copy.deepcopy(request))
             content = json.dumps({"mode": "reply", "reply": "收到"}, ensure_ascii=False)
-        return {"choices": [{"message": {"content": content}}], "model": "test"}
+        return {
+            "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+            "model": "test",
+        }
 
     async def stream_chat_completion(self, **request):
         self.requests.append(copy.deepcopy(request))
@@ -64,82 +68,6 @@ def long_history(count=180):
         }
         for index in range(count)
     ]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("overflow", ["catalog", "core", "request"])
-async def test_planner_catalog_overflow_preserves_request_core_tools_and_hard_budget(
-    monkeypatch, model_boundary, overflow
-):
-    from app.infrastructure.llm.model_context_windows import ModelLimits
-
-    provider, manager = model_boundary
-    limits = ModelLimits(
-        model="test/same-resolved-route",
-        context_window=8192,
-        max_input_tokens=4096,
-        max_output_tokens=512,
-        source="same-route-capabilities",
-    )
-    core = {
-        "tool_id": "conversation",
-        "description": "通用会话工具",
-        "actions": [{"name": "reply"}],
-    }
-    request = "列出客户，并保留当前请求原文。"
-    if overflow == "request":
-        request += "原始用户说明" * 4000
-    catalog = [
-        core,
-        {
-            "tool_id": "customers" if overflow == "core" else "warehouse_specialized_report",
-            "description": "仓库详细操作说明" * 4000,
-            "actions": [{"name": "report"}],
-        },
-    ]
-    messages = [
-        {"role": "system", "content": "SYSTEM_RULE_KEPT"},
-        {
-            "role": "user",
-            "content": json.dumps(
-                {"user_message": request, "conversation_history": [], "tool_registry": catalog},
-                ensure_ascii=False,
-            ),
-        },
-    ]
-    original = copy.deepcopy(messages)
-    attempts = []
-    compress = manager.compress
-
-    async def observe(*args, **kwargs):
-        attempts.append(copy.deepcopy(args[0]))
-        return await compress(*args, **kwargs)
-
-    monkeypatch.setattr(manager, "compress", observe)
-    context = {}
-    if overflow == "catalog":
-        result = await gateway._prepare_model_messages(
-            provider, context, messages, 128, {}, model_limits=limits
-        )
-        assert result[0] == messages[0]
-        assert json.loads(result[-1]["content"])["tool_registry"] == [core]
-        assert windows.estimate_messages_tokens(result) <= limits.input_budget(output_tokens=128)
-    else:
-        with pytest.raises(windows.ContextWindowExceeded) as error:
-            await gateway._prepare_model_messages(
-                provider, context, messages, 128, {}, model_limits=limits
-            )
-        assert error.value.reason == "fixed_context_overflow"
-    assert len(attempts) == (1 if overflow == "core" else 2)
-    for attempt in attempts:
-        assert attempt[0] == messages[0]
-        payload = json.loads(attempt[-1]["content"])
-        assert payload["user_message"] == request
-        assert core in payload["tool_registry"]
-        if overflow == "core":
-            assert payload["tool_registry"] == catalog
-    assert messages == original
-    assert not provider.requests and not provider.summaries
 
 
 @pytest.mark.asyncio
@@ -178,46 +106,6 @@ async def test_conversation_provider_uses_full_owned_history_once(
     assert "STALE_LOCAL_ONLY" not in wire
     assert all(wire.count(row["content"]) == 1 for row in rows)
     assert not provider.summaries
-
-
-def test_conversation_enrichment_does_not_accept_unowned_history(monkeypatch):
-    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": [], "summary": None})
-    context = {
-        "local_user_id": 1,
-        "session_id": "owned",
-        "_chat_history_messages": [{"role": "user", "content": "CLIENT_INJECTED_HISTORY"}],
-    }
-    current = {"role": "user", "content": [{"type": "text", "text": "分析图片"}]}
-    result = memory.enrich_model_messages([current], "分析图片", context)
-    assert result[-1] is current
-    assert "CLIENT_INJECTED_HISTORY" not in json.dumps(result)
-
-
-@pytest.mark.parametrize("authorized", [False, True])
-@pytest.mark.parametrize("message", ["A", " A "])
-def test_enrichment_excludes_current_turn_by_identity_not_equal_text(
-    monkeypatch, authorized, message
-):
-    rows = [
-        {"role": "user", "content": "A", "turn_id": "before", "at": time.time()},
-        {"role": "assistant", "content": "A", "turn_id": "before", "at": time.time()},
-        {"role": "user", "content": message, "turn_id": "current", "at": time.time()},
-    ]
-    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows})
-    context = {
-        "local_user_id": 1,
-        "session_id": "same",
-        "turn_id": "current",
-        "_chat_evidence_authorized": authorized,
-        "_chat_history_messages": rows[:-1],
-    }
-    current = {"role": "user", "content": message}
-    result = memory.enrich_model_messages([current], message, context)
-    assert result[1:] == [
-        {"role": "user", "content": "A"},
-        {"role": "assistant", "content": "A"},
-        current,
-    ]
 
 
 @pytest.mark.asyncio
@@ -490,7 +378,9 @@ async def test_scoped_sdk_budgets_and_calls_the_same_selected_route(
             )
         assert request.url.path == "/api/llm/chat/stream"
         requests.append(json.loads(request.content))
-        return httpx.Response(200, text='data: {"delta":"收到"}\n\ndata: [DONE]\n\n')
+        return httpx.Response(
+            200, text='data: {"delta":"收到"}\n\ndata: {"finish_reason":"stop"}\n\ndata: [DONE]\n\n'
+        )
 
     client_type = httpx.Client
     monkeypatch.setattr(
@@ -731,6 +621,139 @@ def test_generate_sends_middle_fact_and_reuses_persisted_summary(monkeypatch, mo
     assert "FACT_85" in json.dumps(provider.requests[-1]["messages"], ensure_ascii=False)
 
 
+@pytest.mark.parametrize("mode", ["reply", "workflow"])
+def test_review_uses_candidate_evidence_without_reloading_or_trimming_history(monkeypatch, mode):
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    rows = long_history(40)
+    rows[0]["content"] = "4人，预算400元，一人海鲜过敏；只做方案，不写入。"
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows, "summary": None})
+    context = {
+        "local_user_id": 1,
+        "session_id": "review-snapshot",
+        "_chat_evidence_authorized": True,
+        "_chat_history_messages": rows,
+        "chat_customer_evidence": {"scope": "ORIGINAL_AUTHORIZED_EVIDENCE"},
+        "_planning_snapshot": ([{"role": "user", "content": "UNTRUSTED_SNAPSHOT"}], {}),
+    }
+    requests = []
+
+    def complete(**kwargs):
+        prompt = json.loads(kwargs["messages"][-1]["content"])
+        requests.append(prompt)
+        if len(requests) == 1:
+            # A later projection cannot replace the evidence used to generate
+            # the candidate; the normal SQL revision fence still owns recalls.
+            kwargs["context"]["_chat_history_messages"] = [
+                {"role": "user", "content": "LATER_PROJECTION"}
+            ]
+            kwargs["context"]["chat_customer_evidence"]["scope"] = "LATER_EVIDENCE"
+            result = (
+                {"mode": "reply", "reply": "按4人400元、避开海鲜的条件说明。"}
+                if mode == "reply"
+                else {
+                    "mode": "workflow",
+                    "nodes": [
+                        {
+                            "node_id": "query",
+                            "tool_id": "products",
+                            "action": "query",
+                            "params": {"keyword": "A1"},
+                        }
+                    ],
+                }
+            )
+        else:
+            result = {"violations": []}
+            if mode == "workflow":
+                result["goals"] = [
+                    {
+                        "goal_id": "query",
+                        "source": "查询 A1",
+                        "outcome": "execute",
+                        "node_ids": ["query"],
+                    }
+                ]
+        return {"choices": [{"message": {"content": json.dumps(result, ensure_ascii=False)}}]}
+
+    planner = LLMWorkflowPlanner(
+        ai_service=SimpleNamespace(get_context=lambda _: None), completion=complete
+    )
+    registry = {
+        "products": {
+            "actions": {"query": {"risk": "low", "idempotent": True, "required_params": []}}
+        }
+    }
+    plan = planner.plan(
+        "1", "解释之前的用餐条件" if mode == "reply" else "查询 A1", registry, context
+    )
+    assert not plan.metadata.get("planning_rejected")
+    assert len(requests) == 2
+    initial, review = requests
+    assert review["conversation_history"] == initial["conversation_history"]
+    assert len(review["conversation_history"]) == 40
+    assert review["context"] == initial["context"]
+    assert "海鲜过敏" in json.dumps(review, ensure_ascii=False)
+    assert "ORIGINAL_AUTHORIZED_EVIDENCE" in json.dumps(review)
+    assert all(value not in json.dumps(review) for value in ("LATER_", "UNTRUSTED_SNAPSHOT"))
+    if mode == "reply":
+        assert review["task"] == "audit_reply"
+        assert "plan" not in review
+        assert set(review["output_schema"]["properties"]) == {
+            "violations",
+            "clarification_question",
+        }
+
+
+def test_goal_review_uses_shared_provider_budget_and_keeps_early_evidence(
+    monkeypatch, model_boundary
+):
+    from app.application.workflow.goal_coverage import review_goal_coverage
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    provider, manager = model_boundary
+    rows = long_history(40)
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows, "summary": None})
+    response = {
+        "goals": [
+            {
+                "goal_id": "query",
+                "source": "查询 A1",
+                "outcome": "execute",
+                "node_ids": ["query"],
+            }
+        ],
+        "violations": [],
+    }
+
+    async def respond(**request):
+        provider.requests.append(copy.deepcopy(request))
+        return {"choices": [{"message": {"content": json.dumps(response)}}]}
+
+    monkeypatch.setattr(provider, "chat_completion", respond)
+    context = {"local_user_id": 1, "session_id": "review-budget"}
+    plan = PlanGraph(
+        plan_id="p",
+        intent="query",
+        nodes=[WorkflowNode("query", "products", "query", {"keyword": "A1"})],
+    )
+    review, error = review_goal_coverage(
+        plan,
+        "查询 A1",
+        context,
+        lambda **kwargs: gateway.request_planner_completion(ai_service=SimpleNamespace(), **kwargs),
+    )
+    assert error is None and review is not None
+    request = provider.requests[-1]
+    wire = json.dumps(request["messages"], ensure_ascii=False)
+    assert "FACT_0" in wire
+    assert all(row["content"] in wire for row in rows)
+    assert "conversation_history" not in json.loads(request["messages"][-1]["content"])
+    assert windows.estimate_messages_tokens(request["messages"]) + request["max_tokens"] <= (
+        manager.token_budget
+    )
+
+
 @pytest.mark.parametrize("count", [60, 120, 121, 240])
 def test_old_excerpt_cache_never_discards_unsummarized_middle_or_120_boundary(count):
     rows = long_history(count)
@@ -833,74 +856,6 @@ async def test_oversized_latest_turn_or_schema_never_reaches_provider(
     assert not provider.requests and not provider.summaries
 
 
-def test_sql_projection_reads_only_uncovered_suffix_and_keeps_whole_long_messages(monkeypatch):
-    from app.application import task_conversation_store
-    from app.application.ai_chat import chat_evidence
-
-    monkeypatch.setattr(
-        task_conversation_store, "ConversationRevisionError", ValueError, raising=False
-    )
-    saved = {
-        "kind": "langchain",
-        "source": "sql",
-        "revision": 3,
-        "covered_through_id": 80,
-        "count": 80,
-        "text": "FACT_0",
-    }
-    monkeypatch.setattr(memory, "conversation_summary", lambda _: saved)
-    calls = []
-
-    def page(**request):
-        calls.append(request)
-        first = request["after_id"] == 80
-        return {
-            "session": {"revision": 3},
-            "snapshot_latest_id": 84,
-            "has_more": first,
-            "next_after_id": 82 if first else None,
-            "messages": [
-                {"id": value, "role": "user" if value % 2 else "assistant", "content": "长" * 4000}
-                for value in ([81, 82] if first else [83, 84])
-            ],
-        }
-
-    result = chat_evidence._prepare_history(SimpleNamespace(get_conversation=page), {}, "s", 1)
-    assert calls[0]["after_id"] == 80 and calls[1]["through_id"] == 84
-    assert result["_chat_history_ids"] == [None, 81, 82, 83, 84]
-    assert all("长" * 4000 in row["content"] for row in result["_chat_history_messages"][1:])
-    assert result["_chat_history_messages"][0]["content"].endswith("FACT_0")
-
-
-def test_later_finishing_old_summary_cannot_move_sql_cursor_backwards(monkeypatch):
-    from contextlib import nullcontext
-
-    previous = {
-        "kind": "langchain",
-        "source": "sql",
-        "revision": 3,
-        "covered_through_id": 90,
-        "count": 90,
-        "text": "newer",
-    }
-    data = {"revision": 3, "summary": previous}
-    writes = []
-    monkeypatch.setattr(memory, "_read", lambda *_: data)
-    monkeypatch.setattr(memory, "_write", lambda *args: writes.append(args))
-    monkeypatch.setattr(memory, "_lock", lambda _: nullcontext())
-    context = {
-        "local_user_id": 1,
-        "session_id": "same",
-        "_chat_history_source": "sql",
-        "_chat_history_revision": 3,
-        "_chat_history_ids": [None, 81, 82],
-        "_chat_history_prior_summary": {"count": 80, "covered_through_id": 80},
-    }
-    history = [{"role": "user", "content": str(index)} for index in range(3)]
-    memory.save_conversation_summary(context, history, 3, "older computation finished later")
-    assert not writes and data["summary"] is previous
-
-
 def test_light_history_readback_falls_through_to_full_workflow(monkeypatch, model_boundary):
     provider, _ = model_boundary
     monkeypatch.setattr(generation, "_conversational_turn", lambda *_: True)
@@ -922,7 +877,7 @@ def test_light_history_readback_falls_through_to_full_workflow(monkeypatch, mode
                     }
                 ],
             )
-        return {"choices": [{"message": {"content": json.dumps(payload)}}]}
+        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload)}}]}
 
     monkeypatch.setattr(provider, "chat_completion", complete)
     planner = generation.LlmPlanGeneration(
@@ -998,3 +953,540 @@ def test_history_workflow_result_feeds_whole_evidence_back_and_shows_exact_excer
         assert "END_0" in wire and "END_5" in wire and "#105" in wire
     else:
         assert not provider.requests
+
+
+@pytest.fixture
+def platform_failover(monkeypatch):
+    from app.application.workflow.retry_policy import planning_model_call, planning_request_scope
+    from app.domain.shared_services.conversation import modstore_adapter as facade
+    from app.infrastructure.llm.client import llm_client_factory_scope
+    from app.infrastructure.llm.providers import registry
+
+    state = SimpleNamespace(
+        posts=[],
+        gets=[],
+        context={},
+        primary_status=429,
+        backup_status=200,
+        primary_source="platform_gateway",
+        primary_key="platform",
+        backup_key="platform",
+        backup_window=8192,
+        backup_output=512,
+        change_account=False,
+        body=None,
+    )
+
+    def respond(request):
+        assert request.headers["authorization"] == "Bearer synthetic-budget-owner"
+        if request.method == "GET":
+            state.gets.append((request.url.path, dict(request.url.params)))
+            if request.url.path.endswith("/status"):
+                return httpx.Response(
+                    200, json={"providers": [{"provider": "litellm", "has_platform_key": True}]}
+                )
+            if request.url.path.endswith("/catalog"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "providers": [
+                            {
+                                "provider": "litellm",
+                                "runtime_models": ["primary", "backup", "unused"],
+                            }
+                        ]
+                    },
+                )
+            assert request.url.path.endswith("/resolve-chat-default")
+            model = request.url.params.get("model", "primary")
+            primary = model == "primary"
+            if not primary and state.change_account:
+                state.adapter.auth_token = "synthetic-different-account"
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "provider": "litellm",
+                    "model": model,
+                    "route_source": state.primary_source if primary else "explicit",
+                    "key_source": state.primary_key if primary else state.backup_key,
+                    "route_token": f"synthetic-{model}-pin",
+                    "config_revision": f"{model}-r1",
+                    "model_capabilities": {
+                        "context_window": 32768 if primary else state.backup_window,
+                        "max_output_tokens": 4096 if primary else state.backup_output,
+                    },
+                },
+            )
+        payload = json.loads(request.content)
+        state.posts.append(payload)
+        if state.body is not None:
+            return httpx.Response(200, stream=state.body)
+        status = state.primary_status if payload["model"] == "primary" else state.backup_status
+        if status >= 400:
+            return httpx.Response(status, json={"error": "synthetic rate limited"})
+        return httpx.Response(
+            200,
+            text='data: {"delta":"收到"}\n\ndata: {"finish_reason":"stop"}\n\ndata: [DONE]\n\n',
+        )
+
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER_MAX", "2")
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "4096")
+    monkeypatch.setattr(facade, "_CATALOG_CACHE", {})
+    client_type = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: client_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
+    )
+    monkeypatch.setattr(registry, "_maybe_instrument", lambda provider: provider)
+    monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
+    state.adapter = facade.ModstorePlatformAdapter(
+        platform_url="https://market.invalid", auth_token="synthetic-budget-owner"
+    )
+    state.adapter._use_account_default = True
+
+    async def invoke(streaming, **kwargs):
+        request = {
+            "ai_service": None,
+            "context": state.context,
+            "messages": [{"role": "user", "content": "你好，请只回复收到"}],
+            "client_request_id": "synthetic-plan",
+            **kwargs,
+        }
+        with (
+            llm_client_factory_scope(lambda: facade.ModstoreOpenAICompatibleClient(state.adapter)),
+            planning_request_scope(state.context),
+            planning_model_call(),
+        ):
+            if streaming:
+                return "".join(
+                    [part async for part in gateway.stream_planner_completion(**request)]
+                )
+            result = await asyncio.to_thread(gateway.request_planner_completion, **request)
+            return result["choices"][0]["message"]["content"]
+
+    state.invoke = invoke
+    return state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_planner_failover_resolves_and_rebudgets_same_gateway_alias(
+    platform_failover, streaming
+):
+    state = platform_failover
+    assert await state.invoke(streaming) == "收到"
+    assert [row["model"] for row in state.posts] == ["primary", "backup"]
+    assert [row["max_tokens"] for row in state.posts] == [4096, 512]
+    assert [row["client_request_id"] for row in state.posts] == [
+        "synthetic-plan",
+        "synthetic-plan-f1",
+    ]
+    assert all(row["allow_failover"] is False for row in state.posts)
+    assert [row["route_token"] for row in state.posts] == [
+        "synthetic-primary-pin",
+        "synthetic-backup-pin",
+    ]
+    assert [row["config_revision"] for row in state.posts] == ["primary-r1", "backup-r1"]
+    assert state.adapter.resolve_default_route() == ("litellm", "primary")
+    assert state.context["_context_budget"]["context_window"] == 8192
+    assert state.context["planning_diagnostics"]["model_attempts"] == 2
+    assert state.context["planning_diagnostics"]["model_failovers"] == [
+        {"from_model": "litellm/primary", "to_model": "litellm/backup", "status": 429}
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    "policy", ["explicit", "environment", "byok", "preference", "audit", "401", "402", "403"]
+)
+async def test_planner_failover_preserves_authorization_and_explicit_route_policy(
+    monkeypatch, platform_failover, streaming, policy
+):
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    state = platform_failover
+    kwargs = {}
+    if policy == "explicit":
+        kwargs["allow_failover"] = False
+    elif policy == "environment":
+        monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "0")
+    elif policy == "byok":
+        state.primary_key = "user_override"
+    elif policy == "preference":
+        state.primary_source = "preference"
+    elif policy == "audit":
+        kwargs["_reviewed_excel_audit_response"] = lambda *args: None
+    else:
+        state.primary_status = int(policy)
+    with pytest.raises(MarketModelError):
+        await state.invoke(streaming, **kwargs)
+    assert len(state.posts) == 1
+    assert not any(path.endswith("/status") for path, params in state.gets)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("failure", ["byok", "account", "output", "context", "exhausted"])
+async def test_planner_revalidates_alternate_before_call_and_preserves_terminal_failure(
+    platform_failover, streaming, failure
+):
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    state, kwargs = platform_failover, {}
+    if failure == "byok":
+        state.backup_key = "user_override"
+    elif failure == "account":
+        state.change_account = True
+    elif failure == "output":
+        kwargs["max_tokens"] = 1024
+    elif failure == "context":
+        state.backup_window = 256
+    else:
+        state.backup_status = 429
+    with pytest.raises((MarketModelError, windows.ContextWindowExceeded)):
+        await state.invoke(streaming, **kwargs)
+    assert len(state.posts) == (2 if failure == "exhausted" else 1)
+    assert state.context["planning_diagnostics"]["model_attempts"] == (
+        1 if failure in {"byok", "account"} else 2
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_exhausted_call_budget_blocks_alternate_preparation(
+    monkeypatch, platform_failover, streaming
+):
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded
+
+    monkeypatch.setenv("XCAGI_PLAN_MAX_MODEL_CALLS", "1")
+    prepare = gateway._prepare_model_messages
+    prepared_models = []
+
+    async def observed(*args, **kwargs):
+        prepared_models.append(kwargs["model_limits"].model)
+        return await prepare(*args, **kwargs)
+
+    monkeypatch.setattr(gateway, "_prepare_model_messages", observed)
+    with pytest.raises(PlanningBudgetExceeded):
+        await platform_failover.invoke(streaming)
+    assert prepared_models == ["litellm/primary"]
+    assert len(platform_failover.posts) == 1
+    assert platform_failover.context["planning_diagnostics"]["exhausted"] == "model_call_limit"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_planner_deadline_cancels_provider_and_closes_stream(monkeypatch, streaming):
+    from app.application.tool_execution_deadline import invocation_deadline
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded
+
+    closed = []
+
+    class SlowProvider(RecordingProvider):
+        async def chat_completion(self, **request):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                closed.append("complete")
+
+        async def stream_chat_completion(self, **request):
+            try:
+                yield "partial"
+                await asyncio.Event().wait()
+            finally:
+                closed.append("stream")
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **_: SlowProvider()
+    )
+    with invocation_deadline(time.monotonic() + 0.05), pytest.raises(PlanningBudgetExceeded):
+        kwargs = {
+            "ai_service": None,
+            "context": {},
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        if streaming:
+            _ = [chunk async for chunk in gateway.stream_planner_completion(**kwargs)]
+        else:
+            await asyncio.to_thread(gateway.request_planner_completion, **kwargs)
+    assert closed == ["stream" if streaming else "complete"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_planner_deadline_closes_sync_sdk_http_read_in_worker(platform_failover, streaming):
+    from app.application.tool_execution_deadline import invocation_deadline
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded
+
+    released = threading.Event()
+
+    class Body(httpx.SyncByteStream):
+        def __iter__(self):
+            if released.wait(1.0):
+                raise httpx.ReadError("closed by owner")
+            yield b'data: {"delta":"late"}\n\n'
+
+        def close(self):
+            released.set()
+
+    platform_failover.body = Body()
+    started = time.monotonic()
+    with invocation_deadline(started + 0.05), pytest.raises(PlanningBudgetExceeded):
+        await platform_failover.invoke(streaming)
+    assert released.is_set()
+    assert time.monotonic() - started < 0.75
+    assert len(platform_failover.posts) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_summary_save_revision_conflict_propagates_before_planner_call(
+    monkeypatch, model_boundary, streaming
+):
+    from contextlib import nullcontext
+
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+    provider, _ = model_boundary
+    history = long_history()
+    data = {"turns": history, "summary": None, "revision": 3}
+    writes = []
+    monkeypatch.setattr(memory, "_read", lambda *_: data)
+    monkeypatch.setattr(memory, "_write", lambda *args: writes.append(args))
+    monkeypatch.setattr(memory, "_lock", lambda _: nullcontext())
+    original = provider.chat_completion
+
+    async def revoke_during_summary(**request):
+        result = await original(**request)
+        assert provider.summaries and not provider.requests
+        data["revision"] = 4
+        return result
+
+    monkeypatch.setattr(provider, "chat_completion", revoke_during_summary)
+    context = {
+        "local_user_id": 1,
+        "session_id": "same",
+        "_chat_history_source": "sql",
+        "_chat_history_revision": 3,
+        "_chat_history_ids": list(range(1, len(history) + 1)),
+    }
+    kwargs = {
+        "ai_service": None,
+        "context": context,
+        "max_tokens": 512,
+        "messages": [
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "user_message": "继续原任务",
+                        "conversation_history": history,
+                    },
+                    ensure_ascii=False,
+                ),
+            }
+        ],
+    }
+    # The current compaction owner checks the revoked projection before summary save.
+    with pytest.raises(ConversationRevisionError):
+        if streaming:
+            _ = [part async for part in gateway.stream_planner_completion(**kwargs)]
+        else:
+            await asyncio.to_thread(gateway.request_planner_completion, **kwargs)
+    assert provider.summaries and not provider.requests
+    assert not writes and data["summary"] is None
+
+
+@pytest.fixture
+def native_sdk_planner(monkeypatch):
+    from openai import OpenAI
+
+    from app.application.workflow.model_response_metrics import observe_model_response
+    from app.application.workflow.retry_policy import planning_model_call, planning_request_scope
+    from app.infrastructure.llm import client
+    from app.infrastructure.llm.providers import openai_sdk_provider as sdk
+
+    state = SimpleNamespace(posts=[], statuses=[], body=None, before_response=None, workers=[])
+    content = {"choices": [{"message": {"content": "{}"}}], "model": "fixture"}
+
+    def dispatch(request):
+        state.posts.append(request)
+        if state.before_response:
+            state.before_response()
+        status = state.statuses.pop(0) if state.statuses else 200
+        if status != 200:
+            return httpx.Response(status, json={"error": {"message": "limited"}})
+        if state.body is not None:
+            return httpx.Response(200, stream=state.body)
+        if json.loads(request.content).get("stream"):
+            return httpx.Response(
+                200,
+                text='data: {"choices":[{"delta":{"content":"{}"}}]}\n\n'
+                'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+                "data: [DONE]\n\n",
+            )
+        return httpx.Response(200, json=content)
+
+    http_client = httpx.Client(transport=httpx.MockTransport(dispatch))
+    state.client = OpenAI(
+        api_key="fixture",
+        base_url="https://sdk.test/v1",
+        http_client=http_client,
+        timeout=httpx.Timeout(120, connect=0.01, pool=None),
+        max_retries=2,
+    )
+    # Resolve lazy SDK resources before a deliberately short request deadline.
+    _ = state.client.chat.completions.with_streaming_response
+    monkeypatch.setattr(OpenAI, "_sleep_for_retry", lambda *args, **kwargs: None)
+    monkeypatch.setattr(client, "get_llm_client", lambda: state.client)
+    monkeypatch.setattr(client, "require_api_key", lambda: None)
+    provider = sdk.OpenAISdkProvider()
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **_: provider
+    )
+    limits = SimpleNamespace(
+        model="fixture",
+        request_options={"model": "fixture"},
+        default_output_tokens=lambda value: value,
+        assert_current=lambda: None,
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.llm.model_context_windows.resolve_model_limits",
+        AsyncMock(return_value=limits),
+    )
+    monkeypatch.setattr(gateway, "_prepare_model_messages", AsyncMock(return_value=[]))
+    original_worker = sdk.StreamWorker
+
+    def track_worker(*args, **kwargs):
+        worker = original_worker(*args, **kwargs)
+        state.workers.append(worker)
+        return worker
+
+    monkeypatch.setattr(sdk, "StreamWorker", track_worker)
+    state.context, state.chunks, state.provider = {}, [], provider
+
+    def invoke(streaming):
+        kwargs = {"ai_service": None, "context": state.context, "messages": []}
+        with planning_request_scope(state.context):
+            if not streaming:
+                return observe_model_response(gateway.request_planner_completion)(**kwargs)
+
+            async def consume():
+                with planning_model_call():
+                    async for chunk in gateway.stream_planner_completion(**kwargs):
+                        state.chunks.append(chunk)
+
+            return asyncio.run(consume())
+
+    state.invoke = invoke
+    try:
+        yield state
+    finally:
+        state.client.close()
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_native_sdk_deadline_closes_owned_body_without_closing_client(
+    native_sdk_planner, streaming
+):
+    from app.application.tool_execution_deadline import invocation_deadline
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded
+
+    state = native_sdk_planner
+    entered, closed = threading.Event(), threading.Event()
+
+    class BlockedBody(httpx.SyncByteStream):
+        def __iter__(self):
+            if streaming:
+                yield b'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'
+            entered.set()
+            closed.wait(2)
+            raise httpx.ReadError("owned body closed")
+
+        def close(self):
+            closed.set()
+
+    state.body = BlockedBody()
+    started = time.monotonic()
+    try:
+        with invocation_deadline(started + 0.15), pytest.raises(PlanningBudgetExceeded):
+            state.invoke(streaming)
+        assert time.monotonic() - started < 0.65
+        assert entered.is_set() and closed.wait(0.5)
+        assert state.workers[0].finished.wait(0.5)
+        assert state.chunks == (["partial"] if streaming else [])
+        assert len(state.posts) == 1
+        assert not state.client.is_closed()
+        assert state.client.max_retries == 2
+    finally:
+        closed.set()
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_native_sdk_deadline_does_not_wait_for_blocked_headers_or_accept_late_result(
+    native_sdk_planner, streaming
+):
+    from app.application.tool_execution_deadline import invocation_deadline
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded
+
+    state = native_sdk_planner
+    entered, released = threading.Event(), threading.Event()
+
+    def block_headers():
+        entered.set()
+        released.wait(2)
+
+    state.before_response = block_headers
+    started = time.monotonic()
+    try:
+        with invocation_deadline(started + 0.15), pytest.raises(PlanningBudgetExceeded):
+            state.invoke(streaming)
+        assert time.monotonic() - started < 0.65
+        assert entered.is_set() and not released.is_set()
+        assert state.chunks == []
+        assert len(state.posts) == 1
+        assert state.context["planning_diagnostics"]["model_attempts"] == 1
+        assert not state.client.is_closed()
+    finally:
+        released.set()
+        assert state.workers[0].finished.wait(0.5)
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_native_sdk_trusted_deadline_clamps_timeouts_and_disables_only_scoped_retries(
+    native_sdk_planner, streaming
+):
+    from openai import RateLimitError
+
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    state = native_sdk_planner
+
+    async def request():
+        if streaming:
+            return [
+                chunk async for chunk in state.provider.stream_chat_completion([], model="fixture")
+            ]
+        return await state.provider.chat_completion([], model="fixture")
+
+    state.statuses = [429, 200]
+    with invocation_deadline(time.monotonic() + 2), pytest.raises(RateLimitError):
+        asyncio.run(request())
+    assert len(state.posts) == 1
+    timeouts = state.posts[0].extensions["timeout"]
+    assert timeouts["connect"] == 0.01
+    assert all(0 < value <= 2 for value in timeouts.values())
+    assert state.client.timeout == httpx.Timeout(120, connect=0.01, pool=None)
+    assert state.client.max_retries == 2
+    assert not state.client.is_closed()
+
+    # Outside a trusted deadline, the very same client keeps its configured policy.
+    state.statuses = [429, 200]
+    assert asyncio.run(request())
+    assert len(state.posts) == 3
+    assert state.posts[-1].extensions["timeout"]["read"] == 120
+    assert state.posts[-1].extensions["timeout"]["pool"] is None

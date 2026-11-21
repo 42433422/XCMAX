@@ -28,90 +28,65 @@ from tests.fixtures.agent_tool_lifecycle_support import (
 
 def _section_ad(suite: Suite, published: dict) -> None:
     from app.application.employee_runtime.tool_scope import resolve_employee_tools
+    from app.application.tools.workflow import execute_workflow_tool
 
-    status, discovery = suite.call(
-        "GET", "/api/agent-tools/discovery", role="employee", actor="emp-a"
-    )
-    tools = {item["function"]["name"]: item for item in _data(discovery).get("tools") or []}
-    global_tool = tools.get("global_tool")
-    with tenant_scope(1):
-        runtime = {
-            item["function"]["name"]: item
-            for item in resolve_employee_tools("emp-a", {"description": "general"}, {})
-            if isinstance(item, dict) and isinstance(item.get("function"), dict)
+    def definitions(actor: str, tenant: int = 1) -> tuple[int, dict]:
+        status, payload = suite.call(
+            "GET", "/api/agent-tools/discovery", role="employee", actor=actor, tenant=tenant
+        )
+        return status, {
+            item["function"]["name"]: item for item in _data(payload).get("tools") or []
         }
-    runtime_tool = runtime.get("global_tool")
+
+    status, catalog = definitions("emp-a")
+    definition = catalog.get("global_tool") or {}
+    function = definition.get("function") or {}
+    schema = function.get("parameters") or {}
+    with tenant_scope(1):
+        runtime = resolve_employee_tools("emp-a", {"description": "general"}, {})
     suite.record(
         "AD01",
         {"employee": "emp-a"},
-        {"http": status, "runtime_name": (runtime_tool or {}).get("function", {}).get("name")},
-        status == 200 and runtime_tool and runtime_tool["function"]["name"] == "global_tool",
+        {"http": status, "runtime": runtime},
+        status == 200 and definition.get("executable") is False and runtime == [],
+        "A schema-only definition is managed metadata, never an executable employee capability.",
     )
     suite.record(
         "AD02",
         {"name": "global_tool"},
-        {"description": (runtime_tool or {}).get("function", {}).get("description")},
-        bool(runtime_tool) and runtime_tool["function"]["description"] == "desc global_tool",
+        {"description": function.get("description")},
+        function.get("description") == "desc global_tool",
     )
     suite.record(
-        "AD03",
-        {"name": "global_tool"},
-        {"schema": (runtime_tool or {}).get("function", {}).get("parameters")},
-        bool(runtime_tool) and runtime_tool["function"]["parameters"]["type"] == "object",
+        "AD03", {"name": "global_tool"}, {"schema": schema}, schema.get("type") == "object"
     )
-    required = ((runtime_tool or {}).get("function") or {}).get("parameters", {}).get("required")
-    properties = (
-        ((runtime_tool or {}).get("function") or {}).get("parameters", {}).get("properties", {})
-    )
+    properties = schema.get("properties") or {}
+    required = schema.get("required") or []
     suite.record(
         "AD04",
         {"required": required},
         {"properties": sorted(properties)},
         required == ["name"] and "qty" in properties and "qty" not in required,
     )
-    suite.record(
-        "AD05",
-        {"runtime": sorted(runtime)},
-        {"names": sorted(runtime)},
-        "still_draft" not in runtime,
-    )
+    suite.record("AD05", {}, {"names": sorted(catalog)}, "still_draft" not in catalog)
     suite.call("POST", f"/api/agent-tools/{published['employee_tool']['id']}/offline")
-    with tenant_scope(1):
-        runtime_off = {
-            item["function"]["name"]: item
-            for item in resolve_employee_tools("emp-a", {}, {})
-            if isinstance(item, dict) and isinstance(item.get("function"), dict)
-        }
+    _, after = definitions("emp-a")
     suite.record(
-        "AD06",
-        {"offline": "employee_tool"},
-        {"names": sorted(runtime_off)},
-        "employee_tool" not in runtime_off,
+        "AD06", {"offline": "employee_tool"}, {"names": sorted(after)}, "employee_tool" not in after
     )
-    with tenant_scope(2):
-        other = resolve_employee_tools("emp-a", {}, {})
-    other_names = [
-        (item.get("function") or {}).get("name") for item in other if isinstance(item, dict)
-    ]
+    _, other = definitions("emp-a", 2)
     suite.record(
         "AD07",
         {"tenant": 2},
-        {"names": other_names},
-        "global_tool" not in other_names
-        and "tenant_tool" not in other_names
-        and "secret_tool" not in other_names,
+        {"names": sorted(other)},
+        not {"global_tool", "tenant_tool", "secret_tool"}.intersection(other),
     )
-    with tenant_scope(1):
-        emp_b = {
-            (item.get("function") or {}).get("name")
-            for item in resolve_employee_tools("emp-b", {}, {})
-            if isinstance(item, dict)
-        }
+    _, second = definitions("emp-b")
     suite.record(
         "AD08",
         {"employee": "emp-b"},
-        {"names": sorted(name for name in emp_b if name)},
-        "employee_tool" not in emp_b and "tenant_tool" in emp_b,
+        {"names": sorted(second)},
+        "employee_tool" not in second and "tenant_tool" in second,
     )
     exec_status, executed = suite.call(
         "POST",
@@ -121,29 +96,28 @@ def _section_ad(suite: Suite, published: dict) -> None:
         body={"arguments": {"name": "schema"}},
     )
     with tenant_scope(1):
-        from app.application.tools.workflow import execute_workflow_tool
-
-        raw = execute_workflow_tool(
-            "global_tool",
-            {"name": "schema"},
-            runtime_context={"employee_id": "emp-a", "source": "employee_runtime"},
+        workflow = json.loads(
+            execute_workflow_tool(
+                "global_tool",
+                {"name": "schema"},
+                runtime_context={"employee_id": "emp-a", "source": "employee_runtime"},
+            )
         )
-    workflow = json.loads(raw)
-    http_schema = (_data(executed).get("definition") or {}).get("function", {}).get("parameters")
-    runtime_schema = (runtime_tool or {}).get("function", {}).get("parameters")
-    workflow_schema = (workflow.get("definition") or {}).get("function", {}).get("parameters")
+    receipt = _data(executed)
+    http_schema = (receipt.get("definition") or {}).get("function", {}).get("parameters")
     suite.record(
         "AD09",
         {"tool": "global_tool"},
-        {"http": http_schema, "runtime": runtime_schema, "workflow_ok": workflow.get("ok")},
-        exec_status == 200 and http_schema == runtime_schema == workflow_schema == SCHEMA,
+        {"http": http_schema, "workflow": workflow},
+        exec_status == 200
+        and http_schema == schema == SCHEMA
+        and receipt.get("success") is False
+        and receipt.get("execution_status") == "not_started"
+        and workflow.get("success") is False
+        and workflow.get("error") == "unknown_tool",
     )
-    # grant_tool was revoked in A08. emp-a must not receive it from the runtime catalog.
     suite.record(
-        "AD10",
-        {"tool": "grant_tool"},
-        {"names": sorted(runtime_off)},
-        "grant_tool" not in runtime_off,
+        "AD10", {"tool": "grant_tool"}, {"names": sorted(after)}, "grant_tool" not in after
     )
 
 

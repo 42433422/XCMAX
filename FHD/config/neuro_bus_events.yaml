@@ -37,6 +37,7 @@ streams:
           payload_fields: [phase, phase_duration_ms, duration_ms, duration_scope, status, parent_span_id, error_code, error_type]
         - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
         - { type: "approval.authorization_mismatch", const: APPROVAL_AUTHORIZATION_MISMATCH }
+        - { type: "approval.scope_changed", const: APPROVAL_SCOPE_CHANGED, payload_fields: [step_id] }
         - { type: "run.observation_interrupted", const: RUN_OBSERVATION_INTERRUPTED, payload_fields: [reason, worker_pending, business_outcome, replay_allowed] }
         - { type: "run.ambiguous_target_paused", const: RUN_AMBIGUOUS_TARGET_PAUSED }
         - { type: "run.resumed", const: RUN_RESUMED }
@@ -69,6 +70,7 @@ streams:
         - { type: "workflow.plan_policy_normalized", const: WORKFLOW_PLAN_POLICY_NORMALIZED }
         - { type: "workflow.plan_policy_rejected", const: WORKFLOW_PLAN_POLICY_REJECTED }
         - { type: "workflow.plan_reference_resolved", const: WORKFLOW_PLAN_REFERENCE_RESOLVED }
+        - { type: "workflow.resume_params_rejected", const: WORKFLOW_RESUME_PARAMS_REJECTED, payload_fields: [step_id, execution_started] }
       planner:
         - { type: "planner.started",        const: PLANNER_STARTED }
         - { type: "planner.completed",      const: PLANNER_COMPLETED }

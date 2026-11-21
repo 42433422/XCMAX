@@ -45,10 +45,18 @@ def stores(trusted_actor, monkeypatch):
 
 
 def product(actor, name="own-only", context=None):
-    return AgentToolExecutor().execute(
-        AgentStep(node_id="exists", tool_id="products", action="exists", params={"name": name}),
+    result = AgentToolExecutor().execute(
+        AgentStep(
+            node_id="exists",
+            tool_id="business_db",
+            action="read",
+            params={"entity": "products", "keyword": name},
+        ),
         runtime_context=actor.context if context is None else context,
     )
+    if result.get("success"):
+        return {**result, "exists": bool(result["data"])}
+    return result
 
 
 def customer(actor, name="new-customer", context=None, **params):

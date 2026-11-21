@@ -113,11 +113,14 @@ def normalize_model(provider: str, model: str, base_url: str | None = None) -> s
 
 def _openai_request_headers(provider: str, api_key: str) -> Dict[str, str]:
     """MiMo Token Plan 文档推荐 api-key；其余厂商用 Bearer。"""
+    from modstore_server.strategic_portfolio_usage import transport_headers
+
     headers: Dict[str, str] = {"Content-Type": "application/json"}
     if provider == "xiaomi":
         headers["api-key"] = api_key
     else:
         headers["Authorization"] = f"Bearer {api_key}"
+    headers.update(transport_headers(provider))
     return headers
 
 
@@ -495,6 +498,7 @@ async def _events_from_completion(result: Dict[str, Any]) -> AsyncIterator[Dict[
         yield {"type": "delta", "delta": content}
     if result.get("usage"):
         yield {"type": "usage", "usage": result.get("usage") or {}}
+    yield {"type": "finish", "finish_reason": result.get("finish_reason")}
 
 
 @_strategic_budgeted_stream

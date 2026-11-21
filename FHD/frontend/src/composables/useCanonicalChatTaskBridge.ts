@@ -22,12 +22,7 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
     const payload = asRecord(task.payload)
     const requestedToolId = String(payload.tool_id || asRecord(payload.params).tool_id || task.tool_id || '').trim()
     const rawAction = String(payload.action || asRecord(payload.params).action || '').trim()
-    const toolId =
-      requestedToolId === 'shipment_generate'
-        ? 'shipment_orders'
-        : requestedToolId === 'import_excel_to_database'
-          ? 'excel_import'
-          : requestedToolId
+    const toolId = requestedToolId === 'shipment_generate' ? 'shipment_orders' : requestedToolId
     const action = requestedToolId === 'shipment_generate' ? 'generate' : rawAction
     if (!toolId || !action) return null
     const params = { ...(paramsOverride || asRecord(payload.params)) }
@@ -38,12 +33,12 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
     return { toolId, action, params }
   }
 
+  function hasCanonicalTarget(task: ShipmentTask): boolean {
+    return Boolean(String((task as DynamicShipmentTask).agentRunId || '').trim() || canonicalTaskRequest(task))
+  }
+
   async function stageCanonicalTask(task: ShipmentTask, paramsOverride?: Record<string, unknown>): Promise<AgentRunResponse | null> {
-    const request = canonicalTaskRequest(task, paramsOverride)
-    if (!request) return null
     const mutableTask = task as DynamicShipmentTask
-    const taskId = String(mutableTask.agentTaskId || options.createTaskId('chat_task'))
-    mutableTask.agentTaskId = taskId
     const runId = String(mutableTask.agentRunId || '')
     if (runId) {
       const receipt = await agentRunsApi.getRun(runId)
@@ -57,6 +52,10 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
       }
       return receipt
     }
+    const request = canonicalTaskRequest(task, paramsOverride)
+    if (!request) return null
+    const taskId = String(mutableTask.agentTaskId || options.createTaskId('chat_task'))
+    mutableTask.agentTaskId = taskId
     if (staging.has(taskId)) return staging.get(taskId)!
     const pending = agentRunsApi.createTask({
       task_id: taskId,
@@ -86,11 +85,12 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
   }
 
   async function executeCanonicalTask(task: ShipmentTask, paramsOverride?: Record<string, unknown>): Promise<Response | null> {
-    if (!canonicalTaskRequest(task, paramsOverride)) return null
+    const request = canonicalTaskRequest(task, paramsOverride)
     const created = await stageCanonicalTask(task, paramsOverride)
+    if (!created) return null
     if (!created?.data) throw new Error('任务持久化失败')
     let run: AgentRun = created.data
-    if (run.status === 'waiting_user' && !(task as DynamicShipmentTask).agentCancelRequested && created.approval?.grant) {
+    if (request && run.status === 'waiting_user' && !(task as DynamicShipmentTask).agentCancelRequested && created.approval?.grant) {
       const grant = created.approval?.grant
       const approved = await agentRunsApi.continueRun(run.run_id, {
         approval_grant: grant,
@@ -151,5 +151,5 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
       .finally(() => options.refreshTasks())
   }
 
-  return { stageCanonicalTask, executeCanonicalTask, invalidateStagedTask, cancelCanonicalTask }
+  return { hasCanonicalTarget, stageCanonicalTask, executeCanonicalTask, invalidateStagedTask, cancelCanonicalTask }
 }

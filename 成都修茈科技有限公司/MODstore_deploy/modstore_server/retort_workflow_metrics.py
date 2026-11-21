@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 from modstore_server.retort_experiment_surfaces import (
+    RAG_MEASUREMENT,
     WORKFLOW_CUSTOMER_MEASUREMENT,
     WORKFLOW_EXECUTION_MEASUREMENT,
 )
@@ -18,19 +19,30 @@ from modstore_server.retort_experiment_surfaces import (
 def execution_policy(spec):
     life = spec.get("lifecycle") or {}
     customer = life.get("measurement_scope") == WORKFLOW_CUSTOMER_MEASUREMENT
+    rag = life.get("measurement_scope") == RAG_MEASUREMENT
     if life.get("measurement_scope") not in {
         WORKFLOW_EXECUTION_MEASUREMENT,
         WORKFLOW_CUSTOMER_MEASUREMENT,
+        RAG_MEASUREMENT,
     }:
         return None
-    source = life.get("customer_outcomes" if customer else "execution_outcomes") or {}
+    source = (
+        life.get(
+            "rag_outcomes" if rag else "customer_outcomes" if customer else "execution_outcomes"
+        )
+        or {}
+    )
     guards = spec.get("guardrails", [])
     if (
         source.get("source")
         != (
-            "modstore_customer_workflow_postgres_v1"
-            if customer
-            else "modstore_event_outbox_postgres_v1"
+            "modstore_rag_observations_postgres_v1"
+            if rag
+            else (
+                "modstore_customer_workflow_postgres_v1"
+                if customer
+                else "modstore_event_outbox_postgres_v1"
+            )
         )
         or source.get("success_metric_id") != spec.get("metric")
         or any(
@@ -58,7 +70,8 @@ def execution_policy(spec):
 
 def execution_queries(scope=WORKFLOW_EXECUTION_MEASUREMENT):
     common = "(p->>'subject_id') || ':' || (p->>'request_id') AS user_id, "
-    where = "WHERE p->>'surface' = 'workflow_nl_prompt' " f"AND p->>'measurement_scope' = '{scope}'"
+    surface = "rag_context_prompt" if scope == RAG_MEASUREMENT else "workflow_nl_prompt"
+    where = f"WHERE p->>'surface' = '{surface}' AND p->>'measurement_scope' = '{scope}'"
     assignment = (
         "SELECT "
         + common
@@ -72,9 +85,14 @@ def execution_queries(scope=WORKFLOW_EXECUTION_MEASUREMENT):
         "FROM (SELECT payload_json::jsonb AS p FROM event_outbox "
         "WHERE event_name = 'experiment.observed') AS events "
         + where
-        + " AND p->>'execution_id' IS NOT NULL AND (p->>'success')::boolean IS "
+        + (
+            " AND p->>'rag_evidence_sha256' IS NOT NULL AND p->>'observation_id' IS NOT NULL"
+            if scope == RAG_MEASUREMENT
+            else " AND p->>'execution_id' IS NOT NULL"
+        )
+        + " AND (p->>'success')::boolean IS "
     )
-    if scope == WORKFLOW_CUSTOMER_MEASUREMENT:
+    if scope in {WORKFLOW_CUSTOMER_MEASUREMENT, RAG_MEASUREMENT}:
         outcomes += " "
         queries = {}
         for key, value in (("success", "TRUE"), ("failure", "FALSE")):
@@ -82,7 +100,12 @@ def execution_queries(scope=WORKFLOW_EXECUTION_MEASUREMENT):
                 "SELECT user_id, MIN(timestamp) AS timestamp, 1 AS value FROM ("
                 + outcomes
                 + value
-                + " AND p->>'customer_outcome_evidence_sha256' IS NOT NULL) AS measured GROUP BY user_id"
+                + (
+                    " AND p->>'customer_outcome_evidence_sha256' IS NOT NULL"
+                    if scope == WORKFLOW_CUSTOMER_MEASUREMENT
+                    else ""
+                )
+                + ") AS measured GROUP BY user_id"
             )
         return {"assignment": assignment, **queries}
     return {"assignment": assignment, "success": outcomes + "TRUE", "failure": outcomes + "FALSE"}
@@ -94,7 +117,7 @@ def verify_execution_source(client, spec):
     if source is None:
         return
     life = spec["lifecycle"]
-    customer = life.get("measurement_scope") == WORKFLOW_CUSTOMER_MEASUREMENT
+    per_account = life.get("measurement_scope") in {WORKFLOW_CUSTOMER_MEASUREMENT, RAG_MEASUREMENT}
     queries = execution_queries(life["measurement_scope"])
     response = client.get(f"data-sources/{life['datasource_id']}")
     response.raise_for_status()
@@ -134,7 +157,7 @@ def verify_execution_source(client, spec):
             or sql.get("identifierTypes") != ["user_id"]
             or sql.get("denominatorMetricId")
             or sql.get("userAggregationSQL", "").upper()
-            != ("MAX(VALUE)" if customer else "SUM(VALUE)")
+            != ("MAX(VALUE)" if per_account else "SUM(VALUE)")
             or sql.get("conversionSQL", "").split() != queries[outcome].split()
         ):
             raise ValueError("workflow_execution_metric_source_changed")
@@ -156,10 +179,17 @@ def execution_stop_loss(db, row, spec):
         if (
             value.get("measurement_scope") == spec["lifecycle"]["measurement_scope"]
             and value.get("variation_id") == "1"
-            and value.get("execution_id")
+            and (
+                value.get("rag_evidence_sha256")
+                if spec["lifecycle"]["measurement_scope"] == RAG_MEASUREMENT
+                else value.get("execution_id")
+            )
             and value.get("success") is False
         ):
-            if spec["lifecycle"]["measurement_scope"] == WORKFLOW_CUSTOMER_MEASUREMENT:
+            if spec["lifecycle"]["measurement_scope"] in {
+                WORKFLOW_CUSTOMER_MEASUREMENT,
+                RAG_MEASUREMENT,
+            }:
                 if value.get("subject_id"):
                     failed_accounts.add(str(value["subject_id"]))
             else:

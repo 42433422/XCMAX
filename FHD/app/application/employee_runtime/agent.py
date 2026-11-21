@@ -46,7 +46,10 @@ class EmployeeAgent:
 
     # ---- 钩子：子阶段在后续 Phase 增强（P1 tool_scope/guard、P2 perception） ----
     def _build_agent_tools(
-        self, manifest: dict[str, Any], config: dict[str, Any]
+        self,
+        manifest: dict[str, Any],
+        config: dict[str, Any],
+        runtime_context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """工具解析失败时拒绝全部工具。"""
         try:
@@ -54,7 +57,7 @@ class EmployeeAgent:
                 resolve_employee_tools,
             )
 
-            return resolve_employee_tools(self.employee_id, manifest, config)
+            return resolve_employee_tools(self.employee_id, manifest, config, runtime_context)
         except RECOVERABLE_ERRORS:
             logger.debug("build agent tools denied", exc_info=True)
             return []
@@ -501,7 +504,9 @@ class EmployeeAgent:
                 return chat_result
 
             agent_tools = (
-                self._build_agent_tools(manifest, config) if "agent" in handler_list else None
+                self._build_agent_tools(manifest, config, trusted_context)
+                if "agent" in handler_list
+                else None
             )
             agent_gate = (
                 self._build_agent_gate(manifest, config, workspace_root, trusted_context)

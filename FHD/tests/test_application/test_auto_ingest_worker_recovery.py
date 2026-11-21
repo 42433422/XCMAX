@@ -51,18 +51,9 @@ def test_dead_worker_without_business_receipt_becomes_unknown(batch, monkeypatch
     assert receipt["status"] == "failed"
     assert receipt["business_progress"]["stage"] == "outcome_unknown"
     assert receipt["knowledge"] == batch["knowledge"]
-    with pytest.raises(EltError):
+    with pytest.raises(EltError) as rejected:
         service.release_approved_batch(batch_id="batch", tenant_id=1)
-    from app.fastapi_routes.domains.misc.helpers import _dispatch_tool_for_approval
-    from app.infrastructure.tenant_scope import tenant_scope
-
-    monkeypatch.setattr(ais, "get_auto_ingest_service", lambda: service)
-    with tenant_scope(1):
-        retry = _dispatch_tool_for_approval(
-            tool_id="data_docking", action="auto_ingest", params={"batch_id": "batch"}
-        )
-    assert retry["success"] is False
-    assert retry["error"] == "ELT_AUTO_INGEST_NOT_PENDING"
+    assert rejected.value.code == "ELT_AUTO_INGEST_NOT_PENDING"
     launch.assert_not_called()
 
 

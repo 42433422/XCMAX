@@ -47,11 +47,24 @@ def task_allocation(proposal: dict[str, Any], state: dict[str, Any]) -> dict[str
             if not known_terminal:
                 allocation["held"][key] += max(0, task["reservation"][key] - spent[key])
         capacity = task.get("worker_capacity") or {}
+        adapter = (task.get("worker_binding") or {}).get("adapter")
+        remote_state = task.get("remote_state") or {}
         idle_phase = (
             task["status"] == "waiting"
             and len(settled) == len(calls)
             and capacity.get("state") == "idle"
-            and (task.get("worker_binding") or {}).get("adapter") == "github_opencode_workspace"
+            and adapter in {"github_opencode_workspace", "original_pr_repair"}
+            and (
+                adapter != "original_pr_repair"
+                or (
+                    remote_state.get("phases", {}).get("execute", {}).get("status") == "closed"
+                    and not remote_state.get("model_grant")
+                    and bool(remote_state.get("task_grants"))
+                    and all(
+                        grant.get("status") == "closed" for grant in remote_state["task_grants"]
+                    )
+                )
+            )
             and str(capacity.get("phase_receipt_id") or "").startswith("github:")
             and ":job:" in str(capacity.get("phase_receipt_id") or "")
         )

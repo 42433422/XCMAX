@@ -1402,17 +1402,26 @@ class TestExcelAnalysisRouter:
         assert result["success"] is True
         assert mock_exec.call_args.args[0]["file_path"] == "/tmp/x.xlsx"
 
-    def test_query_question_uses_natural_language(self):
+    def test_query_delegates_explicit_expression(self):
         with patch(
             "app.application.tools.workflow.handle_excel_analysis",
             return_value={"success": True},
         ) as mock_exec:
             result = _registered_router_excel_analysis(
-                "query", {"file_path": "/tmp/x.xlsx", "question": "总和是多少"}, {}, "admin", ""
+                "query",
+                {
+                    "file_path": "/tmp/x.xlsx",
+                    "query_expression": "quantity > 1",
+                    "question": "筛选数量大于 1 的记录",
+                },
+                {},
+                "admin",
+                "",
             )
         assert result["success"] is True
-        assert mock_exec.call_args.args[0]["action"] == "excel_query"
-        assert mock_exec.call_args.args[0]["natural_language"] == "总和是多少"
+        assert mock_exec.call_args.args[0]["action"] == "query"
+        assert mock_exec.call_args.args[0]["query_expression"] == "quantity > 1"
+        assert "natural_language" not in mock_exec.call_args.args[0]
 
     def test_error_message_alias(self):
         with patch(

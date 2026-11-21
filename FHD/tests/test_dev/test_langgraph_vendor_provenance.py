@@ -6,22 +6,29 @@ import copy
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location(
-    "langgraph_vendor_verifier", ROOT / "packages/xcagi_langgraph_core/verify_vendor.py"
-)
-assert SPEC is not None and SPEC.loader is not None
-verifier = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(verifier)
 
 
-def test_recorded_runtime_patches_reconstruct_exact_upstream_bytes():
+@pytest.fixture(params=["xcagi_langgraph_core", "xcagi_langgraph_prebuilt", "xcagi_langgraph_sdk"])
+def verifier(request):
+    spec = importlib.util.spec_from_file_location(
+        f"{request.param}_vendor_verifier", ROOT / f"packages/{request.param}/verify_vendor.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_recorded_runtime_patches_reconstruct_exact_upstream_bytes(verifier):
     assert verifier.verify_manifest()
     assert verifier.verify_local_patches(verifier.load_provenance())
     assert verifier.verify_license()
 
 
-def test_changed_patch_or_upstream_identity_is_rejected():
+def test_changed_patch_or_upstream_identity_is_rejected(verifier):
     original = verifier.load_provenance()
     changed = copy.deepcopy(original)
     changed["local_patches"][0]["sha256"] = "0" * 64

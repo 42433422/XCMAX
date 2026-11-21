@@ -337,8 +337,12 @@ function onMenuItemKeydown(event, key) {
 onMounted(async () => {
   const root = document.getElementById('app')
   // Prefetch steals the six HTTP/1 connections from the page that is still starting.
-  if (!root || root.dataset.startupReady === 'true') prefetchShellRouteChunks(router)
-  else window.addEventListener('xcagi:startup-ready', () => prefetchShellRouteChunks(router), { once: true })
+  // Sidebar can be mounted without a router (component tests, embedded shells).
+  // Never schedule prefetch with an undefined router.
+  if (router) {
+    if (!root || root.dataset.startupReady === 'true') prefetchShellRouteChunks(router)
+    else window.addEventListener('xcagi:startup-ready', () => prefetchShellRouteChunks(router), { once: true })
+  }
   startHealthPolling()
   window.addEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
   sidebarLayoutStore.initialize(sidebarLayoutSeedKeys())

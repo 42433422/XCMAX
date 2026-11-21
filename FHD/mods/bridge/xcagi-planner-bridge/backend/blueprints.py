@@ -88,19 +88,21 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return intent_test(body)
 
     @router.get("/tools/registry")
-    def mod_tools_registry():
+    def mod_tools_registry(request: Request):
         from app.mod_sdk.planner_compat import list_planner_tools_registry
 
-        data = list_planner_tools_registry()
+        data = list_planner_tools_registry(request)
         return {"success": True, "data": data}
 
     @router.post("/tools/execute")
     def mod_tools_execute(request: Request, body: dict | None = Body(default=None)):
         from fastapi.responses import JSONResponse
 
-        from app.mod_sdk.planner_compat import execute_planner_tool_request
+        from app.mod_sdk.planner_compat import run_planner_tool_agent
 
-        data, code = execute_planner_tool_request(request, body)
+        data, code = run_planner_tool_agent(
+            request=request, body=body or {}, route_path=str(request.url.path)
+        )
         ok = bool(data.get("success"))
         return JSONResponse({"success": ok, "data": data}, status_code=code)
 

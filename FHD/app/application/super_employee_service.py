@@ -199,6 +199,10 @@ class SuperEmployeeService:
             profile,
             self._messages,
             MessageSyncPorts(
+                api_url=lambda: self._para_api_url(),
+                reconcile_dispatch=lambda request: self._dispatching.reconcile(request),
+                dispatch_reply=lambda receipt: self._dispatch_reply(receipt),
+                task_reply=lambda task: self._para_task_status_reply(task),
                 fetch_task=lambda task: self._fetch_para_task(task),
                 direct_reply=lambda text: self._direct_reply_body(text),
                 should_reply=lambda text, ctx: self._should_reply_with_cli(text, ctx),
@@ -289,30 +293,9 @@ class SuperEmployeeService:
         self, *, user_id: int, request_id: str, task_id: str
     ) -> dict[str, Any] | None:
         """Read one persisted dispatch; never run message-list CLI backfills."""
-        if not request_id:
-            return None
-        rows = [
-            row
-            for row in self._read_all_message_rows()
-            if int(row.get("user_id") or 0) == int(user_id)
-            and row.get("dispatch_request_id") == request_id
-            and row.get("kind") == DISPATCHER_MESSAGE_KIND
-            and (not task_id or row.get("task_id") == task_id)
-        ]
-        if len(rows) != 1:
-            return None
-        original_id = str(rows[0].get("task_id") or "")
-        if not original_id:
-            return None
-        task = self._fetch_para_task(original_id)
-        if not task or str(task.get("id") or task.get("task_id") or "") != original_id:
-            return None
-        state = str(task.get("status") or "unknown")
-        state = {"merged": "completed", "merge_conflict": "blocked"}.get(state, state)
-        return {
-            "dispatch": {"request_id": request_id, "task_id": original_id, "status": state},
-            "assistant_message": {"body": self._para_task_status_reply(task)},
-        }
+        return self._sync.read_dispatch_receipt(
+            user_id=user_id, request_id=request_id, task_id=task_id
+        )
 
     def invoke(
         self, *, user_id: int, message: str, context: dict[str, Any] | None = None
@@ -369,7 +352,14 @@ class SuperEmployeeService:
             for key in ("task", "scope", "workspace_id", "mode", "target_devices"):
                 if previous_request.get(key) != dispatch_request.get(key):
                     raise ValueError(f"request_id 已绑定其他任务参数：{key}")
-            for key in ("branch", "repo_url", "para_tier", "tier", "escalate", "max_devices"):
+            for key in (
+                "branch",
+                "repo_url",
+                "para_tier",
+                "tier",
+                "escalate",
+                "max_devices",
+            ):
                 if previous_request.get("raw_context", {}).get(key) != ctx.get(key):
                     raise ValueError(f"request_id 已绑定其他任务参数：{key}")
             dispatch_request = previous_request
@@ -428,9 +418,9 @@ class SuperEmployeeService:
                 "workspace_id": self._grant.workspace_id or "",
                 "para_tier": dispatch.get("para_tier"),
                 "reconciliation_required": dispatch.get("reconciliation_required", False),
-                "devices": dispatch.get("devices")
-                if isinstance(dispatch.get("devices"), list)
-                else [],
+                "devices": (
+                    dispatch.get("devices") if isinstance(dispatch.get("devices"), list) else []
+                ),
             },
         )
         existing_rows = self._read_all_message_rows() if previous_request else []
@@ -478,7 +468,7 @@ class SuperEmployeeService:
         dispatch_request: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         uid = int(user_msg["user_id"])
-        receipt = failure.receipt if failure else {}
+        receipt = failure.payload() if failure else {}
         status = "failed" if failure else "completed"
         assistant = self._message_row(
             user_id=uid,
@@ -487,27 +477,34 @@ class SuperEmployeeService:
             created_at=_utc_now(),
             request_id=user_msg["dispatch_request_id"],
             status=status,
-            extra={"kind": self._p.direct_kind, **({"cli_execution": receipt} if failure else {})},
+            extra={
+                "kind": self._p.direct_kind,
+                **({"cli_execution": receipt} if failure else {}),
+            },
         )
-        self._append_messages([user_msg, assistant])
         result_dispatch = {
             **(dispatch or {}),
             "request_id": user_msg["dispatch_request_id"],
-            "accepted": receipt.get("execution_started", True),
+            "accepted": (
+                dispatch.get("accepted", False)
+                if failure is not None and dispatch is not None
+                else receipt.get("execution_started", True)
+            ),
             "queued": False,
             "safe_to_fallback": False,
-            "response": {"text": assistant["body"]},
             "status": status,
             "para_tier": 1,
             "device_scope": "local_device",
             "fallback" if dispatch is not None else "dispatcher": (
                 dispatcher or f"{self._p.tool_name}_cli"
             ),
+            "response": {"text": failure.body if failure else body},
             **receipt,
-            **({"queued": False} if failure else {}),
         }
         if dispatch_request is not None:
+            result_dispatch["dispatcher"] = dispatcher or f"{self._p.tool_name}_cli"
             result_dispatch = self._dispatching._persist_receipt(dispatch_request, result_dispatch)
+        self._append_messages([user_msg, assistant])
         return {
             **receipt,
             "employee": {
@@ -661,7 +658,11 @@ class SuperEmployeeService:
         env.setdefault("GIT_TERMINAL_PROMPT", "0")
         env.setdefault("GIT_ASKPASS", "true")
         return subprocess.run(
-            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=timeout, env=env
+            ["git", "-C", cwd, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
         )
 
     def _is_git_repo(self, cwd: str) -> bool:

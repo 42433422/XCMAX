@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import time
 import uuid
@@ -108,7 +109,7 @@ def training_failures(
         ledger_path(), days=max(1, min(90, days)), min_count=max(1, min(50, min_count))
     )[:20]
     for cluster in clusters:
-        if cluster.get("surface") == "workflow_nl_prompt":
+        if cluster.get("surface") in {"workflow_nl_prompt", "rag_context_prompt"}:
             # Authenticated private training transport must preserve exact
             # reproduction bytes; public evidence contains only their hashes.
             continue
@@ -123,10 +124,13 @@ class TrainingCandidateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_key: str = Field(min_length=8, max_length=128)
     surface: str = Field(
-        default="employee_prompt", pattern=r"^(employee_prompt|workflow_nl_prompt)$"
+        default="employee_prompt",
+        pattern=r"^(employee_prompt|workflow_nl_prompt|rag_context_prompt)$",
     )
     employee_id: str = Field(default="", pattern=r"^(?:[A-Za-z0-9_-]{1,128})?$")
-    resource_id: str = Field(default="", pattern=r"^(?:workflow_nl_generator)?$")
+    resource_id: str = Field(
+        default="", pattern=r"^(?:workflow_nl_generator|employee_rag_context)?$"
+    )
     source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     failure_run_ids: list[str] = Field(min_length=1, max_length=20)
     workflow_run_id: int = Field(gt=0)
@@ -160,12 +164,14 @@ def training_candidate(
 
 
 class PullRequestDispatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     request_key: str = Field(min_length=8, max_length=128)
     message: str = Field(min_length=1, max_length=12000)
     source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     github_issue: int = Field(gt=0)
     pull_request: int = Field(gt=0)
     source_run_id: int = Field(gt=0)
+    source_run_attempt: int = Field(gt=0)
 
 
 def _service_view(task: MacControlTask) -> dict:
@@ -223,7 +229,14 @@ def create_github_pr_task(
         "tool": "codex",
         "mode": "code",
     }
-    return _accept_task(db, actor=REPAIR_ACTOR, key=body.request_key, request=request)
+    result = _accept_task(db, actor=REPAIR_ACTOR, key=body.request_key, request=request)
+    task = db.get(MacControlTask, result["task"]["id"])
+    if task is None:
+        raise HTTPException(409, "原 PR 请求回执尚未确认")
+    if task.state == "queued" and not json.loads(task.snapshot_json).get("strategic_request"):
+        transition(db, task, "awaiting_approval", "original_pr_company_budget_required")
+        result["task"] = _service_view(task)
+    return result
 
 
 @router.post("/tasks", status_code=202)
@@ -279,7 +292,11 @@ def get_code_task(
     return {"success": True, "task": _service_view(task), "checked_at": time.time()}
 
 
-# Keep the task-bound gateway on the same deployed service surface as its worker.
-from modstore_server.strategic_remote_api import router as strategic_remote_router
+def _include_strategic_router():
+    # Import after service authentication to keep the shared router cycle explicit.
+    from modstore_server.strategic_remote_api import router as strategic_remote_router
 
-router.include_router(strategic_remote_router)
+    router.include_router(strategic_remote_router)
+
+
+_include_strategic_router()

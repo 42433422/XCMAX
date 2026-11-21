@@ -492,6 +492,12 @@ def _execute_employee_phase_03(state):
         if state["handler_ok"]
         else "burnin_rejected" if burn_in_acceptance else "handler_failed"
     )
+    if state["result"].get("blocked_by_life_policy"):
+        state["exec_status"] = (
+            "outcome_unknown"
+            if state["result"].get("requires_reconciliation")
+            else "blocked_by_life_policy"
+        )
     if state["handler_ok"]:
         metric_error = ""
     elif burn_in_acceptance:
@@ -801,6 +807,8 @@ def _execute_employee_phase_02(state):
         state["employee_id"],
         state["user_id"],
     )
+    if state["result"].get("blocked_by_life_policy"):
+        return (False, None)  # Settle original receipts without starting verification tools.
     from modstore_server.strategic_execution_contract import bind_file_receipts
 
     bind_file_receipts(state["result"], state["payload"], state["config"], state["user_id"])

@@ -213,11 +213,10 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
     assert fingerprint(legacy) != fingerprint(modern)
 
 
-# artifact_files was re-reviewed 2026-11-21; the other modules were re-reviewed
-# 2026-11-16 on the final PR #3245 sources. These single-component / dir_fd
+# These modules were re-reviewed 2026-11-16 on final PR #3245 sources.
+# These single-component / dir_fd
 # sinks have guards that CodeQL cannot model.
 _REVIEWED_FILE_SINKS = {
-    "FHD/app/application/agent_orchestrator/artifact_files.py": (95, 118, 119, 127, 129, 151),
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
     "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
     "FHD/app/application/shipment_excel_elt_security.py": (459, 460, 461, 831, 971, 972, 973),
@@ -265,25 +264,10 @@ def _sink_source_tree(tmp_path, uri, source):
     return tmp_path
 
 
-def test_file_suppression_fails_closed_after_semantic_change(tmp_path):
+@pytest.mark.parametrize("line", [73, 96, 97, 105, 107, 129, 99, 122, 123, 131, 133, 155])
+def test_changed_run_artifact_store_keeps_old_and_current_findings(line):
     path = "FHD/app/application/agent_orchestrator/artifact_files.py"
-    source = (_SCRIPT.parents[2] / path).read_text(encoding="utf-8")
-    changed = source.replace(
-        "if root.is_symlink() or folder.is_symlink() or path.is_symlink():",
-        "if False:",
-    )
-    assert changed != source
-    root = _sink_source_tree(tmp_path, path, changed)
-    for line in _REVIEWED_FILE_SINKS[path]:
-        assert keep_result(_finding(uri=path, line=line), source_root=root) is True
-
-
-@pytest.mark.parametrize("line", [73, 96, 97, 105, 107])
-def test_moved_artifact_sinks_do_not_suppress_stale_locations(line):
-    # Old line 129 now contains another explicitly reviewed sink; the other
-    # original locations must not inherit their previous suppression.
-    path = "FHD/app/application/agent_orchestrator/artifact_files.py"
-    assert line not in _REVIEWED_FILE_SINKS[path]
+    assert path not in _SCRIPT_NS["_REVIEWED_FILE_SINKS"]
     assert keep_result(_finding(uri=path, line=line)) is True
 
 

@@ -193,7 +193,66 @@ def test_sync_service_and_persisted_messages_remain_failed(failed_service, monke
     assert service.list_messages(user_id=1)[-1]["status"] == "failed" and len(calls) == 1
 
 
-def test_history_read_never_executes_a_pending_cli_reply(failed_service):
+@pytest.mark.parametrize("status", ["failed", "dispatch_unknown"])
+def test_reading_history_preserves_failed_receipts_without_running_cli(failed_service, status):
+    service, calls = failed_service
+    request_id, task_id = "original-cli-request", "original-cli-task"
+    receipt = {
+        "success": False,
+        "status": status,
+        "outcome": "unknown",
+        "error_code": "cli_timeout",
+        "request_id": request_id,
+        "task_id": task_id,
+        "partial_text": "partial reply",
+        "retryable": False,
+        "reconciliation_required": True,
+    }
+    rows = [
+        service._message_row(
+            user_id=1,
+            role="user",
+            body="Explain sorting algorithms",
+            created_at="2026-11-21T00:00:00Z",
+            request_id="pending-reply",
+            status="sent",
+        ),
+        service._message_row(
+            user_id=1,
+            role="user",
+            body="Explain sorting algorithms",
+            created_at="2026-11-21T00:00:01Z",
+            request_id=request_id,
+            status="sent",
+        ),
+        service._message_row(
+            user_id=1,
+            role="assistant",
+            body="任务效果未确认；partial reply",
+            created_at="2026-11-21T00:00:02Z",
+            request_id=request_id,
+            status=status,
+            extra={
+                "kind": service._p.direct_kind,
+                "task_id": task_id,
+                "cli_execution": receipt,
+                "reconciliation_required": True,
+            },
+        ),
+    ]
+    service._append_messages(rows)
+    for _ in range(2):
+        history = service.list_messages(user_id=1)
+        assert len(history) == len(rows)
+        original = history[-1]
+        assert original["status"] == status
+        assert original["dispatch_request_id"] == request_id and original["task_id"] == task_id
+        assert original["body"] == rows[-1]["body"]
+        assert service._messages.read_all_message_rows() == rows
+        assert calls == []
+
+
+def test_message_history_never_starts_a_cli_backfill(failed_service):
     service, calls = failed_service
     service._append_messages(
         [

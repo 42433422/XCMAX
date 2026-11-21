@@ -18,6 +18,29 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from . import config, store
 
 
+def _deployment_scope() -> Dict[str, Any]:
+    """Freeze the configured delivery authority before a merge can take effect."""
+    return {
+        "enabled": config._env_bool("MODSTORE_SELF_MAINTENANCE_DEPLOY_RECEIPTS_ENABLED", False),
+        "production_enabled": config._env_bool(
+            "MODSTORE_SELF_MAINTENANCE_PRODUCTION_DEPLOY_ENABLED", False
+        ),
+        "repository": str(
+            os.environ.get("MODSTORE_SELF_MAINTENANCE_GITHUB_REPOSITORY")
+            or os.environ.get("GITHUB_REPOSITORY")
+            or ""
+        ).strip(),
+        "ref": str(
+            os.environ.get("MODSTORE_SELF_MAINTENANCE_DEPLOY_REF")
+            or os.environ.get("MODSTORE_PARA_BRANCH")
+            or ""
+        ).strip(),
+        "workflow": str(
+            os.environ.get("MODSTORE_SELF_MAINTENANCE_DEPLOY_WORKFLOW") or "fhd-deploy.yml"
+        ).strip(),
+    }
+
+
 def _auto_dispatch_deploy_envs() -> List[str]:
     """Return ordered deploy envs when auto-dispatch master switch is on.
 

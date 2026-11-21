@@ -12,9 +12,11 @@ from app.application.agent_orchestrator.result_verification import (
     bind_execution_receipt,
     freeze_verification_contract,
     latest_step_call,
+    pending_execution_receipt,
     project_verification,
     restore_verified_artifacts,
     step_verification_blocked,
+    verified_step_output,
     verify_step_result,
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall, utc_now_iso
@@ -28,7 +30,10 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.task_context import ensure_run_trace
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.application.agent_orchestrator.verification_cognition import verified_plan_admission
+from app.application.agent_orchestrator.verification_cognition import (
+    normalize_tool_execution_result,
+    verified_plan_admission,
+)
 from app.domain.task_lifecycle.results import (
     execution_result_outcome_unknown,
     execution_result_requires_reconciliation,
@@ -73,18 +78,11 @@ class StepExecution:
         runtime_context: dict[str, Any],
         node_outputs: dict[str, Any],
     ) -> None:
-        from app.application.agent_orchestrator.verification_continuation import (
-            approved_preview_continuation,
-            original_preview_step,
-            preview_resume_matches,
-        )
-
         prior = latest_step_call(run, step)
-        continuation = prior if prior and approved_preview_continuation(run, step, prior) else None
+        continuation: ToolCall | None = None
         if (
             prior is not None
-            and continuation is None
-            and prior.output.get("success") is True
+            and (prior.output.get("success") is True or pending_execution_receipt(prior.output))
             and prior.metadata.get("verification_contract")
             and prior.metadata.get("verification_output_sha256")
         ):
@@ -97,16 +95,22 @@ class StepExecution:
                 "node_id": step.node_id,
                 **task_execution_context(run, step),
             }
-            receipt_step = (
-                original_preview_step(step, prior) if preview_resume_matches(step, prior) else step
-            )
-            verify_step_result(run=run, step=receipt_step, call=prior, context=context)
+            verify_step_result(run=run, step=step, call=prior, context=context)
             restore_verified_artifacts(run, step, prior, self.attach_artifacts)
             self._record_verification(run, step, prior)
             if not step_verification_blocked(run, step):
-                node_outputs[step.node_id] = dict(step.output)
+                node_outputs[step.node_id] = verified_step_output(run, step)
             self.repository.save(run)
-            return
+            from app.application.agent_orchestrator.run_lifecycle import (
+                approved_preview_continuation,
+            )
+
+            # Only an independently read preview admission can begin its next,
+            # explicitly approved preview. Business effects and unknown outcomes
+            # retain the original receipt-only recovery path.
+            if not approved_preview_continuation(run, step, prior):
+                return
+            continuation = prior
         started = time.perf_counter()
         step.attempt_count += 1
         step.status = "running"
@@ -185,29 +189,21 @@ class StepExecution:
         run.metadata["runtime_context"] = absorb_tool_output(
             dict(run.metadata.get("runtime_context") or {}), step.output
         )
-        unresolved = execution_result_requires_reconciliation(
+        requires_reconciliation = execution_result_requires_reconciliation(
             step.output
         ) and not verified_plan_admission(step, step.output, ctx)
-        uncertain = unresolved and execution_result_outcome_unknown(step.output)
-        if unresolved or (
+        if requires_reconciliation or (
             step.output.get("retryable") is False
-            and (
-                step.output.get("success") is not True
-                # Catalog terminal receipts retain their independent source
-                # readback in AgentOrchestrator._verified_catalog_terminal.
-                or step.tool_id == "catalog_products_v1"
-            )
+            and (step.output.get("success") is not True or step.tool_id == "catalog_products_v1")
         ):
             run.metadata["non_retryable"] = True
-        if uncertain:
-            step.output.update(
-                success=False,
-                outcome="unknown",
-                retryable=False,
-                reconciliation_required=True,
-            )
+        if requires_reconciliation:
+            unknown = execution_result_outcome_unknown(step.output)
+            step.output.update(success=False, retryable=False)
+            if unknown:
+                step.output.update(outcome="unknown", reconciliation_required=True)
             run.metadata["recovery"] = {
-                "state": "manual_reconciliation_required",
+                "state": "manual_reconciliation_required" if unknown else "result_pending",
                 "error_code": str(step.output.get("error_code") or "tool_outcome_unknown"),
                 "step_ids": [step.step_id],
                 "idempotency_key": ctx["idempotency_key"],
@@ -218,32 +214,34 @@ class StepExecution:
         tool_call.finished_at = step.finished_at
         tool_call.duration_ms = step.duration_ms
         success = step.output.get("success") is True
+        pending = pending_execution_receipt(step.output)
         error_code = (
             ""
-            if success
+            if success or pending
             else redact_log_text(str(step.output.get("error_code") or "tool_failed"))[:128]
         )
         error_type = (
             ""
-            if success
+            if success or pending
             else redact_log_text(str(step.output.get("error_type") or error_code))[:128]
         )
         if success:
             execution_status = "succeeded"
+        elif pending:
+            execution_status = "accepted"
         elif error_code == "tool_timeout_unknown":
             execution_status = "timeout"
         elif error_code == "tool_cancelled":
             execution_status = "cancelled"
         else:
             execution_status = "failed"
-        step.status = tool_call.status = "completed" if success else "failed"
+        step.status = tool_call.status = "completed" if success or pending else "failed"
         if (
             success
             and step.output.get("requires_user_decision") is True
             and step.output.get("question")
         ):
-            # Persist a decision pause before completed-step retention runs.
-            # The original call receipt remains completed and immutable.
+            # Persist the pending decision before completed-step retention can freeze it.
             step.status = run.status = "waiting_user"
         tool_call.metadata.update(
             {
@@ -260,12 +258,14 @@ class StepExecution:
             )
         except BOUNDARY_ERRORS:
             logger.warning("tool metrics recording failed")
-        if not success:
+        if not success and not pending:
             step.error = redact_log_text(
                 str(step.output.get("message") or step.output.get("error") or "tool failed")
             )[:1024]
             tool_call.error = step.error
-        # Persist the original executor receipt before independent readback.
+        # The executor receipt and its frozen contract survive a crash before
+        # verification. ToolCall/step completion records execution, while the
+        # independent report gates graph progress and the final run status.
         bind_execution_receipt(tool_call)
         project_verification(run)
         self.repository.save(run)
@@ -275,12 +275,14 @@ class StepExecution:
         self.repository.save(run)
         if step_verification_blocked(run, step):
             return
+        projected = verified_step_output(run, step)
+        success = projected.get("success") is True
         observation = self.observe(run, step, tool_call=tool_call, success=success)
         event_data = self._trace(run, step, ctx, tool_call, spec, execution_status)
         event_data["observation_id"] = observation.get("observation_id")
         if success:
             self.usage.refresh_run_cost_metadata(run)
-            node_outputs[step.node_id] = step.output
+            node_outputs[step.node_id] = projected
             receipt = run.metadata.get("approval_receipt")
             if isinstance(receipt, dict) and receipt.get("step_id") == step.step_id:
                 receipt["tool_call_id"] = tool_call.call_id
@@ -292,7 +294,10 @@ class StepExecution:
             )
             self.repository.save(run)
             return
-        if str(step.output.get("error_code") or "") != "tool_billing_blocked" and not uncertain:
+        if (
+            str(step.output.get("error_code") or "") != "tool_billing_blocked"
+            and not requires_reconciliation
+        ):
             self.usage.record_tool_usage_refund(run, tool_call, reason=step.error)
         self.usage.refresh_run_cost_metadata(run)
         run.add_event(
@@ -374,15 +379,14 @@ class StepExecution:
                 and receipt.get("step_id") == step.step_id
                 and step.tool_id != "catalog_products_v1"
             ):
+                from app.application.agent_orchestrator.approval_grant import execution_scope_claims
+
                 ctx["_tool_approval_scope"] = {
                     key: receipt.get(key)
                     for key in (
                         "tool_id",
                         "action",
-                        "authorization_scope_sha256",
-                        "tool_contract_sha256",
-                        "tool_version",
-                        "kellai_connection_sha256",
+                        *execution_scope_claims(ctx, step.tool_id, step.action),
                     )
                 }
             tool_call.metadata["idempotency_key"] = ctx["idempotency_key"]
@@ -439,9 +443,13 @@ class StepExecution:
                         "error_type": type(exc).__name__,
                         "message": "工具执行失败",
                     }
-            # The execution boundary has already normalized the result, including
-            # known waits and independently verified cognition-plan admissions.
-            step.output = dict(output or {})
+            raw_output = dict(output or {})
+            step.output = (
+                {**raw_output, "success": False, "retryable": False}
+                if pending_execution_receipt(raw_output)
+                and not verified_plan_admission(step, raw_output, ctx)
+                else normalize_tool_execution_result(step, raw_output, ctx)
+            )
             if step.output.get("success") is not True:
                 step.output["success"] = False
             record_tool_result(span, step.output)

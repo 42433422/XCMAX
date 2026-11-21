@@ -28,6 +28,10 @@ ACTIVE = {"waiting_execution", "waiting_credential_isolation"}
 
 def original(session: Any, request: dict[str, Any], *, active: bool = False):
     """Verify the original dispatch approval, including its immutable private plan."""
+    if request.get("kind") == "original_pr_repair":
+        from modstore_server.para_github_repair import original as original_pr
+
+        return original_pr(session, request, active=active)
     from modstore_server.integrations.repository_packages import load_repository_module
 
     row = session.get(RetortEvolutionRun, request["original_request_id"])
@@ -60,6 +64,10 @@ def original(session: Any, request: dict[str, Any], *, active: bool = False):
 
 
 def authorized(row, proposal, state, saved, request, session):
+    if request.get("kind") == "original_pr_repair":
+        from modstore_server.para_github_repair import authorized as original_pr_authorized
+
+        return original_pr_authorized(row, proposal, state, saved, request, session)
     from modstore_server.strategic_company_resources import require_company_authorization
 
     require_authorization(row, proposal, state)
@@ -136,7 +144,13 @@ def attached(request_id: str, session: Any = None) -> bool:
         with remote.get_session_factory()() as db:
             return attached(request_id, db)
     row = session.get(MacControlTask, uuid.UUID(request_id).hex)
-    return row is not None and row.actor == ACTOR
+    return row is not None and (
+        row.actor == ACTOR
+        or (
+            row.actor == "service:para-github-repair"
+            and bool(json.loads(row.snapshot_json).get("strategic_request"))
+        )
+    )
 
 
 def ready(request_id: str) -> bool:
@@ -160,12 +174,14 @@ def descriptor(request_id: str) -> dict[str, Any]:
         return {}
     request, snapshot, state = remote.read_request(request_id)
     return {
-        "kind": KIND,
+        "kind": request["kind"],
+        "schema": request["schema"],
         "request_id": request_id,
         "binding_id": request["binding"]["binding_id"],
         "model": request["model"],
         "provider": request["provider"],
         "source_sha": request["source_sha"],
+        **({"controller_sha": request["controller_sha"]} if "controller_sha" in request else {}),
         "status": state,
         "phase": snapshot.get("phase"),
         "deadline": request["deadline"],
@@ -204,16 +220,17 @@ def authenticate_model(request_id: str, token: str) -> dict[str, Any]:
             raise PortfolioError("workspace model task grant is invalid or no longer active")
         original_row, _, effects = original(session, request, active=True)
         verify_allocation(request, effects)
-        if original_row.event_id != grant.get("event_id"):
+        event_id = getattr(original_row, "event_id", None)
+        if event_id != grant.get("event_id"):
             raise PortfolioError("workspace original event changed")
         from modstore_server.strategic_workspace_grants import current_attempt
 
-        current_attempt(session, request, effects, original_row.event_id, grant)
+        current_attempt(session, request, effects, event_id, grant)
         return {
             **request,
             "caller_binding": {
                 "grant_id": grant["grant_id"],
-                "event_id": grant["event_id"],
+                **({"event_id": event_id} if event_id is not None else {}),
                 "task_id": grant["task_id"],
                 "subtask_id": grant["subtask_id"],
                 "attempt": grant["attempt_id"],
@@ -231,7 +248,12 @@ def candidate_metered(request_id: str, candidate: dict[str, Any]) -> bool:
     request, _, _ = remote.read_request(request_id)
 
     def check(row, proposal, state, saved, _record, snapshot, session):
-        authorized(row, proposal, state, saved, request, session)
+        if request.get("kind") == "original_pr_repair":
+            from modstore_server.para_github_repair import authorized as original_pr_authorized
+
+            original_pr_authorized(row, proposal, state, saved, request, session, publication=True)
+        else:
+            authorized(row, proposal, state, saved, request, session)
         matches = [
             grant
             for grant in snapshot.get("task_grants", [])
@@ -246,7 +268,9 @@ def candidate_metered(request_id: str, candidate: dict[str, Any]) -> bool:
             from modstore_server.strategic_workspace_grants import current_attempt
 
             original_row, _, effects = original(session, request, active=True)
-            current_attempt(session, request, effects, original_row.event_id, matches[0])
+            current_attempt(
+                session, request, effects, getattr(original_row, "event_id", None), matches[0]
+            )
         calls = list(saved["calls"].values())
         return bool(
             len(matches) == 1

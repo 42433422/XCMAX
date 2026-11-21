@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from app.application.agent_orchestrator.param_references import (
     UNRESOLVED_CODE,
+    host_reference_params,
     unresolved_placeholders,
 )
 from app.application.agent_orchestrator.run_models import AgentStep
@@ -24,17 +25,15 @@ from app.application.agent_orchestrator.verification_cognition import (
     normalize_tool_execution_result,
     verified_plan_admission,
 )
-from app.application.employee_runtime.result_verifier import (
-    execution_result_requires_reconciliation,
-)
 from app.application.tool_execution_deadline import (
     invocation_deadline,
     invocation_requires_reconciliation,
 )
-from app.application.workflow.retry_policy import is_transport_error
 from app.domain.task_lifecycle.results import (
     execution_result_envelopes,
     execution_result_pending_state,
+    execution_result_requires_reconciliation,
+    normalize_execution_result,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -52,8 +51,6 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         # 表格读取会在任务快照阶段查询上传记录并按租户校验归属，
         # 后台/持久化运行必须从 runtime_context 恢复租户上下文。
         "excel_analysis",
-        # 导入会按当前租户写入客户/产品/订单，同样需要恢复租户。
-        "import_excel_to_database",
         # ELT 预演与执行同样按租户查询上传并写入目标库。
         "elt_import",
         "finance",
@@ -389,7 +386,9 @@ class AgentToolExecutor:
             params["user_id"] = str(context["user_id"])
         if "tenant_id" in required and context.get("tenant_id") not in (None, ""):
             params["tenant_id"] = context["tenant_id"]
-        leftover = unresolved_placeholders(params)
+        leftover = unresolved_placeholders(
+            host_reference_params(step.tool_id, step.action, params)[0]
+        )
         if leftover:
             return {
                 "success": False,
@@ -458,14 +457,14 @@ class AgentToolExecutor:
             return refusal
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
-        product_db_read = (validation.tool_id, validation.action) == (
+        business_db_read = (validation.tool_id, validation.action) == (
             "business_db",
             "read",
-        ) and params.get("entity") == "products"
+        )
         reviewed_query = (
             validation.tool_id,
             validation.action,
-        ) in _REVIEWED_QUERY_ACTIONS or product_db_read
+        ) in _REVIEWED_QUERY_ACTIONS or (business_db_read and params.get("entity") == "products")
         if reviewed_query and client_identity:
             return _query_failure("tool_identity_override")
         query_tenant = None
@@ -483,7 +482,7 @@ class AgentToolExecutor:
         if (
             validation.tool_id,
             validation.action,
-        ) in _OWNED_READ_ACTIONS or product_db_read:
+        ) in _OWNED_READ_ACTIONS or business_db_read:
             for hint in ("service_source", "route_module"):
                 params["_runtime_context"].pop(hint, None)
         action = validation.action or step.action
@@ -513,7 +512,7 @@ class AgentToolExecutor:
             AgentModAuthorizationError,
             agent_mod_execution_scope,
         )
-        from app.infrastructure.tenant_scope import owned_tenant_scope, tenant_scope
+        from app.infrastructure.tenant_scope import owned_tenant_scope
 
         result: Any = None
         idem_key = ""
@@ -525,13 +524,12 @@ class AgentToolExecutor:
             # string tenant keys and must not be coerced here.
             scope = (
                 owned_tenant_scope(runtime_tenant_id)
-                if ((validation.tool_id, action) in _OWNED_READ_ACTIONS or product_db_read)
-                and isinstance(runtime_tenant_id, int)
-                else tenant_scope(runtime_tenant_id)
+                if runtime_tenant_id is not None
+                else nullcontext()
             )
             with (
                 agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")),
-                scope if runtime_tenant_id is not None else nullcontext(),
+                scope,
             ):
                 from app.application.agent_orchestrator.tool_permission import (
                     _fingerprint,
@@ -617,6 +615,8 @@ class AgentToolExecutor:
                 except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
                     raise
                 except RECOVERABLE_ERRORS as exc:
+                    from app.application.workflow.retry_policy import is_transport_error
+
                     safe_read_retry = (
                         validation.spec is not None
                         and validation.spec.read_only
@@ -720,9 +720,13 @@ class AgentToolExecutor:
         # After entering a mutating handler, failure alone is not proof of no
         # effect (adapters may have caught an exception after commit). Genuine
         # pre-dispatch validation/authorization refusals returned before claim.
+        from app.application.agent_orchestrator.result_verification import pending_execution_receipt
+
         admitted_child = verified_plan_admission(step, result, dict(runtime_context or {}))
+        acknowledged_pending = pending_execution_receipt(result)
         if invocation_requires_reconciliation() or (
             not admitted_child
+            and not acknowledged_pending
             and (
                 execution_result_requires_reconciliation(result)
                 or (
@@ -738,7 +742,10 @@ class AgentToolExecutor:
                 "retryable": False,
                 "reconciliation_required": True,
             }
-        result = normalize_tool_execution_result(step, result, dict(runtime_context or {}))
+        if acknowledged_pending and not admitted_child:
+            result = {**result, "success": False, "retryable": False}
+        else:
+            result = normalize_tool_execution_result(step, result, dict(runtime_context or {}))
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)
@@ -786,6 +793,8 @@ def execute_with_tool_deadline(
         AgentModAuthorizationError,
         agent_mod_execution_scope,
     )
+
+    completed_in_time = False
     from app.utils.resilience.rate_limiter import (
         ToolCircuitOpenError,
         ToolConcurrencyLimitError,
@@ -858,6 +867,7 @@ def execute_with_tool_deadline(
     except RECOVERABLE_ERRORS as exc:
         if not invocation.uncertain:
             raise
+        completed_in_time = file_deadlines or time.monotonic() <= deadline
         result = {
             "error_code": "tool_exception_after_unknown_io",
             "exception_type": type(exc).__name__,
@@ -898,11 +908,12 @@ def execute_with_tool_deadline(
                 or row.get("requires_reconciliation")
                 for row in execution_result_envelopes(result)
             )
-            result = (
-                {**result, "success": False, "retryable": False}
-                if known_pending and (step.tool_id, step.action) != ("enterprise_cognition", "plan")
-                else normalize_tool_execution_result(step, result, context)
-            )
+            if not verified_plan_admission(step, result, context):
+                result = (
+                    {**result, "success": False, "retryable": False}
+                    if known_pending
+                    else normalize_execution_result(result)
+                )
             if (
                 step.tool_id == "business_db"
                 and step.action == "write"
@@ -921,9 +932,18 @@ def execute_with_tool_deadline(
                 )
             return cast("dict[str, Any]", result)
     worker_exited = isinstance(result, dict) and result.get("error_code") == "tool_worker_exited"
+    timed_out = not completed_in_time or any(
+        marker.get("kind") == "http_timeout" for marker in invocation.uncertain
+    )
     return {
         "success": False,
-        "error_code": "tool_worker_exited" if worker_exited else "tool_timeout_unknown",
+        "error_code": (
+            "tool_worker_exited"
+            if worker_exited
+            else "tool_timeout_unknown"
+            if timed_out
+            else "tool_result_unknown"
+        ),
         "reconciliation_evidence": result if isinstance(result, dict) else {},
         "io_reconciliation": list(invocation.uncertain),
         "outcome": "unknown",
@@ -933,5 +953,7 @@ def execute_with_tool_deadline(
             "工具进程已退出且未返回最终回执，请核对原任务的业务结果，勿重复提交。"
             if worker_exited
             else "工具超时，业务结果未知；必须核对原调用，不可自动重试"
+            if timed_out
+            else "工具已返回，但业务结果尚未确认；请核对原调用，不可自动重试"
         ),
     }

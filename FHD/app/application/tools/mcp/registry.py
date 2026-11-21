@@ -150,7 +150,11 @@ def _discover(
         tool_id = tool_id_for(config.name)
         if tool_id in servers:
             raise ValueError(f"Ambiguous MCP server identity: {config.name}")
-        actions = {info.name: _action_spec(info, config) for info in infos}
+        actions: dict[str, Any] = {}
+        for info in infos:
+            if info.name in actions or info.name in RESOURCE_ACTIONS:
+                raise ValueError(f"Duplicate MCP capability: {tool_id}.{info.name}")
+            actions[info.name] = _action_spec(info, config)
         for name in RESOURCE_ACTIONS:
             actions.setdefault(name, dict(_RESOURCE_ACTION_SPECS[name]))
         tools[tool_id] = {
@@ -193,6 +197,7 @@ def _snapshot(now: float | None = None) -> tuple[dict[str, Any], dict[str, McpSe
 
 def merge_mcp_tools(registry: dict[str, Any]) -> dict[str, Any]:
     """把已发现的外部工具并入工作流注册表；无配置时原样返回。"""
+    registry = {key: value for key, value in registry.items() if not key.startswith("mcp__")}
     if not mcp_enabled():
         return registry
     try:
@@ -206,7 +211,7 @@ def merge_mcp_tools(registry: dict[str, Any]) -> dict[str, Any]:
         return registry
     merged = dict(registry)
     for tool_id, meta in tools.items():
-        merged.setdefault(tool_id, meta)
+        merged[tool_id] = deepcopy(meta)
     return merged
 
 

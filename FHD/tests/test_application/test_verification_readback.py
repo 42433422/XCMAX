@@ -94,6 +94,51 @@ def verify(case, output=None):
     )
 
 
+@pytest.mark.parametrize("drift", [None, "destination", "session", "tenant"])
+def test_price_template_readback_uses_original_digest_and_live_read_scope(
+    tmp_path, trusted_actor, monkeypatch, drift
+):
+    import hashlib
+
+    from app.db.models.user import User
+    from app.infrastructure.documents import price_list_export
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(tenant_id=None if drift != "tenant" else 7, role="admin", tier="admin")
+    monkeypatch.setattr(price_list_export, "fhd_repo_root", lambda: tmp_path)
+    content = _content("docx")
+    expected = hashlib.sha256(content).hexdigest()
+    price_list_export.save_price_list_docx_template(content)
+    case = invocation(
+        actor,
+        "products",
+        "import_price_list_template",
+        {
+            "saved_name": expected + ".docx",
+            "sha256": expected,
+        },
+    )
+    if drift == "destination":
+        (tmp_path / "424" / "document_templates" / "price_list_default.docx").write_bytes(
+            b"changed"
+        )
+    elif drift == "session":
+        with actor.factory.begin() as db:
+            db.get(User, actor.user_id).is_active = False
+    monkeypatch.setattr(
+        price_list_export,
+        "save_price_list_docx_template",
+        lambda *_: pytest.fail("readback must never write"),
+    )
+    for _ in range(2):
+        result = verify(case, {"success": True, "sha256": expected})
+        assert result["status"] == (
+            "verified" if drift is None else "failed" if drift == "destination" else "inconclusive"
+        )
+        if drift is None:
+            assert result["checks"][0]["evidence"]["sha256"] == expected
+
+
 def create_customer(owner, case, *, receipt=True, tenant=None):
     tenant = owner.tenant_id if tenant is None else tenant
     key = idempotency_scope_key(case.context, "customers", "create", case.step.params)

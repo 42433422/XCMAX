@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import subprocess
@@ -15,7 +16,43 @@ import pytest
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 
 
-def _service(tmp_path, monkeypatch, task_handler, *, devices=1, webhook_handler=None):
+def _ack(request, *, task_id="task-original", subtask_id="sub-1"):
+    body = json.loads(request.content)
+    return httpx.Response(
+        200,
+        json={
+            "task": {"id": task_id, "status": "running"},
+            "subtask": {
+                "id": subtask_id,
+                "task_id": task_id,
+                "device_id": body["device_id"],
+            },
+            "request": {
+                "client_request_id": body["client_request_id"],
+                "payload_sha256": hashlib.sha256(
+                    json.dumps(
+                        {key: value for key, value in body.items() if key != "client_request_id"},
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest(),
+            },
+        },
+    )
+
+
+def _service(
+    tmp_path,
+    monkeypatch,
+    task_handler,
+    *,
+    devices=1,
+    webhook_handler=None,
+    receipt_handler=None,
+    recovery_version=1,
+    task_status="running",
+):
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "auto")
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "https://para.test")
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", "test-token")
@@ -29,7 +66,9 @@ def _service(tmp_path, monkeypatch, task_handler, *, devices=1, webhook_handler=
                 return webhook_handler(request)
             return httpx.Response(200, json={"accepted": True})
         if request.url.path == "/api/health":
-            return httpx.Response(200, json={"ok": True})
+            return httpx.Response(
+                200, json={"ok": True, "task_request_recovery_version": recovery_version}
+            )
         if request.url.path == "/api/devices":
             return httpx.Response(
                 200,
@@ -48,8 +87,16 @@ def _service(tmp_path, monkeypatch, task_handler, *, devices=1, webhook_handler=
             )
         if request.method == "POST" and request.url.path == "/api/tasks":
             return task_handler(request)
+        if request.method == "GET" and request.url.path.startswith("/api/tasks/by-request/"):
+            return (
+                receipt_handler(request)
+                if receipt_handler
+                else httpx.Response(404, json={"error": "request_not_found"})
+            )
         if request.method == "GET" and request.url.path == "/api/tasks/task-original":
-            return httpx.Response(200, json={"task": {"id": "task-original", "status": "running"}})
+            return httpx.Response(
+                200, json={"task": {"id": "task-original", "status": task_status}}
+            )
         raise AssertionError(f"unexpected request {request.method} {request.url}")
 
     def create():
@@ -83,7 +130,7 @@ def test_lost_ack_is_durable_and_never_falls_through(tmp_path, monkeypatch, erro
     assert first["dispatch"]["status"] == "dispatch_unknown"
     assert first["dispatch"]["queued"] is False
     assert not first["dispatch"].get("task_id")
-    assert "需要人工核对" in first["assistant_message"]["body"]
+    assert "按原请求核对" in first["assistant_message"]["body"]
     saved = json.loads(Path(first["dispatch"]["outbox_path"]).read_text())
     assert saved["request_id"] == "original-request"
     assert saved["dispatch_receipt"]["reconciliation_required"] is True
@@ -92,7 +139,7 @@ def test_lost_ack_is_durable_and_never_falls_through(tmp_path, monkeypatch, erro
     second = second_service.invoke(user_id=7, message="修复登录问题", context=context)
     assert second["dispatch"]["request_id"] == "original-request"
     assert second["dispatch"]["status"] == "dispatch_unknown"
-    assert "需要人工核对" in second["assistant_message"]["body"]
+    assert "按原请求核对" in second["assistant_message"]["body"]
     assert len(effects) == 1
     assert not any(host == "hook.test" for _, host, _ in requests)
     assert len(second_service._read_all_message_rows()) == 2
@@ -114,7 +161,7 @@ def test_process_exit_after_send_recovers_the_pre_send_receipt(tmp_path, monkeyp
         create().invoke(user_id=7, message="修复登录问题", context=context)
     recovered = create().invoke(user_id=7, message="修复登录问题", context=context)
     assert recovered["dispatch"]["status"] == "dispatch_unknown"
-    assert "需要人工核对" in recovered["assistant_message"]["body"]
+    assert "按原请求核对" in recovered["assistant_message"]["body"]
     assert effects == ["created"]
 
 
@@ -126,13 +173,7 @@ def test_partial_fleet_dispatch_keeps_task_and_device_receipts(tmp_path, monkeyp
         body = json.loads(request.content)
         effects.append(body)
         if len(effects) == 1:
-            return httpx.Response(
-                200,
-                json={
-                    "task": {"id": "task-original", "status": "running"},
-                    "subtask": {"id": "sub-1"},
-                },
-            )
+            return _ack(request)
         assert body["task_id"] == "task-original"
         raise error_type("second device did not acknowledge", request=request)
 
@@ -170,10 +211,7 @@ def test_connect_failure_before_first_send_can_use_webhook(tmp_path, monkeypatch
 
 def test_successful_remote_request_replays_without_creating_a_task(tmp_path, monkeypatch):
     def submit(request):
-        return httpx.Response(
-            200,
-            json={"task": {"id": "task-original", "status": "running"}, "subtask": {"id": "sub-1"}},
-        )
+        return _ack(request)
 
     create, requests = _service(tmp_path, monkeypatch, submit)
     context = {"request_id": "accepted-request", "mode": "code"}
@@ -204,7 +242,8 @@ def test_corrupt_dispatch_receipt_cannot_replay_effect(tmp_path, monkeypatch, co
 
 def test_receipt_lookup_is_user_scoped(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "app.application.super_employee_service._utc_now", lambda: "2026-01-01T00:00:00Z"
+        "app.application.super_employee_service._utc_now",
+        lambda: "2026-01-01T00:00:00Z",
     )
 
     def submit(request):
@@ -265,9 +304,7 @@ def test_malformed_second_ack_retains_first_task_id(tmp_path, monkeypatch):
     def submit(request):
         effects.append(json.loads(request.content))
         if len(effects) == 1:
-            return httpx.Response(
-                200, json={"task": {"id": "task-original"}, "subtask": {"id": "sub-1"}}
-            )
+            return _ack(request)
         return httpx.Response(200, json={"unexpected": "response shape"})
 
     create, requests = _service(tmp_path, monkeypatch, submit, devices=2)
@@ -313,7 +350,7 @@ def _process_dispatch(storage, crash):
             os.fsync(stream.fileno())
         if crash:
             os._exit(17)
-        return httpx.Response(200, json={"task": {"id": "task-original", "status": "running"}})
+        return _ack(request)
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         create, _ = _service(storage, monkeypatch, submit)
@@ -342,7 +379,10 @@ def _process_command(storage, *, crash=False):
 
 def test_hard_process_exit_keeps_original_request_non_replayable(tmp_path):
     first = subprocess.run(
-        _process_command(tmp_path, crash=True), capture_output=True, text=True, timeout=20
+        _process_command(tmp_path, crash=True),
+        capture_output=True,
+        text=True,
+        timeout=20,
     )
     assert first.returncode == 17, first.stderr
     second = subprocess.run(_process_command(tmp_path), capture_output=True, text=True, timeout=20)
@@ -357,7 +397,10 @@ def test_hard_process_exit_keeps_original_request_non_replayable(tmp_path):
 def test_two_processes_replay_accepted_code_request_without_cli_backfill(tmp_path):
     workers = [
         subprocess.Popen(
-            _process_command(tmp_path), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            _process_command(tmp_path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
         for _ in range(2)
     ]
@@ -365,10 +408,135 @@ def test_two_processes_replay_accepted_code_request_without_cli_backfill(tmp_pat
         for worker in workers:
             stdout, stderr = worker.communicate(timeout=20)
             assert worker.returncode == 0, stderr
-            assert json.loads(stdout) == {"status": "accepted", "request_id": "process-request"}
+            assert json.loads(stdout) == {
+                "status": "accepted",
+                "request_id": "process-request",
+            }
     finally:
         for worker in workers:
             if worker.poll() is None:
                 worker.kill()
-                worker.wait(timeout=5)
+            worker.communicate(timeout=5)
     assert (tmp_path / "effects").read_text().splitlines() == ["created"]
+
+
+def test_readback_keeps_partial_fleet_unknown_after_known_task_completes(tmp_path, monkeypatch):
+    effects = []
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        if len(effects) == 1:
+            return _ack(request)
+        raise httpx.ReadTimeout("second device acknowledgement lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit, devices=2, task_status="completed")
+    first = create().invoke(
+        user_id=7,
+        message="修复登录问题",
+        context={"request_id": "fleet-readback", "mode": "code", "para_tier": 2},
+    )
+    original = Path(first["dispatch"]["outbox_path"]).read_text()
+    before = len(requests)
+    receipt = create().read_dispatch_receipt(
+        user_id=7, request_id="fleet-readback", task_id="task-original"
+    )
+    assert receipt["dispatch"]["status"] == "dispatch_unknown"
+    assert receipt["dispatch"]["reconciliation_required"] is True
+    assert receipt["dispatch"]["task_status"] == "completed"
+    assert receipt["dispatch"]["pending_device_id"] == "device-1"
+    assert receipt["dispatch"]["devices"][0]["subtask_id"] == "sub-1"
+    assert "待核对" in receipt["assistant_message"]["body"]
+    assert all(method == "GET" and host == "para.test" for method, host, _ in requests[before:])
+    assert ("GET", "para.test", "/api/tasks/task-original") in requests[before:]
+    assert len(effects) == 2
+    saved = json.loads(Path(first["dispatch"]["outbox_path"]).read_text())
+    before_receipt = json.loads(original)["dispatch_receipt"]
+    for key in ("task_id", "devices", "pending_device_id", "pending_request_id", "plan_sha256"):
+        assert saved["dispatch_receipt"][key] == before_receipt[key]
+
+
+def test_readback_without_ack_only_queries_the_original_request(tmp_path, monkeypatch):
+    def submit(request):
+        raise httpx.ReadTimeout("first acknowledgement lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    create().invoke(
+        user_id=7,
+        message="修复登录问题",
+        context={"request_id": "lost-readback", "mode": "code"},
+    )
+    before = len(requests)
+    service = create()
+    receipt = service.read_dispatch_receipt(user_id=7, request_id="lost-readback", task_id="")
+    assert receipt["dispatch"]["reconciliation_required"] is True
+    assert receipt["dispatch"]["status"] == "dispatch_unknown"
+    assert not receipt["dispatch"].get("task_id")
+    assert len(requests) == before + 1
+    assert requests[-1][0:2] == ("GET", "para.test")
+    assert requests[-1][2].startswith("/api/tasks/by-request/")
+
+
+def test_readback_after_endpoint_change_never_queries_new_target(tmp_path, monkeypatch):
+    def submit(request):
+        return _ack(request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit, task_status="completed")
+    create().invoke(
+        user_id=7,
+        message="修复登录问题",
+        context={"request_id": "bound-readback", "mode": "code"},
+    )
+    before = len(requests)
+    service = create()
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "https://other-para.test")
+    assert (
+        service.read_dispatch_receipt(
+            user_id=7, request_id="bound-readback", task_id="task-original"
+        )
+        is None
+    )
+    assert len(requests) == before
+
+
+def test_readback_can_observe_send_intent_while_dispatch_lock_is_held(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    create, requests = _service(
+        tmp_path, monkeypatch, lambda request: pytest.fail("readback dispatched a write")
+    )
+    service = create()
+    held, release = Event(), Event()
+    request = {
+        "request_id": "inflight-readback",
+        "user_id": 7,
+        "employee_id": service._p.employee_id,
+        "created_at": "2026-11-21T00:00:00Z",
+    }
+
+    def sender():
+        with service._messages.dispatch_lock(7, "inflight-readback"):
+            service._dispatching._persist_receipt(
+                request,
+                {"status": "dispatching", "dispatcher": "para_api", "api_url": "https://para.test"},
+            )
+            held.set()
+            assert release.wait(5)
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        active = workers.submit(sender)
+        try:
+            assert held.wait(2)
+            observed = workers.submit(
+                service.read_dispatch_receipt,
+                user_id=7,
+                request_id="inflight-readback",
+                task_id="",
+            )
+            receipt = observed.result(timeout=2)
+        finally:
+            release.set()
+            active.result(timeout=2)
+    assert receipt["dispatch"]["status"] == "dispatch_unknown"
+    assert receipt["dispatch"]["reconciliation_required"] is True
+    assert requests == []

@@ -44,6 +44,8 @@ class RuntimeState:
     memory_path: Callable[[], Path]
     append: Callable[[Record], None]
     record_outcome: Callable[[Record, Record], Any]
+    outcome_recoverable: bool = False
+    recorded_outcome: Callable[[Record], bool] | None = None
 
     @classmethod
     def configured(cls) -> RuntimeState:
@@ -55,6 +57,8 @@ class RuntimeState:
             memory_path=store.loop_memory_path,
             append=store._append_ledger,
             record_outcome=outcomes._update_loop_memory,
+            outcome_recoverable=True,
+            recorded_outcome=store._has_recorded_outcome,
         )
 
 
@@ -86,6 +90,8 @@ class RuntimePolicy:
     admit: RecordOperation
     actor_user_id: Callable[[], int]
     decide: RecordOperation
+    recover: RecordOperation | None = None
+    prepare: RecordOperation | None = None
 
     @classmethod
     def configured(cls) -> RuntimePolicy:
@@ -93,6 +99,8 @@ class RuntimePolicy:
             admit=schedule.should_run_self_maintenance_loop,
             actor_user_id=schedule._self_maintenance_actor_user_id,
             decide=decision._decide_post_loop_policy,
+            recover=decision._recover_post_loop_policy,
+            prepare=decision._prepare_post_loop_policy,
         )
 
 

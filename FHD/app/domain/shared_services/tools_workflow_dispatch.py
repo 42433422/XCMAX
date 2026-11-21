@@ -22,7 +22,6 @@ from app.domain.shared_services.tools_workflow_excel_ocr import (
     _registered_router_excel_analysis,
     _registered_router_excel_vector_index,
     _registered_router_generate_office_document,
-    _registered_router_import_excel_to_database,
 )
 from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
     _registered_router_excel_import,
@@ -205,6 +204,18 @@ def _registered_router_image_generate(action, params, runtime_context, profile, 
     return {"success": True, "images": images, **receipt}
 
 
+def _registered_router_openclaw(action, params, runtime_context, profile, user_message):
+    from app.application.aiopen.service import dispatch_openclaw_chat
+
+    return dispatch_openclaw_chat(params, runtime_context)
+
+
+def _registered_router_tasks(action, params, runtime_context, profile, user_message):
+    from app.application.tools.tasks import query_tasks
+
+    return query_tasks(action, params, runtime_context)
+
+
 def _registered_router_kellai(action, params, runtime_context, profile, user_message):
     from app.application.tools.kellai import execute_kellai
 
@@ -262,8 +273,9 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "conversation_history": _registered_router_conversation_history,
         "image_generate": _registered_router_image_generate,
         "kellai": _registered_router_kellai,
+        "openclaw": _registered_router_openclaw,
+        "tasks": _registered_router_tasks,
         "excel_analysis": _registered_router_excel_analysis,
-        "import_excel_to_database": _registered_router_import_excel_to_database,
         "elt_import": _registered_router_elt_import,
         "generate_office_document": _registered_router_generate_office_document,
         "excel_vector_index": _registered_router_excel_vector_index,

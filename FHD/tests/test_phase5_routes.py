@@ -50,8 +50,6 @@ def mock_printer_service() -> MagicMock:
 
 @pytest.fixture
 def print_client(mock_printer_service: MagicMock, monkeypatch: pytest.MonkeyPatch):
-    print_routes._print_confirm_cache.clear()
-
     def _svc():
         return mock_printer_service
 
@@ -89,23 +87,6 @@ def admin_session_ok(monkeypatch: pytest.MonkeyPatch):
 # ---------------------------------------------------------------------------
 
 
-def test_print_confirm_cache_ttl() -> None:
-    print_routes._print_confirm_cache.clear()
-    token = print_routes._create_print_confirm_token({"file_path": "/tmp/a.pdf"})
-    assert token in print_routes._print_confirm_cache
-    print_routes._print_confirm_cache[token]["expires_at"] = time.time() - 1
-    print_routes._cleanup_print_confirm_cache()
-    assert token not in print_routes._print_confirm_cache
-
-
-def test_print_consume_confirm_token() -> None:
-    print_routes._print_confirm_cache.clear()
-    token = print_routes._create_print_confirm_token({"copies": 2})
-    payload = print_routes._consume_print_confirm_token(token)
-    assert payload.get("copies") == 2
-    assert print_routes._consume_print_confirm_token(token) == {}
-
-
 # ---------------------------------------------------------------------------
 # print_routes — HTTP
 # ---------------------------------------------------------------------------
@@ -133,15 +114,20 @@ def test_print_printer_selection_get_put(
         "/api/print/printer-selection",
         json={"document_printer": "DocPrinter", "label_printer": "LabelPrinter"},
     )
-    assert r2.status_code == 200
+    assert r2.status_code == 401
+    mock_printer_service.save_printer_selection.assert_not_called()
 
 
-def test_print_printer_selection_invalid_name(print_client) -> None:
+def test_print_printer_selection_requires_actor_before_device_access(
+    print_client, mock_printer_service
+) -> None:
     r = print_client.put(
         "/api/print/printer-selection",
         json={"document_printer": "UnknownPrinter"},
     )
-    assert r.status_code == 400
+    assert r.status_code == 401
+    mock_printer_service.get_printers.assert_not_called()
+    mock_printer_service.save_printer_selection.assert_not_called()
 
 
 def test_print_default_and_test_endpoints(print_client) -> None:
@@ -162,7 +148,7 @@ def test_print_document_validation(print_client, tmp_path, local_tools) -> None:
     doc = tmp_path / "doc.pdf"
     doc.write_bytes(b"%PDF")
     ok = print_client.post("/api/print/document", json={"file_path": str(doc)})
-    assert ok.status_code == 200
+    assert ok.status_code == 401
 
 
 def test_print_document_rejects_existing_path_outside_allowed_roots(
@@ -190,39 +176,10 @@ def test_print_document_rejects_existing_path_outside_allowed_roots(
     assert response.json()["message"] == "文件不存在"
 
 
-def test_print_label_confirm_flow(print_client, tmp_path, local_tools) -> None:
-    label = tmp_path / "label.png"
-    label.write_bytes(b"\x89PNG\r\n")
-    path = str(label)
-    step1 = print_client.post(
-        "/api/print/label",
-        json={"file_path": path, "copies": 2, "require_confirm": True},
-    )
-    assert step1.status_code == 200
-    body = step1.json()
-    assert body.get("status") == "print_confirm_required"
-    token = body["confirm_token"]
-    step2 = print_client.post(
-        "/api/print/label",
-        json={"file_path": path, "confirm_token": token, "require_confirm": True},
-    )
-    assert step2.status_code == 200
-
-
-def test_print_label_cancel_and_bad_copies(print_client, tmp_path) -> None:
+def test_print_label_bad_copies(print_client, tmp_path) -> None:
     label = tmp_path / "l.png"
     label.write_bytes(b"x")
     path = str(label)
-    cancel = print_client.post(
-        "/api/print/label",
-        json={
-            "file_path": path,
-            "require_confirm": True,
-            "confirm_action": "cancel",
-            "confirm_token": "t",
-        },
-    )
-    assert cancel.json().get("status") == "print_cancelled"
     bad = print_client.post("/api/print/label", json={"file_path": path, "copies": 0})
     assert bad.status_code == 400
 
@@ -230,34 +187,8 @@ def test_print_label_cancel_and_bad_copies(print_client, tmp_path) -> None:
 def test_print_test_printer_post(print_client, local_tools) -> None:
     assert print_client.post("/api/print/test", json={}).status_code == 400
     assert (
-        print_client.post("/api/print/test", json={"printer_name": "DocPrinter"}).status_code == 200
+        print_client.post("/api/print/test", json={"printer_name": "DocPrinter"}).status_code == 401
     )
-
-
-def test_print_workflow_dispatch(
-    print_client, monkeypatch: pytest.MonkeyPatch, tmp_path, local_tools
-) -> None:
-    fake_print_app = MagicMock()
-    fake_print_app.print_single_label.return_value = {"success": True}
-    monkeypatch.setattr(
-        "app.application.print_app_service.get_print_application_service",
-        lambda: fake_print_app,
-    )
-    monkeypatch.setattr(
-        "app.application.get_product_app_service",
-        lambda: MagicMock(search_products=MagicMock(return_value=[])),
-    )
-    r = print_client.post(
-        "/api/print/workflow/label-print/dispatch",
-        json={"model_number": "M-1", "quantity": 2, "idempotency_key": "idem-1"},
-    )
-    assert r.status_code == 200
-    r2 = print_client.post(
-        "/api/print/workflow/label-print/dispatch",
-        json={"model_number": "M-1", "idempotency_key": "idem-1"},
-    )
-    assert r2.json().get("skipped") is True
-    assert print_client.post("/api/print/workflow/label-print/dispatch", json={}).status_code == 400
 
 
 def test_print_list_labels_and_serve(

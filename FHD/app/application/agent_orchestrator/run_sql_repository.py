@@ -12,8 +12,6 @@ from typing import cast
 
 from sqlalchemy import JSON, String, Table, and_, case, func, literal, or_
 from sqlalchemy import cast as sql_cast
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -175,7 +173,10 @@ def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
         return {
             key: item
             for key, item in (value.metadata.get("runtime_context") or {}).items()
-            if key not in {"run_id", "agent_run_id"}
+            # Tool observations are appended while registered child runs write
+            # their original parent links. They do not create a new authority
+            # generation or authorize discarding those concurrent receipts.
+            if key not in {"run_id", "agent_run_id", "untrusted_sources", "context_summary"}
         }
 
     return (run.run_id, run.user_id, run.created_at, context(run)) == (
@@ -235,31 +236,31 @@ def preserve_run_evidence(
     from app.application.agent_orchestrator.verification_integrity import (
         preserve_verification_receipts,
         unchanged_receipt_observation,
+        verified_pending_settlement,
     )
 
     preserve_verification_receipts(run, previous)
+    if (run.run_id, run.user_id, run.created_at, tenant_id_of_run(run), mod_id_of_run(run)) != (
+        previous.run_id,
+        previous.user_id,
+        previous.created_at,
+        tenant_id_of_run(previous),
+        mod_id_of_run(previous),
+    ):
+        raise ValueError("run identity cannot change")
     generation, prior_generation = _planning_generation(run), _planning_generation(previous)
-    if generation or prior_generation:
-        if (run.run_id, run.user_id, run.created_at, tenant_id_of_run(run), mod_id_of_run(run)) != (
-            previous.run_id,
-            previous.user_id,
-            previous.created_at,
-            tenant_id_of_run(previous),
-            mod_id_of_run(previous),
-        ):
-            raise ValueError("planning generation identity cannot change")
-        if generation != prior_generation:
-            if not allow_planning_replacement or not _valid_planning_replacement(run, previous):
-                raise ValueError(
-                    "planning generation replacement requires the original snapshot CAS"
-                )
-            return
-    elif not same_run_generation(run, previous):
+    if generation != prior_generation:
+        if not allow_planning_replacement or not _valid_planning_replacement(run, previous):
+            raise ValueError("planning generation replacement requires the original snapshot CAS")
         return
     old = previous.metadata
-    if old.get("non_retryable"):
+    settled_pending = allow_planning_replacement and verified_pending_settlement(run, previous)
+    if old.get("non_retryable") and not settled_pending:
         run.metadata["non_retryable"] = True
-    recovery = {**copy.deepcopy(old.get("recovery") or {}), **(run.metadata.get("recovery") or {})}
+    recovery = {
+        **({} if settled_pending else copy.deepcopy(old.get("recovery") or {})),
+        **(run.metadata.get("recovery") or {}),
+    }
     if (old.get("recovery") or {}).get("state") == "manual_reconciliation_required":
         recovery["state"] = "manual_reconciliation_required"
     if recovery:
@@ -1243,15 +1244,27 @@ class SQLAlchemyAgentRunRepository:
 
     @classmethod
     def _insert_task_record(cls, db: Session, task: AgentTask) -> bool:
+        from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
         from app.db.models.agent import AgentTaskRecord
 
-        values = cls._task_record_values(task)
-        insert = sqlite_insert if db.get_bind().dialect.name == "sqlite" else postgresql_insert
-        statement = (
-            insert(AgentTaskRecord)
-            .values(**values)
-            .on_conflict_do_nothing(index_elements=["tenant_id", "user_id", "task_id"])
+        dialect = db.get_bind().dialect.name
+        if dialect not in {"sqlite", "postgresql"}:
+            raise ValueError(f"Unsupported task admission dialect: {dialect}")
+        insert = sqlite_insert if dialect == "sqlite" else postgresql_insert
+        statement = insert(AgentTaskRecord).values(**cls._task_record_values(task))
+        statement = statement.on_conflict_do_nothing(
+            index_elements=[
+                AgentTaskRecord.tenant_id,
+                AgentTaskRecord.user_id,
+                AgentTaskRecord.task_id,
+            ]
         )
+        if dialect == "postgresql":
+            # INSERT rowcount is not portable; the returned identity proves insertion.
+            result = db.execute(statement.returning(AgentTaskRecord.id))
+            return result.scalar_one_or_none() is not None
         return cast(CursorResult, db.execute(statement)).rowcount == 1
 
     @classmethod

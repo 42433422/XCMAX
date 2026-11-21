@@ -20,7 +20,13 @@ from typing import Any, cast
 
 import psutil
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
+from app.application.agent_orchestrator.worker_process_lifecycle import (
+    OwnedWorker,
+    supervise_worker,
+)
+from app.application.agent_orchestrator.worker_process_lifecycle import (
+    enable_orphan_adoption as _enable_orphan_adoption,
+)
 
 _STREAM_FRAME_LIMIT = 256 * 1024
 _RESOURCE_POLL_SECONDS = 0.1
@@ -144,7 +150,10 @@ class _WorkerProcessSupervisor:
         if self._closed:
             return
         self._closed = True
-        if self.process.pid is not None:
+        if isinstance(self.process, OwnedWorker):
+            observed = self.memory_guard.descendants if self.memory_guard is not None else ()
+            self.clean = self.process.close(observed=observed)
+        elif self.process.pid is not None:
             try:
                 self.clean = (
                     _reap(self.process, observed=self.memory_guard.descendants)
@@ -157,6 +166,8 @@ class _WorkerProcessSupervisor:
                 self.clean = False
 
     def __enter__(self):
+        from app.utils.operational_errors import BOUNDARY_ERRORS
+
         try:
             return self.start()
         except BOUNDARY_ERRORS:
@@ -201,6 +212,8 @@ def _worker_stream(connection):
 
 def _relay_stream(connection, lifetime, drained, failed, stopped, *, keep_connection=False):
     """Deliver in order without letting an observer disable process deadlines."""
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
     publishers = {
         "note": (str, lifetime.publish_note),
         "delta": (str, lifetime.publish_delta),
@@ -355,9 +368,11 @@ def _worker_start(
 ):
     # Startup still uses AS. Restore only the inherited AS limit after the
     # supervising parent has checked RSS and released this trusted handshake.
-    previous_as = None
-    if initialize and multiprocessing.parent_process() is not None:
-        previous_as = _apply_resource_limits(browser=True) if browser else _apply_resource_limits()
+    previous_as = (
+        (_apply_resource_limits(browser=True) if browser else _apply_resource_limits())
+        if initialize and multiprocessing.parent_process() is not None
+        else None
+    )
     if initialize and os.name != "nt":
         os.setsid()
     control.send_bytes(b"r")
@@ -403,6 +418,7 @@ def _worker(
         scoped_route_metadata,
     )
     from app.neuro_bus.tracer import TraceContext
+    from app.utils.operational_errors import BOUNDARY_ERRORS
 
     # 真正执行工具前先收敛子进程能力：环境清洗 + POSIX 资源软限制。
     # 失败只告警，调度语义仍由父进程 deadline 与进程回收保证。
@@ -572,7 +588,7 @@ def _process_namespace_matches() -> bool:
     return False
 
 
-def _reap(process, *, observed=()) -> bool:
+def _reap(process, *, observed=(), allow_exited_root: bool = False) -> bool:
     children = []
     tree_collected = False
     clean = True
@@ -585,6 +601,15 @@ def _reap(process, *, observed=()) -> bool:
         children = list(observed)
         root = psutil.Process(process.pid)
         root.suspend()
+        # SIGSTOP is asynchronous. An exited root is complete only when its
+        # private supervisor has verified Linux orphan adoption.
+        stop_deadline = time.monotonic() + 0.1
+        while (status := root.status()) not in {
+            psutil.STATUS_STOPPED,
+            psutil.STATUS_ZOMBIE,
+            psutil.STATUS_DEAD,
+        } and time.monotonic() < stop_deadline:
+            time.sleep(0.001)
         # Freeze parents before collecting descendants to stop ordinary spawn races.
         for _ in range(2):
             for parent in [root, *observed]:
@@ -600,7 +625,9 @@ def _reap(process, *, observed=()) -> bool:
                             continue
                 except psutil.NoSuchProcess:
                     continue
-        tree_collected = True
+        tree_collected = status == psutil.STATUS_STOPPED or (
+            allow_exited_root and status in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD}
+        )
     except psutil.NoSuchProcess:
         pass
     except psutil.Error:
@@ -636,6 +663,28 @@ def _reap(process, *, observed=()) -> bool:
     except psutil.Error:
         return False
     return clean and tree_collected and not process.is_alive()
+
+
+def _supervise_worker(target, executor, args, connections, lifecycle):
+    supervise_worker(
+        target,
+        executor,
+        args,
+        connections,
+        lifecycle,
+        reap=_reap,
+        namespace_matches=_process_namespace_matches,
+        adopt=_enable_orphan_adoption,
+    )
+
+
+class _OwnedWorker(OwnedWorker):
+    """Bind the shared lifecycle to this tool boundary's original ownership guards."""
+
+    def __init__(self, ctx, target, executor, args, connections):
+        super().__init__(
+            ctx, target, executor, args, connections, supervisor=_supervise_worker, reap=_reap
+        )
 
 
 def _ignore_missing_cleanup_entry(_function, _path, error):
@@ -802,10 +851,11 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
     relay = None
     folder = tempfile.mkdtemp(prefix="xcagi-tool-")
     llm_scope = capture_worker_llm_scope(context)
-    process = ctx.Process(
-        target=_worker,
-        args=(
-            type(executor),
+    process = _OwnedWorker(
+        ctx,
+        _worker,
+        type(executor),
+        (
             payload,
             folder,
             control_out,
@@ -819,6 +869,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
             surface_claim,
             memory_limit is not None,
         ),
+        (control_out, sender),
     )
     armed = False
     early_exit = False
@@ -853,7 +904,11 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
                 relay = None
                 lifetime.worker_finished()
                 raise
-        ready, exited = supervisor.wait_ack(control_in, b"r", deadline)
+        ready, exited = (
+            supervisor.wait_ack(control_in, b"r", deadline)
+            if process.wait_ready(deadline, check=supervisor.check)
+            else (False, False)
+        )
         if ready and not exited and time.monotonic() < deadline:
             supervisor.check()
             supervisor.release(start)
@@ -864,7 +919,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
                 deadline,
                 renew=renew_file_deadline if file_deadlines else None,
             )
-            early_exit = not done and exited and time.monotonic() < deadline
+            early_exit = not done and exited and process.exited() and time.monotonic() < deadline
             if done:
                 result = json.loads(Path(folder, "result").read_text(encoding="utf-8"))
                 if (

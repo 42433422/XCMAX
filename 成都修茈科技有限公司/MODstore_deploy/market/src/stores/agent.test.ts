@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAgentStore } from './agent'
 import { useAuthStore } from './auth'
+import { getActionLog } from '../composables/agent/useActionExecutor'
 
 // 模拟 localStorage
 const localStorageMock = (() => {
@@ -26,6 +27,7 @@ describe('useAgentStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorageMock.clear()
+    sessionStorage.clear()
   })
 
   it('初始状态 isOpen=false', () => {
@@ -99,6 +101,22 @@ describe('useAgentStore', () => {
     store.addMessage({ id: '1', role: 'user', content: 'hello', timestamp: Date.now() })
     store.clearMessages()
     expect(store.messages).toHaveLength(0)
+  })
+
+  it('不认领无账号归属的旧操作日志，账号切换清掉当前小 C 的操作历史', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'A', is_admin: true }
+    const entry = { ts: 1, action: 'navigate', label: '账号 A 私有页面', risk: 'low', success: true }
+    sessionStorage.setItem('xc_butler_action_log', JSON.stringify([entry]))
+    useAgentStore()
+    const restored = getActionLog()
+    sessionStorage.setItem('xc_butler_action_log', JSON.stringify([entry]))
+    const currentAccount = getActionLog()
+    auth.user = { id: 22, username: 'B', is_admin: true }
+
+    expect(restored).toEqual([])
+    expect(currentAccount).toEqual([entry])
+    expect(getActionLog()).toEqual([])
   })
 
   it('savePosition 持久化位置到 localStorage', () => {

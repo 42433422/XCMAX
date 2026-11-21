@@ -13,7 +13,14 @@ def _facade():
 
 def _register_scheduler_phase_01():
     from modstore_server.mac_control_worker import poll_period, run_mac_control_sync
-    from modstore_server.workflow_scheduler import _env_bool
+    from modstore_server.workflow_scheduler import (
+        IntervalTrigger,
+        _cleanup_misfire_grace_time,
+        _env_bool,
+        _run_scheduler_startup_probe,
+        _scheduler,
+        logger,
+    )
 
     _facade()._scheduler.add_job(
         run_mac_control_sync,
@@ -64,6 +71,30 @@ def _register_scheduler_phase_01():
     _facade().autonomy_scheduler.register_autonomy_jobs(
         _facade()._scheduler, _facade()._scheduler_startup_recovery_deadlines
     )
+
+    graph_return_cursor = 0
+
+    def _finish_returned_customer_graphs() -> None:
+        from modstore_server.workflow_customer_finalization import (
+            recover_returned_customer_workflows,
+        )
+
+        nonlocal graph_return_cursor
+        result = recover_returned_customer_workflows(after=graph_return_cursor)
+        graph_return_cursor = result["next_cursor"]
+        if result["checked"]:
+            logger.info("customer graph finalization recovery: %s", result)
+
+    _scheduler.add_job(
+        _finish_returned_customer_graphs,
+        IntervalTrigger(minutes=1),
+        id="workflow_customer_finalization",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=_cleanup_misfire_grace_time(),
+    )
+    _run_scheduler_startup_probe("workflow_customer_finalization", _finish_returned_customer_graphs)
 
     def _dead_letter_reconcile_job() -> None:
         try:

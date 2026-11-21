@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import io
 import json
 import os
 import re
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
@@ -468,59 +468,90 @@ def _retain_artifact(request_id, artifact_digest, root):
     return archive
 
 
-def _download_artifact(repo, artifact_id, root, expected_digest):
+def _download_artifact(
+    repo,
+    artifact_id,
+    root,
+    expected_digest,
+    *,
+    max_bytes=32 * 1024 * 1024,
+    max_unpacked_bytes=64 * 1024 * 1024,
+    max_members=4096,
+):
     # GitHub returns a signed storage URL. Never forward its API credential to storage.
-    with httpx.Client(timeout=30, trust_env=False, follow_redirects=False) as client:
-        response = client.get(
+    def receive(response, target):
+        response.raise_for_status()
+        digest, size = hashlib.sha256(), 0
+        for chunk in response.iter_bytes():
+            size += len(chunk)
+            if size > max_bytes:
+                raise ValueError("证据包超出大小限制")
+            digest.update(chunk)
+            target.write(chunk)
+        if expected_digest != "sha256:" + digest.hexdigest():
+            raise ValueError("GitHub 证据包摘要不匹配")
+        target.seek(0)
+
+    with (
+        tempfile.TemporaryFile() as data,
+        httpx.Client(timeout=30, trust_env=False, follow_redirects=False) as client,
+    ):
+        with client.stream(
+            "GET",
             f"https://api.github.com/repos/{repo}/actions/artifacts/{int(artifact_id)}/zip",
             headers={"Authorization": "Bearer " + os.environ.get("MODSTORE_GITHUB_TOKEN", "")},
-        )
-        if response.status_code != 302:
-            response.raise_for_status()
-        if response.status_code == 302:
-            from urllib.parse import urlparse
+        ) as response:
+            if response.status_code == 302:
+                from urllib.parse import urlparse
 
-            url = response.headers["location"]
-            parsed = urlparse(url)
+                url = response.headers["location"]
+                parsed = urlparse(url)
+                if (
+                    parsed.scheme != "https"
+                    or parsed.username
+                    or parsed.password
+                    or not parsed.hostname
+                    or not (
+                        parsed.hostname.endswith(".blob.core.windows.net")
+                        or parsed.hostname.endswith(".githubusercontent.com")
+                    )
+                ):
+                    raise ValueError("不受信任的 GitHub 证据下载地址")
+                with client.stream("GET", url) as download:
+                    receive(download, data)
+            else:
+                receive(response, data)
+        with zipfile.ZipFile(data) as archive:
             if (
-                parsed.scheme != "https"
-                or parsed.username
-                or parsed.password
-                or not parsed.hostname
-                or not (
-                    parsed.hostname.endswith(".blob.core.windows.net")
-                    or parsed.hostname.endswith(".githubusercontent.com")
-                )
+                len(archive.infolist()) > max_members
+                or sum(item.file_size for item in archive.infolist()) > max_unpacked_bytes
             ):
-                raise ValueError("不受信任的 GitHub 证据下载地址")
-            data = bytearray()
-            with client.stream("GET", url) as download:
-                download.raise_for_status()
-                for chunk in download.iter_bytes():
-                    data.extend(chunk)
-                    if len(data) > 32 * 1024 * 1024:
-                        raise ValueError("证据包超出大小限制")
-        else:
-            data = response.content
-        if len(data) > 32 * 1024 * 1024:
-            raise ValueError("证据包超出大小限制")
-        if expected_digest != "sha256:" + hashlib.sha256(data).hexdigest():
-            raise ValueError("GitHub 证据包摘要不匹配")
-        with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            if sum(item.file_size for item in archive.infolist()) > 64 * 1024 * 1024:
                 raise ValueError("证据包展开超出大小限制")
             seen = set()
             for item in archive.infolist():
                 path = root / item.filename
                 if (
                     not path.resolve().is_relative_to(root.resolve())
-                    or item.filename in seen
+                    or path.resolve() in seen
+                    or Path(item.filename).is_absolute()
+                    or ".." in Path(item.filename).parts
                     or "\\" in item.filename
                     or (item.external_attr >> 16) & 0o170000 == 0o120000
+                    or (path.exists() and not item.is_dir())
                 ):
                     raise ValueError("证据包包含无效路径")
-                seen.add(item.filename)
-                if item.is_dir():
-                    continue
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(archive.read(item))
+                seen.add(path.resolve())
+            with tempfile.TemporaryDirectory(prefix=".artifact-", dir=root) as temporary:
+                stage = Path(temporary)
+                for item in archive.infolist():
+                    if item.is_dir():
+                        continue
+                    path = stage / item.filename
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(item) as source, path.open("wb") as target:
+                        shutil.copyfileobj(source, target, length=1024 * 1024)
+                for path in stage.rglob("*"):
+                    if path.is_file():
+                        target = root / path.relative_to(stage)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        path.replace(target)

@@ -18,18 +18,6 @@ def _success(**fields: Any) -> dict[str, Any]:
 
 
 _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
-    ("desktop_automation", "computer_execute"): [
-        _sample(
-            "verify_browser_page",
-            {
-                "request_id": "computer-example-1",
-                "target": "browser",
-                "steps": [{"action": "navigate", "url": "https://example.com/"}],
-                "verification": {"kind": "url", "expected": "https://example.com/"},
-            },
-            _success(executed=True, verified=True, request_id="computer-example-1"),
-        )
-    ],
     ("browser", "observe"): [
         _sample(
             "read_approved_site",
@@ -52,6 +40,18 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 verified=True,
                 verification=[{"kind": "text", "status": "passed"}],
             ),
+        )
+    ],
+    ("desktop_automation", "computer_execute"): [
+        _sample(
+            "verify_browser_page",
+            {
+                "request_id": "computer-example-1",
+                "target": "browser",
+                "steps": [{"action": "navigate", "url": "https://example.com/"}],
+                "verification": {"kind": "url", "expected": "https://example.com/"},
+            },
+            _success(executed=True, verified=True, request_id="computer-example-1"),
         )
     ],
     ("sales", "create_order"): [
@@ -878,17 +878,19 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 "request_id": "ocr-request-1",
                 "image_url": "https://example.invalid/label.png",
                 "ocr_type": "general",
-                "user_id": "tenant-a",
             },
-            _success(
-                message="OCR 请求已发布",
-                request_id="ocr-request-1",
-                image_url="https://example.invalid/label.png",
-                ocr_type="general",
-                user_id="tenant-a",
-                event="ocr.requested",
-                published=True,
-            ),
+            {
+                "success": False,
+                "execution_state": "pending",
+                "retryable": False,
+                "message": "OCR 请求已发布",
+                "request_id": "ocr-request-1",
+                "image_url": "https://example.invalid/label.png",
+                "ocr_type": "general",
+                "user_id": "tenant-a",
+                "event": "ocr.requested",
+                "published": True,
+            },
         )
     ],
     ("ocr", "extract"): [
@@ -1060,7 +1062,6 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
         _sample(
             "propose_memory_v2_candidate",
             {
-                "user_id": "tenant-a",
                 "memory_type": "preference",
                 "key": "favorite_customer",
                 "value": "ACME Trading",
@@ -1081,7 +1082,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "confirm"): [
         _sample(
             "confirm_memory_v2_candidate",
-            {"user_id": "tenant-a", "memory_id": "mem_1"},
+            {"memory_id": "mem_1"},
             _success(
                 memory={"memory_id": "mem_1", "status": "active", "eligible_for_planner": True}
             ),
@@ -1090,7 +1091,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "reject"): [
         _sample(
             "reject_memory_v2_candidate",
-            {"user_id": "tenant-a", "memory_id": "mem_1", "reason": "not useful"},
+            {"memory_id": "mem_1", "reason": "not useful"},
             _success(memory={"memory_id": "mem_1", "status": "rejected"}),
         )
     ],
@@ -1098,7 +1099,6 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
         _sample(
             "correct_memory_v2_record",
             {
-                "user_id": "tenant-a",
                 "memory_id": "mem_1",
                 "key": "favorite_customer",
                 "value": "ACME Trading Ltd.",
@@ -1116,7 +1116,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "delete"): [
         _sample(
             "delete_memory_v2_record",
-            {"user_id": "tenant-a", "memory_id": "mem_1", "reason": "user removed memory"},
+            {"memory_id": "mem_1", "reason": "user removed memory"},
             _success(memory={"memory_id": "mem_1", "status": "deleted"}),
         )
     ],

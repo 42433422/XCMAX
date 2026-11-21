@@ -17,6 +17,8 @@ from modstore_server.employee_executor_policies import (
     _is_transient_llm_error as _is_transient_llm_error,
     execution_blocks_redispatch,
 )
+from modstore_server.xiaoc_life_chat import manual_life_scope_active
+from modstore_server.xiaoc_life_policy import LifePolicyError
 
 # --- from employee_executor_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -806,6 +808,7 @@ async def _cognition_real(
         "items": [],
         "error": "",
     }
+    rag_chunks, rag_attempt = [], None
     if knowledge_cfg.get("enabled"):
         try:
             from modstore_server import rag_service
@@ -822,7 +825,7 @@ async def _cognition_real(
                 top_k=top_k,
                 min_score=min_score,
             )
-            messages = rag_service.inject_rag_into_messages(messages, chunks)
+            rag_chunks = chunks
             rag_meta = {
                 "enabled": True,
                 "items": [c.to_dict() for c in chunks],
@@ -831,6 +834,21 @@ async def _cognition_real(
         except RECOVERABLE_ERRORS as e:
             _facade().logger.warning("cognition.knowledge retrieve 失败: %s", e)
             rag_meta = {"enabled": True, "items": [], "error": str(e)}
+    if rag_chunks:
+        from modstore_server.rag_prompt_feedback import prepare
+
+        # This is outside the optional retrieval fallback: a failed exposure or
+        # changed source authorization must stop the actual model dispatch.
+        messages, rag_attempt = prepare(
+            messages,
+            rag_chunks,
+            user_id=user_id,
+            employee_id=employee_id,
+            task=user_input,
+            provider=provider,
+            model=model_name,
+            allow_experiment=experiment_assignment is None,
+        )
     from modstore_server.mod_employee_agent_runner import _llm_timeout_seconds
 
     llm_timeout_s = _llm_timeout_seconds()
@@ -869,6 +887,26 @@ async def _cognition_real(
             "error": f"employee cognition LLM timeout ({int(llm_timeout_s)}s)",
         }
     finally:
+        if rag_attempt is not None:
+            from modstore_server.rag_prompt_feedback import complete
+
+            evidence = complete(
+                rag_attempt, result=result, duration_ms=(time.monotonic() - call_started) * 1000
+            )
+            rag_meta["verification"] = {
+                key: evidence[key]
+                for key in (
+                    "measurement_scope",
+                    "success",
+                    "reason",
+                    "business_verified",
+                    "metric_admitted",
+                )
+            }
+            if evidence["reason"] == "rag_source_authorization_changed":
+                result = {"ok": False, "error": "rag_source_authorization_changed"}
+                rag_meta["items"] = []
+                rag_meta["count"] = 0
         if experiment_assignment is not None:
             from modstore_server.retort_experiment_runtime import record_observation
 
@@ -1914,7 +1952,35 @@ def _actions_real(
     for handler in handlers:
         from modstore_server.strategic_portfolio_usage import remaining_execution_seconds
 
-        remaining_seconds = remaining_execution_seconds()
+        try:
+            remaining_seconds = remaining_execution_seconds()
+        except LifePolicyError as exc:
+            if not manual_life_scope_active():
+                raise
+            from modstore_server.customer_issue_delivery_contract import (
+                execution_requires_reconciliation,
+            )
+
+            return {
+                "task": task,
+                "handlers": handlers,
+                "outputs": [
+                    *outputs,
+                    {
+                        "handler": str(handler),
+                        "ok": False,
+                        "status": "blocked",
+                        "outcome": "not_started",
+                        "executed": False,
+                        "error": str(exc),
+                    },
+                ],
+                "status": "blocked",
+                "blocked_by_life_policy": True,
+                "requires_reconciliation": execution_requires_reconciliation({"outputs": outputs}),
+                "error": str(exc),
+                "summary": f"已保留 {len(outputs)} 条原动作回执；授权变化后未启动后续动作。",
+            }
         if (skip_local_after_para_dispatch or para_only) and str(
             handler
         ) in _LOCAL_FALLBACK_HANDLERS:
@@ -2303,6 +2369,8 @@ def _handlers_execution_ok(result: _facade().Dict[str, _facade().Any]) -> bool:
     用于 Para 离线后的本地回退：``para_delegate`` 失败但 ``agent``/``vibe_edit``
     成功时不应整单 handler_failed。
     """
+    if result.get("blocked_by_life_policy"):
+        return False
     outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
     if not outputs:
         return True

@@ -64,13 +64,13 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     writeFileSync(join(directory, 'execution.json'), JSON.stringify(accepted) + '\n');
     return accepted.conclusion === 'success' ? 0 : 1;
   }
-  const budgeted = accepted.strategic_budget?.kind === 'github_opencode_workspace';
-  const isolatedFeedback = customerRepair && env.DEVFLEET_FORCE_OPENCODE === '1'
+  const budgeted = accepted.strategic_budget?.kind === (repair ? 'original_pr_repair' : 'github_opencode_workspace');
+  const isolatedFeedback = (customerRepair || repair) && env.DEVFLEET_FORCE_OPENCODE === '1'
     && env.PARA_PLATFORM_POOL === '1'
     && accepted.model_allocation?.execution_isolation === OPENCODE_CREDENTIAL_ISOLATION;
-  if (repair || (customerRepair && !isolatedFeedback)) {
+  if ((repair && (!budgeted || !isolatedFeedback)) || (customerRepair && !isolatedFeedback)) {
     // Raw keys and login material remain forbidden. Customer repair requires the
-    // admitted native SRT mask profile; original-PR repair keeps its existing gate.
+    // admitted native SRT mask profile and its original approved company task.
     const reason = customerRepair ? 'customer_feedback_requires_non_exportable_model_credentials'
       : 'original_pr_repair_requires_non_exportable_model_credentials';
     mkdirSync(directory, { recursive: true });
@@ -180,6 +180,16 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
       }
       const path = join(env.PARA_GITHUB_CANDIDATE_DIR || directory, 'manifest.json');
       if (stage === 'execute' && existsSync(path) && current.publication_candidate) {
+        if (repair && !(current.publication_authorization?.schema === 'strategic-pr-publication/v1'
+            && current.publication_authorization.authorized === true
+            && current.publication_authorization.usage_complete === true
+            && current.publication_authorization.request_id === request
+            && current.publication_authorization.source_sha === accepted.source_sha
+            && current.publication_authorization.controller_sha === env.GITHUB_SHA)) {
+          if (current.finished) return 1;
+          await sleep(10000);
+          continue;
+        }
         const manifest = JSON.parse(readFileSync(path, 'utf8'));
         if (JSON.stringify(manifest) !== JSON.stringify(current.publication_candidate)) {
           // Compare fields, not producer-controlled key order.
@@ -192,7 +202,8 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
         writeFileSync(join(directory, 'execution.json'), JSON.stringify({ request_id: request,
           run_id: run, status: 'awaiting_publication', finished: false,
           ...((isolatedFeedback || phase) ? { execution_isolation: OPENCODE_CREDENTIAL_ISOLATION,
-            source_sha: env.GITHUB_SHA } : {}),
+            source_sha: repair ? accepted.source_sha : env.GITHUB_SHA,
+            ...(repair ? { controller_sha: env.GITHUB_SHA } : {}) } : {}),
           candidate_sha: manifest.commit_sha }) + '\n');
         return 0; // This stage is done; neither the team nor delivery is complete.
       }

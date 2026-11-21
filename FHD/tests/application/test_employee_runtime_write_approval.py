@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -33,7 +33,16 @@ def test_write_gate_never_creates_an_unresumable_approval(monkeypatch, name, arg
     execute.assert_not_called()
 
 
-def test_write_gate_stages_canonical_run_and_returns_original_receipt(monkeypatch):
+@pytest.mark.parametrize(
+    "tool_id,action,params",
+    [
+        ("customers", "batch_delete", {"ids": [1]}),
+        ("products", "batch_create", {"products": [{"name": "test-product"}]}),
+    ],
+)
+def test_write_gate_stages_canonical_run_and_returns_original_receipt(
+    monkeypatch, tool_id, action, params
+):
     receipt = {
         "success": False,
         "execution_state": "waiting_approval",
@@ -47,21 +56,41 @@ def test_write_gate_stages_canonical_run_and_returns_original_receipt(monkeypatc
     )
     context = {"user_id": "7", "tenant_id": 1, "turn_id": "turn"}
     gate = build_write_approval_gate("employee", runtime_context=context)
-    verdict = gate("import_excel_to_database", {"file_path": "upload.xlsx"})
+    verdict = gate(
+        tool_id,
+        {"action": action, **params},
+        runtime_context={"call_id": "original-call", "employee_id": "parent-employee"},
+    )
     assert verdict["ok"] is False
     assert verdict["pending_approval"] is True
     assert verdict["execution_result"] == receipt
     assert verdict["agent_run_id"] == "run-original"
     execute.assert_called_once_with(
         {
-            "tool_id": "import_excel_to_database",
-            "action": "import",
-            "params": {"file_path": "upload.xlsx"},
+            "tool_id": tool_id,
+            "action": action,
+            "params": params,
         },
         workspace_root=None,
-        runtime_context=context,
+        runtime_context={**context, "call_id": "original-call", "employee_id": "employee"},
         require_approval=True,
     )
+
+
+def test_write_gate_cannot_inherit_parent_identity_when_current_call_is_missing(monkeypatch):
+    execute = MagicMock(side_effect=AssertionError("a missing call cannot create an approval"))
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability", execute
+    )
+    gate = build_write_approval_gate(
+        "employee", runtime_context={"user_id": "7", "turn_id": "turn", "call_id": "parent"}
+    )
+    verdict = gate(
+        "products", {"action": "batch_delete", "ids": [1]}, runtime_context={"call_id": ""}
+    )
+    assert verdict["ok"] is False and verdict["execution_state"] == "blocked"
+    assert verdict["retryable"] is False
+    execute.assert_not_called()
 
 
 class TestComposeGates:
@@ -94,29 +123,95 @@ class TestComposeGates:
         combined = compose_gates(boom, g_ok)
         assert combined("t", {})["ok"] is False
 
+    def test_type_error_after_gate_admission_never_retries_without_context(self):
+        calls = []
+
+        def admitted(name, args, *, runtime_context=None):
+            calls.append(runtime_context)
+            raise TypeError("failure after staging the original approval")
+
+        following = MagicMock(return_value={"ok": True})
+        context = {"call_id": "original-call", "employee_id": "employee"}
+        verdict = compose_gates(lambda name, args: {"ok": True}, admitted, following)(
+            "write", {}, runtime_context=context
+        )
+        assert verdict["ok"] is False
+        assert verdict["execution_state"] == "unknown" and verdict["retryable"] is False
+        assert verdict["requires_reconciliation"] is True
+        assert calls == [context]
+        following.assert_not_called()
+
+    def test_keyword_gate_receives_the_original_server_context_once(self):
+        calls = []
+
+        def keyword_gate(name, args, **options):
+            calls.append((name, args, options))
+            return {"ok": True}
+
+        context = {"call_id": "original-call", "employee_id": "employee"}
+        args = {"action": "write"}
+        verdict = compose_gates(keyword_gate)("tool", args, runtime_context=context)
+
+        assert verdict["ok"] is True
+        assert calls == [("tool", args, {"runtime_context": context})]
+
+    def test_incompatible_signature_is_rejected_before_any_gate_call(self):
+        calls = []
+
+        def incompatible(name, args, *, required_approval, runtime_context=None):
+            calls.append((required_approval, runtime_context))
+            return {"ok": True}
+
+        following = MagicMock(return_value={"ok": True})
+        verdict = compose_gates(incompatible, following)(
+            "write", {}, runtime_context={"call_id": "original-call"}
+        )
+
+        assert verdict["ok"] is False and verdict["blocked"] is True
+        assert calls == []
+        following.assert_not_called()
+
     @pytest.mark.parametrize("verdict", [{}, None, [], {"ok": 1}, {"ok": "yes"}])
     def test_invalid_verdict_blocks(self, verdict):
         assert compose_gates(lambda name, args: verdict)("t", {})["ok"] is False
 
 
 def test_late_registered_write_uses_live_policy_and_only_server_context(monkeypatch):
-    trusted = {"tenant_id": "owner"}
+    context = {"tenant_id": "owner", "user_id": "7", "turn_id": "turn"}
     gate = build_write_approval_gate(
-        "employee", {"tenant_id": "attacker", "human_approved": True}, runtime_context=trusted
+        "employee",
+        {"tenant_id": "attacker", "human_approved": True},
+        runtime_context=context,
     )
     monkeypatch.setattr(
         "resources.config.risk_actions_loader.list_write_tools", lambda: {"late_write"}
     )
     monkeypatch.setattr(
         "resources.config.risk_actions_loader.get_workflow_tools_from_registry",
-        lambda: {"late_write": {"actions": {"write": {"idempotent": False}}}},
+        lambda: {"late_write": {"actions": {"write": {"risk": "high", "idempotent": False}}}},
     )
-    receipt = {"success": False, "pending_approval": True, "agent_run_id": "original-run"}
-    execute = MagicMock(return_value=json.dumps(receipt))
+    execute = MagicMock(
+        return_value=json.dumps(
+            {
+                "success": False,
+                "execution_state": "waiting_approval",
+                "approval_request_id": "persisted-approval",
+            }
+        )
+    )
     monkeypatch.setattr(
         "app.application.tools.registered_capabilities.execute_registered_capability", execute
     )
-    result = gate("late_write", {"human_approved": True, "approved_by": "attacker"})
+    result = gate(
+        "late_write",
+        {"human_approved": True, "approved_by": "attacker"},
+        runtime_context={"call_id": "original-call"},
+    )
     assert result["ok"] is False and result["pending_approval"] is True
-    assert execute.call_args.kwargs["runtime_context"] == trusted
+    assert execute.call_args.kwargs["runtime_context"] == {
+        **context,
+        "call_id": "original-call",
+        "employee_id": "employee",
+    }
+    assert context == {"tenant_id": "owner", "user_id": "7", "turn_id": "turn"}
     assert execute.call_args.kwargs["require_approval"] is True

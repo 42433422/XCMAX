@@ -1,6 +1,5 @@
 import type { Ref } from 'vue'
 import { extractAgentRunId, type useAgentRunEventSync } from '../useAgentRunEvents'
-import type { useChatDbTokenGate } from '../useChatDbTokenGate'
 import type { useChatExcelContext } from '../useChatExcelContext'
 import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
@@ -52,10 +51,7 @@ export interface ChatOrchestrationRemoteRoundDeps {
   retainConversationMessages?: ChatMessagesApi['retainConversationMessages']
   ttsEnabled: Ref<boolean>
   chatSessionActivity: ReturnType<typeof useChatSessionActivity>
-  pendingDbWriteChatRetryMessages: Ref<string[] | null>
-  plannerWriteUnlockResumeDraft: Ref<string>
   chatRequest: ReturnType<typeof useChatRequest>
-  handleChatRequiresToken: ReturnType<typeof useChatDbTokenGate>['handleChatRequiresToken']
   resolveExcelAnalysisContextForRequest: ReturnType<typeof useChatExcelContext>['resolveExcelAnalysisContextForRequest']
   multimodalPendingCount: ReturnType<typeof useChatExcelContext>['multimodalPendingCount']
   stateSteps: Ref<Array<{ node_id: string; status: 'succeeded' | 'failed'; output_summary: string }>>
@@ -87,10 +83,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     applyPlainTextToMessageIndex,
     ttsEnabled,
     chatSessionActivity,
-    pendingDbWriteChatRetryMessages,
-    plannerWriteUnlockResumeDraft,
     chatRequest,
-    handleChatRequiresToken,
     resolveExcelAnalysisContextForRequest,
     multimodalPendingCount,
     stateSteps,
@@ -235,10 +228,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     }
     const addRoundMessage = async (text: string, extras?: UiChatMessageExtras) => {
       if (round.isActive()) addMessage(text, 'ai', { turnId: requestScope.turnId, ...extras }, { speak: ttsEnabled.value })
-    }
-    if (round.isActive() && !opts?.fromWriteUnlock) {
-      pendingDbWriteChatRetryMessages.value = null
-      plannerWriteUnlockResumeDraft.value = ''
     }
     const primaryText = remoteMessages[0] || ''
     const aiModBrief = remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''
@@ -566,7 +555,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             if (ev.type === 'done') {
               doneResult = ev.result
               receivedDone = true
-              awaitingAuthorization = false
             } else if (ev.type === 'error') {
               sseError = String(ev.message || '流式接口错误')
               sseOutcomeUnknown = Boolean(ev.requires_reconciliation || ev.execution_outcome === 'unknown')
@@ -635,7 +623,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } else if (ev.type === 'done') {
             doneResult = ev.result
             receivedDone = true
-            awaitingAuthorization = false
           } else if (ev.type === 'error') {
             consumeRoute(ev.route_metadata)
             streamRunId = ev.run_id || streamRunId
@@ -655,12 +642,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               cancelStreamFrame()
               applyStreamText(streamPlain)
             }
-            if (!round.isActive()) return
-            handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
-            const upTok = String(tokenName || '').toUpperCase()
-            if (upTok.includes('WRITE') || /写入|导入|入库|二级|数据库写入|DB_WRITE/i.test(String(tokenDesc || ''))) {
-              plannerWriteUnlockResumeDraft.value = streamPlain
-            }
           }
         }
         plannerEventHandler = handlePlannerEventRef
@@ -673,8 +654,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (roundResult.error && !receivedDone) throw roundResult.error
         // 请求已成功送出并拿到流：本轮工件 id 用毕即清，避免串到下一轮。
         completeArtifacts()
-        if (awaitingAuthorization) {
+        if (awaitingAuthorization && plannerExecutionState(doneResult) !== 'unknown') {
           round.setStatus('waiting')
+          if (canUpdateStream() && streamMessage) {
+            streamMessage.workflowAction = 'waiting_auth'
+            delete streamMessage.streamingShell
+          }
           if (streamRunId) syncStreamRun({ run_id: streamRunId })
           return
         }
@@ -713,7 +698,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             const result = await aiChatRound.resume(requestScope.turnId, replayController.signal)
             if (result.text) streamPlain = result.text
             // The replayed terminal receipt is authoritative even if the socket closes afterward.
-            resumed = !sseError && receivedDone && !awaitingAuthorization && isOwnerCurrent()
+            resumed = !sseError && receivedDone
+              && (!awaitingAuthorization || plannerExecutionState(doneResult) === 'unknown') && isOwnerCurrent()
           } catch {
             resumed = false
           } finally {
@@ -902,9 +888,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           if (isUnfinishedPlannerResponse(part)) {
             await showUnfinished(part)
           } else if (part && part.success) {
-            if (part.requires_token) {
-              handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
-            }
             await addRoundMessage(part.response || '', responseExtras(part))
             attachBusinessResultToLastAiMessage(part)
             if (!round.isActive()) return
@@ -967,9 +950,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     }
 
     if (data.success) {
-      if (data?.requires_token) {
-        handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
-      }
       await addRoundMessage(data.response || '', responseExtras(data))
       observeModelOutcome(String(data.response || data.message || ''), data)
       if (!round.isActive()) return

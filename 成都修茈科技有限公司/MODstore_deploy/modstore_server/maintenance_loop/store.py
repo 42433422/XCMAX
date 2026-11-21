@@ -153,6 +153,9 @@ def _append_ledger(record: Dict[str, Any]) -> None:
     record.setdefault("ledger_schema_version", 2)
     path = ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    durable_outcome = record.get("phase") == "complete" and isinstance(
+        record.get("policy_decision"), dict
+    )
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     with os.fdopen(fd, "a", encoding="utf-8") as fh:
         if hasattr(os, "fchmod"):
@@ -164,7 +167,7 @@ def _append_ledger(record: Dict[str, Any]) -> None:
         except (ImportError, OSError):
             pass
         fh.write(_dumps_ledger(record) + "\n")
-        if record.get("event") in {
+        if durable_outcome or record.get("event") in {
             "deploy_dispatch_intent",
             "deploy_dispatch_bound",
             "post_deploy_verified",
@@ -174,7 +177,8 @@ def _append_ledger(record: Dict[str, Any]) -> None:
             fh.flush()
             os.fsync(fh.fileno())
     if (
-        record.get("event")
+        durable_outcome
+        or record.get("event")
         in {
             "deploy_dispatch_intent",
             "post_deploy_verified",
@@ -214,6 +218,41 @@ def _read_ledger(
         config.logger.exception("failed to read self-maintenance ledger")
         return []
     return list(rows)[-limit:]
+
+
+def _has_recorded_outcome(final: Dict[str, Any]) -> bool:
+    """Read a lost append acknowledgement without double-counting completion."""
+    path = ledger_path()
+    if not path.exists():
+        return False
+    expected = json.loads(_dumps_ledger(final))
+    found = False
+    with path.open("r", encoding="utf-8") as handle:
+        try:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+        except ImportError:
+            pass
+        while raw := handle.readline(2 * 1024 * 1024 + 1):
+            if len(raw) > 2 * 1024 * 1024 or not raw.endswith("\n"):
+                raise ValueError("outcome_ledger_incomplete")
+            if not raw.strip():
+                continue
+            row = json.loads(raw)
+            if not isinstance(row, dict):
+                raise ValueError("outcome_ledger_invalid")
+            if row.get("phase") != "complete" or row.get("run_id") != final.get("run_id"):
+                continue
+            observed = {
+                key: value
+                for key, value in row.items()
+                if key not in {"correlation_id", "ledger_schema_version"}
+            }
+            if observed != expected:
+                raise ValueError("outcome_ledger_identity_conflict")
+            found = True
+    return found
 
 
 DELIVERY_RECOVERY_ROWS = 256
@@ -323,7 +362,14 @@ def _pending_delivery_page(
                     and not any(item["run_id"] == row["run_id"] for item in candidates)
                 ):
                     candidates.append(
-                        {key: str(row.get(key) or "").strip() for key in _DELIVERY_BINDING}
+                        {
+                            **{key: str(row.get(key) or "").strip() for key in _DELIVERY_BINDING},
+                            **(
+                                {"deployment_scope": row["deployment_scope"]}
+                                if isinstance(row.get("deployment_scope"), dict)
+                                else {}
+                            ),
+                        }
                     )
             state["offset"] = handle.tell()
             if not candidates:
@@ -345,6 +391,21 @@ def _pending_delivery_page(
                     state["other_requests"] = True
                 continue
             event = row.get("event")
+            policy = row.get("policy_decision") or {}
+            scope = row.get("deployment_scope") or (
+                policy.get("deployment_scope") if isinstance(policy, dict) else None
+            )
+            if (
+                (row.get("phase") == "complete" or event == "merge_requested")
+                and isinstance(scope, dict)
+                and all(
+                    str(row.get(key) or "").strip() == item[key] for key in _DELIVERY_BINDING[:3]
+                )
+            ):
+                item["conflict"] = item.get("conflict") or (
+                    "deployment_scope" in item and item["deployment_scope"] != scope
+                )
+                item["deployment_scope"] = scope
             if event == "merge_requested":
                 if item.get("projected") and not item.get("seen"):
                     for key in _DELIVERY_BINDING:
@@ -381,6 +442,11 @@ def _pending_delivery_page(
                 "status": "completed_merge_requested",
                 **(item.get("feedback") or {}),
                 "delivery_merge_sha": item.get("merge_sha", ""),
+                **(
+                    {"deployment_scope": item["deployment_scope"]}
+                    if "deployment_scope" in item
+                    else {}
+                ),
             }
             for item in candidates
             if (item.get("seen") or item.get("projected") or item.get("terminal"))
@@ -636,9 +702,9 @@ def _write_loop_memory(memory: Dict[str, Any]) -> None:
         fh.flush()
         os.fsync(fh.fileno())
     tmp.replace(path)
-    if hasattr(os, "O_DIRECTORY"):
-        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    if os.name != "nt":
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
-            os.fsync(directory_fd)
+            os.fsync(directory)
         finally:
-            os.close(directory_fd)
+            os.close(directory)

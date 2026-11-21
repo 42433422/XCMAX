@@ -17,9 +17,14 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
 
     assert orchestrator.AgentToolExecutor is original_executor
     assert result["execution_mode"] == "fixture_local"
-    assert result["failed"] == 0, [case for case in result["results"] if not case["passed"]]
-    assert result["passed"] == 123
-    assert len(result["results"]) == 123
+    failures = [
+        {"id": case["id"], "failed_checks": case["failed_checks"]}
+        for case in result["results"]
+        if not case["passed"]
+    ]
+    assert not failures, json.dumps(failures, ensure_ascii=False, indent=2)
+    assert result["passed"] == len(eval_module.load_tasks())
+    assert len(result["results"]) == len(eval_module.load_tasks())
     assert result["score"] == 1.0
     missing_spec = next(
         row
@@ -181,8 +186,12 @@ def test_legacy_shipment_fixture_does_not_admit_enterprise_tenant(monkeypatch) -
 def test_eval_route_receipts_do_not_leak_into_later_requests(monkeypatch) -> None:
     from app.application.agent_orchestrator import tool_permission
 
-    kinds = {"excel_vector_route_agent", "materials_route_agent", "products_route_agent"}
-    tasks = [task for task in eval_module.load_tasks() if task["kind"] in kinds]
+    tools = {"excel_vector_index", "materials", "products"}
+    tasks = [
+        task
+        for task in eval_module.load_tasks()
+        if task.get("capability", {}).get("tool_id") in tools
+    ]
     monkeypatch.setattr(eval_module, "load_tasks", lambda _path: tasks)
     claims = dict(tool_permission._IDEMPOTENCY)
     owners = set(tool_permission._LIVE_OWNERS)

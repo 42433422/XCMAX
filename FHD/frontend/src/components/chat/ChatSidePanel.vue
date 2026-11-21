@@ -1,5 +1,11 @@
 <template>
-  <div class="right-panel">
+  <component
+    :is="compact ? ElDrawer : 'div'"
+    :class="compact ? 'chat-side-drawer' : 'chat-side-panel-host'"
+    v-bind="compact ? { modelValue: open, appendToBody: true, direction: 'rtl', title: `${$t('chat.taskTab')} / ${$t('chat.conversationTab')}`, size: 'min(92vw, 420px)' } : {}"
+    @update:model-value="$emit('update:open', $event)"
+  >
+  <div id="chat-side-panel" class="right-panel">
     <div class="panel-header panel-header-tabs" role="tablist">
       <button
         type="button"
@@ -58,7 +64,7 @@
       @toggle-task-expanded="(id) => $emit('toggle-task-expanded', id)"
       @select-task="(task) => $emit('select-task', task)"
       @open-shipment-records="$emit('open-shipment-records')"
-      @jump-to-task-message="(task) => $emit('jump-to-task-message', task)"
+      @jump-to-task-message="(task) => { $emit('jump-to-task-message', task); $emit('update:open', false) }"
       @retry-task="(id) => $emit('retry-task', id)"
       @pause-task="(id) => $emit('pause-task', id)"
       @resume-task="(id) => $emit('resume-task', id)"
@@ -77,18 +83,23 @@
       :has-more="historyHasMore"
       :loading-more="historyLoadingMore"
       @load-more="$emit('load-more-history')"
-      @new="$emit('new-conversation')"
+      @new="$emit('new-conversation'); $emit('update:open', false)"
       @refresh="$emit('refresh-history')"
       @clear="$emit('clear-history-sessions')"
-      @load="(sessionId) => $emit('load-session', sessionId)"
+      @load="(sessionId) => { $emit('load-session', sessionId); $emit('update:open', false) }"
       @rename="(sessionId, title) => $emit('rename-session', sessionId, title)"
       @delete="(sessionId) => $emit('delete-session', sessionId)"
     />
   </div>
+  </component>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { ElDrawer } from 'element-plus'
+import 'element-plus/theme-chalk/base.css'
+import 'element-plus/theme-chalk/el-overlay.css'
+import 'element-plus/theme-chalk/el-drawer.css'
 import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
@@ -102,6 +113,8 @@ defineOptions({ name: 'ChatSidePanel' })
 useI18n()
 
 const props = defineProps<{
+  compact?: boolean
+  open?: boolean
   currentTask: ShipmentTask | null
   taskControlStates?: Record<string, TaskControlState>
   taskSyncState?: TaskSyncState
@@ -130,6 +143,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  'update:open': [open: boolean]
   'refresh-tasks': []
   'confirm-task': []
   'cancel-task': []
@@ -162,6 +176,7 @@ const emit = defineEmits<{
 }>()
 
 const activeTab = ref<'task' | 'conversation'>(props.currentTask || props.taskList.length ? 'task' : 'conversation')
+watch(() => props.compact, (compact) => { if (!compact) emit('update:open', false) })
 
 function activateConversationTab() {
   activeTab.value = 'conversation'
@@ -174,6 +189,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.chat-side-panel-host { display: contents; }
+:global(.chat-side-drawer .el-drawer__body) { display: flex; min-height: 0; padding: 0 0 env(safe-area-inset-bottom, 0px); }
+:global(.chat-side-drawer .el-drawer__header) { margin-bottom: 0; padding: max(8px, env(safe-area-inset-top, 0px)) 12px 8px; }
+:global(.chat-side-drawer .el-drawer__close-btn) { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+.chat-side-drawer .right-panel { flex: 1; width: 100%; min-width: 0; max-width: none; border: 0; border-radius: 0; }
+.chat-side-drawer .panel-tab { min-height: 44px; }
+
 .panel-header-tabs {
   display: flex;
   gap: 6px;

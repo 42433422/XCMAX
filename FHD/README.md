@@ -34,18 +34,23 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+管理端手机导航及智能对话的任务／会话抽屉复用锁文件中的 [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（MIT）Drawer，沿用其遮罩、焦点管理与 Escape 关闭；产品侧仅接入原侧栏、路由、任务事件及移动视口样式，不新增导航或聊天执行链。
+
 客来来工作区复用前端 lockfile 已固定的 [Vue 3.5.45](https://github.com/vuejs/core/tree/v3.5.45)、[Pinia 4.1.0](https://github.com/vuejs/pinia/tree/v4.1.0)、[Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（均为 MIT）。采用现有 tabs、table、switch、状态 store 和请求工具，不搬入 React/Tauri 页面或新增渠道 SDK；渠道协议仍由客来来统一负责。
+
 
 自主编程继续调用已集成的 [OpenAI Codex `rust-v0.153.4`](https://github.com/openai/codex/tree/rust-v0.153.4)（Apache-2.0），GitHub worker 的版本由既有 manifest/lock 固定；本机设备记录实际探测到的 CLI 版本，不能用云端锁版代替本机身份。`cli_output_stream.mjs` 依据同版原生 JSONL 事件与进程退出共同形成回执；`turn.completed`、退出码 0、完整事件流须同时成立，单条工具完成或文本不是整轮成功。保留可内部重试的错误事件，最终仍核对原生终态。旧安装入口转发同一 Para 执行器，真实执行开始后不因配额或工具失败重放；失败补丁保留用于核对，不能进入发布。版本、thread、usage 和执行回执沿原任务报告/outbox 回传。
 
+Para 首次派工先核对 `/api/health` 的 `task_request_recovery_version=1`，冻结全部设备计划和每次原请求正文。`POST /api/tasks` 与 `GET /api/tasks/by-request/:client_request_id` 都核对服务端计算的正文 SHA-256、原 task/subtask/device；消息轮询只读恢复，获授权的原调用续接只派发尚未发送的设备。配套服务 `42433422/devfleet-private` 沿用 SQLite 原生事务、唯一约束和既有重连调度，不能只升级客户端。客户端复用已固定的 [filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT）单例可重入文件锁，保留跨进程原请求互斥；未知结果不切换 webhook/CLI 重做。新任务须配置原 Para 地址、账号令牌、仓库与在线设备，旧服务在创建前停止；历史已知 task 仍可读取。
+
 工具回执复用现有 `app/domain/task_lifecycle/results.py`、SQL 幂等账本及 LangGraph，统一首次执行、已观察工具记录、后继节点与历史恢复的 unknown 语义；普通业务 `data.status` 不冒充执行状态。LangGraph 检查点包使用仓库带回补的版本，源码基线与补丁见 `packages/xcagi_langgraph_*/PROVENANCE.json`，不是声明上游发行了同名 fork 版本。[MCP Python SDK 2.3.0](https://github.com/modelcontextprotocol/python-sdk/tree/v2.3.0)（MIT）沿用原适配器及 `isError` 语义。账号、审批、原任务身份和副作用核对属于产品适配，不重建通用代理或编排引擎。完整缺口及验收边界见 [自治手册](../docs/autonomy.md#自主编程与工具执行)。
 
-小 C 桌面浮窗复用已锁定的 [Electron 45.3.4](https://github.com/electron/electron/tree/v45.3.4)（MIT）`BrowserWindow` 和 `Tray`，沿用现有小 C 对话组件和同一登录会话。
-
-浏览器执行复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0，`browser` extra 与 `uv.lock` 固定版本，与现有前端版本一致）的 BrowserContext、严格 locator、自动等待、断言、上传与下载。内部页面沿用 AIOPEN 光标；任务、模型路由、审批、租约、幂等和文件存储均复用现有 Agent。未引入另一套 Agent 循环：[Playwright MCP](https://github.com/microsoft/playwright-mcp) 沿既有受控入口保持原任务的持久会话；直接浏览器和 MCP 共用来源、定位与证据脱敏政策，各自保留原会话、审批和执行账本。[Browser Use](https://github.com/browser-use/browser-use) 与 [Stagehand](https://github.com/browserbase/stagehand)（均 MIT）提供更高层模型编排，本次选择更薄的 Playwright 原语适配。配置、代码边界与剩余缺口见 [浏览器执行接入](docs/aiopen.md#agent-浏览器执行闭环)。
+浏览器执行复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0，`browser` extra 与 `uv.lock` 固定版本，与现有前端版本一致）的 BrowserContext、严格 locator、自动等待、断言、上传与下载。内部页面沿用 AIOPEN 光标；任务、模型路由、审批、租约、幂等和文件存储均复用现有 Agent。未引入另一套 Agent 循环：[Playwright MCP](https://github.com/microsoft/playwright-mcp) 可作外部客户端接入，普通 MCP 通道保留逐调用语义，多步 AI 浏览器另由同一任务绑定的持久 MCP 会话维持页面状态，页面丢失后仍不重放操作，直接浏览器和 MCP 共用来源、定位与证据脱敏政策，各自保留原会话、审批和执行账本；[Browser Use](https://github.com/browser-use/browser-use) 与 [Stagehand](https://github.com/browserbase/stagehand)（均 MIT）提供更高层模型编排，本次选择更薄的 Playwright 原语适配。配置、代码边界与剩余缺口见 [浏览器执行接入](docs/aiopen.md#agent-浏览器执行闭环)。
 
 浏览器进程预算复用既有 [psutil 7.2.2](https://github.com/giampaolo/psutil)（BSD-3-Clause，`uv.lock` 与部署锁均已固定）和 Agent 子进程握手、截止及回收器。真实 Chromium 对照确认 2 GiB 虚拟地址上限会阻止启动，浏览器任务因而使用整棵已观测进程树的 RSS 预算，默认仍为 2 GiB；CPU、句柄和 Chromium sandbox 保留。RSS 轮询是运行预算监督，严格内核内存隔离需部署侧 cgroup 等机制，不能把前者当成后者。
 Computer Use 在现有 `desktop_automation` 工具内复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0）、[PyAutoGUI 0.9.54](https://pypi.org/project/PyAutoGUI/0.9.54/)（[BSD-3-Clause 源码](https://github.com/asweigart/pyautogui)）及 [Pyperclip 1.9.0](https://pypi.org/project/pyperclip/1.9.0/)（[BSD-3-Clause 源码](https://github.com/asweigart/pyperclip)），版本与传递依赖锁于 `pyproject.toml` 的 `computer-use` extra 和 `uv.lock`。 Unicode 剪贴板输入仅接受可确认的纯文本格式；Linux 需 `xclip` 枚举格式，图片、富文本及未知格式均拒绝覆盖。浏览器使用独立 Context，桌面使用主屏截图、鼠标键盘与剪贴板；沿用 Agent 审批、租户归属与 `run_id`，不另建 Agent。启用条件、安装及核验边界见 [AIOPEN 的 Computer Use 说明](docs/aiopen.md#computer-use桌面与浏览器执行器)；源码回归不代表安装包或 Windows/macOS 真机验收通过。
+
+小 C 桌面浮窗复用已锁定的 [Electron 45.3.4](https://github.com/electron/electron/tree/v45.3.4)（MIT）`BrowserWindow` 和 `Tray`，沿用现有小 C 对话组件和同一登录会话。
 
 
 开发自动化继续使用 [LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT；checkpoint 4.3.0、SQLite 3.1.2 与已吸收的 PostgreSQL 适配版本见 `packages/retort_engine/pyproject.toml`）保存审批、中断和交付等待，不增加另一套任务引擎。GitHub 执行迁移到官方 Actions 独立 job：执行候选、受信发布、恢复原验证、独立验收；[checkout 4.4.0](https://github.com/actions/checkout/tree/11d5960a326750d5838078e36cf38b85af677262)、[upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)、[setup-node 4.4.0](https://github.com/actions/setup-node/tree/49933ea5288caeca8642d1e84afbd3f7d6820020)、[setup-python 7.1.0](https://github.com/actions/setup-python/tree/6d4fd22b20465ccc0f7354476588e8df7c9ca0e0) 均为 MIT，并在相关源 workflow 固定完整提交。候选用 Git 原生 bundle 传递，发布任务只导入对象，不执行候选代码；原共享身份发布入口保持禁用。
@@ -54,7 +59,7 @@ GitHub 业务适配复用 [HTTPX 0.28.1](https://github.com/encode/httpx/tree/0.
 
 Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#compare-two-commits) 核对修复提交与实际发布的祖先关系。MODstore 通过 [GitHub artifact attestations](https://github.com/actions/attest-build-provenance/tree/e8998f949152b193b063cb0ec769d69d929409be)（MIT，锁定提交 `e8998f949152b193b063cb0ec769d69d929409be`）签署原生 Git tar（Git GPL-2.0），由 GitHub CLI 验证签名和签名工作流身份。部署回执绑定签名制品摘要、版本、实际发布 SHA 与公共运行读回。策展员沿用已审查执行包、Python 标准库 `zipfile` 和 Retort 已有加密证据存储，核对批准和原包后生成私有候选 `.xcemp`，读回包与执行凭证后登记完成。
 
-客户反馈改进接入已有 Retort 的 LangGraph 和正式发布核验。管理端复用已锁定的 [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（MIT）表格、步骤和抽屉；审批仍显示准确脱敏复现并绑定摘要，公开计划不含客户原文。客户复现是不可信输入，管理员审批不授权其访问执行器凭据。原 Retort 反馈/训练工作单仅在固定 OpenCode/SRT 的 `srt-0.0.83-header-only-platform-v1` 准入、原派工审批和公司/组合预算绑定全部有效时继续；隔离 worker 只有占位符，模型 grant 由原 event/task/subtask/attempt 核验后领取。原候选发布、独立验证、main 和交付验收仍逐步核对。缺少这些条件保持 `waiting_credential_isolation`，原 PR repair 继续暂停，旧任务只读核对原回执；普通非修复任务沿用原路径。群体效果按 [GrowthBook 5.2.0](https://github.com/growthbook/growthbook/tree/0bd125f5a1df8dcde5b1dd1996bc0bc7e1b1e73d)（开源核心 MIT，企业目录另行许可）的 REST v1 读取原统计，真实付费复用客户价值账本的支付源与退款排除规则。
+客户反馈改进接入已有 Retort 的 LangGraph 和正式发布核验。管理端复用已锁定的 [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（MIT）表格、步骤和抽屉；审批仍显示准确脱敏复现并绑定摘要，公开计划不含客户原文。客户复现是不可信输入，管理员审批不授权其访问执行器凭据。原 Retort 反馈/训练工作单仅在固定 OpenCode/SRT 的 `srt-0.0.83-header-only-platform-v1` 准入、原派工审批和公司/组合预算绑定全部有效时继续；隔离 worker 只有占位符，模型 grant 由原 event/task/subtask/attempt 核验后领取。原候选发布、独立验证、main 和交付验收仍逐步核对。原 PR repair 沿同一隔离与发布组件，使用自身 MacControlTask、原请求摘要、独立预算 UUID 和 `control_task_id` grant，禁止借用 Retort event 身份；候选经受信消费者核对后 CAS 快进原分支，再核对原候选 CI。缺少原批准、隔离或可信用量时保持相应 waiting/blocked，未知执行只核对原回执；普通非修复任务沿用原路径。群体效果按 [GrowthBook 5.2.0](https://github.com/growthbook/growthbook/tree/0bd125f5a1df8dcde5b1dd1996bc0bc7e1b1e73d)（开源核心 MIT，企业目录另行许可）的 REST v1 读取原统计，真实付费复用客户价值账本的支付源与退款排除规则。
 
 已有 `MODSTORE_RETORT_PROTOCOLS` 的冻结验收方案可选配 `customer_feedback`。其中 `domain` 为 `platform` 或 `software`，`surface` 固定为 `shared_web`，`goal` 为适合公开派工的目标。若同时配置 `MODSTORE_RETORT_FEEDBACK_ACTOR_ID` 和 `MODSTORE_RETORT_FEEDBACK_TEMPLATE`，现有调度器每天自动选题一次；审批不能代替上述隔离身份和预算准入。可选的 `growthbook` 指定 `project`、`metric`、`minimum_users`，由 `MODSTORE_RETORT_GROWTHBOOK_URL` 和服务端只读 API 密钥连接实验。实验 `trackingKey` 使用 `xcagi-retort-<运行 ID>`，标签使用 `xcagi-release-<正式提交>`。`track_paid_outcome` 启用同一账号、订单、目标与制品的商业对账。实验或付费证据缺失时保持待核对。
 
@@ -69,6 +74,7 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | 消息状态 | [Vercel AI SDK 7.0.173](https://github.com/vercel/ai)，Apache-2.0，版本由前端 lockfile 固定 | `readUIMessageStream` 组装文本和工具事件，`ChatStatus` 提供会话状态。参考 [Open WebUI 的会话任务事件](https://docs.openwebui.com/features/extensibility/plugin/development/events/) 按会话分发，产品层只绑定账号、Mod、会话和审批回执。 |
 | SSE 解析 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
 | 执行链观测 | [OpenTelemetry Python v1.45.2](https://github.com/open-telemetry/opentelemetry-python/tree/v1.45.2)，Apache-2.0，现有 `uv.lock` 固定 | 复用 W3C Trace Context、SDK span 和 OTLP exporter；产品薄适配绑定原任务账本、工具尝试和既有执行卡片，无新增采集服务。 |
+
 | 员工办公室 | [Pixel Agents v1.6.0](https://github.com/pixel-agents-hq/pixel-agents/tree/4dd14d612fd37d89ffbbc977959f572395c4eec8)，MIT | 固定提交 `4dd14d612fd37d89ffbbc977959f572395c4eec8` 的 Canvas 2D 渲染、工位、精灵与动画核心；仅加 Vue/部门/任务胶水，异步加载，无新增运行时依赖。角色来源为 MetroCity CC0，原许可、源文件校验和可复现导入脚本见 [third_party/pixel-agents](third_party/pixel-agents/README.md)。 |
 | 员工任务与图谱 | [Vue Flow 1.48.2](https://github.com/bcakmakoglu/vue-flow) / [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)，MIT，已有 lockfile 固定 | 复用现有流程图、表单、对话框、执行记录与产物面板；空间、工作台和图谱共同读取原任务账本及认证事件流，不引入上游独立执行器。 |
 | 子进程观测 | Python 标准库 `multiprocessing.Pipe` | 只增加隔离工具与现有 StreamLifetime 的 JSON 进度适配，保留业务回执、绝对截止、进程回收、租户和审批控制。 |
@@ -81,7 +87,11 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 
 员工办公室遵循 `config/duty_roster.json` 的企业四部门和管理六部门，安装包显式 `enterprise_layer` 优先，部门 ID 与原成员关系保持一致。当前任务和多员工步骤由服务端投影身份、步骤状态及待核对回执；断流保留上次结果并标为过期，慢请求不覆盖较新事件，账号切换丢弃旧响应。派发、审批、暂停、恢复、取消和结果查看沿用原 API；托管开关只控制自动接单。完成数只统计当前可见服务端任务并按任务 ID 去重；地图动画不产生任务、交接或完成回执。
 
-AIOPEN「系统地图」的能力目录直接读取 FastAPI 自动生成的 OpenAPI（框架自身能力，不另建索引表）；目录检索复用已锁定依赖 [scikit-learn](https://github.com/scikit-learn/scikit-learn)（BSD-3-Clause）的 TF-IDF 向量化与余弦相似度，按字符 n-gram 切分以兼容中文，不额外引入分词器或向量库；语义 overlay 使用已声明的 PyYAML（MIT）读取。MCP 协议层沿用官方 Python SDK（`mcp==2.3.0`，MIT）同一生态的 JSON-RPC 约定，未替换现有传输实现。
+员工办公室遵循 `config/duty_roster.json` 的企业四部门和管理六部门，安装包显式 `enterprise_layer` 优先，部门 ID 与原成员关系保持一致。当前任务和多员工步骤由服务端投影身份、步骤状态及待核对回执；断流保留上次结果并标为过期，慢请求不覆盖较新事件，账号切换丢弃旧响应。派发、审批、暂停、恢复、取消和结果查看沿用原 API；托管开关只控制自动接单。完成数只统计当前可见服务端任务并按任务 ID 去重；地图动画不产生任务、交接或完成回执。
+
+AIOPEN、Workflow、员工与小 C 的可执行能力统一投影现有 `ToolActionSpecV2`，内置动作仍在 `risk_actions.registry.json` 定义，MCP 动态动作沿用现有注册器；重复身份直接拒绝。FastAPI OpenAPI 只提供非执行 HTTP 资源和字段元数据。目录检索复用已锁定依赖 [scikit-learn](https://github.com/scikit-learn/scikit-learn)（BSD-3-Clause）的 TF-IDF 向量化与余弦相似度，语义 overlay 由已有 PyYAML（MIT）读取，不改变契约授权。MCP 协议层沿用官方 Python SDK（`mcp==2.3.0`，MIT）同一生态的 JSON-RPC 约定，未替换现有传输实现。
+
+统一执行继续复用已有 LangGraph、SQLAlchemy 任务仓储、审批工作台和工具幂等账本。产品胶水只负责有效账号/租户/Mod/凭据绑定、同一能力契约投影、原任务回执和独立业务读回，不增加第二个调度器、权限引擎或企业数据存储。客来来适配使用已有 HTTPX 0.28.1 固定本机连接，供应方 gitlink 保留已整合的 `d680714fae8917f692e261c67856e5d266cafb05`，包含原 PR #2 后续修复；已受理不等于送达，核验必须读取原消息与回执。实现、回归入口与尚未取得的供应方/部署证据见 [流程 SSOT §2.4](docs/architecture/PROCESS_FLOW_SSOT.md#24-能力契约与调用方迁移t03t12)。
 
 桌面语音沿用 [HTTPX 0.28.1](https://github.com/encode/httpx/tree/0.28.1)（BSD-3-Clause）和 websockets 16.1（BSD-3-Clause），由 XCAGI 绑定配置的出站地址。通话断句使用 [Pipecat Smart Turn v3.2 CPU](https://huggingface.co/pipecat-ai/smart-turn-v3/commit/f766f81d3cfdf7737ac64aad813d91bbfd56bf93)（BSD-2-Clause），桌面后端构建校验并打包固定权重。
 
@@ -172,7 +182,7 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 任务详情展示核验状态、独立通过/仅契约检查步数和证据，并提供“重新核验结果”。接口为 `GET /api/agent/runs/{run_id}/verification` 和 `POST /api/agent/runs/{run_id}/verify`。`not_required` 仅用于注册为只读且输出契约通过、未声明待核验文件的动作，表示**只读契约检查**；旧记录为 `not_verified`，混合新旧步骤不能省略未覆盖步骤后宣称整任务已核验。员工结果包检查只拦截显式失败和身份不符，不能代替此独立读回。
 
-只读资格只接受宿主在 [原工具登记](config/risk_actions.registry.json) 显式登记的 `read_only=True`。核验适配以宿主 `verify_independent_result` 的实际分派为准，不再维护会随合并失效的第二份动作数量清单。旧 `query/list` 等动作若既无此标记也无独立适配器，即使执行及输出契约通过，仍会进入 `inconclusive` 并阻止完成；需逐动作审查实际实现，不能凭名称、低风险或幂等性放行。尚未补齐的范围包括部分报表汇总、库存流水、客户地址、账龄分析和 Excel 读取/统计；`excel_analysis.query` 的自然语言代码分支尚未证明无副作用，`excel_analysis.structure` 注册与实现不一致。这里说明限定链路的实现与核验范围，不能据此认定全系统达到生产 L6。
+只读资格只接受宿主在 [原工具登记](config/risk_actions.registry.json) 显式登记的 `read_only=True`。核验适配以宿主 `verify_independent_result` 的实际分派为准，不再维护会随合并失效的第二份动作数量清单。旧 `query/list` 等动作若既无此标记也无独立适配器，即使执行及输出契约通过，仍会进入 `inconclusive` 并阻止完成；需逐动作审查实际实现，不能凭名称、低风险或幂等性放行。尚未补齐的范围包括部分报表汇总、库存流水、客户地址和账龄分析。Excel 读取、结构、查询与统计已按实际只读实现登记；自然语言查询只执行经过校验的有界 JSON 计划，与受限筛选表达式互斥，不再执行模型生成的任意代码。这里说明限定链路的实现与核验范围，不能据此认定全系统达到生产 L6。
 
 | 核验范围 | 已接入的独立事实 | 尚未覆盖的条件 |
 |---|---|---|
@@ -181,11 +191,13 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 | `reports.export`、`excel_analysis.export`、五类文档生成员工 | 运行归属、文件哈希/字节数、格式与可读结构；报表/Excel 导出的显式表格输入可逐项对照 | 证据标记 `artifact_integrity`；不证明任意文档的业务语义或客户验收，已有生产者标识不得冲突 |
 | `sales.confirm/cancel/deliver/invoice/payment/credit_note` | 执行前冻结原订单观察，执行后按原租户/Mod 读取订单状态、出库流水、收款分配及平衡分录；非原幂等键的新动作不能借用旧流水 | 需当前订单/账簿读取权限；缺失记录、并发歧义、金额/数量不符仍待核验；证明请求后置状态，不推断因果 |
 | `enterprise_cognition.bind_goal/plan/evaluate` | 原目标哈希、原父子任务准入及冻结观察对应的 MemoryV2 记录 | 方案准入不等于业务完成，待审批子任务不可被核验终结；记忆仍按原确认、拒绝、纠正流程治理 |
-| `employee.execute` 的 clerk 显式 start | 原员工账本中的服务端任务、账号、租户、工作区与创建事件；只核验准入，业务结果保持 pending/success=False | 不覆盖 execute_limit 和其他 continuity 操作；子任务实际执行与业务完成需要各自原始回执 |
+| `employee.execute` 的 clerk 显式 start | 原员工账本中的服务端任务、账号、租户、工作区与创建事件；只核验准入，业务结果保持 pending/success=False | 准入回执不证明后续执行；子任务实际执行与业务完成需要各自原始回执 |
+| `employee.execute` 的 `run_tools/child_return/chain` 收尾 | 原任务与全部必需子任务集合、父子关系、账号/租户/工作区、原计划与执行回执逐项核对，继续读取原独立核验与文件证据 | 任一必需子任务未完成、原账本/来源/权限变化或原回执缺失均不放行；不把其它 continuity 操作自动视为已核验 |
+| `purchase.create_order/update_order/approve_order/cancel_order/create_inbound` | 原租户和审批订单、价格/数量/供应商范围，以及收货、库存和应付关联按原事务与独立 SQL 读回核验；创建单号绑定原 run/step/tenant | 缺原订单、额度或归属不符时拒绝；受理与材料回执不能替代真实业务记录，结果未知时禁止重放 |
+| `elt_import.execute` 的六类 SQL 目标 | 执行前冻结原预演、审批计划及来源摘要；执行后独立回读原行级账本及 `dynamic_table`、客户、产品、客户产品、采购单、发货记录的真实字段、归属与关联 | 同内容去重仍须核对真实目标；计划、来源、租户或数据不符时不放行。考勤、导出、知识库、Webhook 等其他目标尚无本适配器，保持待核验；未知执行不能因读回成功而重放 |
 | `browser.observe/execute`、`computer_execute`、具备后置条件的 AIOPEN/MCP 写动作 | 原调用冻结断言；原制品/效果记录的实际观察与文件字节，或同一屏幕/浏览器代次的新只读观察 | 明确 DOM、像素、页面或文件范围及 `business_effect_verified=false`；历史记录不证明当前状态，缺条件、丢失会话或权限不足仍待核对 |
-| 注册只读动作（含 `dataset_rag.query`） | 原权限和输出契约检查，明确标为 `not_required`；知识查询的入库、删除、回滚和权限修改动作仍为写操作 | 不宣称答案语义或外部业务副作用已独立核验；声明文件却没有适配器仍阻断 |
-| `elt_import.preview` | 按原 Mod、租户、owner 和上传来源只读核对原 SQL 预演及修订摘要；只报告 `preview_snapshot`、`business_effect_verified=false` | 不核验业务入库，联动父/子预演不在覆盖范围。原决策回执仅允许两个布尔恢复参数，新的有效审批才能追加下一次预演；旧回执不可改写，未知结果不可重放 |
-| 其他销售/出库/会计、通用 ELT 及尚未接入适配器的外部动作 | 保留已有专用执行回执与门禁 | 尚未全部接通本引擎的可信原回执和独立适配器；未覆盖的副作用返回 `inconclusive` |
+| 注册只读动作 | 原输出契约检查，明确标为 `not_required` | 不宣称已证明外部业务副作用；声明文件却没有适配器仍阻断 |
+| 其他销售/出库/会计、未覆盖的 ELT 目标及尚未接入适配器的外部动作 | 保留已有专用执行回执与门禁 | 尚未全部接通本引擎的可信原回执和独立适配器；未覆盖的副作用返回 `inconclusive` |
 | 旧任务、legacy 管理端路径 | 保留历史原回执；员工台账的新 `verified` 为 false，旧值只作为 `legacy_result_valid` 展示 | 执行包检查明确标为 `execution_envelope`；无冻结契约不能补造独立通过，仍需逐入口迁移和真实业务验收 |
 
 `kellai.send` 的原渠道回执完整保存在 `data.delivery_receipt`；受理与送达分开。独立核验只读取当前账号授权的原请求回执和原客户消息，并核对请求、渠道、收件人、内容与供应商消息 ID。仅 `delivered/read` 可通过，发送受理、投影缺失、读取范围不足和权限撤销保持待核验，不能自动重发；具体外部渠道回执仍取决于已配对客来来实例。
@@ -261,6 +273,10 @@ cd XCMAX/FHD
 
 文字与图片按本次操作选路，预算、摘要与最终请求共用同一份账号路由快照；兼容 OpenAI SDK 请求作用域，换号或改绑客户端后拒绝沿用旧预算。规划器与普通对话的系统默认输出适配已选模型上限，调用者显式值仍接受严格检查；修复与目标审查入口保留未指定值直到实际选路。公开能力只含数值和模型身份，内部凭据快照不进入 HTTP 负载或预算日志。摘要是模型输入的派生视图，不能更新业务执行事实。首次系统与工具本身超限不触发历史摘要；压缩保留完整最新轮与工具调用/回执组。已有调用、审批与恢复仍走原入口。能力缺失、真实供应商回复、生产部署及桌面实机恢复需分别取得回执。
 
+对话响应参照 [OpenHands 响应分流](https://github.com/OpenHands/software-agent-sdk/blob/3a893a1b26de7ec02cc0dd2427906eea6aea3fc7/openhands-sdk/openhands/sdk/agent/response_dispatch.py)（MIT），复用现有 LangChain/Pydantic 解析器与 `conversation.reply`：关键词不触发索引或强制索要文件；原生工具协议的可见文本可进入普通回复，混合或未知工具调用仍须校验。普通答复使用只检查答题、证据和澄清必要性的窄格式核验，业务图保持完整目标覆盖审核。两者读取候选生成时相同的授权历史与条件快照，经原 Condenser 和模型网关控制预算；摘要不保证事实无损，需要精确原文时仍调用原会话读取能力。
+
+澄清、预演与审批等待复用原 typed `turn_kind`、LangGraph 检查点和 SQL 任务：澄清回答更新原任务，插问交当前轮规划且保留原等待状态；审批仍走原确认与批准流程，模型分类不产生授权。合法不明确输入与模型错误分别处理。轮次/动作绑定参照 [Codex 公开协议](https://github.com/openai/codex/tree/a0436d69ffd9a6d943d9b56175ba2968c5e698af/codex-rs/protocol)（Apache-2.0）；产品只适配既有 run、step、会话与批准范围，不再维护第二套任务状态。传输错误沿用 `MarketModelError`，规划、澄清抽取、修复与核验共用现有 `InvocationBudget`，`XCAGI_PLANNER_TIMEOUT_SECONDS` 默认 90 秒；达到期限结束模型阶段，不重放业务写入。上述接线属于本产品的任务语义与证据约束，通用组件不自动判断所有话题切换或业务完成。
+
 仓库技能以 [OpenHands Software Agent SDK 的 `SKILL.md` 解析格式](https://github.com/OpenHands/software-agent-sdk/blob/ae4fd87f9b86a9362943d29771192816877646a9/openhands-sdk/openhands/sdk/skills/skill.py)（参考提交 `ae4fd87f9b86a9362943d29771192816877646a9`，[MIT](https://github.com/OpenHands/software-agent-sdk/blob/ae4fd87f9b86a9362943d29771192816877646a9/LICENSE)）为协议参考；使用锁定的 [PyYAML 6.0.3](https://github.com/yaml/pyyaml/tree/6.0.3)（MIT）解析元数据。宿主仅适配 `name`、`description`、`triggers` 和 Markdown 正文，不引入另一套 Agent 运行时；仅命中的技能参与本轮规划，受服务端开关、路径和输入总量限制，不能用客户端 `active_skills` 冒充技能规则。此适配不宣称支持上游完整技能发现、资源调用或插件协议。
 
 ## 许可证与安全
@@ -309,8 +325,6 @@ MODstore `VIBE_AGENT_V2` 保持默认关闭。脚本循环沿用原 AgentLoop �
 
 会话连续性复用 [LangChain 1.3.14 SummarizationMiddleware](https://github.com/langchain-ai/langchain/tree/01d8481ae3d457ec3751cbb0331ea3a4b720fa90/libs/langchain_v1)（MIT）及上述 Core 1.5.3，压缩入口同时覆盖普通/流式规划，预留输出和工具 schema，保存完整原文的已覆盖游标；摘要失败不伪造覆盖。跨进程文件互斥使用 [filelock 4.2.4](https://github.com/tox-dev/filelock/tree/4.2.4)（MIT，统一跨进程锁依赖版本）。SQLAlchemy 事务管理会话 revision、删除标记和整轮回执，JSON 只作为可重建投影；历史通过授权游标分页读取，保存失败仅重试原回执。
 
-普通 Conversation API 与规划器共享授权 SQL 历史，当前输入按 `turn_id` 排除，不重复混入内存副本；缓存读取、每批摘要与最终模型调用前重核会话 revision，拒绝已撤回的旧快照。澄清保留原任务中的完整已接受问答，将其作为必须完整保留的当前规划输入；窗口不足则停止本轮并保留原等待任务，不截掉早期范围，也不删除业务工具。行为对照 [Codex `1145028` 的 retained answers](https://github.com/openai/codex/blob/1145028ae47e8119955323d38ce34122d418f951/codex-rs/core/src/tools/handlers/request_user_input.rs)（Apache-2.0，其 Guardian 功能启用时独立持久化答案）；未移植 Rust 运行时。规划目录只省略与完整 JSON Schema `required` 完全相同的重复说明，保留本地引用、条件、嵌套约束及全部动作。
-
 任务恢复使用 [LangGraph 原生检查点](https://docs.langchain.com/oss/python/langgraph/checkpointers)（核心 1.2.10、checkpoint 4.3.0、SQLite 3.1.2、Postgres 3.1.1+xcagi.1，MIT，源码与许可见 `packages/xcagi_langgraph_*`）。安全步骤在原 run 内恢复。独立规划澄清复用 AgentRun、WorkflowPlanStore 和运行快照 CAS 保存原目标、问题与答复，只有尚未执行业务的单一提问图可以重新规划，并再次经过目标、风险与审批校验；参数澄清和已有业务图继续在原图恢复。这里的执行元数据不提供跨进程租约，持久队列使用现有条件更新和租约归属校验。知识答复沿用 DatasetRag 的答案、证据和查询范围。聊天批量导入按 ELT 文件回执核对已写入项，将剩余原附件绑定到同一任务的下一次审批执行，继续用原有 StateGraph 调度。未知写结果保留待核对。
 
 统一执行入口与任务状态继续复用上述 LangGraph 和现有 task/run/step、审批、轮次回执组件，新增部分限于本产品的授权范围、原子准入和状态投影；不增加第二套调度服务。复用与对照来源如下，具体缺口和未完成的验收见 [流程 SSOT §2.2](docs/architecture/PROCESS_FLOW_SSOT.md#22-统一执行入口与任务状态实现与证据边界)。
@@ -325,6 +339,11 @@ MODstore `VIBE_AGENT_V2` 保持默认关闭。脚本循环沿用原 AgentLoop �
 | 手机离线队列和请求身份恢复 | [Drift 2.35.4](https://github.com/simolus3/drift)，MIT，`mobile-flutter-poc/pubspec.lock` | 复用现有 SQLite/outbox 及迁移机制保存原 turn；已发送任务只能读取原回执。 |
 
 通用开源运行时不能替本仓决定授权主体、审批计划指纹、父子任务归属或业务写回凭证，因此这些校验保留在现有接缝中。缺少原回执时保留 `unknown`；本地测试不代表真实模型、移动端构建、生产 PostgreSQL 或已部署产品验收。
+
+企业认知继续复用上述 SQLAlchemy 2.0.51（MIT）的事务、提交事件、唯一键和条件更新，Pydantic 2.13.5（MIT）的共享接口契约，以及 LangGraph 1.2.10（MIT）的原任务审批执行；版本以既有锁文件为准，没有新增通用状态机、消息总线或记忆数据库。NeuroBus、strategic plan、goal coverage、Business Harness 与 MemoryV2 都从现有入口接入。产品适配仅处理原业务 ID/权威来源、tenant/actor/Mod 权限、投影过期、目标与动作绑定和证据引用；通用组件无法决定这些本产品业务语义，因此保留这些适配。接口、实体清单与验收边界见[流程 SSOT §2.3](docs/architecture/PROCESS_FLOW_SSOT.md#23-企业认知权威状态--经营目标--原任务执行--指标证据)。
+普通 Conversation API 与规划器共享授权 SQL 历史，当前输入按 `turn_id` 排除，不重复混入内存副本；缓存读取、每批摘要与最终模型调用前重核会话 revision，拒绝已撤回的旧快照。澄清保留原任务中的完整已接受问答，将其作为必须完整保留的当前规划输入；窗口不足则停止本轮并保留原等待任务，不截掉早期范围，也不删除业务工具。行为对照 [Codex `1145028` 的 retained answers](https://github.com/openai/codex/blob/1145028ae47e8119955323d38ce34122d418f951/codex-rs/core/src/tools/handlers/request_user_input.rs)（Apache-2.0，其 Guardian 功能启用时独立持久化答案）；未移植 Rust 运行时。规划目录只省略与完整 JSON Schema `required` 完全相同的重复说明，保留本地引用、条件、嵌套约束及全部动作。
+
+任务恢复使用 [LangGraph 原生检查点](https://docs.langchain.com/oss/python/langgraph/checkpointers)（核心 1.2.10、checkpoint 4.3.0、SQLite 3.1.2、Postgres 3.1.1+xcagi.1，MIT，源码与许可见 `packages/xcagi_langgraph_*`）。安全步骤在原 run 内恢复。独立规划澄清复用 AgentRun、WorkflowPlanStore 和执行租约保存原目标、问题与答复，只有尚未执行业务的单一提问图可以重新规划，并再次经过目标、风险与审批校验；参数澄清和已有业务图继续在原图恢复。知识答复沿用 DatasetRag 的答案、证据和查询范围。聊天批量导入按 ELT 文件回执核对已写入项，将剩余原附件绑定到同一任务的下一次审批执行，继续用原有 StateGraph 调度。未知写结果保留待核对。
 
 企业认知继续复用上述 SQLAlchemy 2.0.51（MIT）的事务、提交事件、唯一键和条件更新，Pydantic 2.13.5（MIT）的共享接口契约，以及 LangGraph 1.2.10（MIT）的原任务审批执行；版本以既有锁文件为准，没有新增通用状态机、消息总线或记忆数据库。NeuroBus、strategic plan、goal coverage、Business Harness 与 MemoryV2 都从现有入口接入。产品适配仅处理原业务 ID/权威来源、tenant/actor/Mod 权限、投影过期、目标与动作绑定和证据引用；通用组件无法决定这些本产品业务语义，因此保留这些适配。接口、实体清单与验收边界见[流程 SSOT §2.3](docs/architecture/PROCESS_FLOW_SSOT.md#23-企业认知权威状态--经营目标--原任务执行--指标证据)。
 

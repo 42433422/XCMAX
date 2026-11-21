@@ -51,7 +51,10 @@ def claim(
     actor: str = Depends(require_dispatch_service),
 ):
     try:
-        if bridge.read_request(request_id)[0]["kind"] == "github_opencode_workspace":
+        if bridge.read_request(request_id)[0]["kind"] in {
+            "github_opencode_workspace",
+            "original_pr_repair",
+        }:
             from modstore_server.strategic_workspace_grants import claim_phase
 
             return claim_phase(request_id, body)
@@ -179,7 +182,7 @@ async def responses(request_id: str, request: Request, authorization: str = Head
                     "data: " + json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n\n"
                 ).encode()
                 try:
-                    with bridge.model_scope(request_id, token):
+                    with bridge.model_scope(request_id, token, verify_source=False):
                         event = await anext(source)
                 except StopAsyncIteration:
                     return

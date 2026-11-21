@@ -235,7 +235,6 @@ def templates_delete(
             body=data,
             action="delete",
             route_path="/api/templates/delete",
-            authenticated_actor_id=str(user.id),
         )
     return JSONResponse(payload, status_code=code)
 

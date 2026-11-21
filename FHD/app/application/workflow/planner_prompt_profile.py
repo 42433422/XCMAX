@@ -75,7 +75,7 @@ BASE_RULES: tuple[str, ...] = (
     "本轮短句（如第二个、全部的、换成上个月、也导出）须依据当前会话最近的请求与澄清问题理解：保留未被修改的对象和条件，以本轮明确更正为准。上一轮未形成计划不代表原范围丢失；话题已切换时不得沿用旧目标。候选不唯一、无上文、指代不明或执行结果未知时先 clarify.ask，不得默认第一个、编造 ID 或重放已执行写入。历史确认不授权本轮新的写入。",
     "planning_clarification 保存原任务和按顺序绑定的问题/用户答复；A、选第二项等答复按该问题中的选项解释。已明确选择的范围直接继续规划，不得声称用户未选择或重复征询同一范围。用户更正条件以最新答复为准，业务写入仍须经过执行层审批。",
     "摘要不是完整原文。需要精确旧事实时，若 tool_registry 包含 conversation_history.read，应规划该只读动作，按原文消息 #id（不是列表序号）及游标读取本会话。content_complete=false 时按该消息 id 和 next_offset 继续分段读取，不得把当前片段当作全文或编造省略内容。",
-    "优先使用 tool_registry 中已有工具与 action。",
+    "业务节点的 tool_id 必须逐字取自 tool_registry.tool_id，action 必须逐字取自同一工具的 actions[].action；二者分开填写，不得把工具名、公式名或描述拼进 action。目录中没有的能力不得编造；公式和业务表达式只能填入对应 input_schema 允许的参数。内置 clarify.ask 只用于提问。",
     "完整拆解用户目标所需的全部步骤；先查询、后导出等顺序写入 depends_on。只有执行结果会决定走向时才使用 next/branches，条件字段须来自工具返回值，不得臆造。",
     "params 中每个 {{节点ID.结果路径}} 引用的节点都必须列入当前节点的直接 depends_on，即使已经间接依赖也要显式列出。结果路径必须来自对应工具的 output_schema；未声明的内部字段不能猜测。",
     "每个节点的 params 必须符合对应 input_schema；工具只读查询必须选择 read_only 动作，写操作不确定必填值时先输出 clarify.ask，不得虚构值。",
@@ -317,6 +317,48 @@ def attachment_import_manifest(message: str, context: dict[str, Any]) -> list[st
     ):
         return [item["name"] for item in manifest]
     return None
+
+
+def tool_specs_for_prompt(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
+    from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+
+    contracts = build_tool_specs_v2()
+    result = []
+    # 固定顺序保证 system 前缀稳定，命中供应商的 prompt 缓存。
+    for tool_id in sorted(tool_registry, key=str):
+        spec = tool_registry[tool_id]
+        actions = spec.get("actions", {})
+        action_specs = []
+        for name, metadata in actions.items():
+            contract = contracts.get((str(tool_id), str(name)))
+            raw_schema = metadata.get("input_schema", getattr(contract, "input_schema", {}))
+            action_specs.append(
+                {
+                    "action": name,
+                    "description": str(
+                        getattr(contract, "description", "") or spec.get("description") or ""
+                    )[:240],
+                    "risk": metadata.get("risk", "low"),
+                    "idempotent": bool(metadata.get("idempotent", False)),
+                    "output_schema": metadata.get(
+                        "output_schema", getattr(contract, "output_schema", {})
+                    ),
+                    **(
+                        {"required_params": metadata.get("required_params", [])}
+                        if metadata.get("required_params", []) != raw_schema.get("required", [])
+                        else {}
+                    ),
+                    "input_schema": raw_schema,
+                }
+            )
+        result.append(
+            {
+                "tool_id": tool_id,
+                "description": spec.get("description", ""),
+                "actions": action_specs,
+            }
+        )
+    return result
 
 
 def select_tools_for_prompt(

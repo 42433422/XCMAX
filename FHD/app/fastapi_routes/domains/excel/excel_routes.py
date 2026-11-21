@@ -15,6 +15,7 @@ from app.fastapi_routes.domains.excel.agent_helpers import (
 from app.fastapi_routes.domains.excel.agent_helpers import (
     trace_excel_route as _trace_excel_route,
 )
+from app.fastapi_routes.tools_execute import _capability_http_receipt
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_upload_dir
 
@@ -221,96 +222,24 @@ async def ai_file_analyze(
 
 
 @router.post("/api/ai/sqlite/import_unit_products")
-def ai_sqlite_import_unit_products(body: dict = Body(default_factory=dict)):
-    try:
-        from app.application.agent_orchestrator import AgentOrchestrator
-        from app.application.agent_orchestrator.tool_spec import validate_tool_call
-        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
-        data = body or {}
-        saved_name = str(data.get("saved_name") or "").strip()
-        unit_name = str(data.get("unit_name") or data.get("unit_name_guess") or "").strip()
-        params = {
-            "saved_name": saved_name,
-            "unit_name": unit_name,
+def ai_sqlite_import_unit_products(request: Request, body: dict = Body(default_factory=dict)):
+    data = body or {}
+    payload = _run_excel_skill_agent(
+        request=request,
+        body=data,
+        route_path="/api/ai/sqlite/import_unit_products",
+        tool_id="unit_products_import",
+        action="execute_import",
+        params={
+            "saved_name": str(data.get("saved_name") or "").strip(),
+            "unit_name": str(data.get("unit_name") or data.get("unit_name_guess") or "").strip(),
             "create_purchase_unit": bool(data.get("create_purchase_unit", True)),
             "skip_duplicates": bool(data.get("skip_duplicates", True)),
-        }
-        validation = validate_tool_call("unit_products_import", "execute_import", params)
-        if not validation.ok:
-            return JSONResponse(
-                {
-                    "success": False,
-                    "message": validation.message or "unit_products_import 参数无效",
-                    "error_code": validation.error_code,
-                },
-                status_code=400,
-            )
-
-        plan = PlanGraph(
-            plan_id=f"plan_route_unit_products_import_{uuid.uuid4().hex[:12]}",
-            intent="import_unit_products_db",
-            todo_steps=[
-                "确认导入单位产品数据库",
-                "执行 unit_products_import.execute_import",
-                "记录导入结果和工具审计",
-            ],
-            nodes=[
-                WorkflowNode(
-                    node_id="import_unit_products",
-                    tool_id="unit_products_import",
-                    action="execute_import",
-                    params=params,
-                    risk="medium",
-                    idempotent=False,
-                    description="从 /api/ai/sqlite/import_unit_products route 接管的单位产品导入",
-                )
-            ],
-            risk_level="medium",
-            metadata={
-                "source": "legacy_excel_route",
-                "route": "/api/ai/sqlite/import_unit_products",
-                "artifacts": [
-                    {
-                        "artifact_type": "database_file",
-                        "name": saved_name,
-                        "source": "legacy_excel_route",
-                        "summary": f"unit_products_db 导入源文件，目标客户：{unit_name}",
-                        "fields": [
-                            {"name": "saved_name", "value": saved_name},
-                            {"name": "unit_name", "value": unit_name},
-                        ],
-                    }
-                ],
-            },
-        )
-        run = AgentOrchestrator().start_run_from_plan(
-            user_id=str(data.get("user_id") or data.get("userId") or "legacy-excel-route"),
-            message=str(data.get("message") or f"导入 {saved_name} 到 {unit_name}"),
-            plan=plan,
-            runtime_context={
-                "route": "/api/ai/sqlite/import_unit_products",
-                "source": "legacy_excel_route",
-                "saved_name": saved_name,
-                "unit_name": unit_name,
-            },
-            auto_execute=True,
-        )
-        return JSONResponse(
-            {
-                "success": True,
-                "message": "已创建导入任务，等待用户确认"
-                if run.status == "waiting_user"
-                else "导入任务已处理",
-                "run_id": run.run_id,
-                "agent_run_id": run.run_id,
-                "data": run.to_dict(),
-            },
-            status_code=202 if run.status in {"waiting_user", "blocked"} else 200,
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("unit products import failed")
-        return JSONResponse({"success": False, "message": "导入失败"}, status_code=500)
+        },
+        intent="import_unit_products_db",
+        message="导入单位产品数据库",
+    )
+    return JSONResponse(*_capability_http_receipt(payload))
 
 
 @router.post("/api/skills/analyze/excel")
@@ -335,7 +264,7 @@ def skills_analyze_excel(request: Request, body: dict = Body(default_factory=dic
         intent="skills_analyze_excel",
         message=f"Analyze Excel skill file: {file_path}",
     )
-    return JSONResponse(payload, status_code=200)
+    return JSONResponse(*_capability_http_receipt(payload))
 
 
 @router.post("/api/skills/view/excel")
@@ -361,7 +290,7 @@ def skills_view_excel(request: Request, body: dict = Body(default_factory=dict))
         intent=f"skills_view_excel_{action}",
         message=f"View Excel skill file: {file_path}",
     )
-    return JSONResponse(payload, status_code=200)
+    return JSONResponse(*_capability_http_receipt(payload))
 
 
 @router.post("/api/skills/generate-label-template")
@@ -388,4 +317,4 @@ def skills_generate_label_template(request: Request, body: dict = Body(default_f
         intent="skills_generate_label_template",
         message="Generate label template from image: " + str(image_path),
     )
-    return JSONResponse(payload, status_code=200)
+    return JSONResponse(*_capability_http_receipt(payload))

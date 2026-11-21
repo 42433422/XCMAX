@@ -123,3 +123,40 @@ def test_read_only_flag_preserves_the_registry_admission_floor(
     assert decision.risk_level.value == registry_risk
     assert decision.allowed is False
     assert decision.requires_confirmation is (registry_risk != "blocked")
+
+
+@pytest.mark.parametrize("intervening_user", [False, True])
+def test_last_question_never_crosses_a_new_user_request(monkeypatch, intervening_user):
+    from app.application.ai_chat import dialogue_memory
+
+    question = "请选择：A. 查询客户 B. 查询产品"
+    history = [{"role": "assistant", "content": question}]
+    if intervening_user:
+        history.append({"role": "user", "content": "换一个任务，帮我查库存"})
+    monkeypatch.setattr(dialogue_memory, "conversation_history_messages", lambda _: history)
+    assert dialogue_memory.last_assistant_question({}) == (None if intervening_user else question)
+
+
+def test_compact_schema_preserves_composed_and_nested_constraints():
+    from app.application.workflow.planner_prompt_profile import _slim_schema
+
+    schema = {
+        "type": "object",
+        "anyOf": [{"required": ["customer_id"]}, {"required": ["customer_name"]}],
+        "additionalProperties": False,
+        "properties": {
+            "customer_id": {"type": "integer", "minimum": 1},
+            "customer_name": {"type": "string", "minLength": 1, "description": "说明" * 80},
+            "items": {"type": "array", "items": {"allOf": [{"$ref": "#/$defs/item"}]}},
+        },
+        "$defs": {"item": {"type": "object", "required": ["sku"]}},
+    }
+    compact = _slim_schema(schema)
+    assert compact["anyOf"] == schema["anyOf"]
+    assert compact["$defs"] == schema["$defs"]
+    assert compact["additionalProperties"] is False
+    assert compact["properties"]["items"] == schema["properties"]["items"]
+    assert compact["properties"]["customer_id"] == schema["properties"]["customer_id"]
+    assert compact["properties"]["customer_name"]["minLength"] == 1
+    assert len(compact["properties"]["customer_name"]["description"]) == 80
+    assert len(schema["properties"]["customer_name"]["description"]) == 160

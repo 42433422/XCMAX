@@ -112,6 +112,7 @@ async def chat_openai_compatible(
     out: Dict[str, Any] = {
         "ok": True,
         "content": text_out,
+        "finish_reason": choice0.get("finish_reason"),
         "usage": data.get("usage") or {},
         "raw": data,
         "provider": provider,
@@ -191,8 +192,8 @@ async def stream_openai_compatible(
                 data = redact_key(json.loads(raw), api_key)
             except json.JSONDecodeError:
                 continue
-            # A later return to the requested alias cannot erase a prior
-            # mismatched raw identity from this one reserved stream.
+            # Preserve the first conflicting raw identity for this reservation;
+            # a later approved alias cannot make earlier consumption known.
             if data.get("model") and reported_model in (None, model):
                 reported_model = data["model"]
             if budgeted and usage_reported and reported_model not in (None, model):
@@ -329,6 +330,7 @@ async def chat_anthropic_compatible(
     return {
         "ok": True,
         "content": "\n".join(parts),
+        "finish_reason": data.get("stop_reason"),
         "usage": data.get("usage") or {},
         "raw": data,
     }
@@ -394,4 +396,10 @@ async def chat_google(
                 "completion_tokens": total - prompt,
                 "total_tokens": total,
             }
-    return {"ok": True, "content": "\n".join(texts), "usage": usage, "raw": data}
+    return {
+        "ok": True,
+        "content": "\n".join(texts),
+        "finish_reason": first.get("finishReason"),
+        "usage": usage,
+        "raw": data,
+    }

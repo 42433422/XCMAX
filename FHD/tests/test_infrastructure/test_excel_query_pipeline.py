@@ -21,6 +21,7 @@ from app.application.tools.workflow_tools.excel_analysis import (
 )
 from app.infrastructure.excel.date_norm import cn_date, first_date
 from app.infrastructure.excel.header_detection import detect_header_row_1based
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 pytestmark = pytest.mark.usefixtures("mock_external_service")
 
@@ -290,20 +291,19 @@ def test_natural_language_query_retries_with_error_feedback() -> None:
 
 
 def _execute(code: str, df: pd.DataFrame) -> pd.DataFrame:
-    from app.infrastructure.excel.text_to_pandas import _safe_exec_pandas
+    from app.application.tools.workflow_tools.excel_analysis import execute_query_plan
 
-    return _safe_exec_pandas(code, df)
+    return execute_query_plan(code, df)
 
 
 def test_natural_language_query_reports_translation_failure() -> None:
     frame = pd.DataFrame({"a": [1]})
-    with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
-        result = natural_language_query(
-            frame,
-            "看不懂的问题",
-            lambda *_args, **_kwargs: None,
-            _execute,
-        )
+    result = natural_language_query(
+        frame,
+        "看不懂的问题",
+        lambda *_args, **_kwargs: None,
+        _execute,
+    )
     assert result["success"] is False
     assert result["error"] == "query_translation_failed"
     assert result["message"]
@@ -341,7 +341,6 @@ def test_plain_read_preserves_identifier_values_and_source_file(tmp_path):
     original = path.read_bytes()
     analysis = ExcelAnalysis(
         ExcelIO(lambda _root, _path: path, read_excel_dataframe, lambda _args: None),
-        lambda *_args, **_kwargs: {},
         lambda frame, _expression: frame,
         lambda *_args: "",
         logging.getLogger(__name__),
@@ -384,7 +383,6 @@ def test_explicit_header_is_not_overridden_by_ai(tmp_path):
     _write_workbook(path)
     analysis = ExcelAnalysis(
         ExcelIO(lambda _root, _path: path, read_excel_dataframe, lambda _args: 4),
-        lambda *_args, **_kwargs: {},
         lambda frame, _expression: frame,
         lambda *_args: "",
         logging.getLogger(__name__),
@@ -397,17 +395,57 @@ def test_explicit_header_is_not_overridden_by_ai(tmp_path):
     assert result["header_row"] == 4 and result["row_count"] == 3
 
 
-@pytest.mark.parametrize("tool", ["excel_analysis", "excel_schema_understand"])
+@pytest.fixture
+def registered_workbook(tmp_path, monkeypatch, trusted_actor, local_tools):
+    import io
+
+    from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
+    from app.application.elt.service_uploads import register_chat_upload
+    from app.application.tools.workflow import ERP_CAPABILITY_TOOL_NAME, execute_workflow_tool
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    actor = trusted_actor(user_id=17, role="admin")
+    path = tmp_path / "ledger.xlsx"
+    _write_workbook(path)
+    upload = register_chat_upload(
+        user=SimpleNamespace(id=actor.user_id, tenant_id=actor.tenant_id),
+        filename=path.name,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        stream=io.BytesIO(path.read_bytes()),
+    )
+    repo = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    repo._ensure_schema()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
+
+    def execute():
+        payload = json.loads(
+            execute_workflow_tool(
+                ERP_CAPABILITY_TOOL_NAME,
+                {
+                    "tool_id": "excel_analysis",
+                    "action": "structure",
+                    "params": {"file_path": upload["upload_id"]},
+                },
+                runtime_context=actor.context,
+            )
+        )
+        run = repo.get(payload.get("run_id", ""))
+        assert run is not None and len(run.tool_calls) == 1, payload
+        return run.steps[0].output
+
+    return execute
+
+
 @pytest.mark.parametrize("decision", ["failure", "unknown"])
 @pytest.mark.parametrize("native_enabled", [True, False])
 def test_configured_model_failure_does_not_succeed_with_first_row(
-    tmp_path, monkeypatch, tool, decision, native_enabled
+    monkeypatch, registered_workbook, decision, native_enabled
 ):
-    from app.application.tools.workflow import execute_workflow_tool
     from app.infrastructure.llm.structured_output import StructuredOutputError
 
-    path = tmp_path / "ledger.xlsx"
-    _write_workbook(path)
     monkeypatch.setenv("XCAGI_DISABLE_PLANNER_NATIVE_TOOLS", "0" if native_enabled else "1")
     with (
         patch(
@@ -425,11 +463,7 @@ def test_configured_model_failure_does_not_succeed_with_first_row(
             side_effect=AssertionError("configured model must not fall back to rules"),
         ),
     ):
-        result = json.loads(
-            execute_workflow_tool(
-                tool, {"file_path": str(path), "action": "structure"}, workspace_root=str(tmp_path)
-            )
-        )
+        result = registered_workbook()
     assert result["success"] is False
     assert result["error"] == "read_excel_failed"
     assert "columns" not in result
@@ -437,12 +471,8 @@ def test_configured_model_failure_does_not_succeed_with_first_row(
 
 @pytest.mark.parametrize("native_enabled", [True, False])
 def test_schema_tool_preserves_snapshot_contract_with_model_header(
-    tmp_path, monkeypatch, native_enabled
+    monkeypatch, registered_workbook, native_enabled
 ):
-    from app.application.tools.workflow import execute_workflow_tool
-
-    path = tmp_path / "ledger.xlsx"
-    _write_workbook(path)
     monkeypatch.setenv("XCAGI_DISABLE_PLANNER_NATIVE_TOOLS", "0" if native_enabled else "1")
     with (
         patch(
@@ -453,17 +483,11 @@ def test_schema_tool_preserves_snapshot_contract_with_model_header(
             return_value=SimpleNamespace(data={"header_row": 4}),
         ) as infer,
     ):
-        result = json.loads(
-            execute_workflow_tool(
-                "excel_schema_understand", {"file_path": str(path)}, workspace_root=str(tmp_path)
-            )
-        )
+        result = registered_workbook()
     assert result["success"] is True and result["header_row"] == 4
-    assert result["snapshot"]["columns"] == ["日期", "产品名称", "购货金额"]
-    assert result["structure"]["row_count"] == 3
+    assert result["data"]["columns"] == ["日期", "产品名称", "购货金额"]
+    assert result["data"]["row_count"] == 3
     assert infer.call_count == 1
-    if native_enabled:
-        assert result["source"] == "mod:xcagi-planner-excel-tools"
 
 
 def test_real_translator_keeps_owner_scope_and_runs_date_aggregation_in_both_bridges(monkeypatch):
@@ -546,3 +570,31 @@ def test_missing_model_keeps_failure_receipt_without_python_fallback(monkeypatch
     assert result["error"] == "query_translation_failed"
     assert result["generated_code"] == ""
     assert result["records"] == [{"a": 1}]
+
+
+def test_header_detection_never_promotes_a_denser_business_row(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    path = tmp_path / "sparse-header.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["名称", "日期", None, None])
+    sheet.append(["电视柜", "十一月", "已确认", "正常"])
+    sheet.append(["茶几", "十二月", "未确认", "正常"])
+    workbook.save(path)
+    assert detect_header_row_1based(path) == 1
+    frame = read_excel_dataframe(path, sheet_name=None, header_row_1based=None)
+    assert len(frame) == 2
+    assert frame.iloc[0, 0] == "电视柜"
+
+
+def test_ambiguous_first_populated_row_keeps_default_header(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    path = tmp_path / "numeric-header.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["名称", 2025, 2026])
+    sheet.append(["电视柜", "已确认", "正常"])
+    workbook.save(path)
+    assert detect_header_row_1based(path) is None

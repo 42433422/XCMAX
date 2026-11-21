@@ -10,7 +10,7 @@ import asyncio
 import inspect
 import logging
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -68,6 +68,12 @@ class InstrumentedProvider:
     def is_configured(self) -> bool:
         return self._inner.is_configured
 
+    @property
+    def supports_streaming(self) -> bool:
+        from app.infrastructure.llm.response_completion import provider_supports_streaming
+
+        return provider_supports_streaming(self._inner)
+
     async def chat_completion(
         self,
         messages: list[dict[str, str]],
@@ -124,7 +130,13 @@ class InstrumentedProvider:
             pass
         return result
 
-    async def stream_chat_completion(self, messages: list[dict[str, str]], **kwargs: Any):
+    @property
+    def stream_chat_completion(self) -> Callable[..., AsyncIterator[str]] | None:
+        if not callable(getattr(self._inner, "stream_chat_completion", None)):
+            return None
+        return self._stream_chat_completion
+
+    async def _stream_chat_completion(self, messages: list[dict[str, str]], **kwargs: Any):
         """增量透传给内层 provider；流式路径不重复做输出 guardrails。"""
         inner = getattr(self._inner, "stream_chat_completion", None)
         if inner is None:

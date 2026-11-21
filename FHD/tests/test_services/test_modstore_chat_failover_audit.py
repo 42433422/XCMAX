@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import json
+from unittest.mock import Mock
+
 import httpx
 import pytest
 
-from app.application.market_llm.completions import complete_async
+from app.application.market_llm.completions import complete_async, complete_sync, post_sync
 from app.application.market_llm.protocols import (
     ChatInput,
     CompletionPorts,
     Connection,
     ResponsePorts,
+    StreamPorts,
 )
+from app.application.market_llm.streaming import stream_async, stream_sync
 from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
-from app.infrastructure.modstore_transport import MarketModelError
+from app.infrastructure.modstore_transport import (
+    MarketModelError,
+    aiter_market_sse_data_payloads,
+    iter_market_sse_data_payloads,
+)
 
 
 class _FakeLogger:
@@ -146,3 +155,174 @@ async def test_complete_async_terminal_404_raises_market_error_and_audits():
     else:
         assert "平台错误(404)" in str(raised.value)
     assert captured == [404]
+
+
+_MODES = ["sync", "async", "sync-stream", "async-stream"]
+
+
+async def _call_transport(mode, handler, extra, candidates):
+    """Exercise actual payload/HTTP ownership in all four transport entry points."""
+    connection = Connection("https://market.example", "synthetic-token", 7, 30.0)
+    request = ChatInput([{"role": "user", "content": "hello"}], extra=extra)
+    response_ports = ResponsePorts(
+        normalize=lambda payload, provider, model: payload,
+        notify=lambda **kwargs: None,
+        clock=lambda: 0.0,
+        logger=_FakeLogger(),
+    )
+    transport = httpx.MockTransport(handler)
+
+    def sync_client(**kwargs):
+        return httpx.Client(transport=transport, **kwargs)
+
+    def send_sync(**kwargs):
+        return post_sync(
+            connection,
+            (kwargs["provider"], kwargs["model"]),
+            ChatInput(kwargs["messages"], extra=kwargs["extra"] or {}),
+            kwargs["allow_failover"],
+            sync_client,
+            response_ports,
+        )
+
+    async with httpx.AsyncClient(transport=transport) as client:
+
+        async def get_client():
+            return client
+
+        common = {
+            "candidates": candidates,
+            "prepare_sync": lambda messages, provider, model: messages,
+            "prepare_async": lambda messages, provider, model: _async_identity(messages),
+            "failoverable": is_market_chat_failoverable,
+            "status_code": lambda response, default=200: response.status_code,
+        }
+        if mode in {"sync", "async"}:
+            ports = CompletionPorts(
+                **common, post_sync=send_sync, client=get_client, response=response_ports
+            )
+            if mode == "sync":
+                return complete_sync(connection, ("primary", "first"), request, ports)
+            return await complete_async(connection, ("primary", "first"), request, ports)
+        ports = StreamPorts(
+            **common,
+            sync_client=sync_client,
+            async_client=get_client,
+            sync_payloads=lambda response: iter_market_sse_data_payloads(
+                response, payload_has_content=lambda data: True
+            ),
+            async_payloads=lambda response: aiter_market_sse_data_payloads(
+                response, payload_has_content=lambda data: True
+            ),
+            connect_timeout=lambda: 10.0,
+            logger=response_ports.logger,
+        )
+        if mode == "sync-stream":
+            return list(stream_sync(connection, ("primary", "first"), request, ports))
+        return [
+            part async for part in stream_async(connection, ("primary", "first"), request, ports)
+        ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", _MODES)
+@pytest.mark.parametrize(
+    "policy", ["environment", "explicit", "audit", "byok", "user_override", "pinned"]
+)
+async def test_transport_failover_veto_applies_to_discovery_and_platform(monkeypatch, mode, policy):
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "0" if policy == "environment" else "1")
+    posted = []
+    extra = {
+        "environment": {"allow_failover": True},
+        "explicit": {"allow_failover": False},
+        "audit": {"_reviewed_excel_audit_response": lambda *args: None},
+        "byok": {"allow_failover": True, "key_source": "byok"},
+        "user_override": {"allow_failover": True, "key_source": "user_override"},
+        "pinned": {"route_token": "synthetic-pin"},
+    }[policy]
+
+    def respond(request):
+        posted.append(json.loads(request.content))
+        return httpx.Response(429, json={"error": "quota exhausted"})
+
+    candidates = Mock(return_value=[("primary", "first"), ("backup", "second")])
+    with pytest.raises(ValueError):
+        await _call_transport(mode, respond, extra, candidates)
+    candidates.assert_not_called()
+    assert len(posted) == 1 and posted[0]["allow_failover"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", _MODES)
+@pytest.mark.parametrize("terminal_status", [200, 429, 401, 402, 403])
+async def test_bounded_failover_owns_route_pin_request_key_and_terminal_receipt(
+    monkeypatch, mode, terminal_status
+):
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
+    posted, archived = [], []
+
+    def respond(request):
+        posted.append(json.loads(request.content))
+        status = terminal_status if terminal_status in {401, 402, 403} or len(posted) == 2 else 429
+        return httpx.Response(
+            status,
+            json={"content": "backup reply"} if status == 200 else {"error": "quota exhausted"},
+        )
+
+    extra = {
+        "allow_failover": True,
+        "key_source": "platform",
+        "route_token": "synthetic-pin",
+        "config_revision": "r1",
+        "client_request_id": "synthetic-original",
+        "_reviewed_excel_audit_response": lambda body, status, request_id: archived.append(status),
+    }
+    candidates = Mock(return_value=[("primary", "first"), ("backup", "second")])
+    if terminal_status == 200:
+        result = await _call_transport(mode, respond, extra, candidates)
+        assert "backup reply" in str(result)
+    else:
+        with pytest.raises(ValueError) as error:
+            await _call_transport(mode, respond, extra, candidates)
+        assert error.value.response.status_code == terminal_status
+    assert archived == [terminal_status]
+    if terminal_status in {401, 402, 403}:
+        assert len(posted) == 1
+    else:
+        assert [row["provider"] for row in posted] == ["primary", "backup"]
+        assert [row["allow_failover"] for row in posted] == [True, False]
+        assert [row["client_request_id"] for row in posted] == [
+            "synthetic-original",
+            "synthetic-original-f1",
+        ]
+        assert posted[0]["route_token"] == "synthetic-pin"
+        assert not {"route_token", "key_source", "config_revision"} & posted[1].keys()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["sync-stream", "async-stream"])
+async def test_started_stream_cannot_replay_on_backup(monkeypatch, mode):
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
+    posted = []
+
+    class Body(httpx.SyncByteStream, httpx.AsyncByteStream):
+        def __iter__(self):
+            yield b'data: {"delta":"first"}\n\n'
+            raise httpx.ReadTimeout("synthetic timed out")
+
+        async def __aiter__(self):
+            for chunk in self:
+                yield chunk
+
+    def respond(request):
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, stream=Body())
+
+    with pytest.raises(httpx.ReadTimeout):
+        await _call_transport(
+            mode,
+            respond,
+            {"allow_failover": True},
+            lambda *args: [("primary", "first"), ("backup", "second")],
+        )
+    assert len(posted) == 1

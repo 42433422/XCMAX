@@ -15,6 +15,7 @@ from app.db.models import User
 from app.db.models.user import Session as UserSession
 from app.fastapi_routes import xiaoc_admin_context as bridge
 from app.utils.time import utc_now_naive
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
@@ -185,3 +186,79 @@ def test_legacy_session_rebinding_never_reuses_local_persona(setup_bridge):
     assert _call(client, "recall", query="交付").status_code == 403
     assert original_context["style"] == ""
     style.assert_not_called()
+
+
+@pytest.fixture
+def capability_bridge(trusted_actor, monkeypatch):
+    actor = trusted_actor(permissions=["customer.view"])
+    with actor.factory.begin() as db:
+        user = db.get(User, actor.user_id)
+        user.market_user_id = 42
+        row = db.get(UserSession, actor.session_row_id)
+        row.market_user_id = 42
+        row.market_is_admin = True
+        row.account_kind = "admin"
+        row.tenant_id = actor.tenant_id
+    monkeypatch.setattr(bridge, "HostSessionLocal", actor.factory)
+    monkeypatch.setattr(desktop_admin_gate, "is_desktop_runtime", lambda: False)
+    monkeypatch.setenv("XIAOC_ADMIN_CONTEXT_TOKEN", "test-bridge-key")
+    app = FastAPI()
+    app.include_router(bridge.router)
+    with TestClient(app) as client:
+        yield client, actor
+
+
+def test_admin_capability_discovery_uses_the_live_host_grant(capability_bridge):
+    client, actor = capability_bridge
+    result = _call(client, "capabilities", limit=500).json()
+    assert result["success"]
+    catalog = {row["capability_id"]: row for row in result["capabilities"]}
+    assert "customers.query" not in catalog and "customers.create" not in catalog
+    assert catalog["business_db.read"]["input_schema"]["properties"]["entity"]["enum"] == [
+        "customers"
+    ]
+    assert _call(client, "capabilities", market=43).status_code == 403
+    assert _call(client, "capabilities", user_id=actor.user_id).status_code == 422
+    with actor.factory.begin() as db:
+        db.get(UserSession, actor.session_row_id).market_is_admin = False
+    assert _call(client, "capabilities").status_code == 403
+
+
+def test_admin_enterprise_read_and_execution_use_the_same_bound_chain(
+    capability_bridge, monkeypatch
+):
+    import json
+
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+    from app.infrastructure.tenant_scope import current_tenant_id, owned_tenant_id
+
+    client, actor = capability_bridge
+    observed = []
+
+    def execute(args, *, runtime_context):
+        assert _bound_actor(runtime_context).id == actor.user_id
+        assert current_tenant_id() == owned_tenant_id() == actor.tenant_id
+        assert runtime_context["idempotency_key"] == "original-turn:0"
+        observed.append(args)
+        return json.dumps({"success": True, "task_id": "task-original", "run_id": "run-original"})
+
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability", execute
+    )
+    fields = {
+        "tool_id": "business_db",
+        "action": "read",
+        "params": {"entity": "customers"},
+        "request_id": "original-turn:0",
+    }
+    for operation in ("enterprise_state", "execute_capability"):
+        assert _call(client, operation, **fields).json()["task_id"] == "task-original"
+    assert observed == [{key: fields[key] for key in ("tool_id", "action", "params")}] * 2
+    assert owned_tenant_id() is None
+    assert (
+        _call(client, "enterprise_state", tool_id="customers", action="create").status_code == 422
+    )
+    assert (
+        _call(client, "execute_capability", tool_id="customers", action="query").status_code == 422
+    )
+    assert len(observed) == 2

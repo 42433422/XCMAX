@@ -91,27 +91,27 @@ def project_governance_state(state):
                 if isinstance(item, dict)
             ],
         }
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         config.logger.exception("failed to build self-evolution KB runtime summary")
         state["kb_summary"] = {
-            "error": str(exc)[:500],
+            "error": "知识库运行状态暂时不可用",
             "fix_count": 0,
             "fix_hit_count": 0,
             "invalid_count": 0,
             "pattern_count": 0,
             "pattern_hit_count": 0,
-            "redisvl_status": {"ready": False, "error": str(exc)[:300]},
+            "redisvl_status": {"ready": False, "error": "向量服务状态暂时不可用"},
             "total": 0,
         }
     metrics_gate = {}
     try:
         metrics_gate = self_evolution_knowledge.evolution_metrics_gate()
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         config.logger.exception("failed to build evolution metrics summary")
         metrics_gate = {
             "pause": False,
             "reason": "metrics_gate_error",
-            "error": str(exc)[:500],
+            "error": "指标门禁状态暂时无法核验",
             "windows": [],
             "history_count": 0,
         }

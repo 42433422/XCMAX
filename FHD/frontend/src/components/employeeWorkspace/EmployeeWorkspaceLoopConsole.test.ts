@@ -48,8 +48,8 @@ async function setup(query: Record<string, string> = {}) {
     { path: '/', component: { template: '<div />' } },
     { path: '/task/:taskId', name: 'task-workspace', component: { template: '<div />' } },
     { path: '/employees', name: 'duty-roster-graph', component: { template: '<div />' } },
-    { path: '/employee-graph', name: 'workflow-employee-stitch-full', component: { template: '<div />' } },
     { path: '/office', name: 'workflow-employee-space', component: { template: '<div />' } },
+    { path: '/workflow-employee-space/stitch-full', name: 'workflow-employee-stitch-full', component: { template: '<div />' } },
   ] })
   await router.push({ path: '/', query })
   await router.isReady()
@@ -116,6 +116,7 @@ describe('employee task workspace', () => {
     const second = api.createTask.mock.calls[1][0]
     expect(second.task_id).toBe(first.task_id)
     expect(first).toMatchObject({ tool_id: 'employee', action: 'execute', params: { employee_id: 'auditor', task: '只读检查' } })
+    expect(first.runtime_context).toMatchObject({ source, client_surface: clientSurface })
     expect(first.runtime_context.invoke_mode).toBeUndefined()
     expect(first.runtime_context).toMatchObject({ source, client_surface: clientSurface })
     expect(wrapper.text()).toContain('再次提交将核对同一任务')
@@ -221,7 +222,11 @@ describe('workspace submission and navigation boundaries', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('没有匹配任务')
   })
-  it('refreshes after a persisted update or route selection and returns to the list', async () => {
+  it.each([
+    ['', 'workflow-employee-stitch-full'],
+    ['1', 'duty-roster-graph'],
+  ])('refreshes durable tasks and navigates to the graph for surface %s', async (admin, graphRoute) => {
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', admin)
     const store = await setup()
     api.getTask.mockClear()
     store.tasks = [{ ...task, updated_at: '2026-11-16T13:00:00Z' }]
@@ -240,7 +245,7 @@ describe('workspace submission and navigation boundaries', () => {
     expect(wrapper.vm.$route.query.task).toBeUndefined()
     expect(wrapper.text()).toContain('选择任务，查看工作空间与执行流程')
     await clickButton('员工图谱')
-    expect(wrapper.vm.$route.name).toBe('workflow-employee-stitch-full')
+    expect(wrapper.vm.$route.name).toBe(graphRoute)
   })
   it('routes a task conversation and forwards every runtime control to the selected task', async () => {
     api.getTask.mockResolvedValue({ success: true, data: { ...task, capabilities: { approve: true, pause: true, resume: true, cancel: true, retry: true } } })

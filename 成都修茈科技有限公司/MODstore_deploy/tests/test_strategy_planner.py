@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import sys
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -129,6 +130,92 @@ def test_plan_strategy_without_operator_template_does_not_self_authorize(monkeyp
     assert result["registered"] == result["dispatched"] == []
 
 
+@pytest.mark.parametrize("command", ["plan", "context"])
+def test_cli_reports_counts_without_private_results(monkeypatch, capsys, command):
+    result = {
+        "ok": True,
+        "status": "private-status-sentinel",
+        "dry_run": True,
+        "candidates": [{"title": "private-title-sentinel"}],
+        "registered": ["private-decision-sentinel"],
+        "dispatched": [],
+        "evidence": {"owner_user_id": 7, "task": "private-task-sentinel"},
+        "active_bets": ["private-bet-sentinel"],
+        "domains": {"domains": [{"source": "private-evidence-sentinel"}]},
+    }
+    original = deepcopy(result)
+    monkeypatch.setattr(strategy_planner, "plan_strategy", lambda **_kwargs: result)
+    monkeypatch.setattr(strategy_planner, "collect_context", lambda: result)
+    assert strategy_planner._main([command]) == 0
+    output = capsys.readouterr().out
+    assert "private-" not in output
+    assert json.loads(output) == {
+        "ok": True,
+        "status": "unknown",
+        "dry_run": True,
+        "candidate_count": 1,
+        "registered_count": 1,
+        "dispatched_count": 0,
+        "active_bet_count": 1,
+        "domain_count": 1,
+    }
+    assert result == original
+
+
+def test_cli_failure_does_not_print_private_validation_input(monkeypatch, capsys):
+    def fail(**_kwargs):
+        raise ValueError("private-goal-sentinel")
+
+    monkeypatch.setattr(strategy_planner, "plan_strategy", fail)
+    assert strategy_planner._main(["plan"]) == 1
+    output = capsys.readouterr()
+    assert json.loads(output.out) == {
+        "ok": False,
+        "status": "requires_reconciliation",
+        "dry_run": False,
+    }
+    assert "private-" not in output.out + output.err
+
+
+def test_scheduled_plan_logs_only_summary_and_keeps_private_result(monkeypatch, caplog):
+    from modstore_server import workflow_scheduler, workflow_scheduler_startup_phase04
+
+    jobs = {}
+    monkeypatch.setattr(
+        workflow_scheduler,
+        "_scheduler",
+        SimpleNamespace(
+            add_job=lambda fn, _trigger, **kwargs: jobs.update({kwargs["id"]: fn}),
+        ),
+    )
+    monkeypatch.setattr(workflow_scheduler, "_run_tracked_scheduler_job", lambda _id, fn: fn())
+    result = {
+        "ok": True,
+        "status": "awaiting_approval",
+        "candidates": [{"task": "private-task-sentinel"}],
+        "registered": ["private-decision-sentinel"],
+        "dispatched": [],
+        "evidence": "private-evidence-sentinel",
+    }
+    original = deepcopy(result)
+    monkeypatch.setattr(strategy_planner, "plan_strategy", lambda: result)
+    workflow_scheduler_startup_phase04._register_scheduler_phase_04()
+    caplog.clear()
+    caplog.set_level(logging.INFO, logger=workflow_scheduler.logger.name)
+    jobs["strategy_planner"]()
+    assert "registered_count" in caplog.text and "awaiting_approval" in caplog.text
+    assert "private-" not in caplog.text
+    assert result == original
+
+    def fail():
+        raise ValueError("private-invalid-template-sentinel")
+
+    monkeypatch.setattr(strategy_planner, "plan_strategy", fail)
+    jobs["strategy_planner"]()
+    assert "strategy planner job failed" in caplog.text
+    assert "private-" not in caplog.text
+
+
 @pytest.fixture(params=["input_data", "goal", "expires_at"])
 def invalid_private_template(request, tmp_path, monkeypatch):
     private = "private-template-sentinel"
@@ -180,7 +267,11 @@ def test_strategy_cli_keeps_validation_failure_without_private_input(invalid_pri
         check=False,
     )
     assert result.returncode == 1
-    assert "ValidationError" in result.stderr and location[0] in result.stderr
+    assert json.loads(result.stdout) == {
+        "ok": False,
+        "status": "requires_reconciliation",
+        "dry_run": False,
+    }
     assert private not in result.stdout + result.stderr
 
 
@@ -199,7 +290,6 @@ def test_registered_strategy_job_records_safe_validation_failure(
     with caplog.at_level(logging.ERROR, logger=workflow_scheduler.logger.name):
         scheduler.get_job("strategy_planner").func()
     assert "strategy planner job failed" in caplog.text
-    assert "ValidationError" in caplog.text and location[0] in caplog.text
     assert private not in caplog.text
     with database() as session:
         run = session.query(JobRun).filter_by(job_id="strategy_planner").one()
@@ -339,7 +429,11 @@ def test_cli_summary_keeps_private_market_data_in_internal_result(
     assert "private-" not in output
     summary = json.loads(output)
     assert summary["ok"] is True
-    assert summary["candidate_count"] == int(command == "plan")
+    if command == "plan":
+        assert summary["candidate_count"] == 1
+    else:
+        assert "candidate_count" not in summary
+        assert summary["active_bet_count"] == 1
 
 
 def test_registered_strategy_job_logs_counts_without_market_candidate_payload(
@@ -368,4 +462,6 @@ def test_registered_strategy_job_logs_counts_without_market_candidate_payload(
         registered["strategy_planner"]()
     assert tracked == ["strategy_planner"]
     assert "private-" not in caplog.text
-    assert "candidates=1" in caplog.text
+    records = [record for record in caplog.records if record.msg == "strategy plan: %s"]
+    assert len(records) == 1
+    assert records[0].args["candidate_count"] == 1

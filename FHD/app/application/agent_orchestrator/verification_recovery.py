@@ -9,11 +9,13 @@ import uuid
 from typing import Any
 
 from app.application.agent_orchestrator.result_verification import (
+    pending_execution_receipt,
     restore_verified_artifacts,
     summarize_verification,
+    verified_step_output,
     verify_step_result,
 )
-from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
@@ -71,6 +73,10 @@ def _read_context(run: AgentRun, current: dict[str, Any] | None) -> dict[str, An
         str(current.get("user_id") or "") != run.user_id
         or str(current.get("tenant_id") or "") != tenant_id_of_run(run)
         or original_mod != current_mod
+        or (
+            "_credential_authorization" in current
+            and current["_credential_authorization"] != context.get("_credential_authorization")
+        )
     ):
         raise RuntimeContextOwnershipError("核验不能更改原任务的账户、租户或 Mod")
     # The authenticated HTTP principal may have a renewed read session. Use it
@@ -83,8 +89,12 @@ def _read_context(run: AgentRun, current: dict[str, Any] | None) -> dict[str, An
 
 
 def _stopped_queue_proof(
-    repository: AgentRunRepository, run: AgentRun, *, allow_parked: bool = False
-) -> tuple[Any, Any]:
+    repository: AgentRunRepository,
+    run: AgentRun,
+    *,
+    allow_parked: bool = False,
+    optional: bool = False,
+) -> tuple[Any, Any] | None:
     from app.application.agent_orchestrator.run_repository import (
         InMemoryAgentRunRepository,
         get_agent_run_repository,
@@ -110,8 +120,12 @@ def _stopped_queue_proof(
         if not isinstance(queue, InMemoryTaskExecutionRepository):
             raise VerificationRecoveryError("核验缺少与原任务配对的执行队列")
     else:
+        if optional:
+            return None
         raise VerificationRecoveryError("核验缺少原执行租约的权威终止记录")
     execution = queue.get(run.run_id)
+    if execution is None and optional:
+        return None
     if (
         execution is None
         or (execution.run_id, execution.task_id, execution.user_id, execution.tenant_id)
@@ -152,6 +166,33 @@ def _stopped_queue_conditions(execution: Any) -> tuple[Any, ...]:
     )
 
 
+def _can_settle_queue(run: AgentRun, previous: AgentRun, body: dict[str, Any]) -> bool:
+    """Every open effect must name a verified original step, never a guessed dispatch."""
+    from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
+
+    return bool(
+        (previous.metadata.get("recovery") or {}).get("state") == "result_pending"
+        and run.steps
+        and any(pending_execution_receipt(call.output) for call in run.tool_calls)
+        and verification_report(run).get("accepted") is True
+        and all(step.status in {"completed", "skipped"} for step in run.steps)
+        and not safe_continuation_error(run)
+        and set(body.get("effects") or [])
+        <= {step.step_id for step in run.steps if step.status == "completed"}
+    )
+
+
+def _settlement_body(body: dict[str, Any], run: AgentRun, state: str, now: str) -> None:
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.domain.task_lifecycle.control import remember
+
+    body["effects"] = []
+    body["verification_receipt_sha256"] = canonical_hash(verification_report(run))
+    remember(
+        body, at=now, source=state, target="blocked", code="result_verified", actor=run.user_id
+    )
+
+
 def _save_observation(
     repository: AgentRunRepository,
     run: AgentRun,
@@ -163,23 +204,60 @@ def _save_observation(
     queue, execution = proof
     if isinstance(repository, SQLAlchemyAgentRunRepository):
         from app.db.models.agent import AgentTaskExecutionRecord as Record
+        from app.domain.task_lifecycle.control import SessionBook
 
-        # Recheck and fence the authoritative queue row in the same transaction
-        # as the original run CAS. No clock-based guess can evict a live owner.
         with repository.transaction() as db:
-            matched = (
-                db.query(Record)
-                .filter(*_stopped_queue_conditions(execution))
-                .update({Record.updated_at: execution.updated_at}, synchronize_session=False)
-            )
-            return bool(matched == 1 and repository.save_if_unchanged_in_session(db, run, previous))
+            # Fencing uses the original queue identity and generation in the same
+            # transaction as the run CAS. Merely observing an expired clock is insufficient.
+            query = db.query(Record).filter(*_stopped_queue_conditions(execution))
+            if (
+                query.update({Record.updated_at: execution.updated_at}, synchronize_session=False)
+                != 1
+            ):
+                return False
+            book = SessionBook(db)
+            body = book.get("agent", execution.tenant_id, execution.run_id)
+            settle = _can_settle_queue(run, previous, body)
+            run.metadata["verification_queue_state"] = "blocked" if settle else execution.state
+            if not repository.save_if_unchanged_in_session(db, run, previous):
+                return False
+            if settle:
+                now = utc_now_iso()
+                if (
+                    query.update(
+                        {
+                            Record.state: "blocked",
+                            Record.last_error_code: "result_verified",
+                            Record.updated_at: now,
+                        },
+                        synchronize_session=False,
+                    )
+                    != 1
+                ):
+                    raise VerificationRecoveryError("核验期间原执行队列已变化")
+                _settlement_body(body, run, execution.state, now)
+                book.put("agent", execution.tenant_id, execution.run_id, body)
+            return True
     with queue._lock:
         latest = queue.get(previous.run_id)
-        return bool(
-            latest is not None
-            and latest.to_dict() == execution.to_dict()
-            and repository.save_if_unchanged(run, previous)
-        )
+        if latest is None or latest.to_dict() != execution.to_dict():
+            return False
+        body = queue._book.get("agent", execution.tenant_id, execution.run_id)
+        settle = _can_settle_queue(run, previous, body)
+        run.metadata["verification_queue_state"] = "blocked" if settle else execution.state
+        if not repository.save_if_unchanged(run, previous):
+            return False
+        if settle:
+            now = utc_now_iso()
+            latest.state, latest.last_error_code, latest.updated_at = (
+                "blocked",
+                "result_verified",
+                now,
+            )
+            queue._rows[latest.run_id] = copy.deepcopy(latest)
+            _settlement_body(body, run, execution.state, now)
+            queue._book.put("agent", execution.tenant_id, execution.run_id, body)
+        return True
 
 
 def reverify_run(
@@ -223,11 +301,12 @@ def reverify_run(
         for call in contracted
         if (
             steps[call.step_id].status == call.status == "completed"
-            and call.output.get("success") is True
             and (
-                not execution_result_error(call.output)
+                pending_execution_receipt(call.output)
+                or (call.output.get("success") is True and not execution_result_error(call.output))
                 or (
-                    (call.tool_id, call.action) == ("enterprise_cognition", "plan")
+                    call.output.get("success") is True
+                    and (call.tool_id, call.action) == ("enterprise_cognition", "plan")
                     and plan_admission_receipt(call.output)
                 )
             )
@@ -249,10 +328,13 @@ def reverify_run(
         )
         if require_stopped_queue
         or unknown_delivery
+        or previous.metadata.get("verification_queue_state") == "unknown"
         or previous.status in {"running", "unknown"}
         or (previous.metadata.get("execution") or {}).get("state") == "active"
         else None
     )
+    if proof is None and any(pending_execution_receipt(call.output) for call in calls):
+        proof = _stopped_queue_proof(repository, previous, optional=True)
     for call in calls:
         step = steps[call.step_id]
         verify_step_result(
@@ -269,6 +351,16 @@ def reverify_run(
         )
         restore_verified_artifacts(run, step, call)
     report = verification_report(run)
+    if (
+        report.get("accepted") is True
+        and any(pending_execution_receipt(call.output) for call in calls)
+        and all(step.status in {"completed", "skipped"} for step in run.steps)
+        and (run.metadata.get("recovery") or {}).get("state") == "result_pending"
+    ):
+        # Only the original accepted effects are settled. Their immutable raw
+        # receipts stay pending; the host's bound readback is the current result.
+        run.metadata.pop("non_retryable", None)
+        run.metadata.pop("recovery", None)
     if proof is not None and (
         previous.status == "running"
         or (previous.metadata.get("execution") or {}).get("state") == "active"
@@ -299,10 +391,11 @@ def verification_can_finalize(run: AgentRun) -> bool:
     return bool(
         run.status != "unknown"
         and run.steps
+        and run.metadata.get("verification_queue_state") != "unknown"
         and verification_report(run).get("accepted") is True
         and all(step.status in {"completed", "skipped"} for step in run.steps)
         and all(
-            not execution_result_error(step.output)
+            not execution_result_error(verified_step_output(run, step))
             for step in run.steps
             if step.status == "completed"
         )
@@ -427,6 +520,8 @@ def recover_stopped_verification(
         if run is None or not _eligible(run, current_time):
             return None
         proof = _stopped_queue_proof(repository, run, allow_parked=True)
+        if proof is None:
+            return None
         previous = copy.deepcopy(run)
         state = dict(run.metadata.get(_KEY) or {})
         attempt = max(0, int(state.get("attempt") or 0)) + 1
