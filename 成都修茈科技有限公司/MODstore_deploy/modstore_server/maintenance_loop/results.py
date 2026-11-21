@@ -5,12 +5,16 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server import self_maintenance_retry
+from modstore_server.customer_issue_delivery_contract import (
+    execution_requires_reconciliation,
+    execution_succeeded,
+)
 
 from . import config
 
 
 def _employee_result_ok(result: Dict[str, Any]) -> bool:
-    if not result or result.get("handler_failed"):
+    if not execution_succeeded(result):
         return False
     report_text = _extract_report_excerpt(result).lower()
     if "blocked by risk middleware" in report_text:
@@ -27,17 +31,6 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
         )
     ):
         return False
-    nested_result = result.get("result")
-    inner: Dict[str, Any] = nested_result if isinstance(nested_result, dict) else result
-    if str(inner.get("status", "")).lower() in {"failed", "error"}:
-        return False
-    if not bool(inner.get("ok", True)):
-        return False
-    outputs = inner.get("outputs")
-    if isinstance(outputs, list):
-        for item in outputs:
-            if isinstance(item, dict) and item.get("ok") is False:
-                return False
     dv_gate = _delivery_validation_gate(result)
     if dv_gate.get("found") and (not dv_gate.get("ok")):
         return False
@@ -45,7 +38,13 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
 
 
 def _delivery_validation_command_failed(command: Any) -> bool:
-    return isinstance(command, dict) and command.get("exit_code") not in (0, None)
+    return (
+        not isinstance(command, dict)
+        or type(command.get("exit_code")) is not int
+        or command["exit_code"] != 0
+        or command.get("ok") is False
+        or command.get("timed_out") is True
+    )
 
 
 def _delivery_validation_gate(
@@ -69,7 +68,7 @@ def _delivery_validation_gate(
         return {
             "delivery_validation": dv,
             "found": True,
-            "ok": True,
+            "ok": False,
             "reason": "delivery_validation_no_commands",
         }
     failed_cmds = [c for c in cmds if _delivery_validation_command_failed(c)]
@@ -285,9 +284,13 @@ def _extract_para_meta(
         "branch": first_subtask.get("branch") or first_subtask.get("branchName"),
         "completed_at": para_result.get("completed_at"),
         "error": output.get("error") if isinstance(output, dict) else None,
-        "para_status": para_result.get("status"),
+        "para_status": para_result.get("task_status") or para_result.get("status"),
         "subtask_id": first_subtask.get("id") or response.get("subtaskId"),
-        "task_id": para_result.get("task_id") or para_result.get("id") or response.get("taskId"),
+        "task_id": (output.get("task_id") if isinstance(output, dict) else None)
+        or para_result.get("task_id")
+        or para_result.get("id")
+        or response.get("taskId"),
+        "requires_reconciliation": execution_requires_reconciliation(result),
     }
 
 
@@ -342,7 +345,7 @@ def _extract_report_excerpt(result: Dict[str, Any], limit: int = 4000) -> str:
 def _is_transient_employee_dispatch_failure(
     result: Dict[str, Any],
 ) -> bool:
-    if _is_accepted_para_wait_timeout(result):
+    if execution_requires_reconciliation(result) or _is_accepted_para_wait_timeout(result):
         return False
     return self_maintenance_retry.is_transient_dispatch_failure(result)
 

@@ -791,13 +791,37 @@ def test_concurrent_retry_preserves_completed_write_and_atomically_requeues_same
     ]
 
 
-@pytest.mark.parametrize("condition", ["unknown", "plan_changed", "write_pending", "live_lease"])
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "unknown",
+        "nested_unknown",
+        "nested_timeout",
+        "completed_unknown",
+        "completed_failure",
+        "plan_changed",
+        "write_pending",
+        "live_lease",
+    ],
+)
 def test_retry_rejects_unverified_original_state_without_queue_changes(trusted_actor, condition):
     actor = trusted_actor(role="admin")
     repository, queue = _repositories(actor)
     run = _run(actor, status="failed", completed_write=True)
     if condition == "unknown":
         run.steps[1].output = {"success": False, "outcome": "unknown"}
+    elif condition in {"nested_unknown", "nested_timeout"}:
+        run.steps[1].output = {
+            "success": True,
+            "result": {
+                "execution_status": "unknown" if condition == "nested_unknown" else "timeout"
+            },
+        }
+    elif condition in {"completed_unknown", "completed_failure"}:
+        child = (
+            {"outcome_unknown": True} if condition == "completed_unknown" else {"success": False}
+        )
+        run.steps[0].output["result"] = {"outputs": [{"output": child}]}
     elif condition == "plan_changed":
         run.steps[1].params["keyword"] = "new business intent"
     elif condition == "write_pending":

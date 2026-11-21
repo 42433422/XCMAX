@@ -272,3 +272,33 @@ def test_employee_async_bridge_preserves_invocation_budget(bridge):
         assert _DEADLINE.get() is None
     finally:
         tenant.reset(token)
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        {"requires_reconciliation": True},
+        {"outcome_unknown": True},
+        {"execution_status": "unknown"},
+        {"result": {"outputs": [{"execution_state": "unknown"}]}},
+    ],
+)
+def test_on_time_receipt_cannot_hide_unknown_effect(monkeypatch, marker):
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    raw = {"success": True, "request_id": "original-request", **marker}
+    calls = []
+
+    def execute(*_args, **_kwargs):
+        calls.append(True)
+        return raw
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=30,
+    )
+    assert result["success"] is False and result["outcome"] == "unknown"
+    assert result["retryable"] is False and result["reconciliation_required"] is True
+    assert result["request_id"] == "original-request" and calls == [True]
+    assert raw["success"] is True  # A projection must not rewrite the original evidence.

@@ -19,7 +19,10 @@ const sources = sourcePaths.length
     ];
 
 function loadTargetBranchParser(sourcePath) {
-  const source = readFileSync(sourcePath, 'utf8');
+  let source = readFileSync(sourcePath, 'utf8');
+  if (source.includes("import { startParaAgent } from './para_e2e_agent.mjs'")) {
+    source = readFileSync(path.join(path.dirname(sourcePath), 'para_e2e_agent.mjs'), 'utf8');
+  }
   const start = source.indexOf('function isReportOnlyTask');
   const end = source.indexOf('\nasync function prepareReportOnlyTargetBranch', start);
   assert.ok(start >= 0 && end > start, `report-only parser not found in ${sourcePath}`);
@@ -27,7 +30,10 @@ function loadTargetBranchParser(sourcePath) {
 }
 
 function loadReportOnlyParser(sourcePath) {
-  const source = readFileSync(sourcePath, 'utf8');
+  let source = readFileSync(sourcePath, 'utf8');
+  if (source.includes("import { startParaAgent } from './para_e2e_agent.mjs'")) {
+    source = readFileSync(path.join(path.dirname(sourcePath), 'para_e2e_agent.mjs'), 'utf8');
+  }
   const start = source.indexOf('function isReportOnlyTask');
   const end = source.indexOf('\nfunction reportOnlyTargetBranch', start);
   assert.ok(start >= 0 && end > start);

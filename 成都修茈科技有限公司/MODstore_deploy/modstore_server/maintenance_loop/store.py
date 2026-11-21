@@ -338,10 +338,10 @@ def _load_loop_memory() -> Dict[str, Any]:
     try:
         with path.open("r", encoding="utf-8") as fh:
             data = json.load(fh)
-        return data if isinstance(data, dict) else {}
+        return data if isinstance(data, dict) else {"execution_state_unavailable": True}
     except RECOVERABLE_ERRORS:
         config.logger.exception("failed to read self-maintenance memory")
-        return {}
+        return {"execution_state_unavailable": True}
 
 
 def _read_governance_audit(
@@ -392,4 +392,12 @@ def _write_loop_memory(memory: Dict[str, Any]) -> None:
     with tmp.open("w", encoding="utf-8") as fh:
         fh.write(_dumps_ledger(memory, indent=2))
         fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
     tmp.replace(path)
+    if hasattr(os, "O_DIRECTORY"):
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)

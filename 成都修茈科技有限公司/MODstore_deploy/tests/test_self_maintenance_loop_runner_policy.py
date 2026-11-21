@@ -4878,9 +4878,8 @@ class TestFindDeliveryValidation:
 
         assert found is dv
 
-    def test_find_delivery_validation_commands_with_exit_code_none(self):
-        """exit_code=None 的 command 不视为失败：_find_delivery_validation 仍能找到 dv，
-        但 _extract_failure_reason 不会返回 delivery_validation_failed。"""
+    def test_find_delivery_validation_commands_with_unobserved_exit(self):
+        """没有观察到退出码时，保留原验证回执并拒绝把它当作验证成功。"""
         dv = {"commands": [{"exit_code": None, "command": "pytest"}]}
         result = {"result": {"ok": False, "delivery_validation": dv}}
 
@@ -4888,9 +4887,8 @@ class TestFindDeliveryValidation:
         found = _find_delivery_validation(result)
         assert found is dv
 
-        # _extract_failure_reason 不把 exit_code=None 视为失败，落到 fallback
         reason = _extract_failure_reason(result, {})
-        assert "delivery_validation_failed" not in reason
+        assert "delivery_validation_failed" in reason and "exit=None" in reason
 
     def test_find_delivery_validation_commands_with_exit_code_zero(self):
         """exit_code=0 的 command 不视为失败。"""

@@ -43,6 +43,8 @@ _ACTIVE_STATES = {
     "running",
     "processing",
     "retrying",
+    "timeout",
+    "timed_out",
 }
 _UNFINISHED_STATES = (
     _APPROVAL_STATES
@@ -70,37 +72,74 @@ _UNFINISHED_STATES = (
     }
 )
 
+_EXECUTION_ENVELOPE_KEYS = frozenset(
+    {
+        "success",
+        "ok",
+        "error",
+        "outcome",
+        "execution_state",
+        "execution_status",
+        "execution_outcome",
+        "exit_status",
+        "outcome_unknown",
+        "reconciliation_required",
+        "requires_reconciliation",
+        "requires_token",
+        "pending_approval",
+        "needs_user_input",
+        "task_id",
+        "execution_id",
+    }
+)
+
 
 def execution_result_envelopes(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
     """Walk only result envelopes; business rows in items/sheets are not run states."""
-    pending = [data]
+    pending: list[tuple[dict[str, Any], dict[str, Any] | None]] = [(data, None)]
     seen: set[int] = set()
     while pending:
-        current = pending.pop()
+        current, data_parent = pending.pop()
         if id(current) in seen:
             continue
         if len(seen) >= 256:
             yield {"error": "任务结果层级超限，需核对原结果", "requires_reconciliation": True}
             return
         seen.add(id(current))
-        yield current
+        # A tool can return an order/customer row in data. Its generic status
+        # describes that entity, not whether the tool ran (e.g. cancelled order).
+        # Keep business evidence visible, but classify only explicit execution
+        # envelopes. Nested output/result wrappers retain their ordinary meaning.
+        # Trace adapters copy their own run ID onto business data; only an
+        # independent child-run identity denotes an execution envelope.
+        if data_parent is not None and not (
+            _EXECUTION_ENVELOPE_KEYS.intersection(current)
+            or any(
+                current.get(key)
+                and current[key] not in (data_parent.get("run_id"), data_parent.get("agent_run_id"))
+                for key in ("run_id", "agent_run_id")
+            )
+        ):
+            yield {key: value for key, value in current.items() if key not in {"state", "status"}}
+        else:
+            yield current
         children = [
-            current.get(key)
+            (current.get(key), current if key == "data" else None)
             for key in ("result", "output", "data", "payload", "final_output", "chat_payload")
         ]
         for key in ("outputs", "node_outputs"):
             outputs = current.get(key)
             if isinstance(outputs, dict):
-                children.extend(outputs.values())
+                children.extend((value, None) for value in outputs.values())
             elif isinstance(outputs, list):
-                children.extend(outputs)
+                children.extend((value, None) for value in outputs)
         for key in ("tool_records", "legacy_tool_records", "_tool_records"):
             records = current.get(key)
             if isinstance(records, list):
                 children.extend(
-                    record.get("output") for record in records if isinstance(record, dict)
+                    (record.get("output"), None) for record in records if isinstance(record, dict)
                 )
-        pending.extend(item for item in reversed(children) if isinstance(item, dict))
+        pending.extend((item, flag) for item, flag in reversed(children) if isinstance(item, dict))
 
 
 def execution_result_states(data: dict[str, Any]) -> set[str]:
@@ -159,6 +198,7 @@ def execution_result_error(data: dict[str, Any]) -> str:
             return str(result["error"])
         if (
             execution_result_states(result) & _UNFINISHED_STATES
+            or result.get("outcome_unknown") is True
             or result.get("reconciliation_required")
             or result.get("requires_reconciliation")
             or result.get("pending_approval")
@@ -180,7 +220,9 @@ def execution_result_error(data: dict[str, Any]) -> str:
 def execution_result_outcome_unknown(data: dict[str, Any]) -> bool:
     """Distinguish uncertain effects from ordinary pending or approval states."""
     return any(
-        execution_result_states(result) & {"unknown", "interrupted", "partial", "partial_success"}
+        execution_result_states(result)
+        & {"unknown", "interrupted", "partial", "partial_success", "timeout", "timed_out"}
+        or result.get("outcome_unknown") is True
         or result.get("reconciliation_required") is True
         or result.get("requires_reconciliation") is True
         for result in execution_result_envelopes(data)
@@ -191,10 +233,35 @@ def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
     """Preserve unresolved execution through the same envelopes used by verification."""
     return any(
         execution_result_states(result) & _ACTIVE_STATES
+        or result.get("outcome_unknown") is True
         or result.get("reconciliation_required")
         or result.get("requires_reconciliation")
         for result in execution_result_envelopes(data)
     )
+
+
+def normalize_execution_result(data: dict[str, Any]) -> dict[str, Any]:
+    """Keep the first receipt and durable replay on the same result contract.
+
+    A transport success cannot override an unfinished or failed child execution.
+    Retain its original identity/evidence while making the outer status usable
+    by execution, billing and graph consumers. Business status is not run state.
+    """
+    error = execution_result_error(data)
+    requires_reconciliation = execution_result_requires_reconciliation(data)
+    if not (error or requires_reconciliation):
+        return data
+    result = dict(data)
+    if error:
+        result.update(success=False, message=error)
+    if requires_reconciliation:
+        result.update(
+            success=False,
+            outcome="unknown",
+            retryable=False,
+            reconciliation_required=True,
+        )
+    return result
 
 
 def execution_result_awaits_approval(data: dict[str, Any]) -> bool:

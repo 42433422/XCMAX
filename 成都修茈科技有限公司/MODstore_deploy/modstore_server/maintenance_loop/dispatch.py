@@ -12,6 +12,7 @@ from modstore_server import (
     self_maintenance_remediation_prompts,
     self_maintenance_retry,
 )
+from modstore_server.customer_issue_delivery_contract import execution_requires_reconciliation
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config, para_client, results, review, store
@@ -52,7 +53,11 @@ def _execute_employee_task_with_retries(
     bench_override = _loop_platform_bench_override()
     result: Dict[str, Any] = {}
     for attempt in range(1, attempts + 1):
-        device_wait = para_client._wait_for_para_device_online()
+        device_wait = (
+            {"online": True}
+            if input_data.get("para_task_id")
+            else para_client._wait_for_para_device_online()
+        )
         if not device_wait.get("online"):
             config.logger.warning(
                 "self-maintenance para device not online before dispatch attempt=%s/%s",
@@ -137,9 +142,13 @@ def _run_step_with_inner_retries(
         failure_reason = "" if ok else results._extract_failure_reason(result, para_meta)
         is_final = attempt >= inner_max
         should_retry = False
+        if extra.get("para_task_id"):
+            # Reconciliation only reads the original task; it cannot repair its report.
+            break
         if not ok and (not is_final):
             if (
                 retry_kind == "code_fix"
+                and not execution_requires_reconciliation(result)
                 and not results._is_accepted_para_wait_timeout(result)
                 and not self_maintenance_retry.is_execution_environment_failure(result)
             ):

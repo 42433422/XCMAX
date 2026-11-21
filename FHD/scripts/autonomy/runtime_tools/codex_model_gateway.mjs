@@ -11,8 +11,7 @@ import { Writable } from 'node:stream';
  * - 鉴权：DEVFLEET_CODEX_API_KEY_ENV 指定的变量（默认 OPENAI_API_KEY，其次 CODEX_API_KEY）
  *   有值时只给本次 codex exec 子进程注入 CODEX_API_KEY；缺失时回退 ChatGPT 登录并在日志标注。
  *   日志只写变量名，从不写值。
- * - 遇到“模型不支持 / 模型不存在 / 额度耗尽”换下一个候选重试同一任务；其他失败原样返回，
- *   交给既有的执行器回退链 / 超时逻辑（不在这里重复实现）。
+ * - 模型候选降级只用于只读探活；真实任务一旦启动就不重放，失败由原任务回执核对。
  * - DEVFLEET_CODEX_MODEL_GATEWAY=0 关闭自动降级；角色显式模型仍作为单候选传给 CLI。
  */
 
@@ -167,9 +166,10 @@ export async function runCodexBudgetedAttempt({ execution, model = '', run, log 
     status === 'completed' ? 'info' : 'warn',
   );
   try {
-    const output = await run(args);
-    emit(asText(output).startsWith('[codex exit=') ? 'failed' : 'completed');
-    return output;
+    const result = await run(args);
+    emit(result?.ok === true && result.receipt?.status === 'completed'
+      ? 'completed' : result?.receipt?.status || 'unknown');
+    return result;
   } catch (error) {
     emit('invocation_error');
     throw error;
@@ -312,10 +312,10 @@ export async function probeModels({ candidates, availability, runProbe, log = ()
 }
 
 /**
- * 依序尝试候选模型执行同一任务。runAttempt(model) 返回 {ok, output, nonZero}。
- * 只有模型级错误才降级；其余失败立即返回给调用方。
+ * 只读探活可按模型级错误尝试下个候选。真实任务默认只调用一次；未知失败也不重放。
  */
-export async function runWithModelFallback({ candidates, availability, runAttempt, classify = classifyModelError, log = () => {} }) {
+export async function runWithModelFallback({ candidates, availability, runAttempt, readOnlyProbe = false,
+  classify = classifyModelError, log = () => {} }) {
   const attempts = [];
   let last = null;
   for (const model of candidates) {
@@ -331,12 +331,12 @@ export async function runWithModelFallback({ candidates, availability, runAttemp
     if (result?.ok) {
       availability?.mark(model, 'available');
       attempts.push({ model, status: 'ok' });
-      return { ok: true, model, output: result.output, attempts, exhausted: false };
+      return { ...result, ok: true, model, output: result.output, attempts, exhausted: false };
     }
     const kind = classify(result?.output, model);
-    if (!kind) {
+    if (!kind || !readOnlyProbe) {
       attempts.push({ model, status: 'failed' });
-      return { ok: false, model, output: result?.output ?? '', attempts, exhausted: false };
+      return { ...result, ok: false, model, output: result?.output ?? '', attempts, exhausted: false };
     }
     availability?.mark(model, 'unavailable', kind);
     attempts.push({ model, status: kind === 'quota' ? 'quota' : 'unsupported' });
@@ -344,7 +344,10 @@ export async function runWithModelFallback({ candidates, availability, runAttemp
   }
   const summary = `Codex 候选模型全部不可用 ${formatModelsTried(attempts)}`;
   return {
+    ...last,
     ok: false,
+    executionStarted: last?.executionStarted ?? false,
+    receipt: last?.receipt || { status: 'not_started', reason: 'no_available_model' },
     model: '',
     // 保持 `[codex exit=` 前缀，沿用既有非零退出判定与失败摘要（describeCodexFailure 取尾部）。
     output: `${last?.output ? asText(last.output) : '[codex exit=1]'}\n[codex-model-gateway] ${summary}`,

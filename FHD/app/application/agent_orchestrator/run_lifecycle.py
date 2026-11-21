@@ -6,6 +6,10 @@ from typing import TYPE_CHECKING, Any, cast
 from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
+from app.domain.task_lifecycle.results import (
+    execution_result_error,
+    execution_result_requires_reconciliation,
+)
 
 
 def requires_retry_reconciliation(run: AgentRun) -> bool:
@@ -121,13 +125,7 @@ def safe_continuation_error(
         return "持久化审批节点清单无效，不能恢复"
     for node in plan.nodes:
         step = steps[node.node_id]
-        if (
-            step.output.get("outcome") == "unknown"
-            or step.output.get("execution_outcome") == "unknown"
-            or step.output.get("outcome_unknown")
-            or step.output.get("reconciliation_required")
-            or step.output.get("requires_reconciliation")
-        ):
+        if execution_result_requires_reconciliation(step.output):
             return "步骤执行结果尚需人工核对，不能恢复执行"
         if (node.tool_id, node.action, node.params, node.depends_on) != (
             step.tool_id,
@@ -137,7 +135,7 @@ def safe_continuation_error(
         ):
             return "原计划与执行步骤已变化，不能恢复"
         if step.status == "completed":
-            if step.output.get("success") is not True:
+            if step.output.get("success") is not True or execution_result_error(step.output):
                 return "已完成步骤缺少成功回执，需要人工核对"
             continue
         if step.status == "skipped":

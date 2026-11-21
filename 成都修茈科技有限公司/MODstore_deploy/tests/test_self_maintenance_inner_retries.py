@@ -518,3 +518,115 @@ def test_code_step_does_not_retry_environment_failures_as_code_repairs(
     assert not ok and error in reason
     assert len(calls) == 1 and rounds == 0
     assert not captured_ledger
+
+
+@pytest.mark.parametrize(
+    "receipt",
+    [
+        {"ok": True, "accepted": True, "completed": False, "status": "para_task_accepted"},
+        {
+            "ok": False,
+            "accepted": True,
+            "status": "para_task_poll_failed",
+            "requires_reconciliation": True,
+            "error": "socket hang up",
+        },
+        {"ok": True, "reconciliation_required": True},
+        {"ok": True, "execution_state": "unknown"},
+        {
+            "ok": False,
+            "queued": True,
+            "outbox_path": "/pending.json",
+            "error": "para_api_failed_outboxed",
+        },
+    ],
+)
+def test_uncertain_accepted_work_is_neither_success_nor_a_new_code_attempt(
+    monkeypatch, captured_ledger, receipt
+):
+    output = {"handler": "para_delegate", "task_id": "original-task", **receipt}
+    result = {"result": {"status": "completed", "ok": True, "outputs": [output]}}
+    calls = _patch_dispatch(monkeypatch, [result])
+    _, ok, _, para, _, retries, _ = _maintenance_dispatch._run_step_with_inner_retries(
+        employee_id="vibe-coding-maintainer",
+        step_name="code",
+        task_text="repair",
+        extra={},
+        user_id=1,
+        run_id="uncertain-original",
+    )
+    assert not ok and len(calls) == 1 and retries == 0
+    assert para["task_id"] == "original-task" and para["requires_reconciliation"]
+    assert not _maintenance_results._is_transient_employee_dispatch_failure(result)
+    assert not captured_ledger
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        {},
+        {"exit_code": None},
+        {"exit_code": False},
+        {"exit_code": 0, "timed_out": True},
+        "not a receipt",
+    ],
+)
+def test_delivery_validation_requires_an_observed_zero_exit(command):
+    result = {"ok": True, "delivery_validation": {"commands": [command]}}
+    assert not _maintenance_results._employee_result_ok(result)
+    assert (
+        _maintenance_results._delivery_validation_gate(result)["reason"]
+        == "delivery_validation_failed"
+    )
+
+
+@pytest.mark.parametrize("commands", [None, [], "pytest"])
+def test_present_empty_delivery_validation_is_not_completion(commands):
+    result = {"ok": True, "delivery_validation": {"commands": commands}}
+    assert not _maintenance_results._employee_result_ok(result)
+
+
+@pytest.mark.parametrize("status", ["cancelled", "blocked", "waiting_approval", "timed_out"])
+def test_explicit_non_success_status_cannot_be_hidden_by_ok_envelope(status):
+    assert not _maintenance_results._employee_result_ok({"result": {"ok": True, "status": status}})
+
+
+def test_reconciliation_reads_original_task_once_without_waiting_for_idle_device(monkeypatch):
+    calls = []
+    monkeypatch.setattr(_maintenance_dispatch, "_loop_platform_bench_override", lambda: None)
+    monkeypatch.setattr(
+        _maintenance_para_client,
+        "_wait_for_para_device_online",
+        lambda: pytest.fail("readback must not wait to dispatch new work"),
+    )
+    monkeypatch.setattr(_maintenance_para_client, "_fetch_para_task_report_excerpt", lambda *a: "")
+
+    def execute(employee_id, task, input_data, **kwargs):
+        calls.append(input_data)
+        return {
+            "result": {
+                "outputs": [
+                    {
+                        "handler": "para_delegate",
+                        "ok": False,
+                        "accepted": True,
+                        "completed": False,
+                        "status": "para_task_failed",
+                        "task_id": "original-task",
+                        "error": "actual terminal failure",
+                    }
+                ]
+            }
+        }
+
+    monkeypatch.setattr(_maintenance_dispatch.employee_executor, "execute_employee_task", execute)
+    _, ok, _, _, _, retries, _ = _maintenance_dispatch._run_step_with_inner_retries(
+        employee_id="vibe-coding-maintainer",
+        step_name="code",
+        task_text="read original",
+        extra={"para_task_id": "original-task"},
+        user_id=1,
+        run_id="readback",
+    )
+    assert not ok and retries == 0
+    assert len(calls) == 1 and calls[0]["para_task_id"] == "original-task"
