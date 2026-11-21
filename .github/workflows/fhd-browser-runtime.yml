@@ -108,9 +108,9 @@ jobs:
               raise SystemExit("browser extra must pin one Playwright release")
           packages = tomllib.loads(Path("uv.lock").read_text())["package"]
           requirements = list(browser)
-          # infrastructure/__init__.py imports SQLAlchemy; the parent test conftest
-          # is deliberately outside confcutdir and no application factory is needed.
-          for name in ("pytest", "pytest-asyncio", "sqlalchemy", "pyyaml", "psutil", "pillow"):
+          # infrastructure/__init__.py imports SQLAlchemy; computer_browser imports pydantic.
+          # The parent test conftest is outside confcutdir; no application factory is needed.
+          for name in ("pytest", "pytest-asyncio", "sqlalchemy", "pyyaml", "psutil", "pillow", "pydantic"):
               versions = [p["version"] for p in packages if p["name"] == name]
               if len(versions) != 1:
                   raise SystemExit(f"expected exactly one locked {name} version")
@@ -162,7 +162,7 @@ jobs:
               "test_screenshot_masks_embedded_frame_rectangle",
               "test_browser_executes_under_default_tool_worker_resource_limits",
           }
-          if not required <= {case.get("name") for case in cases}:
+          if not required <= {(n[:n.rfind("[")] if (n:=case.get("name") or "").endswith("]") and "[" in n else n) for case in cases}:
               raise SystemExit("mandatory real-browser scenarios are missing")
           if any(case.find(tag) is not None for case in cases for tag in ("skipped", "failure", "error")):
               raise SystemExit("real-browser evidence contains skips or failures")
