@@ -401,3 +401,35 @@ def memory_digest(context: dict[str, Any]) -> dict[str, str]:
             if summary:
                 digest[key] = summary[:1200]
     return digest
+
+
+def _slim_schema(schema: Any) -> Any:
+    """只保留规划所需结构：字段名、类型、枚举、必填与简短说明。
+
+    输出 schema、执行元数据与长描述不进入规划 prompt，避免工具目录挤占上下文。
+    """
+    if not isinstance(schema, dict):
+        return {}
+    slim: dict[str, Any] = {}
+    for key in ("type", "required", "enum"):
+        if key in schema:
+            slim[key] = schema[key]
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        slim_props: dict[str, Any] = {}
+        for name, prop in properties.items():
+            if not isinstance(prop, dict):
+                slim_props[name] = prop
+                continue
+            item: dict[str, Any] = {}
+            for key in ("type", "enum", "items"):
+                if key in prop:
+                    item[key] = prop[key]
+            description = str(prop.get("description") or "").strip()
+            if description:
+                item["description"] = description[:80]
+            slim_props[name] = item
+        slim["properties"] = slim_props
+    if isinstance(schema.get("items"), dict):
+        slim["items"] = _slim_schema(schema["items"])
+    return slim
