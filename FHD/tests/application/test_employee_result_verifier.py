@@ -69,6 +69,7 @@ def test_success_wrapper_cannot_hide_nested_error_or_unfinished_action():
         {"execution_state": "completed", "status": "unknown"},
         {"outcome": " UNKNOWN "},
         {"requires_reconciliation": True},
+        {"outcome_unknown": True},
         {"status": "accepted"},
         {"reconciliation_required": True},
     ):
@@ -113,6 +114,8 @@ def test_unknown_identity_variants_are_not_verified_and_require_reconciliation()
         ({"status": "inflight"}, False, True),
         ({"status": "partial"}, False, True),
         ({"status": "partial_success"}, False, True),
+        ({"execution_status": "timeout"}, False, True),
+        ({"execution_status": "timed_out"}, False, True),
         ({"status": "blocked"}, False, True),
         ({"status": "error"}, False, False),
         ({"status": "failure"}, False, False),
@@ -138,6 +141,54 @@ def test_success_envelopes_preserve_waits_and_unfinished_execution(child, approv
 def test_business_row_status_does_not_become_execution_status():
     result = {"success": True, "result": {"items": [{"status": "pending", "name": "order"}]}}
     assert verify_employee_run_result("employee", result) == (True, "ok")
+
+
+@pytest.mark.parametrize("status", ["cancelled", "pending", "failed"])
+@pytest.mark.parametrize("traced", [False, True])
+def test_cancel_order_contract_preserves_business_status_and_original_receipt(status, traced):
+    from copy import deepcopy
+
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.application.agent_orchestrator.trace_payloads import _attach_run_id
+    from app.domain.task_lifecycle.results import (
+        execution_result_requires_reconciliation,
+        normalize_execution_result,
+    )
+
+    spec = get_tool_action_spec("purchase", "cancel_order")
+    result = deepcopy(spec.contract_samples[0]["output"])
+    result["data"]["status"] = status
+    if traced:
+        result = _attach_run_id(result, "order-cancellation-trace")
+    before = deepcopy(result)
+    assert normalize_execution_result(result) == before
+    assert result == before and result["success"] is True
+    assert execution_result_requires_reconciliation(result) is False
+    assert verify_employee_run_result("employee", result, require_non_empty=False) == (True, "ok")
+
+
+@pytest.mark.parametrize("identity", ["task_id", "execution_id", "run_id", "agent_run_id"])
+def test_independent_child_execution_keeps_pending_state(identity):
+    from app.domain.task_lifecycle.results import normalize_execution_result
+
+    result = {
+        "success": True,
+        "run_id": "parent-run",
+        "data": {identity: "child-run", "status": "pending"},
+    }
+    normalized = normalize_execution_result(result)
+    assert normalized["success"] is False and normalized["outcome"] == "unknown"
+    assert normalized["retryable"] is False and normalized["data"] == result["data"]
+
+
+def test_employee_execution_contract_does_not_claim_accepted_run_completed():
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.domain.task_lifecycle.results import normalize_execution_result
+
+    result = get_tool_action_spec("employee", "execute").contract_samples[0]["output"]
+    normalized = normalize_execution_result(result)
+    assert normalized["success"] is False and normalized["outcome"] == "unknown"
+    assert normalized["retryable"] is False and normalized["employee_id"] == result["employee_id"]
 
 
 @pytest.mark.parametrize("key", ["outputs", "node_outputs"])

@@ -174,6 +174,7 @@ def test_fresh_process_retains_a_crashed_workers_committed_effect(claims):
     [
         {"success": False, "outcome": "unknown", "retryable": True},
         {"success": True, "requires_reconciliation": True},
+        {"success": True, "outcome_unknown": True},
         {"success": False, "execution_status": "unknown"},
         {"success": False, "error_code": "tool_timeout_unknown"},
         {"success": False, "result": {"outputs": [{"execution_state": "unknown"}]}},
@@ -265,3 +266,58 @@ def test_executor_keeps_ambiguous_dispatch_non_replayable(claims, monkeypatch, m
     assert replay["success"] is False and replay["outcome"] == "unknown"
     assert replay["retryable"] is False
     assert calls == [mode]
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        {"requires_reconciliation": True},
+        {"outcome_unknown": True},
+        {"execution_status": "unknown"},
+        {"result": {"execution_status": "timeout"}},
+        {"result": {"outputs": [{"execution_state": "unknown"}]}},
+        {"payload": {"final_output": {"node_outputs": {"job": {"status": "accepted"}}}}},
+    ],
+)
+def test_first_executor_receipt_matches_durable_unknown_replay(claims, monkeypatch, marker):
+    def dispatch(*_args, **_kwargs):
+        with sqlite3.connect(claims) as conn:
+            conn.execute("insert into effects default values")
+        return {
+            "success": True,
+            "file_name": "fixture.docx",
+            "download_url": "/api/files/fixture.docx",
+            "artifacts": [],
+            "request_id": "original-request",
+            "action_id": "original-effect",
+            **marker,
+        }
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        dispatch,
+    )
+    step = AgentStep(
+        node_id="export",
+        tool_id="generate_office_document",
+        action="execute",
+        params={"user_request": "fixture export", "output_format": "docx"},
+    )
+    context = {**CONTEXT, "idempotency_key": "unknown-export"}
+    first = AgentToolExecutor().execute(step, runtime_context=context)
+    assert first["success"] is False and first["outcome"] == "unknown"
+    assert first["retryable"] is False and first["reconciliation_required"] is True
+    assert first["request_id"] == "original-request" and first["action_id"] == "original-effect"
+    for key, value in marker.items():
+        assert first[key] == value
+
+    permissions.drop_process_idempotency_memory()
+    replay = AgentToolExecutor().execute(step, runtime_context=context)
+    assert replay == first
+    assert _effect_count(claims) == 1
+    assert (
+        permissions.reconcile_turn_effect(tenant_id="421", idempotency_key="unknown-export")[
+            "effect"
+        ]
+        == "unknown"
+    )

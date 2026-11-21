@@ -18,6 +18,10 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 )
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.domain.task_lifecycle.results import (
+    execution_result_requires_reconciliation,
+    normalize_execution_result,
+)
 from app.infrastructure.observability.genai_spans import tool_call_span
 from app.infrastructure.observability.metrics import observe_tool_call
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
@@ -288,7 +292,9 @@ class StepExecution:
                     "error_code": "tool_exception",
                     "message": "工具执行失败",
                 }
-        step.output = _confirm_customer_create(step, dict(output or {}), runtime_context)
+        step.output = normalize_execution_result(
+            _confirm_customer_create(step, dict(output or {}), runtime_context)
+        )
         if step.output.get("success") is not True:
             step.output["success"] = False
         from app.application.agent_orchestrator.tool_permission import absorb_tool_output
@@ -298,7 +304,8 @@ class StepExecution:
         )
         if step.output.get("retryable") is False:
             run.metadata["non_retryable"] = True
-        if step.output.get("outcome") == "unknown" or step.output.get("reconciliation_required"):
+        requires_reconciliation = execution_result_requires_reconciliation(step.output)
+        if requires_reconciliation:
             run.metadata["non_retryable"] = True
             run.metadata["recovery"] = {
                 "state": "manual_reconciliation_required",
@@ -378,8 +385,7 @@ class StepExecution:
             return
         if (
             str(step.output.get("error_code") or "") != "tool_billing_blocked"
-            and not step.output.get("reconciliation_required")
-            and step.output.get("outcome") != "unknown"
+            and not requires_reconciliation
         ):
             self.usage.record_tool_usage_refund(run, tool_call, reason=step.error)
         self.usage.refresh_run_cost_metadata(run)

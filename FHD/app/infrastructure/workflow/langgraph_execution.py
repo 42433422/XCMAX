@@ -15,6 +15,10 @@ from app.application.workflow.workflow_types import (
 )
 from app.domain.task_lifecycle.control import RETRYABLE_CODES
 from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+from app.domain.task_lifecycle.results import (
+    execution_result_requires_reconciliation,
+    normalize_execution_result,
+)
 from app.infrastructure.workflow.langgraph_runtime import (
     _INTERNAL_CHANNELS,
     _now_iso,
@@ -102,17 +106,12 @@ class LangGraphExecutionMixin:
                     retryable = False
                     break
                 continue
-            output = raw if isinstance(raw, dict) else {"output": raw}
+            output = normalize_execution_result(raw) if isinstance(raw, dict) else {"output": raw}
             last_output = output
-            if (
-                output.get("retryable") is False
-                or output.get("outcome") == "unknown"
-                or output.get("outcome_unknown")
-                or output.get("reconciliation_required")
-                or output.get("requires_reconciliation")
-            ):
+            unknown_outcome = execution_result_requires_reconciliation(output)
+            if output.get("retryable") is False or unknown_outcome:
                 retryable = False
-            if output.get("success", False):
+            if output.get("success") is True:
                 duration_ms = int((time.perf_counter() - begin) * 1000)
                 _emit(
                     "finished",
@@ -139,12 +138,6 @@ class LangGraphExecutionMixin:
             attempts.append({"error": last_error, "recoverable": True})
             retries += 1
             code = str(output.get("error_code") or "")
-            unknown_outcome = (
-                output.get("outcome") == "unknown"
-                or output.get("execution_outcome") == "unknown"
-                or output.get("requires_reconciliation") is True
-                or output.get("reconciliation_required") is True
-            )
             if code in _DEFERRED_RETRY_CODES and not unknown_outcome:
                 # Admission failures happen before tool dispatch. Preserve the
                 # safe retry signal for a later request, but do not hammer the

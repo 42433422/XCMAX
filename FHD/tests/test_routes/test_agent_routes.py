@@ -558,6 +558,69 @@ def test_record_observed_tool_rejects_write_or_unknown_tools() -> None:
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "case", ["deep_unknown", "late_unknown", "nested_failure", "missing_success", "nonbool_success"]
+)
+def test_observed_receipt_classification_survives_sql_storage_and_bounded_view(trusted_actor, case):
+    from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
+
+    actor = trusted_actor(role="admin")
+    set_agent_run_repository_for_tests(SQLAlchemyAgentRunRepository(session_factory=actor.factory))
+    output = {"success": True}
+    if case == "deep_unknown":
+        child = {"outcome_unknown": True}
+        for _ in range(6):
+            child = {"result": child}
+        output["result"] = child
+    elif case == "late_unknown":
+        output.update({f"field_{index}": index for index in range(45)})
+        output["requires_reconciliation"] = True
+    elif case == "nested_failure":
+        output["result"] = {"outputs": [{"success": False, "message": "child rejected"}]}
+    elif case == "missing_success":
+        output = {"message": "transport delivered"}
+    else:
+        output["success"] = "false"
+    client = _client(actor=actor)
+    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as dispatch:
+        response = client.post(
+            "/api/agent/runs/observed-tool",
+            json={
+                "message": "查产品",
+                "tool_id": "products",
+                "action": "query",
+                "params": {"keyword": "5003"},
+                "output": output,
+                "response": "已全部完成",
+            },
+        )
+        assert response.status_code == 200, response.text
+        reference = response.json()["data"]
+        unknown = case in {"deep_unknown", "late_unknown"}
+        assert reference["status"] == ("blocked" if unknown else "failed")
+        # Reopen the durable repository before reading or attempting continuation.
+        repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+        set_agent_run_repository_for_tests(repository)
+        read = client.get(f"/api/agent/runs/{reference['run_id']}")
+        assert read.status_code == 200, read.text
+        stored = repository.get(reference["run_id"])
+        assert stored.status == reference["status"]
+        assert read.json()["data"]["status"] == stored.status
+        assert stored.steps[0].output["success"] is False
+        assert stored.tool_calls[0].status == "failed"
+        assert stored.final_output["response"] != "已全部完成"
+        assert stored.events[-1].event_type == f"run.{stored.status}"
+        if unknown:
+            assert stored.steps[0].output["outcome"] == "unknown"
+            assert stored.steps[0].output["retryable"] is False
+            assert stored.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        before = stored.to_dict()
+        assert client.post(f"/api/agent/runs/{stored.run_id}/retry", json={}).status_code == 409
+        assert repository.get(stored.run_id).to_dict() == before
+        assert get_task_execution_repository().get(stored.run_id) is None
+        dispatch.assert_not_called()
+
+
 def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
     get_agent_run_repository().clear()
     client = _client("u1")
