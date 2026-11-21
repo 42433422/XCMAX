@@ -13,6 +13,14 @@ from app.application.employee_runtime.agent_loop import (
     default_employee_tools,
     run_employee_agent_loop,
 )
+from app.application.employee_runtime.write_approval import (
+    build_write_approval_gate,
+    compose_gates,
+)
+from tests.test_application.test_approval_persistence import db as db
+from tests.test_application.test_registered_capabilities import (
+    batch_approval_context as batch_approval_context,
+)
 
 
 @pytest.mark.parametrize(
@@ -312,7 +320,9 @@ def test_final_dispatch_requires_allowlisted_tool_and_valid_gate(tools, verdict)
         )
     execute.assert_not_called()
     assert result["ok"] is False
-    assert result["exit_status"] == "tool_blocked"
+    assert result["exit_status"] == (
+        "unknown" if isinstance(verdict, Exception) else "tool_blocked"
+    )
 
 
 def _run_action_sequence(arguments, results):
@@ -377,6 +387,227 @@ def test_unknown_or_nonretryable_action_cannot_replay(outcome):
     result, count = _run_action_sequence(["{}", "{}"], [outcome, '{"success":true}'])
     assert count == 1 and result["ok"] is False
     assert result["retryable"] is False
+
+
+@pytest.mark.parametrize(
+    "receipt, state",
+    [
+        ({"success": True, "execution_state": "queued"}, "queued"),
+        ({"success": True, "execution_accepted": True}, "queued"),
+        ({"success": True, "status": "retrying"}, "retrying"),
+        ({"success": True, "status": "paused"}, "paused"),
+        ({"success": True, "output": {"pending_approval": True}}, "waiting_approval"),
+        ({"success": True, "output": {"needs_user_input": True}}, "waiting_input"),
+        ({"success": True, "result": {"outcome_unknown": True}}, "unknown"),
+        ({"success": True, "result": {"requires_reconciliation": True}}, "unknown"),
+    ],
+)
+def test_incomplete_nested_receipt_stops_the_employee_and_keeps_original_run(receipt, state):
+    receipt["agent_run_id"] = "original-child-run"
+    result, count = _run_action_sequence(["{}", "{}"], [json.dumps(receipt), '{"success":true}'])
+    assert count == 1
+    assert result["ok"] is False
+    assert result["execution_state"] == state
+    assert result["agent_run_id"] == "original-child-run"
+    assert result["retryable"] is False
+
+
+def test_tool_dispatch_keeps_trusted_scope_and_original_turn():
+    call = MagicMock(id="original-action")
+    call.function.name = "tool1"
+    call.function.arguments = '{"user_id":999,"tenant_id":"forged"}'
+    trusted = {
+        "user_id": 7,
+        "tenant_id": "tenant-a",
+        "session_id": "conversation-a",
+        "turn_id": "turn-a",
+        "idempotency_key": "original-key",
+    }
+    checked_contexts = []
+
+    def scoped_gate(name, args, *, runtime_context=None):
+        checked_contexts.append(runtime_context)
+        return {"ok": True}
+
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch(
+            "app.application.tools.workflow.execute_workflow_tool", return_value='{"success":true}'
+        ) as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=MagicMock(content="", tool_calls=[call]))]),
+            MagicMock(choices=[MagicMock(message=MagicMock(content="done", tool_calls=[]))]),
+        ]
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="",
+            task="task",
+            model="test",
+            tools=[{"function": {"name": "tool1"}}],
+            runtime_context=trusted,
+            gate=compose_gates(lambda name, args: {"ok": True}, scoped_gate),
+        )
+    assert result["ok"] is True
+    context = execute.call_args.kwargs["runtime_context"]
+    assert all(context[key] == value for key, value in trusted.items())
+    assert context["call_id"] == "original-action"
+    assert context["tool_call_id"] == "original-action"
+    assert context["employee_id"] == "employee"
+    assert checked_contexts == [context]
+    assert trusted["tenant_id"] == "tenant-a"
+
+
+def test_pending_gate_stops_before_another_tool_and_keeps_approval_identity():
+    first, second = MagicMock(id="first"), MagicMock(id="second")
+    for call in (first, second):
+        call.function.name, call.function.arguments = "tool1", "{}"
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch("app.application.tools.workflow.execute_workflow_tool") as execute,
+    ):
+        client.return_value.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="", tool_calls=[first, second]))]
+        )
+        gate = MagicMock(
+            return_value={
+                "ok": False,
+                "pending_approval": True,
+                "approval_request_ids": ["original-approval"],
+            }
+        )
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="",
+            task="task",
+            model="test",
+            tools=[{"function": {"name": "tool1"}}],
+            gate=gate,
+        )
+    execute.assert_not_called()
+    gate.assert_called_once()
+    assert result["execution_state"] == "waiting_approval"
+    assert result["approval_request_ids"] == ["original-approval"]
+
+
+def test_inline_tool_call_markup_is_executed_as_the_named_tool():
+    message = MagicMock(
+        content="<tool_call><function=quote_lookup><parameter=sku>SKU-100</parameter></function></tool_call>",
+        tool_calls=None,
+    )
+    done = MagicMock(content="已查询。", tool_calls=[])
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch(
+            "app.application.tools.workflow.execute_workflow_tool",
+            return_value='{"success": true}',
+        ) as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=message)]),
+            MagicMock(choices=[MagicMock(message=done)]),
+        ]
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="员工",
+            task="查报价",
+            model="test",
+            tools=[{"function": {"name": "quote_lookup"}}],
+        )
+    assert execute.call_args.args[0] == "quote_lookup"
+    assert execute.call_args.args[1] == {"sku": "SKU-100"}
+    assert result["ok"] is True
+    assert result["tool_calls"][0]["tool"] == "quote_lookup"
+
+
+@pytest.mark.parametrize("state", ["waiting_approval", "completed"])
+def test_gate_original_run_receipt_never_executes_the_tool_again(state):
+    call = MagicMock(id="approved-call")
+    call.function.name = "business_db"
+    call.function.arguments = '{"action": "write"}'
+    first = MagicMock(content="", tool_calls=[call])
+    done = MagicMock(content="原任务回执已读取。", tool_calls=[])
+    receipt = {
+        "success": state == "completed",
+        "execution_state": state,
+        "agent_run_id": "original-run",
+        "task_id": "original-task",
+        "plan_id": "original-plan",
+        "approval_request_id": "original-approval",
+    }
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch("app.application.tools.workflow.execute_workflow_tool") as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=first)]),
+            MagicMock(choices=[MagicMock(message=done)]),
+        ]
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="",
+            task="写入",
+            model="test",
+            tools=[{"function": {"name": "business_db"}}],
+            gate=lambda *_args, **_kwargs: {"ok": False, "execution_result": receipt},
+        )
+    execute.assert_not_called()
+    assert result["ok"] is (state == "completed")
+    if state == "waiting_approval":
+        assert result["execution_state"] == state
+        assert result["agent_run_id"] == "original-run"
+        assert result["task_id"] == "original-task"
+        assert result["plan_id"] == "original-plan"
+        assert result["approval_request_id"] == "original-approval"
+
+
+def test_missing_required_argument_asks_and_does_not_execute():
+    call = MagicMock(id="need-sku")
+    call.function.name = "quote_lookup"
+    call.function.arguments = "{}"
+    asked = MagicMock(content="请提供物料编码 sku。", tool_calls=[])
+    first = MagicMock(content="", tool_calls=[call])
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch("app.application.tools.workflow.execute_workflow_tool") as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=first)]),
+            MagicMock(choices=[MagicMock(message=asked)]),
+        ]
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="员工",
+            task="查报价",
+            model="test",
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "quote_lookup",
+                        "description": "查询报价",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "sku": {"type": "string"},
+                                "note": {"type": "string"},
+                            },
+                            "required": ["sku"],
+                        },
+                    },
+                }
+            ],
+        )
+    execute.assert_not_called()
+    assert result["ok"] is False
+    assert result["execution_state"] == "waiting_input"
+    assert result["tool_calls"][0]["needs_user_input"] is True
+    assert "sku" in result["output"]
 
 
 def test_employee_agent_preserves_trusted_tool_context_through_the_real_handler_chain(
@@ -464,81 +695,74 @@ def test_employee_agent_preserves_trusted_tool_context_through_the_real_handler_
         **trusted,
         "employee_id": "employee-a",
         "source": "employee_runtime",
+        "workspace_root": str(tmp_path),
+        "call_id": "native-call-1",
         "tool_call_id": "native-call-1",
     }
     assert "human_approved" not in forwarded and "runtime_context" not in forwarded
 
 
-def test_inline_tool_call_markup_is_executed_as_the_named_tool():
-    message = MagicMock(
-        content="<tool_call><function=quote_lookup><parameter=sku>SKU-100</parameter></function></tool_call>",
-        tool_calls=None,
+def test_write_gate_binds_call_identity_to_original_sql_approval(
+    db, batch_approval_context, monkeypatch
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.db.models.approval import ApprovalRequest
+
+    forbidden = MagicMock(side_effect=AssertionError("unapproved tools cannot execute"))
+    monkeypatch.setattr(AgentOrchestrator, "execute_dispatched_run", forbidden)
+    monkeypatch.setattr(AgentOrchestrator, "_execute_with_durable_lease", forbidden)
+    context = {**batch_approval_context, "call_id": "parent-call", "employee_id": "parent"}
+    untrusted = {"tenant_id": 999, "user_id": "999", "call_id": "forged", "human_approved": True}
+    gate = compose_gates(
+        lambda name, args: {"ok": True},
+        build_write_approval_gate("employee", untrusted, runtime_context=context),
     )
-    done = MagicMock(content="已查询。", tool_calls=[])
-    with (
-        patch("app.infrastructure.llm.client.require_api_key"),
-        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
-        patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"success": true}',
-        ) as execute,
-    ):
-        client.return_value.chat.completions.create.side_effect = [
-            MagicMock(choices=[MagicMock(message=message)]),
-            MagicMock(choices=[MagicMock(message=done)]),
-        ]
-        result = run_employee_agent_loop(
-            employee_id="employee",
-            system_prompt="员工",
-            task="查报价",
-            model="test",
-            tools=[{"function": {"name": "quote_lookup"}}],
-        )
-    assert execute.call_args.args[0] == "quote_lookup"
-    assert execute.call_args.args[1] == {"sku": "SKU-100"}
-    assert result["ok"] is True
-    assert result["tool_calls"][0]["tool"] == "quote_lookup"
 
-
-def test_missing_required_argument_asks_and_does_not_execute():
-    call = MagicMock(id="need-sku")
-    call.function.name = "quote_lookup"
-    call.function.arguments = "{}"
-    asked = MagicMock(content="请提供物料编码 sku。", tool_calls=[])
-    first = MagicMock(content="", tool_calls=[call])
-    with (
-        patch("app.infrastructure.llm.client.require_api_key"),
-        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
-        patch("app.application.tools.workflow.execute_workflow_tool") as execute,
-    ):
-        client.return_value.chat.completions.create.side_effect = [
-            MagicMock(choices=[MagicMock(message=first)]),
-            MagicMock(choices=[MagicMock(message=asked)]),
-        ]
-        result = run_employee_agent_loop(
-            employee_id="employee",
-            system_prompt="员工",
-            task="查报价",
-            model="test",
-            tools=[
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "quote_lookup",
-                        "description": "查询报价",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "sku": {"type": "string"},
-                                "note": {"type": "string"},
-                            },
-                            "required": ["sku"],
-                        },
-                    },
-                }
-            ],
+    def run_call(call_id, product_id):
+        call = MagicMock(id=call_id)
+        call.function.name = "products"
+        call.function.arguments = json.dumps(
+            {**untrusted, "action": "batch_delete", "params": {"ids": [product_id]}}
         )
-    execute.assert_not_called()
-    assert result["ok"] is True
-    assert result["tool_calls"][0]["needs_user_input"] is True
-    assert "sku" in result["output"]
+        with (
+            patch("app.infrastructure.llm.client.require_api_key"),
+            patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+            patch("app.application.tools.workflow.execute_workflow_tool", forbidden),
+        ):
+            client.return_value.chat.completions.create.return_value = MagicMock(
+                choices=[MagicMock(message=MagicMock(content="", tool_calls=[call]))]
+            )
+            return run_employee_agent_loop(
+                employee_id="employee",
+                system_prompt="",
+                task="delete the requested product after approval",
+                model="test",
+                tools=[{"function": {"name": "products"}}],
+                input_data=untrusted,
+                runtime_context=context,
+                gate=gate,
+            )
+
+    first, second = run_call("call-a", 1), run_call("call-b", 2)
+    repeated = run_call("call-a", 1)
+    for receipt in (first, second, repeated):
+        assert receipt["ok"] is False and receipt["execution_state"] == "waiting_approval"
+    for key in ("task_id", "agent_run_id", "approval_request_id"):
+        assert first[key] != second[key]
+        assert repeated[key] == first[key]
+    repository = get_agent_run_repository()
+    for receipt, call_id in ((first, "call-a"), (second, "call-b")):
+        run = repository.get(receipt["agent_run_id"])
+        saved = run.metadata["runtime_context"]
+        assert saved["call_id"] == saved["tool_call_id"] == call_id
+        assert saved["employee_id"] == "employee"
+        assert saved["user_id"] == "1" and saved["tenant_id"] == 1
+        assert "human_approved" not in saved
+        assert run.status == "waiting_user"
+    forbidden.assert_not_called()
+    with db() as session:
+        rows = session.query(ApprovalRequest).all()
+        assert len(rows) == 2
+        assert all(row.status == "pending" for row in rows)
+    assert context["call_id"] == "parent-call" and context["employee_id"] == "parent"

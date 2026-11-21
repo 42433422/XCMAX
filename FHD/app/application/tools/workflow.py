@@ -299,14 +299,16 @@ def execute_workflow_tool(
 
         registered = execute_if_registered(name, args, runtime_context)
     except RECOVERABLE_ERRORS:
-        logger.exception("agent tool lifecycle admission failed")
+        logger.exception("agent tool receipt unavailable; dispatch stopped")
         return json.dumps(
             {
                 "success": False,
-                "error_code": "tool_registry_unavailable",
-                "execution_status": "not_started",
+                "error": "tool_receipt_unavailable",
+                "error_code": "tool_receipt_unavailable",
+                "execution_state": "unknown",
                 "retryable": False,
-                "message": "工具注册与授权信息不可用，未执行",
+                "reconciliation_required": True,
+                "tool": name,
             },
             ensure_ascii=False,
         )

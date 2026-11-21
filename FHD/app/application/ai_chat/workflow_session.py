@@ -156,6 +156,47 @@ class WorkflowSession:
             return WorkflowPlanStore()
         return self.store
 
+
+    def _settle_continued_run(
+        self,
+        user_id: str,
+        pending: dict[str, Any],
+        plan: PlanGraph,
+        run: AgentRun,
+        runtime_context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Project the authoritative run; a lost projection never authorizes replay."""
+        context = {**runtime_context, "agent_run_id": run.run_id}
+        payload = self.callbacks._format_agent_run_response(
+            plan,
+            run,
+            thinking_steps=str(pending.get("thinking_steps") or ""),
+            user_message=str(context.get("message") or run.message or ""),
+        )
+        state = str(payload.get("execution_state") or run.status or "unknown")
+        if self.callbacks._persist_plan_state(
+            plan,
+            context,
+            status="succeeded" if state == "completed" else state,
+            message=str(run.error or ""),
+        ):
+            self.pending.pop(user_id, None)
+        else:
+            self.pending[user_id] = {
+                **pending,
+                "plan": plan,
+                "agent_run_id": run.run_id,
+                "runtime_context": context,
+                "kind": "run_reconciliation",
+            }
+            payload["plan_persistence"] = {
+                "status": "failed",
+                "retry": "read_only",
+                "run_id": run.run_id,
+                "message": "计划状态尚未保存，请查询原任务，勿重复执行。",
+            }
+        return payload
+
     def hydrate_pending_workflow(
         self, user_id: str, session_id: str, context: dict[str, Any] | None = None
     ) -> bool:
@@ -247,7 +288,7 @@ class WorkflowSession:
             run_id = entry["agent_run_id"]
             if run_id:
                 run = run or AgentOrchestrator().get_run(run_id)
-                if run is None or run.status != "waiting_user":
+                if run is None:
                     return False
                 persisted_plan = plan_from_dict(run.metadata.get("plan"))
                 if (
@@ -278,6 +319,10 @@ class WorkflowSession:
                 entry["plan"] = persisted_plan
                 if run_context:
                     entry["runtime_context"] = run_context
+                if run.status != "waiting_user":
+                    entry["kind"] = "run_reconciliation"
+                    self.pending[user_id] = entry
+                    return True
                 waiting = find_waiting_step(run)
                 if waiting is None:
                     return unavailable() if authoritative else False
@@ -1316,20 +1361,8 @@ class WorkflowSession:
                                 message="待处理交互缺失",
                             )[1]
                         )
-                    self.pending.pop(user_id, None)
-                    self.callbacks._persist_plan_state(
-                        plan,
-                        runtime_ctx,
-                        status="succeeded"
-                        if continued.status == "completed"
-                        else ("cancelled" if continued.status == "cancelled" else "failed"),
-                        message=str(continued.error or ""),
-                    )
-                    return self.callbacks._format_agent_run_response(
-                        plan,
-                        continued,
-                        thinking_steps=str(pending.get("thinking_steps") or ""),
-                        user_message=str(runtime_ctx.get("message") or run.message or ""),
+                    return self._settle_continued_run(
+                        user_id, pending, plan, continued, runtime_ctx
                     )
                 return _control_reply(
                     "当前问题未绑定具体业务步骤，无法安全判断这条答复要修改哪个参数；原计划保持暂停。"
@@ -1405,18 +1438,8 @@ class WorkflowSession:
                         message="待处理交互缺失",
                     )[1]
                 )
-            self.pending.pop(user_id, None)
-            self.callbacks._persist_plan_state(
-                updated_plan,
-                runtime_ctx,
-                status="succeeded" if continued.status == "completed" else "failed",
-                message=str(continued.error or ""),
-            )
-            return self.callbacks._format_agent_run_response(
-                updated_plan,
-                continued,
-                thinking_steps=str(pending.get("thinking_steps") or ""),
-                user_message=str(runtime_ctx.get("message") or run.message or ""),
+            return self._settle_continued_run(
+                user_id, pending, updated_plan, continued, runtime_ctx
             )
         except ClarificationAnswerError as exc:
             return _control_reply(
@@ -1520,6 +1543,44 @@ class WorkflowSession:
                 message="需要澄清",
             )
         if pending:
+            if pending.get("kind") == "run_reconciliation":
+                from app.application.agent_orchestrator import AgentOrchestrator
+                from app.application.workflow.workflow_types import plan_from_dict
+
+                runtime = dict(pending.get("runtime_context") or {})
+                run = AgentOrchestrator().get_run(str(pending.get("agent_run_id") or ""))
+                owner = self.callbacks._task_owner_id(user_id, runtime)
+                saved = (run.metadata or {}).get("runtime_context") if run else None
+                if (
+                    run is None
+                    or run.user_id not in {user_id, owner}
+                    or run.plan_id != getattr(pending.get("plan"), "plan_id", None)
+                    or not isinstance(saved, dict)
+                    or str(saved.get("tenant_id") or "") != str(runtime.get("tenant_id") or "")
+                    or str(saved.get("session_id") or saved.get("conversation_id") or "")
+                    != str(runtime.get("session_id") or runtime.get("conversation_id") or "")
+                ):
+                    handled, reconciliation_reply = _control_reply(
+                        "原任务回执暂时无法核实，未重新执行；请返回任务页核对。",
+                        "workflow_unknown",
+                        {"run_id": pending.get("agent_run_id", "")},
+                        success=False,
+                        message="任务回执待核对",
+                    )
+                    reconciliation_reply.update(
+                        execution_state="unknown", requires_reconciliation=True, retryable=False
+                    )
+                    return handled, reconciliation_reply
+                if run.status == "waiting_user":
+                    return True, self.capture_agent_run_interaction(
+                        user_id=user_id,
+                        agent_run=run,
+                        runtime_context=runtime,
+                        thinking_steps=str(pending.get("thinking_steps") or ""),
+                        approval_nodes=pending.get("approval_nodes") or [],
+                    )
+                plan = plan_from_dict(run.metadata.get("plan")) or pending["plan"]
+                return True, self._settle_continued_run(user_id, pending, plan, run, runtime)
             if pending.get("kind") in {"clarification", "clarification_unbound"}:
                 clarification_reply = self.callbacks._continue_after_clarification(
                     user_id, pending, message
@@ -1612,21 +1673,11 @@ class WorkflowSession:
                         approval_nodes=approval_nodes,
                     )
                     return (True, interaction)
-                self.pending.pop(user_id, None)
                 continued_plan = plan_from_dict(continued.metadata.get("plan")) or pending_plan
-                self.callbacks._persist_plan_state(
-                    continued_plan,
-                    runtime_ctx,
-                    status="succeeded" if continued.status == "completed" else "failed",
-                    message=str(continued.error or ""),
-                )
                 return (
                     True,
-                    self.callbacks._format_agent_run_response(
-                        continued_plan,
-                        continued,
-                        thinking_steps=str(pending.get("thinking_steps") or ""),
-                        user_message=str(runtime_ctx.get("message") or continued.message or ""),
+                    self._settle_continued_run(
+                        user_id, pending, continued_plan, continued, runtime_ctx
                     ),
                 )
             if text in CANCEL_WORDS:

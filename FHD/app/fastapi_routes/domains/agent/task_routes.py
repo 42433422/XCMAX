@@ -185,16 +185,25 @@ def _task_envelope(
     execution = None
     if active is not None:
         execution = executions.get(active.run_id)
+        progress = task_progress_snapshot(active, viewer=viewer)
         task = replace(
             task,
-            metadata={**task.metadata, "progress": task_progress_snapshot(active, viewer=viewer)},
+            metadata={**task.metadata, "progress": progress},
         )
         active = project_execution_failure(active, execution)
     payload = project_execution_failure(task, execution).to_dict()
+    if active is not None:
+        payload["progress"] = payload.get("progress") or task.metadata.get("progress")
     payload["runs"] = [
-        public_run_dict(project_execution_failure(run, executions.get(run.run_id))) for run in runs
+        public_run_dict(
+            project_execution_failure(run, executions.get(run.run_id)),
+            read_run=orchestrator.get_run,
+        )
+        for run in runs
     ]
-    payload["active_run"] = public_run_dict(active) if active is not None else None
+    payload["active_run"] = (
+        public_run_dict(active, read_run=orchestrator.get_run) if active is not None else None
+    )
     payload["capabilities"] = task_capabilities(active) if active is not None else {}
     command = orchestrator.latest_task_control(active.run_id) if active is not None else None
     payload["control_command"] = command.to_dict() if command is not None else None

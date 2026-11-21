@@ -9,6 +9,11 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from app.application.employee_runtime.result_verifier import (
+    execution_result_error,
+    pending_employee_result,
+)
+from app.application.employee_runtime.write_approval import invoke_employee_gate
 from app.application.tool_execution_deadline import (
     invocation_deadline,
     remaining_invocation_seconds,
@@ -17,8 +22,8 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-# gate 签名：(tool_name, args) -> {"ok": bool, "reason": str}
-GateFn = Callable[[str, dict[str, Any]], dict[str, Any]]
+# Gates may additionally accept the trusted per-call runtime_context keyword.
+GateFn = Callable[..., dict[str, Any]]
 
 _DEFAULT_MAX_ITERATIONS = 6
 
@@ -168,9 +173,8 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
         return False, "工具返回不是有效 JSON", True
     if not isinstance(payload, dict):
         return False, "工具返回必须是 JSON 对象", True
-    from app.application.employee_runtime.result_verifier import execution_result_error
-
-    if error := execution_result_error(payload):
+    error = execution_result_error(payload)
+    if error:
         return False, error[:500], True
     if "success" in payload:
         if payload.get("success") is True:
@@ -535,6 +539,15 @@ def run_employee_agent_loop(
                     "repeat_count": repeat_limit,
                 }
 
+            call_context = {
+                **dict(runtime_context or {}),
+                "employee_id": employee_id,
+                "source": "employee_runtime",
+                "call_id": tc_id,
+                "tool_call_id": tc_id,
+            }
+            if workspace_root is not None:
+                call_context["workspace_root"] = workspace_root
             verdict: dict[str, Any] = {
                 "ok": False,
                 "reason": "工具不在员工授权白名单，未执行",
@@ -543,7 +556,9 @@ def run_employee_agent_loop(
                 verdict = {"ok": True}
                 if gate is not None:
                     try:
-                        verdict = gate(tool_name, args)
+                        verdict = invoke_employee_gate(
+                            gate, tool_name, args, runtime_context=call_context
+                        )
                     except RECOVERABLE_ERRORS:
                         logger.exception("employee tool gate failed closed: %s", tool_name)
                         verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
@@ -563,7 +578,8 @@ def run_employee_agent_loop(
                         "needs_user_input": True,
                         "missing": missing,
                     }
-            if verdict["ok"] is not True:
+            gate_receipt = verdict.get("execution_result")
+            if verdict["ok"] is not True and not isinstance(gate_receipt, dict):
                 reason = str(verdict.get("reason") or "blocked by employee gate")
                 tool_trace.append(
                     {
@@ -605,6 +621,21 @@ def run_employee_agent_loop(
                         ),
                     }
                 )
+                pending = pending_employee_result(verdict)
+                if pending:
+                    return {
+                        "handler": "agent",
+                        "ok": False,
+                        "output": reason,
+                        "rounds": rounds,
+                        "tool_calls": tool_trace,
+                        "trajectory": trajectory,
+                        "session_messages": [
+                            dict(item) for item in messages if item.get("role") != "system"
+                        ],
+                        "exit_status": pending["execution_state"],
+                        **pending,
+                    }
                 continue
 
             try:
@@ -613,16 +644,15 @@ def run_employee_agent_loop(
                 if time.monotonic() >= deadline:
                     return expired_result()
                 with invocation_deadline(deadline) as budget:
-                    result_raw = execute_workflow_tool(
-                        tool_name,
-                        args,
-                        workspace_root,
-                        runtime_context={
-                            **dict(runtime_context or {}),
-                            "employee_id": employee_id,
-                            "source": "employee_runtime",
-                            "tool_call_id": tc_id,
-                        },
+                    result_raw = (
+                        json.dumps(gate_receipt, ensure_ascii=False, default=str)
+                        if isinstance(gate_receipt, dict)
+                        else execute_workflow_tool(
+                            tool_name,
+                            args,
+                            workspace_root,
+                            runtime_context=call_context,
+                        )
                     )
                 if time.monotonic() >= deadline or budget.uncertain:
                     tool_trace.append(
@@ -653,24 +683,12 @@ def run_employee_agent_loop(
                 result_payload = None
             invalid_receipt = not isinstance(result_payload, dict)
             if invalid_receipt:
-                result_payload = {}
-            from app.domain.task_lifecycle.results import (
-                execution_result_requires_reconciliation,
-                execution_result_states,
-            )
-
-            unknown = (
-                invalid_receipt
-                or execution_result_requires_reconciliation(result_payload)
-                or bool(execution_result_states(result_payload) & {"timeout", "timed_out"})
-                or result_payload.get("accepted") is True
-            )
+                result_payload = {
+                    "execution_state": "unknown",
+                    "error": "工具返回不是有效 JSON 对象",
+                }
+            pending = pending_employee_result(result_payload)
             tool_success, tool_error, verified = _tool_result_state(str(result_raw))
-            if unknown:
-                tool_success, tool_error = (
-                    False,
-                    str(result_payload.get("error") or "工具结果待核对"),
-                )
             if tool_success:
                 for previous in reversed(tool_trace):
                     if (
@@ -688,6 +706,7 @@ def run_employee_agent_loop(
                     "success": tool_success,
                     "error": tool_error,
                     "verified": verified,
+                    **pending,
                 }
             )
             trajectory.append(
@@ -723,7 +742,7 @@ def run_employee_agent_loop(
                     "content": tool_content,
                 }
             )
-            if unknown or (not tool_success and result_payload.get("retryable") is False):
+            if pending or (not tool_success and result_payload.get("retryable") is False):
                 return {
                     "handler": "agent",
                     "ok": False,
@@ -731,11 +750,14 @@ def run_employee_agent_loop(
                     "rounds": rounds,
                     "tool_calls": tool_trace,
                     "trajectory": trajectory,
-                    "exit_status": "unknown" if unknown else "tool_failed",
-                    "execution_state": "unknown" if unknown else "failed",
+                    "exit_status": pending.get("execution_state", "tool_failed"),
+                    "execution_state": "failed",
                     "error": tool_error,
                     "retryable": False,
-                    "reconciliation_required": unknown,
+                    "session_messages": [
+                        dict(item) for item in messages if item.get("role") != "system"
+                    ],
+                    **pending,
                 }
 
     return {

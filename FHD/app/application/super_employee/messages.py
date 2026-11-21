@@ -6,7 +6,6 @@ from typing import Any
 
 from app.application.message_repository import MessageRepository
 
-from .cli import CliExecutionError
 from .common import (
     DISPATCHER_MESSAGE_KIND,
     PARA_TERMINAL_TASK_STATUSES,
@@ -112,6 +111,7 @@ class MessageSynchronizer:
         return match.group(1).strip() if match else ""
 
     def upsert_direct_reply_messages(self, *, user_id: int, rows: list[dict[str, Any]]) -> bool:
+        """Rebuild static presentation only; reading history never starts another CLI call."""
         request_ids_with_reply = {
             str(item.get("dispatch_request_id") or "")
             for item in rows
@@ -135,7 +135,6 @@ class MessageSynchronizer:
             )
         )
         changed = False
-        cli_backfills = 0
         for item in list(rows):
             if int(item.get("user_id") or 0) != int(user_id):
                 continue
@@ -146,13 +145,6 @@ class MessageSynchronizer:
                 continue
             text = str(item.get("body") or "")
             body = self._ports.direct_reply(text)
-            failure = None
-            if not body and cli_backfills < 1 and self._ports.should_reply(text, {}):
-                try:
-                    (body, _) = self._ports.compose_reply(text, {})
-                except CliExecutionError as exc:
-                    failure, body = exc, exc.reply_body()
-                cli_backfills += 1
             if not body:
                 continue
             rows.append(
@@ -162,8 +154,8 @@ class MessageSynchronizer:
                     body=body,
                     created_at=_utc_now(),
                     request_id=request_id,
-                    status="failed" if failure else "completed",
-                    extra={"kind": self._p.direct_kind, **(failure.payload() if failure else {})},
+                    status="completed",
+                    extra={"kind": self._p.direct_kind},
                 )
             )
             request_ids_with_reply.add(request_id)

@@ -54,6 +54,7 @@ class RelayTaskCreateBody(BaseModel):
     relay_id: str = Field(..., min_length=8, max_length=80)
     kind: str = Field(default="codex.invoke", max_length=64)
     payload: dict[str, Any] = Field(default_factory=dict)
+    client_request_id: str | None = Field(default=None, min_length=1, max_length=160)
 
 
 class RelayDesktopPollBody(BaseModel):

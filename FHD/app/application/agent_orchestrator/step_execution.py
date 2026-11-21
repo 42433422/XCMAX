@@ -28,6 +28,7 @@ from app.infrastructure.observability.genai_spans import (
     record_tool_result,
     tool_call_span,
 )
+from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 from app.infrastructure.observability.metrics import observe_tool_call
 from app.neuro_bus.tracer import get_trace_context
 from app.security.log_redaction import redact_log_text
@@ -214,8 +215,8 @@ class StepExecution:
         )
         if step.output.get("retryable") is False:
             run.metadata["non_retryable"] = True
-        uncertain = execution_result_requires_reconciliation(step.output)
-        if uncertain or (
+        uncertain = execution_result_outcome_unknown(step.output)
+        if execution_result_requires_reconciliation(step.output) or (
             step.output.get("retryable") is False
             and (
                 step.output.get("success") is not True

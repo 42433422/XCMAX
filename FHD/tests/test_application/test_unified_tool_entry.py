@@ -245,7 +245,9 @@ def test_registry_unavailable_cannot_fall_through_to_another_implementation(
     native = Mock()
     monkeypatch.setattr("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool", native)
     result = json.loads(execute_workflow_tool("test_write", {}))
-    assert result["error_code"] == "tool_registry_unavailable"
+    assert result["error_code"] == "tool_receipt_unavailable"
+    assert result["execution_state"] == "unknown" and result["retryable"] is False
+    assert result["reconciliation_required"] is True
     native.assert_not_called()
 
 
@@ -282,38 +284,67 @@ def test_model_aliases_cannot_bypass_the_runtime_with_forged_arguments(
     raw.assert_not_called()
 
 
-def test_capability_wrapper_keeps_unknown_receipt_so_employee_cannot_replay(
+@pytest.mark.parametrize(
+    "state,expected",
+    [("unknown", "unknown"), ("waiting_approval", "waiting_approval"), ("queued", "blocked")],
+)
+def test_capability_wrapper_keeps_pending_receipt_so_employee_cannot_replay(
     monkeypatch,
+    tmp_path,
+    state,
+    expected,
 ):
-    from app.application.agent_orchestrator import AgentOrchestrator
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator import AgentOrchestrator, SQLAlchemyAgentRunRepository
     from app.application.tools.registered_capabilities import (
         execute_registered_capability,
     )
 
     receipt = {
-        "success": False,
-        "outcome": "unknown",
-        "retryable": False,
-        "reconciliation_required": True,
-        "error_code": "tool_timeout_unknown",
+        "success": state != "unknown",
+        "execution_state": state,
+        "retryable": True,
     }
-    run = SimpleNamespace(
-        run_id="original-run",
-        status="blocked",
-        error="pending reconciliation",
-        steps=[],
-        final_output={"node_outputs": {"registered_capability": receipt}},
-    )
-    monkeypatch.setattr(AgentOrchestrator, "start_run_from_plan", lambda *a, **kw: run)
-    result = json.loads(
-        execute_registered_capability(
-            {"tool_id": "print", "action": "list", "params": {}},
-            runtime_context={"user_id": "17"},
+    if state == "unknown":
+        receipt.update(outcome="unknown", reconciliation_required=True)
+    engine = create_engine(f"sqlite:///{tmp_path / 'capability-unknown.db'}")
+    factory = sessionmaker(bind=engine)
+    execute = Mock(return_value=receipt)
+
+    def service():
+        return AgentOrchestrator(
+            repository=SQLAlchemyAgentRunRepository(session_factory=factory),
+            tool_executor=SimpleNamespace(execute=execute),
         )
-    )
-    assert result["agent_run_id"] == "original-run"
-    assert result["outcome"] == "unknown" and result["retryable"] is False
-    assert result["reconciliation_required"] is True and result["success"] is False
+
+    monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator", service)
+    context = {"user_id": "17", "session_id": "session", "turn_id": "turn", "call_id": "call"}
+    try:
+        results = [
+            json.loads(
+                execute_registered_capability(
+                    {"tool_id": "print", "action": "list", "params": {}}, runtime_context=context
+                )
+            )
+            for _ in range(2)
+        ]
+        assert results[0]["agent_run_id"] == results[1]["agent_run_id"]
+        for result in results:
+            # A queued child blocks its parent; the original child receipt survives.
+            assert result["execution_state"] == expected
+            assert result["retryable"] is False and result["success"] is False
+            if state == "unknown":
+                assert result["outcome"] == "unknown"
+                assert result["reconciliation_required"] is True
+            else:
+                assert result["result"]["execution_state"] == state
+                assert result.get("outcome") != "unknown"
+                assert not result.get("reconciliation_required")
+        execute.assert_called_once()
+    finally:
+        engine.dispose()
 
 
 def test_unregistered_role_alias_cannot_turn_model_confirmation_into_permission(

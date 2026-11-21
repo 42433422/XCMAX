@@ -268,7 +268,8 @@ def test_existing_approval_reuse_requires_same_pending_operation_and_applicant(d
             assert session.query(ApprovalRequest).count() == 1
 
 
-def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch):
+@pytest.mark.parametrize("entry", ["capability", "employee_gate"])
+def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch, entry):
     from datetime import timedelta
 
     from app.application.tools.registered_capabilities import execute_registered_capability
@@ -299,8 +300,22 @@ def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch):
                 )
             )
         context["_actor_authorization"] = bind_agent_actor_scope(session_id="session", user_id="1")
+        if entry == "employee_gate":
+            from unittest.mock import Mock
+
+            from app.application.agent_orchestrator import AgentOrchestrator
+            from app.application.employee_runtime.write_approval import build_write_approval_gate
+
+            dispatch = Mock(
+                side_effect=AssertionError("a write gate only stages the original approval")
+            )
+            monkeypatch.setattr(AgentOrchestrator, "execute_dispatched_run", dispatch)
+            gate = build_write_approval_gate("employee", runtime_context=context)
 
         def call(ids):
+            if entry == "employee_gate":
+                verdict = gate("products", {"action": "batch_delete", "ids": ids})
+                return verdict.get("execution_result", verdict)
             return json.loads(
                 execute_registered_capability(
                     {"tool_id": "products", "action": "batch_delete", "params": {"ids": ids}},
@@ -311,11 +326,18 @@ def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch):
         first, second, changed = call([1]), call([1]), call([2])
         assert first.get("pending_approval") and second.get("pending_approval")
         assert first["approval_request_id"] == second["approval_request_id"]
+        assert first["agent_run_id"] == second["agent_run_id"]
+        assert first["task_id"] == second["task_id"]
+        assert first["execution_state"] == "waiting_approval"
         assert not changed.get("pending_approval") and not changed["success"]
         request_no = first["approval_request_id"]
         with monkeypatch.context() as failure:
-            failure.setattr(ApprovalService, "attach_pending_agent_run", lambda *a, **k: False)
-            assert not call([1]).get("pending_approval")
+            from unittest.mock import Mock
+
+            attach = Mock(side_effect=AssertionError("replay must only read the original approval"))
+            failure.setattr(ApprovalService, "attach_pending_agent_run", attach)
+            assert call([1]).get("pending_approval")
+            attach.assert_not_called()
         with db() as session:
             assert (
                 session.query(ApprovalRequest).filter_by(request_no=request_no).one().status
@@ -452,6 +474,87 @@ def _read_status(db, request_no):
         )
     finally:
         session.close()
+
+
+@pytest.mark.parametrize("drift", [None, "owner", "tenant", "plan", "claim"])
+def test_approved_view_reads_original_run_with_scope_and_plan_fences(db, monkeypatch, drift):
+    from unittest.mock import MagicMock
+
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.approval_workspace.presentation import request_to_dict
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    business = _valid_business_data()
+    snapshot = business[SNAPSHOT_KEY]
+    snapshot.update(agent_run_id="original-run", approved_step_id="write_customer")
+    business["agent_execution_claim"] = {
+        "agent_run_id": "other-run" if drift == "claim" else "original-run",
+        "approved_step_id": "write_customer",
+    }
+    business["workflow_execution"] = {"success": False, "code": "queued"}
+    run = AgentRun(
+        user_id="2" if drift == "owner" else "1",
+        message="write customer",
+        run_id="original-run",
+        plan_id="other-plan" if drift == "plan" else "plan-1",
+        status="running",
+        metadata={
+            "runtime_context": {"tenant_id": 2 if drift == "tenant" else 1},
+            "plan": snapshot["plan"],
+        },
+    )
+    repo = MagicMock()
+    repo.get.return_value = run
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
+        lambda: repo,
+    )
+    with tenant_scope(1):
+        _insert_request(
+            db,
+            request_no="approved-read",
+            business_data=business,
+            status=ApprovalStatus.APPROVED.value,
+        )
+        from sqlalchemy.orm import joinedload
+
+        with db() as session:
+            req = (
+                session.query(ApprovalRequest)
+                .options(joinedload(ApprovalRequest.flow), joinedload(ApprovalRequest.current_node))
+                .filter_by(request_no="approved-read")
+                .one()
+            )
+        view = request_to_dict(req, is_workflow=lambda req: True)
+        receipt = view["workflow_execution"]
+        assert receipt["execution_state"] == ("unknown" if drift else "running")
+        assert receipt["success"] is False
+        assert receipt == view["business_data"]["workflow_execution"]
+        assert "agent_execution_claim" not in view["business_data"]
+        assert SNAPSHOT_KEY not in view["business_data"]
+        if drift:
+            assert receipt["requires_reconciliation"] is True
+            assert receipt["retryable"] is False
+            return
+        repo.get.assert_called_once_with("original-run")
+        assert receipt["agent_run_id"] == "original-run"
+        run.status = "completed"
+        finished = request_to_dict(req, is_workflow=lambda req: True)["workflow_execution"]
+        assert finished["success"] is True
+        assert finished["execution_state"] == "completed"
+        assert json.loads(req.business_data)["workflow_execution"]["code"] == "queued"
+        for state in ("queued", "paused", "waiting_input", "waiting_auth", "failed", "unknown"):
+            run.final_output = {
+                "success": True,
+                "result": {"business_result": {"execution_state": state}},
+            }
+            unfinished = request_to_dict(req, is_workflow=lambda req: True)["workflow_execution"]
+            assert unfinished["success"] is False
+            assert unfinished["execution_state"] == state
+            assert unfinished["execution_accepted"] is (state not in {"failed", "unknown"})
+            assert unfinished["agent_run_id"] == "original-run"
+            assert json.loads(req.business_data)["workflow_execution"]["code"] == "queued"
+        repo.save.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

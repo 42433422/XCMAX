@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, TypeVar, cast
 
@@ -167,11 +168,20 @@ def redact_internal_errors(value: Any) -> Any:
     return value
 
 
-def public_run_dict(run: Any) -> dict[str, Any]:
+def public_run_dict(run: Any, *, read_run: Callable[[str], Any] | None = None) -> dict[str, Any]:
     # to_dict shares metadata with the stored run: redact only the recursive copy.
     data = cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
     if isinstance(data.get("metadata"), dict):
         data["metadata"].pop("_tool_approval_grants", None)
+        if data["metadata"].get("child_results"):
+            from app.application.agent_orchestrator.run_audit_scope import project_child_results
+            from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+
+            data["metadata"]["child_results"] = redact_internal_errors(
+                project_child_results(
+                    run, read_run or (lambda run_id: get_agent_run_repository().get(run_id))
+                )
+            )
     return data
 
 
@@ -187,7 +197,9 @@ def internal_error_response(operation: str) -> JSONResponse:
     )
 
 
-def run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
+def run_response(
+    run: Any, *, principal: AgentPrincipal, read_run: Callable[[str], Any] | None = None
+) -> dict[str, Any]:
     execution = get_task_execution_repository().get(run.run_id)
     run = project_execution_failure(run, execution)
     approval = issue_approval_grant(run, principal_id=principal.user_id)
@@ -196,7 +208,7 @@ def run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
         extra["approval"] = approval
     if execution is not None:
         extra["execution"] = execution.to_dict()
-    return success(public_run_dict(run), **extra)
+    return success(public_run_dict(run, read_run=read_run), **extra)
 
 
 def run_reference_response(run: Any) -> dict[str, Any]:

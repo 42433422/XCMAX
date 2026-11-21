@@ -99,9 +99,8 @@ def test_native_mod_failure_does_not_execute_legacy_or_builtin(dispatch_ports):
     dispatch_ports["analysis"].assert_not_called()
 
 
-def test_extension_exception_stops_before_another_implementation_can_repeat_effect(
-    dispatch_ports,
-):
+@pytest.mark.parametrize("owner", ["employee_match", "employee", "native", "legacy"])
+def test_extension_missing_receipt_cannot_fall_through_to_another_executor(owner, dispatch_ports):
     calls = []
 
     def fail(stage):
@@ -111,19 +110,79 @@ def test_extension_exception_stops_before_another_implementation_can_repeat_effe
 
         return invoke
 
-    for name in ("employee_match", "native", "legacy"):
-        dispatch_ports[name].side_effect = fail(name)
+    if owner == "employee":
+        dispatch_ports["employee_match"].return_value = True
+    dispatch_ports[owner].side_effect = fail(owner)
     dispatch_ports["analysis"].side_effect = lambda *a, **kw: (
         calls.append("analysis") or {"ok": True}
     )
 
     result = json.loads(workflow.execute_workflow_tool("excel_analysis", {}))
+    assert result["execution_state"] == "unknown"
     assert result["outcome"] == "unknown"
-    assert result["retryable"] is False
     assert result["reconciliation_required"] is True
-    assert calls == ["employee_match"]
+    assert result["retryable"] is False
+    assert calls == [owner]
     dispatch_ports["analysis"].assert_not_called()
     dispatch_ports["business"].assert_not_called()
+
+
+def test_custom_tool_lost_receipt_stops_before_dispatch_fallback(monkeypatch, dispatch_ports):
+    from app.application import agent_tool_lifecycle
+
+    execute = Mock(side_effect=ConnectionError("receipt lost after effect"))
+    monkeypatch.setattr(agent_tool_lifecycle, "execute_if_registered", execute)
+    result = json.loads(workflow.execute_workflow_tool("excel_analysis", {}))
+    assert result["execution_state"] == "unknown"
+    assert result["reconciliation_required"] is True
+    execute.assert_called_once()
+    for port in dispatch_ports.values():
+        port.assert_not_called()
+
+
+@pytest.mark.parametrize("legacy, scoped", [(False, True), (True, True), (True, False)])
+def test_native_handler_signature_is_selected_before_one_invocation(monkeypatch, legacy, scoped):
+    from types import SimpleNamespace
+
+    from app.mod_sdk import planner_native_tools as native
+
+    calls = []
+
+    def old_handler(tool, args, *, workspace_root, db_write_token):
+        calls.append(tool)
+        return '{"success":true}'
+
+    def new_handler(tool, args, *, workspace_root, db_write_token, runtime_context=None):
+        calls.append(tool)
+        raise TypeError("runtime_context failed after committing effect")
+
+    monkeypatch.setattr(native, "is_planner_native_tools_enabled", lambda: True)
+    monkeypatch.setattr(
+        native,
+        "_discover_native_tool_mods",
+        lambda: [{"mod_id": "tenant-mod", "mod_path": "/mod", "tool_names": ["write"]}],
+    )
+    monkeypatch.setattr(
+        native,
+        "_load_handler_module",
+        lambda *_: SimpleNamespace(run_native_tool=old_handler if legacy else new_handler),
+    )
+    raw, owner = native.try_execute_native_planner_tool(
+        "write", {}, runtime_context={"turn_id": "original-turn"} if scoped else None
+    )
+    result = json.loads(raw)
+    assert owner == "tenant-mod"
+    if legacy and scoped:
+        assert calls == []
+        assert result["success"] is False
+        assert result["error_code"] == "tool_context_unsupported"
+        assert result["execution_status"] == "not_started"
+    else:
+        assert calls == ["write"]
+        assert result["success"] is legacy
+        if not legacy:
+            assert result["execution_state"] == "unknown"
+            assert result["retryable"] is False
 
 
 def test_template_registration_precedes_legacy_employee(monkeypatch, dispatch_ports):

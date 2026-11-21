@@ -110,6 +110,10 @@ def test_unknown_identity_variants_are_not_verified_and_require_reconciliation()
         ({"status": "approval_required"}, True, False),
         ({"status": "authorization_required"}, True, False),
         ({"status": "outcome_unknown"}, False, True),
+        ({"outcome_unknown": True}, False, True),
+        ({"execution_accepted": True}, False, True),
+        ({"agent_status": "running"}, False, True),
+        ({"run_status": "queued"}, False, True),
         ({"status": "in_progress"}, False, True),
         ({"status": "inflight"}, False, True),
         ({"status": "partial"}, False, True),
@@ -121,7 +125,7 @@ def test_unknown_identity_variants_are_not_verified_and_require_reconciliation()
         ({"status": "failure"}, False, False),
     ],
 )
-@pytest.mark.parametrize("key", ["result", "output", "data", "payload"])
+@pytest.mark.parametrize("key", ["result", "output", "data", "payload", "business_result"])
 def test_success_envelopes_preserve_waits_and_unfinished_execution(child, approval, reconcile, key):
     from app.domain.task_lifecycle.results import (
         execution_result_awaits_approval,

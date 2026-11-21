@@ -1133,7 +1133,7 @@ class TestUpsertDirectReplyMessages:
         assert changed is False
         assert len(rows) == 2
 
-    def test_cli_backfill_once(self, tmp_path):
+    def test_missing_reply_does_not_start_a_cli_call(self, tmp_path):
         svc = _make_svc(tmp_path)
         rows = [
             {"user_id": 1, "role": "user", "dispatch_request_id": "r1", "body": "随便聊点什么"},
@@ -1141,10 +1141,11 @@ class TestUpsertDirectReplyMessages:
         ]
         with patch.object(
             svc, "_compose_direct_chat_reply", return_value=("cli 回填", "codex_cli")
-        ):
+        ) as compose:
             changed = svc._upsert_direct_reply_messages(user_id=1, rows=rows)
-        assert changed is True
-        assert len(rows) == 3  # 只回填一条（cli_backfills < 1）
+        compose.assert_not_called()
+        assert changed is False
+        assert len(rows) == 2
 
 
 # ───────────────────── _direct_reply_body 各类提示 ─────────────────────

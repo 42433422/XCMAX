@@ -134,7 +134,7 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
       }
     }
 
-    if (!apiUrl) {
+    if (!apiUrl && !task.payload?.tool_id && !task.tool_id) {
       await addAndSaveMessage('任务执行失败：缺少 API 地址', 'ai')
       currentTask.value = null
       return
@@ -161,6 +161,8 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
 
       if (canonicalResult) {
         result = canonicalResult
+      } else if (!apiUrl) {
+        throw new Error('任务执行失败：缺少 API 地址')
       } else if (method === 'GET') {
         result = await fetch(apiUrl)
       } else {
@@ -172,6 +174,22 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
       }
 
       const data = asRecord(await result.json().catch(() => ({})))
+
+      const executionState = String(data.execution_state || '')
+      if (canonicalResult && !['completed', 'failed', 'cancelled', 'interrupted', 'rejected'].includes(executionState)) {
+        const message = String(data.message || '任务结果待核对，请查看原任务进度。')
+        await addAndSaveMessage('[任务] ' + message, 'ai')
+        keepTaskCard = true
+        currentTask.value = { ...task, completed: false, description: message }
+        if (shipmentTaskId) upsertTask({
+          id: shipmentTaskId, type: 'shipment', source: 'shipment', title: '发货单生成任务',
+          status: ['queued', 'accepted'].includes(executionState) ? 'queued'
+            : ['planning', 'running', 'retrying'].includes(executionState) ? 'running'
+              : executionState === 'paused' ? 'paused' : 'blocked',
+          stage: message, payload: { activeRunId: data.run_id, taskId: data.task_id, rawRunStatus: executionState },
+        })
+        return
+      }
 
       if (data?.requires_token) {
         handleChatRequiresToken(asString(data.token_name), asString(data.token_description || data.message), [])

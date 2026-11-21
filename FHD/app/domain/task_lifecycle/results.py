@@ -30,11 +30,15 @@ _APPROVAL_STATES = {
     "awaiting_approval",
     "pending_approval",
 }
-_ACTIVE_STATES = {
+_UNKNOWN_STATES = {
     "unknown",
     "interrupted",
     "partial",
     "partial_success",
+    "timeout",
+    "timed_out",
+}
+_ACTIVE_STATES = _UNKNOWN_STATES | {
     "blocked",
     "pending",
     "accepted",
@@ -43,8 +47,6 @@ _ACTIVE_STATES = {
     "running",
     "processing",
     "retrying",
-    "timeout",
-    "timed_out",
 }
 _UNFINISHED_STATES = (
     _APPROVAL_STATES
@@ -125,7 +127,15 @@ def execution_result_envelopes(data: dict[str, Any]) -> Iterator[dict[str, Any]]
             yield current
         children = [
             (current.get(key), current if key == "data" else None)
-            for key in ("result", "output", "data", "payload", "final_output", "chat_payload")
+            for key in (
+                "result",
+                "output",
+                "data",
+                "payload",
+                "final_output",
+                "business_result",
+                "chat_payload",
+            )
         ]
         for key in ("outputs", "node_outputs"):
             outputs = current.get(key)
@@ -152,6 +162,8 @@ def execution_result_states(data: dict[str, Any]) -> set[str]:
             "outcome",
             "execution_state",
             "execution_status",
+            "agent_status",
+            "run_status",
             "execution_outcome",
             "exit_status",
         )
@@ -198,12 +210,16 @@ def execution_result_error(data: dict[str, Any]) -> str:
             return str(result["error"])
         if (
             execution_result_states(result) & _UNFINISHED_STATES
-            or result.get("outcome_unknown") is True
             or result.get("reconciliation_required")
             or result.get("requires_reconciliation")
+            or result.get("outcome_unknown") is True
             or result.get("pending_approval")
             or result.get("requires_token")
             or result.get("needs_user_input")
+            or (
+                (result.get("execution_accepted") is True or result.get("accepted") is True)
+                and "completed" not in execution_result_states(result)
+            )
         ):
             return str(result.get("message") or "任务尚未完成")
         outputs = result.get("outputs")
@@ -220,22 +236,67 @@ def execution_result_error(data: dict[str, Any]) -> str:
 def execution_result_outcome_unknown(data: dict[str, Any]) -> bool:
     """Distinguish uncertain effects from ordinary pending or approval states."""
     return any(
-        execution_result_states(result)
-        & {"unknown", "interrupted", "partial", "partial_success", "timeout", "timed_out"}
-        or result.get("outcome_unknown") is True
+        execution_result_states(result) & _UNKNOWN_STATES
         or result.get("reconciliation_required") is True
         or result.get("requires_reconciliation") is True
+        or result.get("outcome_unknown") is True
         for result in execution_result_envelopes(data)
     )
+
+
+def execution_result_pending_state(data: dict[str, Any]) -> str:
+    """Project an unfinished receipt without treating acceptance as completion."""
+    if execution_result_outcome_unknown(data):
+        return "unknown"
+    waiting = execution_result_wait_reason(data)
+    if waiting:
+        return {
+            "authorization": "waiting_auth",
+            "approval": "waiting_approval",
+            "input": "waiting_input",
+            "paused": "paused",
+        }[waiting]
+    states = set().union(
+        *(execution_result_states(row) for row in execution_result_envelopes(data))
+    )
+    pending = next(
+        (
+            state
+            for state in (
+                "blocked",
+                "retrying",
+                "running",
+                "processing",
+                "planning",
+                "queued",
+                "pending",
+                "accepted",
+            )
+            if state in states
+        ),
+        "",
+    )
+    if not pending and any(
+        (row.get("execution_accepted") is True or row.get("accepted") is True)
+        and "completed" not in execution_result_states(row)
+        for row in execution_result_envelopes(data)
+    ):
+        return "queued"
+    return pending
+
 
 
 def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
     """Preserve unresolved execution through the same envelopes used by verification."""
     return any(
         execution_result_states(result) & _ACTIVE_STATES
-        or result.get("outcome_unknown") is True
         or result.get("reconciliation_required")
         or result.get("requires_reconciliation")
+        or result.get("outcome_unknown") is True
+        or (
+            (result.get("execution_accepted") is True or result.get("accepted") is True)
+            and "completed" not in execution_result_states(result)
+        )
         for result in execution_result_envelopes(data)
     )
 

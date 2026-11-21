@@ -222,16 +222,16 @@ class MessageBubble extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (message.status == ChatDeliveryStatus.failed ||
+                if ([ChatDeliveryStatus.failed, ChatDeliveryStatus.pending].contains(message.status) ||
                     showTimestamp)
                   Padding(
                     padding: const EdgeInsets.only(top: 3, left: 4, right: 4),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (message.status == ChatDeliveryStatus.failed) ...[
+                        if ([ChatDeliveryStatus.failed, ChatDeliveryStatus.pending].contains(message.status)) ...[
                           Text(
-                            '发送失败',
+                            message.status == ChatDeliveryStatus.pending ? '结果待核对' : '发送失败',
                             style: TextStyle(
                               color: colors.danger,
                               fontSize: 11,
@@ -245,7 +245,7 @@ class MessageBubble extends StatelessWidget {
                             GestureDetector(
                               onTap: onResend,
                               child: Text(
-                                '重发',
+                                '核对结果',
                                 style: TextStyle(
                                   color: colors.brand,
                                   fontSize: 11,

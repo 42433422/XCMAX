@@ -150,7 +150,10 @@ class AIChatWorkflowResponseMixin:
                             "不要编造。金额、数量、日期要写清并按资料原文标注来源行。回答不超过 5 句话。"
                         ),
                     },
-                    {"role": "user", "content": f"问题：{question}\n\n资料：\n{evidence}"},
+                    {
+                        "role": "user",
+                        "content": f"问题：{question}\n\n资料：\n{evidence}",
+                    },
                 ],
                 context={},
                 temperature=0.0,
@@ -232,6 +235,12 @@ class AIChatWorkflowResponseMixin:
         thinking_steps: str = "",
         user_message: str = "",
     ) -> dict[str, Any]:
+        from app.domain.task_lifecycle.results import (
+            execution_result_envelopes,
+            execution_result_error,
+            execution_result_pending_state,
+        )
+
         lines = [
             f"工作流: {plan.intent}",
             f"计划ID: {plan.plan_id}",
@@ -249,7 +258,12 @@ class AIChatWorkflowResponseMixin:
             for node in (getattr(plan, "nodes", None) or [])
         }
         for step in getattr(agent_run, "steps", []) or []:
-            if step.status == "completed":
+            pending = (
+                execution_result_pending_state(step.output) if isinstance(step.output, dict) else ""
+            )
+            if pending:
+                lines.append(f"- {step.node_id}: {pending}（原动作尚未完成，请查询原任务）")
+            elif step.status == "completed":
                 item = type(
                     "AgentNodeResult",
                     (),
@@ -284,20 +298,35 @@ class AIChatWorkflowResponseMixin:
                 else:
                     lines.append(f"- {step.node_id}: {step.status}（{_PUBLIC_WORKFLOW_FAILURE}）")
 
-        from app.domain.task_lifecycle.results import (
-            execution_result_envelopes,
-            execution_result_error,
-            execution_result_outcome_unknown,
-        )
-
         recovery = (agent_run.metadata or {}).get("recovery")
+        result = {
+            "output": getattr(agent_run, "final_output", None),
+            "outputs": [step.output for step in getattr(agent_run, "steps", []) or []],
+        }
+        pending = execution_result_pending_state(result)
         uncertain = (
             isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
-        ) or any(
-            isinstance(step.output, dict) and execution_result_outcome_unknown(step.output)
-            for step in getattr(agent_run, "steps", []) or []
-        )
-        success = agent_run.status == "completed" and not uncertain
+        ) or pending == "unknown"
+        execution_state = "unknown" if uncertain else pending or str(agent_run.status or "unknown")
+        if execution_state == "completed" and execution_result_error(result):
+            execution_state = "failed"
+        success = execution_state == "completed"
+        state_message = {
+            "completed": "处理完成",
+            "failed": "处理失败",
+            "cancelled": "任务已取消",
+            "rejected": "任务已拒绝",
+            "blocked": "任务已阻断，请核对原任务",
+            "paused": "任务已暂停",
+            "waiting_user": "任务等待确认或补充信息",
+            "waiting_approval": "任务等待审批",
+            "waiting_input": "任务等待补充信息",
+            "waiting_auth": "任务等待授权",
+            "queued": "任务已受理，等待执行",
+            "planning": "任务正在规划",
+            "running": "任务仍在执行，请查询原任务",
+            "retrying": "原任务正在重试",
+        }.get(execution_state, "执行结果尚待核对，请查询原任务")
         cost_units_total = int((agent_run.metadata or {}).get("cost_units_total") or 0)
         tool_call_count = int((agent_run.metadata or {}).get("tool_call_count") or 0)
         artifact_payloads = [
@@ -350,7 +379,8 @@ class AIChatWorkflowResponseMixin:
             response_text = self._history_answer(steps, user_message)
         payload: dict[str, Any] = {
             "success": success,
-            "message": "回复完成" if model_reply else "处理完成" if success else "处理失败",
+            "message": "回复完成" if model_reply else state_message,
+            "execution_state": execution_state,
             "response": response_text,
             "run_id": agent_run.run_id,
             "agent_run_id": agent_run.run_id,
@@ -360,7 +390,7 @@ class AIChatWorkflowResponseMixin:
                 if model_reply
                 else "workflow_done"
                 if success
-                else "workflow_failed",
+                else f"workflow_{execution_state}",
                 "run_id": agent_run.run_id,
                 "agent_run_id": agent_run.run_id,
                 "data": {
@@ -392,7 +422,8 @@ class AIChatWorkflowResponseMixin:
                     "node_results": [
                         {
                             "node_id": step.node_id,
-                            "success": step.status == "completed",
+                            "success": step.status == "completed"
+                            and not execution_result_error(step.output or {}),
                             "tool_id": step.tool_id,
                             "action": step.action,
                             "message": (
@@ -429,7 +460,14 @@ class AIChatWorkflowResponseMixin:
                 retryable=False,
             )
             payload["data"].update(text=text, requires_reconciliation=True)
-        write_actions = {"write", "create", "update", "delete", "batch_delete", "clear_dataset"}
+        write_actions = {
+            "write",
+            "create",
+            "update",
+            "delete",
+            "batch_delete",
+            "clear_dataset",
+        }
         wrote = any(
             step.status == "completed"
             and step.action in write_actions
@@ -455,7 +493,7 @@ class AIChatWorkflowResponseMixin:
                 "intent": str(getattr(plan, "intent", "") or ""),
                 "committed": wrote,
                 "effect": "unknown" if uncertain else "partial" if wrote else "none",
-                "outcome": "unknown" if uncertain else "partial" if wrote else "not_executed",
+                "outcome": ("unknown" if uncertain else "partial" if wrote else "not_executed"),
             }
         if success and any(
             step.status == "completed" and step.tool_id == "products" and step.action == "query"

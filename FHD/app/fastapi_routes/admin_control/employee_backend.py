@@ -85,6 +85,7 @@ class CanonicalEmployeeBackend:
             LocalInvocation(),
             AgentStep(node_id=str(run_id), tool_id="employee", action="execute"),
             runtime_context={
+                **work.runtime_context,
                 "tenant_id": work.tenant_id,
                 "user_id": work.user_id,
                 "session_id": work.session_id,

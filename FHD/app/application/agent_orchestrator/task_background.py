@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.artifact_attachment import (
@@ -296,16 +297,25 @@ class BackgroundTaskExecutionMixin:
 
     def fail_dispatched_run(self, run_id: str) -> AgentRun | None:
         run = self._repo.get(run_id)
-        if run is None or run.status in {"completed", "failed", "cancelled"}:
+        if run is None or run.status in {"completed", "failed", "cancelled", "rejected"}:
             return cast("AgentRun | None", run)
-        run.status = "failed"
+        previous = copy.deepcopy(run)
+        run.status = "blocked"
         run.error = _WORKER_EXECUTION_FAILED
+        recovery = run.metadata.get("recovery")
+        run.metadata["recovery"] = {
+            **(recovery if isinstance(recovery, dict) else {}),
+            "state": "manual_reconciliation_required",
+            "reason": _WORKER_EXECUTION_FAILED,
+        }
+        run.metadata["non_retryable"] = True
         run.add_event(
             "task.worker_failed",
-            "后台执行失败",
-            {"error_code": _WORKER_EXECUTION_FAILED},
+            "执行工作线程已退出，原业务结果待核对，禁止自动重放",
+            {"error_code": _WORKER_EXECUTION_FAILED, "execution_state": "unknown"},
         )
-        return cast("AgentRun | None", self._repo.save(run))
+        self._repo.save_if_unchanged(run, previous)
+        return cast("AgentRun | None", self._repo.get(run_id))
 
     def _prepare_expired_execution_recovery(self, run: AgentRun) -> bool:
         if requires_retry_reconciliation(run):

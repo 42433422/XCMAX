@@ -754,6 +754,7 @@ void main() {
     final result = await api.streamChat(
       '继续',
       userId: 7,
+      idempotencyKey: 'turn-contract',
       recentMessages: const [
         {'role': 'assistant', 'content': '上一轮'},
         {'role': 'user', 'content': '继续'},
@@ -774,6 +775,9 @@ void main() {
       'mode': 'professional',
       'user_id': '7',
       'context': {
+        'turn_id': 'turn-contract',
+        'idempotency_key': 'turn-contract',
+        'conversation_id': '',
         'recent_messages': [
           {'role': 'assistant', 'content': '上一轮'},
           {'role': 'user', 'content': '继续'},
@@ -836,6 +840,7 @@ void main() {
       modId: 'admin-duty-employees',
       conversationId: 'employee:admin-duty-employees:site-content-editor',
       userId: 7,
+      idempotencyKey: 'employee-turn-contract',
       onToken: tokens.add,
     );
     await requestDone;
@@ -855,6 +860,8 @@ void main() {
       'conversation_id': 'employee:admin-duty-employees:site-content-editor',
       'mod_id': 'admin-duty-employees',
       'employee_id': 'site-content-editor',
+      'turn_id': 'employee-turn-contract',
+      'idempotency_key': 'employee-turn-contract',
     });
   });
 }

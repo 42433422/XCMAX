@@ -23,11 +23,7 @@ from app.application.ai_chat.workflow_session import (
     SessionCallbacks,
     WorkflowSession,
 )
-from app.application.workflow.workflow_types import (
-    NodeExecutionResult,
-    PlanGraph,
-    WorkflowNode,
-)
+from app.application.workflow.workflow_types import NodeExecutionResult, PlanGraph, WorkflowNode
 
 
 def _plan():
@@ -87,7 +83,8 @@ def test_planned_workflow_stream_reports_the_actual_run_outcome(status, expected
     try:
         with (
             patch(
-                "app.application.facades.tools_facade.get_workflow_tool_registry", return_value={}
+                "app.application.facades.tools_facade.get_workflow_tool_registry",
+                return_value={},
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
         ):
@@ -123,7 +120,12 @@ def test_history_uses_trusted_owner_and_stable_per_role_idempotency():
         for call in store.save_turn.call_args_list
         for message in call.kwargs["messages"]
     ]
-    assert [call["role"] for call in calls] == ["user", "assistant", "user", "assistant"]
+    assert [call["role"] for call in calls] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
     assert {call["user_id"] for call in calls} == {"42"}
     assert calls[0]["idempotency_key"] == calls[2]["idempotency_key"]
     assert calls[1]["idempotency_key"] == calls[3]["idempotency_key"]
@@ -187,6 +189,184 @@ def test_confirmation_cannot_resume_another_sessions_pending_plan():
     assert pending["owner"]["runtime_context"]["session_id"] == "original"
 
 
+@pytest.mark.parametrize(
+    "status", ["queued", "running", "retrying", "paused", "blocked", "cancelled"]
+)
+def test_confirmation_preserves_original_run_and_nonfailure_state(status):
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.application.workflow.workflow_types import plan_to_dict
+
+    plan = _plan()
+    context = {"user_id": "owner", "tenant_id": "1", "session_id": "same"}
+    run = AgentRun(user_id="owner", message="查询产品", status=status)
+    run.plan_id = plan.plan_id
+    run.metadata.update(plan=plan_to_dict(plan), runtime_context=context)
+    pending = {"owner": {"plan": plan, "runtime_context": context, "agent_run_id": run.run_id}}
+    callbacks = Mock(spec=SessionCallbacks)
+    callbacks._task_owner_id.return_value = "owner"
+    callbacks._persist_plan_state.return_value = True
+    callbacks._format_agent_run_response.side_effect = (
+        AIChatWorkflowResponseMixin()._format_agent_run_response
+    )
+    session = WorkflowSession(pending, callbacks)
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        orchestrator.return_value.continue_run.return_value = run
+        handled, response = session.resume_pending_dynamic_workflow(
+            "owner", "确认", "确认", context
+        )
+
+    assert handled and response["success"] is False
+    assert response["execution_state"] == status
+    assert response["data"]["action"] != "workflow_failed"
+    assert response["run_id"] == run.run_id
+    assert callbacks._persist_plan_state.call_args.kwargs["status"] == status
+    assert callbacks._persist_plan_state.call_args.args[1]["agent_run_id"] == run.run_id
+    orchestrator.return_value.start_run_from_plan.assert_not_called()
+    assert not pending
+
+
+def test_failed_plan_projection_retries_readback_without_executing_again():
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.application.workflow.workflow_types import plan_to_dict
+
+    plan = _plan()
+    context = {"user_id": "owner", "tenant_id": "1", "session_id": "same"}
+    run = AgentRun(user_id="owner", message="查询产品", status="running")
+    run.plan_id = plan.plan_id
+    run.metadata.update(plan=plan_to_dict(plan), runtime_context=context)
+    pending = {"owner": {"plan": plan, "runtime_context": context, "agent_run_id": run.run_id}}
+    callbacks = Mock(spec=SessionCallbacks)
+    callbacks._task_owner_id.return_value = "owner"
+    callbacks._persist_plan_state.side_effect = [False, True]
+    callbacks._format_agent_run_response.side_effect = (
+        AIChatWorkflowResponseMixin()._format_agent_run_response
+    )
+    session = WorkflowSession(pending, callbacks)
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        orchestrator.return_value.continue_run.return_value = run
+        orchestrator.return_value.get_run.return_value = run
+        _, first = session.resume_pending_dynamic_workflow("owner", "确认", "确认", context)
+        assert pending["owner"]["agent_run_id"] == run.run_id
+        assert first["plan_persistence"]["retry"] == "read_only"
+        run.status = "completed"
+        _, second = session.resume_pending_dynamic_workflow("owner", "确认", "确认", context)
+        orchestrator.return_value.continue_run.assert_called_once()
+        orchestrator.return_value.start_run_from_plan.assert_not_called()
+        orchestrator.return_value.get_run.assert_called_once_with(run.run_id)
+    assert second["success"] is True
+    assert callbacks._persist_plan_state.call_args.kwargs["status"] == "succeeded"
+    assert not pending
+
+
+def test_restart_after_lost_plan_projection_observes_completed_original_run():
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.application.workflow.workflow_types import plan_to_dict
+
+    plan = _plan()
+    context = {"user_id": "owner", "tenant_id": "1", "session_id": "same"}
+    run = AgentRun(user_id="owner", message="查询产品", status="completed")
+    run.plan_id = plan.plan_id
+    run.metadata.update(plan=plan_to_dict(plan), runtime_context=context)
+    store = Mock(spec=PlanStateStore)
+    store.list_active.return_value = [
+        {
+            "status": "pending_awaiting",
+            "plan": plan_to_dict(plan),
+            "runtime_context": {
+                **context,
+                "pending_confirmation": {"agent_run_id": run.run_id},
+            },
+        }
+    ]
+    callbacks = Mock(spec=SessionCallbacks)
+    callbacks._task_owner_id.return_value = "owner"
+    callbacks._persist_plan_state.return_value = True
+    callbacks._format_agent_run_response.side_effect = (
+        AIChatWorkflowResponseMixin()._format_agent_run_response
+    )
+    session = WorkflowSession({}, callbacks, store=store)
+    callbacks._hydrate_pending_workflow.side_effect = session.hydrate_pending_workflow
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        orchestrator.return_value.get_run.return_value = run
+        _, result = session.resume_pending_dynamic_workflow("owner", "确认", "确认", context)
+        orchestrator.return_value.continue_run.assert_not_called()
+        orchestrator.return_value.start_run_from_plan.assert_not_called()
+    assert result["run_id"] == run.run_id and result["success"] is True
+    assert callbacks._persist_plan_state.call_args.kwargs["status"] == "succeeded"
+
+
+@pytest.mark.parametrize("mismatch", [{"tenant_id": "2"}, {"session_id": "other"}])
+def test_projection_readback_rejects_run_scope_drift(mismatch):
+    plan = _plan()
+    context = {"user_id": "owner", "tenant_id": "1", "session_id": "same"}
+    run = AgentRun(user_id="owner", message="查询产品", status="completed")
+    run.plan_id = plan.plan_id
+    run.metadata["runtime_context"] = {**context, **mismatch}
+    pending = {
+        "owner": {
+            "plan": plan,
+            "runtime_context": context,
+            "agent_run_id": run.run_id,
+            "kind": "run_reconciliation",
+        }
+    }
+    callbacks = Mock(spec=SessionCallbacks)
+    callbacks._task_owner_id.return_value = "owner"
+    session = WorkflowSession(pending, callbacks)
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        orchestrator.return_value.get_run.return_value = run
+        _, result = session.resume_pending_dynamic_workflow("owner", "确认", "确认", context)
+        orchestrator.return_value.continue_run.assert_not_called()
+        orchestrator.return_value.start_run_from_plan.assert_not_called()
+    assert result["success"] is False
+    assert result["execution_state"] == "unknown"
+    assert result["requires_reconciliation"] is True
+    assert result["retryable"] is False
+    callbacks._persist_plan_state.assert_not_called()
+    callbacks._format_agent_run_response.assert_not_called()
+
+
+def test_unknown_tool_receipt_keeps_plan_recoverable_without_claiming_failure():
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+    run = AgentRun(user_id="owner", message="写入", status="blocked")
+    run.steps = [
+        AgentStep(
+            node_id="write",
+            tool_id="products",
+            action="write",
+            status="failed",
+            output={"result": {"requires_reconciliation": True}},
+        )
+    ]
+    response = AIChatWorkflowResponseMixin()._format_agent_run_response(_plan(), run)
+    assert response["execution_state"] == "unknown"
+    assert response["data"]["action"] == "workflow_unknown"
+    assert response["requires_reconciliation"] is True
+    assert response["retryable"] is False
+
+
+@pytest.mark.parametrize("state", ["queued", "retrying", "paused", "waiting_approval"])
+def test_workflow_chat_preserves_nested_unfinished_receipt(state):
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+    run = AgentRun(user_id="owner", message="执行", status="completed")
+    run.steps = [
+        AgentStep(
+            node_id="query",
+            tool_id="products",
+            action="query",
+            status="completed",
+            output={"success": True, "result": {"execution_state": state}},
+        )
+    ]
+    response = AIChatWorkflowResponseMixin()._format_agent_run_response(_plan(), run)
+    assert response["success"] is False
+    assert response["execution_state"] == state
+    assert response["data"]["action"] == f"workflow_{state}"
+    assert response["data"]["data"]["node_results"][0]["success"] is False
+
+
 def test_scoped_cancellation_records_the_authenticated_task_owner():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_task_context import (
@@ -194,7 +374,12 @@ def test_scoped_cancellation_records_the_authenticated_task_owner():
         scoped_conversation_user_id,
     )
 
-    runtime = {"user_id": "42", "local_user_id": 42, "tenant_id": 1, "session_id": "same"}
+    runtime = {
+        "user_id": "42",
+        "local_user_id": 42,
+        "tenant_id": 1,
+        "session_id": "same",
+    }
     scoped = scoped_conversation_user_id("42", runtime)
     repository = InMemoryAgentRunRepository()
     run = AgentRun(user_id="42", message="query", metadata={"runtime_context": runtime})
@@ -209,7 +394,10 @@ def test_scoped_cancellation_records_the_authenticated_task_owner():
     callbacks._persist_plan_state.return_value = True
     session = WorkflowSession(pending, callbacks)
 
-    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
+    with patch(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        return_value=orchestrator,
+    ):
         handled, response = session.resume_pending_dynamic_workflow(scoped, "取消", "取消", runtime)
     assert handled and response["success"]
     assert repository.get(run.run_id).status == "cancelled"
@@ -240,7 +428,10 @@ def test_dispatch_does_not_offer_confirmation_for_an_unpersisted_plan():
         SimpleNamespace(get_approval_required_nodes=lambda _: [plan.nodes[0]]),
     )
     with (
-        patch("app.application.facades.tools_facade.get_workflow_tool_registry", return_value={}),
+        patch(
+            "app.application.facades.tools_facade.get_workflow_tool_registry",
+            return_value={},
+        ),
         patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
     ):
         response = dispatch.handle("owner", "查询产品", "chat", {}, "查询产品")
@@ -260,7 +451,11 @@ def test_injected_validation_rejects_before_dispatch_or_billing(missing_spec):
             None if missing_spec else ToolActionSpecV2(tool_id=tool, action=action)
         ),
         validate=lambda tool, action, params: ToolValidationResult(
-            ok=False, tool_id=tool, action=action, error_code="invalid_input", message="blocked"
+            ok=False,
+            tool_id=tool,
+            action=action,
+            error_code="invalid_input",
+            message="blocked",
         ),
         refresh_budget=lambda run: None,
         repair_enabled=lambda run, context: False,
@@ -342,7 +537,11 @@ def test_history_route_receipt_does_not_authorize_a_foreign_session_owner():
         {
             "success": True,
             "response": "reply",
-            "route_metadata": {"provider": "xiaomi", "model": "flash", "route_state": "completed"},
+            "route_metadata": {
+                "provider": "xiaomi",
+                "model": "flash",
+                "route_state": "completed",
+            },
         },
         store=store,
     )
@@ -384,7 +583,12 @@ async def test_sync_error_receipt_preserves_status_and_safe_history_for_any_deta
     assert failure.value.detail == {"message": message, "route_metadata": route}
     assert persist.call_args.args == (
         body,
-        {"success": False, "response": message, "route_metadata": route, "turn_id": None},
+        {
+            "success": False,
+            "response": message,
+            "route_metadata": route,
+            "turn_id": None,
+        },
     )
 
 
@@ -449,7 +653,10 @@ def test_auto_approval_reports_partial_elt_writes_from_the_saved_run():
                 tool_id="elt_import",
                 action="execute",
                 status="failed",
-                output={"message": "完成 1 份，已确认写入 3 行", "data": {"executed_rows": 3}},
+                output={
+                    "message": "完成 1 份，已确认写入 3 行",
+                    "data": {"executed_rows": 3},
+                },
             )
         ]
     )
@@ -457,7 +664,10 @@ def test_auto_approval_reports_partial_elt_writes_from_the_saved_run():
         patch("app.db.session.get_db", lambda: nullcontext(db)),
         patch(
             "app.application.approval_workspace_app_service._approve_ai_workflow_request_without_node",
-            return_value={"success": False, "data": {"workflow_execution": {"nodes_executed": 0}}},
+            return_value={
+                "success": False,
+                "data": {"workflow_execution": {"nodes_executed": 0}},
+            },
         ),
         patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
     ):
@@ -512,7 +722,10 @@ def test_approved_background_import_is_not_persisted_as_completed():
             "app.application.approval_workspace_app_service._approve_ai_workflow_request_without_node",
             return_value=approval,
         ),
-        patch("app.application.agent_orchestrator.AgentOrchestrator.get_run", return_value=run),
+        patch(
+            "app.application.agent_orchestrator.AgentOrchestrator.get_run",
+            return_value=run,
+        ),
     ):
         reply = session._auto_approve_waiting_request(
             request_id="req-elt",
@@ -562,7 +775,12 @@ def test_auto_approval_reply_includes_generated_file_download_url():
             "_approve_ai_workflow_request_without_node",
             return_value={
                 "success": True,
-                "data": {"workflow_execution": {"success": True, "message": "AI 工作流执行完成"}},
+                "data": {
+                    "workflow_execution": {
+                        "success": True,
+                        "message": "AI 工作流执行完成",
+                    }
+                },
             },
         ),
     ):

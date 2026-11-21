@@ -32,7 +32,10 @@ def _legacy_builtin_tool_unit_scope(monkeypatch):
     """Exercise built-in tool handlers without querying an unrelated tenant tool DB."""
     from app.application import agent_tool_lifecycle
 
-    monkeypatch.setattr(agent_tool_lifecycle, "execute_if_registered", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        agent_tool_lifecycle, "execute_if_registered", lambda *_args, **_kwargs: None
+    )
+
 
 from app.application.tools.workflow import (
     _excel_cell_as_clean_str,
@@ -918,6 +921,7 @@ class TestExecuteWorkflowToolMisc:
         assert data["tool"] == "totally_unknown"
 
     def test_template_preview_empty_action_defaults_to_view(self) -> None:
+        context = {"user_id": "17"}
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -935,14 +939,20 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
-                return_value={"result": "ok"},
-                create=True,
-            ),
+                "app.application.tools.registered_capabilities.execute_registered_capability",
+                return_value=json.dumps({"result": "ok"}),
+            ) as registered,
         ):
-            result = execute_workflow_tool("template_preview", {"action": ""})
+            result = execute_workflow_tool(
+                "template_preview", {"action": ""}, runtime_context=context
+            )
         data = json.loads(result)
         assert "result" in data
+        registered.assert_called_once_with(
+            {"tool_id": "template_preview", "action": "view", "params": {"action": ""}},
+            workspace_root=None,
+            runtime_context=context,
+        )
 
     def test_employee_planner_tool_returned(self) -> None:
         with (
@@ -965,7 +975,7 @@ class TestExecuteWorkflowToolMisc:
             result = execute_workflow_tool("some_tool", {})
         assert "emp" in result
 
-    def test_planner_native_tool_error_swallowed(self) -> None:
+    def test_planner_native_tool_error_stops_dispatch(self) -> None:
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -976,18 +986,21 @@ class TestExecuteWorkflowToolMisc:
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 side_effect=ImportError("no planner"),
                 create=True,
-            ),
+            ) as native,
             patch(
                 "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
-            ),
+            ) as legacy,
         ):
             result = execute_workflow_tool("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["execution_state"] == data["outcome"] == "unknown"
+        assert data["retryable"] is False and data["reconciliation_required"] is True
+        native.assert_called_once()
+        legacy.assert_not_called()
 
-    def test_employee_planner_tool_error_swallowed(self) -> None:
+    def test_employee_planner_tool_error_stops_dispatch(self) -> None:
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -1003,11 +1016,13 @@ class TestExecuteWorkflowToolMisc:
                 "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 side_effect=RuntimeError("fail"),
                 create=True,
-            ),
+            ) as legacy,
         ):
             result = execute_workflow_tool("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["execution_state"] == data["outcome"] == "unknown"
+        assert data["retryable"] is False and data["reconciliation_required"] is True
+        legacy.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

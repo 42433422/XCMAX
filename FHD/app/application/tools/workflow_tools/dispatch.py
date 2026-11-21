@@ -97,6 +97,7 @@ class WorkflowToolDispatcher:
                 {
                     "success": False,
                     "error_code": "tool_execution_interrupted",
+                    "execution_state": "unknown",
                     "outcome": "unknown",
                     "retryable": False,
                     "reconciliation_required": True,
@@ -214,7 +215,14 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
             parsed = json.loads(raw)
             return parsed if isinstance(parsed, dict) else {"success": False, "message": raw}
     except RECOVERABLE_ERRORS:
-        logging.getLogger(__name__).debug(
-            "employee tool direct dispatch skipped tool=%s", tool_id, exc_info=True
+        logging.getLogger(__name__).exception(
+            "employee tool direct receipt unavailable tool=%s", tool_id
         )
+        return {
+            "success": False,
+            "message": "员工执行回执不可用，请核对原任务",
+            "execution_state": "unknown",
+            "retryable": False,
+            "reconciliation_required": True,
+        }
     return {"success": False, "message": f"未注册的工具动作: {tool_id}.{action}"}

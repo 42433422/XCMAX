@@ -83,6 +83,42 @@ def _assert_reused_run_scope(
         raise UnifiedTaskConflictError("task_id 已绑定到不同的账号或 Mod 范围")
 
 
+def publish_task_run(
+    *,
+    orchestrator: AgentOrchestrator,
+    run: AgentRun,
+    tool_id: str,
+    action: str,
+    params: dict[str, Any],
+    risk: str,
+    idempotent: bool,
+    runtime_context: dict[str, Any] | None = None,
+) -> UnifiedTaskResult:
+    """Atomically publish the complete existing task/run before any tool executes."""
+    if run.error == "execution_idempotency_conflict":
+        raise UnifiedTaskConflictError("原任务的执行身份或授权范围已变化，未发布新任务")
+    fingerprint = _request_fingerprint(tool_id, action, params)
+    run.metadata["task_request_fingerprint"] = fingerprint
+    run.metadata["task_request"] = {
+        "tool_id": tool_id,
+        "action": action,
+        "risk": risk,
+        "idempotent": idempotent,
+    }
+    user_id = run.user_id
+    run, created = orchestrator.create_task_run(run)
+    if not created:
+        _assert_reused_run_scope(
+            run,
+            user_id=user_id,
+            tenant_id=str((runtime_context or {}).get("tenant_id") or ""),
+            runtime_context=runtime_context,
+        )
+        if str(run.metadata.get("task_request_fingerprint") or "") != fingerprint:
+            raise UnifiedTaskConflictError("task_id 已绑定到不同的任务内容")
+    return UnifiedTaskResult(run=run, deduplicated=not created)
+
+
 def create_unified_task(
     *,
     orchestrator: AgentOrchestrator,
@@ -202,16 +238,18 @@ def create_unified_task(
         message=normalized_message,
         plan=plan,
         runtime_context=context,
+        persist=False,
     )
-    run.metadata["task_request_fingerprint"] = fingerprint
-    run.metadata["task_request"] = {
-        "tool_id": spec.tool_id,
-        "action": spec.action,
-        "risk": spec.risk,
-        "idempotent": spec.idempotent,
-    }
-    run = orchestrator.save_run(run)
-    return UnifiedTaskResult(run=run)
+    return publish_task_run(
+        orchestrator=orchestrator,
+        run=run,
+        tool_id=spec.tool_id,
+        action=spec.action,
+        params=params,
+        risk=spec.risk,
+        idempotent=spec.idempotent,
+        runtime_context=context,
+    )
 
 
 __all__ = [
@@ -219,5 +257,6 @@ __all__ = [
     "UnifiedTaskError",
     "UnifiedTaskResult",
     "create_unified_task",
+    "publish_task_run",
     "task_capabilities",
 ]

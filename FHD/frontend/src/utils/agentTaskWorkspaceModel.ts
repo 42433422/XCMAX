@@ -1,6 +1,7 @@
 import type { AgentArtifact, AgentRun, AgentRunEvent, AgentRunStep, AgentTaskSummary, AgentToolCall } from '@/api/agentRuns'
 import type { TaskItem, TaskStatus } from '@/composables/useChatPersistence'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { runHasUncertainReceipt } from '@/utils/agentRunExecution'
 
 export interface AgentTaskContext {
   task_id: string
@@ -49,11 +50,11 @@ function taskContextOf(run: AgentRun): AgentTaskContext {
 function displayStatus(raw: string): TaskStatus {
   if (['planning', 'running', 'retrying'].includes(raw)) return 'running'
   if (raw === 'paused') return 'paused'
-  if (['waiting_user', 'blocked'].includes(raw)) return 'blocked'
+  if (['waiting_user', 'waiting_approval', 'blocked'].includes(raw)) return 'blocked'
   if (raw === 'completed') return 'success'
   if (raw === 'failed') return 'failed'
   if (raw === 'cancelled') return 'cancelled'
-  return 'queued'
+  return raw === 'queued' || raw === 'accepted' ? 'queued' : 'blocked'
 }
 
 function stageOf(raw: string): string {
@@ -63,6 +64,11 @@ function stageOf(raw: string): string {
     running: '执行中',
     retrying: '正在重试',
     waiting_user: '等待审批或用户确认',
+    waiting_approval: '等待审批或用户确认',
+    waiting_input: '等待补充信息',
+    waiting_auth: '等待授权',
+    accepted: '已受理，等待执行',
+    unknown: '结果待核对，请查看原任务回执',
     blocked: '等待依赖解除',
     paused: '已暂停，可继续',
     completed: '任务完成',
@@ -112,6 +118,7 @@ function evidenceOf(runs: AgentRun[]) {
 
 function capabilitiesOf(run: AgentRun) {
   const status = asString(run.status)
+  if (runHasUncertainReceipt(run)) return { approve: false, pause: false, resume: false, cancel: false, retry: false, evidence: true }
   return {
     approve: status === 'waiting_user',
     pause: ['queued', 'planning', 'running', 'retrying', 'waiting_user'].includes(status),
@@ -141,7 +148,8 @@ export function groupAgentRunsIntoTasks(runs: AgentRun[]): TaskItem[] {
       const toolCalls = ordered.flatMap((run) => asArray<AgentToolCall>(run.tool_calls))
       const events = ordered.flatMap((run) => asArray<AgentRunEvent>(run.events))
       const evidence = evidenceOf(ordered)
-      const status = displayStatus(asString(current.status))
+      const rawStatus = runHasUncertainReceipt(current) ? 'unknown' : asString(current.status)
+      const status = displayStatus(rawStatus)
       const title = firstContext.title || context.title || asString(ordered[0].message) || taskId
       const error = status === 'failed' ? asString(current.error || '任务执行失败') : ''
       return {
@@ -150,8 +158,8 @@ export function groupAgentRunsIntoTasks(runs: AgentRun[]): TaskItem[] {
         source: 'agent' as const,
         title,
         status,
-        progress: exactProgress(steps, asString(current.status)),
-        stage: stageOf(asString(current.status)),
+        progress: exactProgress(steps, rawStatus),
+        stage: stageOf(rawStatus),
         summary:
           status === 'success'
             ? `任务已完成 · ${ordered.length} 次运行 · ${toolCalls.length} 次工具调用`
@@ -183,7 +191,7 @@ export function groupAgentRunsIntoTasks(runs: AgentRun[]): TaskItem[] {
           completedToolCount: evidence.completed_tool_count,
           finalOutput: current.final_output || {},
           capabilities: capabilitiesOf(current),
-          rawRunStatus: current.status,
+          rawRunStatus: rawStatus,
         },
       }
     })
@@ -196,7 +204,9 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
       const runs = asArray<AgentRun>(summary.runs)
       const activeRun = summary.active_run
       const base = groupAgentRunsIntoTasks(runs.length ? runs : activeRun ? [activeRun] : [])[0]
-      const rawStatus = asString(summary.status || activeRun?.status || 'queued')
+      const uncertain = summary.status === 'unknown' || (activeRun && runHasUncertainReceipt(activeRun))
+      const rawStatus = uncertain ? 'unknown' : asString(summary.status || activeRun?.status || 'unknown')
+      const capabilities = uncertain ? { approve: false, pause: false, resume: false, cancel: false, retry: false, evidence: true } : summary.capabilities
       const controlCommand = summary.control_command
       const pendingControl = controlCommand?.status === 'requested' ? controlCommand.action : ''
       const taskStage =
@@ -234,7 +244,7 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
             attentionState: summary.attention_state || '',
             controlCommand,
             execution: summary.execution,
-            capabilities: summary.capabilities || {},
+            capabilities: capabilities || {},
             rawRunStatus: rawStatus,
             finalOutput: Object.keys(businessResult).length ? { business_result: businessResult } : {},
           },
@@ -257,7 +267,7 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
           attentionState: summary.attention_state || '',
           controlCommand,
           execution: summary.execution,
-          capabilities: summary.capabilities || asRecord(base.payload).capabilities || {},
+          capabilities: capabilities || asRecord(base.payload).capabilities || {},
           rawRunStatus: rawStatus,
         },
       }

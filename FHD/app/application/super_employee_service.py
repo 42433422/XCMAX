@@ -314,6 +314,86 @@ class SuperEmployeeService:
             "messages": self.list_messages(user_id=user_msg["user_id"]),
         }
 
+    def read_dispatch_receipt(
+        self, *, user_id: int, request_id: str, task_id: str
+    ) -> dict[str, Any] | None:
+        """Read the original dispatch intent without losing unresolved fleet sends."""
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", request_id):
+            return None
+        # Atomic outbox replacement permits a snapshot read while its sender
+        # still owns the dispatch lock and is waiting for a remote acknowledgement.
+        request = self._messages.read_dispatch_request(user_id, request_id)
+        if request is None:
+            return None
+        receipt = request.get("dispatch_receipt")
+        if not isinstance(receipt, dict) or receipt.get("request_id") != request_id:
+            return None
+        original_id = str(receipt.get("task_id") or "")
+        if task_id and task_id != original_id:
+            return None
+        uncertain = bool(
+            receipt.get("reconciliation_required")
+            or receipt.get("pending_device_id")
+            or receipt.get("unexpected_task_id")
+            or receipt.get("status") in {"dispatching", "dispatch_unknown", "unknown"}
+        )
+        dispatch = {
+            key: receipt[key]
+            for key in (
+                "request_id",
+                "task_id",
+                "status",
+                "dispatcher",
+                "devices",
+                "pending_device_id",
+                "unexpected_task_id",
+            )
+            if key in receipt
+        }
+        if uncertain:
+            dispatch.update(status="dispatch_unknown", reconciliation_required=True)
+        if not original_id:
+            return (
+                {
+                    "dispatch": dispatch,
+                    "assistant_message": {"body": self._dispatch_reply(dispatch)},
+                }
+                if uncertain
+                else None
+            )
+        api_url = str(receipt.get("api_url") or "")
+        if (
+            receipt.get("dispatcher") != "para_api"
+            or not api_url
+            or api_url != self._para_api_url()
+        ):
+            return None
+        try:
+            with self._http_client_factory() as client:
+                token = self._para_token(client, api_url)
+                result = self._para_request(
+                    client, api_url, token, "GET", f"/api/tasks/{original_id}"
+                )
+        except RECOVERABLE_ERRORS:
+            return None
+        task = result.get("task")
+        task = task if isinstance(task, dict) else None
+        if not task or str(task.get("id") or task.get("task_id") or "") != original_id:
+            return None
+        state = str(task.get("status") or "unknown")
+        state = {"merged": "completed", "merge_conflict": "blocked"}.get(state, state)
+        dispatch["task_status"] = state
+        if not uncertain:
+            dispatch["status"] = state
+        return {
+            "dispatch": dispatch,
+            "assistant_message": {
+                "body": self._dispatch_reply(dispatch)
+                if uncertain
+                else self._para_task_status_reply(task)
+            },
+        }
+
     def invoke(
         self, *, user_id: int, message: str, context: dict[str, Any] | None = None
     ) -> dict[str, Any]:

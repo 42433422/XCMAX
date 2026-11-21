@@ -15,7 +15,9 @@ import pytest
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 
 
-def _service(tmp_path, monkeypatch, task_handler, *, devices=1, webhook_handler=None):
+def _service(
+    tmp_path, monkeypatch, task_handler, *, devices=1, webhook_handler=None, task_status="running"
+):
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "auto")
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "https://para.test")
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", "test-token")
@@ -49,7 +51,9 @@ def _service(tmp_path, monkeypatch, task_handler, *, devices=1, webhook_handler=
         if request.method == "POST" and request.url.path == "/api/tasks":
             return task_handler(request)
         if request.method == "GET" and request.url.path == "/api/tasks/task-original":
-            return httpx.Response(200, json={"task": {"id": "task-original", "status": "running"}})
+            return httpx.Response(
+                200, json={"task": {"id": "task-original", "status": task_status}}
+            )
         raise AssertionError(f"unexpected request {request.method} {request.url}")
 
     def create():
@@ -152,6 +156,114 @@ def test_partial_fleet_dispatch_keeps_task_and_device_receipts(tmp_path, monkeyp
     assert len(effects) == 2
     assert ("GET", "para.test", "/api/tasks/task-original") in requests
     assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+def test_readback_keeps_partial_fleet_unknown_after_known_task_completes(tmp_path, monkeypatch):
+    effects = []
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        if len(effects) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "task": {"id": "task-original", "status": "running"},
+                    "subtask": {"id": "sub-1"},
+                },
+            )
+        raise httpx.ReadTimeout("second device acknowledgement lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit, devices=2, task_status="completed")
+    first = create().invoke(
+        user_id=7,
+        message="修复登录问题",
+        context={"request_id": "fleet-readback", "mode": "code", "para_tier": 2},
+    )
+    original = Path(first["dispatch"]["outbox_path"]).read_text()
+    before = len(requests)
+    receipt = create().read_dispatch_receipt(
+        user_id=7, request_id="fleet-readback", task_id="task-original"
+    )
+    assert receipt["dispatch"]["status"] == "dispatch_unknown"
+    assert receipt["dispatch"]["reconciliation_required"] is True
+    assert receipt["dispatch"]["task_status"] == "completed"
+    assert receipt["dispatch"]["pending_device_id"] == "device-1"
+    assert receipt["dispatch"]["devices"][0]["subtask_id"] == "sub-1"
+    assert "待核对" in receipt["assistant_message"]["body"]
+    assert requests[before:] == [("GET", "para.test", "/api/tasks/task-original")]
+    assert len(effects) == 2
+    assert Path(first["dispatch"]["outbox_path"]).read_text() == original
+
+
+def test_readback_without_ack_keeps_original_unknown_without_querying(tmp_path, monkeypatch):
+    def submit(request):
+        raise httpx.ReadTimeout("first acknowledgement lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    create().invoke(
+        user_id=7,
+        message="修复登录问题",
+        context={"request_id": "lost-readback", "mode": "code"},
+    )
+    before = len(requests)
+    service = create()
+    receipt = service.read_dispatch_receipt(user_id=7, request_id="lost-readback", task_id="")
+    assert receipt["dispatch"]["reconciliation_required"] is True
+    assert receipt["dispatch"]["status"] == "dispatch_unknown"
+    assert not receipt["dispatch"].get("task_id")
+    assert len(requests) == before
+
+
+def test_readback_after_endpoint_change_never_queries_new_target(tmp_path, monkeypatch):
+    def submit(request):
+        return httpx.Response(200, json={"task": {"id": "task-original", "status": "running"}})
+
+    create, requests = _service(tmp_path, monkeypatch, submit, task_status="completed")
+    create().invoke(
+        user_id=7,
+        message="修复登录问题",
+        context={"request_id": "bound-readback", "mode": "code"},
+    )
+    before = len(requests)
+    service = create()
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "https://other-para.test")
+    assert (
+        service.read_dispatch_receipt(
+            user_id=7, request_id="bound-readback", task_id="task-original"
+        )
+        is None
+    )
+    assert len(requests) == before
+
+
+def test_readback_can_observe_send_intent_while_dispatch_lock_is_held(tmp_path, monkeypatch):
+    create, requests = _service(
+        tmp_path, monkeypatch, lambda request: pytest.fail("readback dispatched a write")
+    )
+    service = create()
+    request = {
+        "request_id": "inflight-readback",
+        "user_id": 7,
+        "created_at": "2026-11-21T00:00:00Z",
+    }
+    with service._messages.dispatch_lock(7, "inflight-readback"):
+        service._dispatching._persist_receipt(
+            request,
+            {"status": "dispatching", "dispatcher": "para_api", "api_url": "https://para.test"},
+        )
+        # Lock acquisition is exclusively a sender operation. A reader must not
+        # block on the live sender before it can observe the already durable intent.
+        monkeypatch.setattr(
+            service._messages,
+            "dispatch_lock",
+            lambda *args: pytest.fail("readback waited on the live sender"),
+        )
+        receipt = service.read_dispatch_receipt(
+            user_id=7, request_id="inflight-readback", task_id=""
+        )
+    assert receipt["dispatch"]["status"] == "dispatch_unknown"
+    assert receipt["dispatch"]["reconciliation_required"] is True
+    assert requests == []
 
 
 def test_connect_failure_before_first_send_can_use_webhook(tmp_path, monkeypatch):
