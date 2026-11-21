@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="appstore-screenshots/2.3.3-accurate-metadata/ipad-13/ipad-01-messages-live.png" alt="XCAGI · AI 员工桌面平台" width="60%" />
+  <img src="docs/assets/xcagi-readme-cover.svg" alt="XCAGI 企业 AI 员工桌面平台封面" width="100%" />
 </p>
 
 <h1 align="center">XCAGI · AI 员工桌面平台</h1>
