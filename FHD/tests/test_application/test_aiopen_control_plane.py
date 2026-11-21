@@ -173,3 +173,43 @@ def test_environment_key_bypasses_runtime_policy(tmp_path):
     decision = registry.authorize("env-secret", "any_tool")
     assert decision["ok"] is True
     assert decision["env"] is True
+
+@pytest.mark.parametrize("malformed_expiry", [[], {}, True, False])
+def test_execution_context_rejects_non_numeric_expiry_before_actor(
+    monkeypatch, tmp_path, malformed_expiry
+):
+    registry = _registry(tmp_path)
+
+    def actor_must_not_run(_context):
+        raise AssertionError("invalid persisted expiry must not reach actor authorization")
+
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_mod_scope._bound_actor", actor_must_not_run
+    )
+    assert (
+        registry._execution_context(
+            {
+                "expires_at": malformed_expiry,
+                "execution_context": {"user_id": "7"},
+                "credential_id": "durable-id",
+            }
+        )
+        is None
+    )
+
+
+def test_execution_context_does_not_hide_programmer_type_errors(monkeypatch, tmp_path):
+    registry = _registry(tmp_path)
+
+    def broken_actor(_context):
+        raise TypeError("unexpected programming error")
+
+    monkeypatch.setattr("app.infrastructure.auth.agent_mod_scope._bound_actor", broken_actor)
+    with pytest.raises(TypeError, match="unexpected programming error"):
+        registry._execution_context(
+            {
+                "expires_at": 2000.0,
+                "execution_context": {"user_id": "7"},
+                "credential_id": "durable-id",
+            }
+        )
