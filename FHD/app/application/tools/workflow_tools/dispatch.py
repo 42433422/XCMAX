@@ -139,6 +139,14 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
             }
     profile = resolve_tool_execution_profile(runtime_context)
     user_message = _resolve_user_message(runtime_context, params)
+    if tool_id == "browser":
+        from app.application.tools.browser import execute_browser
+
+        return execute_browser(action, params, runtime_context)
+    if tool_id == "aiopen":
+        from app.application.aiopen.agent_bridge import execute_aiopen_step
+
+        return execute_aiopen_step(action, params, runtime_context)
     router = _REGISTERED_WORKFLOW_ROUTERS.get(tool_id)
     if router is not None:
         from app.infrastructure.tenant_scope import owned_tenant_scope

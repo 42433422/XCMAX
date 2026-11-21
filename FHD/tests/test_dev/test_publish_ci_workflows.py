@@ -184,3 +184,47 @@ def test_market_checks_initialized_child_without_mixing_parent_types() -> None:
         assert step["working-directory"] == (
             "成都修茈科技有限公司/MODstore_deploy/market/src/domain/客来来/desktop"
         )
+
+
+@pytest.mark.parametrize("report", ["passed", "missing", "empty", "skipped", "failure", "error"])
+def test_browser_contract_rejects_missing_or_unexecuted_evidence(tmp_path, report):
+    import xml.etree.ElementTree as ET
+
+    rendered = publisher._render_fhd(REPO_ROOT / "FHD/.github/workflows/browser-runtime.yml")
+    assert rendered is not None
+    name, body = rendered
+    assert (REPO_ROOT / ".github/workflows" / name).read_text() == body
+    workflow = yaml.load(body, Loader=yaml.BaseLoader)
+    for event in ("push", "pull_request"):
+        paths = workflow["on"][event]["paths"]
+        assert "FHD/app/infrastructure/browser/**" in paths
+        assert "FHD/.github/workflows/browser-runtime.*" in paths
+        assert ".github/workflows/fhd-browser-runtime.yml" in paths
+    job = workflow["jobs"]["browser-runtime-e2e"]
+    assert job["env"]["XCMAX_BROWSER_REQUIRE_REAL"] == "1"
+    assert not job.get("continue-on-error")
+    step = next(s for s in job["steps"] if s.get("name", "").startswith("Reject missing"))
+    assert step["if"] == "always()"
+    if report != "missing":
+        evidence = tmp_path / "browser-runtime"
+        evidence.mkdir()
+        suite = ET.Element("testsuite")
+        if report != "empty":
+            for case_name in (
+                "test_form_receipt_upload_and_durable_download",
+                "test_context_isolation_between_runs",
+                "test_screenshot_masks_embedded_frame_rectangle",
+                "test_browser_executes_under_default_tool_worker_resource_limits",
+            ):
+                case = ET.SubElement(suite, "testcase", name=case_name)
+                if report != "passed":
+                    ET.SubElement(case, report)
+        ET.ElementTree(suite).write(evidence / "results.xml", encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, "-c", step["run"]],
+        env={**os.environ, "RUNNER_TEMP": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == (0 if report == "passed" else 1), result.stderr

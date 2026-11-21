@@ -492,9 +492,23 @@ class AgentToolExecutor:
                     else nullcontext()
                 )
                 try:
+                    from app.application.tools.surface_authority import surface_invocation_scope
                     from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
-                    with receipt_scope, model_rate_limit_scope(params["_runtime_context"]):
+                    with (
+                        receipt_scope,
+                        model_rate_limit_scope(params["_runtime_context"]),
+                        surface_invocation_scope(
+                            validation.tool_id,
+                            action,
+                            {
+                                key: value
+                                for key, value in params.items()
+                                if key != "_runtime_context"
+                            },
+                            params["_runtime_context"],
+                        ),
+                    ):
                         guarded_batch = (validation.tool_id, action) in {
                             ("customers", "batch_delete"),
                             ("products", "batch_delete"),

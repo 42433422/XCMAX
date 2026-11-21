@@ -244,6 +244,7 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 | FHD Release gate | [`fhd-release-gate-ci.yml`](../.github/workflows/fhd-release-gate-ci.yml) |
 | 前端 Vitest | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → `frontend-test-shard` / `frontend-test` |
 | Playwright 全栈 | [`e2e.yml`](../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml) |
+| 浏览器工具执行契约（path 过滤） | [`fhd-browser-runtime.yml`](../.github/workflows/fhd-browser-runtime.yml)，真实 Chromium 必跑、禁止 skip |
 | Flutter Android+iOS CI | [`fhd-ci-mobile-flutter.yml`](../.github/workflows/fhd-ci-mobile-flutter.yml) |
 | Flutter Android 发布 | [`fhd-release-android.yml`](../.github/workflows/fhd-release-android.yml) |
 | Flutter iOS / TestFlight 发布 | [`fhd-release-ios.yml`](../.github/workflows/fhd-release-ios.yml) |
@@ -519,6 +520,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 |------|----------|------|------|
 | FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **8 pass / 6 skip** |
 | 前端/后端 path 过滤、nightly、手动 | `e2e.yml` → `e2e-playwright-reusable.yml` | 每次运行均为 `E2E_FULL_STACK=1`，含严格构建和真实 FastAPI | 全栈 P0 与 `plan2026-skeleton`，结果以当次报告为准 |
+| 浏览器执行器、工具入口、契约、测试或依赖变化 | `fhd-browser-runtime.yml` | `XCMAX_BROWSER_REQUIRE_REAL=1`，固定 Playwright 依赖与 Chromium，保持 sandbox 开启 | `test_browser_runtime.py` 与 `test_browser_snapshot.py`：真实表单回执、下载、隔离、域名策略、快照隐私、iframe 截图遮罩、生产默认资源限制、超时及租约；JUnit 缺失、skip 或失败均阻断该 job |
+
+浏览器专项源位于 `FHD/.github/workflows/browser-runtime.yml`；只安装 `pyproject.toml` 的 browser extra 与 `uv.lock` 中的 pytest、pytest-asyncio、SQLAlchemy、PyYAML、psutil、Pillow，使用 `--confcutdir=tests/test_infrastructure` 保留该目录夹具并排除应用工厂的全局测试初始化。每轮保存提交、run/attempt、Python/Playwright 版本、JUnit 及合成页面产物。本地浏览器不可用时的 skip 不构成验收；本专项成功须由对应提交的实际运行确认，不改变本节既有分支保护清单。
 
 SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。
 

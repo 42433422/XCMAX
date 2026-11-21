@@ -501,10 +501,29 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const artifactPath = '/api/agent/runs/run_1/artifacts/txt_1'
       const upload = (url: string) => runCommand('file', 'upload', { selector: '#upload-target', files: [{ name: 'invoice.txt', url }] })
 
+      it('aborts a hanging artifact transfer and releases the command queue on timeout', async () => {
+        fetchFile.mockImplementation((_url, options: RequestInit) => new Promise((_resolve, reject) => {
+          options.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+        }))
+        const socket = lastWs()!
+        const uploadWork = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'hanging-upload', timeout_ms: 50, action: 'upload', params: {
+          selector: '#upload-target', files: [{ name: 'private.txt', url: artifactPath }],
+        } }) })
+        const readback = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'read-after-upload', action: 'snapshot', params: {} }) })
+        await vi.runAllTimersAsync(); await Promise.all([uploadWork, readback])
+        const replies = socket.send.mock.calls.map(call => JSON.parse(call[0] as string))
+        expect(replies.map(reply => reply.id)).toEqual(['hanging-upload', 'read-after-upload'])
+        expect(replies[0].result).toMatchObject({ success: false, code: 'COMMAND_CANCELLED' })
+        expect(replies[1].result.success).toBe(true)
+        expect(input.files).toHaveLength(0)
+        expect(change).not.toHaveBeenCalled()
+      })
+
       it.each([artifactPath, `${window.location.origin}${artifactPath}`])('uploads authorized artifact bytes from %s', async url => {
         expect(await upload(url)).toEqual({ success: true, uploaded: ['invoice.txt'] })
         expect(fetchFile).toHaveBeenCalledWith(artifactPath, {
           credentials: 'same-origin', mode: 'same-origin', redirect: 'error',
+          signal: expect.any(AbortSignal),
         })
         expect(input.files).toHaveLength(1)
         expect(await input.files![0].text()).toBe('invoice')
@@ -614,7 +633,7 @@ describe('useAiOpenCursor - coverage ramp', () => {
       setAiOpenCursorEnabled(true)
       const result = await runCommand('ref1', 'snapshot', {})
       expect(result.success).toBe(true)
-      expect(result.elements[0].ref).toBe('e1')
+      expect(result.elements[0].ref).toMatch(/^e\d+$/)
       expect(result.elements[0].role).toBe('button')
       expect(result.elements[0].name).toBe('保存')
       expect(result.elements[0].selector).toBe('#ref-btn')
@@ -628,8 +647,8 @@ describe('useAiOpenCursor - coverage ramp', () => {
       makeVisible(btn)
 
       setAiOpenCursorEnabled(true)
-      await runCommand('ref2', 'snapshot', {})
-      const result = await runCommand('ref3', 'click', { ref: 'e1' })
+      const snapshot = await runCommand('ref2', 'snapshot', {})
+      const result = await runCommand('ref3', 'click', { ref: snapshot.elements[0].ref })
       expect(result.success).toBe(true)
       expect(btn.click).toHaveBeenCalled()
     })
@@ -700,6 +719,80 @@ describe('useAiOpenCursor - coverage ramp', () => {
       expect(result.message).toContain('ref')
     })
 
+    it('never aliases an older snapshot ref or falls through to another target', async () => {
+      const before = document.createElement('button')
+      makeVisible(before); document.body.appendChild(before)
+      setAiOpenCursorEnabled(true)
+      const old = await runCommand('old-snapshot', 'snapshot', {})
+      before.remove()
+      const after = document.createElement('button')
+      after.id = 'replacement'; makeVisible(after); document.body.appendChild(after)
+      const fresh = await runCommand('new-snapshot', 'snapshot', {})
+      expect(fresh.elements[0].ref).not.toBe(old.elements[0].ref)
+      expect(await runCommand('stale-target', 'click', { ref: old.elements[0].ref, selector: '#replacement' })).toMatchObject({ success: false })
+      expect(after.click).not.toHaveBeenCalled()
+    })
+
+    it('serializes a readback behind a pending input action on the same connection', async () => {
+      const input = document.createElement('input')
+      input.id = 'serial'; input.value = 'before'; makeVisible(input); document.body.appendChild(input)
+      setAiOpenCursorEnabled(true)
+      const socket = lastWs()!
+      const typing = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'write', action: 'type', params: { selector: '#serial', text: 'after' } }) })
+      const verifying = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'readback', action: 'verify', params: { selector: '#serial', value: 'after' } }) })
+      await vi.advanceTimersByTimeAsync(100)
+      expect(socket.send).not.toHaveBeenCalled()
+      await vi.runAllTimersAsync(); await Promise.all([typing, verifying])
+      const replies = socket.send.mock.calls.map(call => JSON.parse(call[0] as string))
+      expect(replies.map(reply => reply.id)).toEqual(['write', 'readback'])
+      expect(replies[1].result.success).toBe(true)
+      expect(input.value).toBe('after')
+    })
+
+    it('cancels active and queued writes by command ID before their side effects', async () => {
+      const input = document.createElement('input')
+      input.id = 'cancel-input'; input.value = 'before'; makeVisible(input); document.body.appendChild(input)
+      const changed = vi.fn(); input.addEventListener('input', changed)
+      setAiOpenCursorEnabled(true)
+      const socket = lastWs()!
+      const pending = ['active', 'queued'].map(id => socket.onmessage!({ data: JSON.stringify({ type: 'command', id, action: 'type', params: { selector: '#cancel-input', text: id } }) }))
+      await vi.advanceTimersByTimeAsync(100)
+      for (const id of ['active', 'queued']) await socket.onmessage!({ data: JSON.stringify({ type: 'cancel', id }) })
+      await vi.runAllTimersAsync(); await Promise.all(pending)
+      expect(changed).not.toHaveBeenCalled()
+      expect(input.value).toBe('before')
+      expect(socket.send.mock.calls.map(call => JSON.parse(call[0] as string).result.code)).toEqual(['COMMAND_CANCELLED', 'COMMAND_CANCELLED'])
+      expect(await runCommand('after-cancel', 'verify', { selector: '#cancel-input', value: 'before' })).toMatchObject({ success: true })
+    })
+
+    it('expires a command locally even when its cancellation message is delayed', async () => {
+      const button = document.createElement('button')
+      button.id = 'deadline'; makeVisible(button); document.body.appendChild(button)
+      setAiOpenCursorEnabled(true)
+      const socket = lastWs()!
+      const pending = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'expired', timeout_ms: 50, action: 'click', params: { selector: '#deadline' } }) })
+      await vi.runAllTimersAsync(); await pending
+      expect(button.click).not.toHaveBeenCalled()
+      expect(JSON.parse(socket.send.mock.calls[0][0] as string).result).toMatchObject({ success: false, code: 'COMMAND_CANCELLED' })
+    })
+
+    it('redacts credentials in snapshots, input receipts, verification details and logs', async () => {
+      const input = document.createElement('input')
+      input.type = 'password'; input.id = 'credential'; input.value = 'old-private-value'
+      makeVisible(input); document.body.appendChild(input)
+      setAiOpenCursorEnabled(true)
+      const typed = await runCommand('private-type', 'type', { selector: '#credential', text: 'new-private-value' })
+      const snapshot = await runCommand('private-snapshot', 'snapshot', {})
+      const verified = await runCommand('private-verify', 'verify', { selector: '#credential', value: 'new-private-value' })
+      expect(input.value).toBe('new-private-value')
+      expect(typed.typed).toBe('[REDACTED]')
+      expect(verified.success).toBe(true)
+      expect(snapshot.elements[0].state).not.toHaveProperty('value')
+      const evidence = JSON.stringify([typed, snapshot, verified, aiopenCursorLogs.value])
+      expect(evidence).not.toContain('old-private-value')
+      expect(evidence).not.toContain('new-private-value')
+    })
+
     it('verify returns per-check conclusions', async () => {
       const input = document.createElement('input')
       input.id = 'verify-input'
@@ -708,8 +801,8 @@ describe('useAiOpenCursor - coverage ramp', () => {
       makeVisible(input)
 
       setAiOpenCursorEnabled(true)
-      await runCommand('ref5', 'snapshot', {})
-      const result = await runCommand('ref6', 'verify', { ref: 'e1', value: 'abc' })
+      const snapshot = await runCommand('ref5', 'snapshot', {})
+      const result = await runCommand('ref6', 'verify', { ref: snapshot.elements[0].ref, value: 'abc' })
       expect(result.success).toBe(true)
       expect(result.checks.length).toBe(2)
       expect(result.checks.every((check: any) => check.ok)).toBe(true)
@@ -728,8 +821,8 @@ describe('useAiOpenCursor - coverage ramp', () => {
       makeVisible(select)
 
       setAiOpenCursorEnabled(true)
-      await runCommand('ref7', 'snapshot', {})
-      const result = await runCommand('ref8', 'select', { ref: 'e1', value: 'b' })
+      const snapshot = await runCommand('ref7', 'snapshot', {})
+      const result = await runCommand('ref8', 'select', { ref: snapshot.elements[0].ref, value: 'b' })
       expect(result.success).toBe(true)
       expect(select.value).toBe('b')
     })
@@ -899,6 +992,18 @@ describe('useAiOpenCursor - coverage ramp', () => {
         expect(await runCommand('missing', 'screenshot', { selector: '#missing' })).toMatchObject({ success: false, message: expect.stringContaining('未找到截图区域') })
         expect(toPng).not.toHaveBeenCalled()
         expect(cursorVisible.value).toBe(true)
+      })
+
+      it('excludes credential inputs from the renderer and rejects a direct credential screenshot', async () => {
+        const input = document.createElement('input')
+        input.type = 'password'; input.id = 'private-shot'; input.value = 'private-value'
+        document.body.appendChild(input)
+        expect(await runCommand('private-shot', 'screenshot', { selector: '#private-shot' })).toMatchObject({ success: false, code: 'SENSITIVE_TARGET' })
+        expect(toPng).not.toHaveBeenCalled()
+        expect(await runCommand('filtered-shot', 'screenshot', {})).toMatchObject({ success: true })
+        const filter = toPng.mock.calls[0][1].filter
+        expect(filter(input)).toBe(false)
+        expect(filter(document.body)).toBe(true)
       })
 
       it.each(['render', 'decode'])('restores the cursor and reports a %s failure', async stage => {

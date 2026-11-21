@@ -204,6 +204,7 @@ def _worker(
     catalog_claim=None,
     stream_connection=None,
     elt_claim=None,
+    surface_claim=None,
 ):
     from app.application.agent_orchestrator.business_write_guard import restore_worker_claim
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
@@ -263,10 +264,11 @@ def _worker(
             "excel_import",
             "office_stage",
         )
+        surface_step = step.tool_id in {"browser", "aiopen"}
         if office_stage and not business_db_url:
             raise RuntimeError("office approval database is unavailable")
         if business_db_url and not _bind_worker_business_db(
-            business_db_url, bind_workflow_db=office_stage
+            business_db_url, bind_workflow_db=office_stage or surface_step
         ):
             Path(folder, "result").write_text(
                 json.dumps(
@@ -296,6 +298,7 @@ def _worker(
         with (
             restore_catalog_claim(catalog_claim),
             restore_worker_claim(elt_claim, elt_step_id=step.step_id if elt_claim else ""),
+            restore_worker_claim(surface_claim),
             invocation_deadline(deadline) as budget,
             llm_client_factory_scope(restore_llm_scope) if llm_scope is not None else nullcontext(),
             _worker_stream(stream_connection) as finish_stream,
@@ -564,6 +567,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
     catalog_profile = capture_catalog_worker_profile(step)
     catalog_claim = capture_worker_claim() if catalog_profile is not None else None
     elt_claim = capture_elt_worker_claim(step, context)
+    surface_claim = capture_worker_claim() if step.tool_id in {"browser", "aiopen"} else None
     ctx = multiprocessing.get_context("spawn")
     start = ctx.Event()
     control_in, control_out = ctx.Pipe(duplex=False)
@@ -587,6 +591,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
             catalog_claim,
             sender,
             elt_claim,
+            surface_claim,
         ),
     )
     armed = False
