@@ -173,7 +173,7 @@ def website():
 
 
 def run(plan, tmp_path, origin, executable, seconds=10):
-    return asyncio.run(
+    result = asyncio.run(
         execute_browser_plan(
             plan,
             artifact_dir=tmp_path,
@@ -182,6 +182,11 @@ def run(plan, tmp_path, origin, executable, seconds=10):
             deadline_monotonic=time.monotonic() + seconds,
         )
     )
+    if not result["success"]:
+        # Synthetic fixtures only: preserve the failing action instead of pytest's
+        # abbreviated dictionary repr, without exposing production exception text.
+        print(json.dumps(result, indent=2))
+    return result
 
 
 def text_check(selector, expected):
@@ -369,6 +374,9 @@ result = asyncio.run(execute_browser_plan(
 print(json.dumps({"result": result}), flush=True)
 """
     environment = dict(os.environ)
+    # The child runs only synthetic local pages; browser launch diagnostics reveal
+    # resource reservation failures without recording page bodies or form values.
+    environment["DEBUG"] = "pw:browser"
     # Exercise production defaults regardless of a developer shell's overrides.
     for key in (
         "XCAGI_TOOL_SANDBOX",
@@ -392,6 +400,8 @@ print(json.dumps({"result": result}), flush=True)
             # A failed browser launch must not leave its driver/children running.
             with suppress(ProcessLookupError):
                 os.killpg(process.pid, signal.SIGKILL)
+    print(stdout)
+    print(stderr)
     assert process.returncode == 0, (stdout, stderr[-4000:])
     records = [json.loads(line) for line in stdout.splitlines()]
     assert records[0]["limits"] == {
