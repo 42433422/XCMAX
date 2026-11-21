@@ -357,7 +357,15 @@ def select_tools_for_prompt(
         if allowed_domains and not _matches_domain(key, allowed_domains):
             continue
         filtered[tool_id] = spec
-    return filtered or tool_registry
+    if filtered:
+        return filtered
+    # 已知意图但没有任何工具命中时，回退也只保留通用工具与非文档工具，
+    # 避免把仅因注册表较窄而被筛掉的表格/导入工具重新注入。
+    return {
+        key: spec
+        for key, spec in tool_registry.items()
+        if _is_core_tool(key) or not key.startswith(_DOCUMENT_TOOL_PREFIXES)
+    }
 
 
 def select_rules_for_prompt(
