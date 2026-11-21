@@ -370,6 +370,139 @@ def test_only_trusted_reads_may_reconnect_after_unknown_transport_outcome(
         assert result["reconciliation_required"] is True
 
 
+def test_mcp_reconnect_spends_one_inherited_deadline(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.application.tool_execution_deadline import invocation_deadline
+    from app.infrastructure.mcp import client
+
+    calls, clock = [], [100.0]
+    monkeypatch.setattr(
+        client,
+        "time",
+        SimpleNamespace(monotonic=lambda: clock[0], sleep=lambda _: None),
+    )
+    monkeypatch.setattr(
+        "app.application.tool_execution_deadline.time",
+        SimpleNamespace(monotonic=lambda: clock[0]),
+    )
+
+    def once(factory, timeout):
+        calls.append(timeout)
+        if len(calls) == 1:
+            clock[0] += 0.4
+            raise ConnectionError("lost read response")
+        return "same operation completed"
+
+    monkeypatch.setattr(client, "_sync", once)
+    with invocation_deadline(101.0):
+        assert (
+            client._run_with_reconnect(lambda: None, 30, retry_safe=True)
+            == "same operation completed"
+        )
+    assert calls == pytest.approx([1.0, 0.6])
+
+
+def test_mcp_read_retry_preserves_original_nested_arguments(monkeypatch):
+    import copy
+    from types import SimpleNamespace
+
+    from app.infrastructure.mcp import client
+
+    calls = []
+    original = {"filter": {"query": "original"}}
+
+    class Session:
+        async def call_tool(self, name, arguments):
+            calls.append(copy.deepcopy(arguments))
+            arguments["filter"]["query"] = "changed by transport"
+            if len(calls) == 1:
+                raise ConnectionError("lost read response")
+            return SimpleNamespace(isError=False, structuredContent={"items": []})
+
+    async def with_session(config, action):
+        return await action(Session())
+
+    monkeypatch.setattr(client, "_with_session", with_session)
+    monkeypatch.setattr(client.time, "sleep", lambda _: None)
+    result = client.call_tool(
+        mcp_config.McpServerConfig(name="demo", command="x"), "read", original, retry_safe=True
+    )
+    assert result["success"] is True
+    assert original == {"filter": {"query": "original"}}
+    assert calls == [original, original]
+
+
+def test_mcp_cannot_reconnect_after_total_budget_is_exhausted(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.infrastructure.mcp import client
+
+    calls, clock = [], [100.0]
+    monkeypatch.setattr(
+        client,
+        "time",
+        SimpleNamespace(monotonic=lambda: clock[0], sleep=lambda _: None),
+    )
+
+    def once(factory, timeout):
+        calls.append(timeout)
+        clock[0] += 5
+        raise ConnectionError("lost response")
+
+    monkeypatch.setattr(client, "_sync", once)
+    with pytest.raises(client.McpClientError, match="预算"):
+        client._run_with_reconnect(lambda: None, 1, retry_safe=True)
+    assert len(calls) == 1
+
+
+def test_mcp_thread_retains_trusted_invocation_context():
+    import time
+    from contextvars import ContextVar
+
+    from app.application.tool_execution_deadline import _DEADLINE, invocation_deadline
+    from app.infrastructure.mcp import client
+
+    tenant = ContextVar("mcp_test_tenant", default=None)
+    token = tenant.set("original-tenant")
+
+    async def observe():
+        return tenant.get(), _DEADLINE.get().deadline
+
+    try:
+        with invocation_deadline(time.monotonic() + 1) as budget:
+            assert client._sync(observe, 30) == ("original-tenant", budget.deadline)
+    finally:
+        tenant.reset(token)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        PermissionError("denied"),
+        ValueError("invalid arguments"),
+        FileNotFoundError("missing server"),
+    ],
+)
+def test_mcp_never_retries_authorization_or_parameter_failures(monkeypatch, error):
+    from app.infrastructure.mcp import client
+
+    calls = []
+
+    def fail(factory, timeout):
+        calls.append(1)
+        raise error
+
+    monkeypatch.setattr(client, "_sync", fail)
+    result = client.call_tool(
+        mcp_config.McpServerConfig(name="demo", command="x"),
+        "read",
+        {},
+        retry_safe=True,
+    )
+    assert calls == [1] and result["success"] is False and result["retryable"] is False
+
+
 @pytest.mark.asyncio
 async def test_oauth_scope_and_rotated_secret_do_not_share_token_cache(monkeypatch):
     from types import SimpleNamespace

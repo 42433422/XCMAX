@@ -44,6 +44,7 @@ def retry_and_enqueue(
     principal_id: str,
     runtime_context: dict[str, Any],
     authenticated_binding: dict[str, Any] | None = None,
+    authenticated_actor_binding: dict[str, Any] | None = None,
 ) -> AgentRun | None:
     """CAS a safe continuation and its queue without changing run/step identities."""
     from app.application.agent_orchestrator.run_lifecycle import (
@@ -93,6 +94,7 @@ def retry_and_enqueue(
             run,
             principal_id=principal_id,
             authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
             operation="retry",
         )
         run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
@@ -120,6 +122,7 @@ def resume_and_enqueue(
     principal_id: str,
     runtime_context: dict[str, Any],
     authenticated_binding: dict[str, Any] | None = None,
+    authenticated_actor_binding: dict[str, Any] | None = None,
 ) -> AgentRun | None:
     with runs.transaction() as db:
         with queue.transaction(read_only=True) as queue_db:
@@ -167,6 +170,7 @@ def resume_and_enqueue(
             run,
             principal_id=principal_id,
             authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
             operation="resume",
         )
         context = merge_runtime_context(run, runtime_context)

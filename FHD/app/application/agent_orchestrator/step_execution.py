@@ -224,6 +224,22 @@ class StepExecution:
         if not isinstance(ctx.get("_actor_authorization"), dict):
             execution_scope["user_id"] = run.user_id
         ctx.update(execution_scope)
+        receipt = run.metadata.get("approval_receipt")
+        if (
+            isinstance(receipt, dict)
+            and receipt.get("step_id") == step.step_id
+            and step.tool_id != "catalog_products_v1"
+        ):
+            ctx["_tool_approval_scope"] = {
+                key: receipt.get(key)
+                for key in (
+                    "tool_id",
+                    "action",
+                    "authorization_scope_sha256",
+                    "tool_contract_sha256",
+                    "tool_version",
+                )
+            }
         tool_call.metadata["idempotency_key"] = ctx["idempotency_key"]
         validation = self.dependencies.validate(step.tool_id, step.action, step.params)
         if not validation.ok:
@@ -304,9 +320,24 @@ class StepExecution:
         )
         if step.output.get("retryable") is False:
             run.metadata["non_retryable"] = True
-        requires_reconciliation = execution_result_requires_reconciliation(step.output)
-        if requires_reconciliation:
+        uncertain = execution_result_requires_reconciliation(step.output)
+        if uncertain or (
+            step.output.get("retryable") is False
+            and (
+                step.output.get("success") is not True
+                # Catalog terminal receipts retain their independent source
+                # readback in AgentOrchestrator._verified_catalog_terminal.
+                or step.tool_id == "catalog_products_v1"
+            )
+        ):
             run.metadata["non_retryable"] = True
+        if uncertain:
+            step.output.update(
+                success=False,
+                outcome="unknown",
+                retryable=False,
+                reconciliation_required=True,
+            )
             run.metadata["recovery"] = {
                 "state": "manual_reconciliation_required",
                 "error_code": str(step.output.get("error_code") or "tool_outcome_unknown"),

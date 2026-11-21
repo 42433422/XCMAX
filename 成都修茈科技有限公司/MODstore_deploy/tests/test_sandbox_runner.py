@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -264,3 +265,162 @@ def test_sandbox_employee_run_allowlist_allows_and_runs(monkeypatch, tmp_path: P
         assert r.get("echo") == "ok-emp"
 
     asyncio.run(go())
+
+
+_QUICK_OUTPUT = "from pathlib import Path\nPath('outputs/result.txt').write_text('verified')\n"
+_QUICK_EMPLOYEE = (
+    "from modstore_runtime import employee_run\nemployee_run('worker', task='apply-once')\n"
+)
+
+
+def _run_quick_script_case(monkeypatch, tmp_path, code, *, repaired_code=_QUICK_OUTPUT):
+    from modstore_server import workbench_script_job
+    from modstore_server.script_agent.static_checker import validate_script
+
+    sandbox_calls, repair_calls = [], []
+
+    async def generate(**kwargs):
+        return SimpleNamespace(code=code, errors=[])
+
+    async def repair(**kwargs):
+        repair_calls.append(kwargs)
+        return SimpleNamespace(code=repaired_code, errors=[])
+
+    async def run(**kwargs):
+        call = {"code": kwargs["script_text"]}
+        sandbox_calls.append(call)
+        call["result"] = await sandbox_runner.run_in_sandbox(**kwargs, timeout_seconds=1)
+        return call["result"]
+
+    facade = SimpleNamespace(
+        _generate_script=generate,
+        _repair_script_once=repair,
+        MAX_AGENT_ITERATIONS=2,
+        resolve_api_key=lambda *args: ("test-key", "test"),
+        resolve_base_url=lambda *args: None,
+        validate_script=validate_script,
+        SCRIPT_ROOT=tmp_path,
+        _sandbox=SimpleNamespace(run_in_sandbox=run),
+    )
+    monkeypatch.setattr(workbench_script_job, "_facade", lambda: facade)
+    result = asyncio.run(
+        workbench_script_job.run_script_job(
+            db=object(),
+            user_id=1,
+            session_id="quick-script-receipt",
+            brief="Run the employee exactly once and produce its output",
+            files=[],
+            provider="test",
+            model="test",
+        )
+    )
+    return result, sandbox_calls, repair_calls
+
+
+@pytest.mark.parametrize(
+    "ending", ["raise RuntimeError('after effect')\n", "", "import time\ntime.sleep(5)\n"]
+)
+def test_quick_script_never_replays_employee_effect(monkeypatch, tmp_path, ending):
+    from modstore_server.script_agent.sandbox_host import SandboxRpcServer
+
+    effects = []
+
+    async def employee(self, params):
+        effects.append(params["task"])
+        return {"success": True, "status": "completed", "run_id": "original-run"}
+
+    monkeypatch.setattr(SandboxRpcServer, "_handle_employee_run", employee)
+    result, runs, repairs = _run_quick_script_case(
+        monkeypatch,
+        tmp_path,
+        _QUICK_EMPLOYEE + ending,
+        repaired_code=_QUICK_EMPLOYEE + _QUICK_OUTPUT,
+    )
+    assert effects == ["apply-once"]
+    assert len(runs) == 1 and repairs == []
+    assert result["ok"] is False and result["retryable"] is False
+    assert result["timed_out"] is ("time.sleep" in ending)
+    assert result["sdk_calls"][0]["method"] == "employee_run"
+    assert result["returncode"] == runs[0]["result"].returncode
+    assert (result["returncode"] == 0) is (not ending)
+
+
+def test_quick_script_timeout_receipt_survives_without_repair(monkeypatch, tmp_path):
+    result, runs, repairs = _run_quick_script_case(
+        monkeypatch, tmp_path, "import time\ntime.sleep(5)\n"
+    )
+    assert len(runs) == 1 and repairs == []
+    assert result["ok"] is False and result["retryable"] is False
+    assert result["timed_out"] is True and result["returncode"] != 0
+    assert result["returncode"] == runs[0]["result"].returncode
+    assert result["sdk_calls"] == []
+
+
+def test_quick_script_lost_receipt_is_not_replayed(monkeypatch, tmp_path):
+    effects = []
+
+    async def lost_receipt(**kwargs):
+        effects.append("started")
+        raise OSError("lost sandbox receipt")
+
+    monkeypatch.setattr(sandbox_runner, "run_in_sandbox", lost_receipt)
+    result, runs, repairs = _run_quick_script_case(monkeypatch, tmp_path, _QUICK_OUTPUT)
+    assert effects == ["started"] and len(runs) == 1 and repairs == []
+    assert result["ok"] is False and result["retryable"] is False
+    assert result["outcome"] in {"unverified", "unknown"}
+
+
+@pytest.mark.parametrize(
+    "receipt",
+    [None, {"success": True, "accepted": True}, {"outcome": "unknown", "retryable": False}],
+)
+def test_quick_script_summary_cannot_complete_an_unverified_employee(
+    monkeypatch, tmp_path, receipt
+):
+    from modstore_server.script_agent.sandbox_host import SandboxRpcServer
+
+    async def employee(self, params):
+        return receipt
+
+    monkeypatch.setattr(SandboxRpcServer, "_handle_employee_run", employee)
+    result, runs, repairs = _run_quick_script_case(
+        monkeypatch, tmp_path, _QUICK_EMPLOYEE + _QUICK_OUTPUT
+    )
+    assert len(runs) == 1 and repairs == []
+    assert result["ok"] is False and result["retryable"] is False
+    assert result["returncode"] == 0 and result["timed_out"] is False
+    assert result["outputs"] and result["sdk_calls"][0]["method"] == "employee_run"
+
+
+@pytest.mark.parametrize("code", ["raise RuntimeError('local failure')\n", "print('no file')\n"])
+def test_quick_script_repairs_local_file_failure(monkeypatch, tmp_path, code):
+    result, runs, repairs = _run_quick_script_case(monkeypatch, tmp_path, code)
+    assert result["ok"] is True
+    assert len(runs) == 2 and len(repairs) == 1
+    assert Path(result["outputs"][0]["path"]).read_text() == "verified"
+    assert result["sdk_calls"] == []
+
+
+def test_quick_script_preserves_confirmed_employee_success(monkeypatch, tmp_path):
+    from modstore_server.customer_issue_delivery_contract import execution_succeeded
+    from modstore_server.script_agent.sandbox_host import SandboxRpcServer
+
+    effects = []
+
+    async def employee(self, params):
+        effects.append(params["task"])
+        return {
+            "success": True,
+            "status": "completed",
+            "run_id": "original-run",
+            "retryable": False,
+        }
+
+    monkeypatch.setattr(SandboxRpcServer, "_handle_employee_run", employee)
+    result, runs, repairs = _run_quick_script_case(
+        monkeypatch, tmp_path, _QUICK_EMPLOYEE + _QUICK_OUTPUT
+    )
+    assert result["ok"] is True
+    assert effects == ["apply-once"] and len(runs) == 1 and repairs == []
+    assert execution_succeeded(result["sdk_calls"][0].get("result"))
+    assert Path(result["outputs"][0]["path"]).read_text() == "verified"

@@ -227,7 +227,9 @@ class TestInvokeDirect:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
         svc = _make_svc(tmp_path)
         result = svc.invoke(user_id=1, message="你好", context={"mode": "code"})
-        assert result["dispatch"]["queued"] is True
+        assert result["dispatch"]["queued"] is False
+        assert result["dispatch"]["status"] == "completed"
+        assert result["dispatch"]["fallback"]
 
 
 # ─────────────── invoke — dispatch path ─────────────────────────
@@ -269,7 +271,7 @@ class TestInvokeDispatch:
         assert result["dispatch"]["accepted"] is True
         assert result["dispatch"]["queued"] is False
 
-    def test_webhook_rejected_goes_to_outbox(self, tmp_path, monkeypatch):
+    def test_webhook_server_failure_keeps_unknown_receipt(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "webhook")
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://example.com/hook")
         svc = _make_svc(
@@ -277,9 +279,11 @@ class TestInvokeDispatch:
             http_client_factory=_fake_http_factory(500, {"error": "server error"}),
         )
         result = svc.invoke(user_id=1, message="修复 bug")
-        assert result["dispatch"]["queued"] is True
+        assert result["dispatch"]["queued"] is False
+        assert result["dispatch"]["status"] == "dispatch_unknown"
+        assert result["dispatch"]["safe_to_fallback"] is False
 
-    def test_webhook_exception_goes_to_outbox(self, tmp_path, monkeypatch):
+    def test_webhook_exception_keeps_unknown_receipt(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "webhook")
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://example.com/hook")
         svc = _make_svc(
@@ -287,7 +291,9 @@ class TestInvokeDispatch:
             http_client_factory=_fake_http_factory(exc=RuntimeError("boom")),
         )
         result = svc.invoke(user_id=1, message="修复 bug")
-        assert result["dispatch"]["queued"] is True
+        assert result["dispatch"]["queued"] is False
+        assert result["dispatch"]["status"] == "dispatch_unknown"
+        assert result["dispatch"]["safe_to_fallback"] is False
 
     def test_dispatch_reply_no_webhook_configured(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "webhook")

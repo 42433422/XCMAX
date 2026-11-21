@@ -44,7 +44,10 @@ class WorkflowToolDispatcher:
     def execute(self, call: ToolCall) -> str:
         if call.name == self.capability_name:
             return self.capability(call)
-        for label, handler in (("employee", self.employee), ("planner native", self.native)):
+        for label, handler in (
+            ("employee", self.employee),
+            ("planner native", self.native),
+        ):
             result = self._extension(label, handler, call)
             if result is not None:
                 return result
@@ -56,27 +59,51 @@ class WorkflowToolDispatcher:
         builtin = self.builtins.get(call.name)
         if builtin is not None:
             return builtin(call)
-        payload = self.business_db(call.name, call.args)
+        payload = self.business_db(
+            call.name,
+            {**call.args, "_runtime_context": dict(call.runtime_context or {})},
+        )
         if payload is not None:
             return json.dumps(payload, ensure_ascii=False, default=json_safe)
         crud = self.resolve_crud(call.name)
         if crud is not None:
-            try:
-                return json.dumps(crud(call.args), ensure_ascii=False, default=json_safe)
-            except RECOVERABLE_ERRORS:
-                return json.dumps(
-                    {"success": False, "error": "tool_dispatch_failed"}, ensure_ascii=False
-                )
+            # These old model aliases call services directly and use a
+            # model-controlled confirm flag. They have no ToolActionSpec or
+            # approval receipt. Keep their explicit domain APIs, but require
+            # the model to use a registered capability before business access.
+            return json.dumps(
+                {
+                    "success": False,
+                    "error_code": "tool_contract_unavailable",
+                    "execution_status": "not_started",
+                    "retryable": False,
+                    "message": "旧工具别名未绑定执行契约，请使用已登记的业务能力入口",
+                },
+                ensure_ascii=False,
+            )
         return json.dumps(
-            {"success": False, "error": "unknown_tool", "tool": call.name}, ensure_ascii=False
+            {"success": False, "error": "unknown_tool", "tool": call.name},
+            ensure_ascii=False,
         )
 
     def _extension(self, label: str, handler: ExtensionHandler, call: ToolCall) -> str | None:
         try:
             return handler(call)
         except RECOVERABLE_ERRORS:
-            self.logger.debug("%s tool dispatch skipped", label, exc_info=True)
-            return None
+            # Only an explicit None means that this adapter does not own the
+            # tool. An exception can occur after its external effect committed.
+            self.logger.exception("%s tool execution interrupted", label)
+            return json.dumps(
+                {
+                    "success": False,
+                    "error_code": "tool_execution_interrupted",
+                    "outcome": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
+                    "message": "工具结果待核对，未继续调用其他实现",
+                },
+                ensure_ascii=False,
+            )
 
 
 def _resolve_user_message(runtime_context: dict, params: dict) -> str:
@@ -103,7 +130,9 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
         _normalize_business_db_entity,
         _remember_business_db_target,
     )
-    from app.domain.shared_services.tools_workflow_dispatch import _REGISTERED_WORKFLOW_ROUTERS
+    from app.domain.shared_services.tools_workflow_dispatch import (
+        _REGISTERED_WORKFLOW_ROUTERS,
+    )
 
     params = dict(params or {})
     runtime_context = dict(params.pop("_runtime_context", None) or {})
@@ -167,7 +196,10 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
                 )
         return result
     try:
-        from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
+        from app.mod_sdk.employee_tool_registry import (
+            execute_employee_tool,
+            is_employee_tool,
+        )
 
         if is_employee_tool(tool_id):
             workspace_root = runtime_context.get("workspace_root")

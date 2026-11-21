@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import inspect
 import json
@@ -17,10 +18,20 @@ import time
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
+from contextvars import copy_context
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Coroutine, TypeVar
 
+from tenacity import (
+    Retrying,
+    retry_if_exception,
+    stop_after_attempt,
+    stop_before_delay,
+    wait_random_exponential,
+)
+
+from app.application.tool_execution_deadline import remaining_invocation_seconds
 from app.infrastructure.mcp.config import McpServerConfig
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -52,6 +63,10 @@ class McpToolInfo:
 class McpClientError(RuntimeError):
     """MCP 连接或调用失败；调用方按工具失败处理。"""
 
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
 
 def _sdk_field(value: Any, name: str, alias: str, default: Any = None) -> Any:
     """MCP 2 uses Python snake_case fields; older clients expose wire aliases."""
@@ -60,15 +75,24 @@ def _sdk_field(value: Any, name: str, alias: str, default: Any = None) -> Any:
 
 def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) -> T:
     """在独立线程运行协程，避免与请求所在事件循环互相阻塞。"""
+    timeout = remaining_invocation_seconds(timeout)
+    if timeout <= 0 or not math.isfinite(timeout):
+        raise McpClientError("MCP 调用预算已耗尽", retryable=False)
 
     async def bounded() -> T:
-        async with asyncio.timeout(timeout):
+        # The pool may have queued this call. Do not grant a fresh full timeout
+        # when the worker eventually starts under the captured caller scope.
+        remaining = remaining_invocation_seconds(timeout)
+        if remaining <= 0:
+            raise McpClientError("MCP 调用预算已耗尽", retryable=False)
+        async with asyncio.timeout(remaining):
             return await coro_factory()
 
     def run() -> T:
         return asyncio.run(bounded())
 
-    future = _EXECUTOR.submit(run)
+    context = copy_context()
+    future = _EXECUTOR.submit(context.run, run)
     try:
         return future.result(timeout=timeout)
     except FutureTimeout as exc:
@@ -104,10 +128,15 @@ async def _oauth_header(config: McpServerConfig) -> dict[str, str]:
         response.raise_for_status()
         payload = response.json()
     except RECOVERABLE_ERRORS as exc:
-        raise McpClientError("MCP 授权服务器不可用") from exc
+        from app.application.workflow.retry_policy import is_transport_error
+
+        raise McpClientError(
+            "MCP 授权服务器不可用",
+            retryable=is_transport_error(exc) and not isinstance(exc, PermissionError),
+        ) from exc
     token = payload.get("access_token") if isinstance(payload, dict) else None
     if not isinstance(token, str) or not token.strip():
-        raise McpClientError("MCP 授权服务器未返回 access_token")
+        raise McpClientError("MCP 授权服务器未返回 access_token", retryable=False)
     try:
         expires = float(payload.get("expires_in", 300))
     except (TypeError, ValueError):
@@ -125,7 +154,7 @@ async def _with_session(
     try:
         from mcp import ClientSession
     except ImportError as exc:
-        raise McpClientError("MCP 客户端依赖未安装") from exc
+        raise McpClientError("MCP 客户端依赖未安装", retryable=False) from exc
 
     if config.transport == "http":
         from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
@@ -245,17 +274,35 @@ async def _run_synthetic(session: Any, action: str, arguments: dict[str, Any]) -
 def _run_with_reconnect(
     factory: Callable[[], Coroutine[Any, Any, T]], timeout: float, *, retry_safe: bool = False
 ) -> T:
-    """短连接失败后重连一次，覆盖子进程启动抖动与瞬时断线。"""
-    last: Exception | None = None
-    attempts = 2 if retry_safe else 1
-    for attempt in range(attempts):
-        try:
-            return _sync(factory, timeout)
-        except (McpClientError, OSError, ConnectionError, TimeoutError) as exc:
-            last = exc
-            if attempt + 1 < attempts:
-                time.sleep(0.2)
-    raise last if last is not None else McpClientError("MCP 调用失败")
+    """Use the existing Tenacity dependency; all attempts share one invocation budget."""
+    budget = remaining_invocation_seconds(timeout)
+    if budget <= 0 or not math.isfinite(budget):
+        raise McpClientError("MCP 调用预算已耗尽", retryable=False)
+    deadline = time.monotonic() + budget
+
+    def attempt() -> T:
+        remaining = remaining_invocation_seconds(deadline - time.monotonic())
+        if remaining <= 0:
+            raise McpClientError("MCP 调用预算已耗尽", retryable=False)
+        return _sync(factory, remaining)
+
+    return Retrying(
+        stop=stop_after_attempt(2 if retry_safe else 1) | stop_before_delay(budget),
+        wait=wait_random_exponential(multiplier=0.2, max=1.0),
+        retry=retry_if_exception(_retryable_transport_error),
+        sleep=time.sleep,
+        reraise=True,
+    )(attempt)
+
+
+def _retryable_transport_error(error: BaseException) -> bool:
+    from app.application.workflow.retry_policy import is_transport_error
+
+    if isinstance(error, McpClientError):
+        return error.retryable
+    return not isinstance(
+        error, (PermissionError, FileNotFoundError, IsADirectoryError, NotADirectoryError)
+    ) and is_transport_error(error)
 
 
 def call_tool(
@@ -266,6 +313,7 @@ def call_tool(
     retry_safe: bool = False,
 ) -> dict[str, Any]:
     """调用外部 MCP 工具，返回统一工具结果。"""
+    frozen_arguments = copy.deepcopy(arguments or {})
     safe_read = retry_safe or tool_name in RESOURCE_ACTIONS
     uncertain = (
         {}
@@ -280,7 +328,10 @@ def call_tool(
         if tool_name in RESOURCE_ACTIONS:
             result = _run_with_reconnect(
                 lambda: _with_session(
-                    config, lambda session: _run_synthetic(session, tool_name, arguments or {})
+                    config,
+                    lambda session: _run_synthetic(
+                        session, tool_name, copy.deepcopy(frozen_arguments)
+                    ),
                 ),
                 config.timeout_seconds,
                 retry_safe=safe_read,
@@ -288,7 +339,8 @@ def call_tool(
         else:
             result = _run_with_reconnect(
                 lambda: _with_session(
-                    config, lambda session: session.call_tool(tool_name, arguments or {})
+                    config,
+                    lambda session: session.call_tool(tool_name, copy.deepcopy(frozen_arguments)),
                 ),
                 config.timeout_seconds,
                 retry_safe=safe_read,
@@ -309,6 +361,7 @@ def call_tool(
             "success": False,
             "error_code": "mcp_call_failed",
             "message": "MCP 工具调用失败",
+            "retryable": safe_read and _retryable_transport_error(exc),
             **uncertain,
         }
     error_code = (

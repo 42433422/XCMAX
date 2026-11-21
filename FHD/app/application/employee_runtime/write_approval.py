@@ -6,7 +6,6 @@ import logging
 import uuid
 from typing import Any, cast
 
-from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS
 from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -16,6 +15,8 @@ logger = logging.getLogger(__name__)
 def build_write_approval_gate(
     employee_id: str,
     input_data: dict[str, Any] | None = None,
+    *,
+    runtime_context: dict[str, Any] | None = None,
 ):
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
@@ -24,13 +25,20 @@ def build_write_approval_gate(
     ApprovalService 创建并持久化审批记录。模型参数和员工输入不能自我声明批准，
     也不能携带服务端写令牌绕过审批。
     """
-    payload = dict(input_data or {})
+    # Legacy positional input is model/user data, never approval evidence.
+    payload = dict(runtime_context or {})
 
     def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+        from resources.config.risk_actions_loader import (
+            list_code_write_tools,
+            list_write_tools,
+        )
+
         name = str(tool_name or "").strip()
-        if name not in WRITE_TOOLS and name not in CODE_WRITE_TOOLS:
+        code_writes = list_code_write_tools()
+        if name not in list_write_tools() and name not in code_writes:
             return {"ok": True}
-        if name in CODE_WRITE_TOOLS:
+        if name in code_writes:
             from app.domain.autonomy.autonomy_guard import evaluate_risk
 
             decision = evaluate_risk(

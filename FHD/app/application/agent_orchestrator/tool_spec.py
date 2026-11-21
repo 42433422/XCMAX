@@ -264,6 +264,10 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
             timeout_seconds=30,
             retry=dict(DEFAULT_RETRY),
             idempotent=idempotent,
+            # RoutePolicy.catalog only reads the local whitelist. Other low-risk
+            # AIOPEN actions still need their own explicit side-effect review.
+            read_only=action == "api_catalog",
+            required_params=required_params,
             availability="aiopen",
         )
         description = str(tool.get("description") or f"AIOPEN {action}")
@@ -639,9 +643,9 @@ def _validate_schema_payload(
                         subject=f"{subject}.{key}[{index}]",
                         allow_references_from=allow_references_from,
                         allow_missing_fields=allow_missing_fields,
-                        path_prefix=f"{path_prefix}.{key}[{index}]"
-                        if path_prefix
-                        else f"{key}[{index}]",
+                        path_prefix=(
+                            f"{path_prefix}.{key}[{index}]" if path_prefix else f"{key}[{index}]"
+                        ),
                     )
                     if not nested_ok:
                         return False, nested_message

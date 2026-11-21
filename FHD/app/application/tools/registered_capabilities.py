@@ -124,7 +124,9 @@ def build_registered_capability_tool_definition() -> dict[str, Any]:
     }
 
 
-def extend_workflow_tool_registry(registry: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def extend_workflow_tool_registry(
+    registry: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Append the product capability tool without making a second hard-coded catalog."""
 
     try:
@@ -181,14 +183,24 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
         try:
             validate_stock_in_request(params)
         except ValueError as exc:
-            return {"success": False, "error": str(exc), "tool_id": tool_id, "action": action}
+            return {
+                "success": False,
+                "error": str(exc),
+                "tool_id": tool_id,
+                "action": action,
+            }
     if tool_id == "sales" and action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import validated_quote_request
 
         try:
             validated_quote_request(params)
         except ValueError as exc:
-            return {"success": False, "error": str(exc), "tool_id": tool_id, "action": action}
+            return {
+                "success": False,
+                "error": str(exc),
+                "tool_id": tool_id,
+                "action": action,
+            }
     return {
         "success": True,
         "tool_id": tool_id,
@@ -240,7 +252,8 @@ def execute_registered_capability(
             approval_request_id = hashlib.sha256(identity.encode()).hexdigest()
         except RECOVERABLE_ERRORS:
             return json.dumps(
-                {"success": False, "error": "删除操作身份或请求标识无效"}, ensure_ascii=False
+                {"success": False, "error": "删除操作身份或请求标识无效"},
+                ensure_ascii=False,
             )
     plan_id = f"erp-capability-{tool_id}-{action}-{uuid.uuid4().hex[:12]}"
     if approval_request_id:
@@ -277,6 +290,9 @@ def execute_registered_capability(
             {
                 "success": False,
                 "error": "ERP capability 缺少已认证的调用人上下文，未执行",
+                "error_code": "tool_identity_required",
+                "execution_status": "not_started",
+                "retryable": False,
                 "tool_id": tool_id,
                 "action": action,
             },
@@ -302,7 +318,11 @@ def execute_registered_capability(
         return json.dumps(
             {
                 "success": False,
-                "error": "ERP capability 风险门检查失败，未执行",
+                "error": "ERP capability 执行被中断，请核对原调用结果",
+                "error_code": "capability_execution_interrupted",
+                "outcome": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
                 "tool_id": tool_id,
                 "action": action,
             },
@@ -312,7 +332,11 @@ def execute_registered_capability(
     capability = {
         key: resolved[key] for key in ("tool_id", "action", "risk", "idempotent", "required_params")
     }
-    response = {"success": False, "capability": capability, "agent_run_id": agent_run.run_id}
+    response = {
+        "success": False,
+        "capability": capability,
+        "agent_run_id": agent_run.run_id,
+    }
     if agent_run.status == "waiting_user":
         waiting = next((step for step in agent_run.steps if step.status == "waiting_user"), None)
         if waiting and waiting.node_id in required_ids:
@@ -335,7 +359,9 @@ def execute_registered_capability(
                 )
                 request_id = str(request.request_id or "").strip()
                 if not request_id or not approvals.attach_pending_agent_run(
-                    request_id, agent_run_id=agent_run.run_id, approved_step_id=waiting.node_id
+                    request_id,
+                    agent_run_id=agent_run.run_id,
+                    approved_step_id=waiting.node_id,
                 ):
                     raise RuntimeError("AgentRun 未关联到审批请求")
             except RECOVERABLE_ERRORS:
@@ -355,19 +381,35 @@ def execute_registered_capability(
                 message="该 ERP 操作已在 AgentRun 中安全暂停，等待确认后继续。",
                 run_status=agent_run.status,
             )
-    elif agent_run.status == "completed":
-        step = next((item for item in agent_run.steps if item.status == "completed"), None)
-        output = dict(step.output or {}) if step else {}
+    else:
+        from app.domain.task_lifecycle.results import (
+            agent_node_output,
+            execution_result_requires_reconciliation,
+        )
+
+        output = agent_node_output(agent_run, "registered_capability")
         response.update(
-            success=bool(output.get("success", False)),
-            message=str(output.get("message") or ""),
+            success=agent_run.status == "completed" and output.get("success") is True,
+            message=str(output.get("message") or agent_run.error or "该 ERP 操作未完成。"),
+            run_status=agent_run.status,
             result=output,
         )
-    else:
-        response.update(
-            message=str(agent_run.error or "该 ERP 操作未完成。"),
-            run_status=agent_run.status,
-        )
+        for key in (
+            "outcome",
+            "execution_status",
+            "retryable",
+            "reconciliation_required",
+            "error_code",
+        ):
+            if key in output:
+                response[key] = output[key]
+        if execution_result_requires_reconciliation(output):
+            response.update(
+                success=False,
+                outcome="unknown",
+                retryable=False,
+                reconciliation_required=True,
+            )
     return json.dumps(response, ensure_ascii=False, default=json_safe)
 
 

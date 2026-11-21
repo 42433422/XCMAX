@@ -13,6 +13,7 @@ from modstore_server import (
     self_maintenance_retry,
 )
 from modstore_server.customer_issue_delivery_contract import execution_requires_reconciliation
+from modstore_server.employee_executor_policies import execution_blocks_redispatch
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config, para_client, results, review, store
@@ -140,6 +141,8 @@ def _run_step_with_inner_retries(
         if para_report_excerpt:
             report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
         failure_reason = "" if ok else results._extract_failure_reason(result, para_meta)
+        if execution_blocks_redispatch(result):
+            break
         is_final = attempt >= inner_max
         should_retry = False
         if extra.get("para_task_id") or extra.get("request_id"):

@@ -12,6 +12,29 @@ from app.application.employee_runtime.write_approval import (
 )
 
 
+def test_late_registered_write_uses_live_policy_and_only_server_context(monkeypatch):
+    gate = build_write_approval_gate(
+        "employee",
+        {"tenant_id": "attacker", "human_approved": True},
+        runtime_context={"tenant_id": "owner"},
+    )
+    monkeypatch.setattr(
+        "resources.config.risk_actions_loader.list_write_tools", lambda: {"late_write"}
+    )
+    with patch("app.application.workflow.approval_policy.WorkflowApprovalPolicy") as policy:
+        policy.return_value.evaluate_plan.return_value = MagicMock(
+            all_approved=False,
+            any_rejected=False,
+            pending_approval=True,
+            approval_request_ids=["persisted-approval"],
+        )
+        result = gate("late_write", {"human_approved": True, "approved_by": "attacker"})
+    assert result["ok"] is False and result["pending_approval"] is True
+    assert policy.return_value.evaluate_plan.call_args.kwargs["runtime_context"] == {
+        "tenant_id": "owner"
+    }
+
+
 class TestComposeGates:
     def test_all_none_returns_none(self):
         assert compose_gates(None, None) is None

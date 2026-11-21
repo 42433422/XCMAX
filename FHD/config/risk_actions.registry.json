@@ -848,6 +848,7 @@
         "query": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
@@ -962,24 +963,28 @@
         "sales_summary": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
         "inventory_summary": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
         "purchase_summary": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
         "dashboard": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
@@ -2010,6 +2015,7 @@
         "list": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
