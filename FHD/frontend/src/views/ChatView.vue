@@ -6,7 +6,18 @@
       :action-pending="taskCenterStore.actionPending"
       @control="controlWorkspaceTask"
     />
-    <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+    <div class="chat-header-actions">
+      <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+      <button
+        v-if="!isTaskPaneResizable"
+        type="button"
+        class="quick-btn chat-panel-toggle"
+        aria-haspopup="dialog"
+        aria-controls="chat-side-panel"
+        :aria-expanded="mobileChatPanelOpen"
+        @click="mobileChatPanelOpen = true"
+      >{{ $t('chat.taskTab') }} / {{ $t('chat.conversationTab') }}</button>
+    </div>
     <div v-if="cacheError" class="chat-cache-warning chat-composer-status chat-composer-status--error" role="alert">
       {{ cacheError }} <button type="button" class="btn btn-secondary btn-sm" @click="retryMessagesCache">重试本机保存</button>
     </div>
@@ -53,6 +64,8 @@
         />
       </div>
       <ChatSidePanel
+        v-model:open="mobileChatPanelOpen"
+        :compact="!isTaskPaneResizable"
         :current-task="currentTask"
         :task-list="visibleTaskList"
         :task-control-states="taskControlStates"
@@ -391,6 +404,8 @@ const { currentIndustryId } = storeToRefs(industryStore)
 // Keep WeChat star-refresh forced off here so old checkbox events cannot misfire workflow polls.
 const autoRefreshStarredWechat = ref(false)
 const isTaskPaneResizable = ref(true)
+const mobileChatPanelOpen = ref(false)
+onDeactivated(() => { mobileChatPanelOpen.value = false })
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }

@@ -858,6 +858,20 @@ jobs:
           E2E_VITE_MOCK_API: "1"
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:5001
         run: npm run test:e2e:p0 -- --reporter=line
+      - name: Start admin console for mobile layout regression
+        working-directory: FHD/frontend
+        run: |
+          VITE_DEV_PORT=5011 npm --prefix ../admin-console run dev > "${RUNNER_TEMP}/admin-mobile-vite.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:5011/admin/ >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:5011/admin/ >/dev/null
+      - name: Verify admin mobile navigation and chat (mock API)
+        working-directory: FHD/frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:5011
+        run: npx playwright test e2e/admin-display.spec.ts --grep "admin mobile shell and chat" --reporter=line --output=test-results/admin-mobile
       - name: Preserve mock E2E layout screenshots and failure evidence
         if: always()
         uses: actions/upload-artifact@v4
