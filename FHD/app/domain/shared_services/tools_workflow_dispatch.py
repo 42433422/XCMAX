@@ -79,6 +79,61 @@ def _registered_router_conversation_history(action, params, runtime_context, pro
     return read_conversation_history(action, params, runtime_context)
 
 
+def _run_awaitable(value):
+    """同步工具分发里执行 async 适配器方法；已有事件循环时改用独立线程。"""
+    import asyncio
+    import concurrent.futures
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(value)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, value).result()
+
+
+def _registered_router_image_generate(action, params, runtime_context, profile, user_message):
+    if action != "generate":
+        return {"success": False, "message": "不支持的生图操作"}
+    prompt = str(params.get("prompt") or "").strip() or str(user_message or "").strip()
+    if not prompt:
+        return {"success": False, "message": "请描述要生成的图片"}
+    from uuid import uuid4
+
+    from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
+
+    session_id = str(runtime_context.get("session_id") or "").strip() or None
+    request_id = str(params.get("client_request_id") or f"agent-{uuid4().hex}")
+    adapter = ModstorePlatformAdapter.from_session(session_id)
+    if not adapter.auth_token:
+        return {"success": False, "message": "当前账号未绑定市场模型服务授权，无法生图"}
+    try:
+        data = _run_awaitable(
+            adapter.generate_image({"prompt": prompt, "client_request_id": request_id})
+        )
+    except Exception as exc:  # noqa: BLE001 - 转成用户可读的失败结果
+        return {"success": False, "message": str(exc) or "生图失败，请稍后重试"}
+    finally:
+        try:
+            _run_awaitable(adapter.close())
+        except Exception:  # noqa: BLE001
+            pass
+    images = [
+        str(url)
+        for url in (data.get("images") or [])
+        if str(url).startswith("data:image/") or str(url).startswith("https://")
+    ]
+    if not images:
+        return {"success": False, "message": "生图结果没有可显示的图片"}
+    return {
+        "success": True,
+        "images": images,
+        "model": str(data.get("model") or ""),
+        "billed": bool(data.get("billed")),
+        "charge_amount": str(data.get("charge_amount") or ""),
+    }
+
+
 class _WorkflowRouterMap(dict):
     _hidden_keys = {"employee", "business_db"}
 
@@ -128,6 +183,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "dataset_rag": _registered_router_dataset_rag,
         "memory_v2": _registered_router_memory_v2,
         "conversation_history": _registered_router_conversation_history,
+        "image_generate": _registered_router_image_generate,
         "excel_analysis": _registered_router_excel_analysis,
         "import_excel_to_database": _registered_router_import_excel_to_database,
         "elt_import": _registered_router_elt_import,

@@ -27,6 +27,23 @@ def _customer_query_summary(output: Any) -> str | None:
     return "\n".join(lines)
 
 
+def _image_generate_summary(output: Any) -> str | None:
+    if not isinstance(output, dict):
+        return None
+    images = [
+        str(url)
+        for url in (output.get("images") or [])
+        if str(url).startswith("data:image/") or str(url).startswith("https://")
+    ]
+    if not images:
+        return None
+    lines = [f"![生成图片]({url})" for url in images]
+    model = str(output.get("model") or "").strip()
+    if model:
+        lines.append(f"\n{model}")
+    return "\n".join(lines)
+
+
 def normalize_product_float_query(raw: str) -> str:
     """Keep specific product terms while preserving an empty full-list query."""
     text = str(raw or "").strip()
@@ -299,6 +316,12 @@ class AIChatWorkflowResponseMixin:
             ):
                 # TODO 最后一步是「根据检索结果作答」，不能只回一行「成功」。
                 response_text = self._knowledge_answer(step, user_message) or response_text
+            elif (step.status, step.tool_id, step.action) == (
+                "completed",
+                "image_generate",
+                "generate",
+            ):
+                response_text = _image_generate_summary(step.output) or response_text
         if (
             success
             and steps

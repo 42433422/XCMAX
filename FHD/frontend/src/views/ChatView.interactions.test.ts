@@ -7,14 +7,12 @@ import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
-import { ApiError } from '@/api/core'
 import { voiceChatBridge } from '@/composables/voiceCallHost'
 
 // ===== 模块级 mock =====
 
-const { getActiveConversation, generateImage, approveRunWithFreshGrant, showAppToast } = vi.hoisted(() => ({
+const { getActiveConversation, approveRunWithFreshGrant, showAppToast } = vi.hoisted(() => ({
   getActiveConversation: vi.fn(),
-  generateImage: vi.fn(),
   approveRunWithFreshGrant: vi.fn(async () => ({ status: 'running' })),
   showAppToast: vi.fn(),
 }))
@@ -24,7 +22,7 @@ vi.mock('pinia', async () => {
   return { ...actual, storeToRefs: (store: any) => store }
 })
 
-vi.mock('@/api/chat', () => ({ default: { getActiveConversation, generateImage } }))
+vi.mock('@/api/chat', () => ({ default: { getActiveConversation } }))
 
 vi.mock('@/api/agentRunApproval', () => ({
   APPROVAL_GRANT_REJECTED_MESSAGE: '审批凭证已被使用，请刷新后重试',
@@ -1162,91 +1160,6 @@ describe('ChatView interactions', () => {
     window.dispatchEvent(new CustomEvent('xcagi:assistant-push', { detail: { title: '任务完成', description: '发货单已生成' } }))
     await nextTick()
     expect(latestAssistantPushRef.value).toEqual({ title: '任务完成', description: '发货单已生成' })
-  })
-
-  it('生图使用独立请求并显示钱包结算', async () => {
-    vi.stubGlobal('crypto', webcrypto)
-    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
-    generateImage.mockResolvedValueOnce({
-      images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28',
-    })
-    const wrapper = await mountChatView()
-    await wrapper.get('#messageInput').setValue('生成一个红色方块')
-    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
-    await flushPromises()
-    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledWith('生成一个红色方块', expect.any(String)))
-    expect(wrapper.get('img[alt="AI 生成图片"]').attributes('src')).toBe('data:image/png;base64,AA==')
-    expect(wrapper.text()).toContain('本次扣费 ¥1.28')
-    expect(mockChatViewApi.sendMessage).not.toHaveBeenCalled()
-  })
-
-  it('生图结果不明时重新打开会话复用原请求键', async () => {
-    vi.stubGlobal('crypto', webcrypto)
-    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
-    generateImage.mockRejectedValueOnce(new ApiError('结果待核对', 409, null))
-    generateImage.mockResolvedValueOnce({
-      images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28',
-    })
-    const first = await mountChatView({ workspaceConversationId: 'stable-chat' })
-    await first.get('#messageInput').setValue('生成红色方块')
-    await first.get('[data-testid="generate-chat-image"]').trigger('click')
-    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
-    await flushPromises()
-    const original = generateImage.mock.calls[0][1]
-    first.unmount()
-    const reopened = await mountChatView({ workspaceConversationId: 'stable-chat' })
-    await reopened.get('#messageInput').setValue('生成红色方块')
-    await reopened.get('[data-testid="generate-chat-image"]').trigger('click')
-    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
-    expect(generateImage.mock.calls[1][1]).toBe(original)
-  })
-
-  it('离开会话后收到成功结果，返回时仍可读取原收费回执', async () => {
-    vi.stubGlobal('crypto', webcrypto)
-    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
-    let resolveFirst!: (value: unknown) => void
-    generateImage.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
-    const result = { images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28' }
-    generateImage.mockResolvedValueOnce(result)
-    const first = await mountChatView({ workspaceConversationId: 'stable-chat' })
-    await first.get('#messageInput').setValue('生成红色方块')
-    await first.get('[data-testid="generate-chat-image"]').trigger('click')
-    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
-    const original = generateImage.mock.calls[0][1]
-    first.unmount()
-    resolveFirst(result)
-    await flushPromises()
-    const reopened = await mountChatView({ workspaceConversationId: 'stable-chat' })
-    await reopened.get('#messageInput').setValue('生成红色方块')
-    await reopened.get('[data-testid="generate-chat-image"]').trigger('click')
-    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
-    expect(generateImage.mock.calls[1][1]).toBe(original)
-    await flushPromises()
-    expect(reopened.get('img[alt="AI 生成图片"]').attributes('src')).toBe('data:image/png;base64,AA==')
-  })
-
-  it('切换会话后收到结果，不清除原会话的回执', async () => {
-    vi.stubGlobal('crypto', webcrypto)
-    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
-    let resolveFirst!: (value: unknown) => void
-    generateImage.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
-    const result = { images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28' }
-    generateImage.mockResolvedValueOnce(result)
-    const wrapper = await mountChatView({ workspaceConversationId: 'stable-chat' })
-    await wrapper.get('#messageInput').setValue('生成红色方块')
-    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
-    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
-    const original = generateImage.mock.calls[0][1]
-    ;(wrapper.vm as any).currentSessionId = 'another-chat'
-    await nextTick()
-    resolveFirst(result)
-    await flushPromises()
-    ;(wrapper.vm as any).currentSessionId = 'stable-chat'
-    await nextTick()
-    await wrapper.get('#messageInput').setValue('生成红色方块')
-    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
-    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
-    expect(generateImage.mock.calls[1][1]).toBe(original)
   })
 
   it('回车发送与输入内容联动', async () => {

@@ -278,6 +278,55 @@ def _derive_and_heal_account_kind(
         )
 
 
+async def run_offline_login(
+    *,
+    username: str,
+    password: str,
+    auth_app_service: Any,
+    sku: str,
+    background_tasks: BackgroundTasks | None = None,
+) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    """桌面离线登录：只校验本机账号密码，不请求市场。"""
+    if not _is_desktop_runtime():
+        message = "离线登录仅在桌面端可用"
+        return None, JSONResponse(
+            {
+                "success": False,
+                "message": message,
+                "error": {"code": "OFFLINE_LOGIN_UNAVAILABLE", "message": message},
+            },
+            status_code=403,
+        )
+    result = auth_app_service.login(username, password, enforce_mfa=False)
+    if not result.get("success"):
+        message = "账号或密码不正确，或该账号尚未在本机登录过"
+        return None, JSONResponse(
+            {
+                "success": False,
+                "message": message,
+                "error": {"code": "OFFLINE_AUTH_FAILED", "message": message},
+            },
+            status_code=_login_client_http_status(401),
+        )
+    if is_admin_account_kind((result.get("user") or {}).get("role")):
+        delete_session_quiet(result.get("session_id"))
+        return None, JSONResponse(
+            forbidden_payload(), status_code=_login_client_http_status(403)
+        )
+    session_id = result.get("session_id")
+    result = await finalize_enterprise_login(
+        result=result,
+        session_id=str(session_id) if session_id else None,
+        market_result=None,
+        account_kind="enterprise" if sku == "enterprise" else "personal",
+        username=username,
+        sku=sku,
+        skip_market_sync=True,
+        background_tasks=background_tasks,
+    )
+    return result, None
+
+
 async def run_market_first_login(
     *,
     username: str,
