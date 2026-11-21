@@ -748,12 +748,12 @@
     "FHD/app/application/agent_orchestrator/tool_executor.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_executor.py",
       "base_blob": "d60b63bcf6913d5e9afaa582e36846319ebee45f",
-      "head_blob": "8d5f35916cad9fd9209afa1819a440839dd2d515",
+      "head_blob": "d98305f65a4056be7e9786fb7ee2281cf05f1737",
       "before_lines": 759,
-      "after_lines": 808,
-      "reason": "修复已派发写操作被普通失败或假成功覆盖后释放原声明的问题，并对没有适配器的AIOPEN通用入口明确返回未执行。",
-      "boundary": "复用原结果分类、截止时间和幂等账本；未知写声明保留，只有可信未执行或已审计只读失败可继续原重试流程。",
-      "validation": "真实SQLite副作用、HTTP错误与断连、嵌套未知回执、空只读结果、未适配入口及原审批回归已通过；完整CI仍须核验。",
+      "after_lines": 841,
+      "reason": "修复已派发写操作被普通失败或假成功覆盖后释放原声明的问题，并对没有适配器的AIOPEN通用入口明确返回未执行；现有出货规格与客户 ID 纯验证提前在工具 claim 和派发前闭合。",
+      "boundary": "复用原结果分类、截止时间和幂等账本；未知写声明保留，只有可信未执行或已审计只读失败可继续原重试流程；不接受 handler 自述未执行。",
+      "validation": "真实SQLite副作用、HTTP错误与断连、嵌套未知回执、空只读结果、未适配入口及原审批回归已通过；本地全量离线合同 123/123（包含上述两项拒绝与合法输入对照）；完整CI仍须核验。",
       "follow_up": "继续用原结果契约扩充独立业务回读证据；没有供应商回执时保持待核对，不以模型布尔值结算。",
       "review_owner": "@42433422"
     },

@@ -235,6 +235,36 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
             factory.engine.dispose()
 
 
+def _validate_local_mutation_input(
+    tool_id: str, action: str, params: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Run owned, pure guards before creating a claim or invoking an adapter."""
+    if (tool_id, action) == ("business_event", "shipment_create"):
+        from app.domain.shipment.shipment_quantities import (
+            ShipmentQuantityValidationError,
+            validate_shipment_products,
+        )
+
+        items = params.get("items") or []
+        if not items:
+            return {
+                "success": False,
+                "error_code": "PRODUCTS_REQUIRED",
+                "message": "产品列表不能为空",
+            }
+        try:
+            validate_shipment_products(items)
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
+    if (tool_id, action) == ("customers", "batch_delete"):
+        from app.application.customer_deletion import valid_customer_delete_ids
+
+        ids = params.get("ids") or params.get("customer_ids") or []
+        if not valid_customer_delete_ids(ids):
+            return {"success": False, "message": "ids 须为非空正整数数组", "deleted_count": 0}
+    return None
+
+
 class AgentToolExecutor:
     def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
         from app.application.agent_orchestrator.tool_process import execute_isolated
@@ -399,6 +429,9 @@ class AgentToolExecutor:
         )
         if approval_denied is not None:
             return approval_denied
+        refusal = _validate_local_mutation_input(validation.tool_id, guard_action, params)
+        if refusal is not None:
+            return refusal
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
         product_db_read = (validation.tool_id, validation.action) == (
