@@ -4,13 +4,13 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "01e7a819be5a25100ee8d47ca03c9f8ea0c2da1c",
-      "head_blob": "83575ec1a5e00801b91446f96107151ca5aa8238",
+      "head_blob": "9d6fd8568e8e9f01fcd773310b28fed326de2494",
       "before_lines": 1776,
-      "after_lines": 1833,
+      "after_lines": 1874,
       "reason": "本记录是评审请求，不是审批证据。集成树对该文件保留各来源已登记增量的独特合并结果；不把任一来源评审请求视为已批准，也不合成新的批准记录。最终将按与当前 main 的 merge-base 重算精确 identity 后再提交。",
-      "boundary": "仅保留已纳入来源 PR 对编排入口的独特合并结果，不引入未批准的 #3398/+18、#3447/+33 或 draft 工作。 编排器仍只调用既有规划服务；Trace 恢复、单调耗时和错误记录位于原 task_context 模块，不新增规划器、工具执行入口或权限规则。 同步 main@171418352d 的规划澄清持久化实现，保留原澄清等待、恢复和审批边界。",
+      "boundary": "仅保留已纳入来源 PR 对编排入口的独特合并结果，不引入未批准的 #3398/+18、#3447/+33 或 draft 工作。 编排器仍只调用既有规划服务；Trace 恢复、单调耗时和错误记录位于原 task_context 模块，不新增规划器、工具执行入口或权限规则。 同步 main@171418352d 的规划澄清持久化实现，保留原澄清等待、恢复和审批边界。 浏览器策略、模型决策和会话实现各在独立小模块；本文件净增17行只接原AgentRun生命周期，不引入第二个执行引擎或绕过权限。",
       "validation": "各来源已登记回归范围保留，待集成后按真实调用链复验；远端完整 CI 与未完成验收仍待进行。本说明不是通过证明。",
-      "follow_up": "合入前必须用当前 main 与本 head 的精确 identity 复核；未纳入项见集成 PR 正文。 由 @42433422 核对本次薄层调用与同任务回归证据；观测继续复用 OpenTelemetry 1.45.2。该条是精确变更的评审请求，不表示已获批准，不为体量指标机械拆分现有编排器。",
+      "follow_up": "合入前必须用当前 main 与本 head 的精确 identity 复核；未纳入项见集成 PR 正文。 由 @42433422 核对本次薄层调用与同任务回归证据；观测继续复用 OpenTelemetry 1.45.2。该条是精确变更的评审请求，不表示已获批准，不为体量指标机械拆分现有编排器。 已纳入主线PR3424并保留持久用户更正，不覆盖原澄清逻辑；继续按原执行入口整体职责审查，本记录只请求架构评审，不表示评审已批准。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
@@ -40,13 +40,13 @@
     "FHD/app/application/agent_orchestrator/tool_spec.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec.py",
       "base_blob": "9be9f4642cc52099d777ea989dec5e6a00fb3b19",
-      "head_blob": "c26adbd7f7a1d56edf3509d89af32e7d498a70c6",
+      "head_blob": "c65536431908bd64c9fdc2f14a80504e69bab396",
       "before_lines": 818,
-      "after_lines": 854,
-      "reason": "本记录是评审请求，不是审批证据。集成树保留已登记工具契约解析增量，并按当前 unique head 重算 identity。",
-      "boundary": "特殊 input schema 优先，且不改写与 JSON Schema 一致的嵌套 required；不引入未批准增量。",
-      "validation": "本地将复验工具契约相关测试；远端 CI 待本集成 PR，本说明不是通过证明。",
-      "follow_up": "后续工具族增长仍走既有 tool_spec_data，不另建注册入口。",
+      "after_lines": 869,
+      "reason": "本记录是评审请求，不是审批证据。集成树对该文件保留各来源已登记增量的独特合并结果；不把任一来源评审请求视为已批准，也不合成新的批准记录。最终将按与当前 main 的 merge-base 重算精确 identity 后再提交。",
+      "boundary": "特殊 input schema 优先，且不改写与 JSON Schema 一致的嵌套 required；不引入未批准增量。 优先使用原特殊契约，否则采用服务器已发现的完整Schema；继续原validate_tool_call与jsonschema执行前验证，不新建参数校验引擎。",
+      "validation": "各来源已登记回归范围保留，待集成后按真实调用链复验；远端完整 CI 与未完成验收仍待进行。本说明不是通过证明。",
+      "follow_up": "后续工具族增长仍走既有 tool_spec_data，不另建注册入口。 后续按原ToolSpec目录演进统一抽取契约构造；本次不为压行数拆散现有依赖关系，不修改无关业务动作。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {

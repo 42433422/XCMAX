@@ -142,7 +142,7 @@ def test_router_dispatches_mcp_prefix(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "app.application.tools.mcp.registry.call_mcp_tool",
-        lambda tool_id, action, params: {
+        lambda tool_id, action, params, *, runtime_context=None: {
             "success": True,
             "tool_id": tool_id,
             "action": action,

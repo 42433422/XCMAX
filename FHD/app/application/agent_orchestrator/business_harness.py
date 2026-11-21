@@ -185,12 +185,56 @@ def _catalog_rejection_summary(run: Any) -> str:
     return ""
 
 
+def _verified_browser_result(run: Any) -> dict[str, Any] | None:
+    state = (getattr(run, "metadata", {}) or {}).get("browser_loop")
+    result = (getattr(run, "final_output", {}) or {}).get("browser")
+    if (
+        getattr(run, "status", "") != "completed"
+        or not isinstance(state, dict)
+        or state.get("phase") != "verified"
+        or not isinstance(result, dict)
+        or result.get("scope") != "visible_page_text"
+        or result != state.get("result")
+        or not isinstance(result.get("text"), str)
+        or not result["text"]
+    ):
+        return None
+    verification = state.get("verification")
+    if not isinstance(verification, dict) or any(
+        result.get(key) != verification.get(key)
+        for key in ("text", "node_id", "snapshot_node_id", "session_id")
+    ):
+        return None
+    steps = list(getattr(run, "steps", []) or [])
+    wait = next((step for step in steps if step.node_id == result.get("node_id")), None)
+    if (
+        wait is None
+        or wait.action != "browser_wait_for"
+        or wait.params.get("text") != result["text"]
+        or not steps
+        or steps[-1].node_id != result.get("snapshot_node_id")
+        or steps[-1].action != "browser_snapshot"
+        or steps[-1].depends_on != [wait.node_id]
+        or any(
+            step.status != "completed"
+            or step.tool_id != state.get("tool_id")
+            or step.output.get("success") is not True
+            or step.output.get("session_id") != result.get("session_id")
+            for step in (wait, steps[-1])
+        )
+    ):
+        return None
+    return result
+
+
 def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
     status = _text(getattr(run, "status", ""), limit=32)
     metadata = getattr(run, "metadata", {}) or {}
     terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
     if terminal_catalog:
         return terminal_catalog
+    if browser := _verified_browser_result(run):
+        return f"页面文本已验证：{browser['text']}"
     if status in {"failed", "cancelled", "blocked", "paused"} and (
         metadata.get("non_retryable")
         or (metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
@@ -405,8 +449,10 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     if terminal_catalog:
         status = "failed"  # Workflow completion is not success of a rejected/historical save.
     existing = final_output.get("business_result")
+    browser = _verified_browser_result(run)
     if (
         not terminal_catalog
+        and browser is None
         and isinstance(existing, dict)
         and existing.get("protocol") == BUSINESS_HARNESS_PROTOCOL
     ):
@@ -458,6 +504,11 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         },
         "projection_key": f"{BUSINESS_HARNESS_PROTOCOL}:{identity['run_id']}:{result_status}",
     }
+    if browser is not None and result_status == "completed":
+        result["scope"] = "visible_page_text"
+        result["evidence"]["browser"] = {
+            key: browser[key] for key in ("text", "node_id", "snapshot_node_id", "session_id")
+        }
     final_output["business_result"] = result
     run.final_output = final_output
     return result

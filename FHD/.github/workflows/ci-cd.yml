@@ -78,6 +78,49 @@ permissions:
   contents: read
 
 jobs:
+  browser-agent-integration:
+    name: Browser Agent real MCP integration
+    # Use the existing sandbox-capable browser acceptance host; never disable Chromium's sandbox.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      XCAGI_BROWSER_MCP_LIVE: "1"
+      XCAGI_SKIP_INTENT_LLM: "1"
+      PYTHONPATH: ${{ github.workspace }}/FHD
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+      - name: Install original backend and pinned browser runtime
+        run: |
+          uv sync --frozen --extra server-api --extra dev
+          npm --prefix scripts/autonomy/runtime_tools/browser_mcp_deps ci --ignore-scripts
+          cd scripts/autonomy/runtime_tools/browser_mcp_deps
+          npx --no-install playwright install --with-deps chromium
+      - name: Verify real browser continuity, isolation and failed readback
+        run: |
+          uv run --no-sync pytest \
+            tests/test_application/test_browser_mcp_live.py \
+            tests/test_application/test_browser_tool_process.py \
+            tests/test_application/test_browser_agent_loop.py \
+            tests/test_application/test_browser_goal_contract.py \
+            tests/test_application/test_mcp_browser_contract.py \
+            tests/test_infrastructure/test_mcp_persistent_sessions.py \
+            -q -o addopts= --junitxml=browser-agent-results.xml
+      - name: Retain browser acceptance results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: browser-agent-integration
+          path: FHD/browser-agent-results.xml
+          if-no-files-found: warn
   agent-postgres-transactions:
     name: Agent PostgreSQL transactions
     runs-on: ubuntu-latest
@@ -1093,7 +1136,7 @@ jobs:
 
   docker-build-fhd-api-pr:
     name: Build candidate FHD API image
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, security-scan, container-scan, pack-verify, arch-fitness]
     if: >-
       github.event_name != 'schedule' &&
       !(github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v')) &&
@@ -1132,7 +1175,7 @@ jobs:
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
     name: Publish FHD API image
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, security-scan, container-scan, pack-verify, arch-fitness]
     if: >-
       github.event_name != 'schedule' && github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v')) &&
@@ -1441,7 +1484,7 @@ jobs:
 
   release-verify:
     name: release-verify
-    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, pack-verify, arch-fitness]
     if: needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45

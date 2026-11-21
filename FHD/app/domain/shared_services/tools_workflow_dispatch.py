@@ -170,7 +170,7 @@ class _WorkflowRouterMap(dict):
             from app.application.tools.mcp.registry import call_mcp_tool
 
             return lambda action, params, runtime_context, profile, user_message: call_mcp_tool(
-                str(key), action, params
+                str(key), action, params, runtime_context=runtime_context
             )
         return super().get(key, default)
 

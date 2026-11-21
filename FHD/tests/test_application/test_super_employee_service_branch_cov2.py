@@ -37,6 +37,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from app.application.super_employee.cli import CliExecutionError
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -1208,8 +1209,8 @@ class TestVerifyWorkspace:
     def test_no_changes_passes(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("XCMAX_CLAUDE_VERIFY_CMD", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        # tmp_path is not a git repo, so git status fails → changed=[]
-        ok, msg = svc._verify_workspace(str(tmp_path))
+        with patch.object(svc, "_git", return_value=subprocess.CompletedProcess([], 0, "", "")):
+            ok, msg = svc._verify_workspace(str(tmp_path))
         assert ok is True
         assert "无文件改动" in msg
 
@@ -1262,13 +1263,13 @@ class TestVerifyWorkspace:
             ok, msg = svc._verify_workspace(str(tmp_path))
             assert ok is True
 
-    def test_git_exception_returns_no_changes(self, tmp_path, monkeypatch) -> None:
+    def test_git_exception_fails_verification(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("XCMAX_CLAUDE_VERIFY_CMD", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         with patch.object(svc, "_git", side_effect=RuntimeError("git error")):
             ok, msg = svc._verify_workspace(str(tmp_path))
-            assert ok is True
-            assert "无文件改动" in msg
+            assert ok is False
+            assert "git error" in msg
 
 
 # ───────────────────── _commit_and_push ─────────────────────
@@ -1277,8 +1278,8 @@ class TestVerifyWorkspace:
 class TestCommitAndPush:
     def test_no_changes_returns_false(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        mock_add = MagicMock()
-        mock_status = MagicMock()
+        mock_add = MagicMock(returncode=0, stdout="", stderr="")
+        mock_status = MagicMock(returncode=0, stdout="", stderr="")
         mock_status.stdout = ""
         with patch.object(svc, "_git", side_effect=[mock_add, mock_status]):
             ok, msg = svc._commit_and_push(str(tmp_path), "branch", "task")
@@ -1287,8 +1288,8 @@ class TestCommitAndPush:
 
     def test_commit_fails(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        mock_add = MagicMock()
-        mock_status = MagicMock()
+        mock_add = MagicMock(returncode=0, stdout="", stderr="")
+        mock_status = MagicMock(returncode=0, stdout="", stderr="")
         mock_status.stdout = "M file.py\n"
         mock_commit = MagicMock()
         mock_commit.returncode = 1
@@ -1301,8 +1302,8 @@ class TestCommitAndPush:
 
     def test_push_fails(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        mock_add = MagicMock()
-        mock_status = MagicMock()
+        mock_add = MagicMock(returncode=0, stdout="", stderr="")
+        mock_status = MagicMock(returncode=0, stdout="", stderr="")
         mock_status.stdout = "M file.py\n"
         mock_commit = MagicMock()
         mock_commit.returncode = 0
@@ -1319,8 +1320,8 @@ class TestCommitAndPush:
 
     def test_success(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        mock_add = MagicMock()
-        mock_status = MagicMock()
+        mock_add = MagicMock(returncode=0, stdout="", stderr="")
+        mock_status = MagicMock(returncode=0, stdout="", stderr="")
         mock_status.stdout = "M file.py\n"
         mock_commit = MagicMock()
         mock_commit.returncode = 0
@@ -1422,15 +1423,17 @@ class TestRunDevTaskLoop:
         with (
             patch.object(svc, "_prepare_worktree", return_value=None),
             patch.object(svc, "_run_cli_once") as run_once,
+            pytest.raises(CliExecutionError) as error,
         ):
-            result = svc._run_dev_task_loop(
+            svc._run_dev_task_loop(
                 "/fake/cli",
                 "do task",
                 str(tmp_path),
                 {"branch_context": "feature/mobile"},
             )
-            assert "选中的工作分支不可用" in result
-            run_once.assert_not_called()
+        assert error.value.receipt["error_code"] == "development_workspace_unavailable"
+        assert error.value.receipt["execution_state"] == "not_started"
+        run_once.assert_not_called()
 
     def test_verify_fail_triggers_fix(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("fixed"))

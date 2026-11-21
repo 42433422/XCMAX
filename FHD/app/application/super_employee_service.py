@@ -37,7 +37,7 @@ from app.domain.app_pure.git_workspace_manager import GitWorkspaceManager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
-from .super_employee.cli import CliExecutionError, CliExecutor
+from .super_employee.cli import CliExecutionError, CliExecutor, require_cli_success
 from .super_employee.common import _PARA_TOKEN_CACHE as _PARA_TOKEN_CACHE
 from .super_employee.common import _PARA_TOKEN_TTL as _PARA_TOKEN_TTL
 from .super_employee.common import _RELAY_WT_LOCKS as _RELAY_WT_LOCKS
@@ -442,6 +442,8 @@ class SuperEmployeeService:
             failure = None
             try:
                 direct_body, direct_dispatcher = self._compose_direct_chat_reply(text, ctx)
+                if not direct_body:
+                    raise CliExecutionError(self._p.display_tool, "unavailable", started=False)
             except CliExecutionError as exc:
                 failure = exc
                 direct_body, direct_dispatcher = exc.reply_body(), f"{self._p.tool_name}_cli"
@@ -567,6 +569,55 @@ class SuperEmployeeService:
             "messages": self.list_messages(user_id=int(user_id)),
         }
 
+    def _local_reply_result(
+        self,
+        user_msg: dict[str, Any],
+        *,
+        body: str = "",
+        dispatcher: str = "",
+        failure: CliExecutionError | None = None,
+        dispatch: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        uid = int(user_msg["user_id"])
+        receipt = failure.receipt if failure else {}
+        status = "failed" if failure else "completed"
+        assistant = self._message_row(
+            user_id=uid,
+            role="assistant",
+            body=failure.body if failure else body,
+            created_at=_utc_now(),
+            request_id=user_msg["dispatch_request_id"],
+            status=status,
+            extra={"kind": self._p.direct_kind, **({"cli_execution": receipt} if failure else {})},
+        )
+        self._append_messages([user_msg, assistant])
+        result_dispatch = {
+            "request_id": user_msg["dispatch_request_id"],
+            "accepted": receipt.get("execution_started", True),
+            "queued": False,
+            **(dispatch or {}),
+            "status": status,
+            "para_tier": 1,
+            "device_scope": "local_device",
+            "fallback" if dispatch is not None else "dispatcher": (
+                dispatcher or f"{self._p.tool_name}_cli"
+            ),
+            **receipt,
+            **({"queued": False} if failure else {}),
+        }
+        return {
+            **receipt,
+            "employee": {
+                "id": self._p.employee_id,
+                "name": self._p.employee_name,
+                "device_scope": "all_devices",
+            },
+            "dispatch": result_dispatch,
+            "message": self._public_message(user_msg),
+            "assistant_message": self._public_message(assistant),
+            "messages": self.list_messages(user_id=uid),
+        }
+
     async def invoke_stream(
         self, *, user_id: int, message: str, context: dict[str, Any] | None = None
     ) -> AsyncIterator[dict[str, Any]]:
@@ -608,12 +659,7 @@ class SuperEmployeeService:
             return
         cli_path = self._cli_path()
         if not cli_path:
-            fallback_body, dispatcher = self._compose_direct_chat_reply(text, ctx)
-            yield {"type": "status", "text": f"已连接 {self._p.display_tool}"}
-            for chunk in _chunk_text(fallback_body):
-                yield {"type": "token", "text": chunk}
-                await asyncio.sleep(0.02)
-            yield {"type": "done", "result": {"response": fallback_body, "dispatcher": dispatcher}}
+            yield CliExecutionError(self._p.display_tool, "unavailable", started=False).event()
             return
         base_cwd = self._cli_workspace(ctx)
         is_task = self._is_task_intent(text, ctx)
@@ -623,13 +669,14 @@ class SuperEmployeeService:
                 body = await asyncio.to_thread(
                     self._run_dev_task_loop, cli_path, text, base_cwd, ctx
                 )
+                require_cli_success(self._p.display_tool, 0, body)
                 yield {"type": "status", "text": "开发任务完成，正在整理回复…"}
                 for chunk in _chunk_text(body):
                     yield {"type": "token", "text": chunk}
                     await asyncio.sleep(0.03)
                 yield {"type": "done", "result": {"response": body, "dispatcher": "dev_loop"}}
             except CliExecutionError as exc:
-                yield {"type": "error", **exc.payload()}
+                yield exc.event()
             except RECOVERABLE_ERRORS as exc:
                 logger.exception("invoke_stream dev_loop failed: %s", exc)
                 yield {"type": "error", "message": f"开发任务执行失败：{exc}"}
@@ -647,6 +694,7 @@ class SuperEmployeeService:
                     elif event["type"] == "status":
                         yield event
                     elif event["type"] == "done":
+                        completed = True
                         final_text = event.get("text", final_text)
                         completed = True
                     elif event["type"] == "error":
@@ -658,11 +706,10 @@ class SuperEmployeeService:
                     partial_output=final_text,
                 )
             body = final_text.strip()
-            if not body:
-                body = f"{self._p.display_tool} CLI 暂时没有返回内容，请确认本机 {self._p.display_tool} 已登录后重试。"
+            require_cli_success(self._p.display_tool, 0 if completed else None, body)
             yield {"type": "done", "result": {"response": body, "dispatcher": "cli_stream"}}
         except CliExecutionError as exc:
-            yield {"type": "error", **exc.payload()}
+            yield exc.event()
         except RECOVERABLE_ERRORS as exc:
             logger.exception("invoke_stream cli failed: %s", exc)
             yield {"type": "error", "message": f"{self._p.display_tool} CLI 调用失败：{exc}"}
@@ -690,17 +737,11 @@ class SuperEmployeeService:
         return self._run_dev_task_loop(cli_path, text, base_cwd, context)
 
     def _compose_direct_chat_reply(self, text: str, context: dict[str, Any]) -> tuple[str, str]:
-        """普通对话直答：FAQ → CLI → 明确不可用提示。"""
+        """普通对话直答：空值表示 CLI 不可用；执行失败保留结构化异常。"""
         canned = self._direct_reply_body(text)
         if canned:
             return (canned, f"{self._p.tool_name}_direct")
-        cli_body = self._cli_reply_body(text, context)
-        if cli_body:
-            return (cli_body, f"{self._p.tool_name}_cli")
-        return (
-            f"{self._p.display_tool} CLI 暂时没有返回内容，请确认本机 {self._p.display_tool} 已登录后重试。",
-            f"{self._p.tool_name}_cli",
-        )
+        return (self._cli_reply_body(text, context), f"{self._p.tool_name}_cli")
 
     def _git(self, cwd: str, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
@@ -789,7 +830,7 @@ class SuperEmployeeService:
 
     def _run_cli_idle(
         self, cmd: list[str], cwd: str, idle_timeout: float, hard_cap: float
-    ) -> tuple[int, str, str, str]:
+    ) -> tuple[int | None, str, str, str]:
         return self._cli.run_cli_idle(cmd, cwd, idle_timeout, hard_cap)
 
     def _run_cli_streaming(

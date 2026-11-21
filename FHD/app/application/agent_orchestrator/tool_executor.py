@@ -270,6 +270,18 @@ class AgentToolExecutor:
     def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
         from app.application.agent_orchestrator.tool_process import execute_isolated
 
+        if str(step.tool_id).startswith("mcp__"):
+            from app.application.tools.mcp.registry import browser_server_config
+
+            config = browser_server_config(step.tool_id)
+            if config is not None:
+                from app.application.agent_orchestrator.browser_tool_process import (
+                    execute_browser_isolated,
+                )
+
+                return execute_browser_isolated(
+                    self, step, runtime_context, deadline_monotonic, config
+                )
         if (
             step.tool_id == "dataset_rag"
             and step.action == "rebuild_index"

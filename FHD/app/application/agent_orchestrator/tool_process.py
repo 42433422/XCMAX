@@ -199,7 +199,7 @@ def _worker_stream(connection):
         current_lifetime.reset(token)
 
 
-def _relay_stream(connection, lifetime, drained, failed, stopped):
+def _relay_stream(connection, lifetime, drained, failed, stopped, *, keep_connection=False):
     """Deliver in order without letting an observer disable process deadlines."""
     publishers = {
         "note": (str, lifetime.publish_note),
@@ -227,7 +227,8 @@ def _relay_stream(connection, lifetime, drained, failed, stopped):
             failed.set()
             logging.getLogger(__name__).warning("tool stream receipt failed", exc_info=True)
     finally:
-        connection.close()
+        if not keep_connection:
+            connection.close()
         lifetime.worker_finished()
         drained.set()
 
@@ -305,8 +306,8 @@ def _limit_from_env(name: str, default: int) -> int:
     return value
 
 
-def _apply_resource_limits():
-    """设置子进程 POSIX 软限制并保留继承的硬上限；设置失败记录告警。"""
+def _apply_resource_limits(*, browser: bool = False):
+    """设置子进程 POSIX 限制并保留继承的硬上限；设置失败记录告警，不阻断执行。"""
     if not _sandbox_enabled():
         return
     log = logging.getLogger(__name__)
@@ -319,7 +320,17 @@ def _apply_resource_limits():
     previous_as = None
     targets = (
         ("RLIMIT_CPU", _limit_from_env("XCAGI_TOOL_CPU_SECONDS", 60)),
-        ("RLIMIT_AS", _limit_from_env("XCAGI_TOOL_MEMORY_MB", 2048) * 1024 * 1024),
+        # V8 reserves a large virtual cage; browser RSS is separately bounded
+        # across the whole process tree by browser_tool_process's parent watchdog.
+        (
+            "RLIMIT_AS",
+            _limit_from_env(
+                "XCAGI_BROWSER_ADDRESS_MB" if browser else "XCAGI_TOOL_MEMORY_MB",
+                1572864 if browser else 2048,
+            )
+            * 1024
+            * 1024,
+        ),
         ("RLIMIT_NOFILE", _limit_from_env("XCAGI_TOOL_MAX_FILES", 256)),
     )
     for name, value in targets:
@@ -339,10 +350,14 @@ def _apply_resource_limits():
     return previous_as
 
 
-def _worker_start(control, start, deadline, *, monitored_memory=False):
+def _worker_start(control, start, deadline, *, monitored_memory=False, browser=False):
     # Startup still uses AS. Restore only the inherited AS limit after the
     # supervising parent has checked RSS and released this trusted handshake.
-    previous_as = _apply_resource_limits() if multiprocessing.parent_process() is not None else None
+    previous_as = (
+        _apply_resource_limits(browser=browser)
+        if multiprocessing.parent_process() is not None
+        else None
+    )
     if os.name != "nt":
         os.setsid()
     control.send_bytes(b"r")
@@ -369,6 +384,10 @@ def _worker(
     elt_claim=None,
     surface_claim=None,
     monitored_memory=False,
+    *,
+    initialize=True,
+    retain=False,
+    browser=False,
 ):
     from app.application.agent_orchestrator.business_write_guard import restore_worker_claim
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
@@ -387,7 +406,7 @@ def _worker(
 
     # 真正执行工具前先收敛子进程能力：环境清洗 + POSIX 资源软限制。
     # 失败只告警，调度语义仍由父进程 deadline 与进程回收保证。
-    if _env_scrub_enabled():
+    if initialize and _env_scrub_enabled():
         scrubbed_env = _scrubbed_env()
         try:
             os.environ.clear()
@@ -399,8 +418,19 @@ def _worker(
     # 资源限制只属于 spawn 出的工具子进程。在原进程内调用
     # _worker（测试或误入父进程）时若施加 RLIMIT_CPU，累计 CPU
     # 已超过工具预算就会立即 SIGXCPU 杀死调用方。
-    if not _worker_start(control, start, deadline, monitored_memory=monitored_memory):
-        return
+    if initialize:
+        if not _worker_start(
+            control,
+            start,
+            deadline,
+            monitored_memory=monitored_memory,
+            browser=browser,
+        ):
+            return
+    else:
+        control.send_bytes(b"r")
+        if not start.wait(max(0, deadline - time.monotonic())):
+            return
     route_metadata: dict[str, str | int] = {}
     worker_client: tuple[Any, str] | None = None
     finish_stream = None
@@ -523,10 +553,12 @@ def _worker(
             except OSError:
                 pass  # The parent already records an interrupted/missing receipt.
             finally:
-                stream_connection.close()
+                if not retain:
+                    stream_connection.close()
         # Keep ancestry intact until the parent has reaped tool-created children.
-        start.clear()
-        start.wait()
+        if not retain:
+            start.clear()
+            start.wait()
 
 
 def _process_namespace_matches() -> bool:

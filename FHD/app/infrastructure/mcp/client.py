@@ -1,7 +1,7 @@
 """官方 MCP Python SDK 的同步封装。
 
-外部工具调用频率低，采用「每次调用建连、结束即关」的短连接模型，避免长驻
-事件循环与进程泄漏。所有异常收敛为中文错误，不向上抛第三方异常。
+默认沿用短连接；显式配置的有状态工具按可信执行作用域复用官方 SDK 会话。
+连接丢失后不重放有状态操作，也不把新浏览器冒充为已恢复的原会话。
 """
 
 from __future__ import annotations
@@ -33,6 +33,12 @@ from tenacity import (
 
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 from app.infrastructure.mcp.config import McpServerConfig
+from app.infrastructure.mcp.persistent_sessions import (
+    McpSessionError,
+    call_persistent,
+    close_all_sessions,
+    close_scope,
+)
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -143,7 +149,10 @@ async def _oauth_header(config: McpServerConfig) -> dict[str, str]:
         expires = 300.0
     if math.isfinite(expires) and expires > 0:
         with _TOKEN_LOCK:
-            _TOKEN_CACHE[key] = (token, now + max(0.0, expires - min(30.0, expires / 10)))
+            _TOKEN_CACHE[key] = (
+                token,
+                now + max(0.0, expires - min(30.0, expires / 10)),
+            )
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -185,6 +194,11 @@ def _read_only(tool: Any) -> bool:
     annotations = getattr(tool, "annotations", None)
     hint = _sdk_field(annotations, "read_only_hint", "readOnlyHint")
     return hint is True
+
+
+def _field(value: Any, python_name: str, wire_name: str, default: Any = None) -> Any:
+    """SDK 2 uses snake_case attributes; wire-shaped adapters keep MCP aliases."""
+    return getattr(value, python_name, getattr(value, wire_name, default))
 
 
 async def _list_all_tools(session: Any, *, max_pages: int = 10) -> list[Any]:
@@ -230,13 +244,17 @@ def list_tools(config: McpServerConfig) -> list[McpToolInfo]:
 
 
 def _serialize(value: Any) -> str:
-    dump = getattr(value, "model_dump", None)
-    if callable(dump):
-        params = inspect.signature(dump).parameters
-        return json.dumps(
-            dump(mode="json") if "mode" in params else dump(), ensure_ascii=False, default=str
-        )
-    return json.dumps(value, ensure_ascii=False, default=str)
+    def encode(item: Any) -> Any:
+        dump = getattr(item, "model_dump", None)
+        if callable(dump):
+            params = inspect.signature(dump).parameters
+            options: dict[str, Any] = {"mode": "json"} if "mode" in params else {}
+            if "by_alias" in params:
+                options["by_alias"] = True
+            return dump(**options)
+        return str(item)
+
+    return json.dumps(value, ensure_ascii=False, default=encode)
 
 
 def _result_text(result: Any) -> str:
@@ -258,6 +276,31 @@ def _result_text(result: Any) -> str:
     return _serialize(structured) if structured is not None else ""
 
 
+def _result_error(result: Any, tool_name: str) -> str:
+    """Classify the MCP envelope, without interpreting resource or prompt text."""
+    structured = _field(result, "structured_content", "structuredContent")
+    business = (
+        structured if tool_name not in RESOURCE_ACTIONS and isinstance(structured, dict) else {}
+    )
+    if result is None or ("success" in business and type(business["success"]) is not bool):
+        return "mcp_result_invalid"
+    if _field(result, "result_type", "resultType", "complete") != "complete":
+        return "mcp_result_incomplete"
+    collection = {
+        "mcp_list_resources": "resources",
+        "mcp_read_resource": "contents",
+        "mcp_list_prompts": "prompts",
+        "mcp_get_prompt": "messages",
+    }.get(tool_name, "content")
+    is_error = _field(result, "is_error", "isError", False)
+    # Empty lists are valid MCP results; missing envelopes are not completion.
+    if not isinstance(getattr(result, collection, None), list) or type(is_error) is not bool:
+        return "mcp_result_invalid"
+    if business.get("success") is False:
+        return "mcp_business_error"
+    return "mcp_tool_error" if is_error else ""
+
+
 async def _run_synthetic(session: Any, action: str, arguments: dict[str, Any]) -> Any:
     if action == "mcp_list_resources":
         return await session.list_resources()
@@ -267,12 +310,15 @@ async def _run_synthetic(session: Any, action: str, arguments: dict[str, Any]) -
         return await session.list_prompts()
     return await session.get_prompt(
         str(arguments.get("name") or ""),
-        arguments.get("arguments") if isinstance(arguments.get("arguments"), dict) else None,
+        (arguments.get("arguments") if isinstance(arguments.get("arguments"), dict) else None),
     )
 
 
 def _run_with_reconnect(
-    factory: Callable[[], Coroutine[Any, Any, T]], timeout: float, *, retry_safe: bool = False
+    factory: Callable[[], Coroutine[Any, Any, T]],
+    timeout: float,
+    *,
+    retry_safe: bool = False,
 ) -> T:
     """Use the existing Tenacity dependency; all attempts share one invocation budget."""
     budget = remaining_invocation_seconds(timeout)
@@ -311,6 +357,8 @@ def call_tool(
     arguments: dict[str, Any],
     *,
     retry_safe: bool = False,
+    session_scope: str | None = None,
+    expected_session_id: str | None = None,
 ) -> dict[str, Any]:
     """调用外部 MCP 工具，返回统一工具结果。"""
     frozen_arguments = copy.deepcopy(arguments or {})
@@ -324,8 +372,25 @@ def call_tool(
             "reconciliation_required": True,
         }
     )
+    session_id = ""
     try:
-        if tool_name in RESOURCE_ACTIONS:
+        if config.session_mode == "persistent":
+            operation = (
+                (lambda session: _run_synthetic(session, tool_name, arguments or {}))
+                if tool_name in RESOURCE_ACTIONS
+                else (lambda session: session.call_tool(tool_name, arguments or {}))
+            )
+            result, session_id = call_persistent(
+                config,
+                session_scope,
+                tool_name,
+                operation,
+                _with_session,
+                expected_session_id=expected_session_id,
+            )
+        elif expected_session_id is not None:
+            raise McpSessionError("mcp_session_lost", expected_session_id)
+        elif tool_name in RESOURCE_ACTIONS:
             result = _run_with_reconnect(
                 lambda: _with_session(
                     config,
@@ -355,6 +420,32 @@ def call_tool(
         )
         business_error = isinstance(structured, dict) and structured.get("success") is False
         result_type = _sdk_field(result, "result_type", "resultType", "complete")
+        blocks = getattr(result, "content", None)
+        evidence = {
+            **({"result_type": result_type} if result_type != "complete" else {}),
+            **(
+                {"structured_content": json.loads(_serialize(structured))}
+                if structured is not None
+                else {}
+            ),
+            **(
+                {"content_blocks": json.loads(_serialize(blocks))}
+                if isinstance(blocks, list)
+                else {}
+            ),
+        }
+        derived_error = _result_error(result, tool_name)
+    except McpSessionError as exc:
+        lost = exc.code == "mcp_session_lost"
+        return {
+            "success": False,
+            "error_code": exc.code,
+            "message": ("MCP 原会话已丢失，需核对原操作结果" if lost else "MCP 会话不可用"),
+            "outcome": "unknown" if lost else "not_started",
+            "retryable": False,
+            "reconciliation_required": lost,
+            **({"session_id": exc.session_id} if exc.session_id else {}),
+        }
     except BOUNDARY_ERRORS as exc:  # The external SDK is an isolated plugin boundary.
         logger.warning("MCP 工具 %s.%s 调用失败：%s", config.name, tool_name, type(exc).__name__)
         return {
@@ -373,18 +464,32 @@ def call_tool(
         if business_error
         else "mcp_tool_error"
         if is_error
-        else ""
+        else derived_error or ""
     )
     return {
         "success": not bool(error_code),
         "tool": tool_name,
         "server": config.name,
         "content": text,
-        "message": text if error_code else "",
+        "message": (text or "MCP 工具未返回有效的完成结果") if error_code else "",
         **({"structuredContent": deepcopy(structured)} if structured is not None else {}),
         **({"resultType": result_type} if result_type != "complete" else {}),
+        **evidence,
+        **({"session_id": session_id} if session_id else {}),
         **({"error_code": error_code, **uncertain} if error_code else {}),
     }
 
 
-__all__ = ["McpClientError", "McpToolInfo", "call_tool", "list_tools"]
+def close_session(config: McpServerConfig, session_scope: str) -> int:
+    return close_scope(session_scope, server_name=config.name)
+
+
+__all__ = [
+    "McpClientError",
+    "McpToolInfo",
+    "call_tool",
+    "list_tools",
+    "close_session",
+    "close_scope",
+    "close_all_sessions",
+]
