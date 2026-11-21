@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 
 from modstore_server.models import Workflow, WorkflowExecution, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -44,7 +45,8 @@ def run_recorded_workflow(
         complete_execution_feedback,
     )
 
-    with get_session_factory()() as db:
+    session_factory = get_session_factory()
+    with session_factory() as db:
         workflow = db.get(Workflow, workflow_id)
         if (
             workflow is None
@@ -60,10 +62,14 @@ def run_recorded_workflow(
         )
         db.add(execution)
         db.flush()
+        execution_id = int(execution.id)
+        execution_started_at = execution.started_at
+        start_commit_attempted = False
         binding: dict[str, Any] = {}
         output: dict[str, Any]
         try:
             binding = begin_execution_feedback(db, execution) or {}
+            start_commit_attempted = True
             db.commit()
             if binding.get("blocked"):
                 raise ValueError(binding["blocked"])
@@ -71,7 +77,7 @@ def run_recorded_workflow(
                 {"expected_graph_fingerprint": binding["graph_fingerprint"]} if binding else {}
             )
             if binding.get("customer_delivery"):
-                graph_guard["execution_id"] = int(execution.id)
+                graph_guard["execution_id"] = execution_id
             if real_sandbox:
                 from modstore_server.workflow_engine import workflow_engine
 
@@ -97,19 +103,42 @@ def run_recorded_workflow(
                     **graph_guard,
                 )
         except RECOVERABLE_ERRORS as exc:
-            db.execute(
-                update(WorkflowExecution)
-                .where(WorkflowExecution.id == execution.id)
-                .values(
-                    status="failed",
-                    error_message=str(exc),
-                    completed_at=datetime.now(UTC),
-                    output_data=json.dumps(getattr(exc, "evidence", {}), ensure_ascii=False),
-                )
-            )
-            db.refresh(execution)
-            complete_execution_feedback(db, execution)
-            db.commit()
+            try:
+                db.rollback()
+                if start_commit_attempted:
+                    # A failed COMMIT response may follow a durable commit.
+                    # Read/update only that original identity in a fresh transaction;
+                    # never recreate an uncommitted run or replace another terminal.
+                    with session_factory() as terminal_db:
+                        updated = terminal_db.execute(
+                            update(WorkflowExecution)
+                            .where(
+                                WorkflowExecution.id == execution_id,
+                                WorkflowExecution.workflow_id == workflow_id,
+                                WorkflowExecution.user_id == user_id,
+                                WorkflowExecution.started_at == execution_started_at,
+                                WorkflowExecution.status == "running",
+                                WorkflowExecution.completed_at.is_(None),
+                            )
+                            .values(
+                                status="failed",
+                                error_message=str(exc),
+                                completed_at=datetime.now(UTC),
+                                output_data=json.dumps(
+                                    getattr(exc, "evidence", {}), ensure_ascii=False
+                                ),
+                            )
+                        )
+                        if cast(CursorResult[Any], updated).rowcount == 1:
+                            terminal = (
+                                terminal_db.query(WorkflowExecution)
+                                .filter_by(id=execution_id)
+                                .one()
+                            )
+                            complete_execution_feedback(terminal_db, terminal)
+                        terminal_db.commit()
+            except RECOVERABLE_ERRORS as recording_error:
+                raise exc from recording_error
             if real_sandbox and (binding.get("blocked") or str(exc) == GRAPH_GUARD_FAILED):
                 return {
                     "ok": False,
