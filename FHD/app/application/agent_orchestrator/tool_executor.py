@@ -841,7 +841,20 @@ def execute_with_tool_deadline(
             and result.get("reconciliation_required") is True
         ):
             # A returned receipt can require reconciliation without a timeout.
-            # Keep its durable artifacts and observed evidence visible to the run.
+            # A lost MCP session is an unknown side effect, not a retryable failure.
+            # Keep the raw receipt as evidence under the stable execution error code.
+            if result.get("error_code") == "mcp_session_lost":
+                return {
+                    "success": False,
+                    "error_code": "tool_timeout_unknown",
+                    "reconciliation_evidence": result,
+                    "io_reconciliation": list(invocation.uncertain),
+                    "outcome": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
+                    "message": "MCP 原会话丢失，业务结果未知；必须核对原操作，不可自动重试",
+                }
+            # Keep other domain-specific reconciliation receipts unchanged.
             return {**result, "success": False, "outcome": "unknown", "retryable": False}
         if (
             completed_in_time
