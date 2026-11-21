@@ -49,6 +49,21 @@ export function isMarketCatalogCacheFresh(entry: MarketCatalogCacheEntry | null,
   return Date.now() - entry.fetchedAt <= ttlMs
 }
 
+// Public catalog fields only. URLs and package locators stay out of web storage,
+// and the tab label is not persisted: it can be recovered from the cache key and
+// must not leak lastEmployeeTab-style values into sessionStorage as clear text.
+const PERSISTED_ITEM_OMIT = ['download_url', 'catalog_base_url', 'package_file', 'artifact'] as const
+
+function persistableItems(items: ModCatalogItemUi[]): ModCatalogItemUi[] {
+  return items.map((item) => {
+    const publicItem = { ...item }
+    for (const field of PERSISTED_ITEM_OMIT) {
+      delete publicItem[field]
+    }
+    return publicItem
+  })
+}
+
 export function writeMarketCatalogCache(key: string, tab: string, items: ModCatalogItemUi[]): void {
   const entry: MarketCatalogCacheEntry = {
     items,
@@ -57,7 +72,10 @@ export function writeMarketCatalogCache(key: string, tab: string, items: ModCata
   }
   memory.set(key, entry)
   try {
-    sessionStorage.setItem(storageKey(key), JSON.stringify(entry))
+    sessionStorage.setItem(
+      storageKey(key),
+      JSON.stringify({ items: persistableItems(items), fetchedAt: entry.fetchedAt }),
+    )
   } catch {
     /* quota or private mode */
   }

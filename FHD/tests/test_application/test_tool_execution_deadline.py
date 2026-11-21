@@ -432,7 +432,6 @@ def test_reconciliation_receipt_keeps_evidence_only_when_returned_within_budget(
         assert result["io_reconciliation"] == (
             [{"kind": "http_timeout", "method": "POST"}] if condition == "unknown_io" else []
         )
-@pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
 @pytest.mark.parametrize(
     "marker",
     [

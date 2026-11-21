@@ -179,9 +179,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             _facade().logger.warning("knowledge_search 节点执行失败: %s", e)
             return {
                 out_var: {"items": [], "count": 0, "error": "knowledge_search_failed"},
-                "execution_time": _facade()
-                .datetime.now(_facade().timezone.utc)
-                .isoformat(),
+                "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
             }
         items = [c.to_dict() for c in chunks or []]
         return {

@@ -287,15 +287,11 @@ class SuperEmployeeService:
     def read_dispatch_receipt(
         self, *, user_id: int, request_id: str, task_id: str
     ) -> dict[str, Any] | None:
-        """Read one persisted dispatch; never run message-list CLI backfills."""
-        return self._sync.read_dispatch_receipt(
-            user_id=user_id, request_id=request_id, task_id=task_id
-        )
+        """Read the original dispatch intent without losing unresolved fleet sends.
 
-    def read_dispatch_receipt(
-        self, *, user_id: int, request_id: str, task_id: str
-    ) -> dict[str, Any] | None:
-        """Read the original dispatch intent without losing unresolved fleet sends."""
+        Never start message-list CLI backfills; this path only reads persisted
+        receipts and the original task status API.
+        """
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", request_id):
             return None
         # Atomic outbox replacement permits a snapshot read while its sender
@@ -371,6 +367,24 @@ class SuperEmployeeService:
                 else self._para_task_status_reply(task)
             },
         }
+
+
+    def _record_direct_reply(
+        self,
+        user_msg: dict[str, Any],
+        body: str,
+        dispatch: dict[str, Any],
+        failure: CliExecutionError | None = None,
+    ) -> dict[str, Any]:
+        # Share the local-reply receipt: acceptance follows whether execution
+        # started, and CLI evidence is stored on the message as cli_execution.
+        return self._local_reply_result(
+            user_msg,
+            body=body,
+            dispatcher=str(dispatch.get("dispatcher") or dispatch.get("fallback") or ""),
+            failure=failure,
+            dispatch=dispatch,
+        )
 
     def invoke(
         self, *, user_id: int, message: str, context: dict[str, Any] | None = None
@@ -580,11 +594,15 @@ class SuperEmployeeService:
             },
         )
         self._append_messages([user_msg, assistant])
+        incoming = dict(dispatch or {})
+        # Direct CLI: acceptance follows whether execution began. A rejected
+        # remote dispatch keeps accepted=False even if local fallback started.
+        if incoming.get("accepted") is not False:
+            incoming["accepted"] = receipt.get("execution_started", True)
         result_dispatch = {
             "request_id": user_msg["dispatch_request_id"],
-            "accepted": receipt.get("execution_started", True),
             "queued": False,
-            **(dispatch or {}),
+            **incoming,
             "status": status,
             "para_tier": 1,
             "device_scope": "local_device",
@@ -592,6 +610,7 @@ class SuperEmployeeService:
                 dispatcher or f"{self._p.tool_name}_cli"
             ),
             **receipt,
+            "accepted": incoming["accepted"],
             **({"queued": False} if failure else {}),
         }
         return {

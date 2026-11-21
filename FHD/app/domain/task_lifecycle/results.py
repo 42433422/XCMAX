@@ -312,14 +312,19 @@ def execution_result_pending_state(data: dict[str, Any]) -> str:
 
 
 def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
-    """Preserve unresolved execution through the same envelopes used by verification."""
+    """Preserve unresolved execution through the same envelopes used by verification.
+
+    Known accepted waits stay unfinished and do not invent an unknown effect.
+    """
+    known_wait = bool(execution_result_wait_reason(data))
     return any(
-        execution_result_states(result) & _ACTIVE_STATES
+        execution_result_states(result) & (_UNKNOWN_STATES if known_wait else _ACTIVE_STATES)
         or result.get("reconciliation_required")
         or result.get("requires_reconciliation")
         or result.get("outcome_unknown") is True
         or (
-            (result.get("execution_accepted") is True or result.get("accepted") is True)
+            not known_wait
+            and (result.get("execution_accepted") is True or result.get("accepted") is True)
             and "completed" not in execution_result_states(result)
         )
         for result in execution_result_envelopes(data)

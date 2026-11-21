@@ -100,25 +100,20 @@ class CliExecutionError(RuntimeError):
 
     @property
     def returncode(self) -> int | None:
-        return self.receipt["exit_code"]
+        return self.receipt.get("exit_code")
 
     @property
     def partial_output(self) -> str:
-        return self.receipt["partial_text"]
-
-    def payload(self) -> dict[str, Any]:
-        return {**self.receipt, "returncode": self.returncode, "partial_output": self.partial_output}
-
-    def reply_body(self) -> str:
-        return self.body
+        return str(self.receipt.get("partial_text") or "")
 
     @property
     def body(self) -> str:
         partial = self.receipt["partial_text"]
         return str(self) + (f"\n\n未确认的部分输出：\n{partial}" if partial else "")
 
-    def event(self) -> dict[str, Any]:
-        return {"type": "error", **self.payload()}
+    @property
+    def started(self) -> bool:
+        return bool(self.receipt.get("execution_started"))
 
     def payload(self) -> dict[str, Any]:
         receipt = dict(self.receipt)
@@ -129,17 +124,8 @@ class CliExecutionError(RuntimeError):
     def reply_body(self) -> str:
         return self.body
 
-    @property
-    def returncode(self) -> int | None:
-        return self.receipt.get("exit_code")
-
-    @property
-    def partial_output(self) -> str:
-        return str(self.receipt.get("partial_text") or "")
-
-    @property
-    def started(self) -> bool:
-        return bool(self.receipt.get("execution_started"))
+    def event(self) -> dict[str, Any]:
+        return {"type": "error", **self.payload()}
 
 
 def require_cli_success(

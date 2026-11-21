@@ -380,7 +380,7 @@ class TestDispatchToPara:
             health_resp = MagicMock()
             health_resp.status_code = 200
             health_resp.content = b"ok"
-            health_resp.json.return_value = {}
+            health_resp.json.return_value = {"task_request_recovery_version": 1}
             client.get.return_value = health_resp
             client.request.side_effect = ValueError("bad json")
             return client

@@ -58,6 +58,9 @@ from tests.pure_builders import super_employee_request as _make_request
 # ───────────────────── helpers ─────────────────────
 
 
+from app.application.super_employee.dispatch import _digest
+
+
 def _make_svc(
     tmp_path: Path,
     *,
@@ -98,7 +101,38 @@ def _mock_response(
     )
     resp.text = text or (json.dumps(json_data) if json_data else "")
     resp.json = MagicMock(return_value=json_data or {})
+    resp.raise_for_status = MagicMock()
+    if status_code >= 400:
+        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "error", request=MagicMock(), response=resp
+        )
     return resp
+
+
+
+def _para_ack_response(request, *, task_id="t1", subtask_id="s1", task_status="pending"):
+    """Echo the original-request receipt that create_para_task now requires."""
+    body = dict((request.kwargs or {}).get("json") or {})
+    digest_body = {key: value for key, value in body.items() if key != "client_request_id"}
+    return _mock_response(
+        status_code=200,
+        json_data={
+            "task": {"id": task_id, "status": task_status},
+            "subtask": {
+                "id": subtask_id,
+                "task_id": task_id,
+                "device_id": body.get("device_id"),
+            },
+            "request": {
+                "client_request_id": body.get("client_request_id"),
+                "payload_sha256": _digest(digest_body),
+            },
+        },
+    )
+
+
+def _recovery_health() -> MagicMock:
+    return _mock_response(status_code=200, json_data={"task_request_recovery_version": 1})
 
 
 def _mock_http_client(
@@ -590,11 +624,10 @@ class TestCreateParaTask:
         monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://repo.git")
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
-        mock_resp = _mock_response(
-            status_code=200,
-            json_data={"task": {"id": "t1", "status": "pending"}, "subtask": {"id": "s1"}},
+        mock_client.get.return_value = _recovery_health()
+        mock_client.request.side_effect = lambda *args, **kwargs: _para_ack_response(
+            type("Req", (), {"kwargs": kwargs})()
         )
-        mock_client.request.return_value = mock_resp
         req = _make_request()
         result = svc._create_para_task(
             mock_client,
@@ -613,6 +646,7 @@ class TestCreateParaTask:
     def test_missing_task_receipt_is_unknown(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
+        mock_client.get.return_value = _recovery_health()
         mock_resp = _mock_response(
             status_code=200,
             json_data={"task": "not a dict", "subtask": {"id": "s1"}},
@@ -634,16 +668,16 @@ class TestCreateParaTask:
     def test_task_id_chained_across_devices(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
+        mock_client.get.return_value = _recovery_health()
         # First call returns task with id, second call should include task_id
-        responses = [
-            _mock_response(
-                status_code=200, json_data={"task": {"id": "t1"}, "subtask": {"id": "s1"}}
-            ),
-            _mock_response(
-                status_code=200, json_data={"task": {"id": "t1"}, "subtask": {"id": "s2"}}
-            ),
-        ]
-        mock_client.request.side_effect = responses
+        subtasks = iter(("s1", "s2"))
+
+        def respond(*args, **kwargs):
+            return _para_ack_response(
+                type("Req", (), {"kwargs": kwargs})(), task_id="t1", subtask_id=next(subtasks)
+            )
+
+        mock_client.request.side_effect = respond
         req = _make_request()
         result = svc._create_para_task(
             mock_client,
@@ -661,6 +695,7 @@ class TestCreateParaTask:
     def test_subtask_not_dict(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
+        mock_client.get.return_value = _recovery_health()
         mock_resp = _mock_response(
             status_code=200,
             json_data={"task": {"id": "t1"}, "subtask": "not a dict"},
@@ -675,8 +710,8 @@ class TestCreateParaTask:
             [{"id": "d1", "name": "dev1"}],
             tier=1,
         )
-        assert result["accepted"] is True
-        assert result["devices"][0]["subtask_id"] == ""
+        assert result["accepted"] is False
+        assert result["status"] == "dispatch_unknown"
 
 
 # ───────────────────── _cli_subprocess_env ─────────────────────

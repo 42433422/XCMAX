@@ -40,9 +40,7 @@ def test_public_hall_and_health_responses_keep_failure_visible(monkeypatch):
             "readonly": True,
             "employees": [],
         }
-        monkeypatch.setattr(
-            public_company_hall, "build_public_company_hall", lambda **_: data
-        )
+        monkeypatch.setattr(public_company_hall, "build_public_company_hall", lambda **_: data)
         assert client.get("/api/public/company-hall").json() == {
             "ok": True,
             "data": data,
@@ -60,9 +58,7 @@ def test_payment_proxy_message_does_not_expose_endpoint_or_exception(monkeypatch
         java_payment_unreachable_message,
     )
 
-    monkeypatch.setenv(
-        "JAVA_PAYMENT_SERVICE_URL", "http://secret:password@private-host:8080"
-    )
+    monkeypatch.setenv("JAVA_PAYMENT_SERVICE_URL", "http://secret:password@private-host:8080")
     message = java_payment_unreachable_message(OSError(PRIVATE))
     assert message == "Java 支付服务暂时不可用，请稍后查询原支付状态"
 
@@ -99,9 +95,7 @@ def test_workflow_parallel_failures_keep_branch_statuses_and_successful_output(
 def test_roster_source_failure_keeps_unknown_gate_and_safe_error(monkeypatch):
     from modstore_server.maintenance_loop import status_roster
 
-    monkeypatch.setattr(
-        status_roster.duty_employee_registry, "duty_employee_records", _fail
-    )
+    monkeypatch.setattr(status_roster.duty_employee_registry, "duty_employee_records", _fail)
     result = status_roster._build_roster_alignment({}, _fail, lambda _: [])
     assert result["status"] == "unknown"
     assert result["gate"]["ok"] is False and result["gate"]["action"] == "unknown"
@@ -121,9 +115,7 @@ def test_workflow_nonterminal_result_preserves_partial_execution_evidence(monkey
     steps = [{"node_id": 7, "output_delta": {"receipt": "accepted"}}]
 
     def run(*args, **kwargs):
-        raise WorkflowGraphError(
-            PRIVATE, {"receipt": "accepted"}, steps, ["未到达结束节点"]
-        )
+        raise WorkflowGraphError(PRIVATE, {"receipt": "accepted"}, steps, ["未到达结束节点"])
 
     monkeypatch.setattr(engine, "_run_graph", run)
     result = engine.run_sandbox(None, SimpleNamespace(id=1), {})

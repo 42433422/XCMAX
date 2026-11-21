@@ -16,8 +16,42 @@ import pytest
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 
 
+def _ack(request, *, task_id="task-original", subtask_id="sub-1"):
+    body = json.loads(request.content)
+    return httpx.Response(
+        200,
+        json={
+            "task": {"id": task_id, "status": "running"},
+            "subtask": {
+                "id": subtask_id,
+                "task_id": task_id,
+                "device_id": body["device_id"],
+            },
+            "request": {
+                "client_request_id": body["client_request_id"],
+                "payload_sha256": hashlib.sha256(
+                    json.dumps(
+                        {key: value for key, value in body.items() if key != "client_request_id"},
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest(),
+            },
+        },
+    )
+
+
 def _service(
-    tmp_path, monkeypatch, task_handler, *, devices=1, webhook_handler=None, task_status="running"
+    tmp_path,
+    monkeypatch,
+    task_handler,
+    *,
+    devices=1,
+    webhook_handler=None,
+    receipt_handler=None,
+    recovery_version=1,
+    task_status="running",
 ):
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "auto")
     monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "https://para.test")
@@ -167,13 +201,7 @@ def test_readback_keeps_partial_fleet_unknown_after_known_task_completes(tmp_pat
     def submit(request):
         effects.append(json.loads(request.content))
         if len(effects) == 1:
-            return httpx.Response(
-                200,
-                json={
-                    "task": {"id": "task-original", "status": "running"},
-                    "subtask": {"id": "sub-1"},
-                },
-            )
+            return _ack(request)
         raise httpx.ReadTimeout("second device acknowledgement lost", request=request)
 
     create, requests = _service(tmp_path, monkeypatch, submit, devices=2, task_status="completed")

@@ -182,6 +182,7 @@ class EmployeeDispatcher:
             "accepted": False,
             "queued": False,
             "safe_to_fallback": False,
+            "status": "dispatch_unknown",
             **receipt,
         }
         request["dispatch_receipt"] = receipt
@@ -479,11 +480,23 @@ class EmployeeDispatcher:
                 health = client.get(f"{api_url}/api/health")
                 health.raise_for_status()
                 if not self._supports_recovery(health):
-                    raise ValueError("para_original_request_recovery_unavailable")
+                    return self._persist_receipt(
+                        request,
+                        {
+                            "status": "dispatch_error",
+                            "dispatcher": "para_api",
+                            "api_url": api_url,
+                            "reason": "para_original_request_recovery_unavailable",
+                        },
+                    )
             except RECOVERABLE_ERRORS as exc:
                 return self._persist_receipt(
                     request,
-                    {**request.get("dispatch_receipt", {}), "reason": str(exc)[:500]},
+                    {
+                        **request.get("dispatch_receipt", {}),
+                        "status": "dispatch_error",
+                        "reason": str(exc)[:500],
+                    },
                 )
         raw_context = (
             request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
