@@ -98,6 +98,7 @@ def test_batch_execute_binds_verified_selection_before_goal_review(shape):
             if admitted
             else _response({"unknown": True}),
         ]
+        + ([] if admitted else [_response({"unknown": True})])
     )
     plan = _planner(completion).plan("owner", "导入", get_workflow_tool_registry(), context)
     if admitted:
@@ -109,6 +110,28 @@ def test_batch_execute_binds_verified_selection_before_goal_review(shape):
     else:
         assert plan.metadata["planning_rejected"] is True
         assert plan.metadata["planning_failure_kind"] == "plan_repair_failed"
+        assert completion.call_count == 3
+        assert plan.metadata["plan_repair"]["attempts"] == 2
+        repairs = [
+            json.loads(call.kwargs["messages"][-1]["content"])
+            for call in completion.call_args_list[1:]
+        ]
+        assert all(request["task"] != "audit_goal_coverage" for request in repairs)
+        assert all(
+            [node["params"] for node in request["original_plan"]["nodes"]]
+            == [node["params"] for node in nodes]
+            for request in repairs
+        )
+        assert [(node.tool_id, node.action) for node in plan.nodes] == [("clarify", "ask")]
+        callbacks, risk = Mock(), Mock()
+        callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+        result = PlannedWorkflowDispatch(
+            {}, callbacks, Mock(plan=Mock(return_value=plan)), risk, Mock()
+        ).handle("owner", "导入", "chat", context, "导入")
+        assert result["success"] is False
+        assert result["execution"]["outcome"] == "not_executed"
+        risk.evaluate.assert_not_called()
+        callbacks._capture_agent_run_interaction.assert_not_called()
 
 
 @pytest.mark.parametrize("params", [{}, {"answer_key": "confirmed", "target_node_id": ""}])
@@ -125,14 +148,33 @@ def test_only_a_standalone_model_question_can_skip_goal_review(with_business_nod
     ]
     if with_business_node:
         nodes.append({"node_id": "write", "tool_id": "products", "action": "clear", "params": {}})
-    completion = Mock(side_effect=[_response({"mode": "workflow", "nodes": nodes}), None])
+    completion = Mock(side_effect=[_response({"mode": "workflow", "nodes": nodes}), None, None])
     plan = _planner(completion).plan("owner", "清空数据库", get_workflow_tool_registry())
     if with_business_node:
         assert plan.metadata["planning_rejected"] is True
-        assert completion.call_count == 2
-        assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
-            "audit_goal_coverage"
+        assert plan.metadata["planning_failure_kind"] == "goal_coverage_rejected"
+        assert completion.call_count == 3
+        assert plan.metadata["goal_coverage_trace"]["attempts"] == 2
+        reviews = [
+            json.loads(call.kwargs["messages"][-1]["content"])
+            for call in completion.call_args_list[1:]
+        ]
+        assert all(request["task"] == "audit_goal_coverage" for request in reviews)
+        assert all(
+            [(node["tool_id"], node["action"]) for node in request["plan"]["nodes"]]
+            == [("clarify", "ask"), ("products", "clear")]
+            for request in reviews
         )
+        assert [(node.tool_id, node.action) for node in plan.nodes] == [("clarify", "ask")]
+        callbacks, risk = Mock(), Mock()
+        callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+        result = PlannedWorkflowDispatch(
+            {}, callbacks, Mock(plan=Mock(return_value=plan)), risk, Mock()
+        ).handle("owner", "清空数据库", "chat", {}, "清空数据库")
+        assert result["success"] is False
+        assert result["execution"]["outcome"] == "not_executed"
+        risk.evaluate.assert_not_called()
+        callbacks._capture_agent_run_interaction.assert_not_called()
     else:
         assert completion.call_count == 1
         assert plan.metadata["planning_clarification"] is True

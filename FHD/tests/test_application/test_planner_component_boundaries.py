@@ -283,6 +283,154 @@ def test_model_plan_format_failure_is_not_unavailability():
     assert rejected.metadata["planning_failure_kind"] == "plan_format_invalid"
 
 
+@pytest.mark.parametrize("invalid_action", [False, True])
+def test_shared_model_call_budget_stops_repair_or_coverage_without_execution(
+    monkeypatch, invalid_action
+):
+    import json
+
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    monkeypatch.setenv("XCAGI_PLAN_MAX_MODEL_CALLS", "1")
+    complete = Mock(
+        return_value={
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "mode": "workflow",
+                                "nodes": [
+                                    {
+                                        "node_id": "query",
+                                        "tool_id": "products",
+                                        "action": "invented" if invalid_action else "query",
+                                        "params": {"keyword": "A1"},
+                                    }
+                                ],
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+    )
+    result = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)),
+        completion=complete,
+    ).plan("owner", "查询 A1", get_workflow_tool_registry(), {})
+    assert complete.call_count == 1
+    assert result.metadata["planning_rejected"]
+    assert result.metadata["planning_failure_kind"] == "planning_budget_exhausted"
+    assert result.metadata["planning_diagnostics"]["model_attempts"] == 1
+    assert result.metadata["planning_diagnostics"]["exhausted"] == "model_call_limit"
+    assert all(node.tool_id == "clarify" for node in result.nodes)
+
+
+def test_coverage_provider_exhaustion_is_not_mislabeled_as_json_failure():
+    import json
+
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.infrastructure.modstore_transport import MarketModelError
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    complete = Mock(
+        side_effect=[
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "mode": "workflow",
+                                    "nodes": [
+                                        {
+                                            "node_id": "query",
+                                            "tool_id": "products",
+                                            "action": "query",
+                                            "params": {"keyword": "A1"},
+                                        }
+                                    ],
+                                }
+                            )
+                        }
+                    }
+                ]
+            },
+            MarketModelError({"status": 429}),
+        ]
+    )
+    result = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=complete
+    ).plan(
+        "owner",
+        "查询 A1",
+        get_workflow_tool_registry(),
+        {},
+    )
+    assert result.metadata["planning_failure_kind"] == "model_unavailable"
+    assert "请求受限" in result.metadata["rejection_reason"]
+    assert result.metadata["goal_coverage_trace"]["errors"] == []
+
+
+def test_plan_log_persists_root_cause_and_attempts_without_raw_model_text():
+    import json
+
+    from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+    from app.domain.neuro.cognition.plan_graph_log import plan_to_record
+
+    plan = finalize_planned_graph(
+        None,
+        plan_id="diagnostic",
+        context={
+            "planning_failure_kind": "goal_coverage_rejected",
+            "planning_failure_reason": "目标覆盖核对未返回有效结果",
+            "planning_diagnostics": {
+                "schema_version": 2,
+                "model_attempts": 3,
+                "transport_retries": 0,
+            },
+            "goal_coverage_trace": {
+                "attempts": 2,
+                "errors": [{"reason": "invalid_json", "response_sha256": "a" * 64}],
+            },
+            "raw_model_response": "private raw model text",
+        },
+        validate=lambda _: None,
+        warn=lambda _: None,
+        plan_type=PlanGraph,
+        node_type=WorkflowNode,
+    )
+    record = plan_to_record(plan, phase="rejected")
+    assert record["schema_version"] == 2
+    assert record["planning_failure_kind"] == "goal_coverage_rejected"
+    assert record["planning_diagnostics"]["planning_diagnostics"]["model_attempts"] == 3
+    assert "private raw model text" not in json.dumps(record)
+
+
+def test_observations_do_not_change_plan_authority_but_review_and_parameters_do():
+    from app.application.workflow.workflow_types import plan_fingerprint
+
+    plan = PlanGraph(
+        "bound", "query", nodes=[WorkflowNode("q", "products", "query", {"keyword": "A1"})]
+    )
+    original = plan_fingerprint(plan)
+    plan.metadata.update(
+        planning_diagnostics={"model_attempts": 3, "elapsed_ms": 75},
+        goal_coverage_trace={"attempts": 2},
+    )
+    assert plan_fingerprint(plan) == original
+    plan.metadata["goal_coverage"] = {
+        "goals": [{"source": "查询 A1", "node_ids": ["q"]}],
+        "violations": [],
+    }
+    reviewed = plan_fingerprint(plan)
+    assert reviewed != original
+    plan.nodes[0].params["keyword"] = "B2"
+    assert plan_fingerprint(plan) != reviewed
+
+
 def test_generation_preserves_context_budget_failure_from_gateway(monkeypatch):
     from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
     from app.application.workflow.planner_llm_gateway import request_planner_completion

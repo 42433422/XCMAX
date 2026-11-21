@@ -518,3 +518,86 @@ class TestContextCompressionResult:
         assert r.tokens_saved == 0
         assert r.summary_llm_call is None
         assert r.compression_latency_ms == 0.0
+
+
+@pytest.mark.asyncio
+async def test_summary_and_planner_share_call_cap_without_budget_fallback(monkeypatch):
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowManager
+    from app.application.workflow.model_response_metrics import observe_model_response
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded, planning_request_scope
+
+    monkeypatch.setenv("XCAGI_PLAN_MAX_MODEL_CALLS", "2")
+    manager, provider = ContextWindowManager(token_budget=800), _make_provider()
+    arguments = {
+        "to_summarize": [{"role": "user", "content": "已确认查询本月销售，不修改任何数据。"}],
+        "user_id": "u1",
+        "trace_id": "summary-budget",
+        "provider": provider,
+        "budget": 800,
+        "max_tokens": 40,
+    }
+    completion = observe_model_response(lambda: {"choices": [{"message": {"content": "{}"}}]})
+    with planning_request_scope({}) as budget:
+        summary, _ = await manager._summarize_messages(**arguments)
+        assert summary
+        assert completion()["choices"]
+        with pytest.raises(PlanningBudgetExceeded):
+            await manager._summarize_messages(**arguments)
+        assert budget.trace["model_attempts"] == 2
+        assert [row["stage"] for row in budget.trace["stages"]] == ["summary", "planning"]
+        assert budget.trace["exhausted"] == "model_call_limit"
+    # The middleware's error-to-text behavior must not issue another model call
+    # or turn the exhausted budget into a successful cached summary.
+    assert provider.chat_completion.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_summary_cancellation_signal_survives_langchain_error_text():
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowManager
+    from app.application.workflow.retry_policy import planning_request_scope
+    from app.infrastructure.chat_stream_lifetime import StreamStopped
+
+    manager, provider = ContextWindowManager(token_budget=800), _make_provider()
+    stopped = StreamStopped()
+    provider.chat_completion.side_effect = stopped
+    with planning_request_scope({}):
+        with pytest.raises(StreamStopped) as error:
+            await manager._summarize_messages(
+                to_summarize=[{"role": "user", "content": "原历史必须保留"}],
+                user_id="u1",
+                trace_id="cancel",
+                provider=provider,
+                budget=800,
+                max_tokens=40,
+            )
+    assert error.value is stopped and provider.chat_completion.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_summary_obeys_remaining_planning_timeout_and_cancels_provider(monkeypatch):
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowManager
+    from app.application.workflow.retry_policy import PlanningBudgetExceeded, planning_request_scope
+
+    monkeypatch.setattr("app.application.workflow.retry_policy.planner_call_timeout", lambda: 0.01)
+    manager, provider = ContextWindowManager(token_budget=800), _make_provider()
+    cancelled = asyncio.Event()
+
+    async def delayed(**_):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    provider.chat_completion.side_effect = delayed
+    with planning_request_scope({}) as budget:
+        with pytest.raises(PlanningBudgetExceeded):
+            await manager._summarize_messages(
+                to_summarize=[{"role": "user", "content": "原历史必须保留"}],
+                user_id="u1",
+                trace_id="timeout",
+                provider=provider,
+                budget=800,
+                max_tokens=40,
+            )
+        assert budget.trace["exhausted"] == "deadline"
+    assert cancelled.is_set() and provider.chat_completion.await_count == 1

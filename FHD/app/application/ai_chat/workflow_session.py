@@ -67,6 +67,136 @@ def _control_reply(
     }
 
 
+def _plan_change_items(before: PlanGraph, after: PlanGraph) -> list[str]:
+    """Report paths, never customer values or arbitrary model-authored keys."""
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.application.workflow.workflow_types import plan_fingerprint, plan_to_dict
+
+    if plan_fingerprint(before) == plan_fingerprint(after):
+        return []
+    old, new = plan_to_dict(before), plan_to_dict(after)
+    changed = [key for key in old if key != "nodes" and old[key] != new[key]]
+    if len(before.nodes) != len(after.nodes):
+        changed.append("nodes.count")
+    for index, (left, right) in enumerate(zip(old["nodes"], new["nodes"])):
+        prefix = f"nodes[{index}]"
+        if left["node_id"] != right["node_id"]:
+            changed.append(f"{prefix}.identity")
+            continue
+        changed.extend(
+            f"{prefix}.{key}" for key in left if key != "params" and left[key] != right[key]
+        )
+        if left["params"] == right["params"]:
+            continue
+        spec = get_tool_action_spec(left["tool_id"], left["action"])
+        schema = spec.input_schema if spec and isinstance(spec.input_schema, dict) else {}
+        fields = schema.get("properties") or {}
+        names = sorted(left["params"].keys() | right["params"].keys())
+        for key in names:
+            if (key in left["params"], left["params"].get(key)) == (
+                key in right["params"],
+                right["params"].get(key),
+            ):
+                continue
+            public = (
+                key in fields
+                and key.lower() not in {"key", "api_key"}
+                and not any(
+                    part in key.lower()
+                    for part in (
+                        "token",
+                        "secret",
+                        "password",
+                        "credential",
+                        "authorization",
+                        "cookie",
+                    )
+                )
+            )
+            path = f"{prefix}.params.{key}" if public else f"{prefix}.params"
+            if path not in changed:
+                changed.append(path)
+    return changed[:20]
+
+
+def stale_confirmation_reply(
+    *,
+    plan: PlanGraph | None,
+    run_id: str,
+    current: AgentRun | None,
+    owner_ids: set[str],
+    runtime_context: dict[str, Any],
+    step_id: str = "",
+    previous: AgentRun | None = None,
+    action: str = "workflow_confirmation_stale",
+) -> dict[str, Any]:
+    """Explain a failed original-run guard without approving or replaying it."""
+    from app.application.workflow.workflow_types import plan_from_dict
+
+    reason, items, detail = "run_missing", ["task_record"], "原任务记录不可用"
+    if current is not None:
+        scope = current.metadata.get("runtime_context") or {}
+
+        def session(ctx: dict[str, Any]) -> str:
+            return str(ctx.get("session_id") or ctx.get("conversation_id") or "")
+
+        if (
+            current.user_id not in owner_ids
+            or str(scope.get("tenant_id") or "") != str(runtime_context.get("tenant_id") or "")
+            or session(scope) != session(runtime_context)
+        ):
+            reason, items, detail = (
+                "scope_mismatch",
+                ["authorization_scope"],
+                "当前账号或会话与原确认范围不匹配",
+            )
+        else:
+            try:
+                persisted = plan_from_dict(current.metadata.get("plan"))
+            except (ValueError, TypeError, KeyError, AttributeError):
+                persisted = None
+            step = next((s for s in current.steps if step_id in {s.step_id, s.node_id}), None)
+            items = _plan_change_items(plan, persisted) if plan and persisted else []
+            if (
+                current.status != "waiting_user"
+                or step is not None
+                and step.status != "waiting_user"
+            ):
+                reason, detail = "already_handled", "原澄清已处理或任务已离开待确认状态"
+                items = ["task.status", "clarification.status", *items][:20]
+            elif plan is None or persisted is None:
+                reason, items, detail = "plan_missing", ["plan"], "原任务的可核对计划缺失"
+            elif items or current.plan_id != plan.plan_id:
+                reason, detail = "plan_changed", "原计划的素材、参数或执行步骤已变化"
+                items = items or ["plan_id"]
+            elif step is None or (step.tool_id, step.action) != ("clarify", "ask"):
+                reason, items, detail = "step_changed", ["clarification.step"], "原待答复步骤已变化"
+            elif previous is not None and previous.to_dict() != current.to_dict():
+                reason, items, detail = (
+                    "concurrent_update",
+                    ["task.revision"],
+                    "答复期间原任务已被更新",
+                )
+            else:
+                reason, items, detail = (
+                    "resume_rejected",
+                    ["resume_admission"],
+                    "原任务的续跑校验未通过",
+                )
+    text = f"{detail}（变化项：{'、'.join(items)}）；本次答复未再次触发执行。请打开原任务查看最新计划和待办后继续，无需重复提交业务请求。"
+    data = {
+        "run_id": run_id,
+        "plan_id": getattr(plan, "plan_id", ""),
+        "reason": reason,
+        "changed_items": items,
+    }
+    reply = _control_reply(text, action, data, success=False, message="原确认需要重新核对")[1]
+    reply.update(run_id=run_id, agent_run_id=run_id, execution_state="blocked")
+    reply["data"].update(error_code="workflow_confirmation_stale", **data, execution_started=False)
+    reply["execution"] = {"committed": False, "effect": "none", "outcome": "not_executed"}
+    return reply
+
+
 def _failed_step_detail(agent_run: object) -> str:
     """取第一个失败步骤的可读原因，替代「审批通过后执行失败」这类泛化文案。"""
     for step in getattr(agent_run, "steps", None) or []:
@@ -1110,49 +1240,32 @@ class WorkflowSession:
             orchestrator = AgentOrchestrator()
             run = orchestrator.get_run(run_id)
             owner_id = self.callbacks._task_owner_id(user_id, runtime_ctx)
+            stale_args: dict[str, Any] = {
+                "plan": plan,
+                "run_id": run_id,
+                "owner_ids": {user_id, owner_id},
+                "runtime_context": runtime_ctx,
+                "step_id": str(pending.get("clarification_step_id") or ""),
+            }
             if run is None or run.user_id not in {user_id, owner_id} or run.plan_id != plan.plan_id:
-                return _control_reply(
-                    "澄清记录已失效或不属于当前任务，未执行任何操作；请重新发起。",
-                    "workflow_confirmation_stale",
-                    {"run_id": run_id, "plan_id": plan.plan_id},
-                    success=False,
-                    message="澄清任务不匹配",
-                )[1]
+                return stale_confirmation_reply(**stale_args, current=run)
             run_context = dict(run.metadata.get("runtime_context") or {})
             if str(run_context.get("tenant_id") or "") != str(
                 runtime_ctx.get("tenant_id") or ""
             ) or str(
                 run_context.get("session_id") or run_context.get("conversation_id") or ""
             ) != str(runtime_ctx.get("session_id") or runtime_ctx.get("conversation_id") or ""):
-                return _control_reply(
-                    "澄清记录与当前租户或会话不匹配，未执行任何操作。",
-                    "workflow_confirmation_stale",
-                    {"run_id": run_id, "plan_id": plan.plan_id},
-                    success=False,
-                    message="澄清上下文不匹配",
-                )[1]
+                return stale_confirmation_reply(**stale_args, current=run)
             persisted_plan = plan_from_dict(run.metadata.get("plan"))
             if persisted_plan is None or plan_fingerprint(persisted_plan) != plan_fingerprint(plan):
-                return _control_reply(
-                    "待澄清计划已变化，未执行任何操作；请重新规划任务。",
-                    "workflow_confirmation_stale",
-                    {"run_id": run_id, "plan_id": plan.plan_id},
-                    success=False,
-                    message="澄清计划已变化",
-                )[1]
+                return stale_confirmation_reply(**stale_args, current=run)
             from app.application.agent_orchestrator.clarification import find_waiting_step
 
             waiting = find_waiting_step(
                 run, approved_step_id=str(pending.get("clarification_step_id") or "")
             )
             if waiting is None or (waiting.tool_id, waiting.action) != ("clarify", "ask"):
-                return _control_reply(
-                    "原澄清步骤已变化，未执行任何操作；请重新发起。",
-                    "workflow_confirmation_stale",
-                    {"run_id": run_id, "plan_id": plan.plan_id},
-                    success=False,
-                    message="澄清步骤已变化",
-                )[1]
+                return stale_confirmation_reply(**stale_args, current=run)
             if not str(waiting.params.get("target_node_id") or ""):
                 from app.application.agent_orchestrator.clarification import (
                     is_plan_confirmation,
@@ -1199,13 +1312,9 @@ class WorkflowSession:
                         runtime_context=runtime_ctx,
                     )
                     if continued is None:
-                        return _control_reply(
-                            "确认未能绑定到当前执行记录，原计划仍暂停；请重新确认或取消。",
-                            "workflow_resume_failed",
-                            {"run_id": run_id, "plan_id": plan.plan_id},
-                            success=False,
-                            message="确认续跑失败",
-                        )[1]
+                        return stale_confirmation_reply(
+                            **stale_args, current=orchestrator.get_run(run_id), previous=run
+                        )
                     if continued.status == "waiting_user":
                         self.pending.pop(user_id, None)
                         interaction = self.capture_agent_run_interaction(
@@ -1287,13 +1396,9 @@ class WorkflowSession:
                 runtime_context=runtime_ctx,
             )
             if continued is None:
-                return _control_reply(
-                    "澄清答案未能绑定到当前执行记录，原计划仍暂停；请重新回答或重新发起。",
-                    "workflow_resume_failed",
-                    {"run_id": run_id, "plan_id": plan.plan_id},
-                    success=False,
-                    message="澄清续跑失败",
-                )[1]
+                return stale_confirmation_reply(
+                    **stale_args, current=orchestrator.get_run(run_id), previous=run
+                )
             updated_plan = plan_from_dict(continued.metadata.get("plan"))
             updated_plan = updated_plan or persisted_plan
             if continued.status == "waiting_user":
@@ -1372,9 +1477,14 @@ class WorkflowSession:
             actual = getattr((pending or {}).get("plan"), "plan_id", None)
             if not isinstance(expected, str) or not expected.strip() or expected != actual:
                 return _control_reply(
-                    "此确认卡对应的计划已失效或已变化，请返回原任务核对后重试；未执行本次操作。",
+                    "此确认卡的计划编号与当前待办不一致，请返回原任务查看最新确认项；本次未触发执行。",
                     "workflow_confirmation_stale",
-                    {"plan_id": expected if isinstance(expected, str) else ""},
+                    {
+                        "plan_id": expected if isinstance(expected, str) else "",
+                        "reason": "confirmation_card_mismatch",
+                        "changed_items": ["plan_id"],
+                        "execution_started": False,
+                    },
                     success=False,
                     message="待确认计划不匹配",
                 )

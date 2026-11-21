@@ -416,8 +416,17 @@ class ContextWindowManager:
         )
         calls: list[LLMCall] = []
         batch_count = 0
+        from app.application.workflow.retry_policy import (
+            PlanningBudgetExceeded,
+            planner_call_timeout,
+            planning_model_call,
+        )
+        from app.infrastructure.chat_stream_lifetime import StreamStopped
+
+        interruption: Exception | None = None
 
         async def invoke_summary(request):
+            nonlocal interruption
             call = LLMCall(
                 metadata={
                     "source": "context_window_manager.summarize",
@@ -437,12 +446,20 @@ class ContextWindowManager:
                     raise ContextWindowExceeded("摘要输入超过预算。")
                 if model_limits is not None:
                     model_limits.assert_current()
-                result = await provider.chat_completion(
-                    messages=request,
-                    temperature=0.1,
-                    max_tokens=output_limit,
-                    **request_options,
-                )
+                with planning_model_call(stage="summary") as planning_budget:
+                    timer = asyncio.timeout(planner_call_timeout() if planning_budget else None)
+                    try:
+                        async with timer:
+                            result = await provider.chat_completion(
+                                messages=request,
+                                temperature=0.1,
+                                max_tokens=output_limit,
+                                **request_options,
+                            )
+                    except TimeoutError as exc:
+                        if planning_budget is not None and timer.expired():
+                            raise PlanningBudgetExceeded("历史压缩已达到规划等待时限") from exc
+                        raise
                 if isinstance(result, dict):
                     usage = result.get("usage") or {}
                     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
@@ -460,6 +477,12 @@ class ContextWindowManager:
                     raise ValueError("empty_summary")
                 call.status = "completed"
                 return AIMessage(content=text)
+            except (PlanningBudgetExceeded, StreamStopped) as exc:
+                # LangChain converts callback exceptions to error text. Keep the
+                # original control signal so it cannot become a cached summary.
+                interruption = exc
+                call.status, call.error = "failed", type(exc).__name__
+                raise
             except RECOVERABLE_ERRORS as exc:
                 call.status, call.error = "failed", type(exc).__name__
                 raise
@@ -515,9 +538,13 @@ class ContextWindowManager:
                     summary_runtime,
                 )
             except RECOVERABLE_ERRORS:
+                if interruption is not None:
+                    raise interruption
                 if model_limits is not None:
                     model_limits.assert_current()
                 return "", calls[-1] if calls else None
+            if interruption is not None:
+                raise interruption
             if model_limits is not None:
                 # LangChain may turn provider exceptions into an error summary;
                 # a credential change must still abort instead of caching it.

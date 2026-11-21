@@ -230,8 +230,12 @@ async def test_scoped_sdk_guard_allows_same_client_but_rejects_replaced_scope():
 
 @pytest.mark.asyncio
 async def test_prepared_route_is_shared_by_capability_lookup_and_request_options():
+    from app.application.market_llm.protocols import Connection, PreparedChatRoute
+
     provider, adapter = _platform({"max_input_tokens": 48000})
-    prepared = SimpleNamespace(route=("litellm", "vision-alias"))
+    connection = Connection("https://market.invalid", "synthetic-token", 7, 30)
+    adapter._connection = lambda: connection
+    prepared = PreparedChatRoute(connection, ("litellm", "vision-alias"), {})
     adapter.prepare_chat_route = AsyncMock(return_value=prepared)
     messages = [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]}]
     limits = await windows.resolve_model_limits(provider, messages=messages)
@@ -241,13 +245,18 @@ async def test_prepared_route_is_shared_by_capability_lookup_and_request_options
         "litellm", "vision-alias", prepared_route=prepared
     )
     assert limits.model == "litellm/vision-alias"
-    assert limits.request_options == {"_prepared_chat_route": prepared, "model": limits.model}
+    assert limits.request_options == {
+        "_prepared_chat_route": prepared,
+        "model": limits.model,
+        "allow_failover": False,
+    }
     assert "request_options" not in repr(limits)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("explicit_model", [None, "litellm/explicit-alias"])
 async def test_scoped_preparation_keeps_default_separate_from_explicit_model(explicit_model):
+    from app.application.market_llm.protocols import Connection, PreparedChatRoute
     from app.domain.shared_services.conversation.modstore_adapter import (
         ModstoreOpenAICompatibleClient,
     )
@@ -255,7 +264,9 @@ async def test_scoped_preparation_keeps_default_separate_from_explicit_model(exp
     from app.infrastructure.llm.providers.registry import LLMProviderRegistry
 
     _, adapter = _platform({"context_window": 32000})
-    prepared = SimpleNamespace(route=("litellm", "vision-alias"))
+    connection = Connection("https://market.invalid", "synthetic-token", 7, 30)
+    adapter._connection = lambda: connection
+    prepared = PreparedChatRoute(connection, ("litellm", "vision-alias"), {})
     adapter.prepare_chat_route = AsyncMock(return_value=prepared)
     model = "litellm/xcmax-doubao-code"
     messages = [{"role": "user", "content": "look at the attachment"}]

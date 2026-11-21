@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from typing import Any, cast
 
@@ -24,18 +25,21 @@ from .protocols import (
     Payload,
     ResponsePorts,
     Route,
+    StreamPorts,
     SyncClientFactory,
 )
 from .responses import _response_status_code, finish_completion, market_response_error
 
 
-def _failover_extra(extra: dict | None, *, primary: bool) -> dict:
-    """Drop pinned route credentials once we leave the primary candidate."""
+def _failover_extra(extra: dict | None, *, index: int) -> dict:
+    """A distinct candidate owns its request key and cannot reuse the route pin."""
     payload = dict(extra or {})
-    if primary:
+    if not index:
         return payload
     for key in ("route_token", "key_source", "config_revision"):
         payload.pop(key, None)
+    if isinstance(payload.get("client_request_id"), str):
+        payload["client_request_id"] = f"{payload['client_request_id']}-f{index}"
     return payload
 
 
@@ -45,6 +49,28 @@ def _audit_allows_failover(extra: dict | None) -> bool:
     if payload.get("_reviewed_excel_audit_response") is None:
         return True
     return payload.get("allow_failover") is True
+
+
+def _allows_failover(request: ChatInput) -> bool:
+    """Apply the same request/account policy to client and platform failover."""
+    extra = request.extra
+    return (
+        extra.get("allow_failover") is not False
+        and not request.native_vision
+        and extra.get("key_source") not in {"byok", "user_override"}
+        and (
+            not (extra.get("route_token") or extra.get("key_source"))
+            or extra.get("allow_failover") is True
+        )
+        and _audit_allows_failover(extra)
+        and os.environ.get("XCAGI_LLM_CHAT_FAILOVER", "1").strip().lower()
+        not in {"0", "false", "no", "off"}
+    )
+
+
+def _can_failover(ports: CompletionPorts | StreamPorts, status: int | None, message: str) -> bool:
+    # Account authorization and payment refusals must not select another route.
+    return status not in {401, 402, 403} and ports.failoverable(status, message)
 
 
 def _status_error(request: ChatInput, response: httpx.Response, status: int) -> Exception:
@@ -192,7 +218,8 @@ def complete_sync(
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置 (MODSTORE_PLATFORM_URL)")
     validate_demo_destination(connection)
-    candidates = ports.candidates(*route)
+    allow_failover = _allows_failover(request)
+    candidates = ports.candidates(*route) if allow_failover else [route]
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         check_invocation_deadline()
@@ -204,8 +231,8 @@ def complete_sync(
                 messages=messages,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
-                allow_failover=index == 0,
-                extra=_failover_extra(request.extra, primary=index == 0) or None,
+                allow_failover=allow_failover and index == 0,
+                extra=_failover_extra(request.extra, index=index) or None,
             )
         except (MarketModelError, ValueError, httpx.HTTPError) as exc:
             last_error = exc
@@ -213,11 +240,7 @@ def complete_sync(
             if status is None:
                 match = re.search(r"平台错误\((\d{3})\)", str(exc))
                 status = int(match.group(1)) if match else None
-            can_failover = (
-                index + 1 < len(candidates)
-                and ports.failoverable(status, str(exc))
-                and _audit_allows_failover(request.extra)
-            )
+            can_failover = index + 1 < len(candidates) and _can_failover(ports, status, str(exc))
             if can_failover:
                 ports.response.logger.warning(
                     "[Modstore] 桌面侧换模重试 %s/%s -> %s", *candidate, candidates[index + 1]
@@ -238,16 +261,17 @@ async def complete_async(
 ) -> Payload:
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置 (MODSTORE_PLATFORM_URL)")
-    allow_failover = request.extra.get("allow_failover") is not False
+    allow_failover = _allows_failover(request)
     candidates = await asyncio.to_thread(ports.candidates, *route) if allow_failover else [route]
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
+        check_invocation_deadline()
         messages = await ports.prepare_async(request.messages, *candidate)
         attempt = ChatInput(
             messages,
             request.temperature,
             request.max_tokens,
-            _failover_extra(request.extra, primary=index == 0),
+            _failover_extra(request.extra, index=index),
         )
         payload = attempt.payload(
             connection, candidate, messages, allow_failover=allow_failover and index == 0
@@ -262,11 +286,7 @@ async def complete_async(
             )
         except httpx.HTTPError as exc:
             last_error = exc
-            if (
-                index + 1 < len(candidates)
-                and ports.failoverable(None, str(exc))
-                and _audit_allows_failover(request.extra)
-            ):
+            if index + 1 < len(candidates) and _can_failover(ports, None, str(exc)):
                 continue
             raise
         except ValueError:
@@ -277,10 +297,8 @@ async def complete_async(
         latency_ms = (ports.response.clock() - start) * 1000.0
         status = ports.status_code(response, 200)
         if status >= 400:
-            will_failover = (
-                index + 1 < len(candidates)
-                and ports.failoverable(status, response.text[:500])
-                and _audit_allows_failover(request.extra)
+            will_failover = index + 1 < len(candidates) and _can_failover(
+                ports, status, response.text[:500]
             )
             pending_outer = (
                 request.extra.get("_pending_client_failover") is True

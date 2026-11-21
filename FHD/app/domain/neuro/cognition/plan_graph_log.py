@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.security.log_redaction import redact_log_text
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,7 @@ def plan_to_record(
         node_summaries = []
 
     return {
+        "schema_version": 2,
         "ts": _utc_now(),
         "ts_unix": time.time(),
         "phase": phase,  # planned | probed | revised | executed | failed
@@ -112,6 +114,20 @@ def plan_to_record(
         "nodes": node_summaries[:64],
         "node_count": len(node_summaries),
         "metadata_keys": sorted(str(k) for k in metadata.keys())[:32],
+        "planning_failure_kind": str(metadata.get("planning_failure_kind") or ""),
+        "planning_failure_reason": redact_log_text(str(metadata.get("rejection_reason") or ""))[
+            :240
+        ],
+        "planning_diagnostics": {
+            key: metadata[key]
+            for key in (
+                "planning_diagnostics",
+                "goal_coverage_trace",
+                "plan_shape_repair_trace",
+                "plan_repair",
+            )
+            if isinstance(metadata.get(key), dict)
+        },
         "extra": dict(extra or {}),
     }
 

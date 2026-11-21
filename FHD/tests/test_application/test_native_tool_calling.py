@@ -13,6 +13,7 @@ from app.application.workflow.tool_calling import (
     SubmitWorkflowPlan,
     native_plan_payload,
     plan_function_tools,
+    plan_output_schema,
     tool_calls_enabled,
 )
 
@@ -253,8 +254,9 @@ def test_tool_prefilter_is_the_authoritative_catalog_for_both_transports(monkeyp
     assert plan and plan.nodes[1].depends_on == ["read"]
     request = json.loads(completion.call_args.kwargs["messages"][1]["content"])
     assert [spec["tool_id"] for spec in request["tool_registry"]] == ["products"]
-    assert completion.call_args.kwargs["tools"] == plan_function_tools()
-    assert request["output_schema"] == PLAN_SCHEMA
+    selected = {"products": registry["products"]}
+    assert completion.call_args.kwargs["tools"] == plan_function_tools(selected)
+    assert request["output_schema"] == plan_output_schema(selected)
     # The generated graph is still untrusted here; planner admission checks actions.
 
 
@@ -300,8 +302,8 @@ def test_default_gateway_legacy_provider_signature_really_falls_back(monkeypatch
     plan = _generator(gateway).generate("p1", "u1", "先查询再导出", {}, {})
     assert plan is not None
     assert plan.nodes[1].depends_on == ["read"]
-    assert gateway.call_count == 2
-    assert gateway.call_args_list[0].kwargs["tools"] == plan_function_tools()
+    assert gateway.call_count == 3
+    assert gateway.call_args_list[0].kwargs["tools"] == plan_function_tools({})
     assert "tools" not in gateway.call_args_list[1].kwargs
     assert len(provider_calls) == 1
     meter.assert_called_once()
@@ -312,6 +314,66 @@ def test_tool_calls_switch(monkeypatch):
     assert tool_calls_enabled()
     monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "0")
     assert not tool_calls_enabled()
+
+
+@pytest.mark.parametrize("native", [False, True])
+def test_registry_bound_schema_rejects_fabricated_actions_and_cross_tool_combinations(native):
+    from jsonschema import Draft202012Validator
+
+    registry = {
+        "excel_analysis": {"actions": {"statistics": {}}},
+        "generate_office_document": {"actions": {"execute": {}}},
+    }
+    schema = (
+        plan_function_tools(registry)[0]["function"]["parameters"]
+        if native
+        else plan_output_schema(registry)
+    )
+    validator = Draft202012Validator(schema)
+    graph = {"mode": "workflow", "nodes": [{"tool_id": "excel_analysis", "action": "statistics"}]}
+    assert validator.is_valid(graph)
+    question = {
+        "mode": "workflow",
+        "nodes": [
+            {
+                "tool_id": "clarify",
+                "action": "ask",
+                "params": {"question": "哪张工作表？"},
+            }
+        ],
+    }
+    assert validator.is_valid(question)
+    question["nodes"][0]["action"] = "delete"
+    assert not validator.is_valid(question)
+    for tool_id, action in [
+        ("excel_analysis", "sheet_add_column.add_column"),
+        ("excel_analysis", "COUNTIFS.统计数量"),
+        ("sheet_add_column", "add_column"),
+        ("excel_analysis", "execute"),
+        ("generate_office_document", "statistics"),
+    ]:
+        graph["nodes"] = [{"tool_id": tool_id, "action": action}]
+        assert not validator.is_valid(graph)
+    assert "oneOf" not in PLAN_SCHEMA["$defs"]["PlanNode"]
+
+
+def test_json_mode_compatibility_only_omits_an_explicitly_unsupported_keyword():
+    from app.application.workflow.tool_calling import request_json_completion
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    response = {"choices": [{"message": {"content": "{}"}}]}
+    legacy = Mock(
+        side_effect=[TypeError("unexpected keyword argument 'response_format'"), response]
+    )
+    assert request_json_completion(legacy, messages=[], context={}) is response
+    assert legacy.call_count == 2
+    assert legacy.call_args_list[0].kwargs["response_format"] == {"type": "json_object"}
+    assert "response_format" not in legacy.call_args.kwargs
+    for error in [TypeError("invalid argument value"), MarketModelError({"status": 403})]:
+        completion = Mock(side_effect=error)
+        with pytest.raises(type(error)):
+            request_json_completion(completion, messages=[])
+        assert completion.call_count == 1
 
 
 def test_semantic_replan_expands_catalog_without_reviving_retired_tools():
@@ -425,7 +487,7 @@ def test_full_catalog_reaches_real_budget_gateway_without_losing_contracts(
     assert prompt["user_message"] == "说明工作方式"
     schema_tokens = 0
     if native:
-        assert sent["tools"] == plan_function_tools()
+        assert sent["tools"] == plan_function_tools(registry)
         schema_tokens = estimate_messages_tokens(
             [
                 {

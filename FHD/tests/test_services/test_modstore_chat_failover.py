@@ -52,3 +52,19 @@ def test_build_candidates_orders_primary_then_status():
     assert out[0] == ("openai", "gpt-4o-mini")
     assert ("deepseek", "deepseek-chat") in out
     assert len(out) <= 3
+
+
+def test_same_gateway_aliases_are_deduplicated_and_bounded():
+    candidates = build_chat_failover_candidates(
+        primary_provider="litellm",
+        primary_model="kimi",
+        resolved_default={"provider": "litellm", "model": "kimi"},
+        status_payload={"providers": [{"provider": "litellm", "has_platform_key": True}]},
+        catalog_payload={
+            "providers": [
+                {"provider": "litellm", "runtime_models": ["kimi", "kimi", "mimo", "other"]}
+            ]
+        },
+        max_attempts=2,
+    )
+    assert candidates == [("litellm", "kimi"), ("litellm", "mimo")]

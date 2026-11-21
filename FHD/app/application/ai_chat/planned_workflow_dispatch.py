@@ -179,14 +179,22 @@ class PlannedWorkflowDispatch:
         orchestrator = AgentOrchestrator()
         if continuation:
             from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+            from app.application.ai_chat.workflow_session import stale_confirmation_reply
 
             original = continuation["run"]
             original_plan = plan_from_dict(original.metadata.get("plan"))
+            stale_args: dict[str, Any] = {
+                "plan": original_plan,
+                "run_id": original.run_id,
+                "owner_ids": {self.callbacks._task_owner_id(user_id, runtime_context)},
+                "runtime_context": runtime_context,
+                "step_id": continuation["step_id"],
+                "previous": original,
+                "action": "workflow_risk_rejected",
+            }
             if original_plan is None:
-                return self._risk_rejection(
-                    "workflow_confirmation_stale",
-                    "原澄清计划缺失，未执行本次操作。",
-                    runtime_context,
+                return stale_confirmation_reply(
+                    **stale_args, current=orchestrator.get_run(original.run_id)
                 )
             agent_run = orchestrator.continue_planning_clarification(
                 original.run_id,
@@ -199,10 +207,8 @@ class PlannedWorkflowDispatch:
                 runtime_context=runtime_context,
             )
             if agent_run is None:
-                return self._risk_rejection(
-                    "workflow_confirmation_stale",
-                    "原澄清已被处理或发生变化，本次未重复执行；请查看原任务。",
-                    runtime_context,
+                return stale_confirmation_reply(
+                    **stale_args, current=orchestrator.get_run(original.run_id)
                 )
             plan = plan_from_dict(agent_run.metadata.get("plan")) or plan
         else:
@@ -453,11 +459,22 @@ class PlannedWorkflowDispatch:
             if deterministic and reason:
                 message_text = reason
             elif coverage_rejected:
-                message_text = (
-                    "这次任务的目标、条件或先后顺序尚未核对完整，本次没有执行任何业务操作。"
-                    "请核对并补充任务要求后重试。"
-                )
+                # Model review text is diagnostic input, not a public error:
+                # it can contain internal notes or material copied from context.
                 reason = "任务目标、条件或顺序尚未核对完整"
+                message_text = (
+                    "任务计划未完整覆盖目标、条件或先后顺序，本次没有执行任何业务操作。"
+                    "请重试原请求。"
+                )
+            elif failure_kind == "goal_coverage_rejected":
+                message_text = (
+                    "任务计划已生成，但目标核对服务未返回可验证的结果，自动重试已结束。"
+                    "本次没有执行任何业务操作。请重试原请求，无需补充已有条件。"
+                )
+            elif failure_kind == "planning_budget_exhausted":
+                message_text = (
+                    "规划已达到等待时限或自动重试上限，本次没有执行任何业务操作。请稍后重试原请求。"
+                )
             elif failure_code == "context_window_exceeded" or (
                 unavailable and "余额不足" in reason
             ):
@@ -500,9 +517,22 @@ class PlannedWorkflowDispatch:
                     "execution_started": False,
                     **({"reason": reason[:240]} if reason else {}),
                     **({"planning_failure_kind": failure_kind} if failure_kind else {}),
+                    "planning_failure_reason": reason[:240],
+                    "diagnostics_schema_version": 2,
+                    **{
+                        key: plan.metadata[key]
+                        for key in ("goal_coverage_trace", "plan_shape_repair_trace")
+                        if isinstance(plan.metadata.get(key), dict)
+                    },
                     **(
-                        {"planning_diagnostics": plan.metadata["plan_repair"]}
-                        if isinstance((plan.metadata or {}).get("plan_repair"), dict)
+                        {
+                            "planning_diagnostics": {
+                                **(plan.metadata.get("plan_repair") or {}),
+                                **(plan.metadata.get("planning_diagnostics") or {}),
+                            }
+                        }
+                        if isinstance(plan.metadata.get("plan_repair"), dict)
+                        or isinstance(plan.metadata.get("planning_diagnostics"), dict)
                         else {}
                     ),
                 },

@@ -2,15 +2,95 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import math
 import time
+from contextlib import ExitStack, aclosing
 from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
+
+from app.application.tool_execution_deadline import (
+    check_invocation_deadline,
+    remaining_invocation_seconds,
+)
+from app.infrastructure.chat_stream_lifetime import (
+    StreamLifetime,
+    StreamWorker,
+    owned_model_read,
+)
 from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from ..reasoning_stream import publish_reasoning, reasoning_from_message
+
+
+async def _sdk_responses(client: Any, request: dict[str, Any], *, stream: bool):
+    """Bridge sync SDK I/O without leaving an asyncio executor job on cancellation."""
+    reads = StreamLifetime()
+
+    def produce():
+        try:
+            check_invocation_deadline()
+            native = False
+            if getattr(client.chat.completions, "with_streaming_response", None) is not None:
+                from openai import NotGiven, OpenAI
+
+                native = isinstance(client, OpenAI)
+            with ExitStack() as stack:
+                if native:
+                    scoped = client
+                    remaining = remaining_invocation_seconds(math.inf)
+                    if math.isfinite(remaining):
+                        # Clone options only; the shared client/pool remains borrowed.
+                        scoped = client.with_options(max_retries=0)
+                        timeout = request.get("timeout", client.timeout)
+                        if isinstance(timeout, NotGiven):
+                            timeout = client.timeout
+                        configured = httpx.Timeout(timeout)
+                        request["timeout"] = httpx.Timeout(
+                            **{
+                                name: remaining if value is None else min(value, remaining)
+                                for name, value in configured.as_dict().items()
+                            }
+                        )
+                    check_invocation_deadline()
+                    raw = stack.enter_context(
+                        scoped.chat.completions.with_streaming_response.create(**request)
+                    )
+                    # Enter ownership before parse() starts reading the body.
+                    stack.enter_context(owned_model_read(raw.http_response))
+                    stack.enter_context(reads.reading(raw.http_response))
+                    response = raw.parse()
+                else:
+                    response = client.chat.completions.create(**request)
+                    if stream:
+                        stack.enter_context(owned_model_read(response))
+                        stack.enter_context(reads.reading(response))
+                if stream:
+                    yield from response
+                else:
+                    yield response
+        except asyncio.CancelledError as exc:
+            # A compatible client may itself cancel its producer iterator.
+            yield exc
+
+    worker = StreamWorker(produce)
+    try:
+        while True:
+            item = await worker.receive()
+            if item is worker.END:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            check_invocation_deadline()
+            yield item
+    finally:
+        worker.close()
+        # Cancel only this request's reads, never the borrowed client or pool.
+        reads.cancel()
 
 
 class OpenAISdkProvider:
@@ -31,8 +111,6 @@ class OpenAISdkProvider:
         model: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | None:
-        import asyncio
-
         from app.infrastructure.llm.client import (
             get_llm_client,
             require_api_key,
@@ -46,22 +124,22 @@ class OpenAISdkProvider:
         model_name = model or resolve_chat_model()
         t0 = time.perf_counter()
 
-        def _sync_call() -> dict[str, Any]:
-            resp = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **{k: v for k, v in kwargs.items() if k not in ("model",)},
-            )
-            if hasattr(resp, "model_dump"):
-                return cast("dict[str, Any]", resp.model_dump())
-            if isinstance(resp, SimpleNamespace):
-                return cast("dict[str, Any]", json.loads(json.dumps(resp, default=vars)))
-            return dict(resp)
-
+        request = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            **{k: v for k, v in kwargs.items() if k not in ("model",)},
+        }
         try:
-            result = await asyncio.to_thread(_sync_call)
+            async with aclosing(_sdk_responses(client, request, stream=False)) as source:
+                resp = await anext(source)
+            if hasattr(resp, "model_dump"):
+                result = cast("dict[str, Any]", resp.model_dump())
+            elif isinstance(resp, SimpleNamespace):
+                result = cast("dict[str, Any]", json.loads(json.dumps(resp, default=vars)))
+            else:
+                result = dict(resp)
             record_ai_call(self.provider_id, "chat", "success", time.perf_counter() - t0)
             publish_reasoning(reasoning_from_message(result))
             return result
@@ -79,8 +157,6 @@ class OpenAISdkProvider:
         **kwargs: Any,
     ):
         """逐段产出正文增量；客户端不支持流式时静默结束，由调用方回退。"""
-        import asyncio
-
         from app.infrastructure.llm.client import (
             get_llm_client,
             require_api_key,
@@ -92,29 +168,24 @@ class OpenAISdkProvider:
         if client is None:
             return
         model_name = model or resolve_chat_model()
-        stream = await asyncio.to_thread(
-            lambda: client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-                **{k: v for k, v in kwargs.items() if k not in ("model", "stream")},
-            )
-        )
-        iterator = iter(stream)
+        request = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+            **{k: v for k, v in kwargs.items() if k not in ("model", "stream")},
+        }
         reasoning: list[str] = []
         try:
-            while True:
-                chunk = await asyncio.to_thread(next, iterator, None)
-                if chunk is None:
-                    break
-                reasoning_text = _chunk_delta_reasoning(chunk)
-                if reasoning_text:
-                    reasoning.append(reasoning_text)
-                text = _chunk_delta_text(chunk)
-                if text:
-                    yield text
+            async with aclosing(_sdk_responses(client, request, stream=True)) as source:
+                async for chunk in source:
+                    reasoning_text = _chunk_delta_reasoning(chunk)
+                    if reasoning_text:
+                        reasoning.append(reasoning_text)
+                    text = _chunk_delta_text(chunk)
+                    if text:
+                        yield text
         finally:
             publish_reasoning("".join(reasoning))
 

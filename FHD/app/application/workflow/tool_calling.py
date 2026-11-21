@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
+from copy import deepcopy
 from typing import Any, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -66,8 +68,39 @@ PLAN_PARSER = PydanticOutputParser(pydantic_object=SubmitWorkflowPlan)
 PLAN_SCHEMA = SubmitWorkflowPlan.model_json_schema()
 
 
-def plan_function_tools() -> list[dict[str, Any]]:
-    return [convert_to_openai_tool(SubmitWorkflowPlan)]
+def plan_output_schema(tool_registry: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Bind the typed transport to exact advertised tool/action pairs per request."""
+    schema = deepcopy(PLAN_SCHEMA)
+    if tool_registry is not None:
+        # clarify.ask is the existing internal control node admitted without a
+        # business registry entry. It asks a question and cannot execute a tool.
+        actions = {
+            tool_id: list(spec.get("actions") or {})
+            for tool_id, spec in tool_registry.items()
+            if spec.get("actions")
+        }
+        actions["clarify"] = ["ask"]
+        variants = [
+            {
+                "properties": {
+                    "tool_id": {"const": tool_id},
+                    "action": {"enum": names},
+                },
+                "required": ["tool_id", "action"],
+            }
+            for tool_id, names in actions.items()
+        ]
+        schema["$defs"]["PlanNode"]["oneOf"] = variants
+    return schema
+
+
+def plan_function_tools(tool_registry: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    tool = convert_to_openai_tool(SubmitWorkflowPlan)
+    if tool_registry is not None:
+        constraint = plan_output_schema(tool_registry)["$defs"]["PlanNode"]
+        node_schema = tool["function"]["parameters"]["properties"]["nodes"]["items"]
+        node_schema.update({key: constraint[key] for key in ("oneOf", "not") if key in constraint})
+    return [tool]
 
 
 def native_plan_payload(response: dict[str, Any]) -> dict[str, Any] | None:
@@ -112,7 +145,22 @@ def tool_calls_enabled() -> bool:
     }
 
 
+def request_json_completion(
+    complete: Callable[..., dict[str, Any] | None], **kwargs: Any
+) -> dict[str, Any] | None:
+    """Offer JSON mode; only a proven legacy keyword rejection may omit it."""
+    try:
+        return complete(**kwargs, response_format={"type": "json_object"})
+    except TypeError as error:
+        if not re.search(r"""unexpected keyword argument ['"]response_format['"]""", str(error)):
+            raise
+        return complete(**kwargs)
+
+
 def unsupported_tool_parameter(error: TypeError) -> bool:
     return bool(
-        re.search(r"""unexpected keyword argument ['"](?:tools|tool_choice)['"]""", str(error))
+        re.search(
+            r"""unexpected keyword argument ['"](?:tools|tool_choice|response_format)['"]""",
+            str(error),
+        )
     )

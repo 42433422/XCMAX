@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 from collections import Counter
+from contextlib import aclosing, nullcontext
 from types import SimpleNamespace
 from typing import Any
+
+import httpx
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -216,6 +220,152 @@ async def _prepare_model_messages(
     return result.messages
 
 
+async def _planner_attempts(provider, context, messages, temperature, max_tokens, extra, *, stream):
+    """Each allowed platform candidate gets its own authenticated route and budget."""
+    from app.application.market_llm.completions import _allows_failover
+    from app.application.market_llm.protocols import ChatInput, PreparedChatRoute
+    from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
+    from app.infrastructure.llm.model_context_windows import _provider_adapter, resolve_model_limits
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    from .retry_policy import PlanningBudgetExceeded, planner_call_timeout, planning_model_call
+
+    timer = asyncio.timeout(planner_call_timeout())
+    lifetime = current_lifetime.get()
+    lifetime_token = None
+    if lifetime is None:
+        lifetime = StreamLifetime()
+        lifetime_token = current_lifetime.set(lifetime)
+    candidates = None
+    try:
+        async with timer:
+            limits = await resolve_model_limits(
+                provider, extra.get("model"), extra.get("provider"), messages=messages
+            )
+            original_limits = limits
+            primary = limits.request_options.get("_prepared_chat_route")
+            _, adapter, _ = _provider_adapter(provider)
+            prepare_fallbacks = getattr(adapter, "prepare_chat_failover_routes", None)
+            eligible = (
+                isinstance(primary, PreparedChatRoute)
+                and callable(prepare_fallbacks)
+                and primary.snapshot.get("key_source") == "platform"
+                and primary.snapshot.get("route_source")
+                in {"platform_gateway", "platform_configuration", "fallback"}
+                and _allows_failover(
+                    ChatInput([], extra=extra, native_vision=primary.native_vision)
+                )
+            )
+            attempt, emitted = 0, False
+            while True:
+                try:
+                    # The existing response observer owns the primary call count.
+                    with planning_model_call() if attempt else nullcontext():
+                        attempt_extra = dict(extra)
+                        if attempt:
+                            for key in (
+                                "provider",
+                                "model",
+                                "route_token",
+                                "key_source",
+                                "config_revision",
+                                "_prepared_chat_route",
+                                "allow_failover",
+                            ):
+                                attempt_extra.pop(key, None)
+                            if isinstance(attempt_extra.get("client_request_id"), str):
+                                attempt_extra["client_request_id"] += f"-f{attempt}"
+                        output_limit = (
+                            max_tokens
+                            if max_tokens is not None
+                            else limits.default_output_tokens(planner_max_tokens())
+                        )
+                        outbound = await _prepare_model_messages(
+                            provider,
+                            context,
+                            messages,
+                            output_limit,
+                            attempt_extra,
+                            model_limits=limits,
+                        )
+                        original_limits.assert_current()
+                        limits.assert_current()
+                        request = {
+                            **attempt_extra,
+                            **limits.request_options,
+                            "messages": outbound,
+                            "temperature": temperature,
+                            "max_tokens": output_limit,
+                        }
+                        if stream:
+                            async with aclosing(
+                                provider.stream_chat_completion(**request)
+                            ) as source:
+                                async for chunk in source:
+                                    original_limits.assert_current()
+                                    limits.assert_current()
+                                    emitted = True
+                                    yield chunk
+                        else:
+                            result = await provider.chat_completion(**request)
+                            original_limits.assert_current()
+                            limits.assert_current()
+                            yield result
+                    return
+                except (MarketModelError, httpx.HTTPStatusError) as exc:
+                    # Only an explicit HTTP refusal proves no response was emitted.
+                    # SSE errors and unknown read outcomes must never replay a call.
+                    response = getattr(exc, "response", None)
+                    if (
+                        emitted
+                        or not eligible
+                        or not isinstance(response, httpx.Response)
+                        or response.status_code not in {429, 500, 502, 503, 504}
+                    ):
+                        raise
+                    original_limits.assert_current()
+                    if candidates is None:
+                        candidates = prepare_fallbacks(primary)
+                    prepared = await anext(candidates, None)
+                    if prepared is None:
+                        raise
+                    original_limits.assert_current()
+                    next_limits = await resolve_model_limits(
+                        provider, messages=messages, prepared_route=prepared
+                    )
+                    original_limits.assert_current()
+                    next_limits.assert_current()
+                    if "catalog:default" in next_limits.source:
+                        raise
+                    if context is not None:
+                        context.setdefault("planning_diagnostics", {}).setdefault(
+                            "model_failovers", []
+                        ).append(
+                            {
+                                "from_model": limits.model,
+                                "to_model": next_limits.model,
+                                "status": response.status_code,
+                            }
+                        )
+                    limits = next_limits
+                    attempt += 1
+    except TimeoutError as exc:
+        if timer.expired():
+            lifetime.cancel("planner_timeout")
+            raise PlanningBudgetExceeded(
+                "规划模型等待已达到时限，本次未执行业务操作；请重试原请求"
+            ) from exc
+        raise
+    except (asyncio.CancelledError, GeneratorExit):
+        lifetime.cancel("consumer_closed")
+        raise
+    finally:
+        if candidates is not None:
+            await candidates.aclose()
+        if lifetime_token is not None:
+            current_lifetime.reset(lifetime_token)
+
+
 def stream_planner_completion(
     *,
     ai_service: Any,
@@ -235,29 +385,14 @@ def stream_planner_completion(
         return None
 
     async def generate():
-        from app.infrastructure.llm.model_context_windows import resolve_model_limits
-
         with model_rate_limit_scope(context):
-            limits = await resolve_model_limits(
-                provider, extra.get("model"), extra.get("provider"), messages=messages
-            )
-            output_limit = (
-                max_tokens
-                if max_tokens is not None
-                else limits.default_output_tokens(planner_max_tokens())
-            )
-            outbound = await _prepare_model_messages(
-                provider, context, messages, output_limit, extra, model_limits=limits
-            )
-            limits.assert_current()
-            async for chunk in stream(
-                messages=outbound,
-                temperature=temperature,
-                max_tokens=output_limit,
-                **{**extra, **limits.request_options},
-            ):
-                limits.assert_current()
-                yield chunk
+            async with aclosing(
+                _planner_attempts(
+                    provider, context, messages, temperature, max_tokens, extra, stream=True
+                )
+            ) as source:
+                async for chunk in source:
+                    yield chunk
 
     return generate()
 
@@ -281,43 +416,34 @@ def request_planner_completion(
         if provider is None:
             return None
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
-        from app.infrastructure.llm.model_context_windows import resolve_model_limits
 
         with model_rate_limit_scope(context):
 
             async def complete():
-                limits = await resolve_model_limits(
-                    provider, extra.get("model"), extra.get("provider"), messages=messages
-                )
-                output_limit = (
-                    max_tokens
-                    if max_tokens is not None
-                    else limits.default_output_tokens(planner_max_tokens())
-                )
-                outbound = await _prepare_model_messages(
-                    provider, context, messages, output_limit, extra, model_limits=limits
-                )
-                limits.assert_current()
-                result = await provider.chat_completion(
-                    messages=outbound,
-                    temperature=temperature,
-                    max_tokens=output_limit,
-                    **{**extra, **limits.request_options},
-                )
-                limits.assert_current()
+                result = None
+                async with aclosing(
+                    _planner_attempts(
+                        provider, context, messages, temperature, max_tokens, extra, stream=False
+                    )
+                ) as source:
+                    async for result in source:
+                        pass
                 return result
 
             result = _run_async(complete())
     except RECOVERABLE_ERRORS as exc:
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
 
-        if isinstance(exc, ContextWindowExceeded):
+        if isinstance(exc, (ContextWindowExceeded, ConversationRevisionError)):
             raise
-        from .retry_policy import retry_manages_transport_error
+        from .retry_policy import PlanningBudgetExceeded, retry_manages_transport_error
         from .tool_calling import unsupported_tool_parameter
 
-        if retry_manages_transport_error(exc) or (
-            extra and isinstance(exc, TypeError) and unsupported_tool_parameter(exc)
+        if (
+            isinstance(exc, PlanningBudgetExceeded)
+            or retry_manages_transport_error(exc)
+            or (extra and isinstance(exc, TypeError) and unsupported_tool_parameter(exc))
         ):
             raise
         from app.infrastructure.llm.model_admission import (

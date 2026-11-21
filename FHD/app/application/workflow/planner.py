@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import time
 import uuid
@@ -22,6 +23,7 @@ from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
+from .retry_policy import planning_request_scope, planning_stage
 from .tool_profile import resolve_tool_execution_profile
 from .workflow_types import PlanGraph, WorkflowNode, plan_fingerprint, validate_plan_graph
 
@@ -126,6 +128,12 @@ def close_planner_http_client() -> None:
 
 
 def _repair_failure_kind(trace: dict[str, Any]) -> str:
+    if trace.get("failure_kind") in {
+        "model_unavailable",
+        "planning_budget_exhausted",
+        "planner_error",
+    }:
+        return str(trace["failure_kind"])
     errors = trace.get("errors") or []
     if (
         errors
@@ -155,6 +163,21 @@ class LLMWorkflowPlanner:
         tool_registry: dict[str, Any],
         context: dict[str, Any] | None = None,
     ) -> PlanGraph:
+        context = dict(context or {})
+        with planning_request_scope(context):
+            result = self._plan(user_id, message, tool_registry, context)
+            result.metadata.setdefault(
+                "planning_diagnostics", copy.deepcopy(context["planning_diagnostics"])
+            )
+            return result
+
+    def _plan(
+        self,
+        user_id: str,
+        message: str,
+        tool_registry: dict[str, Any],
+        context: dict[str, Any],
+    ) -> PlanGraph:
         from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
         context = dict(context or {})
@@ -163,6 +186,8 @@ class LLMWorkflowPlanner:
             "planning_failure_reason",
             "planning_failure_kind",
             "plan_repair_trace",
+            "plan_shape_repair_trace",
+            "goal_coverage_trace",
             "goal_coverage_rejected",
         ):
             context.pop(key, None)
@@ -303,6 +328,7 @@ class LLMWorkflowPlanner:
         from app.infrastructure.modstore_transport import MarketModelError
 
         started = time.perf_counter()
+        planning_stage("planning")
         with model_response_scope():
             try:
                 planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
@@ -313,6 +339,7 @@ class LLMWorkflowPlanner:
                 record_response_error()
         repair_trace: dict[str, Any] = {}
         if planned is not None:
+            planning_stage("repair")
             from app.application.workflow.plan_repair import repair_plan
             from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
@@ -345,17 +372,57 @@ class LLMWorkflowPlanner:
                     planned = _clarification_plan(plan_id, question)
                     break
                 with model_rate_limit_scope(context), model_response_scope():
+                    planning_stage("coverage")
+                    review_failure_kind = None
+                    review_context = {
+                        **context,
+                        "prior_conversation": recent_conversation_messages(context, limit=12),
+                    }
                     try:
-                        review_context = {
-                            **context,
-                            "prior_conversation": recent_conversation_messages(context, limit=12),
-                        }
                         review, error = review_goal_coverage(
                             planned, message, review_context, self.complete_messages
                         )
-                    except RECOVERABLE_ERRORS:
+                    except RECOVERABLE_ERRORS as exc:
+                        from app.application.agent_orchestrator.context_window_manager import (
+                            ContextWindowExceeded,
+                        )
+                        from app.domain.model_admission_errors import (
+                            ModelCircuitOpenError,
+                            ModelConcurrencyLimitError,
+                            ModelRateLimitError,
+                        )
+                        from app.domain.shared_services.conversation_service import (
+                            ConversationRevisionError,
+                        )
+                        from app.utils.resilience.rate_limiter import RateLimitBackendError
+
+                        if isinstance(exc, ConversationRevisionError):
+                            raise
                         review, error = None, "目标覆盖核对暂不可用，本轮未执行任何操作"
+                        if isinstance(exc, ContextWindowExceeded):
+                            review_failure_kind, error = "planner_error", str(exc)
+                            context["_planning_failure_code"] = "context_window_exceeded"
+                        elif isinstance(
+                            exc,
+                            (
+                                MarketModelError,
+                                OSError,
+                                httpx.HTTPError,
+                                ModelCircuitOpenError,
+                                ModelConcurrencyLimitError,
+                                ModelRateLimitError,
+                                RateLimitBackendError,
+                            ),
+                        ):
+                            review_failure_kind = "model_unavailable"
+                            error = (
+                                str(exc)
+                                if isinstance(exc, MarketModelError)
+                                else "目标核对模型服务暂不可用，请稍后重试原请求"
+                            )
                         record_response_error()
+                    if isinstance(review_context.get("goal_coverage_trace"), dict):
+                        context["goal_coverage_trace"] = review_context["goal_coverage_trace"]
                 if error is None and review is not None:
                     planned.metadata["goal_coverage"] = review.model_dump()
                     context.pop("goal_coverage_rejected", None)
@@ -366,13 +433,14 @@ class LLMWorkflowPlanner:
                     context.pop("planning_failure_reason", None)
                     break
                 context["planning_failure_reason"] = str(error or "目标核对未完成")
-                context["planning_failure_kind"] = "goal_coverage_rejected"
+                context["planning_failure_kind"] = review_failure_kind or "goal_coverage_rejected"
                 context["goal_coverage_rejected"] = review is not None
                 if attempt or review is None:
                     planned = None
                     break
                 context.pop("goal_coverage_rejected", None)
                 with model_rate_limit_scope(context), model_response_scope():
+                    planning_stage("replanning")
                     try:
                         planned = self._generation().generate(
                             plan_id,
@@ -389,6 +457,7 @@ class LLMWorkflowPlanner:
                         planned = None
                         record_response_error()
                     if planned is not None:
+                        planning_stage("repair")
                         planned, repair_trace = repair_plan(
                             planned=planned,
                             plan_id=plan_id,
@@ -429,6 +498,20 @@ class LLMWorkflowPlanner:
                 planned.metadata["memory_recall"] = recall_meta
             except (AttributeError, TypeError):
                 logger.debug("plan metadata 不支持 memory_recall 附加", exc_info=True)
+        diagnostics = context.get("planning_diagnostics") or {}
+        diagnostics["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        if diagnostics.get("exhausted"):
+            planned = None
+            context["planning_failure_kind"] = "planning_budget_exhausted"
+            context["planning_failure_reason"] = (
+                "规划已达到等待时限或自动重试上限，请重试原请求；本次未执行业务操作"
+            )
+            context.pop("goal_coverage_rejected", None)
+        for key in ("planning_diagnostics", "goal_coverage_trace", "plan_shape_repair_trace"):
+            if isinstance(context.get(key), dict):
+                context[key] = copy.deepcopy(context[key])
+                if planned is not None:
+                    planned.metadata[key] = context[key]
         if planned is not None and "goal_coverage" in planned.metadata:
             reviewed_fingerprint = plan_fingerprint(planned)
         final_plan = finalize_planned_graph(
@@ -475,14 +558,20 @@ class LLMWorkflowPlanner:
         completion = (
             self._completion if self._completion is not None else request_planner_completion
         )
-        return completion(
-            ai_service=self._ai_service,
-            context=context,
-            messages=messages,
-            http_client_factory=self._http_client_factory or _get_planner_http_client,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **extra,
+        from .model_response_metrics import observe_model_response
+        from .retry_policy import call_with_retry, planner_retry_policy
+
+        return call_with_retry(
+            lambda: observe_model_response(completion)(
+                ai_service=self._ai_service,
+                context=context,
+                messages=messages,
+                http_client_factory=self._http_client_factory or _get_planner_http_client,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **extra,
+            ),
+            policy=planner_retry_policy(),
         )
 
     def _plan_with_llm(
