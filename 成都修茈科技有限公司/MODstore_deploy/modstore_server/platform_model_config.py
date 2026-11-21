@@ -210,6 +210,18 @@ def _environment_config(provider: str) -> dict[str, Any]:
     base = (_environment_base_url(provider) or "").rstrip("/")
     if base and not base.endswith(("/v1", "/v2", "/v3", "/v4")):
         base += "/v1"
+    if provider == "litellm":
+        # 同机网关默认走回环 HTTP，不走公网 HTTPS 校验；模型池由网关 /v1/models 提供。
+        return {
+            "provider": provider,
+            "base_url": base,
+            "model": _BENCH_DEFAULT_MODELS.get(provider, ""),
+            "display_name": "统一网关（LiteLLM）",
+            "has_key": bool(key and base),
+            "masked_key": mask_api_key(key or ""),
+            "source": "environment" if key else "none",
+            "revision": None,
+        }
     try:
         base = normalize_base_url(base)
     except PlatformConfigError:
@@ -335,6 +347,9 @@ def configured_model(
     provider: str, api_key: str | None, base_url: str | None
 ) -> dict[str, Any] | None:
     """Only enrich the platform catalog; a user's BYOK catalog stays independent."""
+    if provider == "litellm":
+        # 统一网关本身就是模型池，不能把目录锁成单个模型。
+        return None
     if (
         isinstance(api_key, PlatformApiKey)
         and api_key.managed
