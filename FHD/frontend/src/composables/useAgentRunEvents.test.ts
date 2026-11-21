@@ -107,6 +107,11 @@ describe('useAgentRunEvents', () => {
       { event_id: 'observation', run_id: 'run-1', event_type: 'run.observed', data: { status: 'completed' } },
     ]
     expect(buildAgentRunTaskUpdate({ runId: 'run-1', events })).toMatchObject({ status: 'success', error: '', payload: { terminal: true } })
+    expect(buildAgentRunTaskUpdate({ runId: 'run-1', events: events.slice(0, 3) }))
+      .toMatchObject({ status: 'success', progress: 100, error: '', payload: { terminal: true } })
+    expect(buildAgentRunTaskUpdate({ runId: 'run-1', events: [...events.slice(0, 3),
+      { ...events[3], event_type: 'run.failed', message: '重试后仍失败' },
+    ] })).toMatchObject({ status: 'failed', error: '重试后仍失败', payload: { terminal: true } })
     expect(buildAgentRunTaskUpdate({ runId: 'run-1', events: [events[1], events[2], { ...events[3], data: {} }] }))
       .toMatchObject({ status: 'success', payload: { terminal: true } })
     expect(buildAgentRunTaskUpdate({ runId: 'run-1', events: [events[0], events[3]] }))

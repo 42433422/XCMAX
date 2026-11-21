@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from math import isfinite
@@ -82,13 +83,13 @@ def observe_run_phase(run: AgentRun, phase: str) -> Iterator[None]:
         except BOUNDARY_ERRORS:
             scopes.close()
             span = None
-        error_type = ""
+        phase_returned = False
         try:
             yield
-        except BaseException as exc:
-            error_type = type(exc).__name__
-            raise
+            phase_returned = True
         finally:
+            exception_type = None if phase_returned else sys.exc_info()[0]
+            error_type = exception_type.__name__ if exception_type is not None else ""
             try:
                 if span is not None:
                     failed = bool(error_type) or run.status in {"failed", "blocked", "rejected"}

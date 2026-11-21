@@ -344,7 +344,7 @@ class StepExecution:
                 },
             )
             self.repository.save(run)
-            execution_scope = {
+            execution_scope: dict[str, Any] = {
                 "run_id": run.run_id,
                 "step_id": step.step_id,
                 "node_id": step.node_id,
