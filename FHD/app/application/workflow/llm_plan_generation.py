@@ -99,7 +99,15 @@ def _model_context_value(
             key = str(raw_key)
             lowered = key.lower()
             if (
-                key in {"recent_messages", "chat_owned_history", "chat_history_summary"}
+                key
+                in {
+                    "recent_messages",
+                    "chat_owned_history",
+                    "chat_history_summary",
+                    # The complete, server-bound answer ledger is user_message.
+                    # A second, truncated projection must not compete with it.
+                    "planning_clarification",
+                }
                 or key.startswith("_")
                 or any(part in lowered for part in _MODEL_CONTEXT_PRIVATE_KEYS)
             ):
@@ -281,19 +289,22 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
         for name, metadata in actions.items():
             contract = contracts.get((str(tool_id), str(name)))
             raw_schema = getattr(contract, "input_schema", {})
-            action_specs.append(
-                {
-                    "action": name,
-                    "description": str(
-                        getattr(contract, "description", "") or spec.get("description") or ""
-                    )[:240],
-                    "risk": metadata.get("risk", "low"),
-                    "idempotent": bool(metadata.get("idempotent", False)),
-                    "output_schema": getattr(contract, "output_schema", {}),
-                    "required_params": metadata.get("required_params", []),
-                    "input_schema": raw_schema,
-                }
-            )
+            action_spec = {
+                "action": name,
+                "description": str(
+                    getattr(contract, "description", "") or spec.get("description") or ""
+                )[:240],
+                "risk": metadata.get("risk", "low"),
+                "idempotent": bool(metadata.get("idempotent", False)),
+                "output_schema": getattr(contract, "output_schema", {}),
+                "input_schema": raw_schema,
+            }
+            # The complete JSON Schema already carries this exact requirement.
+            # Keep differing legacy requirements; never rewrite nested schemas.
+            required = metadata.get("required_params", [])
+            if required != raw_schema.get("required", []):
+                action_spec["required_params"] = required
+            action_specs.append(action_spec)
         result.append(
             {
                 "tool_id": tool_id,
@@ -700,7 +711,7 @@ class LlmPlanGeneration:
                 prompt["coverage_feedback"] = _model_context_value(coverage_feedback)
                 prompt["task"] = (
                     "按目标核对反馈重新规划。能补齐时生成完整计划；范围仍无法确定时只向用户提问。"
-                    "若授权工具只能完成部分范围，用 mode=reply 说明可处理的范围，询问是否继续，勿生成部分写入计划。"
+                    "若授权工具只能完成部分范围，只生成一个 clarify.ask 说明可处理的范围并询问是否继续，勿生成部分写入计划。"
                 )
             messages = [
                 {

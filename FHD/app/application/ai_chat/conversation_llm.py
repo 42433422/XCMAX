@@ -35,11 +35,14 @@ class ConversationLlmMixin:
     ) -> dict[str, Any] | None:
         """Call the active platform, direct, or legacy LLM provider."""
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+        from app.application.ai_chat.dialogue_memory import conversation_summary
         from app.domain.neuro.cognition.token_estimator import estimate_tokens
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
         from app.infrastructure.llm.model_context_windows import model_for_budget
 
         started = time.perf_counter()
         context = kwargs.pop("conversation_context", None)
+        request_context = (getattr(context, "metadata", None) or {}).get("request_context")
         schemas = {
             name: kwargs[name]
             for name in ("tools", "functions", "response_format")
@@ -67,6 +70,8 @@ class ConversationLlmMixin:
                 reserved_tokens=max_tokens + schema_tokens,
                 model=await model_for_budget(provider, kwargs.get("model"), kwargs.get("provider")),
             )
+            if isinstance(request_context, dict):
+                conversation_summary(request_context)
             result = await provider.chat_completion(
                 messages=compression.messages,
                 temperature=temperature,
@@ -133,6 +138,8 @@ class ConversationLlmMixin:
                     except RECOVERABLE_ERRORS:
                         pass
             return result
+        except ConversationRevisionError:
+            raise
         except ContextWindowExceeded as error:
             return {"error": {"code": "context_window_exceeded", "message": str(error)}}
         except RECOVERABLE_ERRORS as error:

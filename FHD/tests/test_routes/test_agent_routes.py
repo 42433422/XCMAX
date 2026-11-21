@@ -1463,6 +1463,110 @@ def test_task_center_stream_emits_tenant_scoped_snapshot() -> None:
     }
 
 
+@pytest.mark.parametrize("error_code", ["needs_verification", "retries_exhausted"])
+@pytest.mark.parametrize("run_status", ["running", "completed"])
+def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
+    tmp_path, error_code, run_status
+):
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'recovery-projection.db'}")
+    factory = sessionmaker(bind=engine)
+    runs = SQLAlchemyAgentRunRepository(session_factory=factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    set_agent_run_repository_for_tests(runs)
+    set_task_execution_repository_for_tests(queue)
+    run = AgentRun(user_id="u1", message="保留已确认结果", status=run_status)
+    run.metadata["task_context"] = {"task_id": "recovery-projection"}
+    run.final_output = {"business_result": {"receipt_id": "confirmed-part", "rows_written": 3}}
+    run.steps = [
+        AgentStep(
+            node_id="confirmed",
+            tool_id="products",
+            action="query",
+            status="completed",
+            output={"success": True, "receipt_id": "confirmed-part"},
+        )
+    ]
+    runs.save(run)
+    before = runs.get(run.run_id).to_dict()
+    task_before = runs.get_task(user_id="u1", task_id="recovery-projection").to_dict()
+    queued = queue.enqueue(run)
+    now = datetime.fromisoformat(queued.available_at)
+    assert queue.claim("expired-worker", lease_seconds=1, now=now.isoformat()) is not None
+    if error_code == "needs_verification":
+        queue.mark_open_effect(run.run_id, "unconfirmed-next-write")
+    else:
+        for attempt in range(1, DEFAULT_MAX_ATTEMPTS):
+            assert (
+                queue.claim(
+                    f"worker-{attempt}",
+                    lease_seconds=1,
+                    now=(now + timedelta(seconds=attempt * 2)).isoformat(),
+                )
+                is not None
+            )
+    assert (
+        queue.claim("replacement", lease_seconds=1, now=(now + timedelta(seconds=20)).isoformat())
+        is None
+    )
+    assert queue.get(run.run_id).last_error_code == error_code
+    expected = (
+        "completed"
+        if run_status == "completed"
+        else "blocked"
+        if error_code == "needs_verification"
+        else "failed"
+    )
+    client = _client()
+    with patch.object(AgentOrchestrator, "execute_dispatched_run") as execute:
+        run_response = client.get(f"/api/agent/runs/{run.run_id}").json()
+        run_listing = client.get("/api/agent/runs").json()["data"][0]
+        task = client.get("/api/agent/tasks/recovery-projection").json()["data"]
+        listing = client.get("/api/agent/tasks").json()["data"][0]
+        streamed = client.get("/api/agent/tasks/events/stream?once=true").text
+        snapshot = json.loads(
+            next(line[6:] for line in streamed.splitlines() if line.startswith("data: ["))
+        )[0]
+        overview = client.get("/api/agent/task-runtime").json()["data"]["progress"]
+        execute.assert_not_called()
+    assert run_response["data"]["status"] == expected
+    assert run_listing["status"] == expected
+    assert run_response["data"]["final_output"] == before["final_output"]
+    assert run_response["data"]["steps"] == before["steps"]
+    assert run_response["capabilities"]["retry"] is False
+    for payload in (task, listing, snapshot):
+        assert payload["status"] == payload["progress"]["status"] == expected
+        assert payload["execution"]["last_error_code"] == error_code
+        assert payload["metadata"]["business_result"] == before["final_output"]["business_result"]
+        assert payload["progress"]["completed_units"] == 1
+        assert payload["attention_state"] == (
+            "result_unread" if expected == "completed" else expected
+        )
+    assert task["active_run"]["status"] == task["runs"][0]["status"] == expected
+    assert task["capabilities"]["retry"] is False
+    if expected == "blocked":
+        assert (
+            run_response["data"]["metadata"]["recovery"]["state"]
+            == "manual_reconciliation_required"
+        )
+    assert overview["active_count"] == 0
+    assert overview["attention_count"] == int(expected != "completed")
+    assert overview["completed_count"] == int(expected == "completed")
+    assert runs.get(run.run_id).to_dict() == before
+    assert runs.get_task(user_id="u1", task_id="recovery-projection").to_dict() == task_before
+    engine.dispose()
+
+
 def test_task_control_command_survives_process_local_control_reset() -> None:
     repository = get_agent_run_repository()
     repository.clear()

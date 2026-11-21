@@ -44,6 +44,7 @@ from app.fastapi_routes.domains.agent.route_support import (
 )
 from app.fastapi_routes.domains.agent.route_support import (
     authenticated_runtime_context,
+    project_execution_failure,
 )
 from app.fastapi_routes.domains.agent.route_support import (
     enqueue_run as _enqueue_run,
@@ -241,7 +242,14 @@ def list_agent_runs(
             limit=limit,
             mod_id=str((principal.mod_authorization or {}).get("mod_id") or ""),
         )
-        return _success([_public_run_dict(run) for run in runs], count=len(runs))
+        executions = get_task_execution_repository().list_for_run_ids([run.run_id for run in runs])
+        return _success(
+            [
+                _public_run_dict(project_execution_failure(run, executions.get(run.run_id)))
+                for run in runs
+            ],
+            count=len(runs),
+        )
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent runs")
 

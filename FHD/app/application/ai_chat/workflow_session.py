@@ -95,7 +95,9 @@ class SessionCallbacks(Protocol):
     def _format_agent_run_response(
         self, plan: PlanGraph, agent_run: AgentRun, thinking_steps: str = "", user_message: str = ""
     ) -> dict[str, Any]: ...
-    def _hydrate_pending_workflow(self, user_id: str, session_id: str) -> bool: ...
+    def _hydrate_pending_workflow(
+        self, user_id: str, session_id: str, context: dict[str, Any] | None = None
+    ) -> bool: ...
     def _persist_plan_state(
         self,
         plan: PlanGraph,
@@ -154,19 +156,77 @@ class WorkflowSession:
             return WorkflowPlanStore()
         return self.store
 
-    def hydrate_pending_workflow(self, user_id: str, session_id: str) -> bool:
-        """仅恢复当前会话的待确认计划；跨会话续跑须从明确的任务入口处理。"""
-        try:
-            from app.application.workflow.workflow_types import plan_from_dict
+    def hydrate_pending_workflow(
+        self, user_id: str, session_id: str, context: dict[str, Any] | None = None
+    ) -> bool:
+        """Recover the authoritative wait in the current authenticated conversation."""
+        context = context or {}
 
-            active = self._plan_store().list_active(user_id, limit=1, session_id=session_id)
-            if not active or active[0].get("status") != "pending_awaiting":
-                return False
-            plan = plan_from_dict(active[0].get("plan") or {})
-            if plan is None or not plan.nodes:
-                return False
-            runtime_context = dict(active[0].get("runtime_context") or {})
-            confirmation = runtime_context.pop("pending_confirmation", {})
+        def unavailable() -> bool:
+            self.pending[user_id] = {"kind": "recovery_unavailable", "runtime_context": context}
+            return True
+
+        try:
+            from app.application.agent_orchestrator import AgentOrchestrator
+            from app.application.agent_orchestrator.clarification import find_waiting_step
+            from app.application.agent_orchestrator.run_models import RunContextScope
+            from app.application.workflow.workflow_types import plan_from_dict, validate_plan_graph
+
+            run = None
+            scope = None
+            if context.get("_actor_authorization") is not None:
+                from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
+                revision = context.get("_conversation_revision")
+                owner = self.callbacks._task_owner_id(user_id, context)
+                if (
+                    type(revision) is not int
+                    or revision < 0
+                    or session_id
+                    != str(context.get("session_id") or context.get("conversation_id") or "")
+                    or validate_actor_context(context) is not None
+                    or owner != str(context["_actor_authorization"].get("user_id"))
+                ):
+                    return unavailable()
+                scope = RunContextScope(
+                    tenant_id=str(context.get("tenant_id")),
+                    mod_id=str(context.get("mod_id") or context.get("active_mod_id") or ""),
+                    session_id=session_id,
+                    revision=revision,
+                )
+                expected = context.get("expected_workflow_plan_id")
+                runs = AgentOrchestrator().list_runs(
+                    user_id=owner,
+                    runtime_scope=scope,
+                    status="waiting_user",
+                    limit=2,
+                    matches=(lambda item: item.plan_id == expected)
+                    if expected is not None
+                    else None,
+                )
+                if len(runs) > 1:
+                    self.pending[user_id] = {
+                        "kind": "recovery_ambiguous",
+                        "runtime_context": context,
+                        "run_ids": [item.run_id for item in runs],
+                    }
+                    return True
+                run = runs[0] if runs else None
+            authoritative = run is not None
+            confirmation: dict[str, Any]
+            if run is not None:
+                plan = plan_from_dict(run.metadata.get("plan"))
+                runtime_context = dict(run.metadata.get("runtime_context") or {})
+                confirmation = {"agent_run_id": run.run_id}
+            else:
+                active = self._plan_store().list_active(user_id, limit=1, session_id=session_id)
+                if not active or active[0].get("status") != "pending_awaiting":
+                    return False
+                plan = plan_from_dict(active[0].get("plan") or {})
+                runtime_context = dict(active[0].get("runtime_context") or {})
+                confirmation = runtime_context.pop("pending_confirmation", {})
+            if plan is None or not plan.nodes or (authoritative and validate_plan_graph(plan)):
+                return unavailable() if authoritative else False
             entry = {
                 "plan": plan,
                 "runtime_context": runtime_context,
@@ -186,21 +246,63 @@ class WorkflowSession:
             }
             run_id = entry["agent_run_id"]
             if run_id:
-                from app.application.agent_orchestrator import AgentOrchestrator
-
-                run = AgentOrchestrator().get_run(run_id)
+                run = run or AgentOrchestrator().get_run(run_id)
                 if run is None or run.status != "waiting_user":
                     return False
                 persisted_plan = plan_from_dict(run.metadata.get("plan"))
-                if persisted_plan is None or persisted_plan.plan_id != plan.plan_id:
-                    return False
+                if (
+                    persisted_plan is None
+                    or persisted_plan.plan_id != plan.plan_id
+                    or run.plan_id != plan.plan_id
+                    or (
+                        scope is not None
+                        and (
+                            not scope.matches(run)
+                            or run.user_id != self.callbacks._task_owner_id(user_id, context)
+                        )
+                    )
+                ):
+                    return unavailable() if authoritative else False
+                run_context = dict(run.metadata.get("runtime_context") or {})
+                if run_context and (
+                    run.user_id
+                    not in {user_id, self.callbacks._task_owner_id(user_id, runtime_context)}
+                    or str(run_context.get("tenant_id") or "")
+                    != str(runtime_context.get("tenant_id") or "")
+                    or str(
+                        run_context.get("session_id") or run_context.get("conversation_id") or ""
+                    )
+                    != session_id
+                ):
+                    return unavailable() if authoritative else False
                 entry["plan"] = persisted_plan
-                if entry["kind"] in {"clarification", "clarification_unbound"}:
-                    from app.application.agent_orchestrator.clarification import find_waiting_step
+                if run_context:
+                    entry["runtime_context"] = run_context
+                waiting = find_waiting_step(run)
+                if waiting is None:
+                    return unavailable() if authoritative else False
+                required = set(persisted_plan.metadata.get("approval_required_node_ids") or [])
+                if required:
+                    entry.update(
+                        approval_required=True,
+                        approval_nodes=[
+                            {
+                                "node_id": node.node_id,
+                                "tool_id": node.tool_id,
+                                "action": node.action,
+                                "params": node.params,
+                            }
+                            for node in persisted_plan.nodes
+                            if node.node_id in required
+                        ],
+                    )
+                if (waiting.tool_id, waiting.action) == ("clarify", "ask"):
+                    from datetime import datetime
 
-                    waiting = find_waiting_step(run)
-                    if waiting is None or (waiting.tool_id, waiting.action) != ("clarify", "ask"):
-                        return False
+                    from app.application.workflow.clarification_node import (
+                        clarification_ttl_seconds,
+                    )
+
                     detail = waiting.params.get("clarification")
                     entry.update(
                         kind="clarification"
@@ -211,10 +313,29 @@ class WorkflowSession:
                         clarification_step_id=waiting.step_id,
                         target_node_id=str(waiting.params.get("target_node_id") or ""),
                     )
+                    if not entry["created_at"]:
+                        started = next(
+                            (
+                                event.created_at
+                                for event in reversed(run.events)
+                                if event.event_type == "step.clarification_required"
+                                and (event.data.get("clarification") or {}).get("step_id")
+                                == waiting.step_id
+                            ),
+                            run.created_at,
+                        )
+                        entry["created_at"] = datetime.fromisoformat(
+                            started.replace("Z", "+00:00")
+                        ).timestamp()
+                        entry["ttl_seconds"] = clarification_ttl_seconds()
+                else:
+                    entry["kind"] = "workflow"
             self.pending[user_id] = entry
             return True
         except RECOVERABLE_ERRORS:
             logger.debug("DB 待续跑计划水合失败 user_id=%s", user_id)
+            if context.get("_actor_authorization") is not None:
+                return unavailable()
             return False
 
     def persist_plan_state(
@@ -364,6 +485,16 @@ class WorkflowSession:
             for value in (plan.metadata or {}).get("approval_required_node_ids", [])
             if str(value)
         }
+        approval_nodes = approval_nodes or [
+            {
+                "node_id": node.node_id,
+                "tool_id": node.tool_id,
+                "action": node.action,
+                "params": node.params,
+            }
+            for node in plan.nodes
+            if node.node_id in required_ids
+        ]
         if waiting.tool_id == "clarify" and waiting.action == "ask":
             detail = waiting.params.get("clarification")
             detail = detail if isinstance(detail, dict) else {}
@@ -402,6 +533,9 @@ class WorkflowSession:
             return {
                 "success": True,
                 "message": "需要澄清",
+                "status": "waiting_user",
+                "execution_state": "waiting_user",
+                "needs_user_input": True,
                 "response": question,
                 "run_id": agent_run.run_id,
                 "agent_run_id": agent_run.run_id,
@@ -420,14 +554,6 @@ class WorkflowSession:
                     },
                 },
             }
-        if waiting.node_id in required_ids:
-            return self._submit_waiting_approval(
-                user_id=user_id,
-                plan=plan,
-                agent_run=agent_run,
-                waiting=waiting,
-                runtime_context=context,
-            )
         self.pending[user_id] = {
             "plan": plan,
             "runtime_context": context,
@@ -446,6 +572,14 @@ class WorkflowSession:
                 success=False,
                 message="待确认状态未保存",
             )[1]
+        if waiting.node_id in required_ids:
+            return self._submit_waiting_approval(
+                user_id=user_id,
+                plan=plan,
+                agent_run=agent_run,
+                waiting=waiting,
+                runtime_context=context,
+            )
         reason = decision_reason or "工作流步骤需要用户确认"
         question = (
             str(waiting.output.get("question") or "").strip()
@@ -462,6 +596,9 @@ class WorkflowSession:
         return {
             "success": True,
             "message": "等待确认",
+            "status": "waiting_user",
+            "execution_state": "waiting_user",
+            "needs_user_input": True,
             "response": response_text,
             "run_id": agent_run.run_id,
             "agent_run_id": agent_run.run_id,
@@ -558,6 +695,9 @@ class WorkflowSession:
                 message="本轮未提交写入",
             )[1]
         try:
+            from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+            from app.application.workflow.workflow_types import plan_fingerprint
+
             approval_context = {**runtime_context, "_approval_agent_run_required": True}
             request = self.approval.create_approval_request(
                 plan_id=plan.plan_id,
@@ -565,6 +705,9 @@ class WorkflowSession:
                 runtime_context=approval_context,
                 plan=plan,
                 require_persistence=True,
+                request_id=canonical_hash(
+                    [agent_run.run_id, waiting.step_id, plan_fingerprint(plan)]
+                )[:32],
             )
             request_id = str(request.request_id or "").strip()
             if not request_id or not self.approval.attach_pending_agent_run(
@@ -585,7 +728,8 @@ class WorkflowSession:
             )[1]
         approval_info = self.approval.get_request_metadata(request_id) or {"request_no": request_id}
         approval_info["agent_run_id"] = agent_run.run_id
-        self.pending.pop(user_id, None)
+        if self.callbacks._persist_plan_state(plan, runtime_context, status="running"):
+            self.pending.pop(user_id, None)
         if str(runtime_context.get("chat_approval_mode") or "").strip().lower() == "auto":
             auto_reply = self._auto_approve_waiting_request(
                 request_id=request_id,
@@ -596,7 +740,7 @@ class WorkflowSession:
             )
             if auto_reply is not None:
                 return auto_reply
-        return _control_reply(
+        reply = _control_reply(
             f"已提交审批请求：{request_id}。请前往审批工作台逐笔处理。",
             "approval_pending",
             _enrich_confirmation_inner(
@@ -612,6 +756,14 @@ class WorkflowSession:
                 action="approval_pending",
             ),
         )[1]
+        reply.update(
+            run_id=agent_run.run_id,
+            agent_run_id=agent_run.run_id,
+            status="waiting_user",
+            execution_state="waiting_user",
+            needs_user_input=True,
+        )
+        return reply
 
     def _auto_approve_waiting_request(
         self,
@@ -1094,8 +1246,20 @@ class WorkflowSession:
             if not str(waiting.params.get("target_node_id") or ""):
                 from app.application.agent_orchestrator.clarification import (
                     is_plan_confirmation,
+                    is_planning_clarification,
                 )
 
+                if is_planning_clarification(run, waiting):
+                    # The dispatcher reuses planning, risk and approval admission.
+                    # Keep the durable wait intact until that replacement graph commits.
+                    return {
+                        "_planning_clarification": {
+                            "run": run,
+                            "step_id": waiting.step_id,
+                            "answer": text,
+                            "question": str(waiting.params["question"]),
+                        }
+                    }
                 if is_plan_confirmation(waiting):
                     # 计划级确认（等价 interrupt 的 resume）：确认就在原计划继续，
                     # 取消就终止；绝不能丢弃已有步骤的计划重新规划。
@@ -1283,14 +1447,30 @@ class WorkflowSession:
         session_id = str(context.get("session_id") or context.get("conversation_id") or "")
         control = text in CONFIRM_WORDS | CANCEL_WORDS
         pending = self.pending.get(user_id)
+        if (pending or {}).get("kind") in {"recovery_ambiguous", "recovery_unavailable"}:
+            self.pending.pop(user_id, None)
+            pending = None
         if pending:
             runtime = pending.get("runtime_context") or {}
             pending_session = str(runtime.get("session_id") or runtime.get("conversation_id") or "")
             if (session_id or pending_session) and pending_session != session_id:
                 pending = None
         if not pending and session_id:
-            if self.callbacks._hydrate_pending_workflow(user_id, session_id):
+            if self.callbacks._hydrate_pending_workflow(user_id, session_id, context):
                 pending = self.pending.get(user_id)
+        recovery = (pending or {}).get("kind")
+        if recovery in {"recovery_ambiguous", "recovery_unavailable"}:
+            return _control_reply(
+                "当前会话有多个等待答复的任务，请回到对应任务卡继续；未执行本次操作。"
+                if recovery == "recovery_ambiguous"
+                else "原任务状态暂时无法读取，请稍后重试；未新建或重复执行任务。",
+                "workflow_resume_ambiguous"
+                if recovery == "recovery_ambiguous"
+                else "workflow_resume_failed",
+                {"run_ids": (pending or {}).get("run_ids", [])},
+                success=False,
+                message="恢复任务需要核对",
+            )
         # Inline cards bind a control to the plan the user actually clicked.
         # Older clients omit this field and retain their existing session contract.
         if "expected_workflow_plan_id" in context:
@@ -1352,11 +1532,21 @@ class WorkflowSession:
                 from app.application.workflow.workflow_types import plan_from_dict
                 from app.infrastructure.chat_stream_lifetime import publish_stream_note
 
-                publish_stream_note("审批已通过，开始执行计划…")
+                publish_stream_note("正在核对待确认计划…")
 
                 orchestrator = AgentOrchestrator()
                 agent_run_id = str(pending.get("agent_run_id") or "").strip()
                 if agent_run_id:
+                    if approval_required:
+                        current = orchestrator.get_run(agent_run_id)
+                        if current is not None and current.status == "waiting_user":
+                            return True, self.capture_agent_run_interaction(
+                                user_id=user_id,
+                                agent_run=current,
+                                runtime_context=runtime_ctx,
+                                thinking_steps=str(pending.get("thinking_steps") or ""),
+                                approval_nodes=approval_nodes,
+                            )
                     continued = orchestrator.continue_run(
                         agent_run_id,
                         approved_by=self.callbacks._task_owner_id(user_id, runtime_ctx),

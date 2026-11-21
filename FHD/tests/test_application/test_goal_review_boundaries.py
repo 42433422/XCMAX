@@ -135,10 +135,9 @@ def test_only_a_standalone_model_question_can_skip_goal_review(with_business_nod
         )
     else:
         assert completion.call_count == 1
-        assert plan.metadata["response_mode"] == "reply"
-        assert [(node.tool_id, node.action, node.params) for node in plan.nodes] == [
-            ("conversation", "reply", {"response": question})
-        ]
+        assert plan.metadata["planning_clarification"] is True
+        assert [(node.tool_id, node.action) for node in plan.nodes] == [("clarify", "ask")]
+        assert plan.nodes[0].params["question"] == question
 
 
 def test_short_scope_answer_supplies_authorized_history_to_independent_review():
@@ -180,7 +179,7 @@ def test_short_scope_answer_supplies_authorized_history_to_independent_review():
     assert plan.metadata["goal_coverage"]["goals"][0]["outcome"] == "unsupported"
 
 
-def test_rejected_business_plan_only_displays_the_question_from_coverage_model():
+def test_rejected_business_plan_preserves_a_durable_question_without_business_nodes():
     question = "你要清理当前企业的数据，还是重置整个本地数据库？"
     message = "清理全部知识库和数据库和模板库"
     candidate = _response(
@@ -198,21 +197,9 @@ def test_rejected_business_plan_only_displays_the_question_from_coverage_model()
     completion = Mock(side_effect=[candidate, review])
     plan = _planner(completion).plan("owner", message, get_workflow_tool_registry())
     assert completion.call_count == 2
-    assert plan.metadata["response_mode"] == "reply"
-    assert [(node.tool_id, node.action, node.params) for node in plan.nodes] == [
-        ("conversation", "reply", {"response": question})
-    ]
-    pending, risk, approval = {}, Mock(), Mock()
-    callbacks = Mock()
-    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
-    result = PlannedWorkflowDispatch(
-        pending, callbacks, Mock(plan=Mock(return_value=plan)), risk, approval
-    ).handle("owner", message, "chat", {"chat_approval_mode": "auto"}, message)
-    assert result["response"] == question
-    assert result["success"] is True
-    assert not pending
-    risk.evaluate.assert_not_called()
-    assert not approval.mock_calls
+    assert plan.metadata["planning_clarification"] is True
+    assert [(node.tool_id, node.action) for node in plan.nodes] == [("clarify", "ask")]
+    assert plan.nodes[0].params["question"] == question
 
 
 @pytest.mark.parametrize("clarification_question", [None, "   "])

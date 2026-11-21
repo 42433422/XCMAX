@@ -60,6 +60,11 @@ def test_planned_workflow_stream_reports_the_actual_run_outcome(status, expected
     callbacks._merge_tool_runtime_context.return_value = {}
     callbacks._task_owner_id.return_value = "owner"
     callbacks._build_workflow_thinking_steps.return_value = "读取产品记录"
+    callbacks._capture_agent_run_interaction.return_value = {
+        "success": True,
+        "data": {"action": "clarification_required"},
+    }
+    run = AgentRun(user_id="owner", message="查询产品", status=status)
     dispatch = PlannedWorkflowDispatch(
         {},
         callbacks,
@@ -86,16 +91,19 @@ def test_planned_workflow_stream_reports_the_actual_run_outcome(status, expected
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
         ):
-            orchestrator.return_value.start_run_from_plan.return_value = SimpleNamespace(
-                status=status
-            )
-            dispatch.handle("owner", "查询产品", "chat", {}, "查询产品")
+            orchestrator.return_value.start_run_from_plan.return_value = run
+            orchestrator.return_value.get_run.return_value = run
+            result = dispatch.handle("owner", "查询产品", "chat", {}, "查询产品")
     finally:
         current_lifetime.reset(token)
     assert notes[-1] == expected
     if status == "waiting_user":
         callbacks._capture_agent_run_interaction.assert_called_once()
         callbacks._format_agent_run_response.assert_not_called()
+        orchestrator.return_value.get_run.assert_called_once_with(run.run_id)
+        assert result["run_id"] == result["agent_run_id"] == run.run_id
+        assert result["status"] == result["execution_state"] == "waiting_user"
+        assert result["needs_user_input"] is True
     else:
         callbacks._format_agent_run_response.assert_called_once()
     if status != "completed":
@@ -173,7 +181,9 @@ def test_confirmation_cannot_resume_another_sessions_pending_plan():
     orchestrator.assert_not_called()
 
     assert handled and response["data"]["action"] == "clarification_required"
-    callbacks._hydrate_pending_workflow.assert_called_once_with("owner", "different")
+    callbacks._hydrate_pending_workflow.assert_called_once_with(
+        "owner", "different", {"session_id": "different"}
+    )
     assert pending["owner"]["runtime_context"]["session_id"] == "original"
 
 
