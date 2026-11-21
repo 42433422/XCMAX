@@ -22,7 +22,7 @@ def gate(request):
     path, name = request.param
     jobs = yaml.safe_load((ROOT / path).read_text())["jobs"]
     job = jobs[name]
-    assert job["if"] == "always()"
+    assert job["if"] == "${{ !cancelled() }}"
     return job["steps"][0]["run"]
 
 
@@ -81,6 +81,8 @@ def test_gate_rejects_incomplete_or_inconsistent_evidence(gate, changes):
 
 def test_parallel_work_keeps_cheap_guards_and_publish_dependencies():
     jobs = yaml.safe_load((ROOT / ".github/workflows/fhd-ci-cd.yml").read_text())["jobs"]
+    # A superseded PR must release its concurrency slot; step artifact uploads remain unconditional.
+    assert not any("always()" in job.get("if", "") for job in jobs.values())
     prerequisites = {"classify", "guard-temp-scripts"}
     for name in (
         "backend-quality",

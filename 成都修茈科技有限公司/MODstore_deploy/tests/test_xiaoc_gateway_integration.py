@@ -74,6 +74,23 @@ def gateway_life(database, monkeypatch, tmp_path):
                 200,
                 json={"object": "list", "data": [{"id": MODEL, "type": "chat"}]},
             )
+        if request.url.path == "/model/info":
+            assert request.method == "GET"
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "model_name": MODEL,
+                            "litellm_params": {"model": "openai/synthetic-life-model"},
+                            "model_info": {
+                                "max_input_tokens": 131072,
+                                "max_output_tokens": 4096,
+                            },
+                        }
+                    ]
+                },
+            )
         if request.url.path == "/global/spend":
             assert request.method == "GET"
             return httpx.Response(
@@ -225,6 +242,7 @@ def test_default_gateway_cognition_settles_both_ledgers_and_repeated_ticks_are_i
         assert session.scalar(select(func.count()).select_from(XiaoCLifeState)) == 1
     paths = [request.url.path for request in gateway["calls"]]
     assert "/v1/models" in paths
+    assert "/model/info" in paths
     assert paths[-3:] == ["/global/spend", "/user/info", "/v1/chat/completions"]
     before = len(gateway["calls"])
     for _ in range(2):

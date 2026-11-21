@@ -238,7 +238,7 @@ async def test_xiaoc_cognition_uses_canonical_platform_route(database, monkeypat
         expected = (
             ("openai", "gpt-4o-mini") if runtime_models is None else ("litellm", "xcmax-kimi-code")
         )
-        admission.assert_awaited_once_with(*expected)
+        admission.assert_awaited_once_with(*expected, owner_user_id=1)
     assert [call.args[1] for call in catalog.await_args_list] == (
         [] if runtime_models is None else ["litellm"]
     )
