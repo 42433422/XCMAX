@@ -76,7 +76,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
-  document.body.innerHTML = ''
+  document.body.replaceChildren()
 })
 
 describe('企业任务预算与原提案审批接线', () => {

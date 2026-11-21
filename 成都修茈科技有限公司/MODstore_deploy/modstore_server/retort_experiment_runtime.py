@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -173,14 +174,19 @@ def begin_observation(assignment):
             db.commit()
 
 
-def record_observation(assignment, *, result, duration_ms):
-    """Call after a real product attempt, including failures; persist no prompts or user text."""
+def record_observation(assignment, *, result, duration_ms, session=None):
+    """Queue an actual attempt; an optional business session owns the atomic commit.
+
+    Existing callers keep an independently committed observation. Transactional
+    product writes pass their session so a successful result and its observation
+    cannot be separated by a second commit. No prompts or user text are stored.
+    """
     if assignment is None:
         return
     from modstore_server.eventing.db_outbox import enqueue
     from modstore_server.llm_failure_classifier import classify_failure_kind
 
-    with get_session_factory()() as db:
+    with get_session_factory()() if session is None else nullcontext(session) as db:
         _enqueue_exposure(db, assignment)
         enqueue(
             db,
@@ -199,4 +205,5 @@ def record_observation(assignment, *, result, duration_ms):
             },
             event_id=f"experiment.observed:{assignment['observation_id']}",
         )
-        db.commit()
+        if session is None:
+            db.commit()

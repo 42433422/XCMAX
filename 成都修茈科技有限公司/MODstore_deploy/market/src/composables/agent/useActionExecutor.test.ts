@@ -341,7 +341,25 @@ describe('useActionExecutor', () => {
     auth.user = { id: 11, username: 'admin', is_admin: true }
     auth.currentMode = 'admin'
     vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 6 } as XiaoCLifeState)
-    document.body.innerHTML = '<section data-xiaoc-control-plane><button id="save-life">保存</button><input id="life-budget" value="0"><select id="life-level"><option value="1">L1</option><option value="6">L6</option></select></section>'
+    const controlPlane = document.createElement('section')
+    controlPlane.setAttribute('data-xiaoc-control-plane', '')
+    const saveControl = document.createElement('button')
+    saveControl.setAttribute('id', 'save-life')
+    saveControl.textContent = '保存'
+    const budgetInput = document.createElement('input')
+    budgetInput.setAttribute('id', 'life-budget')
+    budgetInput.setAttribute('value', '0')
+    const levelSelect = document.createElement('select')
+    levelSelect.setAttribute('id', 'life-level')
+    for (const [value, label] of [['1', 'L1'], ['6', 'L6']]) {
+      const option = document.createElement('option')
+      option.setAttribute('value', value)
+      option.textContent = label
+      levelSelect.append(option)
+    }
+    controlPlane.append(saveControl, budgetInput, levelSelect)
+    document.body.replaceChildren()
+    document.body.append(controlPlane)
     const button = document.querySelector<HTMLButtonElement>('#save-life')!
     button.click = vi.fn()
     const executor = useActionExecutor()

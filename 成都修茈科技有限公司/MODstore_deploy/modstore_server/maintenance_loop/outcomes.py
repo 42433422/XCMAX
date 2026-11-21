@@ -78,17 +78,29 @@ def _reconcile_requested_merge_feedback(
     base = (api_base or os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
     recent_runs = memory.get("recent_runs")
     open_items = memory.get("open_items")
-    if not base or not isinstance(recent_runs, list):
+    if not base:
         return {"changed": False, "merged": 0, "remediation_added": 0}
+    recent_runs = recent_runs if isinstance(recent_runs, list) else []
     if not isinstance(open_items, list):
         open_items = []
         memory["open_items"] = open_items
     fetcher = task_fetcher or para_client._fetch_para_task_state
     changed = False
+    cursor = memory.get("delivery_recovery_cursor") or {}
+    try:
+        recovered, next_cursor = store._pending_delivery_page(cursor)
+        if cursor != next_cursor:
+            memory["delivery_recovery_cursor"] = next_cursor
+            changed = True
+    except RECOVERABLE_ERRORS:
+        config.logger.exception("failed to page durable pending deliveries")
+        recovered = []
+    known_runs = {str(run.get("run_id") or "") for run in recent_runs if isinstance(run, dict)}
+    runs = recent_runs + [run for run in recovered if run["run_id"] not in known_runs]
     merged = 0
     remediation_added = 0
     checked_task_ids: set[str] = set()
-    for run in reversed(recent_runs):
+    for run in reversed(runs):
         if not isinstance(run, dict):
             continue
         if str(run.get("status") or "") != "completed_merge_requested":
@@ -107,6 +119,14 @@ def _reconcile_requested_merge_feedback(
         if task_status == "merged" and str(task.get("merge_commit_sha") or "").strip():
             merge_sha = str(task.get("merge_commit_sha") or "").strip()
             existing_receipt = run.get("merge_reconciliation")
+            bound_sha = run.get("delivery_merge_sha") or (
+                existing_receipt.get("merge_commit_sha")
+                if isinstance(existing_receipt, dict)
+                else ""
+            )
+            if bound_sha and bound_sha != merge_sha:
+                config.logger.error("recovered merge SHA changed run_id=%s", run.get("run_id"))
+                continue
             receipt = {
                 "merge_commit_sha": merge_sha,
                 "reconciled_at": config._iso(config._utc_now()),
@@ -151,6 +171,20 @@ def _reconcile_requested_merge_feedback(
                     or (delivery.get("production") or {}).get("verified") is True
                 )
             ):
+                deployment._append_deploy_receipt_event(
+                    {
+                        **{
+                            key: str(run.get(key) or "")
+                            for key in ("run_id", "para_task_id", "branch")
+                        },
+                        "event": "delivery_reconciled",
+                        "phase": "deployment",
+                        "merge_sha": merge_sha,
+                        "status": "completed_merged",
+                        "ok": True,
+                        "deployment_receipt": delivery,
+                    }
+                )
                 run["status"] = "completed_merged"
                 changed = True
             merged += 1

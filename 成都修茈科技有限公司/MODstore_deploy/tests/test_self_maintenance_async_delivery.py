@@ -177,6 +177,24 @@ def test_production_adapter_uses_exact_release_and_real_scan_contract(dispatch_e
     ]
 
 
+def test_staging_binds_release_input_durably_before_dispatch(dispatch_environment, monkeypatch):
+    gateway = GitHubFixture([])
+    run = gateway._run
+
+    def submit_after_intent(args):
+        intent = store._read_ledger(limit=0)[-1]
+        assert intent["event"] == "deploy_dispatch_intent"
+        assert intent["merge_sha"] == MERGE_SHA
+        assert intent["inputs"] == {"release_sha": MERGE_SHA}
+        return run(args)
+
+    monkeypatch.setattr(gateway, "_run", submit_after_intent)
+    receipt = _submit(gateway, "staging")
+    assert f"release_sha={MERGE_SHA}" in _writes(gateway)[0]
+    assert receipt.head_sha == MERGE_SHA
+    assert receipt.environment == "staging"
+
+
 def test_main_controller_can_advance_without_relabeling_release_source(dispatch_environment):
     gateway = GitHubFixture([], controller_sha="c" * 40)
     receipt = _submit(gateway)
@@ -187,18 +205,21 @@ def test_main_controller_can_advance_without_relabeling_release_source(dispatch_
     assert completed.require_success(receipt) == completed
 
 
-def test_lost_dispatch_response_recovers_same_workflow_after_restart(dispatch_environment):
+@pytest.mark.parametrize("environment", ["production", "staging"])
+def test_lost_dispatch_response_recovers_same_workflow_after_restart(
+    dispatch_environment, environment
+):
     remote = []
     first = GitHubFixture(remote)
     first.lose_response = True
     with pytest.raises(DeploymentReceiptError, match="gh_command_failed"):
-        _submit(first)
+        _submit(first, environment)
     second = GitHubFixture(remote)
-    assert _submit(second).workflow_run_id == "900"
+    assert _submit(second, environment).workflow_run_id == "900"
     assert len(_writes(first)) == 1
     assert _writes(second) == []
     third = GitHubFixture(remote)
-    assert _submit(third).workflow_run_id == "900"
+    assert _submit(third, environment).workflow_run_id == "900"
     assert _writes(third) == []
 
 

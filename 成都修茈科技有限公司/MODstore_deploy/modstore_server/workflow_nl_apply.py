@@ -3,10 +3,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib
+import logging
 import time
+from uuid import uuid4
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+_GENERATION_ERRORS = (asyncio.CancelledError,) + RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -64,7 +70,7 @@ async def apply_nl_workflow_graph(
         default_value=_facade().SYSTEM_PROMPT,
     )
     begin_observation(assignment)
-    started, result = time.perf_counter(), None
+    started = time.perf_counter()
     try:
         result = await _generate_graph(
             db,
@@ -80,17 +86,98 @@ async def apply_nl_workflow_graph(
             status_hook=status_hook,
             preset_eskill_nodes=preset_eskill_nodes,
         )
-        return result
-    finally:
-        # A generated graph can be stored with ok=True while static validation
-        # fails. Neither event attests that the workflow's business task ran.
-        observed = dict(result or {})
+    except _GENERATION_ERRORS as exc:
+        db.rollback()
+        try:
+            record_observation(
+                assignment,
+                result={"ok": False, "error": type(exc).__name__},
+                duration_ms=(time.perf_counter() - started) * 1000,
+                session=db,
+            )
+            if assignment is not None:
+                db.commit()
+        except RECOVERABLE_ERRORS as observation_error:
+            db.rollback()
+            exc.add_note("experiment_observation_not_recorded")
+            logger.warning(
+                "workflow failed observation not saved workflow_id=%s error_type=%s",
+                workflow_id,
+                type(observation_error).__name__,
+            )
+        raise
+
+    if result.get("ok") is not True:
+        db.rollback()
+    try:
+        # Static validation reads this transaction's graph. Both the generated
+        # data and the original observation are committed together; delivery is
+        # retried by the existing outbox without replaying model/graph creation.
+        observed = dict(result)
         observed["ok"] = observed.get("ok") is True and observed.get("sandbox_ok") is True
         record_observation(
             assignment,
             result=observed,
             duration_ms=(time.perf_counter() - started) * 1000,
+            session=db,
         )
+        if result.get("ok") is True or assignment is not None:
+            db.commit()
+    except RECOVERABLE_ERRORS as exc:
+        db.rollback()
+        logger.warning(
+            "workflow result transaction not saved workflow_id=%s error_type=%s",
+            workflow_id,
+            type(exc).__name__,
+        )
+        if result.get("ok") is True:
+            result = {
+                "ok": False,
+                "error": "工作流未保存：节点、Skill 与观察记录未能一并提交",
+                "error_code": (
+                    "workflow_observation_commit_failed"
+                    if assignment is not None
+                    else "workflow_commit_failed"
+                ),
+            }
+        if assignment is not None:
+            result["experiment_observation"] = {"status": "not_recorded"}
+        return result
+    if assignment is not None:
+        result["experiment_observation"] = {
+            "status": "queued",
+            "event_id": f"experiment.observed:{assignment['observation_id']}",
+        }
+    return result
+
+
+def _validate_uncommitted_graph(db, user, workflow):
+    """Use the existing static validator and publish its event only after commit."""
+    from modstore_server.eventing.db_outbox import enqueue
+    from modstore_server.workflow_engine import WORKFLOW_SANDBOX_COMPLETED, workflow_engine
+
+    started = time.perf_counter()
+    report = workflow_engine.run_sandbox(
+        db, workflow, {}, mock_employees=True, validate_only=True, user_id=user.id
+    )
+    event_id = f"{WORKFLOW_SANDBOX_COMPLETED}:{workflow.id}:{uuid4()}"
+    enqueue(
+        db,
+        WORKFLOW_SANDBOX_COMPLETED,
+        str(workflow.id),
+        {
+            "workflow_id": workflow.id,
+            "user_id": user.id,
+            "status": "success" if report.get("ok") else "failed",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 3),
+            "ok": bool(report.get("ok")),
+            "validate_only": True,
+        },
+        producer="workflow",
+        event_id=event_id,
+        idempotency_key=event_id,
+    )
+    return report
 
 
 async def _generate_graph(
@@ -444,13 +531,11 @@ async def _generate_graph(
                     condition=e["condition"] or "",
                 )
             )
-        db.commit()
+        db.flush()
+        report = _validate_uncommitted_graph(db, user, wf)
     except RECOVERABLE_ERRORS as ex:
         db.rollback()
         return {"ok": False, "error": f"写入节点/边失败: {ex}"}
-    report = _facade().run_workflow_sandbox(
-        workflow_id, {}, mock_employees=True, validate_only=True
-    )
     errs = [str(x) for x in report.get("errors") or []]
     val_ok = bool(report.get("ok"))
     return {
