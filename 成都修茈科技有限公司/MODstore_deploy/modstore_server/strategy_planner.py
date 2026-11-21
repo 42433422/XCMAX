@@ -17,15 +17,13 @@ import json
 import math
 import os
 import re
-import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from modstore_server import strategy_bets
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
-UTC = timezone.utc
 MAX_NEW_BETS = 1
 DEFAULT_ENVELOPE = {
     "proposals": 6,
@@ -216,6 +214,7 @@ def build_prompt(context: Dict[str, Any]) -> str:
         "5) 证据不足的分区不要编造结论，在 rationale 里写明缺口\n"
         "6) 不要重复已有的活跃赌注\n"
         "7) 预算只是待审提案，不是执行授权；只返回候选，不创建外部任务\n"
+        "8) 收入假设必须在 customer_goal_ids 中选择已有的客户目标；不得编造目标编号\n"
         "只输出 JSON 数组，不要解释，不要 Markdown 代码块。\n\n"
         f"证据：\n{json.dumps(context, ensure_ascii=False, sort_keys=True)}"
     )
@@ -301,7 +300,7 @@ def fit_envelope(
     candidates: List[Dict[str, Any]], envelope: Dict[str, int], active: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """按剩余信封过滤；每个候选按默认预算折算，超出即跳过。"""
-    used = {key: 0 for key in DEFAULT_ENVELOPE}
+    used = dict.fromkeys(DEFAULT_ENVELOPE, 0)
     for bet in active:
         for key in DEFAULT_ENVELOPE:
             used[key] += int((bet.get("budget") or {}).get(key, 0))
@@ -450,6 +449,7 @@ async def run_scheduled_discovery(
         limits: PortfolioLimits
         period_days: int = Field(ge=1, le=90)
         use_llm: bool = True
+        input_data: Dict[str, Any] = Field(default_factory=dict, max_length=64)
 
     if template is None:
         path = os.environ.get("MODSTORE_STRATEGY_DISCOVERY_TEMPLATE", "").strip()
@@ -532,6 +532,7 @@ async def run_scheduled_discovery(
             goal=config.goal,
             limits=config.limits.model_dump(),
             use_llm=config.use_llm,
+            input_data=config.input_data,
         )
         result: Dict[str, Any] = {
             "status": "no_observed_candidate",

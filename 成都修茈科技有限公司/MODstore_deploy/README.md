@@ -39,7 +39,7 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 ## 战略与反馈闭环的开源复用
 
 缺口清单、控制入口和运行边界统一维护在 [自治运维手册](../../docs/autonomy.md)。
-本轮沿用 #3396 的战略候选、失败聚簇和定时治理，并整合 #3397 的锁定依赖修复；审批预算与执行结果以既有 SQL 决策账本为准。
+本轮在 `main@392d50b5` 与 #3398 上复查，沿用已纳入的 #3396 战略候选、失败聚簇和定时治理；#3397 的依赖修复已在主干。审批预算与执行结果以既有 SQL 决策账本为准。
 
 | 组件 | 固定版本/许可证 | 复用职责与选择理由 |
 |---|---|---|
@@ -49,6 +49,9 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 | [Anthropic Sandbox Runtime](https://github.com/anthropics/sandbox-runtime) | `0.0.83` / Apache-2.0 | 官方命名空间、seccomp、TLS 与请求过滤；原始 key 只在受信控制进程闭包中使用 |
 | [LangGraph](https://github.com/langchain-ai/langgraph) / [GEPA](https://github.com/gepa-ai/gepa) | `1.2.10` / `0.1.4`，MIT | 沿用仓库固定包、持久检查点、审批中断和辅助实验；产品只实现协议适配 |
 | [APScheduler](https://github.com/agronholm/apscheduler/tree/3.11.3) | `3.11.3` / MIT | 复用现有独立调度进程，推进批准组合、实验和恢复读回 |
+| [LiteLLM](https://github.com/BerriAI/litellm/tree/v1.109.3) | SDK `1.109.3` / MIT | 复用现有流式路由；预算调用关闭隐性重试/fallback，在 SDK 归一化前观测供应商原始 usage，避免把本地估算当结算回执 |
+| [OpenAI Python SDK](https://github.com/openai/openai-python) | `3.57.0` / Apache-2.0 | 通过 LiteLLM 的请求专属 client 接口和 SDK 原生 `AsyncStream` 观察真实 chunk；不改全局回调或自行解析另一套 SSE |
+| [filelock](https://github.com/tox-dev/filelock) | 服务器锁定 `4.2.4` / Unlicense；沿用 governance 兼容范围 | 与原维护 ledger 共用派发锁；先持久化意图，再发起 GitHub 工作流，响应丢失只恢复原运行 |
 | [systemd](https://github.com/systemd/systemd/tree/v249) | 既有主机组件，接口基线 `v249` / LGPL-2.1-or-later | 复用 transient service，在独立服务进程中执行冻结的回滚请求；不修改服务 KillMode 或授予额外权限 |
 
 SQLAlchemy 和 PostgreSQL 继续承载事务、并发 CAS 与持久结果；备份复用既有 PostgreSQL 16 的 [导出快照](https://www.postgresql.org/docs/16/functions-admin.html#FUNCTIONS-SNAPSHOT-SYNCHRONIZATION)与 `pg_dump --snapshot`（PostgreSQL License），不另建快照引擎。已批准的模型费率用于计提，
@@ -56,7 +59,14 @@ SQLAlchemy 和 PostgreSQL 继续承载事务、并发 CAS 与持久结果；备�
 源码适配集中在 `strategic_portfolio*`、`retort_feedback_*` 和既有发布脚本；
 候选生成、优化求解、实验分流、检查点、TLS 代理均使用上述现成实现。
 仓库自行保留的胶水仅负责账号归属、审批摘要、预算/订单关联、固定发布身份和既有员工入口；
-这些产品合同没有可直接替代的通用上游实现。
+这些产品合同没有可直接替代的通用上游实现。具体上游差异已核对固定版本源码：
+[GrowthBook 5.2.0](https://github.com/growthbook/growthbook/blob/v5.2.0/packages/back-end/src/services/experimentChanges/changeExperimentStatus.ts)
+停止并临时推广会将 coverage 设为 1，本地仍保留原批准 cohort；
+[LiteLLM 1.109.3](https://github.com/BerriAI/litellm/blob/v1.109.3/litellm/litellm_core_utils/streaming_handler.py)
+可能合成或补齐流式 usage，适配器在 Router 预读首块之前通过专属 SDK client 保留原始 chunk 中的两项 token 计数并核对最终值。
+CI 安装既有 `llm-router` extra，使用真实固定版 SDK 回归缺失、部分用量和取消场景。
+战略 Python 任务复用标准库 ZipFile/SourceFileLoader 与原员工解析器，从已批准归档字节创建执行快照；
+这项合同核验不代表新建 OS 沙箱，也不把宿主所有依赖声明为不可变。
 组件版本、配置可用性、测试、生产回执分别核验；接入组件不代表 L6 生产验收完成。
 
 ## 前端看板

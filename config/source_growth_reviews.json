@@ -675,14 +675,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py",
-      "base_blob": "9ab2932e6bc76780275f774efac6ea1a96b7c963",
-      "head_blob": "ca417b7d810eb99e9dc2c8e58be185ff102a89b7",
-      "before_lines": 1106,
-      "after_lines": 1110,
-      "reason": "仅提交评审请求：在现有员工执行器入口解析实际员工包并验证账户授权，校验失败时不进入执行阶段、指标写入和生命周期钩子；该已有超长文件净增 4 行。",
-      "boundary": "只移动员工包加载并传递已有 user_id 与 execute 权限，权限策略复用 employee_runtime、User、CatalogItem、Entitlement 和 UserMod；不在执行器内复制授权实现。",
-      "validation": "员工权限、真实子工作流传递、原有执行器及沙盒定向回归通过；包含无权请求不进入执行阶段、不写指标，以及正常作者、明确授权、管理员和内部系统调用的保留路径。完整 CI 和维护者评审仍须完成，此记录不是批准。",
-      "follow_up": "后续员工执行阶段调整继续复用统一入口授权，避免把所有权判断散落到各阶段；维护者评审该 4 行增长及内部系统调用的保留边界。",
+      "base_blob": "ca417b7d810eb99e9dc2c8e58be185ff102a89b7",
+      "head_blob": "edd1cce0c0772032078ad5094c47adb5d6f1fdd4",
+      "before_lines": 1110,
+      "after_lines": 1117,
+      "reason": "Review request only: validate the frozen strategic employee package and effective runtime configuration before perception or model calls and preserve approved business inputs after cognition.",
+      "boundary": "Only calls into the shared strategic_execution_contract helper at existing execution boundaries; ordinary employee and reviewed duty execution remain on the existing route.",
+      "validation": "Integrated strategy, real employee, archive and cognition regressions are included in the 744-pass run. Changed production modules pass normal-import mypy. Required remote CI and human review are not implied by this record.",
+      "follow_up": "Keep contract logic in the focused helper and review extraction of phase orchestration before further growth of the mechanical executor module.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
@@ -760,13 +760,25 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py",
       "base_blob": "b9f538e97e17f60326c29821ad4d8d0d4225585f",
-      "head_blob": "4ce6413684ce75dbe183f7dee86abd39abcf54cf",
+      "head_blob": "924e12827af0715cfbfd9f5d9e6264c74c9dbb57",
       "before_lines": 2294,
-      "after_lines": 2339,
-      "reason": "评审请求：用户要求补齐真实反馈实验和受约束战略执行，在既有员工cognition/actions入口接入固定实验分流、实际曝光/结果与执行预算检查，净增45行。",
-      "boundary": "实验生命周期、租户/审批、预算账本和优化仍在独立既有协议适配模块；此入口只传递真实员工与账号、调用耗时、结果，限制未计量派发和剩余HTTP时间，不复制业务决策。",
-      "validation": "本地MODstore统一定向432项通过及GrowthBook官方API合同/预算回归通过；实际线上曝光、已授权流量与客户效果仍待部署验收。远端CI与维护者架构评审尚未完成，此登记不是批准。",
-      "follow_up": "由 @42433422 复核实际曝光发生位置、异常路径结果、未计量派发阻断和剩余时间传递。后续入口变化继续通过现有runtime适配，避免增加动态facade或机械part拆分。",
+      "after_lines": 2355,
+      "reason": "Review request only: extend the existing employee executor to bind approved strategic input and execute the verified archive snapshot at the actual Python handler boundary; retain the existing experiment hook.",
+      "boundary": "Reuse the employee resolver, authorized owner and execute flag, archive extraction and standard-library SourceFileLoader; do not add another execution service or claim OS-level isolation.",
+      "validation": "744 integrated tests passed with two optional external-tool/database skips; actual archived CSV employee preserves its output in the tenant workspace. Existing and changed employee execution tests pass. Exact-head CI and human architecture review are still required.",
+      "follow_up": "Keep approval and archive snapshot handling in strategic_execution_contract.py. Further executor expansion must extract a reviewed responsibility from this existing mechanical module rather than adding more branches.",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_runtime.py": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "1d116048786ebde35c0dc509504e00356ace302d",
+      "before_lines": 0,
+      "after_lines": 845,
+      "reason": "Review request only: extend the new approved-portfolio runtime with actual tenant business inputs and strict payment attribution to one completed artifact and observation window.",
+      "boundary": "Reuse StrategicDecision SQL state, existing employee dispatch and authoritative payment/customer receipts. Keep solver and execution-contract code in their existing separate modules; no remote unmetered delegate or new financial ledger.",
+      "validation": "744 integrated regressions passed with explicit optional promptfoo CLI and PostgreSQL skips; normal-import mypy passes the changed production files. Cases include future inputs, different artifact receipts, pre-completion confirmations and same-owner refunds. CI and architecture approval remain pending.",
+      "follow_up": "Extract discovery-source collection and business-outcome attribution into focused adapters in a separately reviewed change before adding further market or asset providers.",
       "review_owner": "@42433422"
     }
   }

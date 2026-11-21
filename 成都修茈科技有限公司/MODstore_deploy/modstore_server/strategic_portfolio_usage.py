@@ -13,7 +13,7 @@ import contextvars
 import hmac
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Awaitable, Callable, Iterator, cast
+from typing import Any, AsyncGenerator, Awaitable, Callable, Iterator, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
@@ -43,6 +43,9 @@ _CALL: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
 
 @contextlib.contextmanager
 def platform_call_reservation(reservation: dict[str, Any] | None) -> Iterator[None]:
+    if reservation is not None:
+        # The shared marker survives separate iterator tasks/ContextVar copies.
+        reservation.setdefault("_transport_state", {"started": False})
     token = _CALL.set({**reservation, "used": False} if reservation else None)
     try:
         yield
@@ -50,17 +53,26 @@ def platform_call_reservation(reservation: dict[str, Any] | None) -> Iterator[No
         _CALL.reset(token)
 
 
-def require_call_reservation() -> None:
-    if scope_active() and _CALL.get() is None:
-        raise PortfolioError("budgeted model route requires a persisted per-call reservation")
-
-
-async def dispatch_budgeted(
-    invoke: Callable[..., Awaitable[dict[str, Any]]], provider: str, kwargs: dict[str, Any]
-) -> dict[str, Any]:
-    """One admission point covers direct pipelines as well as the platform facade."""
+def require_call_reservation(
+    *, provider: str | None = None, model: str | None = None, start_transport: bool = False
+) -> None:
     if not scope_active():
-        return await invoke(provider, **kwargs)
+        return
+    active = _CALL.get()
+    if active is None:
+        raise PortfolioError("budgeted model route requires a persisted per-call reservation")
+    if (provider is not None and provider != active["provider"]) or (
+        model is not None and model != active["model"]
+    ):
+        raise PortfolioError("model reservation route mismatch")
+    if start_transport:
+        if active["_transport_state"]["started"]:
+            raise PortfolioError("model reservation transport already started")
+        active["_transport_state"]["started"] = True
+
+
+def _authorize_platform_route(provider: str, kwargs: dict[str, Any]) -> None:
+    """Shared credential, route and current mandate validation for both transports."""
     if _SCOPE.get() is not None:
         remaining_execution_seconds()
     if (planning := _PLANNING.get()) is not None:
@@ -82,6 +94,15 @@ async def dispatch_budgeted(
     ) != _normalize_openai_base(provider, platform_base_url(provider), platform_key):
         raise PortfolioError("strategic model call cannot change the platform endpoint")
     kwargs["model"] = normalize_model(provider, kwargs["model"], kwargs.get("base_url"))
+
+
+async def dispatch_budgeted(
+    invoke: Callable[..., Awaitable[dict[str, Any]]], provider: str, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """One admission point covers direct pipelines as well as the platform facade."""
+    if not scope_active():
+        return await invoke(provider, **kwargs)
+    _authorize_platform_route(provider, kwargs)
     active = _CALL.get()
     if active is not None:
         if active["used"] or (active["provider"], active["model"]) != (provider, kwargs["model"]):
@@ -106,6 +127,82 @@ async def dispatch_budgeted(
         # Cancellation and programming errors retain the hold and propagate.
         complete_platform_call(reservation, result)
     return result
+
+
+async def dispatch_budgeted_stream(
+    invoke: Callable[..., AsyncGenerator[dict[str, Any], None]],
+    provider: str,
+    kwargs: dict[str, Any],
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Reserve before opening the stream; settle only complete, measured attempts.
+
+    This consumes the existing provider/LiteLLM events, not a second SSE parser.
+    Context tokens never cross a yield: callers may close an iterator from another
+    task, and the processing-status adapter advances each chunk in its own task.
+    """
+    if not scope_active():
+        async with contextlib.aclosing(invoke(provider, **kwargs)) as unbudgeted:
+            async for event in unbudgeted:
+                yield event
+        return
+    kwargs = dict(kwargs)
+    _authorize_platform_route(provider, kwargs)
+    if _CALL.get() is not None:
+        raise PortfolioError("stream requires its own unused model reservation")
+    messages = list(kwargs["messages"])
+    schemas = {key: kwargs[key] for key in ("tools", "tool_choice") if kwargs.get(key)}
+    if schemas:
+        # Account for model-visible tool schemas without changing the real prompt.
+        messages.append({"role": "system", "content": _json(schemas)})
+    reservation = prepare_platform_call(
+        provider, kwargs["model"], messages, kwargs.get("max_tokens")
+    )
+    assert reservation is not None
+    kwargs.update(max_tokens=reservation["max_tokens"], fallbacks=[])
+    source: AsyncGenerator[dict[str, Any], None] | None = None
+    deadline = asyncio.get_running_loop().time() + reservation["timeout_seconds"]
+    measured: dict[str, Any] | None = None
+    finished = exhausted = failed = closed = False
+    try:
+        source = invoke(provider, **kwargs)
+        while True:
+            if _SCOPE.get() is not None:
+                remaining_execution_seconds()
+            if (planning := _PLANNING.get()) is not None:
+                require_active_portfolio_owner(planning["owner_user_id"])
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError("strategic streaming deadline expired")
+            try:
+                with platform_call_reservation(reservation):
+                    active = _CALL.get()
+                    assert active is not None
+                    active["used"] = True
+                    event = await asyncio.wait_for(anext(source), timeout=remaining)
+            except StopAsyncIteration:
+                exhausted = True
+                break
+            failed = failed or event.get("type") == "error"
+            finished = finished or event.get("type") == "finish"
+            if event.get("type") == "usage":
+                measured = {
+                    "provider": provider,
+                    "model": kwargs["model"],
+                    "usage": event.get("usage"),
+                    "usage_estimated": event.get("usage_estimated", False),
+                    "_fallback_used": event.get("fallback_used", False),
+                }
+            yield event
+    finally:
+        try:
+            if source is not None:
+                await source.aclose()
+            closed = True
+        finally:
+            # Cancellation, missing finish/usage, and failed close keep the hold.
+            complete_platform_call(
+                reservation, measured if exhausted and finished and closed and not failed else None
+            )
 
 
 @contextlib.contextmanager
@@ -393,6 +490,7 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
         and prompt >= 0
         and completion >= 0
         and not (result or {}).get("_fallback_used")
+        and not (result or {}).get("fallback_used")
         and not (result or {}).get("usage_estimated")
         and values.get("estimated") is not True
     )
@@ -595,7 +693,9 @@ def complete_platform_call(
         verified = (
             type(prompt) is int and type(completion) is int and prompt >= 0 and completion >= 0
         )
-        verified = verified and not (result or {}).get("_fallback_used")
+        verified = verified and not (
+            (result or {}).get("_fallback_used") or (result or {}).get("fallback_used")
+        )
         verified = (
             verified
             and usage.get("estimated") is not True

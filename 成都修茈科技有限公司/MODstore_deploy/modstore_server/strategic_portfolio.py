@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from graphlib import TopologicalSorter
 from typing import Any, Callable, Literal, TypeVar, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -85,6 +85,15 @@ class Opportunity(BaseModel):
     source_refs: list[str] = Field(min_length=1, max_length=32)
     customer_goal_ids: list[str] = Field(default_factory=list, max_length=32)
     hypothesis: BetHypothesis | None = None
+    input_data: dict[str, Any] = Field(default_factory=dict, max_length=64)
+    execution_binding: dict[str, str] = Field(default_factory=dict, max_length=8)
+
+    @field_validator("input_data")
+    @classmethod
+    def business_input(cls, value: dict[str, Any]) -> dict[str, Any]:
+        from modstore_server.strategic_execution_contract import validate_input
+
+        return validate_input(value)
 
 
 def _date(value: str) -> datetime:
@@ -180,7 +189,12 @@ def create_portfolio_proposal(
     cap = PortfolioLimits.model_validate(limits)
     if _date(cap.expires_at) <= datetime.now(UTC):
         raise PortfolioError("budget authorization must have a future expiry")
-    rows = [Opportunity.model_validate(row).model_dump() for row in opportunities]
+    from modstore_server.strategic_execution_contract import freeze_execution
+
+    rows = [
+        freeze_execution(owner_user_id, Opportunity.model_validate(row).model_dump())
+        for row in opportunities
+    ]
     allocation = optimize_portfolio(rows, cap.model_dump())
     proposal = {
         "schema": SCHEMA,

@@ -119,6 +119,9 @@ async def stream_openai_compatible(
       {"type": "toolcall", "choices": [{"index":0,"delta":{"tool_calls":[...]},"finish_reason":"tool_calls"}]}
       {"type": "usage", "usage": {...}} when upstream provides stream_options.include_usage
     """
+    from modstore_server.strategic_portfolio_usage import require_call_reservation
+
+    require_call_reservation(provider=provider, model=model, start_transport=True)
     url = f"{base_url.rstrip('/')}/chat/completions"
     body = _facade()._openai_chat_body(
         provider,

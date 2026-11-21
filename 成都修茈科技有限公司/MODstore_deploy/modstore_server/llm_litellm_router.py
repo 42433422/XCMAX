@@ -325,6 +325,71 @@ def _fallback_meta(response: Any) -> Dict[str, Any]:
     return {"fallback_used": attempted > 0, "fallback_count": attempted}
 
 
+def _budgeted_stream_client(
+    provider: str,
+    model: str,
+    params: Dict[str, Any],
+    reported: Dict[str, Any],
+    *,
+    http_client: Any = None,
+) -> Any:
+    """Use LiteLLM's client injection to observe raw SDK chunks before its router.
+
+    The router reads a first chunk and wraps the provider stream before returning
+    it. Observing its returned wrapper is too late: usage may be normalized or
+    synthesized already. A request-local SDK stream preserves the actual receipt.
+    """
+    from openai import AsyncOpenAI, AsyncStream, DefaultAsyncHttpxClient
+    from openai.types.chat import ChatCompletionChunk
+
+    def record(chunk):
+        if isinstance(chunk, ChatCompletionChunk) and (values := _usage_dict(chunk)):
+            reported.clear()
+            reported.update(values)
+
+    class ReceiptStream(AsyncStream[ChatCompletionChunk]):
+        async def __aiter__(self):
+            async for chunk in super().__aiter__():
+                record(chunk)
+                yield chunk
+
+        async def __anext__(self):
+            chunk = await super().__anext__()
+            record(chunk)
+            return chunk
+
+    class ReceiptClient(AsyncOpenAI):
+        async def post(self, path, **kwargs):
+            from modstore_server.strategic_portfolio import PortfolioError
+            from modstore_server.strategic_portfolio_usage import require_call_reservation
+
+            if path != "/chat/completions" or kwargs.get("stream") is not True:
+                raise PortfolioError("metered client requires the approved chat stream")
+            require_call_reservation(provider=provider, model=model, start_transport=True)
+            kwargs["stream_cls"] = ReceiptStream
+            return await super().post(path, **kwargs)
+
+    return ReceiptClient(
+        api_key=params["api_key"],
+        base_url=params["api_base"],
+        max_retries=0,
+        http_client=http_client or DefaultAsyncHttpxClient(follow_redirects=False, trust_env=False),
+    )
+
+
+def _reported_stream_usage(reported: Dict[str, Any], usage: Dict[str, Any]) -> bool:
+    return (
+        bool(reported)
+        and reported.get("estimated") is not True
+        and all(
+            type(reported.get(key)) is int
+            and reported[key] >= 0
+            and reported[key] == usage.get(key)
+            for key in ("prompt_tokens", "completion_tokens")
+        )
+    )
+
+
 def _error_payload(exc: BaseException, *, timeout_s: Optional[float]) -> Dict[str, Any]:
     if isinstance(exc, asyncio.TimeoutError):
         if timeout_s:
@@ -408,7 +473,7 @@ async def chat(
 
     budgeted = scope_active()
     if budgeted:
-        require_call_reservation()
+        require_call_reservation(provider=provider, model=model)
         fallbacks = []
 
     specs = _build_specs(provider, model, api_key, base_url, fallbacks)
@@ -539,6 +604,12 @@ async def _stream_impl(
     tool_choice: Any,
     fallbacks: Optional[List[Dict[str, Any]]],
 ) -> AsyncIterator[Dict[str, Any]]:
+    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
+
+    budgeted = scope_active()
+    if budgeted:
+        require_call_reservation(provider=provider, model=model)
+        fallbacks = []
     specs = _build_specs(provider, model, api_key, base_url, fallbacks)
     if specs is None:
         yield {"type": "error", "error": f"unsupported provider: {provider}"}
@@ -550,7 +621,14 @@ async def _stream_impl(
         return
     started = time.perf_counter()
     outcome = "success"
+    response = None
+    client = None
+    reported_usage: Dict[str, Any] = {}
     try:
+        if budgeted:
+            client = _budgeted_stream_client(
+                provider, model, deployments[0]["litellm_params"], reported_usage
+            )
         response = await router.acompletion(
             model=_PRIMARY_ALIAS,
             messages=messages,
@@ -559,12 +637,34 @@ async def _stream_impl(
             tool_choice=tool_choice,
             stream=True,
             stream_options={"include_usage": True},
+            **(
+                {
+                    "num_retries": 0,
+                    "max_retries": 0,
+                    "disable_fallbacks": True,
+                    "enable_mid_stream_fallback_continuation": False,
+                    "client": client,
+                }
+                if budgeted
+                else {}
+            ),
         )
         pending_calls: Dict[int, Dict[str, Any]] = {}
         async for chunk in response:
             usage = _usage_dict(chunk)
             if usage:
-                yield {"type": "usage", "usage": usage}
+                yield {
+                    "type": "usage",
+                    "usage": usage,
+                    **(
+                        {
+                            **_fallback_meta(chunk),
+                            "usage_estimated": not _reported_stream_usage(reported_usage, usage),
+                        }
+                        if budgeted
+                        else {}
+                    ),
+                }
             for event in _stream_delta_events(chunk, pending_calls):
                 yield event
     except asyncio.CancelledError:
@@ -575,6 +675,13 @@ async def _stream_impl(
         payload = _error_payload(exc, timeout_s=None)
         yield {"type": "error", "status": payload.get("status"), "error": payload.get("error")}
     finally:
+        try:
+            closer = getattr(response, "aclose", None)
+            if closer is not None:
+                await closer()
+        finally:
+            if client is not None:
+                await client.close()
         _observe(provider, model, time.perf_counter() - started, "stream", outcome)
 
 
@@ -591,11 +698,11 @@ def stream_events(
     fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[AsyncIterator[Dict[str, Any]]]:
     """返回 LiteLLM 流事件迭代器；不支持时返回 ``None`` 由调用方降级。"""
-    from modstore_server.strategic_portfolio import PortfolioError
-    from modstore_server.strategic_portfolio_usage import scope_active
+    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
 
     if scope_active():
-        raise PortfolioError("strategic streaming needs a persisted usage receipt adapter")
+        require_call_reservation(provider=provider, model=model)
+        fallbacks = []
     if _build_specs(provider, model, api_key, base_url, fallbacks) is None or not available():
         return None
     return _stream_impl(

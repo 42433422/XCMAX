@@ -28,6 +28,7 @@ class DiscoverRequest(BaseModel):
     goal: str = Field(min_length=1, max_length=4000)
     limits: PortfolioLimits
     use_llm: bool = True
+    input_data: dict[str, Any] = Field(default_factory=dict, max_length=64)
 
 
 class ProposalRequest(DiscoverRequest):
@@ -81,7 +82,9 @@ def list_portfolios(
 async def discover_opportunities(
     body: DiscoverRequest, admin: User = Depends(require_admin)
 ) -> dict[str, Any]:
-    from modstore_server.strategic_portfolio_runtime import discover_portfolio_opportunities
+    from modstore_server.strategic_portfolio_runtime import (
+        discover_portfolio_opportunities,
+    )
 
     try:
         return await discover_portfolio_opportunities(
@@ -89,6 +92,7 @@ async def discover_opportunities(
             limits=body.limits.model_dump(),
             use_llm=body.use_llm,
             owner_user_id=int(admin.id),
+            input_data=body.input_data,
         )
     except PortfolioError as exc:
         raise HTTPException(409, str(exc)) from exc
@@ -106,7 +110,10 @@ def propose_portfolio(
         goal=body.goal,
         period=body.period,
         limits=body.limits.model_dump(),
-        opportunities=[row.model_dump() for row in body.opportunities],
+        opportunities=[
+            {**row.model_dump(), "input_data": {**body.input_data, **row.input_data}}
+            for row in body.opportunities
+        ],
         idempotency_key=body.idempotency_key,
     )
 

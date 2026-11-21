@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import text
+from sqlalchemy import case, text, update
 from sqlalchemy.exc import IntegrityError
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
@@ -81,8 +81,10 @@ def create_run(request, actor_id, *, customer_feedback=None, training_candidate=
         raise ValueError("改进任务只能使用已绑定的共享产品仓库")
     source = customer_feedback or training_candidate or {}
     lifecycle = (source.get("growthbook") or {}).get("lifecycle") or {}
+    from modstore_server.retort_experiment_surfaces import surface_identity, surface_lock_name
+
     surface_lock = (
-        run_lock(str(uuid5(NAMESPACE_URL, "xcagi:experiment:" + lifecycle["employee_id"])))
+        run_lock(str(uuid5(NAMESPACE_URL, surface_lock_name(lifecycle))))
         if lifecycle
         else nullcontext()
     )
@@ -104,9 +106,10 @@ def create_run(request, actor_id, *, customer_feedback=None, training_candidate=
             for other in active:
                 effects = json_loads(other.effects_json, {})
                 prior = effects.get("customer_feedback") or effects.get("training_candidate") or {}
-                if (prior.get("growthbook") or {}).get("lifecycle", {}).get(
-                    "employee_id"
-                ) == lifecycle["employee_id"]:
+                prior_lifecycle = (prior.get("growthbook") or {}).get("lifecycle") or {}
+                if prior_lifecycle and surface_identity(prior_lifecycle) == surface_identity(
+                    lifecycle
+                ):
                     raise ValueError("experiment_surface_already_reserved")
         row = RetortEvolutionRun(
             id=protocol["request_id"],
@@ -310,9 +313,15 @@ def advance_run(request_id, *, approval=None, ports=None):
             customer_feedback = bool(
                 sources.get("customer_feedback") or sources.get("training_candidate")
             )
+            recheck = row.status == "impact_recheck"
         graph = workflow.build_evolution_graph(ports or ComponentPorts(request_id), saver)
         config = {"configurable": {"thread_id": request_id}}
         before = graph.get_state(config)
+        if recheck and before.values.get("status") == "completed":
+            # Revisit only the impact/recovery tail using the original persisted
+            # delivery and approvals. Planning, execution and release are not replayed.
+            graph.update_state(config, {"status": "delivered"}, as_node="delivery")
+            before = graph.get_state(config)
         pauses = [i.value for task in before.tasks for i in task.interrupts]
         if approval is not None:
             if (
@@ -363,10 +372,27 @@ def _snapshot(state):
 
 def _project(request_id, snapshot, error=""):
     with get_session_factory()() as db:
-        row = db.get(RetortEvolutionRun, request_id)
-        row.snapshot_json = json_dumps(snapshot)
-        row.status, row.error = snapshot.get("status", "created"), error
-        row.updated_at = datetime.now(UTC)
+        status = snapshot.get("status", "created")
+        db.execute(
+            update(RetortEvolutionRun)
+            .where(RetortEvolutionRun.id == request_id)
+            .values(
+                snapshot_json=json_dumps(snapshot),
+                # The original customer can reopen after impact was read but
+                # before this projection. A stale completion must not lose that
+                # transaction's durable request to revisit the impact tail.
+                status=(
+                    case(
+                        (RetortEvolutionRun.status == "impact_recheck", "impact_recheck"),
+                        else_=status,
+                    )
+                    if status == "completed"
+                    else status
+                ),
+                error=error,
+                updated_at=datetime.now(UTC),
+            )
+        )
         db.commit()
 
 

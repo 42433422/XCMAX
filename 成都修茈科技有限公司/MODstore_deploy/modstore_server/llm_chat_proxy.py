@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import os
+from contextlib import aclosing, suppress
 from functools import wraps
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncGenerator, AsyncIterator, Dict, List, Optional
 from urllib.parse import urlsplit
 
 import httpx
@@ -173,6 +174,36 @@ def _strategic_budgeted_dispatch(invoke):
     return wrapped
 
 
+def _strategic_budgeted_stream(invoke):
+    @wraps(invoke)
+    async def wrapped(provider: str, **kwargs) -> AsyncIterator[Dict[str, Any]]:
+        from modstore_server.strategic_portfolio import PortfolioError
+        from modstore_server.strategic_portfolio_usage import dispatch_budgeted_stream, scope_active
+
+        if scope_active() and (
+            provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+            or (provider == "minimax" and is_minimax_token_plan_key(kwargs["api_key"]))
+        ):
+            # These routes already use one completion, whose existing wrapper meters it.
+            if kwargs.get("tools") or kwargs.get("tool_choice"):
+                raise PortfolioError("this provider has no metered streaming tool adapter")
+            result = await chat_dispatch(
+                provider,
+                **{
+                    key: kwargs.get(key)
+                    for key in ("api_key", "base_url", "model", "messages", "max_tokens")
+                },
+            )
+            async for event in _events_from_completion(result):
+                yield event
+            return
+        async with aclosing(dispatch_budgeted_stream(invoke, provider, kwargs)) as source:
+            async for event in source:
+                yield event
+
+    return wrapped
+
+
 @_strategic_budgeted_dispatch
 async def chat_dispatch(
     provider: str,
@@ -336,7 +367,7 @@ async def chat_dispatch(
                 return await _asyncio.wait_for(
                     _primary_with_retries(), timeout=float(total_timeout_s)
                 )
-            except _asyncio.TimeoutError:
+            except TimeoutError:
                 return {
                     "ok": False,
                     "status": 504,
@@ -401,7 +432,7 @@ async def chat_dispatch(
                 "ok": False,
                 "error": f"unsupported fallback provider: {fb_provider}",
             }
-    except BOUNDARY_ERRORS as exc2:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc2:
         fb_result = {"ok": False, "error": f"备用模型请求失败（{type(exc2).__name__}）"}
 
     if fb_result.get("ok"):
@@ -412,7 +443,7 @@ async def chat_dispatch(
 
 async def _with_processing_status(
     source: AsyncIterator[Dict[str, Any]], interval: float = _STATUS_INTERVAL_S
-) -> AsyncIterator[Dict[str, Any]]:
+) -> AsyncGenerator[Dict[str, Any], None]:
     """同一迭代器还在等下一块时回报处理中，不取消这条调用。"""
     import asyncio
 
@@ -434,6 +465,8 @@ async def _with_processing_status(
     finally:
         if pending is not None and not pending.done():
             pending.cancel()
+            with suppress(asyncio.CancelledError):
+                await pending
         closer = getattr(agen, "aclose", None)
         if closer is not None:
             await closer()
@@ -454,6 +487,7 @@ async def _events_from_completion(result: Dict[str, Any]) -> AsyncIterator[Dict[
         yield {"type": "usage", "usage": result.get("usage") or {}}
 
 
+@_strategic_budgeted_stream
 async def chat_dispatch_stream(
     provider: str,
     *,
@@ -466,11 +500,6 @@ async def chat_dispatch_stream(
     tool_choice: Any = None,
     fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
-    from modstore_server.strategic_portfolio import PortfolioError
-    from modstore_server.strategic_portfolio_usage import scope_active
-
-    if scope_active():
-        raise PortfolioError("strategic streaming needs a persisted usage receipt adapter")
     if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         yield {"type": "error", "error": "平台密钥不允许跨供应商使用"}
         return
@@ -500,8 +529,9 @@ async def chat_dispatch_stream(
             async for ev in _events_from_completion(result):
                 yield ev
 
-        async for ev in _with_processing_status(_minimax()):
-            yield ev
+        async with aclosing(_with_processing_status(_minimax())) as events:
+            async for ev in events:
+                yield ev
         return
     # LiteLLM Router 流式：重试、冷却与 fallback；不可用时降级到原有 provider 适配。
     if not (provider == "minimax" and is_minimax_token_plan_key(api_key)):
@@ -519,24 +549,28 @@ async def chat_dispatch_stream(
             fallbacks=fallbacks,
         )
         if routed_events is not None:
-            async for ev in _with_processing_status(routed_events):
-                yield ev
+            async with aclosing(_with_processing_status(routed_events)) as events:
+                async for ev in events:
+                    yield ev
             return
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         b = _normalize_openai_base(provider, base_url, api_key)
-        async for ev in _with_processing_status(
-            stream_openai_compatible(
-                b,
-                api_key,
-                model,
-                messages,
-                provider=provider,
-                max_tokens=max_tokens,
-                tools=tools,
-                tool_choice=tool_choice,
+        async with aclosing(
+            _with_processing_status(
+                stream_openai_compatible(
+                    b,
+                    api_key,
+                    model,
+                    messages,
+                    provider=provider,
+                    max_tokens=max_tokens,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                )
             )
-        ):
-            yield ev
+        ) as events:
+            async for ev in events:
+                yield ev
         return
 
     async def _once():
@@ -552,5 +586,6 @@ async def chat_dispatch_stream(
             yield ev
 
     # Anthropic / Google 后续可接各自原生 stream；当前保持兼容，回退成一次性结果。
-    async for ev in _with_processing_status(_once()):
-        yield ev
+    async with aclosing(_with_processing_status(_once())) as events:
+        async for ev in events:
+            yield ev

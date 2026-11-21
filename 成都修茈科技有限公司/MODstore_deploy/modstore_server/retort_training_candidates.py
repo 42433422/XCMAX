@@ -82,7 +82,7 @@ def create_training_candidate(body):
                     raise ValueError("training_candidate_request_conflict")
                 return request_id
         observed = {
-            str(sample["run_id"])
+            str(sample["run_id"]): sample.get("task")
             for cluster in mine(ledger_path(), days=14, min_count=1)
             if cluster["employee_id"] == body["employee_id"]
             for sample in cluster["samples"]
@@ -90,6 +90,14 @@ def create_training_candidate(body):
         }
         if not body["failure_run_ids"] or not set(body["failure_run_ids"]).issubset(observed):
             raise ValueError("training_failure_source_unbound")
+        source_hashes = {
+            hashlib.sha256(observed[run_id].encode("utf-8")).hexdigest()
+            for run_id in body["failure_run_ids"]
+            if isinstance(observed[run_id], str) and observed[run_id].strip()
+        }
+        cases = json.loads(body["bundle_json"])["case_sha256"]
+        if not cases or not set(cases).issubset(source_hashes):
+            raise ValueError("training_reproduction_source_unbound")
         repository = configuration()["repository"]
         if github("GET", f"/repos/{repository}/commits/main")["sha"] != body["source_sha"]:
             raise ValueError("training_baseline_not_current_main")

@@ -1509,25 +1509,21 @@ def _action_agent_runner(
             if isinstance(tc, dict) and str(tc.get("tool") or "").strip()
         ][:50],
         "tool_call_success_count": sum(
-            (
-                1
-                for tc in tool_calls
-                if isinstance(tc, dict)
-                and isinstance(tc.get("result"), dict)
-                and (tc["result"].get("ok") is not False)
-                and (not str(tc["result"].get("error") or "").strip())
-            )
+            1
+            for tc in tool_calls
+            if isinstance(tc, dict)
+            and isinstance(tc.get("result"), dict)
+            and (tc["result"].get("ok") is not False)
+            and (not str(tc["result"].get("error") or "").strip())
         ),
         "tool_call_failure_count": sum(
-            (
-                1
-                for tc in tool_calls
-                if isinstance(tc, dict)
-                and isinstance(tc.get("result"), dict)
-                and (
-                    tc["result"].get("ok") is False
-                    or bool(str(tc["result"].get("error") or "").strip())
-                )
+            1
+            for tc in tool_calls
+            if isinstance(tc, dict)
+            and isinstance(tc.get("result"), dict)
+            and (
+                tc["result"].get("ok") is False
+                or bool(str(tc["result"].get("error") or "").strip())
             )
         ),
         "change_request_ids": sorted(cr_ids),
@@ -1542,7 +1538,12 @@ def _action_agent_runner(
 
 
 def _employee_pack_extract_root(
-    employee_id: str, manifest: _facade().Dict[str, _facade().Any]
+    employee_id: str,
+    manifest: _facade().Dict[str, _facade().Any],
+    *,
+    pack=None,
+    archive_bytes: bytes | None = None,
+    target_root=None,
 ) -> _facade().Path:
     """Extract the employee pack to a runtime directory so package-local Python files can run."""
     runtime_root = (
@@ -1552,20 +1553,21 @@ def _employee_pack_extract_root(
     )
     pack_id = str(manifest.get("id") or employee_id).strip() or employee_id
     version = str(manifest.get("version") or "dev").strip() or "dev"
-    target = runtime_root / "employee_packs" / pack_id / version
+    target = target_root or runtime_root / "employee_packs" / pack_id / version
     module_file = target / "backend" / "employees" / "taiyangniao_attendance.py"
-    sf = _facade().get_session_factory()
-    with sf() as session:
-        pack = _facade().load_employee_pack_resolved(session, employee_id)
+    if pack is None:
+        sf = _facade().get_session_factory()
+        with sf() as session:
+            pack = _facade().load_employee_pack_resolved(session, employee_id)
     stored = str(pack.get("stored_filename") or "").strip()
     if not stored:
         raise RuntimeError("employee pack missing stored_filename")
     zpath = _facade().files_dir() / stored
-    if not zpath.is_file():
+    if archive_bytes is None and not zpath.is_file():
         raise RuntimeError(f"employee pack file not found: {zpath}")
     marker = target / ".source_mtime"
-    source_mtime = str(zpath.stat().st_mtime_ns)
-    if module_file.is_file():
+    source_mtime = str(zpath.stat().st_mtime_ns) if archive_bytes is None else ""
+    if archive_bytes is None and module_file.is_file():
         try:
             if marker.read_text(encoding="utf-8").strip() == source_mtime:
                 return target
@@ -1576,7 +1578,8 @@ def _employee_pack_extract_root(
     if tmp.exists():
         _facade().shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, exist_ok=True)
-    with _facade().zipfile.ZipFile(zpath, "r") as zf:
+    source = _facade().io.BytesIO(archive_bytes) if archive_bytes is not None else zpath
+    with _facade().zipfile.ZipFile(source, "r") as zf:
         root_prefix = f"{pack_id}/"
         for info in zf.infolist():
             name = info.filename.replace("\\", "/")
@@ -1595,7 +1598,8 @@ def _employee_pack_extract_root(
     if target.exists():
         _facade().shutil.rmtree(target, ignore_errors=True)
     tmp.replace(target)
-    marker.write_text(source_mtime + "\n", encoding="utf-8")
+    if archive_bytes is None:
+        marker.write_text(source_mtime + "\n", encoding="utf-8")
     return target
 
 
@@ -1612,6 +1616,10 @@ def _action_direct_python(
         if isinstance(actions_cfg.get("direct_python"), dict)
         else {}
     )
+    from contextlib import ExitStack
+    from modstore_server.strategic_execution_contract import approved_python_module
+
+    resources = ExitStack()
     try:
         sf = _facade().get_session_factory()
         direct_input = (
@@ -1619,13 +1627,18 @@ def _action_direct_python(
             if isinstance(reasoning, dict) and isinstance(reasoning.get("input"), dict)
             else {}
         )
+        module = resources.enter_context(
+            approved_python_module(employee_id, user_id, actions_cfg, direct_input)
+        )
         reviewed_burn_in = _facade()._flag_enabled(
             direct_input.get("burn_in")
         ) and _facade()._flag_enabled(direct_input.get("burn_in_read_only"))
         reviewed_duty_execution = _facade()._flag_enabled(
             direct_input.get("_trusted_duty_contract_execution")
         )
-        if reviewed_burn_in or reviewed_duty_execution:
+        if module is not None:
+            root = _facade().Path(module.__file__).parents[2]
+        elif reviewed_burn_in or reviewed_duty_execution:
             from modstore_server.duty_workforce_contracts import (
                 resolve_reviewed_duty_employee_root,
             )
@@ -1647,18 +1660,19 @@ def _action_direct_python(
                 "ok": False,
                 "error": f"module not found: {module_path}",
             }
-        spec = _facade().importlib.util.spec_from_file_location(
-            f"_modstore_employee_pack_{employee_id.replace('-', '_')}_{module_name}",
-            str(module_path),
-        )
-        if spec is None or spec.loader is None:
-            return {
-                "handler": "direct_python",
-                "ok": False,
-                "error": f"cannot load module spec: {module_path}",
-            }
-        module = _facade().importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        if module is None:
+            spec = _facade().importlib.util.spec_from_file_location(
+                f"_modstore_employee_pack_{employee_id.replace('-', '_')}_{module_name}",
+                str(module_path),
+            )
+            if spec is None or spec.loader is None:
+                return {
+                    "handler": "direct_python",
+                    "ok": False,
+                    "error": f"cannot load module spec: {module_path}",
+                }
+            module = _facade().importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
         run_fn = getattr(module, "run", None)
         if not callable(run_fn):
             return {
@@ -1713,7 +1727,7 @@ def _action_direct_python(
         ctx = {
             "employee_id": employee_id,
             "user_id": user_id,
-            "workspace_root": payload.get("workspace_root") or "",
+            "workspace_root": payload.get("workspace_root") or payload.get("project_root") or "",
             "logger": _facade().logging.getLogger(f"employee.direct_python.{employee_id}"),
             "call_llm": _direct_call_llm,
         }
@@ -1734,6 +1748,8 @@ def _action_direct_python(
     except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("direct_python handler failed employee_id=%s", employee_id)
         return {"handler": "direct_python", "ok": False, "error": str(exc)[:1000]}
+    finally:
+        resources.close()
 
 
 def _prefer_para_with_local_fallback(
@@ -1796,9 +1812,9 @@ def _filter_handlers_vibe_coding_maintainer(
     multi_step = bool(inp.get("multi_step") or inp.get("handler_mode") == "agent")
     if delegate == "cursor" or priority == "P0" or inp.get("fallback_cursor"):
         selected: _facade().List[str] = []
-        if "cursor_delegate" in handlers:
-            selected.append("cursor_delegate")
-        elif _facade().os.environ.get("MODSTORE_CURSOR_DELEGATE_ENABLED", "1").strip().lower() in (
+        if "cursor_delegate" in handlers or _facade().os.environ.get(
+            "MODSTORE_CURSOR_DELEGATE_ENABLED", "1"
+        ).strip().lower() in (
             "1",
             "true",
             "yes",
@@ -2283,9 +2299,9 @@ def _handlers_execution_ok(result: _facade().Dict[str, _facade().Any]) -> bool:
     outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
     if not outputs:
         return True
-    if any((isinstance(out, dict) and out.get("ok") is True for out in outputs)):
+    if any(isinstance(out, dict) and out.get("ok") is True for out in outputs):
         return True
-    if any((isinstance(out, dict) and out.get("ok") is False for out in outputs)):
+    if any(isinstance(out, dict) and out.get("ok") is False for out in outputs):
         return False
     return True
 

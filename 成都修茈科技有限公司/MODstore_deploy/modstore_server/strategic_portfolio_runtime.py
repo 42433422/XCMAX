@@ -113,26 +113,42 @@ async def discover_portfolio_opportunities(
     goal: str,
     limits: dict[str, Any],
     use_llm: bool = True,
+    input_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Reuse the existing strategic planner with account-scoped live inputs."""
     from sqlalchemy import func
 
     from modstore_server import strategy_planner
-    from modstore_server.customer_value_classification import amount_cents, classify_payment_order
-    from modstore_server.customer_value_payment_source import load_authoritative_payment_orders
+    from modstore_server.customer_value_classification import (
+        amount_cents,
+        classify_payment_order,
+        parse_datetime,
+    )
+    from modstore_server.customer_value_payment_source import (
+        load_authoritative_payment_orders,
+    )
+    from modstore_server.db.customer_value import CustomerValueReceipt
     from modstore_server.db.llm_chat import LlmCallLog
     from modstore_server.models_cs import CustomerServiceTicket
     from modstore_server.services.llm import (
         chat_dispatch_via_platform_only,
         resolve_platform_bench_llm,
     )
+    from modstore_server.strategic_execution_contract import (
+        freeze_execution,
+        validate_input,
+    )
     from modstore_server.strategic_portfolio import Opportunity, PortfolioLimits
-    from modstore_server.strategic_portfolio_usage import planning_admission, planning_usage_scope
+    from modstore_server.strategic_portfolio_usage import (
+        planning_admission,
+        planning_usage_scope,
+    )
     from modstore_server.task_router import _load_all_employee_profiles
 
     if type(owner_user_id) is not int or owner_user_id <= 0:
         raise PortfolioError("owner is required for planning context")
     cap = PortfolioLimits.model_validate(limits)
+    approved_input = validate_input(input_data or {})
     now = datetime.now(UTC)
     with get_session_factory()() as session:
         tickets = (
@@ -141,6 +157,7 @@ async def discover_portfolio_opportunities(
                 .where(
                     CustomerServiceTicket.user_id == owner_user_id,
                     CustomerServiceTicket.status != "closed",
+                    CustomerServiceTicket.created_at <= now,
                 )
                 .order_by(CustomerServiceTicket.id.desc())
                 .limit(12)
@@ -152,8 +169,22 @@ async def discover_portfolio_opportunities(
             select(func.count(LlmCallLog.id), func.sum(LlmCallLog.total_tokens)).where(
                 LlmCallLog.user_id == owner_user_id,
                 LlmCallLog.created_at >= now - timedelta(days=30),
+                LlmCallLog.created_at <= now,
             )
         ).one()
+        customer_goals = list(
+            session.scalars(
+                select(CustomerValueReceipt.customer_goal_id)
+                .where(
+                    CustomerValueReceipt.customer_ref == f"paid-user:{owner_user_id}",
+                    CustomerValueReceipt.receipt_kind == "goal",
+                    CustomerValueReceipt.verification_status == "verified",
+                    CustomerValueReceipt.occurred_at <= now,
+                )
+                .distinct()
+                .limit(32)
+            )
+        )
         gaps = [f"客户问题 {ticket.ticket_no}：{ticket.title[:180]}" for ticket in tickets]
         prior_rows = (
             session.execute(
@@ -180,6 +211,9 @@ async def discover_portfolio_opportunities(
         for order in source.get("orders") or []
         if str(order.get("user_id")) == str(owner_user_id)
         and classify_payment_order(order, cutoff=now - timedelta(days=30))[0]
+        and (paid_at := parse_datetime(order.get("paid_at"))) is not None
+        and paid_at <= now
+        and str(order.get("currency") or "CNY") == "CNY"
     ]
     metrics = {
         "open_tickets": len(tickets),
@@ -247,14 +281,35 @@ async def discover_portfolio_opportunities(
         "proposal_limits_not_yet_authorized": cap.model_dump(),
         "source_refs": source_refs,
         "employees": employees,
+        "customer_goal_ids": customer_goals,
     }
     plan = await strategy_planner.generate_candidates(
         context, chat=PlatformPlanner() if use_llm else None
     )
     default_employee = "daily-orchestrator" if "daily-orchestrator" in employees else employees[0]
     count = max(1, len(plan["candidates"]))
-    opportunities = [
-        Opportunity(
+    opportunities, rejected = [], []
+    for feature in plan["candidates"]:
+        goals = feature.get("customer_goal_ids") or []
+        if not isinstance(goals, list) or not all(
+            isinstance(goal_id, str) and goal_id in customer_goals for goal_id in goals
+        ):
+            rejected.append(
+                {
+                    "title": feature["title"],
+                    "reason": "customer_goal_not_owned_or_observed",
+                }
+            )
+            continue
+        if feature["metric_id"] == strategy_planner.strategy_bets.REVENUE_METRIC and not goals:
+            rejected.append(
+                {
+                    "title": feature["title"],
+                    "reason": "revenue_hypothesis_requires_customer_goal_binding",
+                }
+            )
+            continue
+        candidate = Opportunity(
             opportunity_id="op-" + digest([goal, feature["title"], source_refs])[:20],
             title=feature["title"][:200],
             task=f"{feature['title']}\n目的：{feature['hypothesis']}\n验收：{feature['metric_id']} {feature['direction']} {feature['threshold']}\n只在现有审批范围内执行；对外通信、支付和新增资源仍需其原有授权。"[
@@ -272,6 +327,8 @@ async def discover_portfolio_opportunities(
             compute_seconds=max(1, cap.compute_seconds // count),
             risk="medium",
             source_refs=source_refs,
+            customer_goal_ids=goals,
+            input_data=approved_input,
             hypothesis=BetHypothesis.model_validate(
                 {
                     key: feature[key]
@@ -286,13 +343,16 @@ async def discover_portfolio_opportunities(
                 }
             ),
         ).model_dump()
-        for feature in plan["candidates"]
-    ]
+        try:
+            opportunities.append(freeze_execution(owner_user_id, candidate))
+        except RECOVERABLE_ERRORS as exc:
+            rejected.append({"title": feature["title"], "reason": str(exc)[:500]})
     return {
         "source": plan["source"],
         "metrics": metrics,
         "source_refs": source_refs,
         "opportunities": opportunities,
+        "rejected_candidates": rejected,
         "planning_calls": planning_calls,
         "company_evidence": {key: company_context[key] for key in ("assets", "repo", "domains")},
         "prior_review_count": len(history),
@@ -303,6 +363,7 @@ async def discover_portfolio_opportunities(
 def _execute(task: dict[str, Any]) -> dict[str, Any]:
     from modstore_server.employee_executor import execute_employee_task
     from modstore_server.platform_llm_scope import platform_llm_scope
+    from modstore_server.strategic_execution_contract import execution_payload
     from modstore_server.strategic_portfolio_usage import portfolio_usage_scope
 
     with (
@@ -313,16 +374,7 @@ def _execute(task: dict[str, Any]) -> dict[str, Any]:
             execute_employee_task(
                 task["employee_id"],
                 task["task"],
-                {
-                    "strategic_decision_id": task["decision_id"],
-                    "strategic_opportunity_id": task["opportunity_id"],
-                    "idempotency_key": _action_id(task["decision_id"], task["opportunity_id"]),
-                    "deadline_epoch": _date(task["deadline"]).timestamp(),
-                    "allow_high_risk_real_run": False,
-                    "suppress_handoff": True,
-                    "suppress_employee_im": True,
-                    "suppress_lifecycle_events": True,
-                },
+                execution_payload(task),
                 user_id=task["owner_user_id"],
             )
         )
@@ -488,10 +540,15 @@ def _business_outcome(
         classify_payment_order,
         parse_datetime,
     )
-    from modstore_server.customer_value_payment_source import load_authoritative_payment_orders
+    from modstore_server.customer_value_payment_source import (
+        load_authoritative_payment_orders,
+    )
     from modstore_server.db.customer_value import CustomerValueReceipt
 
-    start, now = window_start or _date(status["started_at"]), window_end or datetime.now(UTC)
+    start, now = (
+        window_start or _date(status["started_at"]),
+        window_end or datetime.now(UTC),
+    )
     source = load_authoritative_payment_orders(max(1, (datetime.now(UTC) - start).days + 1))
     if not (source.get("source_available") is True and source.get("source_authoritative") is True):
         return {
@@ -500,22 +557,25 @@ def _business_outcome(
             "revenue_cents": None,
         }
     delivered: dict[str, set[tuple[str, str]]] = {}
-    executed_since: dict[str, datetime] = {}
+    executed_since: dict[tuple[str, str, str], datetime] = {}
     missing_attribution = False
     for item in status["opportunities"]:
         task = status.get("tasks", {}).get(item["opportunity_id"], {})
         if task.get("status") != "completed":
             continue
         artifacts = _execution_artifacts(task.get("execution_receipt"))
-        if item["customer_goal_ids"] and not artifacts:
+        if item["customer_goal_ids"] and (not artifacts or not task.get("completed_at")):
             missing_attribution = True
+            continue
         for goal in item["customer_goal_ids"]:
             if artifacts:
                 delivered.setdefault(goal, set()).update(artifacts)
-                task_start = _date(task["started_at"])
-                executed_since[goal] = min(executed_since.get(goal, task_start), task_start)
+                completed = _date(task["completed_at"])
+                for artifact in artifacts:
+                    key = (goal, *artifact)
+                    executed_since[key] = min(executed_since.get(key, completed), completed)
     goal_ids = set(delivered)
-    goals: dict[tuple[str, str, str], set[str]] = {}
+    goals: dict[tuple[str, str, str, str, str], set[str]] = {}
     refunded: set[str] = set()
     with get_session_factory()() as session:
         receipts = (
@@ -537,38 +597,42 @@ def _business_outcome(
                 receipt.customer_goal_id in goal_ids
                 and receipt.environment in {"production", "prod"}
                 and receipt.currency == "CNY"
-                and receipt.occurred_at.replace(tzinfo=UTC)
-                >= max(start, executed_since[str(receipt.customer_goal_id)])
                 and receipt.receipt_kind in {"outcome", "acceptance"}
             ):
-                if receipt.receipt_kind == "acceptance":
-                    try:
-                        evidence = json.loads(str(receipt.evidence_json) or "{}")
-                    except (ValueError, TypeError):
-                        continue
-                    if (
-                        not isinstance(evidence, dict)
-                        or (
-                            str(receipt.artifact_id),
-                            str(evidence.get("artifact_sha256", "")).lower(),
-                        )
-                        not in delivered[str(receipt.customer_goal_id)]
-                    ):
-                        continue
+                try:
+                    evidence = json.loads(str(receipt.evidence_json) or "{}")
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(evidence, dict):
+                    continue
+                artifact = (
+                    str(receipt.artifact_id),
+                    str(evidence.get("artifact_sha256", "")).lower(),
+                )
+                if artifact not in delivered[str(receipt.customer_goal_id)]:
+                    continue
+                if receipt.occurred_at.replace(tzinfo=UTC) < max(
+                    start, executed_since[(str(receipt.customer_goal_id), *artifact)]
+                ):
+                    continue
                 goals.setdefault(
                     (
                         str(receipt.order_no),
                         str(receipt.customer_goal_id),
                         str(receipt.customer_ref),
+                        *artifact,
                     ),
                     set(),
                 ).add(str(receipt.receipt_kind))
-        matched_orders = {number for number, _goal, _customer in goals}
+        matched_orders = {key[0] for key in goals}
         refunded = set(
             session.execute(
                 select(CustomerValueReceipt.order_no).where(
                     CustomerValueReceipt.order_no.in_(matched_orders),
                     CustomerValueReceipt.receipt_kind == "refund",
+                    CustomerValueReceipt.customer_ref == f"paid-user:{status['owner_user_id']}",
+                    CustomerValueReceipt.environment.in_(("production", "prod")),
+                    CustomerValueReceipt.currency == "CNY",
                     CustomerValueReceipt.verification_status == "verified",
                     CustomerValueReceipt.occurred_at <= now,
                 )
@@ -594,7 +658,7 @@ def _business_outcome(
             number == order_no
             and customer == f"paid-user:{order.get('user_id')}"
             and kinds == {"outcome", "acceptance"}
-            for (number, _goal, customer), kinds in goals.items()
+            for (number, _goal, customer, _artifact, _sha), kinds in goals.items()
         ):
             orders[order_no] = amount_cents(order)
     return {

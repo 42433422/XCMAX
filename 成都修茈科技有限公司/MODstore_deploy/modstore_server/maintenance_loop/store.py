@@ -7,7 +7,7 @@ import os
 import socket
 from collections import deque
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Dict, List, Optional, Tuple
@@ -163,6 +163,22 @@ def _append_ledger(record: Dict[str, Any]) -> None:
         except (ImportError, OSError):
             pass
         fh.write(_dumps_ledger(record) + "\n")
+        if record.get("event") in {
+            "deploy_dispatch_intent",
+            "deploy_dispatch_bound",
+            "post_deploy_verified",
+        }:
+            fh.flush()
+            os.fsync(fh.fileno())
+    if (
+        record.get("event") in {"deploy_dispatch_intent", "post_deploy_verified"}
+        and os.name != "nt"
+    ):
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
 
 def _read_ledger(
@@ -219,8 +235,8 @@ def _ledger_row_timestamp(
         except ValueError:
             continue
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
     return None
 
 
@@ -240,7 +256,7 @@ def _select_recent_milestone_rows(
     excluded, and evidence expires after ``window_days`` so an old success can
     never prove current autonomy forever.
     """
-    current = (now or config._utc_now()).astimezone(timezone.utc)
+    current = (now or config._utc_now()).astimezone(UTC)
     bounded_days = max(1, min(int(window_days or config.DEFAULT_EVIDENCE_WINDOW_DAYS), 90))
     bounded_runs = max(1, min(int(run_limit or config.DEFAULT_EVIDENCE_RUN_LIMIT), 64))
     bounded_rows = max(1, min(int(row_limit or config.DEFAULT_EVIDENCE_ROW_LIMIT), 512))

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import modstore_server.maintenance_loop.memory as memory_domain
 from modstore_server import (
     self_evolution_knowledge,
     self_maintenance_para_merge_remediation,
@@ -13,9 +14,7 @@ from modstore_server import (
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
-from . import config
-from . import memory as memory_domain
-from . import para_client, store
+from . import config, deployment, para_client, store
 
 
 def _close_items_resolved_by_final(
@@ -131,6 +130,29 @@ def _reconcile_requested_merge_feedback(
             )
             if closed.get("closed_count"):
                 changed = True
+            delivery = deployment._run_deploy_receipts_after_merge(
+                run_id=str(run.get("run_id") or ""),
+                merge_result={
+                    "ok": True,
+                    "merge_commit_sha": merge_sha,
+                    "remote_task_id": task_id,
+                    "branch": branch,
+                },
+            )
+            if run.get("deployment_receipt") != delivery:
+                run["deployment_receipt"] = delivery
+                changed = True
+            if (
+                delivery.get("enabled") is True
+                and delivery.get("ok") is True
+                and delivery.get("staging_verified") is True
+                and (
+                    delivery.get("production_enabled") is False
+                    or (delivery.get("production") or {}).get("verified") is True
+                )
+            ):
+                run["status"] = "completed_merged"
+                changed = True
             merged += 1
             continue
         terminal_failure_statuses = {
@@ -175,13 +197,11 @@ def _reconcile_requested_merge_feedback(
             run["merge_reconciliation"] = receipt
             changed = True
         already_open = any(
-            (
-                isinstance(item, dict)
-                and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
-                and (item.get("reason") == reason)
-                and (item.get("kind") == item_kind)
-                for item in open_items
-            )
+            isinstance(item, dict)
+            and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
+            and (item.get("reason") == reason)
+            and (item.get("kind") == item_kind)
+            for item in open_items
         )
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()

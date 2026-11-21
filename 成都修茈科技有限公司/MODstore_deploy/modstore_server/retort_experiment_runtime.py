@@ -16,7 +16,14 @@ from sqlalchemy import select
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_value_classification import parse_datetime
 from modstore_server.models import RetortEvolutionRun, User, get_session_factory
-from modstore_server.retort_feedback_experiments import approved_policy
+from modstore_server.retort_experiment_surfaces import (
+    WORKFLOW_NL_MEASUREMENT,
+    surface_identity,
+)
+from modstore_server.retort_feedback_experiments import (
+    approved_policy,
+    traffic_block_reason,
+)
 
 
 def _identity():
@@ -25,35 +32,38 @@ def _identity():
     return _release_manifest_payload()
 
 
-def select_variant(*, surface, resource_id, subject_id, default_value):
+def select_variant(*, surface, resource_id, subject_id, default_value, workflow_id=None):
     """Reusable surface contract: return an actual value plus a private observation handle.
 
-    The first registered surface is employee_prompt. Other products must register
-    their surface in the operator policy validator and call this at actual use.
+    Only employee cognition and the owned-workflow generator have consumers.
+    The latter's static-validation observation is distinct from business execution.
     """
     if not resource_id:
         return default_value, None
-    with get_session_factory()() as db:
-        user = db.get(User, subject_id) if type(subject_id) is int and subject_id > 0 else None
-        rows = db.scalars(
+    with (
+        get_session_factory()() as db,
+        db.scalars(
             select(RetortEvolutionRun)
             .where(RetortEvolutionRun.effects_json.contains(str(resource_id), autoescape=True))
             .order_by(RetortEvolutionRun.created_at.desc())
-            .limit(100)
-        ).all()
+        ).yield_per(100) as rows,
+    ):
+        user = db.get(User, subject_id) if type(subject_id) is int and subject_id > 0 else None
         for row in rows:
             effects = json_loads(row.effects_json, {})
             policy = (
                 effects.get("customer_feedback") or effects.get("training_candidate") or {}
             ).get("growthbook") or {}
             life = policy.get("lifecycle") or {}
-            if life.get("surface") != surface or life.get("employee_id") != resource_id:
+            if life.get("surface") != surface or surface_identity(life) != (surface, resource_id):
                 continue
             if not effects.get("authorization"):
                 continue
             if default_value not in (life.get("control_prompt"), life.get("treatment_prompt")):
                 return default_value, None
             policy, effects = approved_policy(row)
+            if traffic_block_reason(db, row, effects):
+                return life["control_prompt"], None
             if not os.getenv("MODSTORE_RETORT_GROWTHBOOK_URL"):
                 return life["control_prompt"], None
             if (
@@ -64,6 +74,12 @@ def select_variant(*, surface, resource_id, subject_id, default_value):
                 or subject_id not in life["cohort_user_ids"]
             ):
                 return life["control_prompt"], None
+            if surface == "workflow_nl_prompt":
+                from modstore_server.models import Workflow
+
+                workflow = db.get(Workflow, workflow_id) if type(workflow_id) is int else None
+                if workflow is None or workflow.user_id != subject_id:
+                    return life["control_prompt"], None
             progress = effects.get("experiment") or {}
             if not progress:
                 return life["control_prompt"], None
@@ -111,7 +127,7 @@ def select_variant(*, surface, resource_id, subject_id, default_value):
                 sdk.destroy()
             if not result.inExperiment or not result.hashUsed:
                 return life["control_prompt"], None
-            return result.value, {
+            assignment = {
                 "request_id": row.id,
                 "experiment_id": progress["experiment_id"],
                 "tracking_key": key,
@@ -126,6 +142,11 @@ def select_variant(*, surface, resource_id, subject_id, default_value):
                 "assigned_at": now.isoformat(),
                 "observation_id": str(uuid4()),
             }
+            if surface == "workflow_nl_prompt":
+                assignment.update(
+                    workflow_id=workflow_id, measurement_scope=WORKFLOW_NL_MEASUREMENT
+                )
+            return result.value, assignment
     return default_value, None
 
 

@@ -9,7 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -137,9 +137,42 @@ class RuntimeHarness:
                 review=lambda _run, branch, memory: (f"review:{memory['owner']}:{branch}"),
                 qa=lambda _run, branch, memory: f"qa:{memory['owner']}:{branch}",
             ),
-            now=lambda: datetime(2026, 10, 22, tzinfo=timezone.utc),
+            now=lambda: datetime(2026, 10, 22, tzinfo=UTC),
             new_run_id=new_run_id,
         )
+
+
+@pytest.mark.parametrize(
+    "reason,expected",
+    [
+        ("cooldown", 1),
+        ("below_threshold", 1),
+        ("disabled", 0),
+        ("runtime_provenance_blocked", 0),
+        ("evolution_metrics_pause", 0),
+    ],
+)
+def test_pending_merge_readback_survives_new_work_throttle_without_weakening_gates(
+    reason, expected
+):
+    harness = RuntimeHarness("pending", admitted=False)
+    calls = []
+
+    def reconcile(memory):
+        assert harness.lock.locked()
+        calls.append(memory["owner"])
+        memory["delivery_readback"] = "pending"
+        return {"changed": True, "merged": 1}
+
+    harness.runtime.policy = replace(
+        harness.runtime.policy, admit=lambda **_kwargs: {"should_run": False, "reason": reason}
+    )
+    harness.runtime.recovery = replace(harness.runtime.recovery, requested_merges=reconcile)
+    result = harness.runtime.run()
+    assert len(calls) == expected
+    assert harness.calls == []
+    assert result["status"] == f"skipped_{reason}"
+    assert (harness.memory.get("delivery_readback") == "pending") == bool(expected)
 
 
 def test_two_overlapping_runtimes_keep_state_dispatch_and_platform_scope_isolated():
@@ -377,7 +410,7 @@ def test_runtime_status_projects_complete_read_model_without_previous_call_state
         }
         for index, (employee, step) in enumerate(zip(employees, ("code", "review", "qa")), 1)
     )
-    monkeypatch.setattr(config, "_utc_now", lambda: datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
+    monkeypatch.setattr(config, "_utc_now", lambda: datetime(2026, 10, 22, 1, tzinfo=UTC))
     monkeypatch.setattr(store, "_read_ledger", lambda **_kwargs: copy.deepcopy(rows))
     monkeypatch.setattr(store, "_load_loop_memory", lambda: {})
     monkeypatch.setattr(store, "_read_governance_audit", lambda _limit: [])

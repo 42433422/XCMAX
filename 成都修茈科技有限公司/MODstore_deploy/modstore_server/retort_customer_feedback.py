@@ -282,6 +282,38 @@ def _bound_ticket(db, run):
     return source, ticket
 
 
+def queue_reopened_impact(db, ticket, binding):
+    """Wake a completed graph in the same transaction as its owner's new decision."""
+    if not isinstance(binding, dict):
+        return False
+    run = db.get(RetortEvolutionRun, binding.get("run_id"))
+    statuses = {"completed", "delivered", "waiting_customer_impact", "customer_impact_verified"}
+    if run is None or run.status not in statuses:
+        return False
+    source, original = _bound_ticket(db, run)
+    delivery = json_loads(run.snapshot_json, {}).get("delivery") or {}
+    if (
+        original is None
+        or original.id != ticket.id
+        or original.user_id != ticket.user_id
+        or delivery.get("status") != "deployment_verified"
+        or binding
+        != {
+            "run_id": run.id,
+            "release_sha": delivery.get("release_sha"),
+            "selected_revision": source["revision"],
+            "deployment_run_id": delivery.get("deployment_run_id"),
+        }
+    ):
+        return False
+    result = db.execute(
+        update(RetortEvolutionRun)
+        .where(RetortEvolutionRun.id == run.id, RetortEvolutionRun.status.in_(statuses))
+        .values(status="impact_recheck", updated_at=datetime.now(UTC))
+    )
+    return result.rowcount == 1
+
+
 def _selected_execution_context(db, run):
     """Read the frozen scenario for private approval and subsequent execution."""
     from modstore_server.dot_ticket_dispatch import redact_ticket_text

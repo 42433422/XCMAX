@@ -258,7 +258,8 @@ def test_scheduler_repairs_projection_after_checkpoint_was_committed(setup, monk
 
 
 @pytest.mark.parametrize(
-    "entry, digest_matches", [("log.txt", True), ("../escape", True), ("log.txt", False)]
+    "entry, digest_matches",
+    [("log.txt", True), ("../escape", True), ("log.txt", False)],
 )
 def test_artifact_download_checks_digest_paths_and_credential_boundary(
     tmp_path, monkeypatch, entry, digest_matches
@@ -423,7 +424,8 @@ def test_verified_logs_are_retained_with_existing_retort_encryption(tmp_path, mo
 
 
 @pytest.mark.skipif(
-    not os.environ.get("RETORT_TEST_POSTGRES_DSN"), reason="isolated PostgreSQL required"
+    not os.environ.get("RETORT_TEST_POSTGRES_DSN"),
+    reason="isolated PostgreSQL required",
 )
 def test_postgres_native_lock_excludes_another_connection(monkeypatch):
     from sqlalchemy import create_engine
@@ -655,7 +657,16 @@ def test_feedback_respects_persisted_intake_hold_at_each_boundary(setup, boundar
         )
 
 
-@pytest.mark.parametrize("customer_decision", ["resolved", "reopen", "resolved_then_reopen"])
+@pytest.mark.parametrize(
+    "customer_decision",
+    [
+        "resolved",
+        "reopen",
+        "resolved_then_reopen",
+        "completed_then_reopen",
+        "completion_race_then_reopen",
+    ],
+)
 def test_feedback_run_binds_original_customer_and_production_release(
     setup, monkeypatch, customer_decision
 ):
@@ -889,7 +900,7 @@ def test_feedback_run_binds_original_customer_and_production_release(
     decision_path = f"/api/customer-service/issues/{ticket_id}/decision"
     decision = {
         "decision": (
-            "resolved" if customer_decision == "resolved_then_reopen" else customer_decision
+            "resolved" if customer_decision.endswith("then_reopen") else customer_decision
         ),
         "note": "已按原业务路径复测成功",
         "idempotency_key": str(uuid4()),
@@ -899,14 +910,49 @@ def test_feedback_run_binds_original_customer_and_production_release(
     app.dependency_overrides[get_current_user] = lambda: customer
     result = client.post(decision_path, json=decision)
     assert result.status_code == 200, result.text
-    if customer_decision == "resolved_then_reopen":
-        assert resume()["status"] == "waiting_customer_impact"
-        reopened = client.post(
-            decision_path,
-            json={"decision": "reopen", "note": "原问题再次出现", "idempotency_key": str(uuid4())},
-        )
-        assert reopened.status_code == 200, reopened.text
-    if customer_decision in {"reopen", "resolved_then_reopen"}:
+    if customer_decision.endswith("then_reopen"):
+        previous_dispatches = len([call for call in setup["calls"] if call[0] == "POST"])
+
+        def reopen():
+            reopened = client.post(
+                decision_path,
+                json={
+                    "decision": "reopen",
+                    "note": "原问题再次出现",
+                    "idempotency_key": str(uuid4()),
+                },
+            )
+            assert reopened.status_code == 200, reopened.text
+
+        if customer_decision == "completion_race_then_reopen":
+            remember = service.ComponentPorts.remember
+
+            def reopen_after_impact_read(port, state):
+                result = remember(port, state)
+                reopen()
+                return result
+
+            with monkeypatch.context() as race:
+                race.setattr(service.ComponentPorts, "remember", reopen_after_impact_read)
+                assert resume()["status"] == "impact_recheck"
+        else:
+            assert resume()["status"] == (
+                "completed"
+                if customer_decision == "completed_then_reopen"
+                else "waiting_customer_impact"
+            )
+            reopen()
+        if customer_decision in {"completed_then_reopen", "completion_race_then_reopen"}:
+            assert read(client, request_id)["status"] == "impact_recheck"
+            assert service.accepted_knowledge() == []
+            # Reopen and graph advancement survive independent SQLite sessions;
+            # the first tick re-enters the existing impact interrupt.
+            service.tick()
+            assert read(client, request_id)["status"] == "delivered"
+            assert (
+                len([call for call in setup["calls"] if call[0] == "POST"]) == previous_dispatches
+            )
+    if customer_decision == "reopen" or customer_decision.endswith("then_reopen"):
         with get_session_factory()() as db:
             ticket = db.get(CustomerServiceTicket, ticket_id)
             evidence = json_loads(ticket.evidence_json, {})
@@ -914,7 +960,7 @@ def test_feedback_run_binds_original_customer_and_production_release(
             ticket.evidence_json = json_dumps(evidence)
             db.commit()
     final = resume()
-    if customer_decision in {"reopen", "resolved_then_reopen"}:
+    if customer_decision == "reopen" or customer_decision.endswith("then_reopen"):
         assert final["status"] == "waiting_recovery"
         assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
         assert final["effects"]["recovery"]["reason"] == "recovery_not_authorized"
@@ -923,6 +969,29 @@ def test_feedback_run_binds_original_customer_and_production_release(
         assert lessons[0]["outcome"] == "rejected"
         assert lessons[0]["customer_impact"]["reason"] == "original_customer_reopened"
         assert "ticket_id" not in lessons[0]["customer_impact"]
+        if customer_decision in {"completed_then_reopen", "completion_race_then_reopen"}:
+            from modstore_server import retort_feedback_recovery
+
+            recoveries = []
+
+            def recovered(recovery_request_id, _state):
+                recoveries.append(recovery_request_id)
+                return {"status": "rollback_verified", "restored_release_sha": "a" * 40}
+
+            monkeypatch.setattr(retort_feedback_recovery, "recover_release", recovered)
+            terminal = resume()
+            assert terminal["status"] == "customer_impact_rejected"
+            assert terminal["snapshot"]["pending"] == []
+            with get_session_factory()() as db:
+                updated_at = db.get(RetortEvolutionRun, request_id).updated_at
+            recovered_count, dispatches = len(recoveries), list(setup["calls"])
+            for _ in range(3):
+                assert service.tick()["processed"] == 0
+                assert service.advance_run(request_id) == terminal["snapshot"]
+            assert len(recoveries) == recovered_count
+            assert setup["calls"] == dispatches
+            with get_session_factory()() as db:
+                assert db.get(RetortEvolutionRun, request_id).updated_at == updated_at
         return
     assert final["status"] == "completed"
     assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
@@ -1097,10 +1166,11 @@ def test_training_service_submits_frozen_candidate_only_to_original_approval(
         },
     }
     templates_path.write_text(json.dumps(templates))
+    sample = {"run_id": "real-failure", "task": "private reproduction"}
     monkeypatch.setattr(
         trainer,
         "mine",
-        lambda *_, **__: [{"employee_id": "help-desk", "samples": [{"run_id": "real-failure"}]}],
+        lambda *_, **__: [{"employee_id": "help-desk", "samples": [sample]}],
     )
     calls = []
 
@@ -1140,6 +1210,11 @@ def test_training_service_submits_frozen_candidate_only_to_original_approval(
         client.post(endpoint, headers=auth, json={**body, "source_sha": "b" * 40}).status_code
         == 409
     )
+    for wrong_input in (None, "Different easier task"):
+        sample["task"] = wrong_input
+        invalid = client.post(endpoint, headers=auth, json=body)
+        assert invalid.status_code == 409 and "training_reproduction_source_unbound" in invalid.text
+    sample["task"] = "private reproduction"
     response = client.post(endpoint, headers=auth, json=body)
     assert response.status_code == 202, response.text
     request_id = response.json()["request_id"]
