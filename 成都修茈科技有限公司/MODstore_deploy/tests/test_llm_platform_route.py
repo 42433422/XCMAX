@@ -142,6 +142,20 @@ def test_platform_only_rejects_explicit_selection(chat_client, selection):
     assert response.json()["detail"]["code"] == "PLATFORM_ROUTE_CONFLICT"
 
 
+def test_stale_non_chat_preference_falls_back_to_platform(database, chat_client):
+    from modstore_server.models import User
+
+    save("xiaomi", base_url=BASE, model="mimo-v2.6-flash")
+    user = database.get(User, 1)
+    user.default_llm_json = json.dumps(
+        {"mode": "explicit", "provider": "xiaomi", "model": "gpt-image-1"}
+    )
+    database.commit()
+    response = chat_client.get("/api/llm/resolve-chat-default")
+    assert response.status_code == 200
+    assert response.json()["model"] == "mimo-v2.6-flash"
+
+
 def test_chat_default_openapi_exposes_optional_platform_only(chat_client):
     operation = chat_client.app.openapi()["paths"]["/api/llm/resolve-chat-default"]["get"]
     query = {p["name"]: p for p in operation["parameters"] if p["in"] == "query"}

@@ -20,6 +20,10 @@ def test_known_model_uses_catalog_window():
     assert windows.context_window_for("gpt-4o") == 128000
     assert windows.context_window_for("claude-sonnet-4-6") == 1000000
     assert windows.context_window_for("Xiaomi/MiMo-V2.6-Flash") == 1000000
+    assert windows.context_window_for("xcmax-doubao-code") == 1024000
+    assert windows.context_window_for("xcmax-kimi-code") == 1048576
+    assert windows.context_window_for("xcmax-para-coding") == 200000
+    assert windows.resolve_token_budget("xcmax-doubao-code") == 32000
 
 
 def test_unknown_model_falls_back_to_default_window():
