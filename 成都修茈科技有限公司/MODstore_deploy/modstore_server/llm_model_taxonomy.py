@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Literal, Mapping, Optional, Set, Tuple
 
 from modstore_server.llm_model_classification import classify_model as classify_model
@@ -430,33 +431,94 @@ def discover_model_capabilities(
 
 
 def _positive_int(value: Any) -> Optional[int]:
+    if isinstance(value, (bool, float)):
+        return None
     try:
         number = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if number > 0 else None
 
 
-def _public_provider_metadata(metadata: Mapping[str, Any]) -> Dict[str, Any]:
-    architecture = metadata.get("architecture")
-    if not isinstance(architecture, Mapping):
-        architecture = {}
-    context_window = _positive_int(
-        metadata.get("context_length")
-        or metadata.get("inputTokenLimit")
-        or metadata.get("input_token_limit")
-        or architecture.get("context_length")
-    )
-    max_output_tokens = _positive_int(
-        metadata.get("outputTokenLimit")
-        or metadata.get("output_token_limit")
-        or metadata.get("max_completion_tokens")
-    )
+def public_model_capabilities(metadata: Mapping[str, Any]) -> Dict[str, Any]:
+    """Keep declared input, output and combined limits distinct; never infer from max_tokens."""
+    aggregate = metadata.get("model_capabilities")
+    aggregated = isinstance(aggregate, Mapping) and aggregate.get("source") == "litellm_model_info"
+    sources = [metadata]
+    for key in ("model_capabilities", "model_info", "provider_metadata", "architecture"):
+        value = metadata.get(key)
+        if isinstance(value, Mapping):
+            sources.append(value)
     out: Dict[str, Any] = {}
-    if context_window:
-        out["context_window"] = context_window
-    if max_output_tokens:
-        out["max_output_tokens"] = max_output_tokens
+    for key, aliases in {
+        "context_window": ("context_window", "context_length"),
+        "max_input_tokens": ("max_input_tokens", "inputTokenLimit", "input_token_limit"),
+        "max_output_tokens": (
+            "max_output_tokens",
+            "outputTokenLimit",
+            "output_token_limit",
+            "max_completion_tokens",
+        ),
+    }.items():
+        values = [
+            limit
+            for source in sources
+            for alias in aliases
+            if (limit := _positive_int(source.get(alias))) is not None
+        ]
+        if values:
+            out[key] = min(values)
+    for source in ([aggregate] if aggregated and isinstance(aggregate, Mapping) else sources):
+        resolved = source.get("resolved_model")
+        if (
+            isinstance(resolved, str)
+            and 0 < len(resolved) <= 256
+            and "://" not in resolved
+            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]*", resolved)
+        ):
+            out["resolved_model"] = resolved
+            break
+    if aggregated or metadata.get("source") == "litellm_model_info":
+        out["source"] = "litellm_model_info"
+    elif out:
+        out["source"] = next(
+            (
+                source["source"]
+                for source in sources
+                if isinstance(source.get("source"), str)
+                and source["source"]
+                in {"litellm_registry", "provider_metadata", "litellm_model_info"}
+            ),
+            "provider_metadata",
+        )
+    return out
+
+
+def model_context_capabilities(
+    provider: str, model: str, metadata: Optional[Mapping[str, Any]] = None
+) -> Dict[str, Any]:
+    """Use the selected deployment's declarations, supplemented by LiteLLM's pinned registry."""
+    from modstore_server.llm_litellm_router import model_limits
+
+    out = public_model_capabilities(metadata or {})
+    if out.get("source") == "litellm_model_info":
+        # This is the intersection of every deployment behind an alias. Missing
+        # fields are unknown, not permission to refill a larger base-model limit.
+        return out
+    registry_provider, registry_model = provider, model
+    resolved = out.get("resolved_model")
+    if resolved and "/" in resolved:
+        registry_provider, registry_model = resolved.split("/", 1)
+    limits = model_limits(registry_provider, registry_model)
+    if limits:
+        for key, limit in limits.items():
+            out.setdefault(key, limit)
+        out.setdefault("source", "litellm_registry")
+    return out
+
+
+def _public_provider_metadata(metadata: Mapping[str, Any]) -> Dict[str, Any]:
+    out = public_model_capabilities(metadata)
     provider_type = str(metadata.get("type") or metadata.get("sub_type") or "").strip()
     if provider_type:
         out["provider_type"] = provider_type
@@ -510,6 +572,7 @@ def build_models_detailed(
                 "capability_confidence": capabilities["confidence"],
                 "capability_evidence": capabilities["evidence"],
                 "provider_metadata": public_metadata,
+                "model_capabilities": model_context_capabilities(provider, mid, metadata),
             }
         )
     rows.sort(key=lambda r: (_category_sort_key(r["category"]), r["id"]))
