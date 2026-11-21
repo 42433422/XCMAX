@@ -1,5 +1,5 @@
 {
-  "lines": 2555709,
+  "lines": 2556412,
   "updated": "2026-11-21",
-  "note": "规划器上下文预算改造：llm_plan_generation 精简工具目录 +72 行，planner_prompt_profile 意图域映射 +83 行，planner_llm_gateway 超限降级 +62 行，context_window_manager 指标埋点 +23 行，metrics 新增指标 +21 行，CHANGELOG +2 行，净增 220 行。批准：仓库所有者 42433422。"
+  "note": "修复 Excel 自然语言查询链路：date_norm.py 179 行、header_detection.py 84 行、pandas_translator.py 134 行、test_excel_query_pipeline.py 113 行，另有 excel_analysis 等改造净增约 193 行；经用户口头批准并入 PR #3423"
 }
