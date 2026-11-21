@@ -723,6 +723,73 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun", self._repo.save(run))
 
+    def continue_planning_clarification(
+        self,
+        run_id: str,
+        *,
+        answered_by: str,
+        clarification_step_id: str,
+        expected_plan_sha256: str,
+        expected_snapshot_sha256: str,
+        plan: PlanGraph,
+        answer: str,
+        runtime_context: dict[str, Any],
+    ) -> AgentRun | None:
+        """Replace only a pristine planning question, using the existing run CAS and lease."""
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+        from app.application.agent_orchestrator.clarification import is_planning_clarification
+        from app.application.agent_orchestrator.runtime_context import merge_runtime_context
+        from app.application.workflow.workflow_types import plan_fingerprint
+
+        run = self._repo.get(run_id)
+        if run is None or run.user_id != answered_by or not str(answer).strip():
+            return None
+        waiting = find_waiting_step(run, approved_step_id=clarification_step_id)
+        previous_plan = plan_from_dict(run.metadata.get("plan"))
+        if (
+            waiting is None
+            or not is_planning_clarification(run, waiting)
+            or previous_plan is None
+            or plan_fingerprint(previous_plan) != expected_plan_sha256
+            or canonical_hash(run.to_dict()) != expected_snapshot_sha256
+            or plan.metadata.get("planning_rejected")
+        ):
+            return None
+        context = merge_runtime_context(run, runtime_context)
+        if self._preflight_resume_plan(run, context):
+            return None
+        previous = copy.deepcopy(run)
+        replacement = copy.deepcopy(plan)
+        replacement.plan_id = run.plan_id
+        self._apply_plan(run, replacement, stable_step_ids=True)
+        if replacement.metadata.get("response_mode") == "reply":
+            from app.application.agent_orchestrator.reply_plan import valid_reply_plan
+
+            if not valid_reply_plan(run, replacement):
+                return None
+        elif self._preflight_resume_plan(run, context):
+            return None
+        run.metadata["runtime_context"] = context
+        run.metadata["plan_sha256"] = plan_fingerprint(replacement)
+        run.final_output, run.error = {}, ""
+        apply_ai_budget_metadata(run, context)
+        run.add_event(
+            "run.clarification_resumed",
+            "已将用户答复绑定原任务并重新核对执行计划",
+            {
+                "kind": "planning_scope",
+                "step_id": clarification_step_id,
+                "question": str(waiting.params.get("question") or ""),
+                "answer": str(answer),
+                "previous_plan_sha256": expected_plan_sha256,
+                "plan_sha256": run.metadata["plan_sha256"],
+            },
+        )
+        if not self._repo.save_if_unchanged(run, previous):
+            return None
+        self._execute_with_durable_lease(run, runtime_context=context)
+        return cast("AgentRun", self._repo.save(run))
+
     def reject_waiting_step(self, run_id: str, *, rejector: str, reason: str) -> AgentRun | None:
         """Stop a waiting sensitive step. Rejection records who, when, and why, and does not execute."""
         run = self._repo.get(run_id)

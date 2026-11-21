@@ -15,14 +15,14 @@
     },
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
-      "base_blob": "4bf0b175dade7d4b0fb2ccba238b9d9d06f706ed",
-      "head_blob": "314a36e51524c4a82c641e598148faeadfc86b06",
-      "before_lines": 1709,
-      "after_lines": 1726,
+      "base_blob": "01e7a819be5a25100ee8d47ca03c9f8ea0c2da1c",
+      "head_blob": "364d0fb553ad79cf7549c33fee33789b0fdcf303",
+      "before_lines": 1776,
+      "after_lines": 1793,
       "reason": "本轮用户授权AI浏览器闭环实现；保留原审批和执行图，仅增加可信浏览器入口、观察后单节点续跑、终态证据与等待任务拒绝后的资源释放。",
       "boundary": "浏览器策略、模型决策和会话实现各在独立小模块；本文件净增17行只接原AgentRun生命周期，不引入第二个执行引擎或绕过权限。",
-      "validation": "原AgentOrchestrator34项及浏览器循环27项、目标合同8项和business harness42项回归通过；真实Chromium由新增CI验收，未用受控响应冒充上线。",
-      "follow_up": "按原执行入口的整体职责继续审查，避免与PR3424澄清改动互相覆盖；本记录只请求架构评审，不表示评审已批准。",
+      "validation": "合入最新main 171418352d后，浏览器循环、目标合同、原AgentOrchestrator和business harness共112项通过；3424规划澄清/目标审核/知识答案连续性47项通过；真实Chromium仍由CI验收。",
+      "follow_up": "已纳入主线PR3424并保留持久用户更正，不覆盖原澄清逻辑；继续按原执行入口整体职责审查，本记录只请求架构评审，不表示评审已批准。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
@@ -123,14 +123,14 @@
     },
     "FHD/app/application/ai_chat/workflow_session.py": {
       "base_file": "FHD/app/application/ai_chat/workflow_session.py",
-      "base_blob": "165a3abec3f175d125a57584071a0a6ec0a9ef93",
-      "head_blob": "53e15f5c94918bf2706341545b4eb9e790a69f66",
-      "before_lines": 1420,
-      "after_lines": 1478,
-      "reason": "在聊天自动审批之后区分后台导入排队、部分写入、未执行和结果待核对，避免把已提交的任务误报成空操作或成功。",
-      "boundary": "读取已归属的同一执行回执并检查 ELT 步骤结果。返回等待状态不会执行导入，不把部分或未知回执提升为完成。",
-      "validation": "验证范围包括自动审批接续、原任务回执、未写入标记和部分完成聚合。待远端 CI 和实际后台导入验收。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。",
-      "follow_up": "状态契约稳定后将回执投影和面向用户的文字归并到现有工作流响应构造器。",
+      "base_blob": "53e15f5c94918bf2706341545b4eb9e790a69f66",
+      "head_blob": "12665373fe15a9d2383a0048081258d17ac57f3f",
+      "before_lines": 1478,
+      "after_lines": 1562,
+      "reason": "修复澄清恢复、等待状态及审批投影：以持久化 AgentRun 恢复原待办，将 planning_scope 答复交回原任务，等待响应保留 run_id 与 waiting_user。",
+      "boundary": "维持 WorkflowSession 现有待办恢复和审批交接职责；索引落后时从权威运行记录恢复，复用审批请求幂等契约，不将用户选择范围视为写入批准。",
+      "validation": "本地 14 个关联测试文件 333 项通过，其中真实 process_chat/SQL 整链 18 项覆盖重启恢复、并发 CAS、旧快照、身份隔离和审批；12 个生产文件 mypy 与变更 Python Ruff 通过。首轮 GitHub PostgreSQL 事务验收通过；新提交完整 CI 和用户现场验收仍待完成。本记录是审查请求，不代表批准。",
+      "follow_up": "由 @42433422 在 PR #3424 复核崩溃窗口、索引失败回执和恢复后的审批保护；继续使用现有响应构造器，不增加状态旁路或为压行数搬移同职责代码。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat_app_service.py": {
