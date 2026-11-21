@@ -1,13 +1,32 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import math
 import os
+import time
 from collections import Counter
+from contextlib import aclosing, asynccontextmanager, contextmanager
 from types import SimpleNamespace
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.domain.model_admission_errors import (
+    ModelCircuitOpenError,
+    ModelConcurrencyLimitError,
+    ModelRateLimitError,
+)
+from app.infrastructure.modstore_transport import MarketModelError
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from app.utils.resilience.rate_limiter import RateLimitBackendError
+
+MODEL_REQUEST_ERRORS = (
+    MarketModelError,
+    ModelCircuitOpenError,
+    ModelConcurrencyLimitError,
+    ModelRateLimitError,
+    RateLimitBackendError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +34,187 @@ _ENV_MAX_TOKENS = "XCAGI_PLANNER_MAX_TOKENS"
 # 推理模型（如 MiMo / MiniMax M3）会先消耗 reasoning token，1200 的旧默认
 # 会让正文为空（finish_reason=length）。默认放宽到 4096，仍可用环境变量收紧。
 _DEFAULT_MAX_TOKENS = 4096
+
+
+@contextmanager
+def planner_model_budget(context: dict[str, Any] | None):
+    """Share the existing trusted I/O deadline across classification, repair and review."""
+    from app.application.tool_execution_deadline import InvocationBudget, invocation_deadline
+
+    budget = (context or {}).get("_planner_model_budget")
+    if not isinstance(budget, InvocationBudget):
+        try:
+            seconds = float(os.environ.get("XCAGI_PLANNER_TIMEOUT_SECONDS", "90"))
+        except ValueError:
+            seconds = 90.0
+        seconds = max(1.0, min(300.0, seconds)) if math.isfinite(seconds) else 90.0
+        budget = InvocationBudget(time.monotonic() + seconds)
+    with invocation_deadline(budget.deadline) as active:
+        if context is not None:
+            # A JSON client cannot supply this object. It is not model evidence
+            # or a durable task budget and must be discarded before execution.
+            context["_planner_model_budget"] = active
+        yield active
+
+
+def _provider_failure(error: Exception) -> MarketModelError | None:
+    """Normalize SDK/HTTP failures without copying provider text or request data."""
+    import httpx
+    from openai import APIConnectionError, APIError, APITimeoutError
+
+    from app.infrastructure.llm.model_context_windows import ModelOutputLimitExceeded
+
+    if isinstance(error, MarketModelError):
+        return error
+    status = getattr(error, "status_code", None) or getattr(
+        getattr(error, "response", None), "status_code", None
+    )
+    if isinstance(status, int) and 400 <= status <= 599:
+        return MarketModelError({"status": status})
+    if isinstance(error, (TimeoutError, httpx.TimeoutException, APITimeoutError)):
+        return MarketModelError({"status": 504})
+    if isinstance(error, (OSError, httpx.TransportError, APIConnectionError)):
+        return MarketModelError({"status": 503}, code="model_connection_failed")
+    if isinstance(error, ModelOutputLimitExceeded):
+        return MarketModelError({"status": 400}, code="model_output_budget_exceeded")
+    if isinstance(error, ValueError):
+        return MarketModelError({"status": 502}, code="model_response_invalid")
+    if isinstance(error, (RuntimeError, APIError)):
+        return MarketModelError({"status": 502})
+    return None
+
+
+def record_planning_failure(context: dict[str, Any], error: Exception, *, stage="planning"):
+    """Preserve a safe machine-readable failure; never turn outages into missing user input."""
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+    if isinstance(error, ContextWindowExceeded):
+        context.update(
+            planning_failure_reason=str(error),
+            planning_failure_kind="planner_error",
+            planning_failure_retryable=False,
+            planning_failure_status=413,
+            planning_failure_stage=stage,
+            _planning_failure_code="context_window_exceeded",
+        )
+        context.pop("goal_coverage_rejected", None)
+        return
+    if isinstance(error, ConversationRevisionError):
+        context.update(
+            planning_failure_reason="会话已更新或删除，请重新发送本次请求。",
+            planning_failure_kind="conversation_changed",
+            planning_failure_retryable=False,
+            planning_failure_status=409,
+            planning_failure_stage=stage,
+            _planning_failure_code="conversation_changed",
+        )
+        context.pop("goal_coverage_rejected", None)
+        return
+
+    failure: (
+        MarketModelError
+        | ModelCircuitOpenError
+        | ModelConcurrencyLimitError
+        | ModelRateLimitError
+        | None
+    )
+    if isinstance(error, (ModelCircuitOpenError, ModelConcurrencyLimitError, ModelRateLimitError)):
+        failure, status, retryable = (
+            error,
+            503 if isinstance(error, ModelCircuitOpenError) else 429,
+            True,
+        )
+    elif isinstance(error, RateLimitBackendError):
+        failure, status, retryable = MarketModelError({"status": 503}), 503, True
+    else:
+        failure = _provider_failure(error)
+        if failure is None:
+            raise error
+        status, retryable = failure.status_code, failure.retryable
+    context.update(
+        planning_failure_reason=str(failure),
+        planning_failure_kind=failure.code,
+        planning_failure_retryable=retryable,
+        planning_failure_status=status,
+        planning_failure_stage=stage,
+        _planning_failure_code=failure.code,
+    )
+    context.pop("goal_coverage_rejected", None)
+
+
+def _validate_completion(result: Any) -> dict[str, Any]:
+    if not isinstance(result, dict):
+        raise MarketModelError({"status": 502}, code="model_response_invalid")
+    choices = result.get("choices")
+    first = choices[0] if isinstance(choices, list) and choices else None
+    if not isinstance(first, dict):
+        raise MarketModelError({"status": 502}, code="model_response_invalid")
+    message = first.get("message")
+    code = "model_response_invalid"
+    if first.get("finish_reason") == "length":
+        code = "model_output_truncated"
+    elif isinstance(message, dict) and (
+        message.get("refusal") or first.get("finish_reason") == "content_filter"
+    ):
+        code = "model_response_blocked"
+    elif isinstance(message, dict) and (
+        (isinstance(message.get("content"), str) and message["content"].strip())
+        or message.get("tool_calls")
+        or message.get("function_call")
+    ):
+        return result
+    raise MarketModelError({"status": 502}, code=code)
+
+
+@contextmanager
+def _provider_errors():
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+    from .retry_policy import retry_manages_transport_error
+
+    try:
+        yield
+    except BOUNDARY_ERRORS as exc:
+        if isinstance(
+            exc,
+            (
+                ContextWindowExceeded,
+                ConversationRevisionError,
+                MarketModelError,
+                ModelCircuitOpenError,
+                ModelConcurrencyLimitError,
+                ModelRateLimitError,
+                RateLimitBackendError,
+            ),
+        ) or retry_manages_transport_error(exc):
+            raise
+        failure = _provider_failure(exc)
+        if failure is None:
+            raise
+        logger.warning("planner model request failed: %s", type(exc).__name__)
+        raise failure from exc
+
+
+@asynccontextmanager
+async def _model_request_deadline(context):
+    from app.application.tool_execution_deadline import (
+        check_invocation_deadline,
+        remaining_invocation_seconds,
+    )
+
+    with planner_model_budget(context):
+        timeout = asyncio.timeout(remaining_invocation_seconds(math.inf))
+        try:
+            async with timeout:
+                check_invocation_deadline()
+                yield
+                check_invocation_deadline()
+        except TimeoutError as exc:
+            if timeout.expired() or remaining_invocation_seconds(math.inf) <= 0:
+                raise MarketModelError({"status": 504}, code="model_deadline_exceeded") from exc
+            raise
 
 
 def _compact_tool_registry(prompt: dict[str, Any]) -> None:
@@ -258,35 +458,46 @@ def stream_planner_completion(
     from app.infrastructure.llm.model_admission import model_rate_limit_scope
     from app.infrastructure.llm.providers.registry import get_active_provider
 
-    provider = get_active_provider(conversation_service=ai_service)
-    stream = getattr(provider, "stream_chat_completion", None) if provider is not None else None
+    with planner_model_budget(context), _provider_errors():
+        provider = get_active_provider(conversation_service=ai_service)
+        if provider is None:
+            raise MarketModelError({"status": 503}, code="model_not_configured")
+    stream = getattr(provider, "stream_chat_completion", None)
     if stream is None:
         return None
 
     async def generate():
         from app.infrastructure.llm.model_context_windows import resolve_model_limits
 
-        with model_rate_limit_scope(context):
-            limits = await resolve_model_limits(
-                provider, extra.get("model"), extra.get("provider"), messages=messages
-            )
-            output_limit = (
-                max_tokens
-                if max_tokens is not None
-                else limits.default_output_tokens(planner_max_tokens())
-            )
-            outbound = await _prepare_model_messages(
-                provider, context, messages, output_limit, extra, model_limits=limits
-            )
-            limits.assert_current()
-            async for chunk in stream(
-                messages=outbound,
-                temperature=temperature,
-                max_tokens=output_limit,
-                **{**extra, **limits.request_options},
-            ):
+        with _provider_errors(), model_rate_limit_scope(context):
+            async with _model_request_deadline(context):
+                limits = await resolve_model_limits(
+                    provider, extra.get("model"), extra.get("provider"), messages=messages
+                )
+                output_limit = (
+                    max_tokens
+                    if max_tokens is not None
+                    else limits.default_output_tokens(planner_max_tokens())
+                )
+                outbound = await _prepare_model_messages(
+                    provider, context, messages, output_limit, extra, model_limits=limits
+                )
                 limits.assert_current()
-                yield chunk
+                emitted = False
+                async with aclosing(
+                    stream(
+                        messages=outbound,
+                        temperature=temperature,
+                        max_tokens=output_limit,
+                        **{**extra, **limits.request_options},
+                    )
+                ) as chunks:
+                    async for chunk in chunks:
+                        limits.assert_current()
+                        emitted = emitted or bool(chunk)
+                        yield chunk
+                if not emitted:
+                    raise MarketModelError({"status": 502}, code="model_response_invalid")
 
     return generate()
 
@@ -300,78 +511,43 @@ def request_planner_completion(
     temperature: float = 0.1,
     max_tokens: int | None = None,
     **extra: Any,
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
     """Use the same request-scoped provider and model as nested Agent tools."""
     from app.application.employee_runtime.agent_runner import _run_async
     from app.infrastructure.llm.providers.registry import get_active_provider
 
-    try:
+    with planner_model_budget(context), _provider_errors():
         provider = get_active_provider(conversation_service=ai_service)
         if provider is None:
-            return None
+            raise MarketModelError({"status": 503}, code="model_not_configured")
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
         from app.infrastructure.llm.model_context_windows import resolve_model_limits
 
         with model_rate_limit_scope(context):
 
-            async def complete():
-                limits = await resolve_model_limits(
-                    provider, extra.get("model"), extra.get("provider"), messages=messages
-                )
-                output_limit = (
-                    max_tokens
-                    if max_tokens is not None
-                    else limits.default_output_tokens(planner_max_tokens())
-                )
-                outbound = await _prepare_model_messages(
-                    provider, context, messages, output_limit, extra, model_limits=limits
-                )
-                limits.assert_current()
-                result = await provider.chat_completion(
-                    messages=outbound,
-                    temperature=temperature,
-                    max_tokens=output_limit,
-                    **{**extra, **limits.request_options},
-                )
-                limits.assert_current()
-                return result
+            async def complete() -> dict[str, Any]:
+                async with _model_request_deadline(context):
+                    limits = await resolve_model_limits(
+                        provider, extra.get("model"), extra.get("provider"), messages=messages
+                    )
+                    output_limit = (
+                        max_tokens
+                        if max_tokens is not None
+                        else limits.default_output_tokens(planner_max_tokens())
+                    )
+                    outbound = await _prepare_model_messages(
+                        provider, context, messages, output_limit, extra, model_limits=limits
+                    )
+                    limits.assert_current()
+                    result = await provider.chat_completion(
+                        messages=outbound,
+                        temperature=temperature,
+                        max_tokens=output_limit,
+                        **{**extra, **limits.request_options},
+                    )
+                    limits.assert_current()
+                    return _validate_completion(result)
 
-            result = _run_async(complete())
-    except RECOVERABLE_ERRORS as exc:
-        from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
-        from app.domain.shared_services.conversation_service import ConversationRevisionError
-
-        if isinstance(exc, (ContextWindowExceeded, ConversationRevisionError)):
-            raise
-        from .retry_policy import retry_manages_transport_error
-        from .tool_calling import unsupported_tool_parameter
-
-        if retry_manages_transport_error(exc) or (
-            extra and isinstance(exc, TypeError) and unsupported_tool_parameter(exc)
-        ):
-            raise
-        from app.infrastructure.llm.model_admission import (
-            ModelCircuitOpenError,
-            ModelConcurrencyLimitError,
-            ModelRateLimitError,
-        )
-        from app.infrastructure.modstore_transport import MarketModelError
-        from app.utils.resilience.rate_limiter import RateLimitBackendError
-
-        if isinstance(
-            exc,
-            (
-                MarketModelError,
-                ModelCircuitOpenError,
-                ModelConcurrencyLimitError,
-                ModelRateLimitError,
-                RateLimitBackendError,
-            ),
-        ):
-            raise
-        logger.warning("planner model request failed", exc_info=True)
-        return None
-    if not isinstance(result, dict):
-        return None
+            result: dict[str, Any] = _run_async(complete())
     _meter_planner_completion(result, model=str(result.get("model") or ""))
     return result

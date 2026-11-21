@@ -182,7 +182,7 @@ def _model_plan(
 
     def respond(**kwargs):
         request = json.loads(kwargs["messages"][-1]["content"])
-        if request.get("task") == "audit_goal_coverage":
+        if request.get("task") in {"audit_goal_coverage", "audit_reply"}:
             assert review_node_ids, "Structurally invalid plans must not reach goal review"
             return goal_review_response(
                 request, source=message, node_ids=list(review_node_ids), outcome=review_outcome
@@ -197,7 +197,8 @@ def _model_plan(
     planning_calls = [
         call
         for call in completion.call_args_list
-        if json.loads(call.kwargs["messages"][-1]["content"]).get("task") != "audit_goal_coverage"
+        if json.loads(call.kwargs["messages"][-1]["content"]).get("task")
+        not in {"audit_goal_coverage", "audit_reply"}
     ]
     assert len(planning_calls) == expected_model_calls
     assert completion.call_count - len(planning_calls) == bool(review_node_ids)
@@ -283,7 +284,9 @@ def test_unknown_or_incomplete_business_plan_cannot_dispatch(monkeypatch, tool, 
     )
     if tool == "unknown_tool" or action == "unknown_action":
         assert plan.metadata.get("planning_rejected") is True
-        assert all(node.tool_id == "clarify" for node in plan.nodes)
+        assert plan.metadata["planning_failure_kind"] == "plan_repair_failed"
+        assert plan.metadata["planning_unavailable"] is False
+        assert plan.nodes == []
     else:
         assert plan.nodes[0].tool_id == "clarify"
         assert plan.nodes[0].action == "ask"
@@ -358,6 +361,7 @@ def test_persistent_unauthorized_plan_repair_is_bounded_and_never_dispatches(
         expected_model_calls=expected_calls,
     )
     assert plan.metadata["planning_rejected"] is True
-    assert plan.nodes
-    assert all((node.tool_id, node.action) == ("clarify", "ask") for node in plan.nodes)
+    assert plan.metadata["planning_failure_kind"] == "plan_repair_failed"
+    assert plan.metadata["planning_unavailable"] is False
+    assert plan.nodes == []
     dispatch.assert_not_called()

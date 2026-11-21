@@ -84,6 +84,111 @@ def test_native_and_json_use_identical_validation():
 
 
 @pytest.mark.parametrize(
+    "content",
+    [
+        "向量表示一组数值，可以用于比较语义相似度。",
+        "```python\nitems = [1, 2]\nprint(items[0])\n```",
+        "春风拂过窗前，远山渐渐明亮。",
+    ],
+)
+def test_native_auto_text_uses_typed_reply_without_shape_repair(content, monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    completion = Mock(
+        return_value={"choices": [{"finish_reason": "stop", "message": {"content": content}}]}
+    )
+    plan = _generator(completion).generate("p1", "u1", "请解释并给出示例", {}, {})
+    assert plan.metadata["response_mode"] == "reply"
+    assert plan.metadata["reply"] == content
+    assert len(plan.nodes) == 1
+    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("conversation", "reply")
+    assert plan.nodes[0].params == {"response": content}
+    completion.assert_called_once()
+    assert completion.call_args.kwargs["tool_choice"] == "auto"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"city":"北京","count":2}',
+        '[{"city":"北京"},{"city":"成都"}]',
+        '```json\n{"city":"北京","count":2}\n```',
+        '```JSON\n["北京","成都"]\n```',
+        '```\n{"city":"北京"}\n```',
+    ],
+)
+def test_native_auto_json_answers_remain_reply_content(content, monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    completion = Mock(
+        return_value={"choices": [{"finish_reason": "stop", "message": {"content": content}}]}
+    )
+    plan = _generator(completion).generate("p1", "u1", "用 JSON 给出城市示例", {}, {})
+    assert plan.metadata["response_mode"] == "reply"
+    assert plan.metadata["reply"] == content
+    assert [(node.tool_id, node.action) for node in plan.nodes] == [("conversation", "reply")]
+    assert plan.nodes[0].params == {"response": content}
+    completion.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"mode":"workflow","nodes":[]}',
+        '{"mode":"reply","reply":""}',
+        '{"nodes":[]}',
+        '[{"mode":"workflow","nodes":[]}]',
+        '```json\n{"mode":"workflow","nodes":null}\n```',
+        '{"city":"北京","count":NaN}',
+    ],
+)
+def test_invalid_json_plan_envelopes_cannot_become_successful_replies(content, monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    completion = Mock(return_value={"choices": [{"message": {"content": content}}]})
+    assert _generator(completion).generate("p1", "u1", "查询并导出", {}, {}) is None
+
+
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("prefix", ["", "```json\n", "```JSON\n", "```\n"])
+def test_native_text_does_not_reinterpret_structured_or_truncated_plans(
+    native, prefix, monkeypatch
+):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1" if native else "0")
+    completion = Mock(
+        return_value={
+            "choices": [{"message": {"content": prefix + '{"mode":"workflow","nodes":['}}]
+        }
+    )
+    assert _generator(completion).generate("p1", "u1", "查询并导出", {}, {}) is None
+
+
+def test_plain_text_is_not_native_when_tools_were_not_offered(monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "0")
+    completion = Mock(return_value={"choices": [{"message": {"content": "普通文本"}}]})
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    assert "tools" not in completion.call_args.kwargs
+
+
+def test_legacy_completion_without_tool_parameters_keeps_json_contract(monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    plain = {"choices": [{"message": {"content": "普通文本"}}]}
+    completion = Mock(side_effect=[TypeError("unexpected keyword argument 'tools'"), plain, plain])
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    assert completion.call_count == 3
+    assert "tools" not in completion.call_args_list[1].kwargs
+
+
+@pytest.mark.parametrize("finish_reason", ["length", "tool_calls", "content_filter"])
+def test_incomplete_native_text_is_rejected(finish_reason, monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    completion = Mock(
+        return_value={
+            "choices": [{"finish_reason": finish_reason, "message": {"content": "未完整的回答"}}]
+        }
+    )
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    completion.assert_called_once()
+
+
+@pytest.mark.parametrize(
     "arguments",
     [
         "",
@@ -148,12 +253,15 @@ def test_native_arguments_require_json_text(arguments):
 
 @pytest.mark.parametrize("transport", ["tool_calls", "function_call"])
 @pytest.mark.parametrize("mode", ["full", "light", "repair"])
-def test_native_actions_never_reinterpret_shadow_text_or_request_a_new_plan(mode, transport):
+@pytest.mark.parametrize("plain_text", [False, True])
+def test_native_actions_never_reinterpret_shadow_text_or_request_a_new_plan(
+    mode, transport, plain_text
+):
     response = _native(name="unknown__write")
     message = response["choices"][0]["message"]
     if transport == "function_call":
         message["function_call"] = message.pop("tool_calls")[0]["function"]
-    message["content"] = json.dumps(_graph())
+    message["content"] = "已经完成" if plain_text else json.dumps(_graph())
     completion = Mock(return_value=response)
     generator = _generator(completion)
     if mode == "repair":
@@ -205,7 +313,7 @@ def test_rejected_native_response_stays_rejected_through_workflow_planner(invali
     assert plan.metadata["planning_unavailable"] is False
     assert plan.metadata["planning_failure_kind"] == "plan_format_invalid"
     assert plan.metadata["rejection_reason"] == reason
-    assert all(node.tool_id == "clarify" for node in plan.nodes)
+    assert plan.nodes == []
     assert completion.call_count == 1
 
     monkeypatch.setattr(

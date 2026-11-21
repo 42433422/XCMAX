@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -307,6 +309,9 @@ def test_normal_cancel_is_durable_and_save_failure_preserves_pending(
     )
     service = object.__new__(AIChatApplicationService)
     service._pending_workflows = {}
+    service.workflow_planner = Mock()
+    service.risk_gate = Mock()
+    service.approval_service = Mock()
     monkeypatch.setattr(module, "WorkflowPlanStore", lambda: store)
     if failed_save:
         from sqlalchemy.exc import OperationalError
@@ -318,6 +323,8 @@ def test_normal_cancel_is_durable_and_save_failure_preserves_pending(
     result = service._try_handle_dynamic_workflow(
         "u1", "取消", "normal", {"session_id": "sess"}, {}
     )
+    service.workflow_planner.plan.assert_not_called()
+    service.risk_gate.evaluate.assert_not_called()
     assert result["success"] is not failed_save
     assert store.load(plan.plan_id)["status"] == (
         "pending_awaiting" if failed_save else "cancelled"
@@ -522,8 +529,6 @@ def test_real_integrity_failure_without_committed_row_has_no_strict_receipt(
 def test_restarted_control_never_loads_another_owner_or_session(
     session_factory, monkeypatch, user_id, session_id, message
 ):
-    from unittest.mock import Mock
-
     import app.application.workflow.plan_store as module
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -555,8 +560,6 @@ def test_restarted_control_never_loads_another_owner_or_session(
 def test_restarted_confirmation_without_execution_record_stays_fail_closed(
     session_factory, monkeypatch
 ):
-    from unittest.mock import Mock
-
     import app.application.workflow.plan_store as module
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -572,7 +575,9 @@ def test_restarted_confirmation_without_execution_record_stays_fail_closed(
     monkeypatch.setattr(module, "WorkflowPlanStore", lambda: store)
     service = object.__new__(AIChatApplicationService)
     service._pending_workflows = {}
-    service._dispatch_model_selection = Mock(side_effect=AssertionError("must not replan"))
+    service.workflow_planner = Mock()
+    service.risk_gate = Mock()
+    service.approval_service = Mock()
     result = service._try_handle_dynamic_workflow(
         "u1", "确认", "normal", {"session_id": "sess"}, {}
     )
@@ -580,7 +585,8 @@ def test_restarted_confirmation_without_execution_record_stays_fail_closed(
     assert result["data"]["action"] == "workflow_resume_failed"
     assert store.load(plan.plan_id)["status"] == "pending_awaiting"
     assert service._pending_workflows["u1"]["plan"].plan_id == plan.plan_id
-    service._dispatch_model_selection.assert_not_called()
+    service.workflow_planner.plan.assert_not_called()
+    service.risk_gate.evaluate.assert_not_called()
 
 
 @pytest.mark.parametrize("scoped", [False, True])
@@ -663,7 +669,11 @@ def test_restarted_confirmation_resumes_signed_durable_agent_run(
     )
     service = object.__new__(AIChatApplicationService)
     service._pending_workflows = {}
+    service.workflow_planner = Mock()
+    service.risk_gate = Mock()
+    service.approval_service = Mock()
     service._try_handle_dynamic_workflow(chat_user, "确认", "normal", {"session_id": "sess"}, {})
+    service.workflow_planner.plan.assert_not_called()
     completed = fresh.get(run.run_id)
     assert completed.status == "completed", completed.to_dict()
     assert completed.tool_calls and completed.tool_calls[0].output["success"]

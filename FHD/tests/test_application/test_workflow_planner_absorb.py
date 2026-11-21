@@ -269,7 +269,8 @@ class TestFinalizeValidateDecoratedGraph:
             node_type=WorkflowNode,
         )
         assert result.metadata["planning_rejected"] is True
-        assert result.nodes[0].tool_id == "clarify"
+        assert result.metadata["planning_failure_kind"] == "plan_validation_failed"
+        assert result.nodes == []
 
 
 def test_read_plan_without_independent_review_is_not_admitted():
@@ -285,4 +286,5 @@ def test_read_plan_without_independent_review_is_not_admitted():
         rejected = planner.plan("u1", "看看有哪些客户", _customers_registry())
     assert rejected.metadata["planning_rejected"] is True
     assert "目标覆盖" in rejected.metadata["rejection_reason"]
-    assert all(node.tool_id == "clarify" for node in rejected.nodes)
+    assert rejected.metadata["planning_failure_kind"] == "goal_review_unavailable"
+    assert rejected.nodes == []

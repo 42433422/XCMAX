@@ -68,7 +68,6 @@ def runtime(trusted_actor, monkeypatch, tmp_path):
             module, "_ensure_chat_db_read_authorized", lambda *a, **kw: (True, None)
         )
         monkeypatch.setattr(module, "_message_requires_db_read_token", lambda message: False)
-        monkeypatch.setattr(module, "_ensure_vector_index_if_needed", lambda *args: None)
         monkeypatch.setattr(module, "planner_workflow_interrupt_reply", lambda message: None)
     monkeypatch.setattr(compat, "assert_p2_elevated_claim_or_raise", lambda request: None)
     monkeypatch.setattr(compat, "resolve_ai_tier", lambda request: "standard")

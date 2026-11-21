@@ -151,9 +151,11 @@ class PlannedWorkflowDispatch:
             "success": True,
             "message": "回复完成",
             "response": text,
+            "execution": PlannedWorkflowDispatch._no_write_execution(context),
             "data": {
                 "text": text,
                 "action": "model_reply",
+                "execution_started": False,
                 "workflow_runtime": "xcagi-langgraph",
                 "plan_audit": result.final_context.get("plan_audit") or {},
                 "workflow_trace": result.final_context.get("workflow_trace") or [],
@@ -274,6 +276,20 @@ class PlannedWorkflowDispatch:
             resolve_attachment_context,
         )
 
+        pending_handled, pending_result = self.callbacks._resume_pending_dynamic_workflow(
+            user_id, message, text, context
+        )
+        planning_continuation = (pending_result or {}).get("_planning_clarification")
+        suspended_workflow = (pending_result or {}).get("_workflow_new_goal")
+        detail = ((pending_result or {}).get("data") or {}).get("data") or {}
+        batch_continuation = (
+            text.strip().rstrip("。.!！") == "继续"
+            and detail.get("reason") == "no_pending_workflow"
+        )
+        if pending_handled and not planning_continuation and not batch_continuation:
+            # Confirm/cancel use the already bound run even if a new attachment
+            # is invalid. They must not execute and then return an unrelated error.
+            return pending_result
         try:
             context, attachments = resolve_attachment_context(context)
         except AttachmentInputError as exc:
@@ -285,10 +301,6 @@ class PlannedWorkflowDispatch:
                 "execution": self._no_write_execution(context),
                 "data": {"error_code": "attachment_reupload_required", "execution_started": False},
             }
-        pending_handled, pending_result = self.callbacks._resume_pending_dynamic_workflow(
-            user_id, message, text, context
-        )
-        planning_continuation = (pending_result or {}).get("_planning_clarification")
         continuation_reference = {}
         if isinstance(planning_continuation, dict):
             from app.application.agent_orchestrator.tool_permission import overlay_resume_context
@@ -330,12 +342,6 @@ class PlannedWorkflowDispatch:
         plan = None
         continuation_task: dict[str, Any] = {}
         if pending_handled:
-            detail = ((pending_result or {}).get("data") or {}).get("data") or {}
-            if (
-                text.strip().rstrip("。.!！") != "继续"
-                or detail.get("reason") != "no_pending_workflow"
-            ):
-                return pending_result
             from app.application.elt.batch_continuation import (
                 BatchContinuationBlocked,
                 active_batch_turn,
@@ -471,14 +477,18 @@ class PlannedWorkflowDispatch:
                 message_text = reason
             elif coverage_rejected:
                 message_text = (
-                    "这次任务的目标、条件或先后顺序尚未核对完整，本次没有执行任何业务操作。"
-                    "请核对并补充任务要求后重试。"
+                    "生成的计划未覆盖任务目标、条件或先后顺序，已停止执行。"
+                    "本次没有执行任何业务操作，请重试或调整任务范围。"
                 )
                 reason = "任务目标、条件或顺序尚未核对完整"
-            elif failure_code == "context_window_exceeded" or (
-                unavailable and "余额不足" in reason
+            elif (
+                failure_code in {"context_window_exceeded", "conversation_changed"}
+                or (unavailable and "余额不足" in reason)
+                or (isinstance(failure_code, str) and failure_code.startswith("model_") and reason)
             ):
                 message_text = f"{reason.rstrip('。')}。本次没有执行任何业务操作。"
+            elif failure_kind == "goal_review_unavailable":
+                message_text = "模型目标核对未返回有效结果，本次没有执行任何业务操作。请重试。"
             elif failure_kind == "plan_repair_failed":
                 message_text = (
                     "模型已返回任务计划，但计划校验和自动修复均未成功。"
@@ -495,9 +505,7 @@ class PlannedWorkflowDispatch:
                     "平台模型暂时没有返回可用结果，请检查模型连接后重试。本次没有执行任何业务操作。"
                 )
             else:
-                message_text = (
-                    "平台模型计划未通过系统校验，本次没有执行任何业务操作。请补充条件后重试。"
-                )
+                message_text = "平台模型计划未通过系统校验，本次没有执行任何业务操作。请重试。"
             return {
                 "success": False,
                 "execution_state": "failed",
@@ -510,14 +518,23 @@ class PlannedWorkflowDispatch:
                     "action": "workflow_planning_failed",
                     "error_code": "workflow_goal_coverage_rejected"
                     if coverage_rejected
-                    else "context_window_exceeded"
-                    if failure_code == "context_window_exceeded"
+                    else failure_code
+                    if failure_code
                     else "workflow_plan_unavailable"
                     if unavailable
                     else "workflow_plan_rejected",
                     "execution_started": False,
                     **({"reason": reason[:240]} if reason else {}),
                     **({"planning_failure_kind": failure_kind} if failure_kind else {}),
+                    **{
+                        key: plan.metadata[key]
+                        for key in (
+                            "planning_failure_retryable",
+                            "planning_failure_status",
+                            "planning_failure_stage",
+                        )
+                        if key in plan.metadata
+                    },
                     **(
                         {"planning_diagnostics": plan.metadata["plan_repair"]}
                         if isinstance((plan.metadata or {}).get("plan_repair"), dict)
@@ -525,8 +542,12 @@ class PlannedWorkflowDispatch:
                     ),
                 },
             }
+        # The model deadline spans classification, planning and review only.
+        context.pop("_planner_model_budget", None)
         if (plan.metadata or {}).get("response_mode") == "reply" and not planning_continuation:
             result = self._execute_reply_plan(plan, context)
+            if isinstance(suspended_workflow, dict):
+                result["data"]["pending_workflow"] = suspended_workflow
             if attachments and result.get("success"):
                 result["data"]["artifacts"] = attachments
             return result

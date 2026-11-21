@@ -25,7 +25,6 @@ class ChatAdmission:
     requires_read: Callable[[str], bool]
     interrupt: Callable[[str], str | None]
     after_interrupt: Callable[[Context | None], Context]
-    vector_guard: Callable[[str, Context], str | None]
     reply: ReplyFormatter
 
     def context(self, request: Request, context: Context | None, message: str) -> Context:
@@ -65,7 +64,4 @@ class ChatAdmission:
                 ),
                 context_update=cleared,
             )
-        error = self.vector_guard(turn.message, turn.context)
-        if error:
-            return AdmissionResult(self.reply(error, kitten_attachments=turn.kitten_extra))
         return AdmissionResult()

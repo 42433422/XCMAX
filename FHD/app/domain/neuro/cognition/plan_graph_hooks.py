@@ -110,9 +110,6 @@ def finalize_planned_graph(
             plan_id=plan_id,
             validate_error=err,
         )
-    question = (
-        "我没能生成通过系统校验的计划，本轮没有执行任何业务操作。请补充业务对象和目标后重试。"
-    )
     coverage_rejected = bool(context.get("goal_coverage_rejected"))
     failure_kind = (
         "plan_validation_failed"
@@ -121,32 +118,28 @@ def finalize_planned_graph(
     )
     if coverage_rejected:
         failure_kind = "goal_coverage_rejected"
+    failure_details: dict[str, Any] = {
+        key: context[key]
+        for key in (
+            "planning_failure_retryable",
+            "planning_failure_status",
+            "planning_failure_stage",
+        )
+        if key in context
+    }
     rejected = plan_type(
         plan_id=plan_id,
         intent="plan_rejected",
-        todo_steps=["等待补充信息后重新规划"],
-        nodes=[
-            node_type(
-                node_id="plan_rejected_clarification",
-                tool_id="clarify",
-                action="ask",
-                params={
-                    "question": question,
-                    "answer_key": "confirmed",
-                    "target_node_id": "",
-                    "planning_rejected": True,
-                },
-                risk="low",
-                idempotent=True,
-                description="计划校验失败，暂停并请求补充业务目标",
-            )
-        ],
+        todo_steps=[],
+        nodes=[],
         risk_level="low",
         metadata={
             "planning_rejected": True,
-            "planning_unavailable": failure_kind == "model_unavailable",
+            "planning_unavailable": failure_kind.startswith("model_")
+            or failure_kind == "goal_review_unavailable",
             "planning_failure_kind": failure_kind,
             "planning_failure_code": context.get("_planning_failure_code"),
+            **failure_details,
             **({"goal_coverage_rejected": True} if coverage_rejected else {}),
             **(
                 {"plan_repair": context["plan_repair_trace"]}

@@ -600,7 +600,9 @@ def test_planner_discards_prior_turn_failure_diagnostics(monkeypatch):
     }
 
     def generate(plan_id, user_id, message, registry, current):
-        assert current == {"session_id": "s1"}
+        assert {key: value for key, value in current.items() if key != "_planner_model_budget"} == {
+            "session_id": "s1"
+        }
         current["planning_failure_kind"] = "plan_format_invalid"
         return None
 
@@ -613,11 +615,29 @@ def test_planner_discards_prior_turn_failure_diagnostics(monkeypatch):
     assert context["planning_failure_reason"] == "old failure"
 
 
-def test_replanning_repair_balance_failure_keeps_recharge_response(monkeypatch):
+@pytest.mark.parametrize("failure_kind", ["balance", "context", "revision"])
+def test_replanning_repair_preserves_typed_failure(monkeypatch, failure_kind):
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
     from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
     from app.application.facades.tools_facade import get_workflow_tool_registry
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
     from app.infrastructure.modstore_transport import MarketModelError
 
+    failure, code, status, public_message = {
+        "balance": (MarketModelError({"status": 402}), "model_balance_insufficient", 402, "充值"),
+        "context": (
+            ContextWindowExceeded("系统指令和工具定义超过模型的上下文预算。"),
+            "context_window_exceeded",
+            413,
+            "上下文预算",
+        ),
+        "revision": (
+            ConversationRevisionError("private-revision-detail"),
+            "conversation_changed",
+            409,
+            "会话已更新或删除",
+        ),
+    }[failure_kind]
     message = "查询产品 A1"
     node = {
         "node_id": "n1",
@@ -642,7 +662,7 @@ def test_replanning_repair_balance_failure_keeps_recharge_response(monkeypatch):
                 }
             ),
             _completion({"nodes": [{**node, "action": "query.invalid"}]}),
-            MarketModelError({"status": 402}),
+            failure,
         ]
     )
     planner = LLMWorkflowPlanner(
@@ -661,9 +681,13 @@ def test_replanning_repair_balance_failure_keeps_recharge_response(monkeypatch):
     assert "coverage_feedback" in json.loads(
         completion.call_args_list[2].kwargs["messages"][1]["content"]
     )
-    assert result["data"]["planning_failure_kind"] == "model_unavailable"
-    assert result["data"]["error_code"] == "workflow_plan_unavailable"
-    assert "余额不足" in result["response"] and "充值" in result["response"]
+    assert result["data"]["planning_failure_kind"] == code
+    assert result["data"]["error_code"] == code
+    assert result["data"]["planning_failure_status"] == status
+    assert result["data"]["planning_failure_retryable"] is False
+    assert result["data"]["planning_failure_stage"] == "repair"
+    assert public_message in result["response"]
+    assert "private-revision-detail" not in json.dumps(result, ensure_ascii=False)
     assert result["data"]["execution_started"] is False
     risk_gate.evaluate.assert_not_called()
     assert approval.method_calls == []

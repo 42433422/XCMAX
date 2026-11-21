@@ -6,7 +6,7 @@
 边界：
 - 只修复计划结构，不绕过风险门、审批、幂等与租户注入。
 - 未出错节点必须逐字段保持一致；禁止删除/新增节点、禁止降低风险。
-- 达到轮数上限仍失败时返回 ``None``，由现有拒绝路径生成澄清，不执行任何业务操作。
+- 达到轮数上限仍失败时返回 ``None``，由现有拒绝路径报告失败，不执行任何业务操作。
 """
 
 from __future__ import annotations
@@ -30,8 +30,11 @@ from app.application.workflow.llm_plan_generation import (
     build_plan_from_payload,
     model_plan_schema_error,
 )
+from app.application.workflow.planner_llm_gateway import (
+    MODEL_REQUEST_ERRORS,
+    record_planning_failure,
+)
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
-from app.infrastructure.modstore_transport import MarketModelError
 from app.security.log_redaction import redact_log_text
 
 logger = logging.getLogger(__name__)
@@ -270,12 +273,19 @@ def repair_plan(
                 temperature=0.0,
             )
         except (ValueError, TypeError, RuntimeError) as exc:
-            raw_error = str(exc)
-            reason = (
-                str(MarketModelError({"status": 402}))
-                if isinstance(exc, MarketModelError) and exc.status_code == 402
-                else "计划修复请求失败，请稍后重试。"
+            from app.application.agent_orchestrator.context_window_manager import (
+                ContextWindowExceeded,
             )
+            from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+            raw_error = str(exc)
+            reason = "计划修复请求失败，请稍后重试。"
+            if isinstance(
+                exc, (*MODEL_REQUEST_ERRORS, ContextWindowExceeded, ConversationRevisionError)
+            ):
+                record_planning_failure(context, exc, stage="repair")
+                trace["model_failure_code"] = context["_planning_failure_code"]
+                reason = context["planning_failure_reason"]
             logger.warning("计划修复请求失败: %s", type(exc).__name__)
             trace["errors"].append(
                 {

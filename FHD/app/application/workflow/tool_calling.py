@@ -70,17 +70,45 @@ def plan_function_tools() -> list[dict[str, Any]]:
     return [convert_to_openai_tool(SubmitWorkflowPlan)]
 
 
-def native_plan_payload(response: dict[str, Any]) -> dict[str, Any] | None:
-    """Unwrap exactly one full-graph call; reject unordered action batches."""
+def native_plan_payload(
+    response: dict[str, Any], *, allow_text_reply: bool = False
+) -> dict[str, Any] | None:
+    """Normalize native content or one typed call; never reinterpret rejected calls."""
     if not isinstance(response, dict):
         raise ValueError("原生计划响应必须是对象")
     choices = response.get("choices")
     first = choices[0] if isinstance(choices, list) and choices else None
-    message = first.get("message") if isinstance(first, dict) else None
+    if not isinstance(first, dict):
+        return None
+    message = first.get("message")
     if isinstance(message, dict) and message.get("function_call"):
         raise ValueError("原生计划不支持旧式函数信封")
-    if not isinstance(message, dict) or not message.get("tool_calls"):
+    if not isinstance(message, dict):
         return None
+    if not message.get("tool_calls"):
+        content = message.get("content")
+        raw = content.strip() if isinstance(content, str) else ""
+        if not allow_text_reply or not raw:
+            return None
+        # Ordinary JSON is answer content too. Reserve the plan envelope's
+        # discriminant/payload keys; malformed JSON stays on strict plan repair.
+        structural = re.sub(r"^```(?:json)?\s*", "", raw, count=1, flags=re.I)
+        if structural.startswith(("{", "[")):
+            try:
+                value = json.loads(structural.removesuffix("```").strip())
+                json.dumps(value, allow_nan=False)
+            except ValueError:
+                return None
+            objects = value if isinstance(value, list) else [value]
+            if any(
+                isinstance(item, dict) and {"mode", "nodes", "reply"}.intersection(item)
+                for item in objects
+            ):
+                return None
+        if first.get("finish_reason") not in (None, "stop"):
+            raise ValueError("原生文字回复未完整结束")
+        reply = SubmitWorkflowPlan(mode="reply", reply=raw)
+        return {"choices": [{"message": {"content": reply.model_dump_json()}}]}
     calls = message["tool_calls"]
     if not isinstance(calls, list) or len(calls) != 1:
         raise ValueError("原生调用必须一次提交完整依赖图")

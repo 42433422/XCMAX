@@ -21,6 +21,10 @@ from app.application.workflow.clarification_node import (
     build_clarify_node,
     resolve_confirmed_target,
 )
+from app.application.workflow.clarification_selection import (
+    ClarificationExtraction,
+    ClarificationTurnError,
+)
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.services.tools_execution.registry import get_workflow_tool_registry
@@ -31,7 +35,7 @@ CANDIDATES = [
 ]
 
 
-def _waiting_run():
+def _waiting_run(*, confirmation=False):
     clarify = build_clarify_node(
         "请选择产品",
         ambient={
@@ -44,6 +48,10 @@ def _waiting_run():
         },
     )
     target = WorkflowNode(node_id="delete", tool_id="products", action="delete", params={})
+    if confirmation:
+        clarify.params = {"question": "确认删除产品42吗？"}
+        target.params = {"id": 42}
+        target.depends_on = [clarify.node_id]
     orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
     run = orchestrator.start_run_from_plan(
         user_id="owner",
@@ -71,7 +79,7 @@ def test_unresolved_literal_selection_does_not_delegate_a_guess_to_the_model(ans
     planner = Mock()
     session = WorkflowSession({}, SimpleNamespace(workflow_planner=planner))
     assert session._clarification_answer(run, run.steps[0], answer) is None
-    planner.extract_clarification_parameters.assert_not_called()
+    planner.extract_clarification_turn.assert_not_called()
 
 
 @pytest.mark.parametrize("answer", ["第二个", "型号 B200 的那个", "不是 A100，是另外那个"])
@@ -122,7 +130,6 @@ def test_semantic_answer_resumes_same_plan_and_still_requires_write_approval(ans
         {"turn_kind": "answer", "resolved": True, "parameters": {"id": 999}},
         {"turn_kind": "answer", "resolved": True, "parameters": {"id": 42, "force": True}},
         {"turn_kind": "answer", "resolved": "true", "parameters": {"id": 42}},
-        {"turn_kind": "answer", "resolved": False, "parameters": {}},
         {"turn_kind": "new_goal", "resolved": True, "parameters": {"id": 42}},
         {"turn_kind": "unclear", "resolved": True, "parameters": {"id": 42}},
         {"resolved": True, "parameters": {"id": 42}},
@@ -136,7 +143,9 @@ def test_invalid_model_choice_leaves_the_original_run_unchanged(response):
         completion=lambda **_: {"choices": [{"message": {"content": json.dumps(response)}}]},
     )
     session = WorkflowSession({}, SimpleNamespace(workflow_planner=planner))
-    assert session._clarification_answer(run, run.steps[0], "另一个") is None
+    with pytest.raises(ClarificationTurnError) as error:
+        session._clarification_answer(run, run.steps[0], "另一个")
+    assert error.value.failure["_planning_failure_code"] == "model_response_invalid"
     assert run == before
 
 
@@ -152,8 +161,8 @@ def test_empty_or_new_goal_cannot_resume_the_old_clarification(answer):
                         "content": json.dumps(
                             {
                                 "turn_kind": "new_goal",
-                                "resolved": True,
-                                "parameters": {"id": 42},
+                                "resolved": False,
+                                "parameters": {},
                             }
                         )
                     }
@@ -170,13 +179,114 @@ def test_empty_or_new_goal_cannot_resume_the_old_clarification(answer):
     session.capture_agent_run_interaction(user_id="owner", agent_run=run, runtime_context={})
     with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
         response = session.continue_after_clarification("owner", pending["owner"], answer)
-    assert response["data"]["action"] == "clarification_required"
-    assert "取消" in response["response"]
+    if answer.strip():
+        assert response["_workflow_new_goal"] == {
+            "run_id": run.run_id,
+            "plan_id": run.plan_id,
+            "status": "waiting_user",
+        }
+        completion.assert_called_once()
+    else:
+        assert response["data"]["action"] == "clarification_required"
     assert orchestrator.get_run(run.run_id) == before
     assert pending["owner"]["agent_run_id"] == run.run_id
     callbacks._dispatch_model_selection.assert_not_called()
     if not answer.strip():
         completion.assert_not_called()
+
+
+@pytest.mark.parametrize("turn_kind", ["answer", "unclear"])
+def test_valid_unresolved_answer_is_not_a_model_failure(turn_kind):
+    _, run = _waiting_run()
+    before = deepcopy(run)
+    planner = LLMWorkflowPlanner(
+        ai_service=Mock(),
+        completion=lambda **_: {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"turn_kind": turn_kind, "resolved": False, "parameters": {}}
+                        )
+                    }
+                }
+            ]
+        },
+    )
+    session = WorkflowSession({}, SimpleNamespace(workflow_planner=planner))
+    result = session._clarification_answer(run, run.steps[0], "还不能确定")
+    if turn_kind == "unclear":
+        assert isinstance(result, ClarificationExtraction) and result.turn_kind == "unclear"
+    else:
+        assert result is None
+    assert run == before
+
+
+@pytest.mark.parametrize("reason", ["missing_required", "missing_target", "reversal_confirm"])
+def test_new_goal_survives_each_bound_extraction_gate(reason):
+    _, run = _waiting_run()
+    waiting = run.steps[0]
+    waiting.params["clarification"] = {"reason": reason, "missing_fields": ["id"]}
+    before = deepcopy(run)
+    completion = Mock(
+        return_value={
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"turn_kind": "new_goal", "resolved": False, "parameters": {}}
+                        )
+                    }
+                }
+            ]
+        }
+    )
+    planner = LLMWorkflowPlanner(ai_service=Mock(), completion=completion)
+    session = WorkflowSession({}, SimpleNamespace(workflow_planner=planner))
+    result = session._clarification_answer(run, waiting, "我想了解另一件事")
+    assert isinstance(result, ClarificationExtraction) and result.turn_kind == "new_goal"
+    completion.assert_called_once()
+    assert run == before
+
+
+@pytest.mark.parametrize("turn_kind", ["new_goal", "answer"])
+def test_plan_confirmation_classification_cannot_approve_a_write(turn_kind):
+    orchestrator, run = _waiting_run(confirmation=True)
+    before = orchestrator.get_run(run.run_id)
+    completion = Mock(
+        return_value={
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "turn_kind": turn_kind,
+                                "resolved": turn_kind == "answer",
+                                "parameters": {},
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+    )
+    callbacks = Mock()
+    callbacks.workflow_planner = LLMWorkflowPlanner(ai_service=Mock(), completion=completion)
+    callbacks._task_owner_id.return_value = "owner"
+    callbacks._persist_plan_state.return_value = True
+    pending = {}
+    session = WorkflowSession(pending, callbacks)
+    session.capture_agent_run_interaction(user_id="owner", agent_run=run, runtime_context={})
+    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
+        response = session.continue_after_clarification(
+            "owner", pending["owner"], "这一步会影响什么？"
+        )
+    if turn_kind == "new_goal":
+        assert response["_workflow_new_goal"]["run_id"] == run.run_id
+    else:
+        assert response["data"]["action"] == "workflow_confirmation_required"
+    assert orchestrator.get_run(run.run_id) == before
+    completion.assert_called_once()
 
 
 @pytest.mark.parametrize("preview_completed", [False, True])

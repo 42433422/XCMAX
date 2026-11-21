@@ -46,6 +46,14 @@ def _model_response(payload):
     return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
 
 
+def _planning_requests(requests):
+    return [
+        r
+        for r in requests
+        if r["task"] not in {"audit_goal_coverage", "audit_reply", "classify_clarification_turn"}
+    ]
+
+
 @pytest.fixture
 def roundtrip(monkeypatch, tmp_path, trusted_actor):
     actor = trusted_actor(user_id=17, role="admin")
@@ -77,13 +85,33 @@ def roundtrip(monkeypatch, tmp_path, trusted_actor):
     monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator", new_orchestrator)
     requests = []
     state = SimpleNamespace(
-        write=False, query=QUERY, question=QUESTION, fail_once=False, questions=[]
+        write=False,
+        query=QUERY,
+        question=QUESTION,
+        fail_once=False,
+        questions=[],
+        classification={"turn_kind": "answer", "resolved": True, "parameters": {}},
+        classification_error=None,
+        reply=None,
     )
 
     def complete(**kwargs):
         request = json.loads(kwargs["messages"][-1]["content"])
         requests.append(request)
+        if request["task"] == "classify_clarification_turn":
+            if state.classification_error:
+                raise state.classification_error
+            return _model_response(state.classification)
+        if request["task"] == "audit_reply":
+            return _model_response({"violations": [], "clarification_question": None})
         if request["task"] == "audit_goal_coverage":
+            if all(n["tool_id"] == "conversation" for n in request["plan"]["nodes"]):
+                return goal_review_response(
+                    request,
+                    source=request["user_message"],
+                    node_ids=[n["node_id"] for n in request["plan"]["nodes"]],
+                    outcome="reply",
+                )
             assert [node["node_id"] for node in request["plan"]["nodes"]] == ["business"]
             if len(request["user_message"]) > 2000:
                 # A real review cites bounded source spans, never the entire
@@ -121,7 +149,9 @@ def roundtrip(monkeypatch, tmp_path, trusted_actor):
 
                 raise ContextWindowExceeded("当前模型窗口不足，原任务范围不能裁剪")
             raise MarketModelError({"status": 402})
-        if len([item for item in requests if item["task"] != "audit_goal_coverage"]) == 1:
+        if state.reply is not None:
+            return _model_response({"mode": "reply", "reply": state.reply})
+        if len(_planning_requests(requests)) == 1:
             node = {
                 "node_id": "scope",
                 "tool_id": "clarify",
@@ -219,7 +249,7 @@ def test_scope_choice_survives_restart_and_executes_once(roundtrip, reply):
     assert len(completed.tool_calls) == 1
     assert completed.tool_calls[0].params["query"] == QUERY
     assert roundtrip.executor.execute_with_deadline.call_count == 1
-    replans = [r for r in roundtrip.requests if r["task"] != "audit_goal_coverage"]
+    replans = _planning_requests(roundtrip.requests)
     assert len(replans) == 2
     serialized = json.dumps(replans[-1], ensure_ascii=False)
     assert ORIGINAL in serialized and QUESTION in serialized and reply in serialized
@@ -231,15 +261,276 @@ def test_scope_choice_survives_restart_and_executes_once(roundtrip, reply):
     assert len(roundtrip.repository.get(run_id).tool_calls) == 1
 
 
-def test_cancelling_a_scope_question_is_durable(roundtrip):
+@pytest.mark.parametrize("extra", [None, {"attachment_upload_ids": []}])
+def test_cancelling_a_scope_question_is_durable(roundtrip, extra):
     first = roundtrip.send(roundtrip.service(), ORIGINAL)
     run_id = first["run_id"]
-    assert roundtrip.send(roundtrip.service(), "取消")["data"]["action"] == "workflow_cancelled"
+    assert (
+        roundtrip.send(roundtrip.service(), "取消", extra=extra)["data"]["action"]
+        == "workflow_cancelled"
+    )
     cancelled = roundtrip.repository.get(run_id)
     assert cancelled.status == "cancelled"
     assert roundtrip.store.load(cancelled.plan_id)["status"] == "cancelled"
     roundtrip.send(roundtrip.service(), "确认")
     roundtrip.executor.execute_with_deadline.assert_not_called()
+
+
+@pytest.mark.parametrize("side_question", ["向量检索有什么作用？", "能解释一下毛利率吗？", "继续"])
+def test_side_question_keeps_wait_and_resumes_original_run_after_restart(roundtrip, side_question):
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    roundtrip.state.classification = {"turn_kind": "new_goal", "resolved": False, "parameters": {}}
+    roundtrip.state.reply = "这是对插问的独立说明。"
+    reply = roundtrip.send(roundtrip.service(), side_question)
+    assert reply["success"] is True, reply
+    assert reply["response"] == roundtrip.state.reply
+    assert "_workflow_new_goal" not in json.dumps(reply)
+    assert reply["data"]["pending_workflow"] == {
+        "run_id": waiting.run_id,
+        "plan_id": waiting.plan_id,
+        "status": "waiting_user",
+    }
+    assert roundtrip.repository.get(waiting.run_id) == waiting
+    assert roundtrip.store.load(waiting.plan_id)["status"] == "pending_awaiting"
+    other_runs = [r for r in roundtrip.repository.list_recent() if r.run_id != waiting.run_id]
+    assert all(r.status == "completed" and not r.tool_calls for r in other_runs)
+    classification = [r for r in roundtrip.requests if r["task"] == "classify_clarification_turn"]
+    assert len(classification) == 1
+    assert classification[0]["current_question"] == QUESTION
+    assert classification[0]["user_answer"] == side_question
+    assert _planning_requests(roundtrip.requests)[-1]["user_message"] == side_question
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+
+    roundtrip.state.classification = {"turn_kind": "answer", "resolved": True, "parameters": {}}
+    roundtrip.state.reply = None
+    resumed = roundtrip.send(roundtrip.service(), "A")
+    assert resumed["run_id"] == waiting.run_id and resumed["success"] is True
+    completed = roundtrip.repository.get(waiting.run_id)
+    assert completed.metadata["runtime_context"]["planning_clarification"]["exchanges"] == [
+        {"question": QUESTION, "answer": "A"}
+    ]
+    roundtrip.executor.execute_with_deadline.assert_called_once()
+
+
+@pytest.mark.parametrize("turn_kind", ["answer", "unclear"])
+def test_uncertain_scope_answer_leaves_wait_and_does_not_replan(roundtrip, turn_kind):
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    roundtrip.state.classification = {"turn_kind": turn_kind, "resolved": False, "parameters": {}}
+    response = roundtrip.send(roundtrip.service(), "还没确定")
+    assert response["success"] is True
+    assert response["data"]["action"] == "clarification_required"
+    assert response["data"]["data"]["turn_kind"] == turn_kind
+    assert len(_planning_requests(roundtrip.requests)) == 1
+    assert roundtrip.repository.get(waiting.run_id) == waiting
+    assert response["run_id"] == response["agent_run_id"] == waiting.run_id
+    assert len(roundtrip.repository.list_recent()) == 1
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+    roundtrip.state.classification = {"turn_kind": "answer", "resolved": True, "parameters": {}}
+    resumed = roundtrip.send(roundtrip.service(), "A")
+    assert resumed["run_id"] == waiting.run_id and resumed["success"] is True
+    roundtrip.executor.execute_with_deadline.assert_called_once()
+
+
+def test_new_business_goal_completes_without_consuming_original_wait(roundtrip):
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    roundtrip.state.classification = {"turn_kind": "new_goal", "resolved": False, "parameters": {}}
+    side_request = "另查乙客户的采购汇总"
+    roundtrip.state.query = side_request
+    side = roundtrip.send(roundtrip.service(), side_request)
+    assert side["success"] is True and side["run_id"] != waiting.run_id
+    assert roundtrip.repository.get(waiting.run_id) == waiting
+    completed_side = roundtrip.repository.get(side["run_id"])
+    assert completed_side.status == "completed"
+    assert "planning_clarification" not in completed_side.metadata["runtime_context"]
+    assert completed_side.tool_calls[0].params["query"] == side_request
+    roundtrip.state.classification = {"turn_kind": "answer", "resolved": True, "parameters": {}}
+    roundtrip.state.query = QUERY
+    resumed = roundtrip.send(roundtrip.service(), "A")
+    assert resumed["run_id"] == waiting.run_id and resumed["success"] is True
+    assert roundtrip.executor.execute_with_deadline.call_count == 2
+
+
+def _paused_preview(roundtrip):
+    from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
+    from tests.test_application.test_agent_user_decision_pause import _approve_and_execute, _run
+
+    run = _run(roundtrip.actor)
+    context = {**roundtrip.context, "turn_id": uuid4().hex}
+    bind_chat_turn_context(run.message, context)
+    run.metadata["runtime_context"] = context
+    roundtrip.executor.execute_with_deadline.side_effect = [
+        {
+            "success": True,
+            "preview": True,
+            "requires_user_decision": True,
+            "question": "CSV有一行校验失败，是否只保留有效行？",
+            "resume_params": {"valid_rows_only": True},
+            "data": {"run_id": "preview-result", "executable": False, "error_rows": 1},
+        },
+        {
+            "success": True,
+            "preview": True,
+            "requires_user_decision": False,
+            "data": {"run_id": "preview-result", "executable": True, "error_rows": 1},
+        },
+    ]
+    roundtrip.repository.save(run)
+    paused = _approve_and_execute(roundtrip.orchestrator(), run, roundtrip.actor)
+    service = roundtrip.service()
+    service._capture_agent_run_interaction(
+        user_id=roundtrip.chat_user,
+        agent_run=paused,
+        runtime_context=paused.metadata["runtime_context"],
+    )
+    return service, roundtrip.repository.get(run.run_id)
+
+
+def test_preview_side_question_preserves_grant_and_resumes_after_restart(roundtrip):
+    from app.application.agent_orchestrator.approval_grant import (
+        issue_approval_grant,
+        validate_approval_grant,
+    )
+
+    service, waiting = _paused_preview(roundtrip)
+    grant = issue_approval_grant(waiting, principal_id=waiting.user_id)
+    roundtrip.state.classification = {"turn_kind": "new_goal", "resolved": False, "parameters": {}}
+    roundtrip.state.reply = "宣传文案：从每一份可靠数据开始。"
+    reply = roundtrip.send(service, "先帮我写一句宣传文案")
+    assert reply["success"] is True and reply["response"] == roundtrip.state.reply
+    assert reply["data"]["pending_workflow"]["run_id"] == waiting.run_id
+    assert roundtrip.repository.get(waiting.run_id) == waiting
+    validate_approval_grant(grant["grant"], run=waiting, principal_id=waiting.user_id)
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+    continued = roundtrip.send(roundtrip.service(), "继续")
+    assert continued["run_id"] == waiting.run_id
+    approved = roundtrip.repository.get(waiting.run_id)
+    assert approved.run_id == waiting.run_id and approved.plan_id == waiting.plan_id
+    assert approved.steps[0].status == "completed"
+    assert approved.steps[1].status == "waiting_user"
+    assert roundtrip.executor.execute_with_deadline.call_count == 2
+    assert (
+        roundtrip.executor.execute_with_deadline.call_args.args[0].params["valid_rows_only"] is True
+    )
+    assert all(call.action == "preview" for call in approved.tool_calls)
+
+
+def test_approval_wait_side_question_keeps_original_request(roundtrip):
+    roundtrip.state.write = True
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    roundtrip.send(roundtrip.service(), "删除")
+    waiting = roundtrip.repository.get(first["run_id"])
+    assert waiting.status == "waiting_user"
+    roundtrip.state.classification = {"turn_kind": "new_goal", "resolved": False, "parameters": {}}
+    roundtrip.state.reply = "这是插问的说明。"
+    response = roundtrip.send(roundtrip.service(), "先解释一下采购成本")
+    assert response["success"] is True and response["response"] == roundtrip.state.reply
+    assert response["data"]["pending_workflow"]["run_id"] == waiting.run_id
+    assert roundtrip.repository.get(waiting.run_id) == waiting
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+
+
+@pytest.mark.parametrize("turn_kind", ["answer", "unclear"])
+def test_free_text_cannot_approve_a_tool_wait(roundtrip, turn_kind):
+    service, waiting = _paused_preview(roundtrip)
+    roundtrip.state.classification = {
+        "turn_kind": turn_kind,
+        "resolved": turn_kind == "answer",
+        "parameters": {},
+    }
+    response = roundtrip.send(service, "只保留正确数据就行")
+    assert response["data"]["action"] == "workflow_confirmation_required"
+    assert response["run_id"] == waiting.run_id
+    assert roundtrip.repository.get(waiting.run_id) == waiting
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+    assert len(roundtrip.repository.list_recent()) == 1
+
+
+def test_tool_wait_classification_failure_preserves_original_run(roundtrip):
+    service, waiting = _paused_preview(roundtrip)
+    roundtrip.state.classification_error = TimeoutError("private provider details")
+    response = roundtrip.send(service, "先解释一下文案风格")
+    assert response["success"] is False and response["data"]["error_code"] == "model_timeout"
+    assert response["run_id"] == waiting.run_id
+    assert "private" not in json.dumps(response)
+    assert roundtrip.repository.get(waiting.run_id) == waiting
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+@pytest.mark.parametrize("mismatch", ["owner", "session", "plan", "unknown"])
+def test_tool_wait_side_question_cannot_bypass_durable_guards(roundtrip, mismatch):
+    from app.application.ai_chat.workflow_session import WorkflowSession
+
+    service, waiting = _paused_preview(roundtrip)
+    pending = service._pending_workflows[roundtrip.chat_user]
+    current = deepcopy(waiting)
+    if mismatch == "owner":
+        current.user_id = "another-owner"
+    elif mismatch == "session":
+        current.metadata["runtime_context"]["session_id"] = "other-session"
+    elif mismatch == "plan":
+        pending["plan"] = deepcopy(pending["plan"])
+        pending["plan"].nodes[0].params["valid_rows_only"] = False
+    else:
+        current.steps[0].output["requires_reconciliation"] = True
+    if mismatch != "plan":
+        roundtrip.repository.save(current)
+    before = roundtrip.repository.get(waiting.run_id)
+    context = {**waiting.metadata["runtime_context"], "turn_id": uuid4().hex}
+    handled, response = WorkflowSession(
+        service._pending_workflows, service
+    ).resume_pending_dynamic_workflow(roundtrip.chat_user, "先写一句文案", "先写一句文案", context)
+    assert handled is True and response["success"] is False
+    assert response["data"]["action"] == (
+        "workflow_unknown" if mismatch == "unknown" else "workflow_resume_failed"
+    )
+    assert not roundtrip.requests
+    assert roundtrip.repository.get(waiting.run_id) == before
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+@pytest.mark.parametrize("failure", ["balance", "timeout", "context", "invalid"])
+def test_classification_failure_is_not_missing_user_input_and_preserves_wait(roundtrip, failure):
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    if failure == "balance":
+        roundtrip.state.classification_error = MarketModelError(
+            {"status": 402, "message": "secret"}
+        )
+        expected_code = "model_balance_insufficient"
+    elif failure == "timeout":
+        roundtrip.state.classification_error = TimeoutError("secret provider URL")
+        expected_code = "model_timeout"
+    elif failure == "context":
+        from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+
+        roundtrip.state.classification_error = ContextWindowExceeded("当前模型窗口不足")
+        expected_code = "context_window_exceeded"
+    else:
+        roundtrip.state.classification = {
+            "turn_kind": "new_goal",
+            "resolved": True,
+            "parameters": {},
+        }
+        expected_code = "model_response_invalid"
+    failed = roundtrip.send(roundtrip.service(), "A")
+    assert failed["success"] is False, failed
+    assert failed["data"]["action"] == "workflow_clarification_failed"
+    assert failed["data"]["error_code"] == expected_code
+    assert failed["data"]["planning_failure_stage"] == "clarification"
+    assert failed["execution_state"] == "waiting_user"
+    assert failed["run_id"] == failed["agent_run_id"] == waiting.run_id
+    assert "secret" not in json.dumps(failed)
+    assert len(_planning_requests(roundtrip.requests)) == 1
+    assert roundtrip.repository.get(waiting.run_id) == waiting
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+    roundtrip.state.classification_error = None
+    roundtrip.state.classification = {"turn_kind": "answer", "resolved": True, "parameters": {}}
+    resumed = roundtrip.send(roundtrip.service(), "A")
+    assert resumed["run_id"] == waiting.run_id and resumed["success"] is True
+    roundtrip.executor.execute_with_deadline.assert_called_once()
 
 
 def test_other_conversation_cannot_consume_the_scope_question(roundtrip):
@@ -433,9 +724,7 @@ def test_long_clarification_chain_preserves_every_accepted_answer(roundtrip, tur
             "original_request": ORIGINAL,
             "exchanges": exchanges,
         }
-        request = next(
-            item for item in reversed(roundtrip.requests) if item["task"] != "audit_goal_coverage"
-        )
+        request = _planning_requests(roundtrip.requests)[-1]
         assert "planning_clarification" not in request.get("context", {})
         assert json.loads(request["user_message"]) == {
             "original_request": ORIGINAL,

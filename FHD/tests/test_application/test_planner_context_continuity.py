@@ -655,6 +655,139 @@ def test_generate_sends_middle_fact_and_reuses_persisted_summary(monkeypatch, mo
     assert "FACT_85" in json.dumps(provider.requests[-1]["messages"], ensure_ascii=False)
 
 
+@pytest.mark.parametrize("mode", ["reply", "workflow"])
+def test_review_uses_candidate_evidence_without_reloading_or_trimming_history(monkeypatch, mode):
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    rows = long_history(40)
+    rows[0]["content"] = "4人，预算400元，一人海鲜过敏；只做方案，不写入。"
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows, "summary": None})
+    context = {
+        "local_user_id": 1,
+        "session_id": "review-snapshot",
+        "_chat_evidence_authorized": True,
+        "_chat_history_messages": rows,
+        "chat_customer_evidence": {"scope": "ORIGINAL_AUTHORIZED_EVIDENCE"},
+        "_planning_snapshot": ([{"role": "user", "content": "UNTRUSTED_SNAPSHOT"}], {}),
+    }
+    requests = []
+
+    def complete(**kwargs):
+        prompt = json.loads(kwargs["messages"][-1]["content"])
+        requests.append(prompt)
+        if len(requests) == 1:
+            # A later projection cannot replace the evidence used to generate
+            # the candidate; the normal SQL revision fence still owns recalls.
+            kwargs["context"]["_chat_history_messages"] = [
+                {"role": "user", "content": "LATER_PROJECTION"}
+            ]
+            kwargs["context"]["chat_customer_evidence"]["scope"] = "LATER_EVIDENCE"
+            result = (
+                {"mode": "reply", "reply": "按4人400元、避开海鲜的条件说明。"}
+                if mode == "reply"
+                else {
+                    "mode": "workflow",
+                    "nodes": [
+                        {
+                            "node_id": "query",
+                            "tool_id": "products",
+                            "action": "query",
+                            "params": {"keyword": "A1"},
+                        }
+                    ],
+                }
+            )
+        else:
+            result = {"violations": []}
+            if mode == "workflow":
+                result["goals"] = [
+                    {
+                        "goal_id": "query",
+                        "source": "查询 A1",
+                        "outcome": "execute",
+                        "node_ids": ["query"],
+                    }
+                ]
+        return {"choices": [{"message": {"content": json.dumps(result, ensure_ascii=False)}}]}
+
+    planner = LLMWorkflowPlanner(
+        ai_service=SimpleNamespace(get_context=lambda _: None), completion=complete
+    )
+    registry = {
+        "products": {
+            "actions": {"query": {"risk": "low", "idempotent": True, "required_params": []}}
+        }
+    }
+    plan = planner.plan(
+        "1", "解释之前的用餐条件" if mode == "reply" else "查询 A1", registry, context
+    )
+    assert not plan.metadata.get("planning_rejected")
+    assert len(requests) == 2
+    initial, review = requests
+    assert review["conversation_history"] == initial["conversation_history"]
+    assert len(review["conversation_history"]) == 40
+    assert review["context"] == initial["context"]
+    assert "海鲜过敏" in json.dumps(review, ensure_ascii=False)
+    assert "ORIGINAL_AUTHORIZED_EVIDENCE" in json.dumps(review)
+    assert all(value not in json.dumps(review) for value in ("LATER_", "UNTRUSTED_SNAPSHOT"))
+    if mode == "reply":
+        assert review["task"] == "audit_reply"
+        assert "plan" not in review
+        assert set(review["output_schema"]["properties"]) == {
+            "violations",
+            "clarification_question",
+        }
+
+
+def test_goal_review_uses_shared_provider_budget_and_keeps_early_evidence(
+    monkeypatch, model_boundary
+):
+    from app.application.workflow.goal_coverage import review_goal_coverage
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    provider, manager = model_boundary
+    rows = long_history(40)
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows, "summary": None})
+    response = {
+        "goals": [
+            {
+                "goal_id": "query",
+                "source": "查询 A1",
+                "outcome": "execute",
+                "node_ids": ["query"],
+            }
+        ],
+        "violations": [],
+    }
+
+    async def respond(**request):
+        provider.requests.append(copy.deepcopy(request))
+        return {"choices": [{"message": {"content": json.dumps(response)}}]}
+
+    monkeypatch.setattr(provider, "chat_completion", respond)
+    context = {"local_user_id": 1, "session_id": "review-budget"}
+    plan = PlanGraph(
+        plan_id="p",
+        intent="query",
+        nodes=[WorkflowNode("query", "products", "query", {"keyword": "A1"})],
+    )
+    review, error = review_goal_coverage(
+        plan,
+        "查询 A1",
+        context,
+        lambda **kwargs: gateway.request_planner_completion(ai_service=SimpleNamespace(), **kwargs),
+    )
+    assert error is None and review is not None
+    request = provider.requests[-1]
+    wire = json.dumps(request["messages"], ensure_ascii=False)
+    assert "FACT_0" in wire
+    assert all(row["content"] in wire for row in rows)
+    assert "conversation_history" not in json.loads(request["messages"][-1]["content"])
+    assert windows.estimate_messages_tokens(request["messages"]) + request["max_tokens"] <= (
+        manager.token_budget
+    )
+
+
 @pytest.mark.parametrize("count", [60, 120, 121, 240])
 def test_old_excerpt_cache_never_discards_unsummarized_middle_or_120_boundary(count):
     rows = long_history(count)

@@ -16,13 +16,20 @@ from dataclasses import dataclass
 from typing import TypeVar
 
 import httpx
+from openai import APIConnectionError
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 _ENV_MODEL_RETRIES = "XCAGI_PLAN_MODEL_RETRIES"
-_RETRYABLE = (OSError, httpx.NetworkError, httpx.TimeoutException, httpx.RemoteProtocolError)
+_RETRYABLE = (
+    OSError,
+    httpx.NetworkError,
+    httpx.TimeoutException,
+    httpx.RemoteProtocolError,
+    APIConnectionError,
+)
 _TRANSPORT_RETRY_SCOPE: ContextVar[bool] = ContextVar("planner_transport_retry", default=False)
 
 
@@ -67,9 +74,19 @@ def call_with_retry(
 ) -> T:
     """同步执行 ``fn``，可重试异常按策略退避；最后一次异常原样抛出。"""
     attempts = max(1, min(4, int(policy.max_attempts)))
+    from app.application.tool_execution_deadline import (
+        check_invocation_deadline,
+        remaining_invocation_seconds,
+    )
+    from app.infrastructure.modstore_transport import MarketModelError
+
     token = _TRANSPORT_RETRY_SCOPE.set(True)
     try:
         for attempt in range(1, attempts + 1):
+            try:
+                check_invocation_deadline()
+            except TimeoutError as exc:
+                raise MarketModelError({"status": 504}, code="model_deadline_exceeded") from exc
             try:
                 return fn()
             except retry_on as exc:
@@ -77,6 +94,8 @@ def call_with_retry(
                 if not isinstance(exc, _RETRYABLE) or attempt >= attempts:
                     raise
                 delay = policy.delay_for(attempt)
+                if remaining_invocation_seconds(delay + 0.001) <= delay:
+                    raise MarketModelError({"status": 504}, code="model_deadline_exceeded") from exc
                 logger.warning(
                     "模型调用失败，%0.2fs 后重试（%s/%s）：%s",
                     delay,

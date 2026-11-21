@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from types import SimpleNamespace
 from typing import Any, cast
@@ -11,6 +12,28 @@ from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from ..reasoning_stream import publish_reasoning, reasoning_from_message
+from .providers_base import raise_for_stream_failure
+
+
+def _budgeted_client(client, kwargs):
+    from app.application.tool_execution_deadline import (
+        check_invocation_deadline,
+        remaining_invocation_seconds,
+    )
+    from app.infrastructure.llm.client import _resolve_openai_timeout_seconds
+
+    check_invocation_deadline()
+    remaining = remaining_invocation_seconds(math.inf)
+    if math.isfinite(remaining):
+        # The planner owns retries. SDK retries would restart the timeout while
+        # its synchronous worker can outlive coroutine cancellation.
+        with_options = getattr(client, "with_options", None)
+        if callable(with_options):
+            client = with_options(max_retries=0)
+            kwargs["timeout"] = min(remaining, _resolve_openai_timeout_seconds())
+        # The MODstore-compatible facade has no SDK retry layer and already
+        # clamps its transport to the same invocation deadline.
+    return client
 
 
 class OpenAISdkProvider:
@@ -18,9 +41,11 @@ class OpenAISdkProvider:
 
     @property
     def is_configured(self) -> bool:
-        from app.infrastructure.llm.client import get_llm_client
+        from app.infrastructure.llm.client import _first_api_key, _scoped_client, resolve_mode
 
-        return get_llm_client() is not None
+        return resolve_mode() != "offline" and (
+            _scoped_client.get() is not None or bool(_first_api_key()[0])
+        )
 
     async def chat_completion(
         self,
@@ -43,6 +68,7 @@ class OpenAISdkProvider:
         client = get_llm_client()
         if client is None:
             return None
+        client = _budgeted_client(client, kwargs)
         model_name = model or resolve_chat_model()
         t0 = time.perf_counter()
 
@@ -91,6 +117,7 @@ class OpenAISdkProvider:
         client = get_llm_client()
         if client is None:
             return
+        client = _budgeted_client(client, kwargs)
         model_name = model or resolve_chat_model()
         stream = await asyncio.to_thread(
             lambda: client.chat.completions.create(
@@ -109,6 +136,7 @@ class OpenAISdkProvider:
                 chunk = await asyncio.to_thread(next, iterator, None)
                 if chunk is None:
                     break
+                raise_for_stream_failure(chunk)
                 reasoning_text = _chunk_delta_reasoning(chunk)
                 if reasoning_text:
                     reasoning.append(reasoning_text)
@@ -116,6 +144,9 @@ class OpenAISdkProvider:
                 if text:
                     yield text
         finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                await asyncio.to_thread(close)
             publish_reasoning("".join(reasoning))
 
 

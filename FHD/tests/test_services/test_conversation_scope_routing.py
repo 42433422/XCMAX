@@ -97,6 +97,7 @@ def test_planner_and_agent_share_each_threads_model_without_environment_key(monk
             model_dump=lambda: payload,
         )
         client = MagicMock()
+        client.with_options.return_value = client
         client.chat.completions.create.return_value = reply
         with routing.llm_client_scope(client, model):
             plan = request_planner_completion(
@@ -111,6 +112,7 @@ def test_planner_and_agent_share_each_threads_model_without_environment_key(monk
         assert plan["model"] == model
         assert agent["ok"] is True
         assert cognition["model"] == model
+        client.with_options.assert_called_once_with(max_retries=0)
         assert {call.kwargs["model"] for call in client.chat.completions.create.call_args_list} == {
             model
         }

@@ -29,7 +29,6 @@ def _components(business):
         requires_read=lambda _message: False,
         interrupt=lambda _message: None,
         after_interrupt=lambda context: context,
-        vector_guard=Mock(side_effect=AssertionError("online index must not run")),
         reply=lambda text, **_kwargs: {"response": text},
     )
     paths = FastPaths(
@@ -74,7 +73,6 @@ async def test_offline_stream_and_json_match_without_calling_online_paths(
     events = [json.loads(chunk) async for chunk in stream.run(Mock(), body)]
     assert events[-1]["result"] == response
     assert business.call_count == 2
-    admission.vector_guard.assert_not_called()
     if business_result is None:
         assert response["success"] is False
         assert response["data"]["model_called"] is False
@@ -151,7 +149,6 @@ async def test_online_json_and_stream_share_the_langgraph_mainline():
     receipt = {"success": True, "response": "已查询考勤", "data": {"id": 1}}
     business = Mock(side_effect=AssertionError("online route must use the mainline"))
     admission, paths = _components(business)
-    admission = replace(admission, vector_guard=lambda *_args: None)
     mainline_calls = []
 
     async def mainline(body, context, *, message=None, kitten_extra=None):
