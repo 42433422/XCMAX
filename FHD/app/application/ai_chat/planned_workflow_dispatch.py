@@ -237,6 +237,9 @@ class PlannedWorkflowDispatch:
                     interaction["status"] = "waiting_user"
                     interaction["execution_state"] = "waiting_user"
                     interaction["needs_user_input"] = True
+                    data = interaction.get("data")
+                    if isinstance(data, dict) and data.get("action") == "workflow_done":
+                        interaction["data"] = {**data, "action": "workflow_waiting"}
             return interaction
         result = self.callbacks._format_agent_run_response(
             plan, agent_run, thinking_steps=thinking_steps, user_message=message
