@@ -66,6 +66,58 @@ def _compact_tool_registry(prompt: dict[str, Any]) -> None:
         )
 
 
+def _drop_non_core_tools(prompt: dict[str, Any]) -> bool:
+    """预算不足时把工具目录裁到通用工具，避免整轮规划直接失败。"""
+    from app.application.workflow.planner_prompt_profile import _is_core_tool
+
+    tools = prompt.get("tool_registry")
+    if not isinstance(tools, list) or not tools:
+        return False
+    kept = [
+        tool
+        for tool in tools
+        if isinstance(tool, dict) and _is_core_tool(str(tool.get("tool_id") or ""))
+    ]
+    if not kept or len(kept) == len(tools):
+        return False
+    prompt["tool_registry"] = kept
+    schemas = prompt.get("tool_schemas")
+    if isinstance(schemas, dict):
+        used: set[str] = set()
+        for tool in kept:
+            for action in tool.get("actions") or []:
+                if not isinstance(action, dict):
+                    continue
+                for key in ("input_schema_ref", "output_schema_ref"):
+                    ref = action.get(key)
+                    if isinstance(ref, str):
+                        used.add(ref)
+        prompt["tool_schemas"] = {
+            name: schema for name, schema in schemas.items() if name in used
+        }
+    prompt["tool_catalog_note"] = (
+        "工具目录已按上下文预算裁剪，仅保留通用工具；无法规划的业务操作请如实说明并建议分批处理。"
+    )
+    return True
+
+
+def _shrink_planner_prompt(outbound: list[dict[str, Any]]) -> bool:
+    if not outbound:
+        return False
+    last = outbound[-1]
+    try:
+        prompt = json.loads(str(last.get("content") or ""))
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(prompt, dict) or not _drop_non_core_tools(prompt):
+        return False
+    outbound[-1] = {
+        **last,
+        "content": json.dumps(prompt, ensure_ascii=False, separators=(",", ":")),
+    }
+    return True
+
+
 def planner_max_tokens() -> int:
     raw = (os.environ.get(_ENV_MAX_TOKENS) or "").strip()
     try:
@@ -106,6 +158,7 @@ def _meter_planner_completion(payload: dict[str, Any] | None, *, model: str) -> 
 async def _prepare_model_messages(provider, context, messages, max_tokens, extra):
     """One final budget boundary for sync, stream, repairs and native tools."""
     from app.application.agent_orchestrator.context_window_manager import (
+        ContextWindowExceeded,
         estimate_messages_tokens,
         get_context_window_manager,
         summary_fingerprint,
@@ -168,14 +221,28 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
         if schemas
         else 0
     )
-    result = await get_context_window_manager().compress(
-        outbound,
-        provider=provider,
-        context=state,
-        user_id=str((context or {}).get("local_user_id") or ""),
-        reserved_tokens=max_tokens + schema_tokens,
-        model=await model_for_budget(provider, extra.get("model"), extra.get("provider")),
-    )
+    manager = get_context_window_manager()
+    compress_kwargs = {
+        "provider": provider,
+        "context": state,
+        "user_id": str((context or {}).get("local_user_id") or ""),
+        "reserved_tokens": max_tokens + schema_tokens,
+        "model": await model_for_budget(provider, extra.get("model"), extra.get("provider")),
+    }
+    try:
+        result = await manager.compress(outbound, **compress_kwargs)
+    except ContextWindowExceeded:
+        # 工具目录过大时先降到通用工具重试，仍超限才让上层提示分批。
+        if not _shrink_planner_prompt(outbound):
+            raise
+        logger.warning("planner tool catalog trimmed to fit context budget")
+        try:
+            from app.utils import metrics
+
+            metrics.context_window_overflow_total.labels(stage="tool_catalog_trimmed").inc()
+        except Exception:  # noqa: BLE001 - 指标失败不影响重试
+            pass
+        result = await manager.compress(outbound, **compress_kwargs)
     if context is not None and result.summary_llm_call is not None:
         save_conversation_summary(
             context, history, result.summary_covered_count, result.summary_text
