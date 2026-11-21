@@ -8,8 +8,12 @@ import importlib
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.script_agent.brief import AgentEvent, Brief
-from modstore_server.script_agent.sandbox_runner import run_in_sandbox
+from modstore_server.script_agent.brief import AgentEvent, Brief, Verdict
+from modstore_server.script_agent.sandbox_runner import (
+    run_in_sandbox,
+    sandbox_replay_block_reason,
+    sandbox_verification_error,
+)
 
 DEFAULT_MAX_ITERATIONS = 4
 SandboxRunner = object
@@ -119,12 +123,12 @@ async def run_vibe_agent_loop(
     skill_id_hint: Optional[str] = f"script_{session_id}" if session_id else None
     for i in range(max_iterations):
         final_outcome.iterations = i + 1
+        phase_label = "code" if last_skill is None else "repair"
         try:
             if last_skill is None:
                 skill = await asyncio.to_thread(
                     coder.code, brief_text, mode="brief_first", skill_id=skill_id_hint
                 )
-                phase_label = "code"
             else:
                 failure_blob = {
                     "stderr": last_failure.get("stderr") or "",
@@ -137,7 +141,6 @@ async def run_vibe_agent_loop(
                     skill_id_hint or last_skill.skill_id,
                     failure_blob,
                 )
-                phase_label = "repair"
         except RECOVERABLE_ERRORS as exc:
             yield _facade().AgentEvent("error", i, {"reason": f"vibe {phase_label} failed: {exc}"})
             final_outcome.error = f"vibe {phase_label}: {exc}"
@@ -158,6 +161,8 @@ async def run_vibe_agent_loop(
             )
             return
         last_skill = skill
+        final_outcome.final_code = code
+        final_outcome.last_result = final_outcome.last_verdict = None
         skill_id_hint = getattr(skill, "skill_id", None) or skill_id_hint
         yield _facade().AgentEvent(phase_label, i, {"code": code, "skill_id": skill_id_hint})
         trace.append(
@@ -230,40 +235,22 @@ async def run_vibe_agent_loop(
             }
         )
         final_outcome.last_result = result
-        if result.timed_out:
-            fallback_outputs = _facade()._materialize_timeout_summary(
-                result.work_dir, brief=brief, stdout=result.stdout, stderr=result.stderr
-            )
-            if fallback_outputs:
-                result.outputs = fallback_outputs
-                result.timed_out = False
-                result.returncode = 0
-                result.stdout = (result.stdout + "\n已生成 outputs/summary.md（超时兜底）").strip()
-                final_outcome.last_result = result
-                final_outcome.ok = True
-                final_outcome.final_code = code
-                yield _facade().AgentEvent(
-                    "done",
-                    i,
-                    {
-                        "code": code,
-                        "outputs": result.outputs,
-                        "skill_id": skill_id_hint,
-                        "outcome": _facade()._outcome_dict(final_outcome),
-                    },
-                )
-                return
+        replay_blocked = sandbox_replay_block_reason(result)
+        verification_error = sandbox_verification_error(result)
         from modstore_server.script_agent.brief import PlanResult as _PlanResult
 
         plan_obj = _PlanResult(plan_md=ctx.brief_md or brief.goal or "")
         try:
-            from modstore_server.script_agent.llm_client import RealLlmClient
+            if replay_blocked and verification_error:
+                verdict = Verdict(ok=False, reason=verification_error)
+            else:
+                from modstore_server.script_agent.llm_client import RealLlmClient
 
-            with sf() as judge_session:
-                judge_llm = RealLlmClient.from_user_session(
-                    judge_session, int(user_id or 0), provider, model
-                )
-                verdict = await _facade().judge(brief, plan_obj, result, llm=judge_llm)
+                with sf() as judge_session:
+                    judge_llm = RealLlmClient.from_user_session(
+                        judge_session, int(user_id or 0), provider, model
+                    )
+                    verdict = await _facade().judge(brief, plan_obj, result, llm=judge_llm)
         except RECOVERABLE_ERRORS as exc:
             verdict = _facade().Verdict(ok=False, reason=f"observer 调用失败: {exc}")
         yield _facade().AgentEvent(
@@ -288,7 +275,7 @@ async def run_vibe_agent_loop(
             }
         )
         final_outcome.last_verdict = verdict
-        if verdict.ok and result.ok:
+        if verdict.ok is True and not verification_error:
             final_outcome.ok = True
             final_outcome.final_code = code
             yield _facade().AgentEvent(
@@ -298,6 +285,17 @@ async def run_vibe_agent_loop(
                     "code": code,
                     "outputs": result.outputs,
                     "skill_id": skill_id_hint,
+                    "outcome": _facade()._outcome_dict(final_outcome),
+                },
+            )
+            return
+        if replay_blocked:
+            final_outcome.error = verification_error or verdict.reason or replay_blocked
+            yield AgentEvent(
+                "error",
+                i,
+                {
+                    "reason": final_outcome.error,
                     "outcome": _facade()._outcome_dict(final_outcome),
                 },
             )

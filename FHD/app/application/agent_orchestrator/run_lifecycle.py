@@ -395,6 +395,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         runtime_context: dict[str, Any] | None = None,
         auto_execute: bool = True,
         authenticated_binding: dict[str, Any] | None = None,
+        authenticated_actor_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         previous = self._repo.get(run_id)
         if previous is None:
@@ -417,8 +418,18 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 principal_id=requested_by,
                 runtime_context=runtime_context or {},
                 authenticated_binding=authenticated_binding,
+                authenticated_actor_binding=authenticated_actor_binding,
             )
         run = copy.deepcopy(previous)
+        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+
+        renew_approval_session(
+            run,
+            principal_id=requested_by,
+            authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
+            operation="retry",
+        )
         run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
         prepare_safe_continuation(run, requested_by=requested_by, reason="explicit_retry")
         if not self._repo.save_retry_if_unchanged(run, previous):

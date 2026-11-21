@@ -68,6 +68,15 @@ def list_planner_tools_registry() -> dict[str, Any]:
     return list_planner_tools_registry_detail()
 
 
+def run_planner_tool_agent(
+    *, request: Request, body: dict[str, Any], route_path: str
+) -> tuple[dict[str, Any], int]:
+    """Stable Mod SDK entry into the host tools/execute authorization chain."""
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
+
+    return run_tools_execute_agent(request=request, body=body, route_path=route_path)
+
+
 def execute_planner_tool(body: dict[str, Any] | None) -> dict[str, Any]:
     from app.mod_sdk.planner_tools import execute_planner_tool_from_body
 
@@ -85,4 +94,5 @@ __all__ = [
     "intent_test",
     "list_planner_tools_registry",
     "execute_planner_tool",
+    "run_planner_tool_agent",
 ]

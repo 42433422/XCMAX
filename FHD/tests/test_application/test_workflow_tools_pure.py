@@ -8,6 +8,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _legacy_builtin_tool_unit_scope(monkeypatch):
+    """Exercise built-in tool handlers without querying an unrelated tenant tool DB."""
+    from app.application import agent_tool_lifecycle
+
+    monkeypatch.setattr(agent_tool_lifecycle, "execute_if_registered", lambda *_args, **_kwargs: None)
+
+
 class TestParseExcelHeaderRow1Based:
     def test_negative_returns_none(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based

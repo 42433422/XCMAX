@@ -123,6 +123,16 @@ class MessageSynchronizer:
                 )
             )
         }
+        request_ids_with_reply.update(
+            str(item.get("dispatch_request_id") or "")
+            for item in rows
+            if int(item.get("user_id") or 0) == int(user_id)
+            and (
+                item.get("reconciliation_required")
+                or item.get("status") in {"dispatching", "dispatch_unknown"}
+                or item.get("dispatcher") in {"para_api", "webhook"}
+            )
+        )
         changed = False
         cli_backfills = 0
         for item in list(rows):
@@ -161,7 +171,9 @@ class MessageSynchronizer:
         body = self.para_task_status_reply(task)
         patch = {
             "body": body,
-            "status": task_status or str(row.get("status") or ""),
+            "status": "dispatch_unknown"
+            if row.get("reconciliation_required")
+            else task_status or str(row.get("status") or ""),
             "task_id": task_id,
             "task_status": task_status,
         }

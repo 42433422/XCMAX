@@ -10,6 +10,9 @@ from __future__ import annotations
 
 # --- dataclass / build defaults -------------------------------------------
 DEFAULT_TIMEOUT_SECONDS = 60
+# 0 preserves the legacy RunRepair policy. Positive integers bound all calls of
+# one step, including its first call: 1 forbids retries, 3 permits at most two.
+# RunRepair applies this ceiling without bypassing its safety or repair limits.
 DEFAULT_RETRY: dict[str, int] = {"max_attempts": 0}
 
 # --- cost units -----------------------------------------------------------

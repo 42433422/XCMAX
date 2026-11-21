@@ -20,7 +20,12 @@ from modstore_server.script_agent.llm_client import LlmClient
 from modstore_server.script_agent.observer import judge
 from modstore_server.script_agent.planner import make_plan
 from modstore_server.script_agent.repairer import repair_code
-from modstore_server.script_agent.sandbox_runner import SandboxResult, run_in_sandbox
+from modstore_server.script_agent.sandbox_runner import (
+    SandboxResult,
+    run_in_sandbox,
+    sandbox_replay_block_reason,
+    sandbox_verification_error,
+)
 from modstore_server.script_agent.static_checker import validate_script
 
 DEFAULT_MAX_ITERATIONS = 4
@@ -114,13 +119,12 @@ async def run_agent_loop(
     for i in range(max_iterations):
         final_outcome.iterations = i + 1
         # === code / repair ===
+        phase_label = "code" if last_code is None else "repair"
         try:
             if last_code is None:
                 code = await write_code(brief, plan, ctx, llm=llm)
-                phase_label = "code"
             else:
                 code = await repair_code(brief, plan, ctx, last_code, last_failure, llm=llm)
-                phase_label = "repair"
         except BOUNDARY_ERRORS as e:  # noqa: BLE001
             yield AgentEvent("error", i, {"reason": f"{phase_label} failed: {e}"})
             final_outcome.error = f"{phase_label}: {e}"
@@ -139,6 +143,8 @@ async def run_agent_loop(
             return
         yield AgentEvent(phase_label, i, {"code": code})
         trace.append({"phase": phase_label, "iteration": i, "code_excerpt": code[:1000]})
+        final_outcome.final_code = code
+        final_outcome.last_result = final_outcome.last_verdict = None
 
         # === static check ===
         static_errors = validate_script(code)
@@ -192,39 +198,16 @@ async def run_agent_loop(
             }
         )
         final_outcome.last_result = result
-
-        if result.timed_out:
-            # Timeout repairs are expensive and often repeat the same long-running
-            # script.  Materialise a diagnostic output and stop the loop so the
-            # workbench handoff does not wait another 300s+ per round.
-            fallback_outputs = _materialize_timeout_summary(
-                result.work_dir,
-                brief=brief,
-                stdout=result.stdout,
-                stderr=result.stderr,
-            )
-            if fallback_outputs:
-                result.outputs = fallback_outputs
-                result.timed_out = False
-                result.returncode = 0
-                result.stdout = (result.stdout + "\n已生成 outputs/summary.md（超时兜底）").strip()
-                final_outcome.last_result = result
-                final_outcome.ok = True
-                final_outcome.final_code = code
-                yield AgentEvent(
-                    "done",
-                    i,
-                    {
-                        "code": code,
-                        "outputs": result.outputs,
-                        "outcome": _outcome_dict(final_outcome),
-                    },
-                )
-                return
+        replay_blocked = sandbox_replay_block_reason(result)
+        verification_error = sandbox_verification_error(result)
 
         # === observe ===
         try:
-            verdict = await judge(brief, plan, result, llm=llm)
+            verdict = (
+                Verdict(ok=False, reason=verification_error)
+                if replay_blocked and verification_error
+                else await judge(brief, plan, result, llm=llm)
+            )
         except BOUNDARY_ERRORS as e:  # noqa: BLE001
             verdict = Verdict(ok=False, reason=f"observer 调用失败: {e}")
         yield AgentEvent(
@@ -249,7 +232,7 @@ async def run_agent_loop(
         )
         final_outcome.last_verdict = verdict
 
-        if verdict.ok and result.ok:
+        if verdict.ok is True and not verification_error:
             final_outcome.ok = True
             final_outcome.final_code = code
             yield AgentEvent(
@@ -260,6 +243,15 @@ async def run_agent_loop(
                     "outputs": result.outputs,
                     "outcome": _outcome_dict(final_outcome),
                 },
+            )
+            return
+
+        if replay_blocked:
+            final_outcome.error = verification_error or verdict.reason or replay_blocked
+            yield AgentEvent(
+                "error",
+                i,
+                {"reason": final_outcome.error, "outcome": _outcome_dict(final_outcome)},
             )
             return
 
@@ -309,6 +301,8 @@ def _outcome_dict(o: AgentLoopOutcome) -> Dict[str, Any]:
         }
     return {
         "ok": o.ok,
+        "outcome": "success" if o.ok else "unverified",
+        "retryable": False,
         "iterations": o.iterations,
         "final_code": o.final_code,
         "plan_md": o.plan_md,
@@ -317,54 +311,6 @@ def _outcome_dict(o: AgentLoopOutcome) -> Dict[str, Any]:
         "trace": o.trace,
         "error": o.error,
     }
-
-
-def _materialize_timeout_summary(
-    work_dir: str,
-    *,
-    brief: Brief,
-    stdout: str = "",
-    stderr: str = "",
-) -> List[Dict[str, Any]]:
-    """Create a diagnostic output when sandbox execution timed out."""
-    if not work_dir:
-        return []
-    try:
-        from pathlib import Path
-
-        output_dir = Path(work_dir) / "outputs"
-        output_dir.mkdir(exist_ok=True)
-        out = output_dir / "summary.md"
-        out.write_text(
-            "\n".join(
-                [
-                    "# 脚本运行摘要",
-                    "",
-                    "脚本运行超过沙箱时间限制，系统已停止本轮执行并生成兜底说明。",
-                    "",
-                    "## 用户需求",
-                    brief.as_markdown()[:3000],
-                    "",
-                    "## stdout 末段",
-                    "```",
-                    (stdout or "")[-1200:],
-                    "```",
-                    "",
-                    "## stderr 末段",
-                    "```",
-                    (stderr or "")[-1200:],
-                    "```",
-                    "",
-                    "## 建议",
-                    "- 避免无限循环、长时间 sleep、等待外部输入或遍历过大目录。",
-                    "- 优先输出静态说明、diff 模板或自检清单到 outputs/summary.md。",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        return [{"filename": out.name, "path": str(out), "size": out.stat().st_size}]
-    except BOUNDARY_ERRORS:  # noqa: BLE001
-        return []
 
 
 _AGENT_V2 = _os.environ.get("VIBE_AGENT_V2", "").lower() in ("1", "on", "true", "yes")
