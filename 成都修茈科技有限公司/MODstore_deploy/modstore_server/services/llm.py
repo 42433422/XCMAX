@@ -209,6 +209,8 @@ _BENCH_DEFAULT_MODELS: dict[str, str] = {
     "groq": "llama-3.3-70b-versatile",
     "together": "meta-llama/Llama-3-8b-chat-hf",
     "openrouter": "openai/gpt-4o-mini",
+    # 统一网关首选主力编码模型；其余网关模型仍可从模型池选择。
+    "litellm": "xcmax-kimi-code",
 }
 
 

@@ -17,6 +17,9 @@ from modstore_server.models import UserLlmCredential
 
 # 受支持的 provider id（与前端、catalog、chat 一致）
 KNOWN_PROVIDERS = (
+    # 统一模型网关（LiteLLM）：平台模型密钥与模型池的唯一来源；
+    # 其余直连供应商仅保留给 BYOK 或历史配置。
+    "litellm",
     "openai",
     "deepseek",
     "anthropic",
@@ -45,6 +48,8 @@ KNOWN_PROVIDERS = (
 
 # OpenAI 兼容：默认根 URL（不含末尾 /v1，由 catalog/chat 统一补全）
 OPENAI_COMPAT_DEFAULT_ROOT: dict[str, str] = {
+    # 同机部署的 LiteLLM 网关；可用 LITELLM_BASE_URL 覆盖。
+    "litellm": "http://127.0.0.1:14000",
     "openai": "https://api.openai.com",
     "deepseek": "https://api.deepseek.com",
     # 国内 SiliconFlow 控制台与文档默认使用 .cn；海外可设 SILICONFLOW_BASE_URL=https://api.siliconflow.com
@@ -75,6 +80,7 @@ OPENAI_COMPAT_DEFAULT_ROOT: dict[str, str] = {
 # 使用 /v1/models + /v1/chat/completions 的厂商（与 catalog、chat 共用）
 OAI_COMPAT_OPENAI_STYLE_PROVIDERS = frozenset(
     {
+        "litellm",
         "openai",
         "deepseek",
         "siliconflow",
@@ -146,6 +152,10 @@ def _env(name: str) -> str:
 
 
 def _environment_api_key(provider: str) -> Optional[str]:
+    if provider == "litellm":
+        # 与 LiteLLM 网关的 LITELLM_MASTER_KEY 共用同一份服务端密钥。
+        k = _env("LITELLM_MASTER_KEY") or _env("XCMAX_LITELLM_MASTER_KEY")
+        return k or None
     if provider == "openai":
         k = _env("OPENAI_API_KEY")
         return k or None
@@ -217,6 +227,9 @@ def _environment_api_key(provider: str) -> Optional[str]:
 
 
 def _environment_base_url(provider: str) -> Optional[str]:
+    if provider == "litellm":
+        u = _env("LITELLM_BASE_URL")
+        return (u or openai_compat_default_root("litellm")).rstrip("/")
     if provider == "openai":
         u = _env("OPENAI_BASE_URL")
         return (u or openai_compat_default_root("openai")).rstrip("/")

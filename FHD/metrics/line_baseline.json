@@ -1,5 +1,5 @@
 {
-  "lines": 2555489,
+  "lines": 2555586,
   "updated": "2026-11-21",
-  "note": "发布安全门禁修复：codex/opencode 的 ws 8.18.0→8.21.0（package.json 各 1 行同位置替换），opencode 新增 zod 4.6.6 overrides 共 +3 行受管行（lockfile 不计入）；修复 CVE-2026-48779 与 Dependabot 762/764/765，无产品逻辑改动。批准：仓库所有者 42433422 发起的部署安全修复。"
+  "note": "MODstore 接入统一 LiteLLM 网关为平台模型调用唯一来源：新增 litellm provider 解析、网关模型池目录、管理员只读保护与回归测试，净增 97 行，已由所有者批准"
 }
