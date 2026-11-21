@@ -22,6 +22,7 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
 from app.application.tools.mcp import registry
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_tool_process_cleanup import assert_owner_exit_reaps_workers
 from tests.test_infrastructure.test_mcp_persistent_sessions import _SERVER
 
 
@@ -118,6 +119,11 @@ def test_actual_executor_keeps_browser_across_steps_and_reaps_entire_tree(browse
     assert call(browser, "browser_snapshot")["error_code"] == "mcp_session_lost"
 
 
+@pytest.mark.parametrize("phase", ["idle", "active"])
+def test_browser_worker_and_stdio_tree_stop_when_owner_exits(tmp_path, phase):
+    assert_owner_exit_reaps_workers(tmp_path, browser=True, phase=phase)
+
+
 def test_actual_executor_rechecks_revoked_host_session_between_steps(browser):
     from app.db.models.user import Session
 
@@ -147,7 +153,9 @@ def test_real_worker_keeps_captured_model_credentials_off_disk(browser, monkeypa
     first = call(browser, "browser_snapshot")
     state(first)
     worker = next(iter(workers._WORKERS.values()))
-    process = psutil.Process(worker.process.pid)
+    consumer_pid = worker.consumer_pid
+    assert consumer_pid is not None and consumer_pid != worker.process.pid
+    process = psutil.Process(consumer_pid)
     sent = threading.Event()
     frames = []
     send = worker.commands.send_bytes
@@ -186,7 +194,9 @@ def test_backpressured_request_deadline_reaps_worker_and_sender_thread(browser, 
     first = call(browser, "browser_snapshot")
     browser_pid = state(first)["pid"]
     worker = next(iter(workers._WORKERS.values()))
-    worker_pid = worker.process.pid
+    supervisor_pid = worker.process.pid
+    worker_pid = worker.consumer_pid
+    assert worker_pid is not None and worker_pid != supervisor_pid
     sender_threads = []
     send = worker.commands.send_bytes
 
@@ -205,7 +215,7 @@ def test_backpressured_request_deadline_reaps_worker_and_sender_thread(browser, 
     assert result["success"] is False and result["retryable"] is False
     assert result["outcome"] == "unknown"
     assert sender_threads and all(not thread.is_alive() for thread in sender_threads)
-    assert not psutil.pid_exists(worker_pid) and not psutil.pid_exists(browser_pid)
+    assert all(not psutil.pid_exists(pid) for pid in (supervisor_pid, worker_pid, browser_pid))
     assert not Path(worker.folder).exists()
     assert call(browser, "browser_snapshot")["error_code"] == "mcp_session_lost"
 

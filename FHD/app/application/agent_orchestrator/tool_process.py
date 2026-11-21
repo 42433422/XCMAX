@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import multiprocessing
 import os
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -19,8 +21,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import psutil
-
-from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _STREAM_FRAME_LIMIT = 256 * 1024
 
@@ -59,6 +59,8 @@ def _worker_stream(connection):
 
 def _relay_stream(connection, lifetime, drained, failed, stopped, *, keep_connection=False):
     """Deliver in order without letting an observer disable process deadlines."""
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
     publishers = {
         "note": (str, lifetime.publish_note),
         "delta": (str, lifetime.publish_delta),
@@ -233,6 +235,7 @@ def _worker(
         restore_worker_llm_client,
         scoped_route_metadata,
     )
+    from app.utils.operational_errors import BOUNDARY_ERRORS
 
     # 真正执行工具前先收敛子进程能力：环境清洗 + POSIX 资源硬限制。
     # 失败只告警，调度语义仍由父进程 deadline 与进程回收保证。
@@ -397,41 +400,26 @@ def _process_namespace_matches() -> bool:
     return False
 
 
-def _reap(process) -> bool:
+def _stop_owned_descendants(root):
     children = []
-    tree_collected = False
-    try:
-        if not _process_namespace_matches():
-            # Only this owned child handle is trustworthy. Its descendants are
-            # unverified, so killing it cannot establish successful cleanup.
-            process.kill()
-            return False
-        root = psutil.Process(process.pid)
-        root.suspend()
-        # Freeze parents before collecting descendants to stop ordinary spawn races.
-        for _ in range(2):
-            for child in root.children(recursive=True):
-                if child not in children:
-                    children.append(child)
-                    try:
-                        child.suspend()
-                    except psutil.NoSuchProcess:
-                        pass
-        tree_collected = True
-        for child in reversed(children):
-            try:
-                child.kill()
-            except psutil.NoSuchProcess:
-                pass
-        root.kill()
-    except psutil.NoSuchProcess:
-        if not tree_collected:
-            process.kill()
-    except psutil.Error:
-        process.kill()
-        return False
-    finally:
-        process.join(timeout=1)
+    # Freeze parents before collecting descendants to stop ordinary spawn races.
+    for _ in range(2):
+        for child in root.children(recursive=True):
+            if child not in children:
+                children.append(child)
+                try:
+                    child.suspend()
+                except psutil.NoSuchProcess:
+                    pass
+    for child in reversed(children):
+        try:
+            child.kill()
+        except psutil.NoSuchProcess:
+            pass
+    return children
+
+
+def _descendants_stopped(children) -> bool:
     try:
         _, alive = psutil.wait_procs(children, timeout=1)
         for child in alive:
@@ -442,7 +430,263 @@ def _reap(process) -> bool:
                 pass
     except psutil.Error:
         return False
-    return tree_collected and not process.is_alive()
+    return True
+
+
+def _reap(process, *, allow_exited_root: bool = False) -> bool:
+    children = []
+    tree_collected = False
+    try:
+        if not _process_namespace_matches():
+            # Only this owned child handle is trustworthy. Its descendants are
+            # unverified, so killing it cannot establish successful cleanup.
+            process.kill()
+            return False
+        root = psutil.Process(process.pid)
+        root.suspend()
+        # SIGSTOP is asynchronous on POSIX. An exited root's empty children list
+        # proves nothing unless the private supervisor retains orphan ownership.
+        stop_deadline = time.monotonic() + 0.1
+        while (status := root.status()) not in {
+            psutil.STATUS_STOPPED,
+            psutil.STATUS_ZOMBIE,
+            psutil.STATUS_DEAD,
+        } and time.monotonic() < stop_deadline:
+            time.sleep(0.001)
+        children = _stop_owned_descendants(root)
+        tree_collected = status == psutil.STATUS_STOPPED or (
+            allow_exited_root and status in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD}
+        )
+        root.kill()
+    except psutil.NoSuchProcess:
+        if not tree_collected:
+            process.kill()
+    except psutil.Error:
+        process.kill()
+        return False
+    finally:
+        process.join(timeout=1)
+    return _descendants_stopped(children) and tree_collected and not process.is_alive()
+
+
+def _enable_orphan_adoption() -> bool:
+    """Reuse the Linux subreaper contract already used by e2e_supervise.py."""
+    if sys.platform != "linux":
+        return False
+    import ctypes
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        prctl = libc.prctl
+    except AttributeError:
+        raise RuntimeError("worker orphan ownership is unavailable") from None
+    prctl.argtypes = [ctypes.c_int, *([ctypes.c_ulong] * 4)]
+    prctl.restype = ctypes.c_int
+    enabled = ctypes.c_int()
+    if (
+        prctl(36, 1, 0, 0, 0) != 0  # PR_SET_CHILD_SUBREAPER
+        or prctl(37, ctypes.addressof(enabled), 0, 0, 0) != 0  # PR_GET_CHILD_SUBREAPER
+        or enabled.value != 1
+    ):
+        raise RuntimeError("worker orphan ownership is unverified")
+    return True
+
+
+def _reap_adopted_descendants() -> bool:
+    if not _process_namespace_matches():
+        return False
+    try:
+        root = psutil.Process(os.getpid())
+        # This supervisor has no business thread or further spawn. It must keep
+        # running to freeze/reap adopted children, never suspend itself.
+        children = _stop_owned_descendants(root)
+        return _descendants_stopped(children) and not root.children()
+    except psutil.Error:
+        return False
+
+
+def _run_owned_worker(target, executor, args):
+    # Resolve trusted spawn callables only here, not in the lightweight supervisor.
+    # Tool payloads never select either reference or enter this lifecycle channel.
+    def resolve(reference):
+        value = importlib.import_module(reference[0])
+        for name in reference[1].split("."):
+            value = getattr(value, name)
+        return value
+
+    resolve(target)(resolve(executor), *args)
+
+
+def _supervise_worker(target, executor, args, connections, lifecycle):
+    """Own the real worker so parent loss can use the original frozen-tree reap."""
+    owner = multiprocessing.parent_process()
+    worker = None
+    exited = False
+    adopts_orphans = False
+    try:
+        if (
+            owner is not None
+            and not wait((owner.sentinel,), timeout=0)
+            and not lifecycle.poll()
+            and _process_namespace_matches()
+        ):
+            adopts_orphans = _enable_orphan_adoption()
+            worker = multiprocessing.get_context("spawn").Process(
+                target=_run_owned_worker, args=(target, executor, args), daemon=False
+            )
+            worker.start()
+            for connection in connections:
+                connection.close()  # Only the consumer may retain these pipe ends.
+            if not wait((owner.sentinel,), timeout=0):
+                lifecycle.send_bytes(json.dumps({"kind": "ready", "pid": worker.pid}).encode())
+                readable = wait((owner.sentinel, worker.sentinel, lifecycle))
+                # Parent death always wins over a concurrent normal receipt/stop.
+                exited = owner.sentinel not in readable and worker.sentinel in readable
+                if exited:
+                    lifecycle.send_bytes(b'{"kind":"exited"}')
+    except (OSError, ValueError, RuntimeError) as exc:
+        logging.getLogger(__name__).warning(
+            "tool worker supervision interrupted: %s", type(exc).__name__
+        )
+    finally:
+        for connection in connections:
+            connection.close()
+        clean = True
+        exitcode = None
+        if worker is not None and worker.pid is not None:
+            try:
+                # Do not poll exitcode/is_alive before the tree is frozen and reaped:
+                # waitpid could otherwise release the PID before psutil inspects it.
+                clean = _reap(worker, allow_exited_root=adopts_orphans)
+                exitcode = worker.exitcode
+                if clean:
+                    worker.close()
+            except (OSError, ValueError):
+                clean = False
+        if adopts_orphans:
+            adopted_clean = _reap_adopted_descendants()
+            clean = clean and adopted_clean
+        try:
+            if owner is not None and not wait((owner.sentinel,), timeout=0):
+                lifecycle.send_bytes(
+                    json.dumps(
+                        {"kind": "closed", "clean": clean, "exited": exited, "exitcode": exitcode}
+                    ).encode()
+                )
+                # Keep our own ancestry/PID until the caller's original _reap runs.
+                # Its namespace and kill/join checks remain a separate requirement.
+                wait((owner.sentinel,))
+        except (OSError, ValueError):
+            pass
+        finally:
+            lifecycle.close()
+
+
+class _OwnedWorker:
+    """A standard spawn supervisor plus a small, private lifecycle receipt."""
+
+    def __init__(self, ctx, target, executor, args, connections):
+        self._lifecycle, self._child_lifecycle = ctx.Pipe()
+        self._read_lock = threading.Lock()
+        self.worker_pid: int | None = None
+        self.worker_exited: bool = False
+        self.worker_exitcode: int | None = None
+        self._worker_clean: bool | None = None
+        self._closed = False
+        self.clean: bool | None = None
+        self.process = ctx.Process(
+            target=_supervise_worker,
+            args=(
+                (target.__module__, target.__qualname__),
+                (executor.__module__, executor.__qualname__),
+                args,
+                tuple(connection for connection in connections if connection is not None),
+                self._child_lifecycle,
+            ),
+            daemon=False,
+        )
+
+    @property
+    def sentinel(self):
+        # After ready, only actual exit/cleanup or a broken supervisor can signal.
+        return self._lifecycle
+
+    def start(self):
+        try:
+            self.process.start()
+        finally:
+            self._child_lifecycle.close()
+
+    def _poll_lifecycle(self):
+        with self._read_lock:
+            while not self._closed and self._lifecycle.poll():
+                try:
+                    frame = json.loads(self._lifecycle.recv_bytes(256))
+                except EOFError:
+                    self._closed = True
+                    break  # Supervisor exit alone proves neither execution nor cleanup.
+                if not isinstance(frame, dict):
+                    raise ValueError("invalid worker lifecycle receipt")
+                if frame.get("kind") == "ready" and type(frame.get("pid")) is int:
+                    self.worker_pid = frame["pid"]
+                elif frame.get("kind") == "exited":
+                    self.worker_exited = True
+                elif frame.get("kind") == "closed":
+                    self._closed = True
+                    self._worker_clean = frame.get("clean") is True
+                    self.worker_exited = frame.get("exited") is True
+                    code = frame.get("exitcode")
+                    self.worker_exitcode = code if type(code) is int else None
+                else:
+                    raise ValueError("invalid worker lifecycle receipt")
+
+    def wait_ready(self, deadline: float) -> bool:
+        while self.worker_pid is None and not self._closed:
+            if not wait(
+                (self._lifecycle, self.process.sentinel),
+                timeout=max(0, deadline - time.monotonic()),
+            ):
+                return False
+            self._poll_lifecycle()
+        return self.worker_pid is not None and not self._closed
+
+    def exited(self) -> bool:
+        self._poll_lifecycle()
+        return self.worker_exited
+
+    def close(self) -> bool:
+        if self.clean is not None:
+            return self.clean
+        clean = self.process.pid is None
+        try:
+            if self.process.pid is not None:
+                try:
+                    # At most one byte is sent; the other direction has three small
+                    # frames. Neither pipe can fill while the consumer is stopped.
+                    self._lifecycle.send_bytes(b"x")
+                    deadline = time.monotonic() + 3
+                    while not self._closed and time.monotonic() < deadline:
+                        if not wait(
+                            (self._lifecycle, self.process.sentinel),
+                            timeout=max(0, deadline - time.monotonic()),
+                        ):
+                            break
+                        self._poll_lifecycle()
+                except (OSError, EOFError, ValueError):
+                    pass
+                # Also runs when the supervisor/receipt failed. A missing or false
+                # child cleanup proof cannot become true by killing the supervisor.
+                clean = _reap(self.process) and self._worker_clean is True
+                if clean:
+                    self.process.close()
+        except (OSError, ValueError):
+            clean = False
+        finally:
+            with self._read_lock:
+                self._lifecycle.close()
+            self._child_lifecycle.close()
+            self.clean = clean
+        return clean
 
 
 def _ignore_missing_cleanup_entry(_function, _path, error):
@@ -590,10 +834,11 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
     relay = None
     folder = tempfile.mkdtemp(prefix="xcagi-tool-")
     llm_scope = capture_worker_llm_scope(context)
-    process = ctx.Process(
-        target=_worker,
-        args=(
-            type(executor),
+    process = _OwnedWorker(
+        ctx,
+        _worker,
+        type(executor),
+        (
             payload,
             folder,
             control_out,
@@ -605,6 +850,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
             sender,
             elt_claim,
         ),
+        (control_out, sender),
     )
     armed = False
     early_exit = False
@@ -637,7 +883,11 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
                 relay = None
                 lifetime.worker_finished()
                 raise
-        ready, exited = _worker_acknowledged(control_in, process, b"r", deadline)
+        ready, exited = (
+            _worker_acknowledged(control_in, process, b"r", deadline)
+            if process.wait_ready(deadline)
+            else (False, False)
+        )
         if ready and not exited and time.monotonic() < deadline:
             armed = True
             start.set()
@@ -648,7 +898,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
                 deadline,
                 renew=renew_file_deadline if file_deadlines else None,
             )
-            early_exit = not done and exited and time.monotonic() < deadline
+            early_exit = not done and exited and process.exited() and time.monotonic() < deadline
             if done:
                 result = json.loads(Path(folder, "result").read_text(encoding="utf-8"))
                 if (
@@ -670,13 +920,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
             sender.close()
         if receiver is not None and relay is None:
             receiver.close()
-        if process.pid is not None:
-            try:
-                clean = _reap(process)
-                if clean:
-                    process.close()
-            except OSError:
-                clean = False
+        clean = process.close()
         if clean:
             try:
                 shutil.rmtree(folder, onerror=_ignore_missing_cleanup_entry)

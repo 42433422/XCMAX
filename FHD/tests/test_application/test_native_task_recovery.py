@@ -11,7 +11,6 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
-from multiprocessing.connection import wait
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -698,21 +697,21 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(marker_db))
     monkeypatch.setattr(tool_process, "_caller_business_db_url", lambda: "")
     monkeypatch.setattr(tool_process.tempfile, "tempdir", str(tmp_path))
-    original_reap = tool_process._reap
+    original_close = tool_process._OwnedWorker.close
+    observed_exits = []
 
-    def inspect_fixture_exit(process):
-        if wait((process.sentinel,), timeout=0):
-            # A concurrent multiprocessing launch can reap an exited PID
-            # before psutil sees it. Exercise that path deterministically.
-            process.join(timeout=1)
-            # The synthetic worker only uses in-process SQLite. Supply the
-            # clean verdict for the separate queue handoff case.
-            if process.exitcode == 23 and cleanup_verified:
-                return True
-        return original_reap(process)
+    def inspect_fixture_exit(worker):
+        clean = original_close(worker)
+        if worker.worker_exited and worker.worker_exitcode == 23:
+            observed_exits.append(clean)
+            # Lose the cleanup proof only after the real supervisor has reaped
+            # this fixture. A missing proof must still forbid checkpoint reuse.
+            return clean and cleanup_verified
+        return clean
 
-    monkeypatch.setattr(tool_process, "_reap", inspect_fixture_exit)
+    monkeypatch.setattr(tool_process._OwnedWorker, "close", inspect_fixture_exit)
     dispatcher._execute_claim(old, "old")
+    assert observed_exits == [True]
     stored = repository.get(run.run_id)
     if not cleanup_verified:
         assert stored.status == "blocked", stored.steps[0].output

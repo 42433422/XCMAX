@@ -19,17 +19,14 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_call,
     validate_tool_result,
 )
-from app.application.employee_runtime.result_verifier import (
-    execution_result_requires_reconciliation,
-)
 from app.application.tool_execution_deadline import (
     invocation_deadline,
     invocation_requires_reconciliation,
 )
-from app.application.workflow.retry_policy import is_transport_error
 from app.domain.task_lifecycle.results import (
     execution_result_envelopes,
     execution_result_pending_state,
+    execution_result_requires_reconciliation,
     normalize_execution_result,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -596,6 +593,8 @@ class AgentToolExecutor:
                 except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
                     raise
                 except RECOVERABLE_ERRORS as exc:
+                    from app.application.workflow.retry_policy import is_transport_error
+
                     safe_read_retry = (
                         validation.spec is not None
                         and validation.spec.read_only

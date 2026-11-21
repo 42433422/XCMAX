@@ -748,12 +748,12 @@
     "FHD/app/application/agent_orchestrator/tool_executor.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_executor.py",
       "base_blob": "d60b63bcf6913d5e9afaa582e36846319ebee45f",
-      "head_blob": "0bb033a19db20880bc0a6a580234661505ba9b20",
+      "head_blob": "5f4b2e615767ea40d08e4947a872ee1d8cc6f49c",
       "before_lines": 759,
-      "after_lines": 896,
-      "reason": "修复已派发写操作被普通失败或假成功覆盖后释放原声明的问题，并对没有适配器的AIOPEN通用入口明确返回未执行；现有出货规格与客户 ID 纯验证提前在工具 claim 和派发前闭合。",
+      "after_lines": 895,
+      "reason": "修复已派发写操作被普通失败或假成功覆盖后释放原声明的问题，并对没有适配器的AIOPEN通用入口明确返回未执行；现有出货规格与客户 ID 纯验证提前在工具 claim 和派发前闭合。 本轮冷启动剖析确认两个间接导入加载无关员工执行器和工作流规划器；改为直接使用相同领域分类函数，运输错误助手延迟到唯一异常分支，减少原截止时间内的无效初始化。",
       "boundary": "复用原结果分类、截止时间和幂等账本；未知写声明保留，只有可信未执行或已审计只读失败可继续原重试流程；不接受 handler 自述未执行。",
-      "validation": "最终组合回归覆盖真实spawn撤权、父deadline、原请求未知回执和已有effect；父进程在slot与effect前核验Mod权限，子进程再次核验。撤权竞态和handler异常保留未知写入，租约失效直接透传，旧effect不会被blocked清除。远端最终提交的完整CI仍为必要合并条件。 当前组合136项验证及时排队回执只读回收原子任务、真实I/O未知仍不重放；9项schema错误回归区分原始未知回执与实际超时包装。",
+      "validation": "最终组合回归覆盖真实spawn撤权、父deadline、原请求未知回执和已有effect；父进程在slot与effect前核验Mod权限，子进程再次核验。撤权竞态和handler异常保留未知写入，租约失效直接透传，旧effect不会被blocked清除。远端最终提交的完整CI仍为必要合并条件。 当前组合136项验证及时排队回执只读回收原子任务、真实I/O未知仍不重放；9项schema错误回归区分原始未知回执与实际超时包装。 同环境8ab既有4个阶段时限测试复核为3失败1通过，完整导入约3.8秒；收窄导入后约1.17秒，核对无关运行时未加载；原3秒启动及每文件阶段预算不变；既有阶段超时测试按原平铺unknown回执核对，额外断言success=False、禁止重试及必须核对，完整回归与最终CI继续验收。",
       "follow_up": "继续用原结果契约扩充独立业务回读证据；没有供应商回执时保持待核对，不以模型布尔值结算。",
       "review_owner": "@42433422"
     },
@@ -791,6 +791,18 @@
       "boundary": "新任务的审批身份随原子准入保存；旧main记录只在owner/tenant/Mod/session/call/完整计划和参数证明齐全时复用，缺证明不新建任务。",
       "validation": "旧main审批真实SQLite反例覆盖独立调用、进程重建、缺失元数据及范围/计划/参数冲突；相关定点mypy通过，最终50后台文件2145项通过、9项PostgreSQL环境跳过。最终CI与架构审核仍待完成。 本轮整合验收：按主线 ce5a491e183 合并原候选，保留100轮澄清、原进程重启、幂等双进程、撤权、超时和迟到回执回归；上述历史候选证据不替代最终集成提交的完整CI，最终必需检查仍须全部通过。",
       "follow_up": "后续审批身份变更继续按旧持久记录兼容，不猜测缺失字段；生产数据库验证和架构审核仍由原CI及评审流程完成。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/agent_orchestrator/tool_process.py": {
+      "base_file": "FHD/app/application/agent_orchestrator/tool_process.py",
+      "base_blob": "acfa7d1385047b168954500421dc43fc6dfe4bf8",
+      "head_blob": "38d28186f65d9efb16daa27bb5d0fc09d7edc070",
+      "before_lines": 695,
+      "after_lines": 956,
+      "reason": "修复桌面owner通过os._exit退出后，普通工具和持久浏览器失去父端deadline/watchdog且继续产生晚到副作用的真实缺陷。共享生命周期监督保留原有冻结进程树清理，不建立新的执行通道。 定点真实worker自行exit23还复现了zombie空children误报clean且独立stdio后代晚到写入，需同时闭合退出后的所有权证明。",
+      "boundary": "复用Python标准库multiprocessing的spawn、parent_process sentinel与私有有界Pipe，以及原psutil冻结回收；实际worker继续使用原审批、端到端凭据/回执、绝对deadline和检查点。父退出优先停止，清理成功须同时具备实际子树回执和caller原_reap证明。 Linux私有supervisor在派发前复用仓内e2e_supervise标准ctypes/prctl模式，设置并读取验证subreaper；清理收养树并核对空树。未证明收养时只认可实际停止根的遍历证明，worker已退出保持未知。",
+      "validation": "真实生产spawn探针与正式回归复现浏览器空闲/活动、普通工具活动3种父退出后的遗留进程/晚到写入（3失败），并另证worker自行exit23后clean=True却留stdio/孙进程和晚写（1失败）。修订后7项定点通过：原4种实际生命周期、ownership API拒绝/不可用零派发、未证明收养保持clean=False。完整进程两文件39项及完整FHD mypy通过且输入哈希稳定；保留背压、撤权、未知不重放、凭据不落盘和namespace/kill/join回归，原生恢复、完整普通工具及最终远端CI仍须按最终提交验收。",
+      "follow_up": "保持实际worker、收养子树、caller原_reap三重清理证明。Linux ownership API失败不派发；其他平台未证明所有权时worker异常退出保留未知，不据此自动续接检查点。真实Chromium、PostgreSQL和全部最终headCI须绑定本次提交重新验收。",
       "review_owner": "@42433422"
     }
   }
