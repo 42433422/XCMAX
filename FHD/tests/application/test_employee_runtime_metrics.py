@@ -15,6 +15,24 @@ def _reset_metrics():
 
 
 class TestRecordRun:
+    @pytest.mark.parametrize(
+        "state",
+        ["queued", "running", "waiting_input", "waiting_approval", "paused", "blocked", "unknown"],
+    )
+    def test_unfinished_runs_are_not_failure_or_success_activity(self, state, monkeypatch):
+        from unittest.mock import Mock
+
+        from app.application import ai_circle_service
+
+        activity = Mock()
+        monkeypatch.setattr(ai_circle_service, "record_employee_activity", activity)
+        m.record_employee_run("e1", success=False, execution_state=state)
+        snapshot = m.get_employee_runtime_metrics()
+        assert snapshot["runs_pending"] == 1
+        assert snapshot["runs_failed"] == snapshot["runs_success"] == 0
+        assert snapshot["by_employee"]["e1"]["last_execution"]["execution_state"] == state
+        activity.assert_not_called()
+
     def test_success_run(self):
         m.record_employee_run("e1", success=True)
         snap = m.get_employee_runtime_metrics()

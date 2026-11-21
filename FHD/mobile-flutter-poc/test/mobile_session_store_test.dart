@@ -943,7 +943,7 @@ void main() {
     },
   );
 
-  test('MobileRepository falls back to relay when LAN direct fails', () async {
+  test('MobileRepository does not redispatch when LAN direct outcome is uncertain', () async {
     final store = MemoryMobileSessionStore(
       const MobileSessionData(
         serverMode: 'lan',
@@ -954,7 +954,7 @@ void main() {
     final api = _LanFailFreshRelayApi(store);
     final repository = MobileRepository(client: api);
 
-    final reply = await repository.streamMessage(
+    await expectLater(repository.streamMessage(
       conversation: const ConversationItem(
         id: 'pinned:trae',
         type: ConversationType.pinnedTrae,
@@ -962,13 +962,56 @@ void main() {
         subtitle: '',
         timestampText: '',
       ),
-      body: '局域网失败就回中继',
-    );
+      body: '局域网原任务待核对',
+    ), throwsA(isA<MobileApiException>()));
 
-    expect(reply, 'Trae 中继回复');
-    expect(api.createdRelayTasks, 1);
+    expect(api.createdRelayTasks, 0);
     // Phone LAN remaps loopback listen port 17500 → vite proxy 5011.
     expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
+  });
+
+  for (final uncertain in [false, true]) {
+    test('outbox preserves identity and only reconciles dispatched writes: $uncertain', () async {
+      final api = _OutboxReceiptApi(uncertain);
+      final repository = MobileRepository(client: api);
+      addTearDown(repository.dispose);
+      addTearDown(api.dispose);
+      await repository.enqueuePendingMessage(conversation: const ConversationItem(
+        id: 'pinned:assistant', type: ConversationType.pinnedAssistant, title: '小C', subtitle: '', timestampText: ''),
+        body: '写入订单', idempotencyKey: 'original-outbox-turn');
+      expect(await repository.flushPendingMessages(), 0);
+      expect(await repository.pendingMessageCount(), 1);
+      expect(await repository.flushPendingMessages(), 1);
+      expect(api.turnKeys, ['original-outbox-turn', 'original-outbox-turn']);
+      expect(api.resumeFlags, [false, uncertain]);
+      expect(await repository.pendingMessageCount(), 0);
+    });
+  }
+
+  test('uncertain LAN SSE never submits JSON or relay fallback', () async {
+    final api = _UnknownLanReceiptApi(MemoryMobileSessionStore(const MobileSessionData(
+        serverMode: 'lan', localBaseUrl: 'http://192.168.31.8:17500/', relayDesktopId: 'fresh-relay')));
+    final repository = MobileRepository(client: api);
+    addTearDown(repository.dispose);
+    addTearDown(api.dispose);
+    await expectLater(repository.streamMessage(conversation: const ConversationItem(
+        id: 'pinned:trae', type: ConversationType.pinnedTrae, title: 'Trae', subtitle: '', timestampText: ''),
+        body: '执行'), throwsA(isA<MobileApiException>().having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')));
+    expect(api.postedBaseUrls, isEmpty);
+    expect(api.createdRelayTasks, 0);
+  });
+
+  test('blocked relay keeps its original task ID for read-only resume', () async {
+    final api = _BlockedRelayReceiptApi(MemoryMobileSessionStore(const MobileSessionData(
+        serverMode: 'cloud', relayDesktopId: 'fresh-relay')));
+    final repository = MobileRepository(client: api);
+    addTearDown(repository.dispose);
+    addTearDown(api.dispose);
+    await expectLater(repository.streamMessage(conversation: const ConversationItem(
+        id: 'pinned:trae', type: ConversationType.pinnedTrae, title: 'Trae', subtitle: '', timestampText: ''),
+        body: '执行'), throwsA(isA<MobileApiException>().having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')));
+    expect(api.createdRelayTasks, 1);
+    expect(await repository.hasInflightRelay('pinned:trae'), isTrue);
   });
 
   test(
@@ -1843,6 +1886,14 @@ class _FreshPairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
   Map<String, Object?>? lastPayload;
 
   @override
+  Future<String> streamSuperEmployeeMessage(String tool, String body,
+      {String baseUrl = '', String idempotencyKey = '',
+      void Function(String)? onToken, void Function(String)? onStatus,
+      bool Function()? isCancelled}) async {
+    throw const MobileApiException(statusCode: 404, message: 'route missing', body: {});
+  }
+
+  @override
   Future<MobileEnvelope<Map<String, Object?>>> relayDesktops() async {
     final now = DateTime.now().toUtc().toIso8601String();
     return MobileEnvelope<Map<String, Object?>>(
@@ -1947,6 +1998,8 @@ class _PlainChatCacheApi extends MobileApiClient {
   @override
   Future<String> streamChat(
     String message, {
+    String idempotencyKey = '',
+    bool resumeOnly = false,
     String? sessionId,
     int userId = 0,
     List<Map<String, String>> recentMessages = const [],
@@ -1972,6 +2025,8 @@ class _EmployeeChatRoutingApi extends MobileApiClient {
   @override
   Future<String> streamChat(
     String message, {
+    String idempotencyKey = '',
+    bool resumeOnly = false,
     String? sessionId,
     int userId = 0,
     List<Map<String, String>> recentMessages = const [],
@@ -1983,6 +2038,8 @@ class _EmployeeChatRoutingApi extends MobileApiClient {
 
   @override
   Future<String> streamEmployeeChat({
+    String idempotencyKey = '',
+    bool resumeOnly = false,
     required String message,
     required String employeeId,
     required String modId,
@@ -2203,4 +2260,49 @@ Future<void> _seedScopedPreviews(MemoryMobileSessionStore sessions) async {
       'ts': entry.value['last_message_at'],
     });
   }
+}
+
+class _OutboxReceiptApi extends MobileApiClient {
+  _OutboxReceiptApi(this.uncertain) : super(sessionStore: MemoryMobileSessionStore(
+      const MobileSessionData(userId: 1, accessToken: 'test-account')));
+  final bool uncertain;
+  final turnKeys = <String>[];
+  final resumeFlags = <bool>[];
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> me() async => const MobileEnvelope(
+      success: true, message: '', data: {'user': {'id': 1}}, raw: {});
+  @override
+  Future<String> streamChat(String message, {String? sessionId, int userId = 0,
+      String idempotencyKey = '', bool resumeOnly = false,
+      List<Map<String, String>> recentMessages = const [], void Function(String)? onToken}) async {
+    turnKeys.add(idempotencyKey);
+    resumeFlags.add(resumeOnly);
+    if (turnKeys.length == 1) {
+      if (uncertain) {
+        throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+            message: '原任务回执待核对', body: {'execution_state': 'unknown'});
+      }
+      throw const SocketException('connection refused before send');
+    }
+    return '原任务完成';
+  }
+}
+
+class _UnknownLanReceiptApi extends _FreshPairedRelayApi {
+  _UnknownLanReceiptApi(super.store);
+  @override
+  Future<String> streamSuperEmployeeMessage(String tool, String body,
+      {String baseUrl = '', String idempotencyKey = '', void Function(String)? onToken,
+      void Function(String)? onStatus, bool Function()? isCancelled}) async {
+    throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+        message: '原任务待核对', body: {'execution_state': 'unknown'});
+  }
+}
+
+class _BlockedRelayReceiptApi extends _FreshPairedRelayApi {
+  _BlockedRelayReceiptApi(super.store);
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(String taskId) async =>
+      MobileEnvelope(success: true, message: '',
+          data: {'task': {'task_id': taskId, 'status': 'blocked'}}, raw: {});
 }

@@ -154,6 +154,44 @@ void main() {
     expect(await store.pendingMessages(), isEmpty);
   });
 
+  test('outbox preserves the original turn across a crash and read-back attempts', () async {
+    final id = await store.enqueueMessage(conversationId: 'c1',
+        conversationType: ConversationType.pinnedAssistant, title: '小C',
+        body: '写入订单', authGeneration: 1, idempotencyKey: 'original-turn');
+    await store.markSending(id);
+    var entry = (await store.pendingMessages()).single;
+    expect(entry.idempotencyKey, 'original-turn');
+    expect(entry.requiresReconciliation, isTrue);
+    await store.markFailed(id, '原回执暂不可读', requiresReconciliation: true);
+    entry = (await store.pendingMessages()).single;
+    expect(entry.idempotencyKey, 'original-turn');
+    expect(entry.attempts, 1);
+    expect(entry.requiresReconciliation, isTrue);
+    for (var i = 0; i < 6; i++) {
+      await store.markFailed(id, '回读暂不可达', requiresReconciliation: true);
+    }
+    expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
+  });
+
+  test('an undispatched connection failure may retry the same original key', () async {
+    final id = await store.enqueueMessage(conversationId: 'c1',
+        conversationType: ConversationType.pinnedAssistant, title: '小C',
+        body: '未建立连接', authGeneration: 1, idempotencyKey: 'not-sent');
+    await store.markSending(id);
+    await store.markFailed(id, 'connection refused');
+    final entry = (await store.pendingMessages()).single;
+    expect(entry.requiresReconciliation, isFalse);
+    expect(entry.idempotencyKey, 'not-sent');
+  });
+
+  test('cached pending receipt retains its turn across restart and update', () async {
+    await store.appendMessage('c1', {...message(1, '回执待核对', role: 'assistant'),
+      'turn_id': 'original-turn', 'status': 'pending'});
+    final cached = (await store.cachedMessages('c1')).single;
+    expect(cached['turn_id'], 'original-turn');
+    expect(cached['status'], 'pending');
+  });
+
   test('手动重发后可按内容清除排队记录', () async {
     await store.enqueueMessage(
       conversationId: 'c1',

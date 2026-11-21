@@ -139,7 +139,7 @@ class _ChatScreenState extends _ChatStateActions {
       onReply: () => setState(() => _replyTo = original),
       onDelete: () => _deleteMessageAt(originalIndex),
       onResend:
-          original.status == ChatDeliveryStatus.failed ? _resendLastChat : null,
+          [ChatDeliveryStatus.failed, ChatDeliveryStatus.pending].contains(original.status) ? () => _readOriginalChatTurn(original) : null,
       toolCalls: toolCalls,
       onShowTimeline:
           toolCalls.isEmpty ? null : () => _openTimelineForMessage(original),

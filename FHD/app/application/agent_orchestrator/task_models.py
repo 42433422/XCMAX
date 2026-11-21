@@ -142,7 +142,14 @@ def task_from_run(run: AgentRun, *, existing: AgentTask | None = None) -> AgentT
         title=str(context.get("title") or run.message or task_id),
         created_at=run.created_at,
     )
-    if existing is not None and attempt < existing.attempt:
+    if existing is not None and (
+        attempt < existing.attempt
+        or (
+            attempt == existing.attempt
+            and existing.active_run_id
+            and existing.active_run_id != run.run_id
+        )
+    ):
         return existing
     current.user_id = run.user_id
     current.tenant_id = str(runtime.get("tenant_id") or current.tenant_id or "")[:128]

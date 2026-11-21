@@ -235,13 +235,16 @@ def list_agent_runs(
     try:
         # Public callers can only enumerate their own runs. Cross-user admin search should
         # use a separately permissioned admin route, not a caller-controlled query string.
-        runs = get_agent_run_repository().list_recent(
+        repository = get_agent_run_repository()
+        runs = repository.list_recent(
             user_id=principal.user_id,
             tenant_id=principal.tenant_id,
             limit=limit,
             mod_id=str((principal.mod_authorization or {}).get("mod_id") or ""),
         )
-        return _success([_public_run_dict(run) for run in runs], count=len(runs))
+        return _success(
+            [_public_run_dict(run, read_run=repository.get) for run in runs], count=len(runs)
+        )
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent runs")
 
@@ -310,7 +313,7 @@ def get_agent_run(
         run, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
-        response = _run_response(run, principal=principal)
+        response = _run_response(run, principal=principal, read_run=orchestrator.get_run)
         command = orchestrator.latest_task_control(run_id)
         if command is not None:
             response["control_command"] = command.to_dict()

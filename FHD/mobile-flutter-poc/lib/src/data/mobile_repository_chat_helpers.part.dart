@@ -132,7 +132,15 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     if (scope != await _offlineScope()) return const [];
     // Legacy JSON/SQLite has no reliable backend owner: retain it on disk,
     // but never import it into a newly authenticated account's scoped cache.
-    return rows.map(_chatMessageFromCache).whereType<ChatMessage>().toList();
+    final messages = rows.map(_chatMessageFromCache).whereType<ChatMessage>().toList();
+    final answeredTurns = messages.where((message) => message.role == ChatRole.assistant)
+        .map((message) => message.turnId).toSet();
+    return messages.expand((message) => [message,
+      if (message.role == ChatRole.user && message.turnId.isNotEmpty && !answeredTurns.contains(message.turnId))
+        ChatMessage(id: 'turn-${message.turnId}-assistant', conversationId: id,
+            role: ChatRole.assistant, body: '原任务回执待核对，请读取原任务状态，勿重复提交。',
+            timeText: message.timeText, turnId: message.turnId, status: ChatDeliveryStatus.pending)
+    ]).toList();
   }
 
   Future<void> _requireChatScope(int generation, String base) async {
@@ -146,6 +154,8 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     String conversationId, {
     required ChatRole role,
     required String body,
+    String turnId = '',
+    ChatDeliveryStatus status = ChatDeliveryStatus.sent,
     int? expectedAuthGeneration,
     String? expectedBaseUrl,
   }) async {
@@ -159,7 +169,7 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     final now = DateTime.now();
     final timestampMs = now.millisecondsSinceEpoch;
     // 微秒 + 角色保证同一毫秒内写入的用户/助手消息不会互相覆盖。
-    final messageId = 'cache-${now.microsecondsSinceEpoch}-${role.name}';
+    final messageId = turnId.isEmpty ? 'cache-${now.microsecondsSinceEpoch}-${role.name}' : 'turn-$turnId-${role.name}';
     final preview = _conversationPreviewForRole(role, text);
     final store = await openOfflineStore();
     if (expectedBaseUrl != null) {
@@ -175,7 +185,8 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
         'time_text': now.toIso8601String(),
         'ts': timestampMs,
         'has_employee_profile': role == ChatRole.assistant,
-        'status': ChatDeliveryStatus.sent.name,
+        'status': status.name,
+        'turn_id': turnId,
       });
       await store.saveConversationState(
         id,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from typing import Any
 
@@ -12,6 +13,7 @@ from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ERP_CAPABILITY_TOOL_NAME = "execute_erp_capability"
+logger = logging.getLogger(__name__)
 
 
 def _workflow_registry() -> dict[str, Any]:
@@ -206,6 +208,7 @@ def execute_registered_capability(
     *,
     workspace_root: str | None = None,
     runtime_context: dict[str, Any] | None = None,
+    require_approval: bool = False,
 ) -> str:
     """Execute a registered product operation through risk and approval gates."""
 
@@ -213,22 +216,48 @@ def execute_registered_capability(
     if not resolved.get("success"):
         return json.dumps(resolved, ensure_ascii=False)
 
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     tool_id = str(resolved["tool_id"])
     action = str(resolved["action"])
     params = dict(resolved["params"])
     context: dict[str, Any] = dict(runtime_context or {})
-    approval_request_id = None
+    if denial := actor_tool_denial(tool_id, action, context, params):
+        return json.dumps(denial, ensure_ascii=False, default=json_safe)
+    key = str(context.get("idempotency_key") or context.get("turn_id") or "").strip()
+    call_id = str(context.get("call_id") or "").strip()
+    session_id = str(context.get("conversation_id") or context.get("session_id") or "").strip()
+    if (
+        not key
+        and call_id
+        and (session_id or context.get("parent_run_id") or context.get("run_id"))
+    ):
+        key = call_id
+    stable_request = bool(key)
+    spec = get_tool_action_spec(tool_id, action)
+    if not key:
+        if not spec or not (spec.read_only or spec.risk == "low" and spec.idempotent):
+            return json.dumps(
+                {
+                    "success": False,
+                    "execution_state": "blocked",
+                    "retryable": False,
+                    "error_code": "task_identity_required",
+                    "message": "写操作需要稳定的 turn_id 或 idempotency_key，尚未执行。",
+                },
+                ensure_ascii=False,
+            )
+        key = uuid.uuid4().hex
+    legacy_approval_request_id = ""
     if tool_id in {"customers", "products"} and action == "batch_delete":
-        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
         from app.infrastructure.auth.agent_mod_scope import _bound_actor
         from app.infrastructure.tenant_scope import current_tenant_id
 
         try:
             actor = _bound_actor(context)
             tenant = current_tenant_id()
-            key = str(context.get("idempotency_key") or context.get("turn_id") or "").strip()
             if (
                 not tenant
                 or str(tenant) != str(context.get("tenant_id"))
@@ -237,14 +266,44 @@ def execute_registered_capability(
             ):
                 raise ValueError("删除操作缺少有效身份、权限或请求标识")
             identity = json.dumps([tenant, str(actor.id), key, tool_id, action], ensure_ascii=False)
-            approval_request_id = hashlib.sha256(identity.encode()).hexdigest()
+            legacy_approval_request_id = hashlib.sha256(identity.encode()).hexdigest()
         except RECOVERABLE_ERRORS:
             return json.dumps(
                 {"success": False, "error": "删除操作身份或请求标识无效"}, ensure_ascii=False
             )
-    plan_id = f"erp-capability-{tool_id}-{action}-{uuid.uuid4().hex[:12]}"
-    if approval_request_id:
-        plan_id = f"erp-capability-{approval_request_id}"
+    actor_id = str(
+        context.get("user_id") or context.get("local_user_id") or context.get("actor_id") or ""
+    ).strip()
+    if not actor_id:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "ERP capability 缺少已认证的调用人上下文，未执行",
+                "tool_id": tool_id,
+                "action": action,
+            },
+            ensure_ascii=False,
+        )
+    identity = json.dumps(
+        [
+            str(context.get("tenant_id") or ""),
+            actor_id,
+            session_id or str(context.get("parent_run_id") or context.get("run_id") or ""),
+            key,
+            call_id,
+        ],
+        ensure_ascii=False,
+    )
+    digest = hashlib.sha256(identity.encode()).hexdigest()
+    task_id = f"task_erp_{digest[:40]}"
+    parent_task = str(context.get("task_id") or "")
+    if parent_task and parent_task != task_id:
+        context.setdefault("parent_task_id", parent_task)
+    if context.get("agent_run_id") or context.get("run_id"):
+        context.setdefault("parent_run_id", str(context.get("agent_run_id") or context["run_id"]))
+    context["task_id"] = task_id
+    approval_request_id = hashlib.sha256(f"{task_id}:approval".encode()).hexdigest()
+    plan_id = f"erp-capability-{digest}"
     plan = PlanGraph(
         plan_id=plan_id,
         intent=f"ERP Agent 请求执行 {tool_id}.{action}",
@@ -269,19 +328,12 @@ def execute_registered_capability(
     context["source"] = "erp_agent_capability_tool"
     context["workspace_root"] = workspace_root
     context.setdefault("message", str(params.get("user_request") or params.get("message") or ""))
-    actor_id = str(
-        context.get("user_id") or context.get("local_user_id") or context.get("actor_id") or ""
-    ).strip()
-    if not actor_id:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "ERP capability 缺少已认证的调用人上下文，未执行",
-                "tool_id": tool_id,
-                "action": action,
-            },
-            ensure_ascii=False,
-        )
+    from app.application.agent_orchestrator.unified_task import (
+        UnifiedTaskConflictError,
+        UnifiedTaskResult,
+        publish_task_run,
+    )
+
     try:
         from app.application.agent_orchestrator import AgentOrchestrator
         from app.application.workflow import get_approval_service
@@ -289,20 +341,84 @@ def execute_registered_capability(
         approvals = get_approval_service()
         required_nodes = approvals.get_approval_required_nodes(plan)
         required_ids = [node.node_id for node in required_nodes]
+        if require_approval:
+            required_ids = [node.node_id for node in plan.nodes]
         if required_ids:
             plan.metadata["approval_required_node_ids"] = required_ids
-        agent_run = AgentOrchestrator().start_run_from_plan(
-            user_id=actor_id,
-            message=str(context.get("message") or ""),
-            plan=plan,
-            runtime_context=context,
-            auto_execute=True,
+        orchestrator = AgentOrchestrator()
+        legacy_run = None
+        if legacy_approval_request_id:
+            from app.application.workflow.approval_persistence import load_legacy_capability_run
+
+            legacy_found, legacy_run = load_legacy_capability_run(
+                legacy_approval_request_id,
+                read_run=orchestrator.get_run,
+                user_id=actor_id,
+                runtime_context=context,
+                tool_id=tool_id,
+                action=action,
+                params=params,
+            )
+            if legacy_found and legacy_run is None:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "execution_state": "unknown",
+                        "requires_reconciliation": True,
+                        "retryable": False,
+                        "error_code": "legacy_approval_identity_unverified",
+                        "approval_request_id": legacy_approval_request_id,
+                        "message": "旧审批的执行身份尚未完整确认，请核对原审批；未创建或执行新任务。",
+                    },
+                    ensure_ascii=False,
+                )
+        if legacy_run is not None:
+            publication = UnifiedTaskResult(run=legacy_run, deduplicated=True)
+        else:
+            options: dict[str, Any] = {
+                "user_id": actor_id,
+                "message": str(context.get("message") or ""),
+                "plan": plan,
+                "runtime_context": context,
+                "persist": False,
+            }
+            agent_run = (
+                orchestrator.start_task_from_plan(**options)
+                if require_approval
+                else orchestrator.start_run_from_plan(**options, auto_execute=False)
+            )
+            if required_ids:
+                # Publish the approval identity with the winning run, before dispatch.
+                agent_run.metadata["approval_request_id"] = approval_request_id
+            publication = publish_task_run(
+                orchestrator=orchestrator,
+                run=agent_run,
+                tool_id=tool_id,
+                action=action,
+                params=params,
+                risk=str(resolved["risk"]),
+                idempotent=bool(resolved["idempotent"]),
+                runtime_context=context,
+            )
+        agent_run = publication.run
+    except UnifiedTaskConflictError:
+        return json.dumps(
+            {
+                "success": False,
+                "execution_state": "blocked",
+                "retryable": False,
+                "error_code": "task_idempotency_conflict",
+                "message": "原任务标识已绑定其他参数或 Mod 范围，未再次执行。",
+            },
+            ensure_ascii=False,
         )
     except RECOVERABLE_ERRORS:
         return json.dumps(
             {
                 "success": False,
-                "error": "ERP capability 风险门检查失败，未执行",
+                "error": "ERP capability 任务未能安全登记，未进入执行",
+                "execution_state": "unknown",
+                "retryable": False,
                 "tool_id": tool_id,
                 "action": action,
             },
@@ -312,8 +428,68 @@ def execute_registered_capability(
     capability = {
         key: resolved[key] for key in ("tool_id", "action", "risk", "idempotent", "required_params")
     }
-    response = {"success": False, "capability": capability, "agent_run_id": agent_run.run_id}
-    if agent_run.status == "waiting_user":
+    response = {
+        "success": False,
+        "capability": capability,
+        "agent_run_id": agent_run.run_id,
+        "run_id": agent_run.run_id,
+        "task_id": (agent_run.metadata.get("task_context") or {}).get("task_id"),
+        "deduplicated": publication.deduplicated,
+        "retryable": False,
+    }
+    if legacy_run is not None:
+        response["approval_request_id"] = legacy_approval_request_id
+    if not publication.deduplicated and not require_approval:
+        try:
+            agent_run = orchestrator.execute_dispatched_run(agent_run.run_id) or agent_run
+        except RECOVERABLE_ERRORS:
+            try:
+                orchestrator.fail_dispatched_run(agent_run.run_id)
+            except RECOVERABLE_ERRORS:
+                logger.exception(
+                    "capability reconciliation was not persisted run=%s", agent_run.run_id
+                )
+                response["reconciliation_persistence"] = "unavailable"
+            response.update(
+                execution_state="unknown",
+                requires_reconciliation=True,
+                message="执行回执尚未确认，请查询原任务，勿重复提交。",
+            )
+            return json.dumps(response, ensure_ascii=False, default=json_safe)
+    from app.application.agent_orchestrator.trace_payloads import _payload_status
+    from app.application.workflow.workflow_types import plan_from_dict
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+
+    plan = plan_from_dict(agent_run.metadata.get("plan")) or plan
+    required_ids = list((plan.metadata or {}).get("approval_required_node_ids") or [])
+    outputs = {
+        "agent_status": agent_run.status,
+        "output": agent_run.final_output,
+        "outputs": [step.output for step in agent_run.steps],
+        "requires_reconciliation": (agent_run.metadata.get("recovery") or {}).get("state")
+        == "manual_reconciliation_required",
+    }
+    state = execution_result_pending_state(outputs) or _payload_status(outputs)
+    if (
+        state != "unknown"
+        and agent_run.status == "waiting_user"
+        and any(
+            step.status == "waiting_user" and step.node_id in required_ids
+            for step in agent_run.steps
+        )
+    ):
+        state = "waiting_approval"
+    response.update(
+        execution_state=state,
+        success=state == "completed",
+        plan_id=agent_run.plan_id,
+        execution_accepted=state not in {"completed", "failed", "cancelled", "rejected"},
+    )
+    if state == "unknown":
+        response.update(requires_reconciliation=True, message="执行结果尚未确认，请查询原任务。")
+    if not stable_request:
+        response["idempotency_scope"] = "original_task_only"
+    if agent_run.status == "waiting_user" and state != "unknown":
         waiting = next((step for step in agent_run.steps if step.status == "waiting_user"), None)
         if waiting and waiting.node_id in required_ids:
             node = next((item for item in plan.nodes if item.node_id == waiting.node_id), None)
@@ -325,26 +501,46 @@ def execute_registered_capability(
                     waiting.params,
                 ):
                     raise RuntimeError("审批节点与完整计划不一致")
-                request = approvals.create_approval_request(
-                    plan_id=plan.plan_id,
-                    node=node,
-                    runtime_context={**context, "_approval_agent_run_required": True},
-                    plan=plan,
-                    require_persistence=True,
-                    request_id=approval_request_id,
-                )
-                request_id = str(request.request_id or "").strip()
-                if not request_id or not approvals.attach_pending_agent_run(
-                    request_id, agent_run_id=agent_run.run_id, approved_step_id=waiting.node_id
-                ):
-                    raise RuntimeError("AgentRun 未关联到审批请求")
+                if publication.deduplicated:
+                    from app.application.workflow.approval_persistence import (
+                        find_pending_approval_for_run,
+                    )
+
+                    request_id = find_pending_approval_for_run(
+                        agent_run,
+                        approved_step_id=waiting.node_id,
+                        request_ids=(approval_request_id, legacy_approval_request_id),
+                    )
+                    if not request_id:
+                        raise RuntimeError("原审批回执尚未确认")
+                else:
+                    request_id = str(agent_run.metadata.get("approval_request_id") or "")
+                    if not request_id:
+                        raise RuntimeError("原任务未绑定审批请求标识")
+                    request = approvals.create_approval_request(
+                        plan_id=plan.plan_id,
+                        node=node,
+                        runtime_context={**context, "_approval_agent_run_required": True},
+                        plan=plan,
+                        require_persistence=True,
+                        request_id=request_id,
+                    )
+                    request_id = str(request.request_id or "").strip()
+                    if not request_id or not approvals.attach_pending_agent_run(
+                        request_id, agent_run_id=agent_run.run_id, approved_step_id=waiting.node_id
+                    ):
+                        raise RuntimeError("AgentRun 未关联到审批请求")
             except RECOVERABLE_ERRORS:
                 response.update(
                     message="ERP 操作已暂停，但审批请求未能安全保存；未执行等待审批的步骤。",
                     run_status=agent_run.status,
+                    execution_state="unknown",
+                    execution_accepted=False,
+                    requires_reconciliation=True,
                 )
             else:
                 response.update(
+                    execution_state="waiting_approval",
                     pending_approval=True,
                     approval_request_id=request_id,
                     message="该 ERP 操作已创建审批请求，审批前不会执行。",
@@ -359,7 +555,6 @@ def execute_registered_capability(
         step = next((item for item in agent_run.steps if item.status == "completed"), None)
         output = dict(step.output or {}) if step else {}
         response.update(
-            success=bool(output.get("success", False)),
             message=str(output.get("message") or ""),
             result=output,
         )

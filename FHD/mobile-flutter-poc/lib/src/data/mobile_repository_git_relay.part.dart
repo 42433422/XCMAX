@@ -265,11 +265,16 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     String text, {
     String baseUrl = '',
   }) async {
-    final response = await _client.postSuperEmployeeMessage(
-      tool,
-      text,
-      baseUrl: baseUrl,
-    );
+    late final MobileEnvelope<Map<String, Object?>> response;
+    try {
+      response = await _client.postSuperEmployeeMessage(tool, text, baseUrl: baseUrl);
+    } catch (error) {
+      if (error is MobileApiException && error.statusCode >= 400 && error.statusCode < 500) rethrow;
+      throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+          message: '原任务结果待核对，请在任务工作区读取原回执，勿重复提交。',
+          body: {'execution_state': 'unknown', 'requires_reconciliation': true});
+    }
+    chatReceiptText({...response.raw, ...?response.data}, '', '');
     if (!response.success) {
       throw MobileRepositoryException(response.message.ifEmpty('超级员工回复失败'));
     }
@@ -305,22 +310,29 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     bool Function()? isCancelled,
   }) async {
     await requireScope();
-    final created = await _client.relayCreateTask(
-      relayId: relayId,
-      kind: relayKind,
-      payload: {
-        'message': message,
-        'context': _superEmployeeRelayContext(conversationId: conversationId),
-      },
-    );
+    late final MobileEnvelope<Map<String, Object?>> created;
+    try {
+      created = await _client.relayCreateTask(relayId: relayId, kind: relayKind,
+        payload: {'message': message,
+          'context': _superEmployeeRelayContext(conversationId: conversationId)});
+    } catch (error) {
+      if (error is MobileApiException && error.statusCode >= 400 && error.statusCode < 500) rethrow;
+      throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+          message: '原中继任务是否受理尚待核对，请在任务工作区查看，勿重复提交。',
+          body: {'execution_state': 'unknown', 'requires_reconciliation': true});
+    }
     await requireScope();
     if (!created.success) {
-      throw MobileRepositoryException(created.message.ifEmpty('中继任务创建失败'));
+      throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+          message: created.message.ifEmpty('原中继任务受理回执未确认，请核对后再操作。'),
+          body: {'execution_state': 'unknown', 'requires_reconciliation': true});
     }
     final task = _objectMap(created.data?['task']);
     final taskId = _stringField(task, 'task_id');
     if (taskId.isEmpty) {
-      throw const MobileRepositoryException('中继任务缺少 task_id');
+      throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+          message: '中继受理回执缺少原任务标识，请核对原任务，勿重复提交。',
+          body: {'execution_state': 'unknown', 'requires_reconciliation': true});
     }
     await _setInflightRelayTask(conversationId, taskId,
         requireScope: requireScope);
@@ -363,16 +375,11 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
           isCancelled: isCancelled,
           requireScope: requireScope,
         );
-      } on MobileApiException catch (error) {
-        if (error.statusCode == 404) {
-          // 任务已被清理或服务端版本不含该任务：停止后续 resume，避免反复 404。
-          await _setInflightRelayTask(conversationId, '',
-              requireScope: requireScope);
-          throw const MobileRepositoryException(
-            '执行任务已不存在（可能已结束或服务端版本不一致），请重新发起',
-          );
-        }
-        rethrow;
+      } catch (error) {
+        if (error is MobileApiException && [401, 403].contains(error.statusCode)) rethrow;
+        throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+            message: '原中继任务回执暂不可读，请核对原任务，勿重复提交。',
+            body: {'task_id': taskId, 'execution_state': 'unknown', 'requires_reconciliation': true});
       }
       await requireScope();
       final taskMap = _objectMap(status.data?['task']);
@@ -380,6 +387,11 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
           ? taskMap
           : status.data ?? const <String, Object?>{};
       final currentStatus = _stringField(current, 'status');
+      if (!status.success || (_stringField(current, 'task_id').isNotEmpty && _stringField(current, 'task_id') != taskId)) {
+        throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+            message: '原中继任务回执未确认，请核对原任务，勿重复提交。',
+            body: {'task_id': taskId, 'execution_state': 'unknown', 'requires_reconciliation': true});
+      }
       _throwIfCancelled(isCancelled);
       if (currentStatus.isNotEmpty && currentStatus != lastStatus) {
         onStatus?.call(
@@ -401,6 +413,9 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
         lastStatus = currentStatus;
       }
       if (currentStatus == 'done' || currentStatus == 'completed') {
+        final result = _objectMap(current['result']);
+        final reply = chatReceiptText({...result, 'execution_state': result['execution_state'] ?? result['agent_status'] ?? result['run_status'] ?? result['status'] ?? 'completed'}, taskId,
+            _relayTaskResultText(current).ifEmpty('电脑工具已完成任务。'));
         await _setInflightRelayTask(conversationId, '',
             requireScope: requireScope);
         await requireScope();
@@ -411,9 +426,9 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
             toolLabel: toolLabel,
           ),
         );
-        return _relayTaskResultText(current).ifEmpty('电脑工具已完成任务。');
+        return reply;
       }
-      if (const {'failed', 'blocked', 'cancelled'}.contains(currentStatus)) {
+      if (const {'failed', 'cancelled', 'rejected'}.contains(currentStatus)) {
         await _setInflightRelayTask(conversationId, '',
             requireScope: requireScope);
         await requireScope();
@@ -424,12 +439,19 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
             toolLabel: toolLabel,
           ),
         );
-        throw MobileRepositoryException(
-          _relayTaskResultText(current).ifEmpty('电脑工具执行失败'),
-        );
+        throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_TERMINAL',
+            message: _relayTaskResultText(current).ifEmpty(currentStatus == 'cancelled' ? '原任务已取消' : '电脑工具执行失败'),
+            body: {'task_id': taskId, 'execution_state': currentStatus});
+      }
+      if (!const {'queued', 'pending', 'running', 'assigned', 'planning', 'retrying'}.contains(currentStatus)) {
+        throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+            message: _relayTaskResultText(current).ifEmpty('原任务尚未完成，请在任务工作区查看进度或确认请求。'),
+            body: {'task_id': taskId, 'execution_state': currentStatus.isEmpty ? 'unknown' : currentStatus});
       }
     }
-    throw const MobileRepositoryException('电脑工具暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。');
+    throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+        message: '电脑工具暂未回写结果，请稍后读取原任务状态，勿重复提交。',
+        body: {'task_id': taskId, 'execution_state': lastStatus.isEmpty ? 'unknown' : lastStatus});
   }
 
   /// 429 是服务端正常限流：按 Retry-After 等待后重试同一任务，不当作失败。

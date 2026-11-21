@@ -299,7 +299,10 @@ async def test_source_factory_reads_and_close_share_one_context(super_stream, en
 
 
 @pytest.mark.asyncio
-async def test_independent_employee_component_streams_configured_executor(trusted_actor):
+async def test_independent_employee_component_streams_configured_executor(
+    trusted_actor, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "dialogue"))
     actor = trusted_actor(user_id=71)
     execute = MagicMock(return_value={"success": True})
     component = EmployeeChatRoutes(
@@ -319,19 +322,187 @@ async def test_independent_employee_component_streams_configured_executor(truste
     ) as client:
         response = await client.post(
             "/employees/fixture/chat/stream",
-            json={"message": "hello", "conversation_id": "c-71", "mod_id": "fixture-mod"},
+            json={
+                "message": "hello",
+                "conversation_id": "c-71",
+                "mod_id": "fixture-mod",
+                "turn_id": "mobile-turn",
+                "idempotency_key": "mobile-turn",
+            },
             headers=actor.headers,
         )
     assert response.status_code == 200
     assert [event["type"] for event in _events(response.text)] == ["token", "token", "done"]
     assert _events(response.text)[-1]["result"]["response"] == "configured reply"
-    assert execute.call_args.kwargs == {
-        "user_id": 71,
-        "workspace_root": None,
-        "session_id": "mobile_chat_71",
-        "runtime_context": actor.context,
-    }
+    assert execute.call_args.kwargs["user_id"] == 71
+    assert execute.call_args.kwargs["workspace_root"] is None
+    assert execute.call_args.kwargs["session_id"] == "c-71"
+    context = execute.call_args.kwargs["runtime_context"]
+    assert {key: context[key] for key in actor.context} == actor.context
+    assert context["turn_id"] == context["idempotency_key"] == "mobile-turn"
+    assert context["session_id"] == context["conversation_id"] == "c-71"
     assert execute.call_args.args[2]["conversation_id"] == "c-71"
+    result = _events(response.text)[-1]["result"]
+    assert result["execution_state"] == "completed"
+    assert result["turn_id"] == "mobile-turn"
+    assert result["history_persistence"]["status"] == "saved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state",
+    [
+        "queued",
+        "retrying",
+        "paused",
+        "blocked",
+        "unknown",
+        "waiting_approval",
+        "accepted",
+        "receipt_only",
+    ],
+)
+async def test_mobile_employee_turn_replay_keeps_original_state_and_identity(
+    trusted_actor, monkeypatch, tmp_path, state
+):
+    from app.application.ai_chat.dialogue_memory import stored_turn_receipt
+    from app.application.task_conversation_store import task_conversation_store
+
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "dialogue"))
+    actor = trusted_actor(user_id=71)
+    execute = MagicMock(
+        return_value={
+            "success": False,
+            "result": {
+                "outputs": [
+                    {
+                        "output": {
+                            "execution_state": state,
+                            "agent_run_id": "original-run",
+                            "message": "原任务状态",
+                            "pending_approval": state == "waiting_approval",
+                        }
+                    }
+                ]
+            },
+        }
+    )
+    if state in {"accepted", "receipt_only"}:
+        execute.return_value = {"agent_run_id": "original-run"}
+        if state == "accepted":
+            execute.return_value.update(success=True, execution_accepted=True)
+        state = "queued" if state == "accepted" else "unknown"
+    component = EmployeeChatRoutes(
+        EmployeeChatRoutesPorts(
+            extract_employee_failure_text=lambda result: "原任务状态",
+            chunk_employee_reply=lambda text: [text],
+            extract_employee_reply_text=lambda result: "原任务状态",
+            sse_line=lambda payload: ("data: " + json.dumps(payload) + "\n\n").encode(),
+            execute_employee=execute,
+        ),
+        _principal,
+    )
+    body = {
+        "message": "run once",
+        "conversation_id": "employee:host:fixture",
+        "turn_id": "stable-turn",
+        "idempotency_key": "stable-turn",
+    }
+    replies = []
+    for _ in range(2):
+        response = await component.mobile_employee_chat_stream(
+            "fixture", actor.request, Principal(), body
+        )
+        replies.append(
+            _events("".join([chunk.decode() async for chunk in response.body_iterator]))[-1][
+                "result"
+            ]
+        )
+    execute.assert_called_once()
+    for receipt in replies:
+        assert receipt["execution_state"] == state
+        assert receipt["agent_run_id"] == "original-run"
+        assert receipt["success"] is False
+        assert receipt["turn_id"] == "stable-turn"
+        if state == "unknown":
+            assert receipt["requires_reconciliation"] is True
+            assert receipt["retryable"] is False
+    with tenant_scope(actor.context["tenant_id"]):
+        stored = stored_turn_receipt(execute.call_args.kwargs["runtime_context"], "stable-turn")
+        assert stored["payload"]["agent_run_id"] == "original-run"
+        assert stored["payload"]["execution_state"] == state
+        history = task_conversation_store.get_conversation(
+            session_id=body["conversation_id"], user_id=71
+        )
+        assert len(history["messages"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_employee_disconnect_does_not_release_execution_or_lose_receipt(
+    trusted_actor, monkeypatch, tmp_path
+):
+    from threading import Event
+
+    from app.application.ai_chat import dialogue_memory
+
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "dialogue"))
+    actor = trusted_actor(user_id=71)
+    started, release, settled = Event(), Event(), Event()
+
+    def execute(*args, **kwargs):
+        started.set()
+        assert release.wait(timeout=10)
+        return {"success": True, "agent_run_id": "original-run"}
+
+    execute = MagicMock(side_effect=execute)
+    original_settle = dialogue_memory.settle_chat_turn
+
+    def settle(*args, **kwargs):
+        original_settle(*args, **kwargs)
+        settled.set()
+
+    monkeypatch.setattr(dialogue_memory, "settle_chat_turn", settle)
+    component = EmployeeChatRoutes(
+        EmployeeChatRoutesPorts(
+            extract_employee_failure_text=lambda result: "unfinished",
+            chunk_employee_reply=lambda text: [text],
+            extract_employee_reply_text=lambda result: "done",
+            sse_line=lambda payload: ("data: " + json.dumps(payload) + "\n\n").encode(),
+            execute_employee=execute,
+        ),
+        _principal,
+    )
+    body = {"message": "once", "conversation_id": "employee:host:fixture", "turn_id": "stable-turn"}
+    response = await component.mobile_employee_chat_stream(
+        "fixture", actor.request, Principal(), body
+    )
+    stream = response.body_iterator
+    await anext(stream)
+    work = asyncio.create_task(anext(stream))
+    try:
+        assert await asyncio.to_thread(started.wait, 5)
+        duplicate = await component.mobile_employee_chat_stream(
+            "fixture", actor.request, Principal(), body
+        )
+        replay = _events("".join([chunk.decode() async for chunk in duplicate.body_iterator]))[-1][
+            "result"
+        ]
+        assert replay["execution_state"] == "running"
+        execute.assert_called_once()
+        work.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await work
+    finally:
+        release.set()
+    assert await asyncio.to_thread(settled.wait, 10)
+    with tenant_scope(actor.context["tenant_id"]):
+        receipt = dialogue_memory.stored_turn_receipt(
+            execute.call_args.kwargs["runtime_context"], "stable-turn"
+        )
+        assert receipt["payload"]["execution_state"] == "completed"
+        assert receipt["payload"]["agent_run_id"] == "original-run"
+        assert receipt["payload"]["history_persistence"]["status"] == "saved"
+    execute.assert_called_once()
 
 
 @pytest.mark.asyncio

@@ -86,10 +86,14 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     required String conversationId,
     required List<MobileChatAttachment> attachments,
     required String idempotencyKey,
+    bool resumeOnly = false,
     List<Map<String, String>> recentMessages = const [],
     void Function(String)? onToken,
   }) async {
     final base = await resolveSessionBaseUrl();
+    if (resumeOnly) {
+      return _readChatTurn(conversationId, idempotencyKey.trim(), _authGeneration, base);
+    }
     if (idempotencyKey.trim().isEmpty ||
         attachments.isEmpty ||
         attachments.length > 4 ||
@@ -106,6 +110,7 @@ abstract class _ApiChatBase extends _ApiWorkBase {
         onToken: onToken,
         baseUrl: base,
         idempotencyKey: idempotencyKey,
+        resumeOnly: resumeOnly,
         attachmentUploadIds:
             attachments.map((a) => a.uploadId).toSet().toList());
   }
@@ -132,12 +137,16 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     String message, {
     String? sessionId,
     int userId = 0,
+    String idempotencyKey = '',
+    bool resumeOnly = false,
     List<Map<String, String>> recentMessages = const [],
     void Function(String token)? onToken,
   }) =>
       _streamChat(message,
           sessionId: sessionId,
           userId: userId,
+          idempotencyKey: idempotencyKey,
+          resumeOnly: resumeOnly,
           recentMessages: recentMessages,
           onToken: onToken);
 
@@ -150,10 +159,16 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     String? baseUrl,
     List<String> attachmentUploadIds = const [],
     String idempotencyKey = '',
+    bool resumeOnly = false,
   }) async {
     final generation = _authGeneration;
+    final turnId = idempotencyKey.trim().isEmpty
+        ? 'mobile-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
+        : idempotencyKey.trim();
     final context = <String, Object?>{
-      if (idempotencyKey.isNotEmpty) 'idempotency_key': idempotencyKey,
+      'idempotency_key': turnId,
+      'turn_id': turnId,
+      'conversation_id': sessionId ?? '',
       if (attachmentUploadIds.isNotEmpty)
         'attachment_upload_ids': attachmentUploadIds,
     };
@@ -171,6 +186,9 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     };
 
     final streamBase = baseUrl ?? await resolveSessionBaseUrl();
+    if (resumeOnly) {
+      return _readChatTurn(sessionId ?? '', turnId, generation, streamBase);
+    }
     final request = await _open('POST', XcagiMobileEndpoints.aiChatStream,
         baseUrl: streamBase);
     final currentBase = await resolveSessionBaseUrl();
@@ -185,160 +203,58 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     }
     final bytes = utf8.encode(jsonEncode(body));
     request.contentLength = bytes.length;
-    request.add(bytes);
-
-    final response = await request.close().timeout(_config.timeout);
-    await _requireStreamScope(generation, streamBase);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final text = await utf8.decodeStream(response).timeout(_config.timeout);
-      final body = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
-      throw MobileApiException(
-        statusCode: response.statusCode,
-        message: body['message']?.toString() ??
-            body['error']?.toString() ??
-            'HTTP ${response.statusCode}',
-        body: body,
-      );
-    }
-
-    final buffer = StringBuffer();
-    await for (final line
-        in response.transform(utf8.decoder).transform(const LineSplitter())) {
-      final eventBase = await resolveSessionBaseUrl();
-      if (generation != _authGeneration || eventBase != streamBase) {
-        throw const MobileApiException(
-            statusCode: 409, message: '账号或连接已切换，请重试', body: {});
+    try {
+      request.add(bytes);
+      final response = await request.close().timeout(_config.timeout);
+      await _requireStreamScope(generation, streamBase);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final text = await utf8.decodeStream(response).timeout(_config.timeout);
+        final body = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
+        throw MobileApiException(
+          statusCode: response.statusCode,
+          message: body['message']?.toString() ??
+              body['error']?.toString() ??
+              'HTTP ${response.statusCode}',
+          body: body,
+        );
       }
-      final trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      final payload = trimmed.substring('data:'.length).trim();
-      if (payload.isEmpty || payload == '[DONE]') continue;
 
-      final json = _asObjectMap(jsonDecode(payload));
-      final eventType = json['type']?.toString() ?? '';
-      if (eventType.isNotEmpty) {
-        switch (eventType) {
-          case 'token':
-            final token = json['text']?.toString() ?? '';
-            if (token.isNotEmpty) {
-              buffer.write(token);
-              onToken?.call(token);
-            }
-            break;
-          case 'done':
-            final result = json['result'];
-            final finalText = _chatResultText(
-              result,
-            ).ifEmpty(buffer.toString());
-            return finalText.ifEmpty('（无回复）');
-          case 'error':
-            throw MobileApiException(
-              statusCode: response.statusCode,
-              message: json['message']?.toString() ?? 'stream error',
-              body: json,
-            );
+      final buffer = StringBuffer();
+      await for (final line
+          in response.timeout(_config.timeout).transform(utf8.decoder).transform(const LineSplitter())) {
+        final eventBase = await resolveSessionBaseUrl();
+        if (generation != _authGeneration || eventBase != streamBase) {
+          throw const MobileApiException(
+              statusCode: 409, message: '账号或连接已切换，请重试', body: {});
         }
-      } else {
-        final error = json['error']?.toString() ?? '';
-        if (error.isNotEmpty) {
-          throw MobileApiException(
-            statusCode: response.statusCode,
-            message: error,
-            body: json,
-          );
-        }
-        final token = json['text']?.toString() ?? '';
-        if (token.isNotEmpty) {
-          buffer.write(token);
-          onToken?.call(token);
-        }
-        if (json['done'] == true) {
-          return buffer.toString().ifEmpty('（无回复）');
-        }
-      }
-    }
-    if (attachmentUploadIds.isNotEmpty) {
-      throw const MobileApiException(
-          statusCode: 502, message: '附件对话连接中断，结果待核对；附件已保留，请确认后重试', body: {});
-    }
-    return buffer.toString().ifEmpty('（无回复）');
-  }
+        final trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        final payload = trimmed.substring('data:'.length).trim();
+        if (payload.isEmpty || payload == '[DONE]') continue;
 
-  Future<String> streamEmployeeChat({
-    required String message,
-    required String employeeId,
-    required String modId,
-    required String conversationId,
-    int userId = 0,
-    void Function(String token)? onToken,
-  }) async {
-    final generation = _authGeneration;
-    final base = await resolveSessionBaseUrl();
-    final body = <String, Object?>{
-      'message': message,
-      'conversation_id': conversationId,
-      'mod_id': modId,
-      'employee_id': employeeId,
-    };
-
-    final request = await _open(
-      'POST',
-      XcagiMobileEndpoints.employeeChatStream(employeeId),
-      baseUrl: base,
-    );
-    await _requireStreamScope(generation, base, request: request);
-    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
-    if (userId > 0) {
-      request.headers.set('X-User-ID', '$userId');
-    }
-    final bytes = utf8.encode(jsonEncode(body));
-    request.contentLength = bytes.length;
-    request.add(bytes);
-
-    final response = await request.close().timeout(_config.timeout);
-    await _requireStreamScope(generation, base);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final text = await utf8.decodeStream(response).timeout(_config.timeout);
-      final body = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
-      throw MobileApiException(
-        statusCode: response.statusCode,
-        message: body['message']?.toString() ??
-            body['error']?.toString() ??
-            'HTTP ${response.statusCode}',
-        body: body,
-      );
-    }
-
-    final buffer = StringBuffer();
-    await for (final line
-        in response.transform(utf8.decoder).transform(const LineSplitter())) {
-      await _requireStreamScope(generation, base);
-      final trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      final payload = trimmed.substring('data:'.length).trim();
-      if (payload.isEmpty || payload == '[DONE]') continue;
-
-      final json = _asObjectMap(jsonDecode(payload));
-      final eventType = json['type']?.toString() ?? '';
-      switch (eventType) {
-        case 'token':
-          final token = json['text']?.toString() ?? '';
-          if (token.isNotEmpty) {
-            buffer.write(token);
-            onToken?.call(token);
+        final json = _asObjectMap(jsonDecode(payload));
+        final eventType = json['type']?.toString() ?? '';
+        if (eventType.isNotEmpty) {
+          switch (eventType) {
+            case 'token':
+              final token = json['text']?.toString() ?? '';
+              if (token.isNotEmpty) {
+                buffer.write(token);
+                onToken?.call(token);
+              }
+              break;
+            case 'done':
+              final result = json['result'];
+              final finalText = chatReceiptText(result, turnId, buffer.toString());
+              return finalText.ifEmpty('（无回复）');
+            case 'error':
+              throw MobileApiException(
+                statusCode: response.statusCode,
+                message: json['message']?.toString() ?? 'stream error',
+                body: json,
+              );
           }
-          break;
-        case 'done':
-          final result = json['result'];
-          final finalText = _chatResultText(result).ifEmpty(buffer.toString());
-          return finalText.ifEmpty('（员工未回复）');
-        case 'error':
-          throw MobileApiException(
-            statusCode: response.statusCode,
-            message: json['message']?.toString() ?? '员工对话流错误',
-            body: json,
-          );
-        default:
+        } else {
           final error = json['error']?.toString() ?? '';
           if (error.isNotEmpty) {
             throw MobileApiException(
@@ -353,11 +269,149 @@ abstract class _ApiChatBase extends _ApiWorkBase {
             onToken?.call(token);
           }
           if (json['done'] == true) {
-            return buffer.toString().ifEmpty('（员工未回复）');
+            return chatReceiptText(json, turnId, buffer.toString()).ifEmpty('（无回复）');
           }
+        }
+      }
+    } catch (error) {
+      await _requireStreamScope(generation, streamBase);
+      if (error is MobileApiException &&
+          error.statusCode >= 400 && error.statusCode < 500) rethrow;
+    }
+    return _readChatTurn(sessionId ?? '', turnId, generation, streamBase);
+  }
+
+  Future<String> _readChatTurn(String conversationId, String turnId,
+      int generation, String base) async {
+    await _requireStreamScope(generation, base);
+    Map<String, Object?> receipt = {};
+    if (conversationId.isNotEmpty) {
+      try {
+        final history = await _sendJsonRequest(method: 'GET',
+            path: 'api/conversations/${Uri.encodeComponent(conversationId)}',
+            query: {'turn_id': turnId}, baseUrl: base, expectedConnectionBase: base);
+        await _requireStreamScope(generation, base);
+        final candidate = _asObjectMap(history['turn_receipt'] ?? history['active_turn']);
+        if (candidate['turn_id'] == turnId &&
+            ((candidate['run_id']?.toString().trim().isNotEmpty ?? false) ||
+                (candidate['receipt_kind'] == 'turn' && candidate['durable'] == true))) receipt = candidate;
+      } catch (error) {
+        await _requireStreamScope(generation, base);
+        if (error is MobileApiException && [401, 403].contains(error.statusCode)) rethrow;
       }
     }
-    return buffer.toString().ifEmpty('（员工未回复）');
+    final state = receipt['execution_state'] ?? receipt['status'] ?? 'unknown';
+    return chatReceiptText({...receipt, 'execution_state': state}, turnId,
+        '原任务已完成，请在任务工作区查看结果。');
+  }
+
+  Future<String> streamEmployeeChat({
+    required String message,
+    required String employeeId,
+    required String modId,
+    required String conversationId,
+    int userId = 0,
+    String idempotencyKey = '',
+    bool resumeOnly = false,
+    void Function(String token)? onToken,
+  }) async {
+    final generation = _authGeneration;
+    final base = await resolveSessionBaseUrl();
+    final turnId = idempotencyKey.trim().isEmpty
+        ? 'mobile-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
+        : idempotencyKey.trim();
+    if (resumeOnly) return _readChatTurn(conversationId, turnId, generation, base);
+    final body = <String, Object?>{
+      'message': message,
+      'conversation_id': conversationId,
+      'mod_id': modId,
+      'employee_id': employeeId,
+      'turn_id': turnId,
+      'idempotency_key': turnId,
+    };
+
+    final request = await _open(
+      'POST',
+      XcagiMobileEndpoints.employeeChatStream(employeeId),
+      baseUrl: base,
+    );
+    await _requireStreamScope(generation, base, request: request);
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    if (userId > 0) {
+      request.headers.set('X-User-ID', '$userId');
+    }
+    final bytes = utf8.encode(jsonEncode(body));
+    request.contentLength = bytes.length;
+    try {
+      request.add(bytes);
+      final response = await request.close().timeout(_config.timeout);
+      await _requireStreamScope(generation, base);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final text = await utf8.decodeStream(response).timeout(_config.timeout);
+        final body = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
+        throw MobileApiException(
+          statusCode: response.statusCode,
+          message: body['message']?.toString() ??
+              body['error']?.toString() ??
+              'HTTP ${response.statusCode}',
+          body: body,
+        );
+      }
+
+      final buffer = StringBuffer();
+      await for (final line
+          in response.timeout(_config.timeout).transform(utf8.decoder).transform(const LineSplitter())) {
+        await _requireStreamScope(generation, base);
+        final trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        final payload = trimmed.substring('data:'.length).trim();
+        if (payload.isEmpty || payload == '[DONE]') continue;
+
+        final json = _asObjectMap(jsonDecode(payload));
+        final eventType = json['type']?.toString() ?? '';
+        switch (eventType) {
+          case 'token':
+            final token = json['text']?.toString() ?? '';
+            if (token.isNotEmpty) {
+              buffer.write(token);
+              onToken?.call(token);
+            }
+            break;
+          case 'done':
+            final result = json['result'];
+            final finalText = chatReceiptText(result, turnId, buffer.toString());
+            return finalText.ifEmpty('（员工未回复）');
+          case 'error':
+            throw MobileApiException(
+              statusCode: response.statusCode,
+              message: json['message']?.toString() ?? '员工对话流错误',
+              body: json,
+            );
+          default:
+            final error = json['error']?.toString() ?? '';
+            if (error.isNotEmpty) {
+              throw MobileApiException(
+                statusCode: response.statusCode,
+                message: error,
+                body: json,
+              );
+            }
+            final token = json['text']?.toString() ?? '';
+            if (token.isNotEmpty) {
+              buffer.write(token);
+              onToken?.call(token);
+            }
+            if (json['done'] == true) {
+              return chatReceiptText(json, turnId, buffer.toString()).ifEmpty('（员工未回复）');
+            }
+        }
+      }
+    } catch (error) {
+      await _requireStreamScope(generation, base);
+      if (error is MobileApiException &&
+          error.statusCode >= 400 && error.statusCode < 500) rethrow;
+    }
+    return _readChatTurn(conversationId, turnId, generation, base);
   }
 
   Future<MobileEnvelope<List<SuperEmployeeMessage>>> superEmployeeMessages(
@@ -389,11 +443,12 @@ abstract class _ApiChatBase extends _ApiWorkBase {
   }
 
   /// LAN SSE 流式调用超级员工。逐 token 返回，与 streamChat 同样的 SSE 协议。
-  /// 失败时抛 [MobileApiException]，由调用方决定是否回退到直答/relay。
+  /// 已派发后的断流保留未知回执；只有连接未建立或路由不存在允许切换通道。
   Future<String> streamSuperEmployeeMessage(
     String tool,
     String body, {
     String baseUrl = '',
+    String idempotencyKey = '',
     void Function(String token)? onToken,
     void Function(String status)? onStatus,
     bool Function()? isCancelled,
@@ -410,69 +465,80 @@ abstract class _ApiChatBase extends _ApiWorkBase {
       jsonEncode({
         'body': body,
         'message': body,
-        'context': const {'source': 'mobile', 'client_surface': 'mobile'},
+        'context': {'source': 'mobile', 'client_surface': 'mobile',
+          if (idempotencyKey.isNotEmpty) 'idempotency_key': idempotencyKey},
       }),
     );
     request.contentLength = bytes.length;
-    request.add(bytes);
+    try {
+      request.add(bytes);
 
-    final response = await request.close().timeout(_config.timeout);
-    await _requireStreamScope(generation, sessionBase);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final text = await utf8.decodeStream(response).timeout(_config.timeout);
-      final errBody = _asObjectMap(
-        text.trim().isEmpty ? null : jsonDecode(text),
-      );
-      throw MobileApiException(
-        statusCode: response.statusCode,
-        message: errBody['message']?.toString() ??
-            errBody['error']?.toString() ??
-            'HTTP ${response.statusCode}',
-        body: errBody,
-      );
-    }
-
-    final buffer = StringBuffer();
-    await for (final line
-        in response.transform(utf8.decoder).transform(const LineSplitter())) {
+      final response = await request.close().timeout(_config.timeout);
       await _requireStreamScope(generation, sessionBase);
-      if (isCancelled != null && isCancelled()) {
-        return buffer.toString();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final text = await utf8.decodeStream(response).timeout(_config.timeout);
+        final errBody = _asObjectMap(
+          text.trim().isEmpty ? null : jsonDecode(text),
+        );
+        throw MobileApiException(
+          statusCode: response.statusCode,
+          message: errBody['message']?.toString() ??
+              errBody['error']?.toString() ??
+              'HTTP ${response.statusCode}',
+          body: errBody,
+        );
       }
-      final trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      final payload = trimmed.substring('data:'.length).trim();
-      if (payload.isEmpty || payload == '[DONE]') continue;
 
-      final json = _asObjectMap(jsonDecode(payload));
-      final eventType = json['type']?.toString() ?? '';
-      switch (eventType) {
-        case 'token':
-          final token = json['text']?.toString() ?? '';
-          if (token.isNotEmpty) {
-            buffer.write(token);
-            onToken?.call(token);
-          }
-          break;
-        case 'status':
-          final status = json['text']?.toString() ?? '';
-          if (status.isNotEmpty) {
-            onStatus?.call(status);
-          }
-          break;
-        case 'done':
-          final result = json['result'];
-          final finalText = _chatResultText(result).ifEmpty(buffer.toString());
-          return finalText.ifEmpty('（无回复）');
-        case 'error':
-          throw MobileApiException(
-            statusCode: response.statusCode,
-            message: json['message']?.toString() ?? 'stream error',
-            body: json,
-          );
+      final buffer = StringBuffer();
+      await for (final line
+          in response.timeout(_config.timeout).transform(utf8.decoder).transform(const LineSplitter())) {
+        await _requireStreamScope(generation, sessionBase);
+        if (isCancelled != null && isCancelled()) {
+          throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+              message: '已停止接收回复，请核对原任务状态。',
+              body: {'turn_id': idempotencyKey, 'execution_state': 'unknown', 'requires_reconciliation': true});
+        }
+        final trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        final payload = trimmed.substring('data:'.length).trim();
+        if (payload.isEmpty || payload == '[DONE]') continue;
+
+        final json = _asObjectMap(jsonDecode(payload));
+        final eventType = json['type']?.toString() ?? '';
+        switch (eventType) {
+          case 'token':
+            final token = json['text']?.toString() ?? '';
+            if (token.isNotEmpty) {
+              buffer.write(token);
+              onToken?.call(token);
+            }
+            break;
+          case 'status':
+            final status = json['text']?.toString() ?? '';
+            if (status.isNotEmpty) {
+              onStatus?.call(status);
+            }
+            break;
+          case 'done':
+            final result = json['result'];
+            final finalText = chatReceiptText(result, idempotencyKey, buffer.toString());
+            return finalText.ifEmpty('（无回复）');
+          case 'error':
+            throw MobileApiException(
+              statusCode: response.statusCode,
+              message: json['message']?.toString() ?? 'stream error',
+              body: json,
+            );
+        }
       }
+    } catch (error) {
+      await _requireStreamScope(generation, sessionBase);
+      if (error is MobileApiException &&
+          error.statusCode >= 400 && error.statusCode < 500) rethrow;
     }
-    return buffer.toString().ifEmpty('（无回复）');
+    throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+        message: '原任务回执待核对，请在任务工作区查看；未重新派发。',
+        body: {'turn_id': idempotencyKey, 'execution_state': 'unknown', 'requires_reconciliation': true});
   }
 
   Future<void> _requireStreamScope(int generation, String base,

@@ -325,7 +325,14 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         plan: PlanGraph,
         runtime_context: dict[str, Any] | None = None,
         auto_execute: bool = True,
+        persist: bool = True,
     ) -> AgentRun:
+        if auto_execute and not persist:
+            raise ValueError("未持久化的任务不能执行")
+
+        def checkpoint(value: AgentRun) -> AgentRun:
+            return cast("AgentRun", self._repo.save(value)) if persist else value
+
         context = dict(runtime_context or {})
         from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 
@@ -344,12 +351,13 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             }
         )
         run_id = f"run_{idempotency_key[:32]}"
-        existing = self._repo.get(run_id)
-        if existing is not None:
+
+        def replay(existing: AgentRun) -> AgentRun:
+            # The immutable execution key already binds the original plan hash;
+            # a validated planning answer may replace the current plan in this run.
             if (
                 existing.user_id == str(user_id or "")
                 and existing.plan_id == str(plan.plan_id or "")
-                and existing.metadata.get("plan_sha256") == plan_sha256
                 and existing.metadata.get("execution_idempotency_key") == idempotency_key
             ):
                 return cast("AgentRun", existing)
@@ -363,7 +371,11 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 "执行幂等键发生冲突，已拒绝启动",
                 {"plan_id": str(plan.plan_id or ""), "execution_started": False},
             )
-            return cast("AgentRun", self._repo.save(conflict))
+            return checkpoint(conflict)
+
+        existing = self._repo.get(run_id)
+        if existing is not None:
+            return replay(existing)
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""), run_id=run_id)
         run.metadata["persistence"] = dict(self._repository_status)
         run.metadata["runtime_context"] = context
@@ -381,19 +393,27 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 "source": "provided_plan",
             },
         )
+        admitted = False
         try:
             self._apply_plan(run, plan, stable_step_ids=True)
             apply_ai_budget_metadata(run, dict(plan.metadata or {}), dict(runtime_context or {}))
-            self._repo.save(run)
+            if persist:
+                published, admitted = self._repo.create_task_run(run, initial_only=False)
+                if not admitted:
+                    return replay(published)
+                run = published
             if auto_execute:
                 self._execute_with_durable_lease(run, runtime_context=dict(runtime_context or {}))
-            return cast("AgentRun", self._repo.save(run))
+            return checkpoint(run)
         except RECOVERABLE_ERRORS:
             logger.exception("agent run from plan failed")
             run.status = "failed"
             run.error = _INTERNAL_RUN_ERROR
             run.add_event("run.failed", "Agent run 失败", {"error_code": _INTERNAL_RUN_ERROR})
-            return cast("AgentRun", self._repo.save(run))
+            if persist and not admitted:
+                published, created = self._repo.create_task_run(run, initial_only=False)
+                return published if created else replay(published)
+            return checkpoint(run)
 
     def continue_run(
         self,
@@ -733,7 +753,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         answer: str,
         runtime_context: dict[str, Any],
     ) -> AgentRun | None:
-        """Replace only a pristine planning question, using the existing run CAS and lease."""
+        """Replace only a pristine planning question, executing only after its run CAS wins."""
         from app.application.agent_orchestrator.business_action_ledger import canonical_hash
         from app.application.agent_orchestrator.clarification import is_planning_clarification
         from app.application.agent_orchestrator.runtime_context import merge_runtime_context
@@ -767,6 +787,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return None
         elif self._preflight_resume_plan(run, context):
             return None
+        # A validated graph replacement starts a new generation even when the
+        # caller reuses its context. Never accept a caller-supplied generation:
+        # bind it to the original snapshot already verified above and by the CAS.
+        context["_planning_clarification_snapshot"] = expected_snapshot_sha256
         run.metadata["runtime_context"] = context
         run.metadata["plan_sha256"] = plan_fingerprint(replacement)
         run.final_output, run.error = {}, ""

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.application.admin_control.protocols import JsonObject
+from app.application.employee_runtime.result_verifier import pending_employee_result
 from app.domain.task_lifecycle.control import RETRYABLE_CODES, failure_retries, jittered_delay
 
 
@@ -63,7 +64,8 @@ class EmployeeRunner:
                 }
             )
             ok, reason = self._backend.verify(work.employee_id, result)
-            success = ok and result.get("success") is not False
+            pending = pending_employee_result(result)
+            success = ok and result.get("success") is not False and not pending
             error = (
                 ""
                 if success
@@ -78,6 +80,17 @@ class EmployeeRunner:
                 if self._backend.awaits_approval(result)
                 else "failed"
             )
+            if pending:
+                state = str(pending["execution_state"])
+                status = {
+                    "waiting_approval": "awaiting_approval",
+                    "accepted": "running",
+                    "pending": "running",
+                    "queued": "running",
+                    "planning": "running",
+                    "retrying": "running",
+                    "processing": "running",
+                }.get(state, state)
             error_code = (
                 str(result.get("error_code") or "")
                 if status == "failed" and str(result.get("error_code") or "") in RETRYABLE_CODES
@@ -107,6 +120,8 @@ class EmployeeRunner:
             "run_id": run_id,
             "attempts": attempts,
             "data": result,
+            "execution_state": "completed" if success else status,
+            **{key: value for key, value in pending.items() if key != "run_id"},
         }
         if not success:
             response["message"] = error

@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,10 +22,53 @@ from app.application.mobile_extensions.protocols import (
     SseLineCall,
     UserDependency,
 )
+from app.domain.task_lifecycle.results import (
+    execution_result_envelopes,
+    execution_result_pending_state,
+    execution_result_states,
+)
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _employee_receipt(result: dict[str, Any]) -> dict[str, Any]:
+    """Project existing result envelopes without treating delivery as task completion."""
+    from app.application.agent_orchestrator.trace_payloads import _payload_status
+
+    envelopes = list(execution_result_envelopes(result))
+    state = execution_result_pending_state(result) or _payload_status(result)
+    state = {"processing": "running", "pending": "queued", "accepted": "queued"}.get(state, state)
+    if state == "completed" and not any(
+        item.get("success") is True
+        or item.get("ok") is True
+        or "completed" in execution_result_states(item)
+        for item in envelopes
+    ):
+        state = "unknown"
+    receipt = {
+        key: next(item[key] for item in envelopes if item.get(key) is not None)
+        for key in (
+            "run_id",
+            "agent_run_id",
+            "task_id",
+            "plan_id",
+            "approval_request_id",
+            "pending_approval",
+            "requires_token",
+            "needs_user_input",
+            "approval_card",
+        )
+        if any(item.get(key) is not None for item in envelopes)
+    }
+    return {
+        **receipt,
+        "success": state == "completed",
+        "execution_state": state,
+        "execution_accepted": state not in {"completed", "failed", "cancelled", "rejected"},
+        **({"requires_reconciliation": True, "retryable": False} if state == "unknown" else {}),
+    }
 
 
 @dataclass(frozen=True)
@@ -114,8 +158,17 @@ class EmployeeChatRoutes:
             """
             if not isinstance(result, dict):
                 return ""
-            if not result.get("success"):
+            state = _employee_receipt(result)["execution_state"]
+            if state != "completed":
                 msg = ports.extract_employee_failure_text(result)
+                if state not in {"failed", "cancelled", "rejected"}:
+                    return msg or {
+                        "unknown": "执行结果尚未确认，请核对原任务，勿重复提交。",
+                        "waiting_approval": "原任务正在等待审批。",
+                        "waiting_input": "原任务正在等待补充信息。",
+                        "paused": "原任务已暂停。",
+                        "blocked": "原任务已阻断，请核对任务状态。",
+                    }.get(state, "原任务尚未完成，请继续查看任务回执。")
                 return f"⚠️ 员工执行失败：{msg or '未知错误'}"
             r = result.get("result") or {}
             if not isinstance(r, dict):
@@ -180,6 +233,31 @@ class EmployeeChatRoutes:
             if str(runtime_context.get("user_id")) != str(user_id):
                 raise HTTPException(status_code=403, detail="employee actor mismatch")
             conversation_id = str((body or {}).get("conversation_id") or "").strip()
+            turn_id = (
+                str(body.get("turn_id") or body.get("idempotency_key") or "").strip()
+                or uuid.uuid4().hex
+            )
+            if len(turn_id) > 160 or (
+                body.get("turn_id")
+                and body.get("idempotency_key")
+                and body["turn_id"] != body["idempotency_key"]
+            ):
+                raise HTTPException(
+                    status_code=400, detail="turn_id 与 idempotency_key 必须一致且不超过160字符"
+                )
+            conversation_id = (
+                conversation_id or f"employee:{runtime_context.get('mod_id') or 'host'}:{pid}"
+            )
+            runtime_context.update(
+                local_user_id=user_id,
+                conversation_id=conversation_id,
+                session_id=conversation_id,
+                turn_id=turn_id,
+                idempotency_key=turn_id,
+                source="mobile_app",
+                invoke_mode="interactive_chat",
+                client_surface="mobile_app",
+            )
             payload = {
                 "trigger": "mobile_chat",
                 "invoke_mode": "interactive_chat",
@@ -188,7 +266,77 @@ class EmployeeChatRoutes:
                 "client_surface": "mobile_app",
                 "mod_id": str((body or {}).get("mod_id") or "").strip(),
                 "employee_id": pid,
+                "turn_id": turn_id,
+                "idempotency_key": turn_id,
             }
+
+            def execute_turn() -> dict[str, Any]:
+                from app.application.ai_chat.conversation_history import persist_chat_turn
+                from app.application.ai_chat.dialogue_memory import (
+                    prepare_chat_turn,
+                    settle_chat_turn,
+                )
+                from app.domain.shared_services.conversation_service import (
+                    ConversationRevisionError,
+                )
+                from app.infrastructure.tenant_scope import tenant_scope
+
+                with tenant_scope(runtime_context.get("tenant_id")):
+                    prepared = prepare_chat_turn(message, runtime_context)
+                    if prepared is not None:
+                        return {
+                            **prepared,
+                            **_employee_receipt(prepared),
+                            "turn_id": turn_id,
+                            "conversation_id": conversation_id,
+                        }
+                    try:
+                        result = ports.execute_employee(
+                            pid,
+                            message,
+                            payload,
+                            user_id=user_id,
+                            workspace_root=None,
+                            session_id=conversation_id,
+                            runtime_context=runtime_context,
+                        )
+                        result = result if isinstance(result, dict) else {}
+                        receipt = _employee_receipt(result)
+                        receipt["response"] = (
+                            ports.extract_employee_reply_text(result) or "（员工未返回内容）"
+                        )
+                    except RECOVERABLE_ERRORS:
+                        logger.exception("mobile employee execution interrupted")
+                        receipt = {
+                            "success": False,
+                            "execution_state": "unknown",
+                            "requires_reconciliation": True,
+                            "retryable": False,
+                            "response": "执行结果尚未确认，请查询原任务回执，勿重复提交。",
+                        }
+                    receipt.update(turn_id=turn_id, conversation_id=conversation_id)
+                    try:
+                        receipt["history_persistence"] = persist_chat_turn(
+                            str(user_id), message, runtime_context, receipt
+                        )
+                    except ConversationRevisionError:
+                        receipt["history_persistence"] = {"status": "invalidated", "retry": "none"}
+                    except RECOVERABLE_ERRORS:
+                        logger.exception("mobile employee history persistence failed")
+                        receipt["history_persistence"] = {
+                            "status": "failed",
+                            "retry": "save_only",
+                            "turn_id": turn_id,
+                            "conversation_id": conversation_id,
+                            "revision": runtime_context.get("_conversation_revision"),
+                        }
+                    try:
+                        settle_chat_turn(
+                            message, runtime_context, receipt, receipt["execution_state"]
+                        )
+                    except RECOVERABLE_ERRORS:
+                        logger.exception("mobile employee receipt persistence failed")
+                    return receipt
 
             async def sse_gen():
                 try:
@@ -196,26 +344,22 @@ class EmployeeChatRoutes:
                         {"type": "token", "text": f"已连接员工 {pid}，正在思考..."}
                     )
 
-                    result = await asyncio.to_thread(
-                        ports.execute_employee,
-                        pid,
-                        message,
-                        payload,
-                        user_id=user_id,
-                        workspace_root=None,
-                        session_id=f"mobile_chat_{user_id}",
-                        runtime_context=runtime_context,
-                    )
-                    final_text = ports.extract_employee_reply_text(result)
-                    if not final_text:
-                        final_text = "（员工未返回内容）"
+                    result = await asyncio.to_thread(execute_turn)
+                    final_text = str(result.get("response") or result.get("message") or "")
                     for chunk in ports.chunk_employee_reply(final_text):
                         yield ports.sse_line({"type": "token", "text": chunk})
                         await asyncio.sleep(0.05)
-                    yield ports.sse_line({"type": "done", "result": {"response": final_text}})
+                    yield ports.sse_line({"type": "done", "result": result})
                 except RECOVERABLE_ERRORS as exc:
                     logger.exception("mobile_employee_chat_stream failed: %s", exc)
-                    yield ports.sse_line({"type": "error", "message": "员工对话失败，请稍后重试"})
+                    yield ports.sse_line(
+                        {
+                            "type": "error",
+                            "message": "员工对话暂不可用，请查询原轮回执。",
+                            "turn_id": turn_id,
+                            "conversation_id": conversation_id,
+                        }
+                    )
 
             return StreamingResponse(
                 sse_gen(),

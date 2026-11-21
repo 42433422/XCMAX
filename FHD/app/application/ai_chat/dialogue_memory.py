@@ -244,6 +244,8 @@ def stored_turn_receipt(
         assistant = _assistant_for(data, turn_id)
         if user is None or assistant is None or not isinstance(assistant.get("payload"), dict):
             return None
+        if assistant.get("scope_key", key) != key:
+            return None
         return {
             "message": user["content"],
             "input_fingerprint": user.get("input_fingerprint"),
@@ -775,7 +777,7 @@ def _read(key: str, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
         snapshot = task_conversation_store.memory_snapshot(**scope, include_messages=True)
         if snapshot is None or snapshot["revision"] != revision:
             raise ConversationRevisionError("conversation changed while restoring history")
-        data = _restore_snapshot(snapshot)
+        data = _restore_snapshot(snapshot, key=key)
     turns = data.get("turns") or []
     receipts = data.get("receipts") or {}
     return {
@@ -790,7 +792,7 @@ def _read(key: str, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+def _restore_snapshot(snapshot: Mapping[str, Any], *, key: str) -> dict[str, Any]:
     from datetime import datetime
 
     turns: list[dict[str, Any]] = []
@@ -806,6 +808,13 @@ def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         harness = metadata.get("business_harness") or {}
         summary = summary if isinstance(summary, dict) else {}
         harness = harness if isinstance(harness, dict) else {}
+        scope_key = (
+            str(harness.get("conversation_key") or "")
+            if harness.get("recall_bound") is True
+            else ""
+        )
+        if scope_key and scope_key != key:
+            continue
         turn_id = str(harness.get("turn_id") or summary.get("turn_id") or "")
         role = "user" if row["role"] == "user" else "assistant"
         ui = metadata.get("ui")
@@ -824,6 +833,8 @@ def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             )
         )
         status = str(summary.get("status") or fallback)
+        if turn_id and not scope_key:
+            status = "unknown"
         content = _SECRET_TEXT.sub(
             lambda match: f"{match.group(1) or match.group(3)}[已隐藏]", str(row["content"] or "")
         )
@@ -833,6 +844,7 @@ def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             "input_fingerprint": metadata.get("input_fingerprint") if role == "user" else None,
             "turn_id": turn_id,
             "status": status,
+            "scope_key": scope_key,
             "at": datetime.fromisoformat(row["timestamp"]).timestamp()
             if row["timestamp"]
             else time.time(),

@@ -218,6 +218,9 @@ def persist_chat_turn(
         "run_id": summary.get("run_id"),
         "recall_bound": True,
     }
+    from app.application.ai_chat.dialogue_memory import conversation_key
+
+    harness_metadata["conversation_key"] = conversation_key(context)
     turn_id = str(context.get("turn_id") or "").strip()
     user_fingerprint = uuid.uuid5(
         uuid.NAMESPACE_URL,

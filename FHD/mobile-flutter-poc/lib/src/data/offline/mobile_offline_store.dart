@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -85,8 +86,8 @@ class MobileOfflineStore {
   ) async {
     await _db.customUpdate(
       'INSERT OR REPLACE INTO chat_messages '
-      '(conversation_id, message_id, role, body, time_text, ts, has_employee_profile, status) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      '(conversation_id, message_id, role, body, time_text, ts, has_employee_profile, status, turn_id) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       variables: [
         Variable<String>(conversationId),
         Variable<String>('${row['id'] ?? ''}'),
@@ -96,6 +97,7 @@ class MobileOfflineStore {
         Variable<int>(_asInt(row['ts'])),
         Variable<int>(row['has_employee_profile'] == true ? 1 : 0),
         Variable<String>('${row['status'] ?? ChatDeliveryStatus.sent.name}'),
+        Variable<String>('${row['turn_id'] ?? ''}'),
       ],
     );
     await _trimMessages(conversationId);
@@ -228,13 +230,15 @@ class MobileOfflineStore {
     required String title,
     required String body,
     required int authGeneration,
+    String idempotencyKey = '',
   }) async {
     final text = body.trim();
     if (text.isEmpty) return 0;
+    final key = idempotencyKey.trim();
     final existing = await _db.customSelect(
-      'SELECT id FROM outbox_messages WHERE conversation_id = ? AND body = ? '
-      "AND status = 'pending' LIMIT 1",
-      variables: [Variable<String>(conversationId), Variable<String>(text)],
+      'SELECT id FROM outbox_messages WHERE conversation_id = ? AND ${key.isEmpty ? 'body' : 'idempotency_key'} = ? '
+      "AND status IN ('pending', 'sending', 'unknown') LIMIT 1",
+      variables: [Variable<String>(conversationId), Variable<String>(key.isEmpty ? text : key)],
     ).get();
     if (existing.isNotEmpty) {
       return _asInt(existing.first.data['id']);
@@ -242,15 +246,18 @@ class MobileOfflineStore {
     final now = DateTime.now().millisecondsSinceEpoch;
     return _db.customInsert(
       'INSERT INTO outbox_messages '
-      '(conversation_id, conversation_type, title, body, auth_generation, status, attempts, '
+      '(conversation_id, conversation_type, title, body, auth_generation, idempotency_key, status, attempts, '
       'last_error, created_at, updated_at) '
-      "VALUES (?, ?, ?, ?, ?, 'pending', 0, '', ?, ?)",
+      "VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, '', ?, ?)",
       variables: [
         Variable<String>(conversationId),
         Variable<String>(conversationType.name),
         Variable<String>(title),
         Variable<String>(text),
         Variable<int>(authGeneration),
+        Variable<String>(idempotencyKey.trim().isEmpty
+            ? 'mobile-outbox-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
+            : idempotencyKey.trim()),
         Variable<int>(now),
         Variable<int>(now),
       ],
@@ -259,7 +266,7 @@ class MobileOfflineStore {
 
   Future<List<PendingOutboxMessage>> pendingMessages({int limit = 5}) async {
     final rows = await _db.customSelect(
-      "SELECT * FROM outbox_messages WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
+      "SELECT * FROM outbox_messages WHERE status IN ('pending', 'sending', 'unknown') ORDER BY updated_at ASC, id ASC LIMIT ?",
       variables: [Variable<int>(limit)],
     ).get();
     return rows.map((row) {
@@ -272,6 +279,8 @@ class MobileOfflineStore {
         body: '${data['body'] ?? ''}',
         authGeneration: _asInt(data['auth_generation']),
         attempts: _asInt(data['attempts']),
+        idempotencyKey: '${data['idempotency_key'] ?? ''}',
+        requiresReconciliation: data['status'] != 'pending',
       );
     }).toList(growable: false);
   }
@@ -279,7 +288,7 @@ class MobileOfflineStore {
   Future<int> pendingMessageCount() async {
     final rows = await _db
         .customSelect(
-          "SELECT COUNT(*) AS total FROM outbox_messages WHERE status = 'pending'",
+          "SELECT COUNT(*) AS total FROM outbox_messages WHERE status IN ('pending', 'sending', 'unknown')",
         )
         .get();
     return _asInt(rows.first.data['total']);
@@ -294,12 +303,14 @@ class MobileOfflineStore {
     );
   }
 
-  Future<void> markFailed(int id, String error) async {
+  Future<void> markFailed(int id, String error, {bool requiresReconciliation = false, bool terminal = false}) async {
     await _db.customUpdate(
       'UPDATE outbox_messages SET attempts = attempts + 1, '
-      "status = CASE WHEN attempts + 1 >= $_maxQueuedAttempts THEN 'failed' ELSE 'pending' END, "
+      "status = CASE WHEN ? = 1 THEN 'failed' WHEN ? = 1 THEN 'unknown' WHEN attempts + 1 >= $_maxQueuedAttempts THEN 'failed' ELSE 'pending' END, "
       'last_error = ?, updated_at = ? WHERE id = ?',
       variables: [
+        Variable<int>(terminal ? 1 : 0),
+        Variable<int>(requiresReconciliation ? 1 : 0),
         Variable<String>(error.length > 500 ? error.substring(0, 500) : error),
         Variable<int>(DateTime.now().millisecondsSinceEpoch),
         Variable<int>(id),
@@ -309,12 +320,18 @@ class MobileOfflineStore {
 
   Future<void> removePendingByBody(String conversationId, String body) async {
     await _db.customUpdate(
-      "DELETE FROM outbox_messages WHERE conversation_id = ? AND body = ? AND status = 'pending'",
+      "DELETE FROM outbox_messages WHERE conversation_id = ? AND body = ? AND status IN ('pending', 'sending', 'unknown')",
       variables: [
         Variable<String>(conversationId),
         Variable<String>(body.trim())
       ],
     );
+  }
+
+  Future<void> removePendingByTurn(String conversationId, String turnId) async {
+    if (turnId.isEmpty) return;
+    await _db.customUpdate('DELETE FROM outbox_messages WHERE conversation_id = ? AND idempotency_key = ?',
+        variables: [Variable<String>(conversationId), Variable<String>(turnId)]);
   }
 
   Future<void> _updateOutbox(int id, String assignment) async {
@@ -340,6 +357,7 @@ class MobileOfflineStore {
       'ts': data['ts'],
       'has_employee_profile': _asInt(data['has_employee_profile']) == 1,
       'status': data['status'],
+      'turn_id': data['turn_id'],
     };
   }
 
@@ -367,6 +385,8 @@ class PendingOutboxMessage {
     required this.body,
     required this.authGeneration,
     required this.attempts,
+    this.idempotencyKey = '',
+    this.requiresReconciliation = false,
   });
 
   final int id;
@@ -376,6 +396,8 @@ class PendingOutboxMessage {
   final String body;
   final int authGeneration;
   final int attempts;
+  final String idempotencyKey;
+  final bool requiresReconciliation;
 }
 
 class _MobileOfflineDatabase extends GeneratedDatabase {
@@ -385,7 +407,7 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
   Iterable<TableInfo<Table, dynamic>> get allTables => const [];
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -400,6 +422,7 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
             'ts INTEGER NOT NULL, '
             'has_employee_profile INTEGER NOT NULL DEFAULT 0, '
             'status TEXT NOT NULL, '
+            "turn_id TEXT NOT NULL DEFAULT '', "
             'PRIMARY KEY (conversation_id, message_id))',
           );
           await m.database.customStatement(
@@ -427,6 +450,7 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
             'title TEXT NOT NULL, '
             'body TEXT NOT NULL, '
             'auth_generation INTEGER NOT NULL DEFAULT 0, '
+            "idempotency_key TEXT NOT NULL DEFAULT '', "
             "status TEXT NOT NULL DEFAULT 'pending', "
             'attempts INTEGER NOT NULL DEFAULT 0, '
             "last_error TEXT NOT NULL DEFAULT '', "
@@ -440,6 +464,18 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
           await m.database.customStatement(
             'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
           );
+        },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.database.customStatement(
+                "ALTER TABLE chat_messages ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''");
+            await m.database.customStatement(
+                "ALTER TABLE outbox_messages ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''");
+            await m.database.customStatement(
+                "UPDATE outbox_messages SET idempotency_key = 'mobile-legacy-' || lower(hex(randomblob(16))) WHERE idempotency_key = ''");
+            await m.database.customStatement(
+                "UPDATE outbox_messages SET status = 'unknown' WHERE status = 'sending' OR (status = 'pending' AND attempts > 0)");
+          }
         },
       );
 

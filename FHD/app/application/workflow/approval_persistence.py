@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -529,6 +530,152 @@ def load_durable_workflow_snapshot(
         if raise_storage_errors:
             raise
         return None
+
+
+def load_legacy_capability_run(
+    request_id: str,
+    *,
+    read_run: Callable[[str], Any],
+    user_id: str,
+    runtime_context: dict[str, Any],
+    tool_id: str,
+    action: str,
+    params: dict[str, Any],
+) -> tuple[bool, Any | None]:
+    """Fence old approvals before publishing a new task; uncertain bindings cannot replay."""
+    from app.application.agent_orchestrator.unified_task import _assert_reused_run_scope
+    from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+    from app.db.session import get_db
+
+    try:
+        with get_db() as db:
+            row = db.query(ApprovalRequestModel).filter_by(request_no=request_id).first()
+            if row is None:
+                return False, None
+            snapshot = _validated_snapshot(row)
+            if not snapshot or str(row.applicant_id) != user_id:
+                return True, None
+            run = read_run(snapshot["agent_run_id"])
+            if run is None:
+                return True, None
+            for context in (runtime_context, snapshot["runtime_context"]):
+                _assert_reused_run_scope(
+                    run, user_id=user_id, tenant_id=str(row.tenant_id), runtime_context=context
+                )
+            original_context = run.metadata.get("runtime_context") or {}
+            contexts = (runtime_context, original_context, snapshot["runtime_context"])
+            identities = {
+                (
+                    str(context.get("conversation_id") or context.get("session_id") or ""),
+                    str(context.get("call_id") or ""),
+                    str(context.get("idempotency_key") or context.get("turn_id") or ""),
+                )
+                for context in contexts
+            }
+            plan = plan_from_dict(run.metadata.get("plan"))
+            step = next(
+                (item for item in run.steps if item.node_id == snapshot["approved_step_id"]), None
+            )
+            data = json.loads(row.business_data or "{}")
+            if (
+                len(identities) != 1
+                or not all(next(iter(identities)))
+                or any(
+                    str(context.get("tenant_id") or "") != str(row.tenant_id)
+                    for context in contexts
+                )
+                or plan is None
+                or run.plan_id != snapshot["plan"].plan_id
+                or str(run.metadata.get("approval_request_id") or request_id) != request_id
+                or _plan_digest(plan) != _plan_digest(snapshot["plan"])
+                or data.get("agent_run_id") != run.run_id
+                or data.get("approved_step_id") != snapshot["approved_step_id"]
+                or data.get("node_id") != snapshot["approved_step_id"]
+                or step is None
+                or (step.tool_id, step.action, step.params) != (tool_id, action, params)
+            ):
+                return True, None
+            return True, run
+    except _APPROVAL_STORAGE_ERRORS:
+        logger.warning("read legacy capability approval failed request_no=%s", request_id)
+        return True, None
+
+
+def find_pending_approval_for_run(
+    run: Any, *, approved_step_id: str, request_ids: tuple[str, ...] = ()
+) -> str:
+    """Read a pending approval bound to this exact run; never create or rebind one."""
+    from sqlalchemy import or_
+
+    from app.application.agent_orchestrator.unified_task import _assert_reused_run_scope
+    from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+    from app.db.session import get_db
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    try:
+        context = run.metadata.get("runtime_context") or {}
+        plan = plan_from_dict(run.metadata.get("plan"))
+        tenant = current_tenant_id()
+        if (
+            not tenant
+            or str(context.get("tenant_id") or "") != str(tenant)
+            or plan is None
+            or plan.plan_id != run.plan_id
+        ):
+            return ""
+        bound_id = str(run.metadata.get("approval_request_id") or "").strip()
+        candidates = [value for value in request_ids if value]
+        with get_db() as db:
+            rows = (
+                db.query(ApprovalRequestModel)
+                .filter(
+                    ApprovalRequestModel.tenant_id == tenant,
+                    ApprovalRequestModel.applicant_id == int(run.user_id),
+                    ApprovalRequestModel.status == "pending",
+                    ApprovalRequestModel.business_type == "workflow_tool",
+                    (
+                        ApprovalRequestModel.request_no == bound_id
+                        if bound_id
+                        else or_(
+                            ApprovalRequestModel.request_no.in_(candidates),
+                            ApprovalRequestModel.business_data.contains(
+                                run.run_id, autoescape=True
+                            ),
+                        )
+                    ),
+                )
+                .all()
+            )
+            matches = []
+            for row in rows:
+                data = json.loads(row.business_data or "{}")
+                snapshot = _validated_snapshot(row)
+                if (
+                    not isinstance(data, dict)
+                    or "workflow_execution" in data
+                    or not snapshot
+                    or snapshot["agent_run_id"] != run.run_id
+                    or snapshot["approved_step_id"] != approved_step_id
+                    or _plan_digest(snapshot["plan"]) != _plan_digest(plan)
+                ):
+                    continue
+                saved_context = snapshot["runtime_context"]
+                _assert_reused_run_scope(
+                    run,
+                    user_id=str(row.applicant_id),
+                    tenant_id=str(row.tenant_id),
+                    runtime_context=saved_context,
+                )
+                if any(
+                    str(saved_context.get(key) or "") != str(context.get(key) or "")
+                    for key in ("tenant_id", "session_id", "conversation_id")
+                ):
+                    continue
+                matches.append(str(row.request_no))
+            return matches[0] if len(matches) == 1 else ""
+    except _APPROVAL_STORAGE_ERRORS:
+        logger.warning("read bound pending approval failed run_id=%s", run.run_id)
+        return ""
 
 
 def load_workflow_snapshot_for_execution(request_id: str) -> dict[str, Any] | None:

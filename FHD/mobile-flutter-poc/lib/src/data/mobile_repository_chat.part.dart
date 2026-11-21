@@ -11,6 +11,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     required String body,
     required List<MobileChatAttachment> attachments,
     required String idempotencyKey,
+    bool resumeOnly = false,
     List<ChatMessage> recentMessages = const [],
     void Function(String)? onToken,
   }) async {
@@ -20,22 +21,27 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     final generation = _client.authGeneration;
     final base = await _client.resolveSessionBaseUrl();
     await _requireChatScope(generation, base);
-    final reply = await _client.streamAttachmentChat(body,
-        conversationId: conversation.id,
-        attachments: attachments,
-        idempotencyKey: idempotencyKey,
-        recentMessages: _recentChatContext(recentMessages),
-        onToken: onToken);
-    await _cacheChatMessage(conversation.id,
-        role: ChatRole.user,
-        body: body,
-        expectedAuthGeneration: generation,
-        expectedBaseUrl: base);
-    await _cacheChatMessage(conversation.id,
-        role: ChatRole.assistant,
-        body: reply,
-        expectedAuthGeneration: generation,
-        expectedBaseUrl: base);
+    Future<void> cache(ChatRole role, String text, {ChatDeliveryStatus status = ChatDeliveryStatus.sent}) =>
+        _cacheChatMessage(conversation.id, role: role, body: text,
+            turnId: idempotencyKey, status: status,
+            expectedAuthGeneration: generation, expectedBaseUrl: base);
+    if (!resumeOnly) await cache(ChatRole.user, body);
+    late final String reply;
+    try {
+      reply = await _client.streamAttachmentChat(body,
+          conversationId: conversation.id,
+          attachments: attachments,
+          idempotencyKey: idempotencyKey,
+          resumeOnly: resumeOnly,
+          recentMessages: _recentChatContext(recentMessages),
+          onToken: onToken);
+    } on MobileApiException catch (error) {
+      if (error.errorCode == 'CHAT_RECEIPT_PENDING') {
+        await cache(ChatRole.assistant, error.message, status: ChatDeliveryStatus.pending);
+      }
+      rethrow;
+    }
+    await cache(ChatRole.assistant, reply);
     await _requireChatScope(generation, base);
     return reply;
   }
@@ -68,38 +74,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     required ConversationItem conversation,
     required String body,
   }) async {
-    final generation = _client.authGeneration;
-    final base = await _client.resolveSessionBaseUrl();
-    await _requireChatScope(generation, base);
-    final tool = conversation.type.superTool;
-    final text = body.trim();
-    if (text.isEmpty) {
-      throw const MobileRepositoryException('消息不能为空');
-    }
-
-    if (tool != null) {
-      final reply = await streamMessage(conversation: conversation, body: text);
-      return _assistantMessage(conversation.id, reply);
-    }
-
-    final employeeRef = _employeeConversationRef(conversation.id);
-    if (employeeRef != null) {
-      final userId = await _loadCurrentUserId();
-      await _requireChatScope(generation, base);
-      final reply = await _client.streamEmployeeChat(
-        message: text,
-        employeeId: employeeRef.employeeId,
-        modId: employeeRef.modId,
-        conversationId: conversation.id,
-        userId: userId,
-      );
-      await _requireChatScope(generation, base);
-      return _assistantMessage(conversation.id, reply.ifEmpty('已收到。'));
-    }
-
-    final response = await _client.chat(text, sessionId: conversation.id);
-    await _requireChatScope(generation, base);
-    final reply = _assistantReplyFromMap(response).ifEmpty('已收到。');
+    final reply = await streamMessage(conversation: conversation, body: body);
     return _assistantMessage(conversation.id, reply);
   }
 
@@ -107,6 +82,8 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     required ConversationItem conversation,
     required String body,
     int userId = 0,
+    String idempotencyKey = '',
+    bool resumeOnly = false,
     List<ChatMessage> recentMessages = const [],
     bool cacheUserMessage = true,
     void Function(String token)? onToken,
@@ -115,11 +92,16 @@ abstract class _RepoChatBase extends _RepoRelayBase {
   }) async {
     final generation = _client.authGeneration;
     final base = await _client.resolveSessionBaseUrl();
+    if (idempotencyKey.trim().isEmpty && !resumeOnly) {
+      idempotencyKey = 'mobile-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32).toRadixString(16)}';
+    }
     Future<void> requireScope() => _requireChatScope(generation, base);
-    Future<void> cache(ChatRole role, String body) async {
+    Future<void> cache(ChatRole role, String body, {ChatDeliveryStatus status = ChatDeliveryStatus.sent}) async {
       await _cacheChatMessage(conversation.id,
           role: role,
           body: body,
+          turnId: idempotencyKey,
+          status: status,
           expectedAuthGeneration: generation,
           expectedBaseUrl: base);
       await requireScope();
@@ -128,11 +110,19 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     await requireScope();
     final tool = conversation.type.superTool;
     final text = body.trim();
-    if (text.isEmpty) {
+    if (text.isEmpty && !resumeOnly) {
       throw const MobileRepositoryException('消息不能为空');
     }
 
     if (tool != null) {
+      if (resumeOnly) {
+        final reply = await resumeRelayTask(conversationId: conversation.id,
+            onToken: onToken, onStatus: onStatus, isCancelled: isCancelled);
+        if (reply != null) return reply;
+        throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+            message: '原任务回执待核对，请在任务工作区查看；未重新派发。',
+            body: {'turn_id': idempotencyKey, 'execution_state': 'unknown', 'requires_reconciliation': true});
+      }
       if (cacheUserMessage) {
         await cache(ChatRole.user, text);
       }
@@ -145,6 +135,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
             tool,
             text,
             baseUrl: localBaseUrl,
+            idempotencyKey: idempotencyKey,
             onToken: (token) {
               if (isCancelled != null && isCancelled()) return;
               onToken?.call(token);
@@ -161,8 +152,9 @@ abstract class _RepoChatBase extends _RepoRelayBase {
         } catch (sseError) {
           _throwIfCancelled(isCancelled);
           await requireScope();
-          // 第 2 级：LAN 直答（一次性返回，SSE 不可用时的同城 fallback）
-          try {
+          // Only a missing SSE route proves that no task was dispatched.
+          if (sseError is MobileApiException &&
+              [404, 405].contains(sseError.statusCode)) {
             final reply = await _postSuperEmployeeMessage(
               tool,
               text,
@@ -171,14 +163,10 @@ abstract class _RepoChatBase extends _RepoRelayBase {
             _throwIfCancelled(isCancelled);
             await cache(ChatRole.assistant, reply);
             return reply;
-          } catch (e) {
-            _throwIfCancelled(isCancelled);
-            await requireScope();
-            final sink = onToken;
-            if (sink != null) {
-              sink('〔局域网连接失败，正在切换到云端中继〕\n');
-            }
           }
+          // Post-dispatch transport errors are wrapped by the API as unknown.
+          // A raw socket error here occurred while opening the connection.
+          if (sseError is! SocketException) rethrow;
         }
       }
       final relayKind = relayKindForConversation(conversation.id);
@@ -209,38 +197,29 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       return reply;
     }
 
-    final employeeRef = _employeeConversationRef(conversation.id);
-    if (employeeRef != null) {
-      if (cacheUserMessage) {
-        await cache(ChatRole.user, text);
-      }
-      final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
-      await requireScope();
-      final reply = await _client.streamEmployeeChat(
-        message: text,
-        employeeId: employeeRef.employeeId,
-        modId: employeeRef.modId,
-        conversationId: conversation.id,
-        userId: effectiveUserId,
-        onToken: onToken,
-      );
-      _throwIfCancelled(isCancelled);
-      await cache(ChatRole.assistant, reply);
-      return reply;
-    }
-
-    if (cacheUserMessage) {
+    if (cacheUserMessage && !resumeOnly) {
       await cache(ChatRole.user, text);
     }
+    final employeeRef = _employeeConversationRef(conversation.id);
     final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
     await requireScope();
-    final reply = await _client.streamChat(
-      text,
-      sessionId: conversation.id,
-      userId: effectiveUserId,
-      recentMessages: _recentChatContext(recentMessages),
-      onToken: onToken,
-    );
+    late final String reply;
+    try {
+      reply = employeeRef != null
+          ? await _client.streamEmployeeChat(message: text,
+              employeeId: employeeRef.employeeId, modId: employeeRef.modId,
+              conversationId: conversation.id, userId: effectiveUserId,
+              idempotencyKey: idempotencyKey, resumeOnly: resumeOnly, onToken: onToken)
+          : await _client.streamChat(text, sessionId: conversation.id,
+              userId: effectiveUserId, idempotencyKey: idempotencyKey,
+              resumeOnly: resumeOnly, recentMessages: _recentChatContext(recentMessages),
+              onToken: onToken);
+    } on MobileApiException catch (error) {
+      if (error.errorCode == 'CHAT_RECEIPT_PENDING') {
+        await cache(ChatRole.assistant, error.message, status: ChatDeliveryStatus.pending);
+      }
+      rethrow;
+    }
     _throwIfCancelled(isCancelled);
     await cache(ChatRole.assistant, reply);
     return reply;
@@ -323,6 +302,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
   Future<int> enqueuePendingMessage({
     required ConversationItem conversation,
     required String body,
+    String idempotencyKey = '',
   }) async {
     final scope = await _offlineScope();
     final generation = _client.authGeneration;
@@ -334,6 +314,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       title: conversation.title,
       body: body,
       authGeneration: generation,
+      idempotencyKey: idempotencyKey,
     );
   }
 
@@ -344,9 +325,13 @@ abstract class _RepoChatBase extends _RepoRelayBase {
   }
 
   /// 手动重发或重连成功后，清掉同一内容的排队记录，避免重复发送。
-  Future<void> removeQueuedMessage(String conversationId, String body) async {
+  Future<void> removeQueuedMessage(String conversationId, String body, {String idempotencyKey = ''}) async {
     final store = await openOfflineStore();
-    await store?.removePendingByBody(conversationId, body);
+    if (idempotencyKey.isNotEmpty) {
+      await store?.removePendingByTurn(conversationId, idempotencyKey);
+    } else {
+      await store?.removePendingByBody(conversationId, body);
+    }
   }
 
   /// 依次重放待发送消息；跨账号的旧队列直接丢弃，避免串号。
@@ -377,12 +362,17 @@ abstract class _RepoChatBase extends _RepoRelayBase {
               timestampText: '',
             ),
             body: item.body,
+            idempotencyKey: item.idempotencyKey,
+            resumeOnly: item.requiresReconciliation,
             cacheUserMessage: false,
           );
           await store.markSent(item.id);
           sent++;
         } catch (error) {
-          await store.markFailed(item.id, error.toString());
+          await store.markFailed(item.id, error.toString(),
+              requiresReconciliation: item.requiresReconciliation || item.conversationType.superTool != null ||
+                  (error is! SocketException && error is! TimeoutException),
+              terminal: error is MobileApiException && error.errorCode == 'CHAT_RECEIPT_TERMINAL');
         }
       }
     } finally {

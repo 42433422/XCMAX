@@ -105,7 +105,7 @@ class RelayTaskQueue:
             return _row_dict(row) if row else None
 
     def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
-        """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
+        """Only an unclaimed task can be cancelled without a desktop receipt."""
         now = _utc_now()
         with self.ports.database() as db:
             self.ports.ensure_tables(db)
@@ -134,15 +134,23 @@ class RelayTaskQueue:
                 text(
                     """
                     UPDATE mobile_relay_tasks
-                    SET status = 'cancelled',
-                        completed_at = :now,
+                    SET status = CASE WHEN status = 'queued' THEN 'cancelled' ELSE 'unknown' END,
+                        completed_at = CASE WHEN status = 'queued' THEN :now ELSE NULL END,
                         updated_at = :now
                     WHERE task_id = :task_id AND status IN ('queued', 'running')
                     """
                 ),
                 {"task_id": task_id.strip(), "now": now},
             )
-            return _row_dict(row)
+            updated = (
+                db.execute(
+                    text("SELECT * FROM mobile_relay_tasks WHERE task_id = :task_id"),
+                    {"task_id": task_id.strip()},
+                )
+                .mappings()
+                .first()
+            )
+            return _row_dict(updated) if updated else None
 
     def _purge_expired(self, db) -> None:
         """终态任务只保留短周期密文；排队任务最多 7 天，避免云端长期堆积。"""
@@ -155,9 +163,20 @@ class RelayTaskQueue:
         queued_cutoff = (current - timedelta(days=7)).isoformat()
         db.execute(
             text(
-                "DELETE FROM mobile_relay_tasks WHERE status != 'queued' AND updated_at < :cutoff"
+                "DELETE FROM mobile_relay_tasks WHERE status IN ('completed', 'failed', 'cancelled') AND updated_at < :cutoff"
             ),
             {"cutoff": cutoff},
+        )
+        # Erase expired ciphertext without losing the only address for an
+        # unresolved execution. Clearing payloads never authorizes replay.
+        db.execute(
+            text(
+                "UPDATE mobile_relay_tasks SET status = 'unknown', payload_json = '{}', "
+                "result_json = '{}', completed_at = NULL, updated_at = :now "
+                "WHERE status NOT IN ('queued', 'completed', 'failed', 'cancelled') "
+                "AND updated_at < :cutoff"
+            ),
+            {"cutoff": cutoff, "now": current.isoformat()},
         )
         db.execute(
             text("DELETE FROM mobile_relay_tasks WHERE status = 'queued' AND created_at < :cutoff"),
@@ -191,10 +210,8 @@ class RelayTaskQueue:
                 ),
                 {"now": now, "relay_id": relay_id.strip()},
             )
-            # 孤儿回收：执行端中途死会把任务永久卡在 running（poll 只发 queued，无人再认领）。
-            # 每次 poll 先把本 relay claimed_at 超 TTL 的 running 重置回 queued，活 relay 自动重认领，
-            # 根治『永久卡 running』。同一 relay 仍在跑的任务由执行端 _INFLIGHT 去重，不会重复执行；
-            # 真完成时 complete 覆盖 queued 态，无副作用。
+            # A missing desktop receipt cannot prove that a side effect did not happen.
+            # Keep the same task addressable; process-local _INFLIGHT is not a replay fence.
             try:
                 stale_ttl = max(60, int(os.environ.get("XCAGI_RELAY_RUNNING_TTL_SEC") or "900"))
             except (TypeError, ValueError):
@@ -208,7 +225,7 @@ class RelayTaskQueue:
                 text(
                     """
                     UPDATE mobile_relay_tasks
-                    SET status = 'queued', claimed_at = NULL, updated_at = :now
+                    SET status = 'unknown', updated_at = :now
                     WHERE relay_id = :relay_id AND status = 'running'
                       AND claimed_at IS NOT NULL AND claimed_at < :stale_before
                     """
@@ -230,9 +247,10 @@ class RelayTaskQueue:
                 .mappings()
                 .all()
             )
-            tasks = [_row_dict(row) for row in rows]
-            for task in tasks:
-                db.execute(
+            tasks = []
+            for row in rows:
+                task = _row_dict(row)
+                claimed = db.execute(
                     text(
                         """
                         UPDATE mobile_relay_tasks
@@ -242,8 +260,11 @@ class RelayTaskQueue:
                     ),
                     {"task_id": task["task_id"], "now": now},
                 )
+                if cast(CursorResult[Any], claimed).rowcount != 1:
+                    continue
                 task["status"] = "running"
                 task["claimed_at"] = now
+                tasks.append(task)
         return {
             "desktop": self.ports.public_desktop(desktop),
             "tasks": tasks,
@@ -260,13 +281,13 @@ class RelayTaskQueue:
         result: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         now = _utc_now()
-        requested_status = (status or "completed").strip().lower()
+        requested_status = (status or "unknown").strip().lower()
         if requested_status == "done":
             requested_status = "completed"
         final_status = (
             requested_status
-            if requested_status in {"completed", "failed", "blocked", "cancelled"}
-            else "completed"
+            if requested_status in {"completed", "failed", "blocked", "cancelled", "unknown"}
+            else "unknown"
         )
         with self.ports.database() as db:
             self.ports.ensure_tables(db)
@@ -285,21 +306,24 @@ class RelayTaskQueue:
                     UPDATE mobile_relay_tasks
                     SET status = :status,
                         result_json = :result_json,
-                        completed_at = :now,
+                        completed_at = :completed_at,
                         updated_at = :now
                     WHERE task_id = :task_id AND relay_id = :relay_id
+                      AND status NOT IN ('completed', 'failed', 'cancelled')
                     """
                 ),
                 {
                     "status": final_status,
                     "result_json": _json_dumps(result or {}),
                     "now": now,
+                    "completed_at": now
+                    if final_status in {"completed", "failed", "cancelled"}
+                    else None,
                     "task_id": task_id.strip(),
                     "relay_id": relay_id.strip(),
                 },
             )
-            if cast(CursorResult[Any], updated).rowcount != 1:
-                return None
+            changed = cast(CursorResult[Any], updated).rowcount == 1
             row = (
                 db.execute(
                     text(
@@ -311,6 +335,12 @@ class RelayTaskQueue:
                 .first()
             )
             task_row = _row_dict(row) if row else None
+            if not changed:
+                return (
+                    task_row
+                    if task_row and task_row.get("status") in {"completed", "failed", "cancelled"}
+                    else None
+                )
         # 终态主动推送创建者手机（FCM + 离线队列轮询补发）——在 DB 事务收尾后再发，
         # 不让推送网络耗时拖住 complete 回写。此前任务完成只写库，手机要等下次打开
         # App 轮询才知道结果，"超级员工干完活"对老板完全无感。
