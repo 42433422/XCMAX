@@ -205,9 +205,9 @@ def _content(kind):
     else:
         from pypdf import PdfWriter
 
-        document = PdfWriter()
-        document.add_blank_page(width=72, height=72)
-        document.write(stream)
+        pdf_writer = PdfWriter()
+        pdf_writer.add_blank_page(width=72, height=72)
+        pdf_writer.write(stream)
         return stream.getvalue()
     document.save(stream)
     return stream.getvalue()

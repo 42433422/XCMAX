@@ -1,7 +1,8 @@
 // Reproduce the reviewed renderer subset and sprite atlas; never fetches code at build time.
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -53,20 +54,27 @@ roots.forEach(copy)
 fs.copyFileSync(path.join(upstream, 'LICENSE'), path.join(out, 'LICENSE'))
 
 // Use the upstream character compositor and manifest flattener unchanged at import time.
-const built = await build({
-  stdin: {
-    contents: `export { CharacterRenderer } from './webview-ui/src/characters/renderer.ts';
+const { CharacterRenderer, decodeWardrobe, parseWardrobeManifest, EYE_FOLDERS, DEFAULT_CHARACTER_PROFILES, flattenManifest } = await loadCompositor()
+async function loadCompositor() {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-pixel-agents-'))
+  try {
+    const outfile = path.join(directory, 'compositor.mjs')
+    await build({
+      stdin: {
+        contents: `export { CharacterRenderer } from './webview-ui/src/characters/renderer.ts';
 export { decodeWardrobe, parseWardrobeManifest } from './webview-ui/src/characters/wardrobe.ts';
 export { EYE_FOLDERS } from './webview-ui/src/characters/slots.ts';
 export { DEFAULT_CHARACTER_PROFILES } from './core/src/defaultCharacterProfiles.ts';
 export { flattenManifest } from './core/src/assets/manifestUtils.ts';`,
-    resolveDir: upstream, loader: 'ts',
-  },
-  bundle: true, write: false, format: 'cjs', platform: 'node',
-})
-const module = { exports: {} }
-new Function('module', 'exports', built.outputFiles[0].text)(module, module.exports)
-const { CharacterRenderer, decodeWardrobe, parseWardrobeManifest, EYE_FOLDERS, DEFAULT_CHARACTER_PROFILES, flattenManifest } = module.exports
+        resolveDir: upstream, loader: 'ts',
+      },
+      bundle: true, outfile, format: 'esm', platform: 'node',
+    })
+    return await import(pathToFileURL(outfile).href)
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+}
 const art = path.join(upstream, 'webview-ui/src/characters/art')
 const wardrobeFiles = new Map(fs.readdirSync(art, { recursive: true, encoding: 'utf8' }).filter(f => f.endsWith('.png')).map(f => {
   const png = PNG.sync.read(fs.readFileSync(path.join(art, f)))
