@@ -168,6 +168,33 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
         if schemas
         else 0
     )
+    if context is not None:
+        if state is None:
+            state = SimpleNamespace(
+                conversation_history=[],
+                summary=None,
+                summary_covered_until=-1,
+                summary_fingerprint="",
+            )
+        # Only local ownership/revision fields reach the compaction guard; the
+        # snapshot is never part of model messages or the persisted summary.
+        state.metadata = {
+            "request_context": {
+                key: context[key]
+                for key in (
+                    "local_user_id",
+                    "actor_id",
+                    "tenant_id",
+                    "mod_id",
+                    "conversation_id",
+                    "session_id",
+                    "_conversation_revision",
+                    "_chat_history_source",
+                    "_chat_history_revision",
+                )
+                if key in context
+            }
+        }
     result = await get_context_window_manager().compress(
         outbound,
         provider=provider,
@@ -180,6 +207,8 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
         save_conversation_summary(
             context, history, result.summary_covered_count, result.summary_text
         )
+    if context is not None:
+        conversation_summary(context)  # Revalidate after routing/compression awaits, before IO.
     return result.messages
 
 
@@ -250,8 +279,9 @@ def request_planner_completion(
             )
     except RECOVERABLE_ERRORS as exc:
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
 
-        if isinstance(exc, ContextWindowExceeded):
+        if isinstance(exc, (ContextWindowExceeded, ConversationRevisionError)):
             raise
         from .retry_policy import retry_manages_transport_error
         from .tool_calling import unsupported_tool_parameter

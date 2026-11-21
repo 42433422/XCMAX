@@ -181,7 +181,9 @@ def test_confirmation_cannot_resume_another_sessions_pending_plan():
     orchestrator.assert_not_called()
 
     assert handled and response["data"]["action"] == "clarification_required"
-    callbacks._hydrate_pending_workflow.assert_called_once_with("owner", "different")
+    callbacks._hydrate_pending_workflow.assert_called_once_with(
+        "owner", "different", {"session_id": "different"}
+    )
     assert pending["owner"]["runtime_context"]["session_id"] == "original"
 
 

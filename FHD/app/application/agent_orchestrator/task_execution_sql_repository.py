@@ -486,7 +486,6 @@ class SQLAlchemyTaskExecutionRepository:
                 body["approval_requested_at"] = now
             if available_at:
                 body["available_at"] = available_at
-            book.put("agent", str(existing.tenant_id or ""), str(existing.run_id), body)
 
             query = db.query(AgentTaskExecutionRecord).filter(
                 AgentTaskExecutionRecord.run_id == str(run_id or "")
@@ -515,6 +514,9 @@ class SQLAlchemyTaskExecutionRepository:
             # a claim acquired by another process between those two operations.
             if query.update(values, synchronize_session=False) != 1:
                 return None
+            # A rejected/expired worker must not publish lifecycle history or
+            # erase the replacement worker's unresolved business effects.
+            book.put("agent", str(existing.tenant_id or ""), str(existing.run_id), body)
         return self.get(run_id)
 
     def mark_open_effect(self, run_id: str, effect_id: str = "dispatch") -> None:

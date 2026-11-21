@@ -595,6 +595,7 @@ class SQLAlchemyAgentRunRepository:
         mod_id: str | None = None,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
@@ -603,6 +604,8 @@ class SQLAlchemyAgentRunRepository:
             query = db.query(AgentRunRecord)
             if user_id is not None:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
+            if status is not None:
+                query = query.filter(AgentRunRecord.status == status)
             if runtime_scope is not None:
                 query = query.filter(
                     _runtime_scope_candidates(

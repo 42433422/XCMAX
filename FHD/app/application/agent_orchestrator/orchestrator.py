@@ -900,7 +900,16 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         limit: int = 50,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]:
+        if status is not None:
+            return self._repo.list_recent(
+                user_id=user_id,
+                limit=limit,
+                matches=matches,
+                runtime_scope=runtime_scope,
+                status=status,
+            )
         if runtime_scope is not None:
             return self._repo.list_recent(
                 user_id=user_id, limit=limit, matches=matches, runtime_scope=runtime_scope

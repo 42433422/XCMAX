@@ -408,3 +408,48 @@ def test_durable_resume_rejects_unreconciled_result(waiting_task):
     assert runs.get(run.run_id).to_dict() == before
     assert runs.latest_task_control(run.run_id) is None
     assert queue.get(run.run_id) is None
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_resume_reconciles_durable_effects_before_requeue(waiting_task, confirmed):
+    from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+    from app.domain.task_lifecycle.control import SessionBook
+
+    runs, queue, _, original, previous, _ = waiting_task
+    run = runs.get(original.run_id)
+    run.status = "paused"
+    run.steps[0].status = "completed" if confirmed else "pending"
+    run.steps[0].output = {"success": True, "order_id": "created-once"} if confirmed else {}
+    runs.save(run)
+    with runs.transaction() as db:
+        book = SessionBook(db)
+        body = book.get("agent", "tenant", run.run_id)
+        body["effects"] = [run.steps[0].step_id]
+        book.put("agent", "tenant", run.run_id, body)
+    before = runs.get(run.run_id).to_dict()
+
+    def resume():
+        return resume_and_enqueue(
+            runs,
+            queue,
+            run_id=run.run_id,
+            principal_id="owner",
+            runtime_context={},
+            authenticated_binding={**previous, "session_row_id": 2},
+        )
+
+    if confirmed:
+        result = resume()
+        assert result.status == "queued" and result.run_id == run.run_id
+        assert result.steps[0].to_dict() == run.steps[0].to_dict()
+        assert queue.get(run.run_id).state == "queued"
+    else:
+        with pytest.raises(ApprovalGrantError, match="核对"):
+            resume()
+        assert runs.get(run.run_id).to_dict() == before
+        assert runs.latest_task_control(run.run_id) is None
+        assert queue.get(run.run_id) is None
+    with runs.transaction(read_only=True) as db:
+        assert SessionBook(db).get("agent", "tenant", run.run_id)["effects"] == (
+            [] if confirmed else [run.steps[0].step_id]
+        )

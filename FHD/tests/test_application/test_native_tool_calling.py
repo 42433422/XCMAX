@@ -383,6 +383,94 @@ def test_catalog_compaction_preserves_independent_local_schema_references():
     assert prompt == compacted
 
 
+def test_catalog_omits_only_duplicate_required_annotation(monkeypatch):
+    from jsonschema import Draft202012Validator
+
+    from app.application.workflow.llm_plan_generation import _tool_specs
+    from app.application.workflow.planner_llm_gateway import _compact_tool_registry
+
+    schema = {
+        "$defs": {
+            "row": {
+                "type": "object",
+                "properties": {"quantity": {"type": "integer", "minimum": 1}},
+                "required": ["quantity"],
+                "additionalProperties": False,
+            }
+        },
+        "type": "object",
+        "properties": {
+            "rows": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/row"}},
+            "warehouse_id": {"type": "integer"},
+            "warehouse_name": {"type": "string", "minLength": 1},
+        },
+        "required": ["rows"],
+        "anyOf": [{"required": ["warehouse_id"]}, {"required": ["warehouse_name"]}],
+        "additionalProperties": False,
+    }
+    contract = SimpleNamespace(input_schema=schema, output_schema=copy.deepcopy(schema))
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_spec.build_tool_specs_v2",
+        lambda: {("inventory", action): contract for action in ("create", "update")},
+    )
+    registry = {
+        "inventory": {
+            "description": "Inventory",
+            "actions": {
+                "create": {"required_params": ["rows"]},
+                "update": {"required_params": ["rows", "warehouse_id"]},
+            },
+        }
+    }
+    original_schema = copy.deepcopy(schema)
+    prompt = {"tool_registry": _tool_specs(registry)}
+    _compact_tool_registry(prompt)
+    actions = _expanded_tool_specs(prompt)[0]["actions"]
+    assert "required_params" not in actions[0]
+    assert actions[1]["required_params"] == ["rows", "warehouse_id"]
+    for action in actions:
+        for field in ("input_schema", "output_schema"):
+            assert action[field] == original_schema
+            validator = Draft202012Validator(action[field])
+            assert validator.is_valid({"rows": [{"quantity": 1}], "warehouse_name": "主仓"})
+            assert not validator.is_valid({"rows": [{}], "warehouse_name": "主仓"})
+            assert not validator.is_valid({"rows": [{"quantity": 0}], "warehouse_id": 1})
+            assert not validator.is_valid({"rows": [{"quantity": 1}]})
+    assert contract.input_schema == contract.output_schema == original_schema
+
+
+def test_real_catalog_remains_losslessly_reconstructable_with_smaller_budget():
+    from app.application.agent_orchestrator.context_window_manager import estimate_messages_tokens
+    from app.application.facades.tools_facade import get_workflow_tool_registry
+    from app.application.workflow.llm_plan_generation import _tool_specs
+    from app.application.workflow.planner_llm_gateway import _compact_tool_registry
+
+    registry = get_workflow_tool_registry()
+    projected = _tool_specs(registry)
+    original = copy.deepcopy(projected)
+    for tool in original:
+        for action in tool["actions"]:
+            action["required_params"] = registry[tool["tool_id"]]["actions"][action["action"]].get(
+                "required_params", []
+            )
+    previous = {"tool_registry": copy.deepcopy(original)}
+    prompt = {"tool_registry": projected}
+    for value in (previous, prompt):
+        _compact_tool_registry(value)
+    restored = _expanded_tool_specs(prompt)
+    for tool in restored:
+        for action in tool["actions"]:
+            action.setdefault("required_params", action["input_schema"].get("required", []))
+    assert restored == original  # Includes every tool, action, schema and execution annotation.
+    encoded = [
+        json.dumps(value, ensure_ascii=False, separators=(",", ":")) for value in (previous, prompt)
+    ]
+    assert len(encoded[1].encode()) < len(encoded[0].encode())
+    assert estimate_messages_tokens(
+        [{"role": "user", "content": encoded[1]}]
+    ) < estimate_messages_tokens([{"role": "user", "content": encoded[0]}])
+
+
 @pytest.mark.parametrize("profile", ["normal", "pro_default"])
 @pytest.mark.parametrize("native", [False, True])
 @pytest.mark.parametrize("replanning", [False, True])
