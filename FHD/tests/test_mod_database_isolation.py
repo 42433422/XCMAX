@@ -12,6 +12,7 @@ def test_postgres_active_mod_database_url_suffix(monkeypatch):
 
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:secret@localhost:5432/xcagi")
     monkeypatch.setenv("XCAGI_MOD_ISOLATED_DATABASES", "1")
+    monkeypatch.setattr(db, "_postgres_database_exists", lambda url: True)
 
     token = set_request_active_mod_id("leshan-kc-ai-suite-test")
     try:
@@ -22,6 +23,23 @@ def test_postgres_active_mod_database_url_suffix(monkeypatch):
     parsed = make_url(url)
     assert parsed.database == "xcagi__leshan_kc_ai_suite_test"
     assert "secret" in parsed.render_as_string(hide_password=False)
+
+
+def test_postgres_missing_mod_db_falls_back_to_base(monkeypatch):
+    from app import db
+    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:secret@localhost:5432/xcagi")
+    monkeypatch.setenv("XCAGI_MOD_ISOLATED_DATABASES", "1")
+    monkeypatch.setattr(db, "_postgres_database_exists", lambda url: False)
+
+    token = set_request_active_mod_id("xcagi-planner-bridge")
+    try:
+        url = db._get_database_url()
+    finally:
+        reset_request_active_mod_id(token)
+
+    assert make_url(url).database == "xcagi"
 
 
 def test_session_factories_are_cached_per_resolved_database_url(monkeypatch, tmp_path):
