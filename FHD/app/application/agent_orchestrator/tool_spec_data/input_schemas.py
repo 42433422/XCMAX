@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .kellai_schemas import KELLAI_INPUT_SCHEMAS
 from .report_input_schemas import REPORT_INPUT_SCHEMAS
 
 
@@ -143,6 +144,7 @@ _OCR_EXTRACT_INPUT = _object_schema(["text"], {"text": {"type": "string"}})
 
 _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     **REPORT_INPUT_SCHEMAS,
+    **KELLAI_INPUT_SCHEMAS,
     ("conversation_history", "read"): {
         "type": "object",
         "additionalProperties": False,

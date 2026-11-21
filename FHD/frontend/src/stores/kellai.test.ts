@@ -1,0 +1,133 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { deliveryTargetKey, useKellaiStore } from './kellai'
+
+const api = vi.hoisted(() => ({
+  status: vi.fn(), dataStatus: vi.fn(), customers: vi.fn(), channels: vi.fn(), conversations: vi.fn(),
+  latestDraft: vi.fn(), followUpOverview: vi.fn(), generateDraft: vi.fn(), sendMessage: vi.fn(), sendReceipt: vi.fn(),
+  start: vi.fn(), disconnect: vi.fn(),
+}))
+vi.mock('@/api/kellaiBinding', () => ({ default: api }))
+const customer = { customer_id: 7, display_name: '客户甲' }
+const recipient = { customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9', content: '已人工确认' }
+const key = deliveryTargetKey(recipient)
+const allScopes = ['customer_profiles.read', 'customer_conversations.read', 'channels.read', 'messages.send']
+const connection = { state: 'connected', connection: { connection_id: 'conn-a', authorized_scopes: allScopes } }
+const channel = { id: 1, type: 'chatwoot', name: 'Chatwoot', connected: true, enabled: true, connection_id: 'team:chatwoot:primary', capabilities: { send: true, receive: true, contacts: true, sync: true } }
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(next => { resolve = next }); return { promise, resolve } }
+
+describe('Kellai shared account and delivery state', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    sessionStorage.clear()
+    api.status.mockResolvedValue(connection)
+    api.dataStatus.mockResolvedValue({ customer_count: 1, unread_message_count: 0 })
+    api.customers.mockResolvedValue([customer])
+    api.channels.mockResolvedValue([channel])
+    api.conversations.mockResolvedValue([])
+    api.latestDraft.mockResolvedValue(null)
+    api.followUpOverview.mockResolvedValue({ tasks: [], metrics: null })
+    api.sendMessage.mockResolvedValue({ request_id: 'accepted-request', status: 'accepted', persisted: true })
+  })
+
+  it('shares one binding and never reads channel capability under the old read-only grant', async () => {
+    api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, authorized_scopes: allScopes.slice(0, 2) } })
+    const store = useKellaiStore()
+    expect(useKellaiStore()).toBe(store)
+    await store.refreshAll()
+    expect(store.customers).toEqual([customer])
+    expect(store.canSend).toBe(false)
+    expect(api.channels).not.toHaveBeenCalled()
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('retires old reads on an account A → B → A change', async () => {
+    const old = deferred<typeof connection>()
+    api.status.mockReturnValueOnce(old.promise)
+    const store = useKellaiStore()
+    const loading = store.refreshAll()
+    productReadAccountEpoch.value++
+    productReadAccountEpoch.value++
+    api.customers.mockResolvedValue([{ customer_id: 9, display_name: '新账号客户' }])
+    await store.refreshAll()
+    old.resolve(connection)
+    await loading
+    expect(store.customers.map(item => item.customer_id)).toEqual([9])
+    expect(store.busy).toBe(false)
+  })
+
+  it('ignores late conversation and AI draft responses for the previous customer', async () => {
+    const store = useKellaiStore()
+    await store.refreshAll()
+    const late = deferred<Array<{ id: string; customer_id: number; direction: string; content: string }>>()
+    api.conversations.mockReturnValueOnce(late.promise)
+    const previous = store.loadMessages(7)
+    api.conversations.mockResolvedValue([{ id: 'next', customer_id: 8, direction: 'inbound', content: '客户乙消息' }])
+    await store.selectCustomer({ customer_id: 8, display_name: '客户乙' })
+    late.resolve([{ id: 'old', customer_id: 7, direction: 'inbound', content: '客户甲私密消息' }])
+    await previous
+    expect(store.messages.map(item => item.id)).toEqual(['next'])
+    const draft = deferred<unknown>()
+    api.generateDraft.mockReturnValueOnce(draft.promise)
+    const generating = store.generateCopilotDraft()
+    await store.selectCustomer(customer)
+    draft.resolve({ draft_id: 'old-draft', customer_id: 8, reply_draft: '旧客户回复' })
+    await generating
+    expect(store.copilotDraft).toBeNull()
+  })
+
+  it('retains the original request after a lost response and recovers receipts after remount', async () => {
+    api.sendMessage.mockRejectedValueOnce(new Error('连接中断'))
+    const store = useKellaiStore()
+    await store.refreshAll()
+    await store.submitMessage(recipient)
+    const id = api.sendMessage.mock.calls[0][0].client_request_id
+    expect(store.deliveries[key].receipt.status).toBe('unknown')
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).toHaveBeenCalledTimes(1)
+    expect(sessionStorage.getItem('kellai-requests:conn-a')).not.toContain(recipient.content)
+    setActivePinia(createPinia())
+    const recovered = useKellaiStore()
+    await recovered.refreshAll()
+    expect(recovered.deliveries[key].request_id).toBe(id)
+    await recovered.submitMessage(recipient)
+    expect(api.sendMessage).toHaveBeenCalledTimes(1)
+    api.sendReceipt.mockResolvedValue({ request_id: id, status: 'accepted', provider_message_id: 'provider-9', persisted: false })
+    await recovered.queryReceipt(key)
+    expect(api.sendReceipt).toHaveBeenCalledWith(id)
+    expect(recovered.deliveries[key].receipt.status).toBe('accepted')
+    expect(recovered.deliveries[key].receipt.persisted).toBe(false)
+  })
+
+  it('clears channel capabilities on failure and blocks sends to disabled channels', async () => {
+    const store = useKellaiStore()
+    await store.refreshAll()
+    store.channels[0].connected = false
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).not.toHaveBeenCalled()
+    api.channels.mockRejectedValueOnce(new Error('客来来离线'))
+    await store.refreshAll()
+    expect(store.channels).toEqual([])
+    expect(store.channelError).toBe('客来来离线')
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not expose a send completion after the authenticated account changes', async () => {
+    const pending = deferred<{ request_id: string; status: string }>()
+    api.sendMessage.mockReturnValueOnce(pending.promise)
+    const store = useKellaiStore()
+    await store.refreshAll()
+    const sending = store.submitMessage(recipient)
+    await flushPromises()
+    productReadAccountEpoch.value++
+    pending.resolve({ request_id: 'private-receipt', status: 'accepted' })
+    await sending
+    expect(store.deliveries).toEqual({})
+    expect(store.customers).toEqual([])
+  })
+})

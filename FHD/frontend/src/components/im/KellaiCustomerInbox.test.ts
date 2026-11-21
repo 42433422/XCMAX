@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import KellaiCustomerInbox from './KellaiCustomerInbox.vue'
 
 const kellaiMocks = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ const connectedStatus = {
 
 describe('KellaiCustomerInbox', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     Object.values(kellaiMocks).forEach(mock => mock.mockReset())
 
     kellaiMocks.status.mockResolvedValue(connectedStatus)
