@@ -30,6 +30,7 @@ from app.application.employee_runtime.result_builders import (
     build_blocked_result,
     build_cognition_failed_result,
 )
+from app.application.employee_runtime.result_verifier import pending_employee_result
 from app.application.employee_runtime.risk_gate import gate_action_or_block
 from app.domain.employee.memory_scope import MemoryScope
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -45,7 +46,10 @@ class EmployeeAgent:
 
     # ---- 钩子：子阶段在后续 Phase 增强（P1 tool_scope/guard、P2 perception） ----
     def _build_agent_tools(
-        self, manifest: dict[str, Any], config: dict[str, Any]
+        self,
+        manifest: dict[str, Any],
+        config: dict[str, Any],
+        runtime_context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """工具解析失败时拒绝全部工具。"""
         try:
@@ -53,7 +57,7 @@ class EmployeeAgent:
                 resolve_employee_tools,
             )
 
-            return resolve_employee_tools(self.employee_id, manifest, config)
+            return resolve_employee_tools(self.employee_id, manifest, config, runtime_context)
         except RECOVERABLE_ERRORS:
             logger.debug("build agent tools denied", exc_info=True)
             return []
@@ -63,7 +67,7 @@ class EmployeeAgent:
         manifest: dict[str, Any],
         config: dict[str, Any],
         workspace_root: str | None,
-        input_data: dict[str, Any] | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ) -> Any:
         """任一必需授权门初始化失败时拒绝执行。"""
         try:
@@ -77,7 +81,7 @@ class EmployeeAgent:
 
             return compose_gates(
                 build_employee_gate(self.employee_id, manifest, config, workspace_root),
-                build_write_approval_gate(self.employee_id, input_data),
+                build_write_approval_gate(self.employee_id, runtime_context=runtime_context),
             )
         except RECOVERABLE_ERRORS:
             logger.exception("employee authorization initialization failed closed")
@@ -235,6 +239,10 @@ class EmployeeAgent:
         payload = dict(input_data or {})
         payload.pop("workspace_root", None)
         trusted_context = dict(runtime_context or {})
+        if user_id:
+            trusted_context.setdefault("user_id", user_id)
+        if session_id:
+            trusted_context.setdefault("session_id", session_id)
         for key in (
             "invoke_mode",
             "mode",
@@ -245,6 +253,9 @@ class EmployeeAgent:
             "skip_collaboration",
         ):
             payload.pop(key, None)
+        for key in ("invoke_mode", "source", "client_surface"):
+            if trusted_context.get(key):
+                payload[key] = trusted_context[key]
         if trusted_context.get("employee_collaboration_run") is True:
             outputs = trusted_context.get("node_outputs")
             payload.update(
@@ -297,7 +308,7 @@ class EmployeeAgent:
             handler_list = _ex._handler_list(actions_cfg)
             upstream: dict[str, Any] | None = None
 
-            gate = gate_action_or_block(employee_id, manifest, handler_list, payload)
+            gate = gate_action_or_block(employee_id, manifest, handler_list, trusted_context)
             if not gate.get("ok"):
                 from app.application.employee_runtime.metrics import record_employee_run
 
@@ -493,10 +504,12 @@ class EmployeeAgent:
                 return chat_result
 
             agent_tools = (
-                self._build_agent_tools(manifest, config) if "agent" in handler_list else None
+                self._build_agent_tools(manifest, config, trusted_context)
+                if "agent" in handler_list
+                else None
             )
             agent_gate = (
-                self._build_agent_gate(manifest, config, workspace_root, payload)
+                self._build_agent_gate(manifest, config, workspace_root, trusted_context)
                 if "agent" in handler_list
                 else None
             )
@@ -509,9 +522,11 @@ class EmployeeAgent:
                 workspace_root,
                 agent_tools=agent_tools,
                 agent_gate=agent_gate,
+                runtime_context=trusted_context,
             )
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             ok = _ex._handlers_execution_ok(result)
+            pending = pending_employee_result(result)
 
             from app.application.employee_runtime.metrics import record_employee_run
 
@@ -520,8 +535,9 @@ class EmployeeAgent:
                 success=ok,
                 task=task,
                 summary=self._summarize(result),
+                execution_state=str(pending.get("execution_state") or ""),
             )
-            if not ok:
+            if not ok and not pending:
                 try:
                     from app.application.employee_runtime.triggers import (
                         publish_employee_task_failed,
@@ -536,13 +552,14 @@ class EmployeeAgent:
                 except RECOVERABLE_ERRORS:
                     logger.debug("publish task failed event skipped", exc_info=True)
 
-            memory_mgr.remember(
-                task,
-                self._summarize(result),
-                user_id=user_id,
-                session_id=session_id,
-                success=ok,
-            )
+            if not pending:
+                memory_mgr.remember(
+                    task,
+                    self._summarize(result),
+                    user_id=user_id,
+                    session_id=session_id,
+                    success=ok,
+                )
             return {
                 "employee_id": employee_id,
                 "pack": {"id": pack["pack_id"], "version": pack.get("version")},
@@ -555,6 +572,7 @@ class EmployeeAgent:
                 "collaboration_upstream": (
                     upstream if upstream and not upstream.get("skipped") else None
                 ),
+                **pending,
             }
         except RECOVERABLE_ERRORS:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)

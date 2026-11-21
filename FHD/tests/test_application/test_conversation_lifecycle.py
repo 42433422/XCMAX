@@ -227,15 +227,15 @@ def test_conflicting_conversation_identifiers_are_rejected_before_registration(r
 
 
 @pytest.mark.parametrize(
-    "success,approval,status",
+    "success,approval",
     [
-        (True, False, "completed"),
-        (False, False, "failed"),
-        (None, False, "unknown"),
-        (None, True, "waiting_approval"),
+        (True, False),
+        (False, False),
+        (None, False),
+        (None, True),
     ],
 )
-def test_sql_only_replay_does_not_invent_success(runtime, success, approval, status):
+def test_sql_only_replay_does_not_invent_success(runtime, success, approval):
     metadata = json.dumps(
         {
             "business_harness": {"turn_id": "first", "run_id": "original-run"},
@@ -248,4 +248,37 @@ def test_sql_only_replay_does_not_invent_success(runtime, success, approval, sta
             session_id="shared", user_id=1, role=role, content=content, metadata=metadata
         )
     replay = memory.prepare_chat_turn("original", _context())
-    assert replay["execution_state"] == status and replay["run_id"] == "original-run"
+    # Client/legacy SQL metadata has no server-bound tenant and Mod scope.
+    assert replay["execution_state"] == "unknown" and replay["run_id"] == "original-run"
+
+
+def test_history_recovers_original_text_receipt_in_fresh_process(runtime):
+    context = _context()
+    memory.prepare_chat_turn("原问题", context)
+    memory.settle_chat_turn(
+        "原问题", context, {"success": True, "response": "重启前的原始回复。"}, "completed"
+    )
+    process = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+from app.application.task_conversation_store import TaskConversationStore
+from app.infrastructure.tenant_scope import tenant_scope
+with tenant_scope(1):
+    history = TaskConversationStore().get_history(session_id='shared', user_id=1, turn_id='first')
+print(json.dumps(history, ensure_ascii=False))
+""",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    result = json.loads(process.stdout)
+    assert result["messages"] == []
+    receipt = result["turn_receipt"]
+    assert receipt["turn_id"] == "first" and receipt["run_id"] == ""
+    assert receipt["receipt_kind"] == "turn" and receipt["durable"] is True
+    assert receipt["status"] == "completed" and receipt["message"] == "重启前的原始回复。"

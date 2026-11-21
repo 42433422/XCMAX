@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 
 from app.application.tools.workflow_tools.contracts import (
     ExtensionHandler,
-    JsonTool,
     Payload,
     ToolCall,
     ToolHandler,
 )
-from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -37,14 +35,15 @@ class WorkflowToolDispatcher:
     template: ToolHandler
     legacy_employee: ExtensionHandler
     builtins: Mapping[str, ToolHandler]
-    business_db: Callable[[str, Payload], Payload | None]
-    resolve_crud: Callable[[str], JsonTool | None]
     logger: logging.Logger
 
     def execute(self, call: ToolCall) -> str:
         if call.name == self.capability_name:
             return self.capability(call)
-        for label, handler in (("employee", self.employee), ("planner native", self.native)):
+        for label, handler in (
+            ("employee", self.employee),
+            ("planner native", self.native),
+        ):
             result = self._extension(label, handler, call)
             if result is not None:
                 return result
@@ -56,27 +55,38 @@ class WorkflowToolDispatcher:
         builtin = self.builtins.get(call.name)
         if builtin is not None:
             return builtin(call)
-        payload = self.business_db(call.name, call.args)
-        if payload is not None:
-            return json.dumps(payload, ensure_ascii=False, default=json_safe)
-        crud = self.resolve_crud(call.name)
-        if crud is not None:
-            try:
-                return json.dumps(crud(call.args), ensure_ascii=False, default=json_safe)
-            except RECOVERABLE_ERRORS:
-                return json.dumps(
-                    {"success": False, "error": "tool_dispatch_failed"}, ensure_ascii=False
-                )
         return json.dumps(
-            {"success": False, "error": "unknown_tool", "tool": call.name}, ensure_ascii=False
+            {
+                "success": False,
+                "error": "unknown_tool",
+                "error_code": "unknown_tool",
+                "execution_status": "not_started",
+                "execution_state": "not_started",
+                "retryable": False,
+                "tool": call.name,
+            },
+            ensure_ascii=False,
         )
 
     def _extension(self, label: str, handler: ExtensionHandler, call: ToolCall) -> str | None:
         try:
             return handler(call)
         except RECOVERABLE_ERRORS:
-            self.logger.debug("%s tool dispatch skipped", label, exc_info=True)
-            return None
+            # Only an explicit None means that this adapter does not own the
+            # tool. An exception can occur after its external effect committed.
+            self.logger.exception("%s tool execution interrupted", label)
+            return json.dumps(
+                {
+                    "success": False,
+                    "error_code": "tool_execution_interrupted",
+                    "outcome": "unknown",
+                    "execution_state": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
+                    "message": "工具结果待核对，未继续调用其他实现",
+                },
+                ensure_ascii=False,
+            )
 
 
 def _resolve_user_message(runtime_context: dict, params: dict) -> str:
@@ -103,7 +113,9 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
         _normalize_business_db_entity,
         _remember_business_db_target,
     )
-    from app.domain.shared_services.tools_workflow_dispatch import _REGISTERED_WORKFLOW_ROUTERS
+    from app.domain.shared_services.tools_workflow_dispatch import (
+        _REGISTERED_WORKFLOW_ROUTERS,
+    )
 
     params = dict(params or {})
     runtime_context = dict(params.pop("_runtime_context", None) or {})
@@ -159,7 +171,10 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
                 )
         return result
     try:
-        from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
+        from app.mod_sdk.employee_tool_registry import (
+            execute_employee_tool,
+            is_employee_tool,
+        )
 
         if is_employee_tool(tool_id):
             workspace_root = runtime_context.get("workspace_root")
@@ -174,7 +189,14 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
             parsed = json.loads(raw)
             return parsed if isinstance(parsed, dict) else {"success": False, "message": raw}
     except RECOVERABLE_ERRORS:
-        logging.getLogger(__name__).debug(
-            "employee tool direct dispatch skipped tool=%s", tool_id, exc_info=True
+        logging.getLogger(__name__).exception(
+            "employee tool direct receipt unavailable tool=%s", tool_id
         )
+        return {
+            "success": False,
+            "message": "员工执行回执不可用，请核对原任务",
+            "execution_state": "unknown",
+            "retryable": False,
+            "reconciliation_required": True,
+        }
     return {"success": False, "message": f"未注册的工具动作: {tool_id}.{action}"}

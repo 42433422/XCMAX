@@ -103,11 +103,14 @@ def _has_explicit_system_prompt(manifest: dict[str, Any]) -> bool:
     return bool(str(agent.get("system_prompt") or "").strip())
 
 
-def build_employee_directory(include_prompt_only: bool = False) -> list[dict[str, Any]]:
+def build_employee_directory(
+    include_prompt_only: bool = False, *, include_management: bool = False
+) -> list[dict[str, Any]]:
     """返回统一员工目录（已排序）。
 
     ``include_prompt_only`` 仅给展示层使用：没有 direct_python 运行时、但显式
     声明了系统提示词的员工以 ``prompt_only=True`` 纳入目录。
+    ``include_management`` 供随后执行账号授权检查的统一能力目录使用。
     """
     from app.mod_sdk.employee_specialized_tools_employee_map import EMPLOYEE_TOOLS
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
@@ -129,7 +132,9 @@ def build_employee_directory(include_prompt_only: bool = False) -> list[dict[str
     for pack_id, tool in tools.items():
         if not pack_id:
             continue
-        if any(EMPLOYEE_TOOLS.get(candidate) for candidate in candidate_pack_ids(pack_id)):
+        if not include_management and any(
+            EMPLOYEE_TOOLS.get(candidate) for candidate in candidate_pack_ids(pack_id)
+        ):
             continue
         manifest = records.get(pack_id, {}).get("manifest")
         manifest = manifest if isinstance(manifest, dict) else {}

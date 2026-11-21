@@ -8,9 +8,8 @@ import type { AgentContext, AgentMessage, LLMResponse, LLMToolCall } from '../..
 import { api } from '../../api'
 import { getMarketPageKnowledge, getStructuredPageSummary } from '../../content/siteKnowledge'
 
-let _msgId = 0
 function nextId() {
-  return `msg-${Date.now()}-${++_msgId}`
+  return `msg-${crypto.randomUUID()}`
 }
 
 function makeUserMsg(content: string): AgentMessage {
@@ -75,6 +74,7 @@ export function useAgentEngine() {
       await callLLMBrain(context, {
         withScreenshot: opts?.withScreenshot ?? false,
         imageDataUrl: uploaded || null,
+        requestId: [...agentStore.messages].reverse().find((message) => message.role === 'user')?.id || nextId(),
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -86,7 +86,7 @@ export function useAgentEngine() {
     }
   }
 
-  async function callLLMBrain(context: AgentContext, opts: { withScreenshot: boolean; imageDataUrl?: string | null }) {
+  async function callLLMBrain(context: AgentContext, opts: { withScreenshot: boolean; imageDataUrl?: string | null; requestId: string }) {
     let screenshotDataUrl: string | null =
       typeof opts.imageDataUrl === 'string' && opts.imageDataUrl.trim() ? opts.imageDataUrl.trim() : null
     if (!screenshotDataUrl && opts.withScreenshot) {
@@ -128,6 +128,7 @@ export function useAgentEngine() {
     try {
       response = (await api.agentButlerChat({
         messages,
+        request_id: opts.requestId,
         conversation_id: agentStore.currentConversationId,
         page_context: context.pageSummary,
       })) as LLMResponse

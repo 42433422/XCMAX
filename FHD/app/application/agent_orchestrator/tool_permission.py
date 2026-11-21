@@ -42,9 +42,17 @@ _SERVER_FIELDS = frozenset(
         "user_id",
         "employee_id",
         "employee_tool_allowlist",
+        "mutation_policy",
+        "service_source",
+        "template_base_dir",
+        "route_module",
+        "_bulk_preview_scope",
+        "_bulk_preview_scopes",
         "node_outputs",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
+        "_tool_approval_scope",
         "task_id",
         "run_id",
         "agent_run_id",
@@ -63,10 +71,15 @@ _UNTRUSTED_CONTROL = frozenset(
         "permissions",
         "system_prompt",
         "grant_tools",
+        "service_source",
+        "template_base_dir",
+        "route_module",
         "employee_tool_allowlist",
         "node_outputs",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
+        "_tool_approval_scope",
         "_approval_agent_run_required",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
@@ -82,6 +95,7 @@ _FINGERPRINT_SKIP = frozenset(
         "mod_id",
         "active_mod_id",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
         "local_user_id",
         "authenticated_local_user_id",
@@ -211,6 +225,39 @@ def actor_tool_denial(
 ) -> dict[str, Any] | None:
     """Deny when a sealed actor, tenant owner, or employee allowlist does not grant this tool."""
     ctx = dict(context or {})
+    if "_credential_authorization" in ctx:
+        from app.application.aiopen.service import api_key_permits_execution
+
+        if not api_key_permits_execution(ctx, tool_id, action):
+            return _denial(
+                "tool_permission_denied",
+                "调用凭据已撤销、过期或未授权此能力",
+                context=ctx,
+                tool_id=tool_id,
+                action=action,
+                reason="credential_scope_denied",
+            )
+    receipt = ctx.get("_tool_approval_scope")
+    if isinstance(receipt, dict) and (
+        receipt.get("tool_id"),
+        receipt.get("action"),
+    ) == (tool_id, action):
+        from app.application.agent_orchestrator.approval_grant import (
+            execution_scope_claims,
+        )
+
+        if any(
+            receipt.get(key) != value
+            for key, value in execution_scope_claims(ctx, tool_id, action).items()
+        ):
+            return _denial(
+                "approval_scope_changed",
+                "审批后的身份范围或工具契约已变化，请重新审批",
+                context=ctx,
+                tool_id=tool_id,
+                action=action,
+                reason="approval_scope_changed",
+            )
     tenant_denial = _tenant_tool_denial(tool_id, action, ctx)
     if tenant_denial is not None:
         return tenant_denial
@@ -243,6 +290,53 @@ def actor_tool_denial(
 
     try:
         actor = _bound_actor(ctx)
+        if tool_id == "business_db" and action in {"read", "write"}:
+            tenant = getattr(actor, "tenant_id", None)
+            if type(tenant) is not int or tenant <= 0:
+                return _denial(
+                    "tool_permission_denied",
+                    "业务读写需要已认证企业归属",
+                    context=ctx,
+                    tool_id=tool_id,
+                    action=action,
+                    reason="owned_tenant_required",
+                )
+            if action == "read" and (params or {}).get("entity") == "products":
+                from fastapi import HTTPException
+
+                from app.infrastructure.auth.business_scope_gate import (
+                    check_owned_business_permission,
+                )
+
+                try:
+                    check_owned_business_permission(actor, "product.view")
+                except HTTPException as exc:
+                    return _denial(
+                        "tool_permission_denied",
+                        str(exc.detail),
+                        context=ctx,
+                        tool_id=tool_id,
+                        action=action,
+                        reason="owned_business_permission_denied",
+                    )
+        if spec.policy.get("data_scope") == "legacy_global":
+            from fastapi import HTTPException
+
+            from app.infrastructure.auth.business_scope_gate import (
+                check_legacy_business_user_permission,
+            )
+
+            try:
+                check_legacy_business_user_permission(actor, spec.permission)
+            except HTTPException as exc:
+                return _denial(
+                    "tool_permission_denied",
+                    str(exc.detail),
+                    context=ctx,
+                    tool_id=tool_id,
+                    action=action,
+                    reason="legacy_store_not_scoped",
+                )
         if tool_id == "memory_v2":
             aliases = {str(actor.id)}
             if not str(actor.username).isdecimal():
@@ -407,11 +501,32 @@ def approval_execution_denial(
     )
 
 
-def _fingerprint(params: dict[str, Any]) -> str:
+def _fingerprint(params: dict[str, Any], context: dict[str, Any] | None = None) -> str:
     from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 
+    ctx = context if context is not None else params.get("_runtime_context")
+    ctx = ctx if isinstance(ctx, dict) else {}
+    actor = ctx.get("_actor_authorization")
+    actor = actor if isinstance(actor, dict) else {}
+    mod = ctx.get("_mod_authorization")
+    mod = mod if isinstance(mod, dict) else {}
     visible = {key: value for key, value in params.items() if key not in _FINGERPRINT_SKIP}
-    return canonical_hash(visible)
+    # Keep existing durable keys and transaction receipts addressable. Identity
+    # is immutable within a key; session renewal does not create a new effect.
+    return "scope-v2:" + canonical_hash(
+        [
+            str(ctx.get("tenant_id") or ""),
+            str(actor.get("user_id") or ctx.get("actor_id") or ctx.get("user_id") or ""),
+            str(
+                mod.get("mod_id")
+                or actor.get("mod_id")
+                or ctx.get("mod_id")
+                or ctx.get("active_mod_id")
+                or ""
+            ),
+            visible,
+        ]
+    )
 
 
 def idempotency_scope_key(
@@ -535,10 +650,15 @@ def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
 
 
 def _retained_result(output: dict[str, Any]) -> dict[str, Any] | None:
+    from app.application.agent_orchestrator.result_verification import pending_execution_receipt
     from app.application.employee_runtime.result_verifier import (
         execution_result_requires_reconciliation,
     )
 
+    if pending_execution_receipt(output):
+        # Acceptance pins the original claim just like uncertain effects, while
+        # retaining the provider's known state for independent readback later.
+        return {**output, "success": False, "retryable": False}
     if (
         execution_result_requires_reconciliation(output)
         or str(output.get("execution_status") or "").lower()
@@ -909,7 +1029,7 @@ def _begin_idempotent_replay(
     if key.endswith(":"):
         return "", None
     try:
-        fingerprint = _fingerprint(params)
+        fingerprint = _fingerprint(params, context)
     except RECOVERABLE_ERRORS:
         return key, _denial(
             "idempotency_conflict",
@@ -933,10 +1053,25 @@ def _begin_idempotent_replay(
         _IDEMPOTENCY[key] = record
         _LIVE_OWNERS.add(owner)
         return key, None
+    if not str(current.get("fingerprint") or "").startswith("scope-v2:"):
+        # Old records cannot establish which actor/Mod owned the effect. Neither
+        # disclose their result nor create a fresh claim that could repeat it.
+        return key, {
+            **_denial(
+                "idempotency_scope_unverified",
+                "原调用缺少身份范围回执，必须核验原结果，不可重复执行",
+                context=context,
+                tool_id=tool_id,
+                action=action,
+                reason="idempotency_scope_unverified",
+            ),
+            "outcome": "unknown",
+            "reconciliation_required": True,
+        }
     if current.get("fingerprint") != fingerprint:
         return key, _denial(
             "idempotency_conflict",
-            "相同幂等键不能改用新的执行参数",
+            "相同幂等键不能改用新的执行身份或参数",
             context=context,
             tool_id=tool_id,
             action=action,
@@ -1213,7 +1348,12 @@ def handoff_runtime_context(
         "parent_run_id": parent_run_id,
         **{
             key: parent[key]
-            for key in ("workspace_id", "workspace_path", "root_run_id")
+            for key in (
+                "workspace_id",
+                "workspace_path",
+                "root_run_id",
+                "_credential_authorization",
+            )
             if key in parent
         },
         "_actor_authorization": parent.get("_actor_authorization"),

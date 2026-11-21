@@ -1,185 +1,31 @@
-"""Execute governed dataset actions through the existing Agent runtime."""
+"""Dataset HTTP projection of the shared capability execution contract."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any, cast
-from uuid import uuid4
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from app.application.knowledge.protocols import AgentRuntime, RecallMerger
-from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, normalize_workflow_risk
+from app.application.knowledge.protocols import RecallMerger
 from app.fastapi_routes.knowledge.serialization import _public_dataset_payload
-
-
-def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", False) and (not output.get("message")):
-        output["message"] = getattr(run, "error", False)
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return cast("dict[str, Any]", _public_dataset_payload(output))
-
-
-def _dataset_agent_user_id(request: Request, params: dict[str, Any]) -> str:
-    access_context = (
-        params.get("access_context") if isinstance(params.get("access_context"), dict) else {}
-    )
-    if not isinstance(access_context, dict):
-        access_context = {}
-    return str(access_context.get("actor_id") or "dataset-rag-route").strip()
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
 
 class DatasetAgent:
-    """Only the runtime, principal projection and result adapters are dependencies."""
-
-    def __init__(
-        self,
-        *,
-        runtime: Callable[[], AgentRuntime],
-        registry: Callable[[], dict[str, Any]],
-        access_payload: Callable[[Request], dict[str, Any]],
-        actor: Callable[[Request, dict[str, Any]], str],
-        output: Callable[[Any, str], dict[str, Any]],
-        recall: RecallMerger,
-    ) -> None:
-        self._runtime = runtime
-        self._registry = registry
-        self._access_payload = access_payload
-        self._actor = actor
-        self._output = output
+    def __init__(self, *, recall: RecallMerger) -> None:
         self._recall = recall
 
     def run(
         self, *, request: Request, action: str, params: dict[str, Any], route_path: str
     ) -> JSONResponse:
-        data = dict(params or {})
-        access_payload = self._access_payload(request)
-        if access_payload:
-            data["access_context"] = access_payload
-            if access_payload.get("tenant_id"):
-                if not str(data.get("tenant_id") or "").strip():
-                    data["tenant_id"] = access_payload["tenant_id"]
-        registry = self._registry()
-        action_meta = dict((registry.get("dataset_rag") or {}).get("actions") or {}).get(action)
-        if not isinstance(action_meta, dict):
-            return JSONResponse(
-                {"success": False, "message": f"未注册的 Dataset/RAG 动作: {action}"},
-                status_code=400,
-            )
-        node_id = f"dataset_rag_{action}"
-        user_id = self._actor(request, data)
-        request_key = str(request.headers.get("Idempotency-Key") or "").strip()
-        claim_key = ""
-        if request_key and action not in {"query", "multi_query", "diff_versions"}:
-            if len(request_key) > 200:
-                return JSONResponse({"success": False, "message": "幂等键过长"}, status_code=400)
-            from app.application.agent_orchestrator.tool_permission import begin_idempotent_replay
-
-            claim_key, replay = begin_idempotent_replay(
-                {
-                    "tenant_id": str(access_payload.get("tenant_id") or ""),
-                    "task_id": f"knowledge:{user_id}",
-                },
-                "knowledge_http",
-                action,
-                {**data, "idempotency_key": request_key},
-            )
-            if replay is not None:
-                status = (
-                    int(replay.pop("_knowledge_http_status", 200)) if replay.get("success") else 409
-                )
-                return JSONResponse(_public_dataset_payload(replay), status_code=status)
-        plan = PlanGraph(
-            plan_id=f"{node_id}:{uuid4().hex}",
-            intent=node_id,
-            todo_steps=[f"通过 AgentOrchestrator 执行 dataset_rag.{action}"],
-            nodes=[
-                WorkflowNode(
-                    node_id=node_id,
-                    tool_id="dataset_rag",
-                    action=action,
-                    params=data,
-                    risk=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-                    idempotent=bool(action_meta.get("idempotent", False)),
-                    description=f"Execute dataset_rag.{action} through the unified Agent runtime.",
-                )
-            ],
-            risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-            metadata={"source": "dataset_rag_route", "route": route_path},
+        payload, status = run_tools_execute_agent(
+            request=request,
+            body={"tool_id": "dataset_rag", "action": action, "params": params},
+            route_path=route_path,
         )
-        runtime_context = {
-            "source": "dataset_rag_route",
-            "route": route_path,
-            "request_path": str(request.url.path),
-            "user_id": user_id,
-            "route_confirmed": True,
-        }
-        if access_payload:
-            runtime_context["dataset_access_context"] = access_payload
-            if access_payload.get("tenant_id"):
-                runtime_context["dataset_tenant_id"] = access_payload["tenant_id"]
-            runtime_context["dataset_permissions"] = list(access_payload.get("permissions") or [])
-            runtime_context["dataset_admin"] = bool(access_payload.get("is_admin"))
-        finished = False
-        try:
-            orchestrator = self._runtime()
-            run = orchestrator.start_run_from_plan(
-                user_id=user_id,
-                message=str(data.get("message") or f"Dataset/RAG {action}"),
-                plan=plan,
-                runtime_context=runtime_context,
-            )
-            if run.status in {"waiting_user", "running"}:
-                continued = orchestrator.continue_run(
-                    run.run_id,
-                    approved_by=user_id or "dataset-rag-route",
-                    approved_step_id=node_id,
-                    runtime_context=runtime_context,
-                )
-                if continued is not None:
-                    run = continued
-            payload = self._output(run, node_id)
-            if action == "query":
-                payload = self._recall(payload, request=request, params=data)
-            finished = True
-        finally:
-            if not finished and claim_key:
-                from app.application.agent_orchestrator.tool_permission import (
-                    finish_idempotent_replay,
-                )
-
-                finish_idempotent_replay(
-                    claim_key,
-                    {"success": False, "outcome": "unknown", "reconciliation_required": True},
-                )
-        if run.status in {"waiting_user", "blocked"}:
-            status_code = 202
-        elif payload.get("error_code") == "dataset_permission_denied":
-            status_code = 403
-        elif payload.get("error_code") == "tool_exception":
-            status_code = 500
-        else:
-            status_code = 200
-        if claim_key:
-            from app.application.agent_orchestrator.tool_permission import finish_idempotent_replay
-
-            stored = {**payload, "_knowledge_http_status": status_code}
-            if status_code == 202 and payload.get("success") is not True:
-                stored.update(outcome="unknown", reconciliation_required=True)
-            finish_idempotent_replay(claim_key, stored)
-        return JSONResponse(payload, status_code=status_code)
+        if action == "query" and payload.get("success") is True:
+            payload = self._recall(payload, request=request, params=params)
+        return JSONResponse(
+            cast("dict[str, Any]", _public_dataset_payload(payload)), status_code=status
+        )

@@ -55,7 +55,7 @@ export function requiresTurnReconciliation(value: unknown): boolean {
     if (!item || typeof item !== 'object' || seen.has(item)) continue
     seen.add(item)
     const row = asRecord(item)
-    if (row.requires_reconciliation || row.reconciliation_required ||
+    if (row.requires_reconciliation || row.reconciliation_required || row.outcome_unknown === true ||
       ['execution_outcome', 'outcome', 'execution_state', 'status'].some(key => ['unknown', 'outcome_unknown'].includes(String(row[key] || '').toLowerCase()))) return true
     if (depth >= 3) continue
     for (const key of ['data', 'payload', 'result']) pending.push({ value: row[key], depth: depth + 1 })
@@ -66,6 +66,19 @@ export function requiresTurnReconciliation(value: unknown): boolean {
     }
   }
   return false
+}
+
+export function plannerExecutionState(value: unknown): string {
+  if (requiresTurnReconciliation(value)) return 'unknown'
+  const row = asRecord(value)
+  const data = asRecord(row.data)
+  if (row.requires_token || data.requires_token) return 'waiting_auth'
+  return String(row.execution_state || data.execution_state || asRecord(data.data).agent_status || '').trim().toLowerCase()
+}
+
+export function isUnfinishedPlannerResponse(value: unknown): boolean {
+  const state = plannerExecutionState(value)
+  return Boolean(state && !['completed', 'failed', 'cancelled', 'interrupted', 'rejected'].includes(state))
 }
 
 export type XcagiChatWindow = Window & {

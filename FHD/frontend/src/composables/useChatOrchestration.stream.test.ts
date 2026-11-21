@@ -8,7 +8,6 @@ import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { readDroppedRoundOutcome } from '@/utils/droppedRoundPresentation'
 
 const {
-  handleChatRequiresToken,
   applyPlainTextToMessageIndex,
   pushStreamingAiShell,
   saveMessage,
@@ -26,7 +25,6 @@ const {
   queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, continueRun, cancelRun, streamMode, modState,
   approvalGetMyRequests, approvalApprove,
 } = vi.hoisted(() => ({
-  handleChatRequiresToken: vi.fn(),
   applyPlainTextToMessageIndex: vi.fn(),
   pushStreamingAiShell: vi.fn(() => 0),
   saveMessage: vi.fn().mockResolvedValue(undefined),
@@ -139,13 +137,6 @@ vi.mock('./useChatWorkflowPanel', () => ({
     registerWorkflowPanelWatchers: vi.fn(),
     mountWorkflowPanel: vi.fn(),
     unmountWorkflowPanel: vi.fn(),
-  }),
-}))
-vi.mock('./useChatDbTokenGate', () => ({
-  useChatDbTokenGate: () => ({
-    handleChatRequiresToken,
-    onDbWriteUnlockedForChatRetry: vi.fn(),
-    resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
 vi.mock('./useChatExcelContext', () => ({
@@ -603,8 +594,9 @@ describe('useChatOrchestration stream', () => {
     })
     const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('发起支付')
-    expect(handleChatRequiresToken).toHaveBeenCalled()
-    expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '\n[需要授权：支付授权]\n')
+    expect(attachBusinessResultToLastAiMessage).not.toHaveBeenCalled()
+    expect(continueRun).not.toHaveBeenCalled()
   })
 
   it('keeps the stream open while execution progress continues', async () => {
@@ -657,7 +649,7 @@ describe('useChatOrchestration stream', () => {
     } })))
     const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('等待写入授权')
-    expect(handleChatRequiresToken).toHaveBeenCalledWith('DB_WRITE', '写入授权', ['等待写入授权'])
+    expect(continueRun).not.toHaveBeenCalled()
     expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '\n[需要授权：写入授权]\n')
     expect(attachApprovalCardToLastAiMessage).not.toHaveBeenCalled()
     expect(attachBusinessResultToLastAiMessage).not.toHaveBeenCalled()
@@ -879,7 +871,6 @@ describe('useChatOrchestration stream', () => {
     await useChatOrchestration({ sessionId: ref('s') }).sendMessage('hello')
     expect(applyPlainTextToMessageIndex).not.toHaveBeenCalled()
     expect(queueVoice).not.toHaveBeenCalled()
-    expect(handleChatRequiresToken).not.toHaveBeenCalled()
     expect(syncAgentRunFromPayload).not.toHaveBeenCalled()
     expect(sendChatStream.mock.calls[0][1].signal.aborted).toBe(true)
   })
@@ -904,7 +895,6 @@ describe('useChatOrchestration stream', () => {
       expect(saveMessage).toHaveBeenCalledWith('ai', 'original private answer', 'original')
     } else expect(saveMessage).not.toHaveBeenCalled()
     expect(addMessage).toHaveBeenCalledTimes(1)
-    expect(handleChatRequiresToken).not.toHaveBeenCalled()
     expect(syncAgentRunFromPayload).not.toHaveBeenCalled()
   })
 
@@ -954,7 +944,6 @@ describe('useChatOrchestration stream', () => {
     finishes[0]()
     await old
     expect(applyPlainTextToMessageIndex).not.toHaveBeenCalled()
-    expect(handleChatRequiresToken).not.toHaveBeenCalled()
     expect(queueVoice).not.toHaveBeenCalled()
     expect(api.isLoading.value).toBe(action === 'correct')
     expect(lastChatModelRoute('same-session')).toBeNull()
@@ -1050,7 +1039,6 @@ describe('useChatOrchestration stream', () => {
     finish({ success: true, response: 'late answer', requires_token: true, token_name: 'DB_WRITE' })
     await sending
     expect(addMessage.mock.calls.some(call => call[0] === 'late answer')).toBe(false)
-    expect(handleChatRequiresToken).not.toHaveBeenCalled()
     expect(syncAgentRunFromPayload).not.toHaveBeenCalled()
   })
 

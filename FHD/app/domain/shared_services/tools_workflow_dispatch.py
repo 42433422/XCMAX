@@ -26,7 +26,6 @@ from app.domain.shared_services.tools_workflow_excel_ocr import (
     _registered_router_excel_analysis,
     _registered_router_excel_vector_index,
     _registered_router_generate_office_document,
-    _registered_router_import_excel_to_database,
 )
 from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
     _registered_router_excel_import,
@@ -79,6 +78,24 @@ def _registered_router_conversation_history(action, params, runtime_context, pro
     return read_conversation_history(action, params, runtime_context)
 
 
+def _registered_router_openclaw(action, params, runtime_context, profile, user_message):
+    from app.application.aiopen.service import dispatch_openclaw_chat
+
+    return dispatch_openclaw_chat(params, runtime_context)
+
+
+def _registered_router_tasks(action, params, runtime_context, profile, user_message):
+    from app.application.tools.tasks import query_tasks
+
+    return query_tasks(action, params, runtime_context)
+
+
+def _registered_router_kellai(action, params, runtime_context, profile, user_message):
+    from app.application.tools.kellai import execute_kellai
+
+    return execute_kellai(action, params, runtime_context)
+
+
 class _WorkflowRouterMap(dict):
     _hidden_keys = {"employee", "business_db"}
 
@@ -98,6 +115,7 @@ class _WorkflowRouterMap(dict):
 
 _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMap(
     {
+        "kellai": _registered_router_kellai,
         "customers": _registered_router_customers,
         "products": _registered_router_products,
         "materials": _registered_router_materials,
@@ -128,8 +146,9 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "dataset_rag": _registered_router_dataset_rag,
         "memory_v2": _registered_router_memory_v2,
         "conversation_history": _registered_router_conversation_history,
+        "openclaw": _registered_router_openclaw,
+        "tasks": _registered_router_tasks,
         "excel_analysis": _registered_router_excel_analysis,
-        "import_excel_to_database": _registered_router_import_excel_to_database,
         "elt_import": _registered_router_elt_import,
         "generate_office_document": _registered_router_generate_office_document,
         "excel_vector_index": _registered_router_excel_vector_index,

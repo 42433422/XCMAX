@@ -141,3 +141,50 @@ def _attach_run_id(payload: dict[str, Any], run_id: str) -> dict[str, Any]:
 _coerce_trace_int = _scalars.coerce_int
 
 _coerce_trace_float = _scalars.coerce_float
+
+
+def agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    for step in getattr(run, "steps", []) or []:
+        if str(getattr(step, "node_id", "")) == node_id:
+            from app.application.agent_orchestrator.result_verification import verified_step_output
+            from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+
+            if isinstance(run, AgentRun) and isinstance(step, AgentStep):
+                output = verified_step_output(run, step)
+            elif not output:
+                output = dict(getattr(step, "output", {}) or {})
+            break
+    if not output:
+        output = {
+            "success": False,
+            "error_code": "execution_receipt_missing",
+            "message": "原执行回执缺失，不能根据任务状态推定业务成功",
+        }
+    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
+        output["message"] = getattr(run, "error", False)
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    status = str(getattr(run, "status", "") or "")
+    output["agent_status"] = status
+    metadata = getattr(run, "metadata", {})
+    metadata = metadata if isinstance(metadata, dict) else {}
+    context = metadata.get("task_context") or {}
+    runtime = metadata.get("runtime_context") or {}
+    output["task_id"] = str(context.get("task_id") or runtime.get("task_id") or run_id)
+    output["root_run_id"] = str(context.get("root_run_id") or run_id)
+    for key in ("turn_id", "client_request_id"):
+        if value := context.get(key) or runtime.get(key):
+            output[key] = str(value)
+    verification = metadata.get("verification")
+    if isinstance(verification, dict):
+        from copy import deepcopy
+
+        output["verification"] = deepcopy(verification)
+    if status != "completed" or execution_result_error(output):
+        output["success"] = False
+    return output

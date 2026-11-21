@@ -16,6 +16,70 @@ CONTEXT = {"tenant_id": "421", "task_id": "same-task", "user_id": "421"}
 PARAMS = {"idempotency_key": "same-call", "name": "fixture"}
 
 
+@pytest.mark.parametrize("field,value", [("user_id", "other-user"), ("mod_id", "other-mod")])
+def test_replay_cannot_disclose_another_actor_or_mod_result(claims, field, value):
+    context = {**CONTEXT, "mod_id": "mod-a"}
+    key, replay = permissions.begin_idempotent_replay(context, "products", "create", PARAMS)
+    assert replay is None
+    permissions.finish_idempotent_replay(
+        key, {"success": True, "data": {"private": "original-scope"}}
+    )
+    permissions.drop_process_idempotency_memory()
+    changed_key, denied = permissions.begin_idempotent_replay(
+        {**context, field: value},
+        "products",
+        "create",
+        PARAMS,
+    )
+    assert changed_key == key
+    assert denied["error_code"] == "idempotency_conflict" and denied["retryable"] is False
+    assert "original-scope" not in str(denied)
+    assert (
+        permissions.begin_idempotent_replay(context, "products", "create", PARAMS)[1]["success"]
+        is True
+    )
+
+
+def test_same_actor_and_mod_session_renewal_replays_original_effect(claims):
+    context = {
+        **CONTEXT,
+        "_actor_authorization": {
+            "user_id": "421",
+            "mod_id": "mod-a",
+            "session_row_id": 1,
+        },
+    }
+    key, replay = permissions.begin_idempotent_replay(context, "products", "create", PARAMS)
+    assert replay is None
+    permissions.finish_idempotent_replay(key, {"success": True, "data": {"id": 7}})
+    context["_actor_authorization"]["session_row_id"] = 2
+    assert permissions.begin_idempotent_replay(context, "products", "create", PARAMS)[1] == {
+        "success": True,
+        "data": {"id": 7},
+    }
+
+
+@pytest.mark.parametrize(
+    "output", [{"success": True, "data": {"private": "legacy"}}, {"outcome": "unknown"}]
+)
+def test_legacy_unbound_identity_neither_replays_nor_reclaims_effect(claims, output):
+    key, replay = _begin()
+    assert replay is None
+    permissions.finish_idempotent_replay(key, output)
+    with sqlite3.connect(claims) as conn:
+        conn.execute(
+            "update tool_idempotency set fingerprint = ? where scope_key = ?",
+            ("legacy-params-only", key),
+        )
+    permissions.drop_process_idempotency_memory()
+    returned_key, denied = _begin()
+    assert returned_key == key and denied["error_code"] == "idempotency_scope_unverified"
+    assert denied["outcome"] == "unknown" and denied["reconciliation_required"] is True
+    assert denied["retryable"] is False and "legacy" not in str(denied)
+    with sqlite3.connect(claims) as conn:
+        assert conn.execute("select count(*) from tool_idempotency").fetchone()[0] == 1
+
+
 def _begin():
     return permissions.begin_idempotent_replay(CONTEXT, "products", "create", PARAMS)
 
@@ -180,7 +244,7 @@ def test_fresh_process_retains_a_crashed_workers_committed_effect(claims):
         {"status": "accepted"},
     ],
 )
-def test_unknown_receipt_is_retained_across_restart(claims, output):
+def test_unsettled_receipt_is_retained_across_restart(claims, output):
     key, replay = _begin()
     assert replay is None
     permissions.finish_idempotent_replay(key, output)
@@ -188,8 +252,12 @@ def test_unknown_receipt_is_retained_across_restart(claims, output):
     assert permissions.recover_idempotent_claims()["retained_unknown"] == 1
     _key, replay = _begin()
     assert replay["success"] is False
-    assert replay["outcome"] == "unknown" and replay["retryable"] is False
-    assert replay["reconciliation_required"] is True
+    assert replay["retryable"] is False
+    if output.get("status") == "accepted":
+        assert replay == {**output, "success": False, "retryable": False}
+    else:
+        assert replay["outcome"] == "unknown"
+        assert replay["reconciliation_required"] is True
     _key, conflict = permissions.begin_idempotent_replay(
         CONTEXT, "products", "create", {**PARAMS, "name": "changed"}
     )
@@ -265,3 +333,68 @@ def test_executor_keeps_ambiguous_dispatch_non_replayable(claims, monkeypatch, m
     assert replay["success"] is False and replay["outcome"] == "unknown"
     assert replay["retryable"] is False
     assert calls == [mode]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        408,
+        429,
+        500,
+        503,
+        "hidden_io",
+        "nested_unknown",
+        "generic_false",
+        "spoofed_not_started",
+    ],
+)
+def test_valid_receipt_cannot_release_or_complete_an_uncertain_effect(claims, monkeypatch, failure):
+    import time
+
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    calls = []
+    with invocation_deadline(time.monotonic() + 30) as budget:
+
+        def dispatch(*_args, **_kwargs):
+            calls.append(failure)
+            # This result satisfies the real ToolSpec, so output validation cannot
+            # accidentally turn the regression into an unrelated schema failure.
+            result = {
+                "success": failure in {"hidden_io", "nested_unknown"},
+                "file_name": "fixture.docx",
+                "download_url": "/files/fixture.docx",
+                "artifacts": [],
+            }
+            if isinstance(failure, int):
+                result["status_code"] = failure
+            elif failure == "hidden_io":
+                budget.uncertain.append({"kind": "http_transport_error", "method": "POST"})
+            elif failure == "nested_unknown":
+                result["result"] = {"outputs": [{"outcome": "unknown"}]}
+            elif failure == "spoofed_not_started":
+                result.update(execution_status="not_started", retryable=True)
+            with sqlite3.connect(claims) as conn:
+                conn.execute("insert into effects default values")
+            return result
+
+        monkeypatch.setattr(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            dispatch,
+        )
+        executor = AgentToolExecutor()
+        step = AgentStep(
+            node_id="write",
+            tool_id="generate_office_document",
+            action="execute",
+            params={"user_request": "fixture export", "output_format": "docx"},
+        )
+        context = {**CONTEXT, "idempotency_key": "valid-uncertain-dispatch"}
+        result = executor.execute(step, runtime_context=context)
+    assert result["success"] is False and result["outcome"] == "unknown"
+    assert result.get("error_code") != "output_schema_validation_failed"
+    permissions.drop_process_idempotency_memory()
+    replay = executor.execute(step, runtime_context=context)
+    assert replay["success"] is False and replay["outcome"] == "unknown"
+    assert replay["retryable"] is False and replay["reconciliation_required"]
+    assert calls == [failure] and _effect_count(claims) == 1

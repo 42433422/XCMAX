@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,17 @@ from fastapi.testclient import TestClient
 from app.fastapi_routes.domains.system import routes
 from app.fastapi_routes.tools_execute import router as tools_execute_router
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+def _assert_pending(response):
+    assert response.status_code == 202, response.text
+    receipt = response.json()
+    assert receipt["success"] is False
+    assert receipt["execution_state"] == "waiting_approval", receipt
+    assert receipt["pending_approval"] is True
+    assert receipt["run_id"] == receipt["agent_run_id"]
+    assert receipt["task_id"] and receipt["approval_request_id"]
+    assert receipt.get("outcome") != "unknown"
 
 
 def _assert_shared_error_0(self, client, _shared_literal_0, _shared_literal_1):
@@ -46,13 +58,16 @@ def client(trusted_actor, local_tools, monkeypatch, tmp_path) -> TestClient:
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("XCAGI_DESKTOP_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repo,
     )
     app = FastAPI()
     app.include_router(routes.router)
     app.include_router(tools_execute_router)
     return TestClient(
-        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+        app,
+        raise_server_exceptions=False,
+        headers={**trusted_actor(role="admin").headers, "Idempotency-Key": uuid.uuid4().hex},
     )
 
 
@@ -80,7 +95,8 @@ class TestSystemInfoGet:
         mock_svc = MagicMock()
         mock_svc.get_system_info.return_value = {"version": "10.0.0"}
         with patch(
-            "app.application.facades.session_facade.get_system_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_system_service",
+            return_value=mock_svc,
         ):
             r = client.get("/api/system/info")
             assert r.json()["success"] is True
@@ -104,7 +120,8 @@ class TestSystemPrinter:
         mock_svc = MagicMock()
         mock_svc.get_printer_config.return_value = {"default": "HP"}
         with patch(
-            "app.application.facades.session_facade.get_system_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_system_service",
+            return_value=mock_svc,
         ):
             r = client.get("/api/system/printer")
             assert r.json()["success"] is True
@@ -129,20 +146,25 @@ class TestSystemPrinter:
         mock_svc = MagicMock()
         mock_svc.set_default_printer.return_value = {"success": True}
         with patch(
-            "app.application.facades.session_facade.get_system_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_system_service",
+            return_value=mock_svc,
         ):
             r = client.post("/api/system/printer", json={"printer_name": "HP"})
-            assert r.status_code == 200
-        mock_svc.set_default_printer.assert_called_once_with("HP")
+            _assert_pending(r)
+        mock_svc.set_default_printer.assert_not_called()
 
     def test_post_fail(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
-        mock_svc.set_default_printer.return_value = {"success": False, "message": "error"}
+        mock_svc.set_default_printer.return_value = {
+            "success": False,
+            "message": "error",
+        }
         with patch(
-            "app.application.facades.session_facade.get_system_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_system_service",
+            return_value=mock_svc,
         ):
             r = client.post("/api/system/printer", json={"printer_name": "HP"})
-            assert r.status_code == 500
+            _assert_pending(r)
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +177,8 @@ class TestSystemStartup:
         mock_svc = MagicMock()
         mock_svc.get_startup_config.return_value = {"enabled": False}
         with patch(
-            "app.application.facades.session_facade.get_system_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_system_service",
+            return_value=mock_svc,
         ):
             r = client.get("/api/system/startup")
             assert r.json()["success"] is True
@@ -172,21 +195,23 @@ class TestSystemStartup:
         mock_svc = MagicMock()
         mock_svc.enable_startup.return_value = {"success": True}
         with patch(
-            "app.application.facades.session_facade.get_system_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_system_service",
+            return_value=mock_svc,
         ):
             r = client.post("/api/system/startup")
-            assert r.status_code == 200
-        mock_svc.enable_startup.assert_called_once_with()
+            _assert_pending(r)
+        mock_svc.enable_startup.assert_not_called()
 
     def test_delete_success(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
         mock_svc.disable_startup.return_value = {"success": True}
         with patch(
-            "app.application.facades.session_facade.get_system_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_system_service",
+            return_value=mock_svc,
         ):
             r = client.delete("/api/system/startup")
-            assert r.status_code == 200
-        mock_svc.disable_startup.assert_called_once_with()
+            _assert_pending(r)
+        mock_svc.disable_startup.assert_not_called()
 
     def test_delete_error(self, client: TestClient):
         with patch(
@@ -194,7 +219,7 @@ class TestSystemStartup:
             side_effect=RuntimeError("fail"),
         ):
             r = client.delete("/api/system/startup")
-            assert r.status_code == 500
+            _assert_pending(r)
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +232,8 @@ class TestDatabaseBackups:
         mock_svc = MagicMock()
         mock_svc.list_backups.return_value = {"success": True, "data": []}
         with patch(
-            "app.application.facades.session_facade.get_database_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_database_service",
+            return_value=mock_svc,
         ):
             r = client.get("/api/database/backups")
             assert r.json()["success"] is True
@@ -224,11 +250,12 @@ class TestDatabaseBackups:
         mock_svc = MagicMock()
         mock_svc.backup_database.return_value = {"success": True}
         with patch(
-            "app.application.facades.session_facade.get_database_service", return_value=mock_svc
+            "app.application.facades.session_facade.get_database_service",
+            return_value=mock_svc,
         ):
             r = client.post("/api/database/backup")
-            assert r.status_code == 200
-        mock_svc.backup_database.assert_called_once_with()
+            _assert_pending(r)
+        mock_svc.backup_database.assert_not_called()
 
     def test_backup_error(self, client: TestClient, local_tools):
         with patch(
@@ -236,13 +263,14 @@ class TestDatabaseBackups:
             side_effect=RuntimeError("fail"),
         ):
             r = client.post("/api/database/backup")
-            assert r.status_code == 500
+            _assert_pending(r)
 
     @pytest.mark.parametrize("action", ["delete", "restore"])
     def test_destructive_backup_action_requires_approval(self, client: TestClient, action):
         service = MagicMock()
         with patch(
-            "app.application.facades.session_facade.get_database_service", return_value=service
+            "app.application.facades.session_facade.get_database_service",
+            return_value=service,
         ):
             response = (
                 client.delete("/api/database/backup/test.sql")
@@ -404,7 +432,7 @@ class TestPerformanceCacheClear:
             return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/clear")
-            assert r.status_code == 503
+            _assert_pending(r)
 
     def test_clear_with_pattern(self, client: TestClient, local_tools):
         mock_opt = MagicMock()
@@ -414,8 +442,8 @@ class TestPerformanceCacheClear:
             return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/clear?pattern=test:*")
-            assert r.json()["success"] is True
-        mock_opt.redis_cache.clear_pattern.assert_called_once_with("test:*")
+            _assert_pending(r)
+        mock_opt.redis_cache.clear_pattern.assert_not_called()
 
     def test_clear_local(self, client: TestClient, local_tools):
         mock_opt = MagicMock()
@@ -425,8 +453,8 @@ class TestPerformanceCacheClear:
             return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/clear")
-            assert r.json()["success"] is True
-        mock_opt.redis_cache.clear_local_cache.assert_called_once_with()
+            _assert_pending(r)
+        mock_opt.redis_cache.clear_local_cache.assert_not_called()
 
 
 class TestPerformanceCacheInvalidate:
@@ -442,7 +470,7 @@ class TestPerformanceCacheInvalidate:
             return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/invalidate", json={"keys": ["k1"]})
-            assert r.status_code == 503
+            _assert_pending(r)
 
     def test_success(self, client: TestClient, local_tools):
         mock_opt = MagicMock()
@@ -452,8 +480,8 @@ class TestPerformanceCacheInvalidate:
             return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/invalidate", json={"keys": ["k1"]})
-            assert r.json()["success"] is True
-        mock_opt.redis_cache.delete.assert_called_once_with("k1")
+            _assert_pending(r)
+        mock_opt.redis_cache.delete.assert_not_called()
 
 
 class TestPerformanceTasksStatus:
@@ -600,7 +628,7 @@ class TestTemplatesDelete:
             content=json.dumps({"id": "fs:"}),
             headers={"Content-Type": "application/json"},
         )
-        assert r.status_code == 400
+        _assert_pending(r)
 
     def test_fs_template_not_found(self, client: TestClient):
         with patch(
@@ -613,7 +641,7 @@ class TestTemplatesDelete:
                 content=json.dumps({"id": "fs:missing.docx"}),
                 headers={"Content-Type": "application/json"},
             )
-            assert r.status_code == 404
+            _assert_pending(r)
 
     def test_builtin_fs_template_is_refused_and_preserved(self, client: TestClient, tmp_path):
         test_file = tmp_path / "test.docx"
@@ -628,26 +656,20 @@ class TestTemplatesDelete:
                 content=json.dumps({"id": "fs:test.docx"}),
                 headers={"Content-Type": "application/json"},
             )
-            assert r.status_code == 403, r.text
+            _assert_pending(r)
             assert r.json()["success"] is False
             assert test_file.read_text() == "content"
 
-    def test_db_template_not_found(self, client: TestClient, local_tools):
-        mock_db = MagicMock()
-        mock_db.execute.return_value.fetchone.return_value = None
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch("app.db.init_db.init_template_tables"),
-        ):
+    def test_db_template_delete_waits_before_reading_or_mutating(self, client: TestClient):
+        with patch("app.db.init_db.init_template_tables") as init_templates:
             r = client.request(
                 "DELETE",
                 "/api/templates/delete",
                 content=json.dumps({"id": "db:9999"}),
                 headers={"Content-Type": "application/json"},
             )
-            assert r.status_code == 404
+            _assert_pending(r)
+            init_templates.assert_not_called()
 
     def test_unsupported_type(self, client: TestClient):
         r = client.request(
@@ -656,20 +678,22 @@ class TestTemplatesDelete:
             content=json.dumps({"id": "other:123"}),
             headers={"Content-Type": "application/json"},
         )
-        assert r.status_code == 400
+        _assert_pending(r)
 
-    def test_error(self, client: TestClient):
+    def test_delete_handler_is_not_called_before_approval(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.system.system_routes.get_base_dir",
+            "app.legacy.routes.document_templates_compat.run_archive_template_delete",
             side_effect=RuntimeError("fail"),
-        ):
+        ) as delete:
             r = client.request(
                 "DELETE",
                 "/api/templates/delete",
                 content=json.dumps({"id": "fs:test.docx"}),
                 headers={"Content-Type": "application/json"},
             )
-            assert r.status_code == 500
+        assert r.status_code == 202, r.text
+        assert r.json()["success"] is False and r.json()["approval_request_id"]
+        delete.assert_not_called()
 
 
 class TestTemplatesCreate:
@@ -679,7 +703,7 @@ class TestTemplatesCreate:
             return_value=({"success": True}, 200),
         ):
             r = client.post("/api/templates/create", json={"name": "test"})
-            assert r.status_code == 200
+            _assert_pending(r)
 
 
 class TestTemplatesUpdate:
@@ -689,14 +713,14 @@ class TestTemplatesUpdate:
             return_value=({"success": True}, 200),
         ):
             r = client.post("/api/templates/update", json={"id": 1, "name": "updated"})
-            assert r.status_code == 200
+            _assert_pending(r)
 
 
 class TestTemplatesDeletePost:
     def test_delegates_to_delete(self, client: TestClient):
         with patch("app.utils.path_io.path_utils.get_base_dir", return_value="/nonexistent"):
             r = client.post("/api/templates/delete", json={"id": "fs:missing.docx"})
-            assert r.status_code == 404
+            _assert_pending(r)
 
 
 # ---------------------------------------------------------------------------
@@ -714,7 +738,8 @@ class TestSkillsList:
 
     def test_error(self, client: TestClient):
         with patch(
-            "app.infrastructure.skills.get_skill_registry", side_effect=RuntimeError("fail")
+            "app.infrastructure.skills.get_skill_registry",
+            side_effect=RuntimeError("fail"),
         ):
             r = client.get("/api/skills/list")
             assert r.status_code == 500
@@ -741,24 +766,19 @@ class TestSkillsInfo:
             assert r.status_code == 404
 
 
-class TestSkillsExecute:
-    def test_success(self, client: TestClient):
-        with patch(
-            "app.application.facades.tools_facade.run_archive_tools_execute",
-            return_value=({"success": True}, 200),
-        ):
-            r = client.post("/api/skills/execute", json={"skill_id": "s1"})
-            assert r.status_code == 200
-
-
 class TestToolsExecute:
-    def test_success(self, client: TestClient):
+    def test_unknown_tool_never_dispatches(self, client: TestClient):
         with patch(
-            "app.application.facades.tools_facade.run_archive_tools_execute",
-            return_value=({"success": True}, 200),
-        ):
-            r = client.post("/api/tools/execute", json={"tool_id": "t1"})
-            assert r.status_code == 200
+            "app.application.tools.registered_capabilities.execute_registered_capability"
+        ) as run:
+            response = client.post("/api/tools/execute", json={"tool_id": "unregistered"})
+        assert response.status_code == 400
+        assert response.json()["error_code"] == "tool_contract_unavailable"
+        run.assert_not_called()
+
+    def test_removed_skill_alias_has_no_route(self, client: TestClient):
+        response = client.post("/api/skills/execute", json={"tool_id": "products"})
+        assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -779,26 +799,35 @@ class TestAdminLlmReload:
 def test_maintenance_denial_uses_signed_actor_and_never_calls_service(client, trusted_actor):
     client.headers.update(trusted_actor(role="user").headers)
     service = MagicMock()
-    with patch("app.application.facades.session_facade.get_system_service", return_value=service):
+    with patch(
+        "app.application.facades.session_facade.get_system_service",
+        return_value=service,
+    ):
         response = client.post("/api/system/printer", json={"printer_name": "HP"})
     assert response.status_code == 403
     assert response.json()["error_code"] == "tool_permission_denied"
     service.set_default_printer.assert_not_called()
 
 
-def test_maintenance_admin_can_execute_with_own_identity(trusted_actor, local_tools):
+def test_maintenance_admin_uses_shared_approval_with_own_identity(trusted_actor, local_tools):
     app = FastAPI()
     app.include_router(routes.router)
     app.include_router(tools_execute_router)
     admin = trusted_actor(role="admin")
-    client = TestClient(app, raise_server_exceptions=False, headers=admin.headers)
+    client = TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={**admin.headers, "Idempotency-Key": uuid.uuid4().hex},
+    )
     service = MagicMock()
     service.set_default_printer.return_value = {"success": True}
-    with patch("app.application.facades.session_facade.get_system_service", return_value=service):
+    with patch(
+        "app.application.facades.session_facade.get_system_service",
+        return_value=service,
+    ):
         response = client.post("/api/system/printer", json={"printer_name": "HP"})
-    assert response.status_code == 200, response.text
-    assert response.json()["success"] is True
-    service.set_default_printer.assert_called_once_with("HP")
+    _assert_pending(response)
+    service.set_default_printer.assert_not_called()
 
 
 def test_restore_waits_for_approval_even_for_applicant_admin(
@@ -808,7 +837,11 @@ def test_restore_waits_for_approval_even_for_applicant_admin(
     app.include_router(routes.router)
     app.include_router(tools_execute_router)
     admin = trusted_actor(role="admin")
-    client = TestClient(app, raise_server_exceptions=False, headers=admin.headers)
+    client = TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={**admin.headers, "Idempotency-Key": uuid.uuid4().hex},
+    )
     from sqlalchemy import text
 
     from app.application.approval_workspace_app_service import approve_request
@@ -817,7 +850,10 @@ def test_restore_waits_for_approval_even_for_applicant_admin(
     monkeypatch.setattr("app.db.session.SessionLocal", admin.factory)
     service = MagicMock()
     service.restore_database.return_value = {"success": True}
-    with patch("app.application.facades.session_facade.get_database_service", return_value=service):
+    with patch(
+        "app.application.facades.session_facade.get_database_service",
+        return_value=service,
+    ):
         response = client.post("/api/database/restore", json={"backup_file": "test.sql"})
         assert response.status_code == 202, response.text
         assert response.json()["error_code"] == "approval_required"
@@ -835,10 +871,11 @@ def test_restore_waits_for_approval_even_for_applicant_admin(
             receipt = approve_request(row.id, admin.request, body={}, x_user_id=None)
         if hasattr(receipt, "body"):
             receipt = json.loads(receipt.body)
-        assert receipt["success"] is True, (
-            AgentOrchestrator().get_run(response.json()["run_id"]).error
-        )
-        assert "durable_workflow_snapshot" not in receipt["data"]["business_data"]
+        assert receipt["success"] is False
+        run = AgentOrchestrator().get_run(response.json()["run_id"])
+        assert run.status == "blocked"
+        assert run.tool_calls[0].metadata["verification"]["accepted"] is False
+        assert "durable_workflow_snapshot" not in json.dumps(receipt)
         assert "_actor_authorization" not in json.dumps(receipt)
         with tenant_scope(admin.tenant_id):
             repeated = approve_request(row.id, admin.request, body={}, x_user_id=None)

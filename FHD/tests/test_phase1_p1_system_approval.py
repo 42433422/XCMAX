@@ -15,7 +15,7 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def system_client(trusted_actor, local_tools) -> TestClient:
+def system_client(trusted_actor, local_tools, request) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
     from app.fastapi_routes.tools_execute import router as tools_execute_router
 
@@ -23,7 +23,9 @@ def system_client(trusted_actor, local_tools) -> TestClient:
     app.include_router(system_routes.router)
     app.include_router(tools_execute_router)
     return TestClient(
-        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+        app,
+        raise_server_exceptions=False,
+        headers={**trusted_actor(role="admin").headers, "Idempotency-Key": request.node.name},
     )
 
 
@@ -88,11 +90,14 @@ def test_performance_cache_clear(
 ) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.post("/api/performance/cache/clear")
-    assert r.status_code == 200
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False
+    assert r.json()["approval_request_id"]
+    mock_get.return_value.clear_cache.assert_not_called()
 
 
 @patch("app.utils.performance.performance_initializer.get_performance_optimizer")
-@pytest.mark.parametrize("body, status", [({"keys": ["k"]}, 200), ({"key": "k"}, 400)])
+@pytest.mark.parametrize("body, status", [({"keys": ["k"]}, 202), ({"key": "k"}, 400)])
 def test_performance_cache_invalidate(
     mock_get: MagicMock, system_client: TestClient, body: dict, status: int
 ) -> None:
@@ -100,14 +105,12 @@ def test_performance_cache_invalidate(
     optimizer.redis_cache.delete.return_value = 1
     r = system_client.post("/api/performance/cache/invalidate", json=body)
     assert r.status_code == status, r.text
-    assert r.json()["success"] is (status == 200)
-    if status == 200:
-        assert r.json()["data"]["deleted_count"] == 1
-        assert r.json()["data"]["requested_keys"] == 1
-        optimizer.redis_cache.delete.assert_called_once_with("k")
+    assert r.json()["success"] is False
+    if status == 202:
+        assert r.json()["approval_request_id"]
     else:
-        assert r.json()["error_code"] == "schema_validation_failed"
-        optimizer.redis_cache.delete.assert_not_called()
+        assert r.json().get("error_code") == "schema_validation_failed"
+    optimizer.redis_cache.delete.assert_not_called()
 
 
 @patch("app.utils.performance.performance_initializer.get_performance_optimizer")
@@ -177,12 +180,13 @@ def test_skills_list(mock_reg: MagicMock, system_client: TestClient) -> None:
     mock_reg.return_value.list_all.assert_called_once_with()
 
 
-@pytest.mark.parametrize("path", ["/api/skills/execute", "/api/tools/execute"])
+@pytest.mark.parametrize("path", ["/api/tools/execute"])
 def test_tools_execute_empty(system_client: TestClient, path: str) -> None:
     with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
         r = system_client.post(path, json={})
     assert r.status_code == 400, r.text
-    assert r.json() == {"success": False, "message": "未知工具: None"}
+    assert r.json()["error_code"] == "tool_contract_unavailable"
+    assert r.json()["execution_status"] == "not_started"
     orchestrator.assert_not_called()
 
 

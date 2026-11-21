@@ -9,9 +9,15 @@ from app.application.agent_orchestrator.runtime_context import merge_runtime_con
 
 
 def requires_retry_reconciliation(run: AgentRun) -> bool:
+    from app.application.agent_orchestrator.result_verification import verification_blocked
+
     recovery = run.metadata.get("recovery")
-    return bool(run.metadata.get("non_retryable")) or (
-        isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+    return (
+        verification_blocked(run)
+        or bool(run.metadata.get("non_retryable"))
+        or (
+            isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+        )
     )
 
 
@@ -137,7 +143,9 @@ def safe_continuation_error(
         ):
             return "原计划与执行步骤已变化，不能恢复"
         if step.status == "completed":
-            if step.output.get("success") is not True:
+            from app.application.agent_orchestrator.result_verification import verified_step_output
+
+            if verified_step_output(run, step).get("success") is not True:
                 return "已完成步骤缺少成功回执，需要人工核对"
             continue
         if step.status == "skipped":
@@ -395,6 +403,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         runtime_context: dict[str, Any] | None = None,
         auto_execute: bool = True,
         authenticated_binding: dict[str, Any] | None = None,
+        authenticated_actor_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         previous = self._repo.get(run_id)
         if previous is None:
@@ -417,8 +426,18 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 principal_id=requested_by,
                 runtime_context=runtime_context or {},
                 authenticated_binding=authenticated_binding,
+                authenticated_actor_binding=authenticated_actor_binding,
             )
         run = copy.deepcopy(previous)
+        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+
+        renew_approval_session(
+            run,
+            principal_id=requested_by,
+            authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
+            operation="retry",
+        )
         run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
         prepare_safe_continuation(run, requested_by=requested_by, reason="explicit_retry")
         if not self._repo.save_retry_if_unchanged(run, previous):

@@ -7,7 +7,6 @@ const addAndSaveMessage = vi.fn().mockResolvedValue(undefined)
 const executePrintTask = vi.fn()
 const buildPrintSummaryMessage = vi.fn(() => '打印完成')
 const upsertTask = vi.fn()
-const handleChatRequiresToken = vi.fn()
 const agentRunsApiMock = vi.hoisted(() => ({
   createRun: vi.fn(),
   createTask: vi.fn(),
@@ -116,13 +115,6 @@ vi.mock('./useChatWorkflowPanel', () => ({
     upsertWorkflowEmployeeTask: vi.fn(),
   }),
 }))
-vi.mock('./useChatDbTokenGate', () => ({
-  useChatDbTokenGate: () => ({
-    handleChatRequiresToken,
-    onDbWriteUnlockedForChatRetry: vi.fn(),
-    resolveChatDbTokensForPayload: vi.fn(() => ({})),
-  }),
-}))
 vi.mock('./useChatExcelContext', () => ({
   useChatExcelContext: () => ({
     bindExcelSheetToChat: vi.fn(),
@@ -212,6 +204,9 @@ describe('useChatOrchestration task/print', () => {
     executePrintTask.mockResolvedValue({ success: true, message: 'ok' })
     agentRunsApiMock.listRuns.mockResolvedValue({ success: true, data: [] })
     agentRunsApiMock.listTasks.mockResolvedValue({ success: true, data: [] })
+    agentRunsApiMock.createTask.mockReset()
+    agentRunsApiMock.getRun.mockReset()
+    agentRunsApiMock.continueRun.mockReset()
   })
 
   afterEach(() => {
@@ -293,56 +288,115 @@ describe('useChatOrchestration task/print', () => {
     expect(buildPrintSummaryMessage).toHaveBeenCalled()
   })
 
-  it('confirmTask without api_url reports failure', async () => {
+  it.each(['GET', 'POST'])('rejects an API-only %s task before any HTTP effect', async method => {
+    const legacyFetch = vi.fn()
+    vi.stubGlobal('fetch', legacyFetch)
     const api = useChatOrchestration({ sessionId: ref('s') })
-    api.showTaskConfirm({ type: 'custom', title: 't', api_url: '', payload: {} })
+    api.showTaskConfirm({ type: 'shipment_generate', title: 't', api_url: '/api/retired-write', method, payload: {} })
     await api.confirmTask()
-    expect(addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('缺少 API'), 'ai', undefined, expect.any(Object))
+    expect(addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('缺少有效能力契约'), 'ai', { workflowAction: 'not_started' }, expect.any(Object))
+    expect(api.currentTask.value).toMatchObject({ completed: false, data: { execution_state: 'not_started' } })
+    expect(legacyFetch).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.createTask).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.getRun).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.continueRun).not.toHaveBeenCalled()
   })
 
-  it('confirmTask POST success keeps completed task card', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true, message: '执行成功' }),
-      }),
-    )
+  it('keeps a completed canonical receipt without using the legacy URL', async () => {
+    const legacyFetch = vi.fn()
+    vi.stubGlobal('fetch', legacyFetch)
+    const receipt = { success: true, data: {
+      run_id: 'read-run', status: 'completed',
+      final_output: { node_outputs: { read: { success: true, message: '执行成功' } } },
+    } }
+    agentRunsApiMock.createTask.mockResolvedValue(receipt)
+    agentRunsApiMock.getRun.mockResolvedValue(receipt)
     const api = useChatOrchestration({ sessionId: ref('s') })
     api.showTaskConfirm({
       type: 'custom',
       title: '测试任务',
       api_url: '/api/test',
       method: 'POST',
-      payload: { params: {} },
+      payload: { tool_id: 'business_db', action: 'read', params: { entity: 'customers' } },
     })
     await api.confirmTask()
-    expect(fetch).toHaveBeenCalled()
+    expect(legacyFetch).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.createTask).toHaveBeenCalledTimes(1)
     expect(api.currentTask.value?.completed).toBe(true)
   })
 
-  it('confirmTask handles requires_token response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          requires_token: true,
-          token_name: 'PAYMENT_TOKEN',
-          message: '需要支付授权令牌',
-        }),
-      }),
-    )
+  it.each(['waiting_auth', 'unknown'])('keeps a legacy %s receipt without a second POST on confirmation or unlock', async state => {
+    vi.stubGlobal('fetch', vi.fn())
     const api = useChatOrchestration({ sessionId: ref('s') })
     api.showTaskConfirm({
       type: 'custom',
       title: '支付',
       api_url: '/api/pay',
+      description: state === 'unknown' ? '原任务结果待核对' : '需要支付授权令牌',
+      completed: false,
+      data: { requires_token: true, execution_state: state },
       payload: {},
     })
     await api.confirmTask()
-    expect(handleChatRequiresToken).toHaveBeenCalled()
-    expect(api.currentTask.value?.description).toContain('令牌')
+    expect(api.currentTask.value?.description).toContain(state === 'unknown' ? '待核对' : '令牌')
+    expect(api.currentTask.value?.description).not.toContain('已弹出')
+    expect(api.currentTask.value?.completed).toBe(false)
+    expect(api.currentTask.value?.data?.execution_state).toBe(state)
+    window.dispatchEvent(new CustomEvent('fhd-db-write-unlocked'))
+    await api.confirmTask()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.createTask).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.continueRun).not.toHaveBeenCalled()
+    expect(addAndSaveMessage).toHaveBeenLastCalledWith(expect.any(String), 'ai', { workflowAction: state }, expect.any(Object))
+  })
+
+  it('reads an existing run without a capability contract but cannot approve or create it', async () => {
+    const legacyFetch = vi.fn()
+    vi.stubGlobal('fetch', legacyFetch)
+    agentRunsApiMock.getRun.mockResolvedValue({
+      success: true, data: { run_id: 'original-run', status: 'waiting_user' },
+      approval: { grant: 'original-grant' },
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.showTaskConfirm({
+      type: 'custom', title: '原任务', agentRunId: 'original-run', agentTaskId: 'original-task',
+      data: { requires_token: true }, api_url: '/api/retired-write', payload: {},
+    })
+    await api.confirmTask()
+    expect(agentRunsApiMock.getRun).toHaveBeenCalledExactlyOnceWith('original-run')
+    expect(agentRunsApiMock.continueRun).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.createTask).not.toHaveBeenCalled()
+    expect(legacyFetch).not.toHaveBeenCalled()
+    expect(api.currentTask.value?.completed).toBe(false)
+  })
+
+  it('allows a waiting card to query and approve its existing run with the real grant', async () => {
+    const legacyFetch = vi.fn()
+    vi.stubGlobal('fetch', legacyFetch)
+    agentRunsApiMock.getRun.mockResolvedValue({
+      success: true, data: { run_id: 'original-run', status: 'waiting_user' },
+      approval: { grant: 'original-grant' },
+    })
+    agentRunsApiMock.continueRun.mockResolvedValue({
+      success: true, data: {
+        run_id: 'original-run', status: 'completed',
+        final_output: { node_outputs: { write: { success: true, message: '原任务已完成' } } },
+      },
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.showTaskConfirm({
+      type: 'custom', title: '原任务', agentRunId: 'original-run', agentTaskId: 'original-task',
+      data: { requires_token: true }, api_url: '/api/retired-write',
+      payload: { tool_id: 'business_db', action: 'write', params: {} },
+    })
+    await api.confirmTask()
+    expect(agentRunsApiMock.getRun).toHaveBeenCalledExactlyOnceWith('original-run')
+    expect(agentRunsApiMock.continueRun).toHaveBeenCalledExactlyOnceWith('original-run', {
+      approval_grant: 'original-grant', runtime_context: { source: 'chat_task_card_approval' },
+    })
+    expect(agentRunsApiMock.createTask).not.toHaveBeenCalled()
+    expect(legacyFetch).not.toHaveBeenCalled()
+    expect(api.currentTask.value?.completed).toBe(true)
   })
 
   it('routes a registered task through durable creation and bound approval', async () => {

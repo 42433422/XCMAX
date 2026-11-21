@@ -87,8 +87,7 @@ const goShellPage = (name, query = {}) => {
 }
 
 const enterAnalyzer = (appKey = 'kitten') => {
-  // 'qclaw' 为旧入口键，等价于 'aiopen'（Qclaw龙虾生态已升级为 AIOPEN）
-  activeApp.value = appKey === 'qclaw' ? 'aiopen' : appKey
+  activeApp.value = appKey
   inAnalyzer.value = true
 }
 

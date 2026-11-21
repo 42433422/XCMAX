@@ -519,12 +519,19 @@ describe('AIOpenPanel.vue – OpenClaw', () => {
     wrapper.unmount()
   })
 
-  it('sendToOpenclaw sends message', async () => {
+  it('sendToOpenclaw submits one approved capability task', async () => {
     const wrapper = await mountAIOpenPanel()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true } })
+    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: false, pending_approval: true, task_id: 'original-task' } })
     wrapper.vm.openclawMessage = '测试消息'
     await wrapper.vm.sendToOpenclaw()
-    expect(wrapper.vm.openclawResult).toBe('发送成功')
+    expect(wrapper.vm.openclawResult).toContain('等待审批')
+    const first = mockSafeJsonRequest.mock.calls.at(-1)!
+    expect(first[0]).toBe('/api/tools/execute')
+    expect(JSON.parse(String(first[1]?.body))).toEqual({ tool_id: 'openclaw', action: 'chat', params: { message: '测试消息', gateway_url: wrapper.vm.openclawBase }, request_id: expect.any(String) })
+    const calls = mockSafeJsonRequest.mock.calls.length
+    await wrapper.vm.sendToOpenclaw()
+    expect(mockSafeJsonRequest.mock.calls.length).toBe(calls)
+    expect(wrapper.vm.openclawTaskId).toBe('original-task')
     wrapper.unmount()
   })
 
@@ -541,6 +548,10 @@ describe('AIOpenPanel.vue – OpenClaw', () => {
     mockSafeJsonRequest.mockRejectedValue(new Error('Network error'))
     await wrapper.vm.sendToOpenclaw()
     expect(wrapper.vm.openclawResult).toBe('Network error')
+    const first = JSON.parse(String(mockSafeJsonRequest.mock.calls.at(-1)?.[1]?.body))
+    await wrapper.vm.sendToOpenclaw()
+    const retry = JSON.parse(String(mockSafeJsonRequest.mock.calls.at(-1)?.[1]?.body))
+    expect(retry.request_id).toBe(first.request_id)
     wrapper.unmount()
   })
 })
@@ -578,11 +589,11 @@ describe('AIOpenPanel.vue – computed properties', () => {
   it('friendlyTools maps manifestTools with labels', async () => {
     const wrapper = await mountAIOpenPanel()
     wrapper.vm.manifestTools = [
-      { name: 'api_call', description: '调用接口' },
+      { name: 'operation_call', description: '执行能力', inputSchema: { type: 'object', properties: { params: { type: 'object' }, request_id: { type: 'string' } } } },
       { name: 'unknown_tool', description: '未知工具' },
     ]
     const tools = wrapper.vm.friendlyTools
-    expect(tools[0].label).toBe('调用接口')
+    expect(tools[0].label).toBe('执行能力')
     expect(tools[1].label).toBe('unknown_tool')
     wrapper.unmount()
   })
@@ -613,7 +624,7 @@ describe('AIOpenPanel.vue – MCP health probe', () => {
       if (url.includes('/manifest')) {
         return Promise.resolve({
           ok: true,
-          data: { success: true, name: 'AIOPEN', tools: [{ name: 'api_call' }] },
+          data: { success: true, name: 'AIOPEN', tools: [{ name: 'operation_call', inputSchema: { type: 'object', properties: { params: { type: 'object' }, request_id: { type: 'string' } } } }] },
           status: 200,
         })
       }
@@ -738,10 +749,10 @@ describe('AIOpenPanel backend capability controls', () => {
     await vm.toggleWhitelist('/orders', { target: { checked: true } })
     expect(vm.routes).toEqual([{ path: '/orders', enabled: true }, { path: '/products', enabled: true }])
     expect(mockSafeJsonRequest).toHaveBeenLastCalledWith('/api/aiopen/whitelist', expect.objectContaining({ body: JSON.stringify({ path: '/orders', enabled: true }) }))
-    for (const [action, path, field] of [['toggleWechat', '/api/ai/qclaw/wechat-gateway', 'wechatOpen'], ['toggleRemoteControl', '/api/aiopen/control', 'remoteControlEnabled']]) {
+    for (const [action, path, field] of [['toggleWechat', '/api/aiopen/config', 'wechatOpen'], ['toggleRemoteControl', '/api/aiopen/control', 'remoteControlEnabled']]) {
       await vm[action]({ target: { checked: true } })
       expect(vm[field]).toBe(true)
-      expect(mockSafeJsonRequest).toHaveBeenLastCalledWith(path, expect.objectContaining({ body: '{"enabled":true}' }))
+      expect(mockSafeJsonRequest).toHaveBeenLastCalledWith(path, expect.objectContaining({ body: action === 'toggleWechat' ? '{"wechat_open":true}' : '{"enabled":true}' }))
       vm.panelAvailable = false; mockSafeJsonRequest.mockClear()
       await vm[action]({ target: null })
       expect(vm[field]).toBe(true); expect(mockSafeJsonRequest).not.toHaveBeenCalled()

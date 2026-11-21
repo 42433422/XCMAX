@@ -107,6 +107,7 @@ describe('useAgentEngine behavior', () => {
 
     await engine.handleInput('plain request')
     const firstPayload = mocks.agentButlerChat.mock.calls[0]?.[0]
+    expect(firstPayload.request_id).toBe(useAgentStore().messages[0].id)
     expect(firstPayload.messages[0].role).toBe('system')
     expect(firstPayload.messages.at(-1)).toEqual({ role: 'user', content: 'plain request' })
     expect(useAgentStore().currentConversationId).toBe(42)
@@ -114,6 +115,8 @@ describe('useAgentEngine behavior', () => {
 
     await engine.handleInput('', { imageDataUrl: ' data:image/png;base64,upload ' })
     const secondPayload = mocks.agentButlerChat.mock.calls[1]?.[0]
+    expect(secondPayload.request_id).toBeTruthy()
+    expect(secondPayload.request_id).not.toBe(firstPayload.request_id)
     expect(secondPayload.messages.at(-1).content).toEqual([
       { type: 'text', text: '[图片]' },
       { type: 'image_url', image_url: { url: 'data:image/png;base64,upload', detail: 'low' } },

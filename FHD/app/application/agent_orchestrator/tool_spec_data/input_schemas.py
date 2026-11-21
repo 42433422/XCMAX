@@ -128,13 +128,12 @@ _SALES_QUOTE_INPUT = {
 }
 
 _MEMORY_V2_REJECT_INPUT = _object_schema(
-    ["user_id", "memory_id"],
+    ["memory_id"],
     {
-        "user_id": {"type": "string"},
         "memory_id": {"type": "string"},
         "reason": {"type": "string"},
     },
-)
+) | {"additionalProperties": False}
 
 _OCR_RECOGNIZE_INPUT = _object_schema(["file_path"], {"file_path": {"type": "string"}})
 
@@ -809,28 +808,30 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "max_rows": {"type": "integer"},
         },
     ),
-    ("excel_analysis", "query"): _object_schema(
+    ("excel_analysis", "structure"): _object_schema(
         ["file_path"],
         {
             "file_path": {"type": "string"},
-            "question": {"type": "string"},
-            "natural_language": {"type": "string"},
-            "sheet_name": {"type": "string"},
-            "offset": {"type": "integer"},
-            "max_rows": {"type": "integer"},
-        },
-    ),
-    ("import_excel_to_database", "import"): _object_schema(
-        ["file_path"],
-        {
-            "file_path": {"type": "string"},
-            "import_type": {"type": "string", "enum": ["products", "customers", "orders"]},
             "sheet_name": {"type": "string"},
             "header_row": {"type": "integer"},
-            "last_data_row_1based": {"type": "integer"},
-            "unit_name": {"type": "string"},
-            "price_column": {"type": "string"},
-            "confirm": {"type": "boolean"},
+        },
+    ),
+    ("excel_analysis", "query"): _object_schema(
+        ["file_path", "query_expression"],
+        {
+            "file_path": {"type": "string"},
+            "query_expression": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": r"[\s\S]*\S[\s\S]*",
+                "description": "根据用户问题与实际列名生成筛选表达式，如 count > 1 and item in ['paint']；仅支持列名、字面量、比较、布尔与算术运算，不接受函数调用或 Python 代码。",
+            },
+            "question": {"type": "string", "description": "可选的原始查询问题，仅作说明"},
+            "sheet_name": {"type": "string"},
+            "header_row": {"type": "integer"},
+            "offset": {"type": "integer"},
+            "max_rows": {"type": "integer"},
         },
     ),
     ("elt_import", "preview"): _object_schema(
@@ -1043,9 +1044,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("memory_v2", "propose_candidate"): _object_schema(
-        ["user_id", "memory_type", "key", "value"],
+        ["memory_type", "key", "value"],
         {
-            "user_id": {"type": "string"},
             "memory_type": {"type": "string", "enum": ["preference", "entity", "episodic"]},
             "type": {"type": "string"},
             "key": {"type": "string"},
@@ -1054,26 +1054,27 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "confidence": {"type": "number"},
             "evidence": {"type": "array"},
         },
-    ),
+    )
+    | {"additionalProperties": False},
     ("memory_v2", "confirm"): _object_schema(
-        ["user_id", "memory_id"],
+        ["memory_id"],
         {
-            "user_id": {"type": "string"},
             "memory_id": {"type": "string"},
             "correction": {"type": "object"},
         },
-    ),
+    )
+    | {"additionalProperties": False},
     ("memory_v2", "reject"): _MEMORY_V2_REJECT_INPUT,
     ("memory_v2", "correct"): _object_schema(
-        ["user_id", "memory_id"],
+        ["memory_id"],
         {
-            "user_id": {"type": "string"},
             "memory_id": {"type": "string"},
             "key": {"type": "string"},
             "value": {},
             "reason": {"type": "string"},
         },
-    ),
+    )
+    | {"additionalProperties": False},
     ("memory_v2", "delete"): _MEMORY_V2_REJECT_INPUT,
     ("template_extract", "extract"): _object_schema(
         ["file_path"],
@@ -1116,7 +1117,6 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "request_id": {"type": "string"},
             "image_url": {"type": "string"},
             "ocr_type": {"type": "string"},
-            "user_id": {"type": "string"},
         },
     ),
     ("ocr", "extract"): _OCR_EXTRACT_INPUT,

@@ -10,6 +10,9 @@ from __future__ import annotations
 
 # --- dataclass / build defaults -------------------------------------------
 DEFAULT_TIMEOUT_SECONDS = 60
+# 0 preserves the legacy RunRepair policy. Positive integers bound all calls of
+# one step, including its first call: 1 forbids retries, 3 permits at most two.
+# RunRepair applies this ceiling without bypassing its safety or repair limits.
 DEFAULT_RETRY: dict[str, int] = {"max_attempts": 0}
 
 # --- cost units -----------------------------------------------------------
@@ -35,10 +38,9 @@ PERMISSION_OVERRIDES: dict[str, str] = {
     # Like the history API, current-conversation reads require a live owner binding,
     # enforced again by the adapter; they grant no access to other users' sessions.
     "conversation_history": "",
+    "tasks": "",
     "memory_v2": "memory_v2.write",
     "client_product_issue": "",
-    # Excel 导入属于数据对接（ELT）执行，沿用 elt.execute，而不是发明新的权限码。
-    "import_excel_to_database": "elt.execute",
     # ELT 预演/执行同样归入数据对接权限。
     "elt_import": "elt.execute",
 }

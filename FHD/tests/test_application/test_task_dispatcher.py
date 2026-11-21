@@ -27,9 +27,9 @@ def _queued_run(actor, task_id: str, *, idempotent: bool = True) -> AgentRun:
     run.steps.append(
         AgentStep(
             node_id="query",
-            tool_id="products",
-            action="query",
-            params={"keyword": task_id},
+            tool_id="business_db",
+            action="read",
+            params={"entity": "customers", "keyword": task_id},
             risk="low" if idempotent else "high",
             idempotent=idempotent,
         )
@@ -37,13 +37,13 @@ def _queued_run(actor, task_id: str, *, idempotent: bool = True) -> AgentRun:
     run.metadata["plan"] = plan_to_dict(
         PlanGraph(
             plan_id=task_id,
-            intent="products_query",
+            intent="customers_query",
             nodes=[
                 WorkflowNode(
                     node_id="query",
-                    tool_id="products",
-                    action="query",
-                    params={"keyword": task_id},
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": "customers", "keyword": task_id},
                     risk="low",
                     idempotent=True,
                 )
@@ -155,8 +155,8 @@ def test_expired_idempotent_step_recovers_but_non_idempotent_step_fails_closed(a
         ToolCall(
             step_id=idempotent.steps[0].step_id,
             node_id="query",
-            tool_id="products",
-            action="query",
+            tool_id="business_db",
+            action="read",
             status="running",
         )
     )
@@ -238,8 +238,8 @@ def test_dispatcher_restart_claims_expired_lease_and_completes_idempotent_task(a
         ToolCall(
             step_id=run.steps[0].step_id,
             node_id="query",
-            tool_id="products",
-            action="query",
+            tool_id="business_db",
+            action="read",
             status="running",
         )
     )
@@ -300,7 +300,7 @@ def test_timeout_unknown_releases_worker_slot_and_prevents_repair_replay(monkeyp
     try:
         assert _wait_until(
             lambda: all(
-                queue.get(run.run_id).state == "failed"
+                queue.get(run.run_id).state == "unknown"
                 and queue.get(run.run_id).last_error_code == "needs_verification"
                 for run in runs
             )
@@ -317,3 +317,43 @@ def test_timeout_unknown_releases_worker_slot_and_prevents_repair_replay(monkeyp
                 _orchestrator_factory(repository, DeadlineExecutor()).retry_run(run.run_id)
     finally:
         dispatcher.stop()
+
+
+@pytest.mark.parametrize(
+    "status, tool, output, expected",
+    [
+        ("paused", "products", {}, "paused"),
+        ("blocked", "products", {}, "blocked"),
+        ("waiting_user", "clarify", {}, "waiting_input"),
+        ("waiting_user", "products", {}, "waiting_approval"),
+        ("completed", "products", {"success": True, "pending_approval": True}, "waiting_approval"),
+        ("completed", "products", {"success": True, "requires_token": True}, "waiting_auth"),
+        ("completed", "products", {"success": True, "outcome_unknown": True}, "unknown"),
+        ("running", "products", {}, "unknown"),
+    ],
+)
+def test_worker_yield_preserves_unfinished_receipts(actor, status, tool, output, expected):
+    from types import SimpleNamespace
+
+    repository = InMemoryAgentRunRepository()
+    queue = InMemoryTaskExecutionRepository()
+    run = _queued_run(actor, "yield-state")
+    repository.save(run)
+    queue.enqueue(run)
+    claim = queue.claim("worker", lease_seconds=30)
+    run.status = status
+    run.steps[0].tool_id = tool
+    run.steps[0].status = "waiting_user" if status == "waiting_user" else status
+    run.steps[0].output = output
+    dispatcher = AgentTaskDispatcher(
+        execution_repository=queue,
+        run_repository=repository,
+        orchestrator_factory=lambda _: SimpleNamespace(
+            execute_dispatched_run=lambda *_args, **_kwargs: run
+        ),
+    )
+    dispatcher._execute_claim(claim, "worker")
+    stored = queue.get(run.run_id)
+    assert stored.state == expected
+    assert not stored.finished_at
+    assert queue.claim("another-worker", lease_seconds=30) is None

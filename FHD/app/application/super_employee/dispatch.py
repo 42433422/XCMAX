@@ -16,6 +16,8 @@ from .devices import DeviceSelection
 from .profiles import SuperEmployeeToolProfile
 from .protocols import ExecutionContext, OutboxWriter, ParaPorts
 
+_NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
 
 class EmployeeDispatcher:
     def __init__(
@@ -68,6 +70,9 @@ class EmployeeDispatcher:
         }
 
     def dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
+        receipt = request.get("dispatch_receipt")
+        if isinstance(receipt, dict) and not receipt.get("safe_to_fallback"):
+            return self._resume_dispatch(request, receipt)
         mode = (
             (
                 os.environ.get(f"{self._p.env_super_prefix}_DISPATCH_MODE")
@@ -106,40 +111,102 @@ class EmployeeDispatcher:
                 accepted=False,
                 reason=para_reason or f"{self._p.tool_name}_dispatch_webhook_not_configured",
             )
+        self._persist_receipt(request, {"dispatcher": "webhook", "status": "dispatching"})
         try:
             with self._remote.client() as client:
-                resp = client.post(webhook, json=request)
+                resp = client.post(
+                    webhook, json={k: v for k, v in request.items() if k != "dispatch_receipt"}
+                )
             body: Any
             try:
                 body = resp.json() if resp.content else {}
             except ValueError:
                 body = {"raw": resp.text[:1000]}
+            if not isinstance(body, dict):
+                body = {"raw": body}
             accepted = resp.status_code < 400 and (
                 body.get("ok") is True
                 or body.get("success") is True
                 or body.get("accepted") is True
             )
             if accepted:
-                return {
-                    "request_id": request["request_id"],
-                    "status": "accepted",
-                    "accepted": True,
-                    "queued": False,
-                    "device_scope": "all_devices",
-                    "response": body,
-                }
-            return self._outbox(
+                return self._persist_receipt(
+                    request,
+                    {
+                        "request_id": request["request_id"],
+                        "status": "accepted",
+                        "accepted": True,
+                        "queued": False,
+                        "device_scope": "all_devices",
+                        "response": body,
+                        "dispatcher": "webhook",
+                    },
+                )
+            return self._unknown_dispatch(
+                request, str(body.get("error") or body.get("message") or f"HTTP {resp.status_code}")
+            )
+        except _NOT_SENT as exc:
+            return self._persist_receipt(
                 request,
-                status="dispatch_failed",
-                accepted=False,
-                reason=str(body.get("error") or body.get("message") or f"HTTP {resp.status_code}")[
-                    :500
-                ],
+                {"status": "dispatch_error", "safe_to_fallback": True, "reason": str(exc)[:500]},
             )
         except RECOVERABLE_ERRORS as exc:
-            return self._outbox(
-                request, status="dispatch_error", accepted=False, reason=str(exc)[:500]
-            )
+            return self._unknown_dispatch(request, str(exc))
+
+    def _persist_receipt(self, request: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
+        receipt = {
+            "request_id": request["request_id"],
+            "accepted": False,
+            "queued": False,
+            "safe_to_fallback": False,
+            **receipt,
+        }
+        request["dispatch_receipt"] = receipt
+        outbox = self._outbox(
+            request,
+            status=receipt["status"],
+            accepted=receipt["accepted"],
+            reason=str(receipt.get("reason") or ""),
+        )
+        return {**outbox, **receipt}
+
+    def _unknown_dispatch(self, request: dict[str, Any], reason: str) -> dict[str, Any]:
+        return self._persist_receipt(
+            request,
+            {
+                **request.get("dispatch_receipt", {}),
+                "status": "dispatch_unknown",
+                "accepted": False,
+                "reconciliation_required": True,
+                "safe_to_fallback": False,
+                "reason": reason[:500],
+            },
+        )
+
+    def _resume_dispatch(self, request: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
+        receipt = dict(receipt)
+        if receipt.get("status") == "dispatching":
+            receipt.update(status="dispatch_unknown", reconciliation_required=True)
+        task_id = receipt.get("task_id")
+        api_url = self._remote.api_url()
+        if (
+            task_id
+            and receipt.get("dispatcher") == "para_api"
+            and api_url == receipt.get("api_url")
+        ):
+            try:
+                with self._remote.client() as client:
+                    token = self._remote.token(client, api_url)
+                    result = self._remote.request(
+                        client, api_url, token, "GET", f"/api/tasks/{task_id}"
+                    )
+                task = result.get("task")
+                if isinstance(task, dict) and str(task.get("id") or "") == task_id:
+                    receipt["task_status"] = str(task.get("status") or "")
+                    receipt["response"] = {"task": task}
+            except RECOVERABLE_ERRORS:
+                pass
+        return self._persist_receipt(request, receipt)
 
     def dispatch_to_para(self, request: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
         api_url = self._remote.api_url()
@@ -178,8 +245,16 @@ class EmployeeDispatcher:
             httpx.ConnectError,
             httpx.NetworkError,
         ) as exc:
+            if isinstance(request.get("dispatch_receipt"), dict) and not request[
+                "dispatch_receipt"
+            ].get("safe_to_fallback"):
+                return (self._unknown_dispatch(request, str(exc)), "dispatch_unknown")
             return (None, f"para_api_unreachable: {exc}")
         except RECOVERABLE_ERRORS as exc:
+            if isinstance(request.get("dispatch_receipt"), dict) and not request[
+                "dispatch_receipt"
+            ].get("safe_to_fallback"):
+                return (self._unknown_dispatch(request, str(exc)), "dispatch_unknown")
             return (
                 self._outbox(
                     request,
@@ -256,11 +331,45 @@ class EmployeeDispatcher:
                 body["repo_url"] = repo_url
             if task_id:
                 body["task_id"] = task_id
-            result = self._remote.request(
-                client, api_url, token, "POST", "/api/tasks", json_body=body
+            self._persist_receipt(
+                request,
+                {
+                    "status": "dispatching",
+                    "dispatcher": "para_api",
+                    "api_url": api_url,
+                    "task_id": task_id,
+                    "devices": list(dispatched),
+                    "pending_device_id": str(device.get("id") or ""),
+                },
             )
-            task = result.get("task") if isinstance(result.get("task"), dict) else task
-            task_id = str((task or {}).get("id") or task_id)
+            try:
+                result = self._remote.request(
+                    client, api_url, token, "POST", "/api/tasks", json_body=body
+                )
+            except _NOT_SENT as exc:
+                if not dispatched:
+                    self._persist_receipt(
+                        request,
+                        {
+                            "status": "dispatch_error",
+                            "safe_to_fallback": True,
+                            "reason": str(exc)[:500],
+                        },
+                    )
+                    raise
+                return self._unknown_dispatch(request, str(exc))
+            except RECOVERABLE_ERRORS as exc:
+                return self._unknown_dispatch(request, str(exc))
+            result_task = result.get("task")
+            result_task_id = (
+                str(result_task.get("id") or "") if isinstance(result_task, dict) else ""
+            )
+            if not result_task_id:
+                return self._unknown_dispatch(request, "para response omitted task_id")
+            if task_id and result_task_id != task_id:
+                request["dispatch_receipt"]["unexpected_task_id"] = result_task_id
+                return self._unknown_dispatch(request, "para response changed task_id")
+            task, task_id = result_task, result_task_id
             subtask = result.get("subtask") if isinstance(result.get("subtask"), dict) else {}
             if not isinstance(subtask, dict):
                 subtask = {}
@@ -272,21 +381,34 @@ class EmployeeDispatcher:
                     "tool": self._p.tool_name,
                 }
             )
-        return {
-            "request_id": request["request_id"],
-            "status": "accepted",
-            "accepted": True,
-            "queued": False,
-            "para_tier": tier,
-            "device_scope": "local_device" if tier == 1 else "all_devices",
-            "dispatcher": "para_api",
-            "mcp_tool_equivalent": "devfleet_dispatch_task",
-            "api_url": api_url,
-            "task_id": task_id,
-            "task_status": str((task or {}).get("status") or ""),
-            "devices": dispatched,
-            "response": {"task": task, "dispatched": dispatched},
-        }
+            self._persist_receipt(
+                request,
+                {
+                    "status": "dispatching",
+                    "dispatcher": "para_api",
+                    "api_url": api_url,
+                    "task_id": task_id,
+                    "devices": list(dispatched),
+                },
+            )
+        return self._persist_receipt(
+            request,
+            {
+                "request_id": request["request_id"],
+                "status": "accepted",
+                "accepted": True,
+                "queued": False,
+                "para_tier": tier,
+                "device_scope": "local_device" if tier == 1 else "all_devices",
+                "dispatcher": "para_api",
+                "mcp_tool_equivalent": "devfleet_dispatch_task",
+                "api_url": api_url,
+                "task_id": task_id,
+                "task_status": str((task or {}).get("status") or ""),
+                "devices": dispatched,
+                "response": {"task": task, "dispatched": dispatched},
+            },
+        )
 
     def para_prompt(
         self,
@@ -313,5 +435,13 @@ class EmployeeDispatcher:
         return f"{label}：{title[:60]}"
 
     def dispatch_reply(self, dispatch: dict[str, Any]) -> str:
-        _ = dispatch
+        if dispatch.get("status") in {"dispatching", "dispatch_unknown"}:
+            if dispatch.get("dispatcher") == "para_api" and not dispatch.get("task_id"):
+                return (
+                    "Para 可能已创建任务，但未能确认任务 ID，需要人工核对；"
+                    "已保留原请求，不会重新派发。"
+                )
+            return "执行结果待核对；已保留原请求和已有回执，不会重新派发。"
+        if dispatch.get("status") == "completed":
+            return str(dispatch.get("response", {}).get("text") or "任务已完成。")
         return "思考中..."

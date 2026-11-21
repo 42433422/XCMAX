@@ -31,6 +31,5 @@ def templates_create(
             body=body,
             action="create",
             route_path="/api/templates/create",
-            authenticated_actor_id=str(user.id),
         )
     return JSONResponse(data, status_code=code)

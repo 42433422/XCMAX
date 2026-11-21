@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes import kellai_binding
 from app.services import kellai_binding_store
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 PAIRING_HEADERS = {"X-Kellai-Local-Pairing": "1"}
 XCMAX_HEADERS = {**PAIRING_HEADERS, "X-XCMAX-Client-Shell": "enterprise"}
@@ -16,9 +17,12 @@ CLIENT_HEADERS = {"X-XCMAX-Client-Shell": "enterprise"}
 
 
 @pytest.fixture()
-def app() -> FastAPI:
+def app(trusted_actor) -> FastAPI:
+    actor = trusted_actor(permissions=[])
     application = FastAPI()
     application.include_router(kellai_binding.router)
+    application.state.test_session_headers = actor.headers
+    application.state.test_actor_id = actor.user_id
     return application
 
 
@@ -37,30 +41,38 @@ def isolated_store(monkeypatch: pytest.MonkeyPatch, tmp_path):
 
 
 def local_client(app: FastAPI) -> TestClient:
-    return TestClient(app, client=("127.0.0.1", 50000))
+    return TestClient(
+        app, client=("127.0.0.1", 50000), headers=getattr(app.state, "test_session_headers", {})
+    )
 
 
 def test_kellai_loopback_requests_bypass_environment_proxies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    request = urllib.request.Request("http://127.0.0.1:8793/health")
-    sentinel = object()
+    from io import BytesIO
+
+    from app.infrastructure import kellai_client
+
     calls: list[tuple[urllib.request.Request, float]] = []
 
     class DirectOpener:
         def open(self, opened_request, *, timeout):
             calls.append((opened_request, timeout))
-            return sentinel
+            return BytesIO(b'{"success":true,"data":{}}')
 
-    monkeypatch.setattr(kellai_binding, "_DIRECT_LOOPBACK_OPENER", DirectOpener())
+    monkeypatch.setattr(kellai_client, "_OPENER", DirectOpener())
     monkeypatch.setattr(
         urllib.request,
         "urlopen",
         lambda *_args, **_kwargs: pytest.fail("fixed loopback traffic must not use global urlopen"),
     )
 
-    assert kellai_binding._open_kellai_request(request, timeout=3) is sentinel
-    assert calls == [(request, 3)]
+    assert kellai_client.request_kellai("channels", {"access_token": "test-token"}) == {
+        "success": True,
+        "data": {},
+    }
+    assert calls[0][0].full_url == "http://127.0.0.1:8793/api/kellai/integrations/xcmax/channels"
+    assert calls[0][1] == 5
 
 
 def test_infrastructure_mount_registers_kellai_binding_routes() -> None:
@@ -184,19 +196,49 @@ def test_pairing_requires_all_read_only_scopes(app: FastAPI) -> None:
     assert "全部只读权限" in response.json()["detail"]
 
 
+def test_pairing_requires_live_account_and_reads_use_unified_execution(app, monkeypatch):
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+    anonymous = TestClient(app, client=("127.0.0.1", 50000))
+    assert anonymous.post("/api/kellai/binding/start", headers=XCMAX_HEADERS).status_code == 401
+    assert kellai_binding_store.pending_for_kellai() is None
+    observed = []
+
+    def execute(args, *, runtime_context):
+        assert _bound_actor(runtime_context).id == app.state.test_actor_id
+        observed.append(args)
+        return json.dumps(
+            {
+                "success": True,
+                "result": {"success": True, "data": {"customers": []}},
+                "task_id": "original-task",
+                "run_id": "original-run",
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability", execute
+    )
+    response = local_client(app).get(
+        "/api/kellai/binding/customers?limit=2", headers=CLIENT_HEADERS
+    )
+    assert response.status_code == 200
+    assert observed == [{"tool_id": "kellai", "action": "customers", "params": {"limit": 2}}]
+
+
 def test_customer_data_proxy_clamps_limits_and_validates_customer_id(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     requested_paths: list[str] = []
 
-    def fake_kellai_get(path: str):
-        requested_paths.append(path)
-        if "conversations" in path:
+    def fake_kellai_get(request, action, params):
+        requested_paths.append((action, params))
+        if action == "conversations":
             return {"success": True, "data": {"messages": [{"id": "m-1"}]}}
         return {"success": True, "data": {"customers": [{"customer_id": 7}]}}
 
-    monkeypatch.setattr(kellai_binding, "_kellai_get", fake_kellai_get)
+    monkeypatch.setattr(kellai_binding, "_read_kellai_capability", fake_kellai_get)
     client = local_client(app)
 
     customers = client.get("/api/kellai/binding/customers?limit=999", headers=CLIENT_HEADERS)
@@ -212,8 +254,8 @@ def test_customer_data_proxy_clamps_limits_and_validates_customer_id(
     assert customers.json()["data"]["customers"][0]["customer_id"] == 7
     assert conversations.json()["data"]["messages"][0]["id"] == "m-1"
     assert requested_paths == [
-        "/api/kellai/integrations/xcmax/customers?limit=50",
-        "/api/kellai/integrations/xcmax/customers/7/conversations?limit=1",
+        ("customers", {"limit": 50}),
+        ("conversations", {"customer_id": 7, "limit": 1}),
     ]
     assert invalid_customer.status_code == 422
 
@@ -226,9 +268,9 @@ def test_copilot_draft_uses_only_authorized_customer_conversation(
 
     requested_paths: list[str] = []
 
-    def fake_kellai_get(path: str):
-        requested_paths.append(path)
-        if path.endswith("/conversations?limit=100"):
+    def fake_kellai_get(request, action, params):
+        requested_paths.append((action, params))
+        if action == "conversations":
             return {
                 "success": True,
                 "data": {
@@ -268,7 +310,7 @@ def test_copilot_draft_uses_only_authorized_customer_conversation(
             "status": "pending_approval",
         }
 
-    monkeypatch.setattr(kellai_binding, "_kellai_get", fake_kellai_get)
+    monkeypatch.setattr(kellai_binding, "_read_kellai_capability", fake_kellai_get)
     monkeypatch.setattr(kellai_customer_copilot, "generate_draft", fake_generate_draft)
 
     response = local_client(app).post(
@@ -282,8 +324,8 @@ def test_copilot_draft_uses_only_authorized_customer_conversation(
     assert captured["customer"]["display_name"] == "已授权客户"
     assert captured["messages"][0]["id"] == "m-1"
     assert requested_paths == [
-        "/api/kellai/integrations/xcmax/customers?limit=50",
-        "/api/kellai/integrations/xcmax/customers/7/conversations?limit=100",
+        ("customers", {"limit": 50}),
+        ("conversations", {"customer_id": 7, "limit": 100}),
     ]
 
 
@@ -293,8 +335,8 @@ def test_copilot_draft_rejects_unpaired_or_unknown_customer(
 ) -> None:
     monkeypatch.setattr(
         kellai_binding,
-        "_kellai_get",
-        lambda _path: {"success": True, "data": {"customers": []}},
+        "_read_kellai_capability",
+        lambda *_args: {"success": True, "data": {"customers": []}},
     )
     client = local_client(app)
 
@@ -350,7 +392,7 @@ def test_copilot_approval_is_explicit_and_client_only(
         {
             "draft_id": "draft-1",
             "decision": "approve",
-            "actor": None,
+            "actor": app.state.test_actor_id,
             "note": "已由客户负责人核对",
         }
     ]
@@ -422,7 +464,7 @@ def test_follow_up_task_routes_stay_in_client_plane(
         {
             "task_id": "task-1",
             "decision": "complete",
-            "actor": None,
+            "actor": app.state.test_actor_id,
             "outcome_result": "success",
         }
     ]

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import urllib.error
-import urllib.request
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Path, Request
@@ -14,8 +12,6 @@ from app.application import kellai_binding_app_service as kellai_binding_app
 
 router = APIRouter(prefix="/api/kellai/binding", tags=["kellai-binding"])
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
-_KELLAI_BASE = "http://127.0.0.1:8793"
-_DIRECT_LOOPBACK_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 class ApproveBindingBody(BaseModel):
@@ -29,6 +25,10 @@ class ApproveBindingBody(BaseModel):
 class CancelBindingBody(BaseModel):
     request_id: str = Field(min_length=12, max_length=128)
     authorization_secret: str = Field(min_length=24, max_length=256)
+
+
+class StartBindingBody(BaseModel):
+    requested_scopes: list[str] | None = Field(default=None, max_length=10)
 
 
 class CopilotDecisionBody(BaseModel):
@@ -65,6 +65,16 @@ def _require_xcmax_client(request: Request) -> None:
         or bool(meta.get("market_is_admin"))
     ):
         raise HTTPException(status_code=403, detail="平台管理账号无权读取客户原始会话")
+    owners = kellai_binding_app.binding_owners()
+    if owners and _client_actor(request) not in owners:
+        raise HTTPException(status_code=403, detail="此客来来连接属于另一个 XCMAX 账号")
+    connection = kellai_binding_app.connection_credentials()
+    if (
+        connection
+        and connection.get("xcmax_user_id") is not None
+        and str(connection.get("xcmax_tenant_id") or "") != _client_tenant(request)
+    ):
+        raise HTTPException(status_code=403, detail="此客来来连接属于另一个企业范围")
 
 
 def _require_pairing_request(request: Request) -> None:
@@ -84,34 +94,37 @@ def _client_actor(request: Request) -> int | None:
         return None
 
 
-def _open_kellai_request(request: urllib.request.Request, *, timeout: float):
-    """Open the fixed loopback hop directly, independent of process proxy hooks."""
-    return _DIRECT_LOOPBACK_OPENER.open(request, timeout=timeout)
-
-
-def _kellai_get(path: str) -> dict[str, Any]:
-    connection = kellai_binding_app.connection_credentials()
-    if not connection:
-        raise HTTPException(status_code=409, detail="客来来尚未连接")
-    token = str(connection.get("access_token") or "")
-    request = urllib.request.Request(
-        f"{_KELLAI_BASE}{path}",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-        method="GET",
-    )
+def _client_tenant(request: Request) -> str:
     try:
-        with _open_kellai_request(request, timeout=3) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (
-        urllib.error.URLError,
-        urllib.error.HTTPError,
-        TimeoutError,
-        json.JSONDecodeError,
-    ) as exc:
-        raise HTTPException(status_code=503, detail=f"无法读取客来来本地数据：{exc}") from exc
-    if not isinstance(payload, dict) or not payload.get("success"):
-        raise HTTPException(status_code=503, detail="客来来没有返回可用客户数据")
-    return payload
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        user = resolve_session_user(request)
+        return str(getattr(user, "tenant_id", "") or "")
+    except (ImportError, RuntimeError, TypeError, ValueError):
+        return ""
+
+
+def _read_kellai_capability(
+    request: Request, action: str, params: dict[str, Any]
+) -> dict[str, Any]:
+    from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+    context = request_runtime_context(request)
+    result = json.loads(
+        execute_registered_capability(
+            {"tool_id": "kellai", "action": action, "params": params}, runtime_context=context
+        )
+    )
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=403
+            if result.get("error_code")
+            in {"kellai_scope_required", "tool_identity_required", "tool_permission_denied"}
+            else 503,
+            detail=result.get("message") or "客来来能力不可用",
+        )
+    return {**result["result"], "task_id": result.get("task_id"), "run_id": result.get("run_id")}
 
 
 @router.get("/status")
@@ -121,10 +134,21 @@ def get_binding_status(request: Request):
 
 
 @router.post("/start")
-def start_binding(request: Request):
+def start_binding(request: Request, body: StartBindingBody | None = None):
     _require_xcmax_client(request)
     _require_pairing_request(request)
-    return {"success": True, "data": kellai_binding_app.start_pairing()}
+    actor = _client_actor(request)
+    if actor is None:
+        raise HTTPException(status_code=401, detail="请先登录 XCMAX 企业账号")
+    try:
+        data = kellai_binding_app.start_pairing(
+            requested_scopes=body.requested_scopes if body else None,
+            actor=actor,
+            tenant_id=_client_tenant(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"success": True, "data": data}
 
 
 @router.get("/pending")
@@ -178,16 +202,14 @@ def disconnect_binding(request: Request):
 @router.get("/data-status")
 def get_data_status(request: Request):
     _require_xcmax_client(request)
-    payload = _kellai_get("/api/kellai/integrations/xcmax/data-status")
+    payload = _read_kellai_capability(request, "data_status", {})
     return {"success": True, "data": payload.get("data") or {}}
 
 
 @router.get("/customers")
 def get_customers(request: Request, limit: int = 12):
     _require_xcmax_client(request)
-    payload = _kellai_get(
-        f"/api/kellai/integrations/xcmax/customers?limit={max(1, min(limit, 50))}"
-    )
+    payload = _read_kellai_capability(request, "customers", {"limit": max(1, min(limit, 50))})
     return {"success": True, "data": payload.get("data") or {}}
 
 
@@ -198,8 +220,8 @@ def get_customer_conversations(
     limit: int = 30,
 ):
     _require_xcmax_client(request)
-    payload = _kellai_get(
-        f"/api/kellai/integrations/xcmax/customers/{customer_id}/conversations?limit={max(1, min(limit, 100))}"
+    payload = _read_kellai_capability(
+        request, "conversations", {"customer_id": customer_id, "limit": max(1, min(limit, 100))}
     )
     return {"success": True, "data": payload.get("data") or {}}
 
@@ -236,7 +258,7 @@ async def create_copilot_draft(
     _require_xcmax_client(request)
     _require_pairing_request(request)
 
-    customer_payload = _kellai_get("/api/kellai/integrations/xcmax/customers?limit=50")
+    customer_payload = _read_kellai_capability(request, "customers", {"limit": 50})
     customers = (customer_payload.get("data") or {}).get("customers") or []
     customer = next(
         (
@@ -248,8 +270,8 @@ async def create_copilot_draft(
     )
     if not isinstance(customer, dict):
         raise HTTPException(status_code=404, detail="未找到已授权的真实客户")
-    conversation_payload = _kellai_get(
-        f"/api/kellai/integrations/xcmax/customers/{customer_id}/conversations?limit=100"
+    conversation_payload = _read_kellai_capability(
+        request, "conversations", {"customer_id": customer_id, "limit": 100}
     )
     messages = (conversation_payload.get("data") or {}).get("messages") or []
     try:

@@ -208,7 +208,7 @@ NiFi 的数据流能力不直接等同于 ERP 撤销；撤销与业务关联是 
 
 ### 05 AI 意图与工具路由 (`intent-routing`)
 
-XCMAX 范围：`FHD/app/application/chat_business_safety_core.py`。
+XCMAX 范围：`FHD/app/domain/app_pure/chat_business_safety_core.py`。
 
 采用 Rasa OSS 3.6 系列代码快照，不把 Rasa Pro 算作开源；模型自报置信度不等于准确率。
 

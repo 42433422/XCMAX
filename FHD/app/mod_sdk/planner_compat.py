@@ -62,16 +62,11 @@ def intent_test(body: dict[str, Any] | None) -> dict[str, Any] | JSONResponse:
         )
 
 
-def list_planner_tools_registry() -> dict[str, Any]:
+def list_planner_tools_registry(request: Request) -> dict[str, Any]:
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
     from app.mod_sdk.planner_tools import list_planner_tools_registry_detail
 
-    return list_planner_tools_registry_detail()
-
-
-def execute_planner_tool(body: dict[str, Any] | None) -> dict[str, Any]:
-    from app.mod_sdk.planner_tools import execute_planner_tool_from_body
-
-    return execute_planner_tool_from_body(body)
+    return list_planner_tools_registry_detail(request_runtime_context(request))
 
 
 __all__ = [
@@ -84,5 +79,4 @@ __all__ = [
     "compat_chat_stream_async",
     "intent_test",
     "list_planner_tools_registry",
-    "execute_planner_tool",
 ]

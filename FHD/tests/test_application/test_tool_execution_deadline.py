@@ -5,8 +5,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.application.agent_orchestrator.run_models import AgentStep
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
+
+
+@pytest.fixture(autouse=True)
+def isolated_circuit_state(monkeypatch):
+    from collections import OrderedDict
+
+    from app.utils.resilience import rate_limiter
+
+    monkeypatch.setattr(rate_limiter, "_tool_breakers", OrderedDict())
 
 
 def _step():
@@ -51,6 +60,7 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
     assert seen[0]["tenant_id"] == 7
     assert seen[0]["deadline_utc"]
     assert result["outcome"] == "unknown"
+    assert result["error_code"] == ("tool_timeout_unknown" if late else "tool_result_unknown")
     assert result["reconciliation_evidence"]["task_id"] == "existing-task"
     assert result["reconciliation_evidence"]["attempt_id"] == "attempt-1"
     assert result["retryable"] is False and result["reconciliation_required"] is True
@@ -69,7 +79,7 @@ def test_unknown_outcome_blocks_automatic_repair_without_dispatch():
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
     runner = AgentOrchestrator(repository=InMemoryAgentRunRepository())
-    run = SimpleNamespace(metadata={"non_retryable": True})
+    run = AgentRun(user_id="owner", message="retry", metadata={"non_retryable": True})
     assert runner._prepare_repair_or_retry(run, _step(), runtime_context={}) is False
 
 
@@ -272,3 +282,113 @@ def test_employee_async_bridge_preserves_invocation_budget(bridge):
         assert _DEADLINE.get() is None
     finally:
         tenant.reset(token)
+
+
+@pytest.mark.parametrize("failure", ["read_error", "protocol_error", "cancelled", 429, 503])
+def test_remote_write_failure_cannot_be_hidden_by_employee_success(monkeypatch, failure):
+    import asyncio
+
+    import httpx
+
+    from app.application.tool_execution_deadline import build_http_helpers
+
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    calls = []
+
+    async def request(self, method, url, **kwargs):
+        calls.append(method)
+        if failure == "read_error":
+            raise httpx.ReadError("private upstream error")
+        if failure == "protocol_error":
+            raise httpx.RemoteProtocolError("private upstream error")
+        if failure == "cancelled":
+            raise asyncio.CancelledError
+        return httpx.Response(failure, json={"message": "result unavailable"})
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", request)
+    # Keep this stubbed transport independent of the host's proxy environment.
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kwargs: client_type(trust_env=False, **kwargs)
+    )
+
+    def execute(*args, **kwargs):
+        _, post = build_http_helpers()
+        try:
+            asyncio.run(post("https://fixture.invalid", {"private": "payload"}))
+        except asyncio.CancelledError:
+            pass  # An employee swallowing cancellation still cannot settle success.
+        return {"success": True, "data": {"claimed": "complete"}}
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=30,
+    )
+    assert calls == ["POST"], result
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert result["error_code"] == "tool_result_unknown"
+    assert result["reconciliation_evidence"]["success"] is True
+    assert result["io_reconciliation"] == [
+        {
+            "kind": (
+                "http_failure"
+                if isinstance(failure, int)
+                else "http_cancelled"
+                if failure == "cancelled"
+                else "http_transport_error"
+            ),
+            "method": "POST",
+        }
+    ]
+
+
+@pytest.mark.parametrize("entry", ["prepare_repair_or_retry", "prepare_llm_repair_or_retry"])
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"success": False, "outcome": "unknown", "retryable": True},
+        {"success": False, "result": {"outputs": [{"execution_state": "running"}]}},
+        {"success": False, "requires_reconciliation": True},
+        {"success": False, "result": {"execution_status": "timeout"}},
+        {"success": False, "error_code": "tool_timeout_unknown"},
+        {"success": False, "error_code": "tool_billing_blocked"},
+    ],
+)
+def test_repair_rechecks_receipt_when_old_run_lacks_non_retryable_flag(entry, output):
+    from app.application.agent_orchestrator.run_repair import RunRepair
+
+    # None dependencies intentionally fail if an uncertain receipt reaches repair,
+    # billing, LLM generation or persistence rather than being refused at entry.
+    repair = RunRepair(None, None, None)
+    step = _step()
+    step.risk, step.idempotent, step.output = "low", True, output
+    assert not getattr(repair, entry)(
+        AgentRun(user_id="owner", message="retry", steps=[step]), step, runtime_context={}
+    )
+
+
+@pytest.mark.parametrize("entry", ["prepare_repair_or_retry", "prepare_llm_repair_or_retry"])
+def test_repair_override_cannot_extend_server_attempt_limit(entry):
+    from app.application.agent_orchestrator.run_repair import RunRepair
+
+    dependencies = SimpleNamespace(repair_enabled=lambda *_: True, repair_limit=lambda *_: 99999)
+    repair = RunRepair(None, None, dependencies)
+    step = _step()
+    step.risk, step.idempotent = "low", True
+    step.output = {"success": False, "retryable": True}
+    step.repair_history = [{"attempt_count": attempt} for attempt in range(1, 5)]
+    run = AgentRun(
+        user_id="owner",
+        message="retry",
+        steps=[step],
+        metadata={
+            "plan": {
+                "metadata": {
+                    "repair_overrides": {step.node_id: {"max_attempts": 99999, "retry": True}},
+                }
+            }
+        },
+    )
+    assert not getattr(repair, entry)(run, step, runtime_context={})

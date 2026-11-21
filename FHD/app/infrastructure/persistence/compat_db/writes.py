@@ -1,37 +1,16 @@
-"""
-xcagi_compat 共享 DB 写入 / 更新 / 删除辅助函数。
-
-供 xcagi_compat_customer / product 等路由子模块复用。
-"""
+"""Existing tenant-scoped customer insertion used by shipment recording."""
 
 from __future__ import annotations
 
-import logging
-
 from fastapi import HTTPException
-from sqlalchemy import inspect, text
+from sqlalchemy import text
 
-from app.infrastructure.db.sync_engine import get_sync_engine
 from app.infrastructure.persistence.compat_db.compat_db_base import (
     _customer_pg_engine_insp,
-    _customer_pg_products_has_unit,
-    _pg_expr_norm_unit,
     _pg_purchase_unit_active_sql,
-    _product_parse_id,
-    _sql_delete_where,
     _sql_ident,
     _sql_insert_returning,
     _sql_select_from_where,
-    _sql_update_set_where,
-)
-from app.infrastructure.persistence.compat_db.product_writes import (
-    products_pg_batch_delete_rows,
-    products_pg_delete_row,
-    products_pg_insert_row,
-    products_pg_update_row,
-)
-from app.infrastructure.persistence.compat_db.product_writes import (
-    products_pg_col_names as _products_pg_col_names,
 )
 from app.infrastructure.persistence.compat_db.queries import (
     _customer_row_for_api,
@@ -43,12 +22,9 @@ from app.infrastructure.tenant_scope import (
 )
 from app.shell.mod_row_scope import (
     append_mod_scope_where,
-    products_update_or_delete_mod_and,
     scoped_mod_id,
 )
 from app.utils.time import utc_now_naive
-
-logger = logging.getLogger(__name__)
 
 
 def _tenant_scope_http_error(exc: TenantScopeError) -> HTTPException:
@@ -77,144 +53,6 @@ def _require_tenant_id_or_raise(
         return require_raw_sql_tenant_id(column_names, table_name=table_name)
     except TenantScopeError as exc:
         raise _tenant_scope_http_error(exc) from exc
-
-
-def _products_delete_by_unit_pg(eng, unit_name: str) -> int:
-    un = (unit_name or "").strip()
-    if not un:
-        return 0
-    insp = inspect(eng)
-    if not _customer_pg_products_has_unit(insp):
-        return 0
-    pcols = {c["name"] for c in insp.get_columns("products")}
-    col = _pg_expr_norm_unit("CAST(unit AS TEXT)")
-    prm = _pg_expr_norm_unit("CAST(:u AS TEXT)")
-    where_parts = [f"{col} = {prm}"]
-    params: dict[str, object] = {"u": un}
-    _append_tenant_scope_or_raise(where_parts, params, pcols, table_name="products")
-    append_mod_scope_where(where_parts, params, pcols)
-    where_sql = " AND ".join(where_parts)
-    with eng.begin() as conn:
-        r = conn.execute(
-            text(_sql_delete_where("products", where_sql)),
-            params,
-        )
-        return int(r.rowcount or 0)
-
-
-def _purchase_units_delete_by_norm_unit_pg(eng, unit_name: str) -> int:
-    un = (unit_name or "").strip()
-    if not un:
-        return 0
-    insp = inspect(eng)
-    if "purchase_units" not in insp.get_table_names():
-        return 0
-    cols = {c["name"] for c in insp.get_columns("purchase_units")}
-    if "unit_name" not in cols:
-        return 0
-    col = _pg_expr_norm_unit("CAST(unit_name AS TEXT)")
-    prm = _pg_expr_norm_unit("CAST(:u AS TEXT)")
-    where_parts = [f"{col} = {prm}"]
-    params: dict[str, object] = {"u": un}
-    _append_tenant_scope_or_raise(where_parts, params, cols, table_name="purchase_units")
-    append_mod_scope_where(where_parts, params, cols)
-    where_sql = " AND ".join(where_parts)
-    with eng.begin() as conn:
-        r = conn.execute(
-            text(_sql_delete_where("purchase_units", where_sql)),
-            params,
-        )
-        return int(r.rowcount or 0)
-
-
-def _customers_delete_by_norm_name_pg(eng, insp, customer_name: str) -> int:
-    cn = (customer_name or "").strip()
-    if not cn or "customers" not in insp.get_table_names():
-        return 0
-    cols_names = {c["name"] for c in insp.get_columns("customers")}
-    name_col = next(
-        (c for c in ("customer_name", "name", "客户名称") if c in cols_names),
-        None,
-    )
-    if not name_col:
-        return 0
-    col = _pg_expr_norm_unit(f"CAST({_sql_ident(name_col)} AS TEXT)")
-    prm = _pg_expr_norm_unit("CAST(:u AS TEXT)")
-    where_parts = [f"{col} = {prm}"]
-    params: dict[str, object] = {"u": cn}
-    _append_tenant_scope_or_raise(where_parts, params, cols_names, table_name="customers")
-    append_mod_scope_where(where_parts, params, cols_names)
-    where_sql = " AND ".join(where_parts)
-    with eng.begin() as conn:
-        r = conn.execute(
-            text(_sql_delete_where(_sql_ident("customers"), where_sql)),
-            params,
-        )
-        return int(r.rowcount or 0)
-
-
-def _purchase_units_delete_by_id_pg(eng, customer_id: int) -> int:
-    insp = inspect(eng)
-    if "purchase_units" not in insp.get_table_names():
-        return 0
-    cols = {c["name"] for c in insp.get_columns("purchase_units")}
-    if "id" not in cols:
-        return 0
-    where_parts = ["id = :id"]
-    params: dict[str, object] = {"id": int(customer_id)}
-    _append_tenant_scope_or_raise(where_parts, params, cols, table_name="purchase_units")
-    append_mod_scope_where(where_parts, params, cols)
-    where_sql = " AND ".join(where_parts)
-    with eng.begin() as conn:
-        r = conn.execute(
-            text(_sql_delete_where("purchase_units", where_sql)),
-            params,
-        )
-        return int(r.rowcount or 0)
-
-
-def _customers_delete_by_id_pg(eng, insp, customer_id: int) -> int:
-    if "customers" not in insp.get_table_names():
-        return 0
-    cols = {c["name"] for c in insp.get_columns("customers")}
-    id_col = "id" if "id" in cols else ("customer_id" if "customer_id" in cols else None)
-    if not id_col:
-        return 0
-    where_parts = [f"{_sql_ident(id_col)} = :id"]
-    params: dict[str, object] = {"id": int(customer_id)}
-    _append_tenant_scope_or_raise(where_parts, params, cols, table_name="customers")
-    append_mod_scope_where(where_parts, params, cols)
-    where_sql = " AND ".join(where_parts)
-    with eng.begin() as conn:
-        r = conn.execute(
-            text(_sql_delete_where(_sql_ident("customers"), where_sql)),
-            params,
-        )
-        return int(r.rowcount or 0)
-
-
-def _products_unit_replace_pg(eng, old_name: str, new_name: str) -> None:
-    o = (old_name or "").strip()
-    n = (new_name or "").strip()
-    if not o or not n or o == n:
-        return
-    insp = inspect(eng)
-    if not _customer_pg_products_has_unit(insp):
-        return
-    pcols = {c["name"] for c in insp.get_columns("products")}
-    col = _pg_expr_norm_unit("CAST(unit AS TEXT)")
-    prm = _pg_expr_norm_unit("CAST(:oo AS TEXT)")
-    where_parts = [f"{col} = {prm}"]
-    params: dict[str, object] = {"nn": n, "oo": o}
-    _append_tenant_scope_or_raise(where_parts, params, pcols, table_name="products")
-    append_mod_scope_where(where_parts, params, pcols)
-    where_sql = " AND ".join(where_parts)
-    with eng.connect() as conn:
-        conn.execute(
-            text(_sql_update_set_where("products", "unit = :nn", where_sql)),
-            params,
-        )
-        conn.commit()
 
 
 def _customer_pg_row_select_sql(insp) -> tuple[str, list[str]]:
@@ -316,181 +154,3 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
         new_id = int(r.scalar_one())
         conn.commit()
     return _customer_pg_fetch_by_id(eng, insp, new_id)
-
-
-def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str) -> dict:
-    eng, insp = _customer_pg_engine_insp()
-    pu_cols = {c["name"] for c in insp.get_columns("purchase_units")}
-    with eng.connect() as conn:
-        prev_parts = ["id = :id", _pg_purchase_unit_active_sql()]
-        prev_bind: dict[str, object] = {"id": int(customer_id)}
-        _append_tenant_scope_or_raise(prev_parts, prev_bind, pu_cols, table_name="purchase_units")
-        append_mod_scope_where(prev_parts, prev_bind, pu_cols)
-        prev = (
-            conn.execute(
-                text(
-                    _sql_select_from_where(
-                        "id, unit_name",
-                        "purchase_units",
-                        " AND ".join(prev_parts),
-                    )
-                ),
-                prev_bind,
-            )
-            .mappings()
-            .first()
-        )
-        if not prev:
-            raise HTTPException(status_code=404, detail="客户不存在或已删除")
-        old_name = str(prev["unit_name"] or "").strip()
-        clash_parts = [
-            "unit_name = :n",
-            "id != :id",
-            _pg_purchase_unit_active_sql(),
-        ]
-        clash_bind: dict[str, object] = {"n": name, "id": int(customer_id)}
-        _append_tenant_scope_or_raise(clash_parts, clash_bind, pu_cols, table_name="purchase_units")
-        append_mod_scope_where(clash_parts, clash_bind, pu_cols)
-        clash = conn.execute(
-            text(_sql_select_from_where("id", "purchase_units", " AND ".join(clash_parts))),
-            clash_bind,
-        ).first()
-        if clash:
-            raise HTTPException(status_code=400, detail="客户名称与其他记录冲突")
-        now = utc_now_naive()
-        upd_bind = {
-            "un": name,
-            "cp": cp,
-            "ph": ph,
-            "addr": addr,
-            "id": int(customer_id),
-        }
-        upd_bind["tenant_id"] = _require_tenant_id_or_raise(pu_cols, table_name="purchase_units")
-        tenant_and = " AND tenant_id = :tenant_id"
-        mod_and = products_update_or_delete_mod_and(pu_cols, upd_bind)
-        if "updated_at" in pu_cols:
-            upd_bind["ua"] = now
-            conn.execute(
-                text(
-                    "UPDATE purchase_units SET unit_name = :un, contact_person = :cp, "
-                    "contact_phone = :ph, address = :addr, updated_at = :ua WHERE id = :id"
-                    + tenant_and
-                    + mod_and
-                ),
-                upd_bind,
-            )
-        else:
-            conn.execute(
-                text(
-                    "UPDATE purchase_units SET unit_name = :un, contact_person = :cp, "
-                    "contact_phone = :ph, address = :addr WHERE id = :id" + tenant_and + mod_and
-                ),
-                upd_bind,
-            )
-        conn.commit()
-    if old_name and old_name != name.strip():
-        _products_unit_replace_pg(eng, old_name, name.strip())
-    return _customer_pg_fetch_by_id(eng, insp, customer_id)
-
-
-def _customer_pg_select_customers_name_by_id(eng, insp, customer_id: int) -> tuple[str, str] | None:
-    if "customers" not in insp.get_table_names():
-        return None
-    cols = {c["name"] for c in insp.get_columns("customers")}
-    id_col = "id" if "id" in cols else ("customer_id" if "customer_id" in cols else None)
-    name_col = next(
-        (c for c in ("customer_name", "name", "客户名称") if c in cols),
-        None,
-    )
-    if not id_col or not name_col:
-        return None
-    where_parts = [f"{_sql_ident(id_col)} = :id"]
-    cbind: dict[str, object] = {"id": int(customer_id)}
-    _append_tenant_scope_or_raise(where_parts, cbind, cols, table_name="customers")
-    append_mod_scope_where(where_parts, cbind, cols)
-    where_clause = " AND ".join(where_parts)
-    select_sql = (
-        "SELECT "
-        + _sql_ident(name_col)
-        + " AS nm FROM "
-        + _sql_ident("customers")
-        + " WHERE "
-        + where_clause
-    )
-    with eng.connect() as conn:
-        r = (
-            conn.execute(
-                text(select_sql),
-                cbind,
-            )
-            .mappings()
-            .first()
-        )
-        if not r:
-            return None
-        nm = str(r["nm"] or "").strip()
-        return (nm, id_col)
-
-
-def _customer_pg_delete_anywhere(customer_id: int) -> None:
-    eng, insp = _customer_pg_engine_insp()
-    cid = int(customer_id)
-    resolved_name: str | None = None
-
-    if "purchase_units" in insp.get_table_names():
-        pu_cols = {c["name"] for c in insp.get_columns("purchase_units")}
-        where_parts = ["id = :id"]
-        pbind: dict[str, object] = {"id": cid}
-        _append_tenant_scope_or_raise(where_parts, pbind, pu_cols, table_name="purchase_units")
-        append_mod_scope_where(where_parts, pbind, pu_cols)
-        with eng.connect() as conn:
-            r = conn.execute(
-                text(
-                    _sql_select_from_where("unit_name", "purchase_units", " AND ".join(where_parts))
-                ),
-                pbind,
-            ).first()
-            if r:
-                resolved_name = str(r[0] or "").strip() or None
-
-    if not resolved_name:
-        csel = _customer_pg_select_customers_name_by_id(eng, insp, cid)
-        if csel:
-            nm, _id_col = csel
-            resolved_name = (nm or "").strip() or None
-
-    if not resolved_name:
-        from app.infrastructure.persistence.compat_db.queries import _customer_find_by_id
-
-        hint = _customer_find_by_id(cid)
-        if hint and int(hint.get("id") or 0) == cid:
-            resolved_name = str(hint.get("customer_name") or "").strip() or None
-
-    n_prod = 0
-    n_pu = 0
-    n_cu = 0
-    if resolved_name:
-        n_prod += _products_delete_by_unit_pg(eng, resolved_name)
-        n_pu += _purchase_units_delete_by_norm_unit_pg(eng, resolved_name)
-        n_cu += _customers_delete_by_norm_name_pg(eng, insp, resolved_name)
-
-    n_pu += _purchase_units_delete_by_id_pg(eng, cid)
-    n_cu += _customers_delete_by_id_pg(eng, insp, cid)
-
-    if n_prod == 0 and n_pu == 0 and n_cu == 0:
-        raise HTTPException(status_code=404, detail="客户不存在")
-
-
-def _customer_delete_unified(customer_id: int) -> None:
-    _customer_pg_delete_anywhere(customer_id)
-
-
-__all__ = [
-    "_product_parse_id",
-    "_products_pg_col_names",
-    "get_sync_engine",
-    "products_pg_batch_delete_rows",
-    "products_pg_delete_row",
-    "products_pg_insert_row",
-    "products_pg_update_row",
-]

@@ -235,13 +235,16 @@ def list_agent_runs(
     try:
         # Public callers can only enumerate their own runs. Cross-user admin search should
         # use a separately permissioned admin route, not a caller-controlled query string.
-        runs = get_agent_run_repository().list_recent(
+        repository = get_agent_run_repository()
+        runs = repository.list_recent(
             user_id=principal.user_id,
             tenant_id=principal.tenant_id,
             limit=limit,
             mod_id=str((principal.mod_authorization or {}).get("mod_id") or ""),
         )
-        return _success([_public_run_dict(run) for run in runs], count=len(runs))
+        return _success(
+            [_public_run_dict(run, read_run=repository.get) for run in runs], count=len(runs)
+        )
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent runs")
 
@@ -310,13 +313,94 @@ def get_agent_run(
         run, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
-        response = _run_response(run, principal=principal)
+        response = _run_response(run, principal=principal, read_run=orchestrator.get_run)
         command = orchestrator.latest_task_control(run_id)
         if command is not None:
             response["control_command"] = command.to_dict()
         return response
     except RECOVERABLE_ERRORS:
         return _internal_error_response("get agent run")
+
+
+@router.get("/api/agent/runs/{run_id}/verification", response_model=None)
+def get_agent_run_verification(
+    run_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    from app.application.agent_orchestrator.verification_recovery import (
+        verification_report,
+    )
+
+    try:
+        run, error = _owned_run(AgentOrchestrator(), run_id, principal)
+        if error is not None:
+            return error
+        assert run is not None
+        return _success({"run_id": run.run_id, "verification": verification_report(run)})
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("get agent verification")
+
+
+@router.post("/api/agent/runs/{run_id}/verify", response_model=None)
+def verify_agent_run(
+    run_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    from app.application.agent_orchestrator.verification_recovery import (
+        reverify_run,
+        verification_can_finalize,
+        verification_report,
+    )
+
+    with run_operation_lock(run_id):
+        orchestrator = AgentOrchestrator()
+        run, error = _owned_run(orchestrator, run_id, principal)
+        if error is not None:
+            return error
+        try:
+            run = reverify_run(
+                get_agent_run_repository(),
+                run_id,
+                runtime_context=authenticated_runtime_context({}, principal),
+            )
+            if run is None:
+                return JSONResponse(
+                    {"success": False, "message": "原任务已不存在"}, status_code=404
+                )
+            report = verification_report(run)
+            if verification_can_finalize(run):
+                # All original actions already have receipts. The normal queue
+                # advances the original graph, skipping them, and settles its
+                # existing task state; verification never dispatches a new effect.
+                run = orchestrator.retry_run(
+                    run_id,
+                    requested_by=principal.user_id,
+                    auto_execute=False,
+                    authenticated_binding=principal.mod_authorization,
+                )
+                if run is not None and run.status == "queued":
+                    if isinstance(get_agent_run_repository(), SQLAlchemyAgentRunRepository):
+                        notify_agent_task_dispatcher()
+                    else:
+                        _enqueue_run(run, requested_by=principal.user_id)
+            if run is None:
+                return JSONResponse(
+                    {"success": False, "message": "原任务已不存在"}, status_code=404
+                )
+            response = _run_response(run, principal=principal)
+            response["verification"] = report
+            return response
+        except (ApprovalGrantError, ValueError):
+            logger.warning("agent verification recovery rejected", exc_info=True)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": "任务或授权状态已变化，核验未触发业务重做；请刷新后核对原任务",
+                },
+                status_code=409,
+            )
+        except RECOVERABLE_ERRORS:
+            return _internal_error_response("recheck agent verification")
 
 
 @router.post("/api/agent/runs/{run_id}/clarification", response_model=None)
@@ -404,6 +488,7 @@ def continue_agent_run(
                     principal_id=principal.user_id,
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
             else:
                 durable = False
@@ -415,6 +500,7 @@ def continue_agent_run(
                     current,
                     principal_id=principal.user_id,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
                 claims = consume_approval_grant(
                     str(data.get("approval_grant") or ""),
@@ -427,6 +513,8 @@ def continue_agent_run(
                     approved_step_id=str(claims["step_id"]),
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
+                    approval_claims=claims,
                 )
         if run is None:
             return JSONResponse(
@@ -491,6 +579,7 @@ def _control_agent_run(
                     principal_id=principal.user_id,
                     runtime_context=runtime_context or {},
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
                 durable_resume = True
             else:
@@ -499,6 +588,7 @@ def _control_agent_run(
                     requested_by=principal.user_id,
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
         if run is None:
             return JSONResponse(
@@ -607,6 +697,7 @@ def retry_agent_run(
                 requested_by=principal.user_id,
                 auto_execute=False,
                 authenticated_binding=principal.mod_authorization,
+                authenticated_actor_binding=principal.actor_authorization,
             )
             if retried is not None and retried.status == "queued":
                 if isinstance(get_agent_run_repository(), SQLAlchemyAgentRunRepository):

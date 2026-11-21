@@ -146,9 +146,13 @@ def test_materials_list_query(mock_get: MagicMock) -> None:
 
 @patch("app.application.get_material_application_service")
 def test_materials_batch_delete(mock_get: MagicMock) -> None:
-    mock_get.return_value.batch_delete_materials.return_value = {"success": True}
+    mock_get.return_value.batch_delete_materials.return_value = {
+        "success": True,
+        "deleted_count": 1,
+    }
     out = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "pro", "")
     assert out["success"] is True
+    assert out["deleted_count"] == 1
 
 
 @patch("app.bootstrap.get_shipment_app_service")

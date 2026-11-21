@@ -139,7 +139,7 @@ def _products_batch(**kw: Any) -> Any:
     if _use_products_service():
         from app.mod_sdk.erp_products_facade import products_batch
 
-        return _tag(products_batch(kw.get("body") or {}))
+        return _tag(products_batch(kw.get("request"), kw.get("body") or {}))
     from app.mod_sdk.host_services import products_batch
 
     return _tag(products_batch(**kw))

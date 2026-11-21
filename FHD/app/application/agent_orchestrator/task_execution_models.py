@@ -12,6 +12,9 @@ ExecutionState = Literal[
     "queued",
     "running",
     "waiting_approval",
+    "waiting_input",
+    "waiting_auth",
+    "unknown",
     "succeeded",
     "failed",
     "timed_out",
@@ -22,6 +25,42 @@ ExecutionState = Literal[
     "blocked",
     "completed",
 ]
+
+
+def dispatched_run_state(run: AgentRun) -> tuple[str, str]:
+    """Project the persisted run receipt when its worker yields execution."""
+    from app.application.agent_orchestrator.result_verification import verified_step_output
+    from app.domain.task_lifecycle.adapters import LegacyTransitionError, canonicalize
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+
+    recovery = run.metadata.get("recovery")
+    pending = execution_result_pending_state(
+        {
+            "final_output": run.final_output,
+            "outputs": [verified_step_output(run, step) for step in run.steps if step.output],
+        }
+    )
+    if (
+        isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+    ) or pending == "unknown":
+        return "unknown", "needs_verification"
+    if pending in {"waiting_input", "waiting_auth", "waiting_approval", "paused", "blocked"}:
+        return pending, ""
+    if pending:
+        return "unknown", "worker_incomplete_state"
+    if run.status == "waiting_user":
+        waiting = next((step for step in run.steps if step.status == "waiting_user"), None)
+        if waiting is None or waiting.tool_id == "clarify":
+            return "waiting_input", ""
+        return "waiting_approval", ""
+    try:
+        state = canonicalize("agent", run.status)
+    except LegacyTransitionError:
+        return "unknown", "worker_incomplete_state"
+    if state in {"created", "queued", "running"}:
+        # A worker returning is not a completion receipt for the work it accepted.
+        return "unknown", "worker_incomplete_state"
+    return state, "needs_verification" if state == "unknown" else ""
 
 
 def _task_id_of(run: AgentRun) -> str:
@@ -145,4 +184,5 @@ __all__ = [
     "AgentTaskExecution",
     "ExecutionState",
     "TaskExecutionRepository",
+    "dispatched_run_state",
 ]

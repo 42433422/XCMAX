@@ -257,13 +257,15 @@ class TestMaterialsRouter:
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1, 2]}, _ctx(), "normal", ""
             )
-            assert result["success"] is True
-            assert result["deleted_count"] == 2
-            assert "warning" in result
+            assert result["success"] is False
+            assert result["execution_state"] == "unknown"
+            assert result["retryable"] is False and result["reconciliation_required"] is True
+            assert "deleted_count" not in result
+        mock_svc.batch_delete_materials.assert_called_once_with([1, 2])
 
     def test_batch_delete_returns_dict(self) -> None:
         mock_svc = MagicMock()
-        mock_svc.batch_delete_materials.return_value = {"success": True}
+        mock_svc.batch_delete_materials.return_value = {"success": True, "deleted_count": 1}
         with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1]}, _ctx(), "normal", ""
@@ -278,7 +280,11 @@ class TestMaterialsRouter:
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1]}, _ctx(), "normal", ""
             )
-            assert result["success"] is True
+            assert result["success"] is False
+            assert result["execution_state"] == "unknown"
+            assert result["retryable"] is False and result["reconciliation_required"] is True
+            assert "deleted_count" not in result
+        mock_svc.batch_delete_materials.assert_called_once_with([1])
 
     def test_export(self) -> None:
         mock_svc = MagicMock()

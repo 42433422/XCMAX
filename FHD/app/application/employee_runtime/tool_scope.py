@@ -1,26 +1,13 @@
-"""按员工能力派生「作用域工具子集」。
-
-此前所有员工的 agent handler 共享同一份全量工具表 —— 差异只在 prompt。
-本模块让差异真实生效：根据 manifest 的 capabilities / expertise / read_only，
-从 ``get_workflow_tool_registry()`` 的基础工具里挑选适配子集（剔除员工包工具本身，避免递归）。
-
-优先级：
-1. 显式声明（``employee_config_v2.tools`` / ``actions.tools`` / ``actions.agent.tools``）—— 为 P4 迁移预留。
-2. 能力关键词派生（excel / 图表 / 文档 / 导入 …）。
-3. 兜底：只读员工给只读分析工具，其它给分析 + 文档生成。
-"""
+"""员工能力声明只收窄当前账号的权威能力目录，不注册独立工具契约。"""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
 logger = logging.getLogger(__name__)
 
-READ_TOOLS = ("excel_analysis", "excel_schema_understand", "excel_join_compare")
-CHART_TOOLS = ("excel_chart_recommend",)
+READ_TOOLS = ("excel_analysis", "excel_toolkit", "excel_analyzer")
 DOC_TOOLS = ("generate_office_document",)
 
 
@@ -72,25 +59,6 @@ _DOC_KW = (
     "pdf",
 )
 _IMPORT_KW = ("导入", "入库", "import", "批量", "bulk", "录入", "ingest", "写库")
-
-
-def _base_tool_specs() -> dict[str, dict[str, Any]]:
-    """基础（非员工包）工具：name -> spec。"""
-    try:
-        from app.application.tools.workflow import get_workflow_tool_registry
-        from app.mod_sdk.employee_tool_registry import is_employee_tool
-
-        out: dict[str, dict[str, Any]] = {}
-        for spec in get_workflow_tool_registry() or []:
-            if not isinstance(spec, dict):
-                continue
-            name = str((spec.get("function") or {}).get("name") or "")
-            if name and not is_employee_tool(name):
-                out[name] = spec
-        return out
-    except RECOVERABLE_ERRORS:
-        logger.debug("base tool specs unavailable", exc_info=True)
-        return {}
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -146,97 +114,53 @@ def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
     actions = _as_dict(config.get("actions"))
     agent = _as_dict(actions.get("agent"))
     ws = _as_dict(agent.get("workspace"))
-    if bool(ws.get("read_only")):
+    if bool(ws.get("read_only")) or bool(_as_dict(config.get("workspace_policy")).get("read_only")):
         return True
     v2 = _as_dict(manifest.get("employee_config_v2"))
     wp = _as_dict(v2.get("workspace_policy"))
     return bool(wp.get("read_only"))
 
 
-def _merge_lifecycle_tools(
+def resolve_employee_tools(
     employee_id: str,
     manifest: dict[str, Any],
     config: dict[str, Any],
-    specs: list[dict[str, Any]],
+    runtime_context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Append published lifecycle tools the employee runtime is allowed to call."""
-    try:
-        from app.application.agent_tool_lifecycle import discovery_for_runtime
+    from app.application.tools.workflow import get_workflow_tool_registry
 
-        extra = discovery_for_runtime(employee_id)
-    except RECOVERABLE_ERRORS:
-        return specs
     allow = _explicit_allowlist(config, manifest)
-    merged = list(specs)
-    seen = {str((item.get("function") or {}).get("name") or "") for item in merged}
-    for spec in extra:
-        if not isinstance(spec, dict):
-            continue
-        name = str((spec.get("function") or {}).get("name") or "")
-        if not name or name in seen:
-            continue
-        if allow is not None and name not in allow:
-            continue
-        merged.append(spec)
-        seen.add(name)
-    return merged
-
-
-def resolve_employee_tools(
-    employee_id: str, manifest: dict[str, Any], config: dict[str, Any]
-) -> list[dict[str, Any]]:
-    base = _base_tool_specs()
-    allow = _explicit_allowlist(config, manifest)
-    if not base:
-        return _merge_lifecycle_tools(employee_id, manifest, config, [])
-    if allow is not None:
-        allowlisted = [base[name] for name in allow if name in base]
-        return _merge_lifecycle_tools(employee_id, manifest, config, allowlisted)
-
-    text = _capability_text(manifest, config)
-    read_only = is_read_only(manifest, config)
-    selected: list[str] = []
-
-    def add(name: str) -> None:
-        if name in base and name not in selected:
-            selected.append(name)
-
-    if any(k in text for k in _EXCEL_KW):
-        for n in READ_TOOLS:
-            add(n)
-    if any(k in text for k in _CHART_KW):
-        for n in CHART_TOOLS:
-            add(n)
-    if any(k in text for k in _DOC_KW):
-        for n in DOC_TOOLS:
-            add(n)
-    if not read_only and any(k in text for k in _IMPORT_KW):
-        for n in ("import_excel_to_database", "products_bulk_import"):
-            add(n)
-
-    if not selected:
-        for n in (
-            "excel_analysis",
-            "excel_schema_understand",
-            "generate_office_document",
-        ):
-            add(n)
-
-    if read_only:
-        from resources.config.risk_actions_loader import list_write_tools
-
-        blocked = set(list_write_tools())
-        selected = [n for n in selected if n not in blocked]
-
-    return _merge_lifecycle_tools(employee_id, manifest, config, [base[n] for n in selected])
+    if allow is None:
+        text = _capability_text(manifest, config)
+        allow = []
+        if any(word in text for word in (*_EXCEL_KW, *_CHART_KW)):
+            allow.extend(READ_TOOLS)
+        if any(word in text for word in _DOC_KW):
+            allow.extend(DOC_TOOLS)
+        if any(word in text for word in _IMPORT_KW):
+            allow.extend(("elt_import", "excel_import"))
+        if not allow:
+            allow = [*READ_TOOLS, *DOC_TOOLS]
+    return get_workflow_tool_registry(
+        runtime_context,
+        allowed_tools=allow,
+        read_only=is_read_only(manifest, config),
+        exclude_tools={"employee"},
+    )
 
 
 def employee_tool_names(
-    employee_id: str, manifest: dict[str, Any], config: dict[str, Any]
+    employee_id: str,
+    manifest: dict[str, Any],
+    config: dict[str, Any],
+    runtime_context: dict[str, Any] | None = None,
 ) -> list[str]:
-    """供可观测/测试使用：返回作用域工具名列表。"""
-    specs = resolve_employee_tools(employee_id, manifest, config) or []
-    return [str((s.get("function") or {}).get("name") or "") for s in specs]
+    """返回实际已投影的能力动作，而不是统一传输工具名。"""
+    return [
+        f"{branch['properties']['tool_id']['enum'][0]}.{branch['properties']['action']['enum'][0]}"
+        for spec in resolve_employee_tools(employee_id, manifest, config, runtime_context)
+        for branch in spec["function"]["parameters"]["anyOf"]
+    ]
 
 
 __all__ = ["employee_tool_names", "is_read_only", "resolve_employee_tools"]

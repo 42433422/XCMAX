@@ -193,6 +193,7 @@ def remember_run_outcome(
                 task=task_text,
                 summary=summary_text,
                 metadata_json=meta,
+                feedback_id=str((metadata or {}).get("feedback_id") or ""),
             )
             or wrote
         )
@@ -210,7 +211,13 @@ def remember_run_outcome(
 
 
 def _remember_short_term(
-    *, session_id: str, user_id: str, task: str, summary: str, metadata_json: str
+    *,
+    session_id: str,
+    user_id: str,
+    task: str,
+    summary: str,
+    metadata_json: str,
+    feedback_id: str = "",
 ) -> bool:
     try:
         from app.domain.shared_services.conversation_service import ConversationService
@@ -218,7 +225,12 @@ def _remember_short_term(
         svc = ConversationService()
         if task:
             svc.save_message(
-                session_id, user_id, "user", task[:_SHORT_TERM_MAX_CHARS], metadata=metadata_json
+                session_id,
+                user_id,
+                "user",
+                task[:_SHORT_TERM_MAX_CHARS],
+                metadata=metadata_json,
+                idempotency_key=f"agent-feedback:{feedback_id}:task" if feedback_id else "",
             )
         if summary:
             svc.save_message(
@@ -227,6 +239,7 @@ def _remember_short_term(
                 "assistant",
                 summary[:_SHORT_TERM_MAX_CHARS],
                 metadata=metadata_json,
+                idempotency_key=f"agent-feedback:{feedback_id}:result" if feedback_id else "",
             )
         return True
     except RECOVERABLE_ERRORS:
@@ -245,7 +258,7 @@ def _remember_long_term(
     if not str(user_id or "").strip():
         return False
     content = (
-        f"[agent_run] status={'completed' if success else 'failed'}; "
+        f"[agent_run] status={extra_metadata.get('status') or ('completed' if success else 'failed')}; "
         f"task={task[:200]}; outcome={summary[:_LONG_TERM_MAX_CHARS]}"
     )
     try:
@@ -255,7 +268,9 @@ def _remember_long_term(
         )
 
         chunk = UserMemoryVectorChunk(
-            chunk_id=uuid.uuid4().hex,
+            chunk_id=("agent-feedback:" + str(extra_metadata["feedback_id"]))
+            if extra_metadata.get("feedback_id")
+            else uuid.uuid4().hex,
             content=content,
             metadata={
                 "source": "agent_runtime",

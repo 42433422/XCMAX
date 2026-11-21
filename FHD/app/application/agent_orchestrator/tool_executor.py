@@ -26,6 +26,7 @@ from app.application.tool_execution_deadline import (
     invocation_deadline,
     invocation_requires_reconciliation,
 )
+from app.application.workflow.retry_policy import is_transport_error
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -42,8 +43,6 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         # 表格读取会在任务快照阶段查询上传记录并按租户校验归属，
         # 后台/持久化运行必须从 runtime_context 恢复租户上下文。
         "excel_analysis",
-        # 导入会按当前租户写入客户/产品/订单，同样需要恢复租户。
-        "import_excel_to_database",
         # ELT 预演与执行同样按租户查询上传并写入目标库。
         "elt_import",
         "finance",
@@ -109,9 +108,11 @@ def _reviewed_query_tenant(
             permission = (
                 "customer.view"
                 if (spec.tool_id, spec.action) in _CUSTOMER_READ_ACTIONS
-                else "shipment.view"
-                if (spec.tool_id, spec.action) in _SHIPMENT_READ_ACTIONS
-                else "product.view"
+                else (
+                    "shipment.view"
+                    if (spec.tool_id, spec.action) in _SHIPMENT_READ_ACTIONS
+                    else "product.view"
+                )
             )
             tenant = check_owned_business_permission(actor, permission)
             if str(context.get("tenant_id")) != str(tenant):
@@ -230,6 +231,36 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
     finally:
         if factory is not None:
             factory.engine.dispose()
+
+
+def _validate_local_mutation_input(
+    tool_id: str, action: str, params: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Run owned, pure guards before creating a claim or invoking an adapter."""
+    if (tool_id, action) == ("business_event", "shipment_create"):
+        from app.domain.shipment.shipment_quantities import (
+            ShipmentQuantityValidationError,
+            validate_shipment_products,
+        )
+
+        items = params.get("items") or []
+        if not items:
+            return {
+                "success": False,
+                "error_code": "PRODUCTS_REQUIRED",
+                "message": "产品列表不能为空",
+            }
+        try:
+            validate_shipment_products(items)
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
+    if (tool_id, action) == ("customers", "batch_delete"):
+        from app.application.customer_deletion import valid_customer_delete_ids
+
+        ids = params.get("ids") or params.get("customer_ids") or []
+        if not valid_customer_delete_ids(ids):
+            return {"success": False, "message": "ids 须为非空正整数数组", "deleted_count": 0}
+    return None
 
 
 class AgentToolExecutor:
@@ -353,6 +384,16 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action,
             }
+        if validation.spec is not None and validation.spec.availability == "aiopen":
+            # AIOPEN owns key scopes and live screen sessions in its async entry.
+            # Its catalog entry does not bind a handler in this process boundary.
+            return {
+                "success": False,
+                "error_code": "tool_entry_unsupported",
+                "execution_status": "not_started",
+                "retryable": False,
+                "message": "此工具需通过已授权的 AIOPEN 入口执行",
+            }
         from app.application.chat_turn_guard import _is_mutation
 
         guard_policy = str((runtime_context or {}).get("mutation_policy") or "")
@@ -386,16 +427,19 @@ class AgentToolExecutor:
         )
         if approval_denied is not None:
             return approval_denied
+        refusal = _validate_local_mutation_input(validation.tool_id, guard_action, params)
+        if refusal is not None:
+            return refusal
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
-        product_db_read = (validation.tool_id, validation.action) == (
+        business_db_read = (validation.tool_id, validation.action) == (
             "business_db",
             "read",
-        ) and params.get("entity") == "products"
+        )
         reviewed_query = (
             validation.tool_id,
             validation.action,
-        ) in _REVIEWED_QUERY_ACTIONS or product_db_read
+        ) in _REVIEWED_QUERY_ACTIONS or (business_db_read and params.get("entity") == "products")
         if reviewed_query and client_identity:
             return _query_failure("tool_identity_override")
         query_tenant = None
@@ -413,13 +457,16 @@ class AgentToolExecutor:
         if (
             validation.tool_id,
             validation.action,
-        ) in _OWNED_READ_ACTIONS or product_db_read:
+        ) in _OWNED_READ_ACTIONS or business_db_read:
             for hint in ("service_source", "route_module"):
                 params["_runtime_context"].pop(hint, None)
         action = validation.action or step.action
         runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
         runtime_tenant_id: int | None = query_tenant
-        if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
+        if (
+            step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS
+            or (validation.tool_id, action) == ("products", "batch_delete")
+        ) and runtime_tenant_raw not in (None, ""):
             try:
                 if isinstance(runtime_tenant_raw, bool) or not str(runtime_tenant_raw).isdigit():
                     raise ValueError
@@ -440,7 +487,7 @@ class AgentToolExecutor:
             AgentModAuthorizationError,
             agent_mod_execution_scope,
         )
-        from app.infrastructure.tenant_scope import owned_tenant_scope, tenant_scope
+        from app.infrastructure.tenant_scope import owned_tenant_scope
 
         result: Any = None
         idem_key = ""
@@ -452,13 +499,12 @@ class AgentToolExecutor:
             # string tenant keys and must not be coerced here.
             scope = (
                 owned_tenant_scope(runtime_tenant_id)
-                if ((validation.tool_id, action) in _OWNED_READ_ACTIONS or product_db_read)
-                and isinstance(runtime_tenant_id, int)
-                else tenant_scope(runtime_tenant_id)
+                if runtime_tenant_id is not None
+                else nullcontext()
             )
             with (
                 agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")),
-                scope if runtime_tenant_id is not None else nullcontext(),
+                scope,
             ):
                 from app.application.agent_orchestrator.tool_permission import (
                     _fingerprint,
@@ -530,15 +576,24 @@ class AgentToolExecutor:
                 except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
                     raise
                 except RECOVERABLE_ERRORS as exc:
+                    safe_read_retry = (
+                        validation.spec is not None
+                        and validation.spec.read_only
+                        and is_transport_error(exc)
+                        and not isinstance(
+                            exc, (FileNotFoundError, IsADirectoryError, NotADirectoryError)
+                        )
+                        and not invocation_requires_reconciliation()
+                    )
                     result = {
                         "success": False,
-                        "error_code": "tool_exception",
+                        "error_code": "tool_unavailable" if safe_read_retry else "tool_exception",
                         "message": "工具执行失败",
                         "exception_type": type(exc).__name__,
-                        "outcome": "unknown",
-                        "retryable": False,
-                        "reconciliation_required": True,
+                        "retryable": safe_read_retry,
                     }
+                    if not safe_read_retry:
+                        result.update(outcome="unknown", reconciliation_required=True)
                 finally:
                     if idem_key and not isinstance(result, dict):
                         finish_idempotent_replay(
@@ -584,7 +639,10 @@ class AgentToolExecutor:
             status_value = 0
         if status_value >= 400:
             result = {**result, **classify_http_status(status_value)}
-        empty = reject_empty_business_result(result, action=action)
+        empty = reject_empty_business_result(
+            result,
+            action="read" if validation.spec is not None and validation.spec.read_only else action,
+        )
         if empty is not None:
             result = {**empty, "outcome": "unknown", "reconciliation_required": True}
 
@@ -615,6 +673,34 @@ class AgentToolExecutor:
             }
             if requires_reconciliation:
                 result.update(outcome="unknown", retryable=False, reconciliation_required=True)
+        # Settle the durable receipt with the same trusted uncertainty as the
+        # outer deadline wrapper. A schema-valid employee "success" cannot erase
+        # a lost HTTP response and leave a successful cached receipt behind.
+        # After entering a mutating handler, failure alone is not proof of no
+        # effect (adapters may have caught an exception after commit). Genuine
+        # pre-dispatch validation/authorization refusals returned before claim.
+        from app.application.agent_orchestrator.result_verification import pending_execution_receipt
+
+        acknowledged_pending = pending_execution_receipt(result)
+        if invocation_requires_reconciliation() or (
+            not acknowledged_pending
+            and (
+                execution_result_requires_reconciliation(result)
+                or (
+                    result.get("success") is not True
+                    and (validation.spec is None or not validation.spec.read_only)
+                )
+            )
+        ):
+            result = {
+                **result,
+                "success": False,
+                "outcome": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
+            }
+        elif acknowledged_pending:
+            result = {**result, "success": False, "retryable": False}
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)
@@ -657,6 +743,7 @@ def execute_with_tool_deadline(
             "message": "工具缺少可取消/隔离的有界执行适配器，已拒绝执行",
         }
     result: Any = None
+    completed_in_time = False
     from app.utils.resilience.rate_limiter import (
         ToolCircuitOpenError,
         ToolConcurrencyLimitError,
@@ -702,13 +789,15 @@ def execute_with_tool_deadline(
     except RECOVERABLE_ERRORS as exc:
         if not invocation.uncertain:
             raise
+        completed_in_time = file_deadlines or time.monotonic() <= deadline
         result = {
             "error_code": "tool_exception_after_unknown_io",
             "exception_type": type(exc).__name__,
         }
     else:
+        completed_in_time = file_deadlines or time.monotonic() <= deadline
         if (
-            (file_deadlines or time.monotonic() <= deadline)
+            completed_in_time
             and isinstance(result, dict)
             and not invocation.uncertain
             and (
@@ -743,9 +832,18 @@ def execute_with_tool_deadline(
                 )
             return result
     worker_exited = isinstance(result, dict) and result.get("error_code") == "tool_worker_exited"
+    timed_out = not completed_in_time or any(
+        marker.get("kind") == "http_timeout" for marker in invocation.uncertain
+    )
     return {
         "success": False,
-        "error_code": "tool_worker_exited" if worker_exited else "tool_timeout_unknown",
+        "error_code": (
+            "tool_worker_exited"
+            if worker_exited
+            else "tool_timeout_unknown"
+            if timed_out
+            else "tool_result_unknown"
+        ),
         "reconciliation_evidence": result if isinstance(result, dict) else {},
         "io_reconciliation": list(invocation.uncertain),
         "outcome": "unknown",
@@ -755,5 +853,7 @@ def execute_with_tool_deadline(
             "工具进程已退出且未返回最终回执，请核对原任务的业务结果，勿重复提交。"
             if worker_exited
             else "工具超时，业务结果未知；必须核对原调用，不可自动重试"
+            if timed_out
+            else "工具已返回，但业务结果尚未确认；请核对原调用，不可自动重试"
         ),
     }

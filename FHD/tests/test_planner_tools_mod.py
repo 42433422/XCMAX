@@ -19,14 +19,15 @@ def test_planner_mod_manifest_tools_execution_flag():
 def test_planner_tools_config_file():
     cfg = json.loads((MOD_DIR / "config" / "planner_tools.json").read_text(encoding="utf-8"))
     assert cfg.get("schema_version") == 1
-    native = cfg.get("mod_native_tools") or {}
-    assert "excel_analysis" in (native.get("tools") or [])
+    assert cfg["execution"]["delegate"] == "capability_contract"
+    assert "mod_native_tools" not in cfg
+    assert "host_delegated_tools" not in cfg
 
 
 def test_planner_blueprints_tools_execute_route():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/tools/execute" in text
-    assert "execute_planner_tool" in text
+    assert "run_tools_execute_agent" in text
     assert 'data.get("success")' in text
 
 
@@ -40,7 +41,7 @@ def test_list_planner_tools_registry_detail_host_path(monkeypatch):
     assert data.get("success") is True
     assert data.get("execution_path") == "host.workflow"
     assert isinstance(data.get("tool_names"), list)
-    assert len(data["tool_names"]) >= 1
+    assert data["tool_names"] == []
 
 
 def test_list_planner_tools_registry_detail_mod_facade(monkeypatch):
@@ -55,32 +56,6 @@ def test_list_planner_tools_registry_detail_mod_facade(monkeypatch):
 
     assert data.get("execution_path") in MOD_FACADE_EXECUTION_PATHS
     assert "tools/execute" in str(data.get("tools_execute_endpoint") or "")
-
-
-def test_execute_planner_tool_from_body_missing_name():
-    from app.mod_sdk.planner_tools import execute_planner_tool_from_body
-
-    out = execute_planner_tool_from_body({})
-    assert out.get("success") is False
-
-
-@pytest.mark.skipif(
-    not (REPO / "mods" / "tools" / "xcagi-planner-excel-tools" / "manifest.json").is_file(),
-    reason="xcagi-planner-excel-tools mod_native path unavailable",
-)
-def test_execute_planner_tool_excel_chart_recommend(monkeypatch):
-    from app.mod_sdk.planner_tools import execute_planner_tool_from_body
-
-    monkeypatch.setenv("XCAGI_PLANNER_TOOLS_VIA_MOD", "1")
-    out = execute_planner_tool_from_body(
-        {"tool_name": "excel_chart_recommend", "arguments": {"file_path": "x.xlsx"}}
-    )
-    assert out.get("success") is True
-    assert out.get("execution_path") == "mod_native"
-    assert out.get("mod_id") == "xcagi-planner-excel-tools"
-    raw = out.get("result") or ""
-    parsed = json.loads(raw)
-    assert "suggestions" in parsed
 
 
 def test_resolve_planner_tool_executor_env(monkeypatch):
@@ -103,4 +78,5 @@ def test_resolve_planner_tool_executor_env(monkeypatch):
     )
     assert resolve_planner_tool_executor().__name__ == "execute_planner_workflow_tool"
     raw = execute_planner_workflow_tool("excel_chart_recommend", {})
-    assert json.loads(raw).get("suggestions")
+    assert json.loads(raw)["error_code"] == "unknown_tool"
+    assert json.loads(raw)["execution_status"] == "not_started"

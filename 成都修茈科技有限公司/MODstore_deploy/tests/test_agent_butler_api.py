@@ -123,7 +123,7 @@ def test_butler_wallet_contract(
     charge_calculator = MagicMock(return_value=Decimal("0.02"))
     monkeypatch.setattr(butler, "calculate_charge", charge_calculator)
     expected_charge = 0.0 if byok else 0.02
-    monkeypatch.setattr(butler, "_partition_butler_tool_calls", lambda *a, **kw: ([], ""))
+    monkeypatch.setattr(butler, "_partition_butler_tool_calls", AsyncMock(return_value=([], "")))
     conversation = butler.ChatConversation(id=81, user_id=mock_user.id)
     mock_db.query.return_value.filter.return_value.first.return_value = conversation
     answer = "answer " * 8
@@ -497,7 +497,8 @@ class TestButlerSystemPrompt:
         assert "fill" in tool_names
         assert "read" in tool_names
 
-    def test_admin_readonly_tools_merged_only_for_admin(self):
+    @pytest.mark.asyncio
+    async def test_admin_readonly_tools_merged_only_for_admin(self):
         from types import SimpleNamespace
 
         from modstore_server.agent_butler_api import (
@@ -507,8 +508,8 @@ class TestButlerSystemPrompt:
 
         admin = SimpleNamespace(is_admin=True)
         user = SimpleNamespace(is_admin=False)
-        admin_names = {t["function"]["name"] for t in _butler_tools_for_user(admin)}
-        user_names = {t["function"]["name"] for t in _butler_tools_for_user(user)}
+        admin_names = {t["function"]["name"] for t in await _butler_tools_for_user(admin)}
+        user_names = {t["function"]["name"] for t in await _butler_tools_for_user(user)}
         assert ADMIN_READONLY_TOOL_NAMES.issubset(admin_names)
         assert not (ADMIN_READONLY_TOOL_NAMES & user_names)
 
@@ -522,7 +523,8 @@ class TestButlerSystemPrompt:
         out = _execute_admin_readonly_tool("get_my_account_snapshot", {}, user=user, db=MagicMock())
         assert "仅管理员" in out
 
-    def test_execute_ops_update_brief_and_self_tickets(self):
+    @pytest.mark.asyncio
+    async def test_execute_ops_update_brief_and_self_tickets(self):
         from types import SimpleNamespace
         from unittest.mock import MagicMock, patch
 
@@ -618,7 +620,7 @@ class TestButlerSystemPrompt:
         assert "T-1" in tickets
         assert "本人工单" in tickets
 
-        page, readonly = _partition_butler_tool_calls(
+        page, readonly = await _partition_butler_tool_calls(
             [
                 {"name": "navigate", "args": {"route": "/wallet"}},
                 {"name": "get_ops_update_brief", "args": {}},

@@ -23,6 +23,7 @@ from app.application.agent_orchestrator import (
     SQLAlchemyAgentRunRepository,
     task_dispatcher,
 )
+from app.application.agent_orchestrator.approval_grant import authorization_scope_hash
 from app.application.agent_orchestrator.run_repository import set_agent_run_repository_for_tests
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.task_execution_sql_repository import (
@@ -65,9 +66,9 @@ class _ExitingCheckpointExecutor(AgentToolExecutor):
 def _run(actor, *, status="queued", completed_write=False):
     first = WorkflowNode(
         node_id="first",
-        tool_id="products",
-        action="query",
-        params={"keyword": "first"},
+        tool_id="business_db",
+        action="read",
+        params={"entity": "customers", "id": 1},
         risk="low",
         idempotent=True,
     )
@@ -90,9 +91,9 @@ def _run(actor, *, status="queued", completed_write=False):
             first,
             WorkflowNode(
                 node_id="second",
-                tool_id="products",
-                action="query",
-                params={"keyword": "second"},
+                tool_id="business_db",
+                action="read",
+                params={"entity": "customers", "id": 2},
                 risk="low",
                 idempotent=True,
                 depends_on=["first"],
@@ -111,13 +112,17 @@ def _run(actor, *, status="queued", completed_write=False):
         node.risk, node.idempotent = step.risk, step.idempotent
     task_id = "task-" + run.run_id
     plan.metadata["source"] = "unified_task_api"
+    context = {**actor.context, "conversation_id": task_id, "workspace_id": task_id}
     run.metadata.update(
-        runtime_context={**actor.context, "conversation_id": task_id, "workspace_id": task_id},
+        runtime_context=context,
+        execution_authorization_scope=authorization_scope_hash(context),
         plan=plan_to_dict(plan),
         task_context={"task_id": task_id},
         task_request={"tool_id": first.tool_id, "action": first.action},
     )
     if completed_write:
+        # A historical execution receipt is retained, but has no independent
+        # business evidence and must never make the resumed task successful.
         run.steps[0].status = "completed"
         run.steps[0].output = {"success": True, "quote_id": 81}
         run.steps[1].status = "failed"
@@ -131,7 +136,16 @@ def _repositories(actor):
     )
 
 
-def _finish_with_startup(monkeypatch, repository, queue, execute, run_id):
+def _finish_with_startup(
+    monkeypatch,
+    repository,
+    queue,
+    execute,
+    run_id,
+    *,
+    expected_status="completed",
+    expected_execution_state="succeeded",
+):
     dispatcher = task_dispatcher.AgentTaskDispatcher(
         execution_repository=queue,
         run_repository=repository,
@@ -153,21 +167,47 @@ def _finish_with_startup(monkeypatch, repository, queue, execute, run_id):
         }:
             time.sleep(0.02)
         stored = repository.get(run_id)
-        assert stored.status == "completed", stored.to_dict()
-        assert queue.get(run_id).state == "succeeded"
+        assert stored.status == expected_status, stored.to_dict()
+        assert queue.get(run_id).state == expected_execution_state
         return stored
     finally:
         dispatcher.stop()
         set_agent_run_repository_for_tests(None)
 
 
+def _assert_unverified_not_replayable(repository, queue, run, actor):
+    assert run.status == "blocked"
+    assert queue.get(run.run_id).state == "unknown"
+    assert run.metadata["verification"]["accepted"] is False
+    assert not any(event.event_type == "run.completed" for event in run.events)
+    before = repository.get(run.run_id).to_dict()
+    execution = queue.get(run.run_id).to_dict()
+    future = (datetime.now(UTC) + timedelta(seconds=120)).isoformat()
+    assert queue.claim("unexpected-replay", lease_seconds=60, now=future) is None
+    with pytest.raises(ValueError, match="核对"):
+        AgentOrchestrator(repository=repository).retry_run(
+            run.run_id,
+            requested_by=str(actor.user_id),
+            auto_execute=False,
+            authenticated_binding=actor.principal.mod_authorization,
+        )
+    assert repository.get(run.run_id).to_dict() == before
+    assert queue.get(run.run_id).to_dict() == execution
+
+
 def test_real_executor_resumes_crashed_read_claim_under_replacement_queue_lease(
     trusted_actor, tmp_path, monkeypatch
 ):
     from app.application.agent_orchestrator import tool_permission
+    from app.db.models.purchase_unit import PurchaseUnit
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(role="admin")
+    with actor.factory.begin() as db:
+        db.add_all(
+            PurchaseUnit(id=index, tenant_id=actor.tenant_id, unit_name=f"customer-{index}")
+            for index in (1, 2)
+        )
     repository, queue = _repositories(actor)
     run = repository.save(_run(actor))
     queue.enqueue(run)
@@ -197,7 +237,10 @@ with worker_claim_scope(repo, execution, execution.lease_owner):
     result = AgentToolExecutor().execute(run.steps[0], runtime_context=context)
     raise AssertionError(result)
 """)
-    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (str(Path(__file__).resolve().parents[2]), env.get("PYTHONPATH", "")))
+    )
     child = subprocess.run(
         [sys.executable, str(script), run.run_id], timeout=25, capture_output=True, env=env
     )
@@ -223,6 +266,15 @@ with worker_claim_scope(repo, execution, execution.lease_owner):
             monkeypatch, repository, queue, AgentToolExecutor().execute, run.run_id
         )
         assert all(step.status == "completed" for step in stored.steps)
+        assert [step.output["data"][0]["unit_name"] for step in stored.steps] == [
+            "customer-1",
+            "customer-2",
+        ]
+        for step in stored.steps:
+            row = step.output["data"][0]
+            assert row["tenant_id"] == actor.tenant_id
+            for field in ("created_at", "updated_at"):
+                assert isinstance(row[field], str) and datetime.fromisoformat(row[field])
         assert queue.get(run.run_id).execution_count == 2
         with sqlite3.connect(claim_path) as db:
             receipts = db.execute(
@@ -256,11 +308,11 @@ def test_read_takeover_fences_live_duplicate_and_stale_worker_completion(
     try:
         with worker_claim_scope(repository, first, first.lease_owner):
             key, replay = tool_permission.begin_idempotent_replay(
-                context, "products", "query", params
+                context, "business_db", "read", params
             )
             assert replay is None
             assert (
-                tool_permission.begin_idempotent_replay(context, "products", "query", params)[1][
+                tool_permission.begin_idempotent_replay(context, "business_db", "read", params)[1][
                     "error_code"
                 ]
                 == "idempotency_in_progress"
@@ -275,11 +327,11 @@ def test_read_takeover_fences_live_duplicate_and_stale_worker_completion(
         assert second.execution_count == first.execution_count + 1
         with worker_claim_scope(repository, second, second.lease_owner):
             assert tool_permission.begin_idempotent_replay(
-                context, "products", "query", params
+                context, "business_db", "read", params
             ) == (key, None)
         with worker_claim_scope(repository, first, first.lease_owner):
             with pytest.raises(WorkerLeaseLost):
-                tool_permission.begin_idempotent_replay(context, "products", "query", params)
+                tool_permission.begin_idempotent_replay(context, "business_db", "read", params)
             with pytest.raises(WorkerLeaseLost):
                 tool_permission.finish_idempotent_replay(key, {"success": True, "data": ["late"]})
         with worker_claim_scope(repository, second, second.lease_owner):
@@ -452,7 +504,11 @@ def test_restart_preserves_exact_queued_approval_before_first_write(
         plan_id=plan.plan_id,
         steps=[step],
     )
-    run.metadata.update(plan=plan_to_dict(plan), runtime_context=actor.context)
+    run.metadata.update(
+        plan=plan_to_dict(plan),
+        runtime_context=actor.context,
+        execution_authorization_scope=authorization_scope_hash(actor.context),
+    )
     if parent is not None:
         run.metadata["task_context"] = {
             "task_id": parent.run_id,
@@ -615,7 +671,18 @@ os._exit(23)
         finally:
             set_agent_run_repository_for_tests(None)
     else:
-        stored = _finish_with_startup(monkeypatch, repository, queue, execute, run.run_id)
+        stored = _finish_with_startup(
+            monkeypatch,
+            repository,
+            queue,
+            execute,
+            run.run_id,
+            expected_status="blocked",
+            expected_execution_state="unknown",
+        )
+        _assert_unverified_not_replayable(repository, queue, stored, actor)
+        assert stored.steps[0].output == {"success": True, "data": {"executed_rows": 1}}
+        assert stored.metadata["verification"]["steps"][0]["code"] == "result_verifier_unavailable"
     assert (
         approved.metadata["approval_receipt"].items() <= stored.metadata["approval_receipt"].items()
     )
@@ -628,7 +695,9 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     trusted_actor, monkeypatch, tmp_path, cleanup_verified
 ):
     from app.application.agent_orchestrator import tool_process
-    from app.application.agent_orchestrator.approval_grant import _params_hash
+    from app.application.agent_orchestrator.approval_grant import (
+        approval_receipt_claims,
+    )
     from app.application.agent_orchestrator.elt_checkpoint_recovery import ELT_CHECKPOINT_PROTOCOL
     from app.application.workflow.workflow_types import plan_fingerprint
 
@@ -664,6 +733,7 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     run.metadata.update(
         plan=plan_to_dict(plan),
         runtime_context=actor.context,
+        execution_authorization_scope=authorization_scope_hash(actor.context),
         dispatch={
             "approved_step_id": step.step_id,
             "elt_checkpoint_protocol": ELT_CHECKPOINT_PROTOCOL,
@@ -675,10 +745,10 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
             "tool_id": step.tool_id,
             "action": step.action,
             "approved_by": run.user_id,
-            "params_sha256": _params_hash(step),
             "plan_sha256": plan_fingerprint(plan),
         },
     )
+    run.metadata["approval_receipt"].update(approval_receipt_claims(run, step))
     repository.save(run)
     queue.enqueue(run)
     old = queue.claim("old", lease_seconds=60)
@@ -716,7 +786,8 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
         assert stored.status == "blocked", stored.steps[0].output
         assert stored.steps[0].output["error_code"] == "tool_worker_exited"
         assert stored.steps[0].output["reconciliation_evidence"]["cleanup_unresolved"] is True
-        assert queue.get(run.run_id).state == "failed"
+        assert queue.get(run.run_id).state == "unknown"
+        assert not queue.get(run.run_id).finished_at
         with sqlite3.connect(fixture) as db:
             assert db.execute("select file from elt_checkpoint_test").fetchall() == [(1,)]
         return
@@ -734,8 +805,9 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     assert new.run_id == old.run_id and new.execution_count == old.execution_count + 1
     dispatcher._execute_claim(new, "replacement")
     stored = repository.get(run.run_id)
-    assert stored.status == "completed" and queue.get(run.run_id).state == "succeeded"
+    _assert_unverified_not_replayable(repository, queue, stored, actor)
     assert stored.steps[0].output == {"success": True, "data": {"executed_rows": 2}}
+    assert stored.metadata["verification"]["steps"][0]["code"] == "result_verifier_unavailable"
     with sqlite3.connect(fixture) as db:
         assert db.execute("select file from elt_checkpoint_test order by file").fetchall() == [
             (1,),
@@ -743,7 +815,7 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
         ]
 
 
-def test_concurrent_retry_preserves_completed_write_and_atomically_requeues_same_run(
+def test_concurrent_retry_preserves_original_write_receipt_and_atomically_requeues_same_run(
     trusted_actor, monkeypatch
 ):
     actor = trusted_actor(role="admin")
@@ -784,7 +856,20 @@ def test_concurrent_retry_preserves_completed_write_and_atomically_requeues_same
         calls.append((step.node_id, runtime_context["idempotency_key"]))
         return {"success": True, "data": []}
 
-    stored = _finish_with_startup(monkeypatch, repository, queue, execute, original.run_id)
+    stored = _finish_with_startup(
+        monkeypatch,
+        repository,
+        queue,
+        execute,
+        original.run_id,
+        expected_status="blocked",
+        expected_execution_state="unknown",
+    )
+    _assert_unverified_not_replayable(repository, queue, stored, actor)
+    assert (
+        stored.metadata["verification"]["steps"][0]["code"]
+        == "historical_receipt_has_no_verification_contract"
+    )
     assert stored.steps[0].to_dict() == before
     assert calls == [
         ("second", task_execution_context(original, original.steps[1])["idempotency_key"])
@@ -799,7 +884,7 @@ def test_retry_rejects_unverified_original_state_without_queue_changes(trusted_a
     if condition == "unknown":
         run.steps[1].output = {"success": False, "outcome": "unknown"}
     elif condition == "plan_changed":
-        run.steps[1].params["keyword"] = "new business intent"
+        run.steps[1].params["id"] = 3
     elif condition == "write_pending":
         run.steps[0].status, run.steps[0].output = "pending", {}
     repository.save(run)
@@ -821,7 +906,9 @@ def test_retry_rejects_unverified_original_state_without_queue_changes(trusted_a
     assert queue.get(run.run_id).to_dict() == execution
 
 
-def test_completed_receipt_settles_open_effect_before_another_worker_takes_lease(trusted_actor):
+def test_original_write_receipt_settles_open_effect_before_another_worker_takes_lease(
+    trusted_actor,
+):
     actor = trusted_actor(role="admin")
     repository, queue = _repositories(actor)
     run = _run(actor, status="running", completed_write=True)
@@ -833,6 +920,8 @@ def test_completed_receipt_settles_open_effect_before_another_worker_takes_lease
     claimed = queue.claim("replacement", lease_seconds=60, now=future)
     assert claimed is not None and claimed.lease_owner == "replacement"
     assert queue.lifecycle(run.run_id)["effects"] == []
+    assert repository.get(run.run_id).steps[0].output == run.steps[0].output
+    assert repository.get(run.run_id).status == "running"
 
 
 def test_native_checkpoint_identity_includes_tenant_user_run_and_plan(trusted_actor):
@@ -850,7 +939,7 @@ def test_native_checkpoint_identity_includes_tenant_user_run_and_plan(trusted_ac
     assert run_checkpoint_thread(changed, plan, parallel=True) != identity
     changed.run_id = "another-run"
     assert run_checkpoint_thread(changed, plan, parallel=True) != identity
-    plan.nodes[1].params["keyword"] = "changed-plan"
+    plan.nodes[1].params["id"] = 3
     assert run_checkpoint_thread(run, plan, parallel=True) != identity
 
 

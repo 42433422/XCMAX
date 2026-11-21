@@ -14,6 +14,7 @@ _DEFAULT_METRICS: dict[str, Any] = {
     "runs_success": 0,
     "runs_failed": 0,
     "runs_blocked": 0,
+    "runs_pending": 0,
     "triggers_total": 0,
     "orchestrations_total": 0,
     "write_blocks_total": 0,
@@ -45,10 +46,16 @@ def record_employee_run(
     blocked: bool = False,
     task: str = "",
     summary: str = "",
+    execution_state: str = "",
 ) -> None:
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+
+    pending = execution_result_pending_state({"execution_state": execution_state})
     now = _now_iso()
     _bump("runs_total", employee_id)
-    if blocked:
+    if pending:
+        _bump("runs_pending", employee_id)
+    elif blocked:
         _bump("runs_blocked", employee_id)
     elif success:
         _bump("runs_success", employee_id)
@@ -61,10 +68,14 @@ def record_employee_run(
         row["last_run_at"] = now
         row["last_execution"] = {
             "executed_at": now,
-            "success": bool(success) and not blocked,
+            "success": bool(success) and not blocked and not pending,
             "blocked": bool(blocked),
+            "execution_state": execution_state
+            or ("blocked" if blocked else "completed" if success else "failed"),
         }
         per[employee_id] = row
+    if pending:
+        return
     try:
         import os
 
@@ -114,6 +125,7 @@ def get_employee_runtime_metrics() -> dict[str, Any]:
             "runs_success": _metrics.get("runs_success", 0),
             "runs_failed": _metrics.get("runs_failed", 0),
             "runs_blocked": _metrics.get("runs_blocked", 0),
+            "runs_pending": _metrics.get("runs_pending", 0),
             "triggers_total": _metrics.get("triggers_total", 0),
             "orchestrations_total": _metrics.get("orchestrations_total", 0),
             "write_blocks_total": _metrics.get("write_blocks_total", 0),

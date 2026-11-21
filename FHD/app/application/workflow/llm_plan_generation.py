@@ -280,7 +280,7 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
         action_specs = []
         for name, metadata in actions.items():
             contract = contracts.get((str(tool_id), str(name)))
-            raw_schema = getattr(contract, "input_schema", {})
+            raw_schema = metadata.get("input_schema", getattr(contract, "input_schema", {}))
             action_specs.append(
                 {
                     "action": name,
@@ -289,7 +289,9 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
                     )[:240],
                     "risk": metadata.get("risk", "low"),
                     "idempotent": bool(metadata.get("idempotent", False)),
-                    "output_schema": getattr(contract, "output_schema", {}),
+                    "output_schema": metadata.get(
+                        "output_schema", getattr(contract, "output_schema", {})
+                    ),
                     "required_params": metadata.get("required_params", []),
                     "input_schema": raw_schema,
                 }

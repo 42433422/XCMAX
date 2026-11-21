@@ -56,6 +56,7 @@ class ToolActionSpecV2:
     version: str = "2"
     read_only: bool = False
     owner_mod_id: str = ""
+    policy: dict[str, Any] = field(default_factory=dict)
 
     @property
     def receipt_permission(self) -> str:
@@ -73,6 +74,7 @@ class ToolActionSpecV2:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            **deepcopy(self.policy),
             "tool_id": self.tool_id,
             "action": self.action,
             "description": self.description,
@@ -186,7 +188,7 @@ def _aiopen_tool_risk(action: str) -> tuple[RiskLevel, bool]:
 
 def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> None:
     try:
-        from app.application.aiopen.service import TOOL_DEFINITIONS
+        from app.application.aiopen.definitions import TOOL_DEFINITIONS
     except RECOVERABLE_ERRORS:
         return
 
@@ -232,7 +234,7 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
             fixture = [
                 {
                     "name": "invoke_aiopen_chat",
-                    "input": {"message": "你好"},
+                    "input": {"message": "你好", "request_id": "contract-aiopen-chat"},
                     "output": {"success": True, "data": {"reply": "你好"}},
                 }
             ]
@@ -253,6 +255,8 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
                     "output": {"success": True, "uploaded": ["sample.txt"]},
                 }
             ]
+        if ("aiopen", action) in specs:
+            raise ValueError(f"Duplicate capability identity: aiopen.{action}")
         specs[("aiopen", action)] = ToolActionSpecV2(
             tool_id="aiopen",
             action=action,
@@ -265,6 +269,9 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
             timeout_seconds=30,
             retry=dict(DEFAULT_RETRY),
             idempotent=idempotent,
+            # api_catalog reads the live account's canonical capability projection.
+            # Other low-risk AIOPEN actions still need explicit side-effect review.
+            read_only=action == "api_catalog",
             required_params=required_params,
             availability="aiopen",
             contract_samples=deepcopy(fixture),
@@ -272,20 +279,23 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
 
 
 _TOOL_SPECS_CACHE: dict[tuple[str, str], ToolActionSpecV2] | None = None
+_TOOL_SPECS_SOURCE: dict[str, Any] | None = None
 
 
 def invalidate_tool_specs_cache() -> None:
-    global _TOOL_SPECS_CACHE
+    global _TOOL_SPECS_CACHE, _TOOL_SPECS_SOURCE
     _TOOL_SPECS_CACHE = None
+    _TOOL_SPECS_SOURCE = None
 
 
 def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
-    global _TOOL_SPECS_CACHE
-    if _TOOL_SPECS_CACHE is not None:
-        return _TOOL_SPECS_CACHE
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    global _TOOL_SPECS_CACHE, _TOOL_SPECS_SOURCE
+    from app.application.tools.mcp.registry import merge_mcp_tools
+    from resources.config.risk_actions_loader import get_workflow_tools_from_registry
 
-    registry = get_workflow_tool_registry()
+    registry = merge_mcp_tools(get_workflow_tools_from_registry())
+    if _TOOL_SPECS_CACHE is not None and registry == _TOOL_SPECS_SOURCE:
+        return _TOOL_SPECS_CACHE
     specs: dict[tuple[str, str], ToolActionSpecV2] = {}
     for tool_id, tool_meta in registry.items():
         actions = tool_meta.get("actions") if isinstance(tool_meta, dict) else None
@@ -295,30 +305,46 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
         for action, action_meta in actions.items():
             if not isinstance(action_meta, dict):
                 continue
-            normalized_action = _normalize_tool_action(str(action or "view"))
+            normalized_action = (
+                str(action).strip()
+                if str(tool_id).startswith("mcp__")
+                else _normalize_tool_action(str(action or "view"))
+            )
+            if (str(tool_id), normalized_action) in specs:
+                raise ValueError(f"Duplicate capability identity: {tool_id}.{normalized_action}")
             required = action_meta.get("required_params")
             required_params = [str(x) for x in required] if isinstance(required, list) else []
             risk = _risk_value(action_meta.get("risk"))
-            input_schema = _SPECIAL_INPUT_SCHEMAS.get(
-                (str(tool_id), normalized_action),
-                _schema_from_required(required_params),
+            input_schema = (
+                _SPECIAL_INPUT_SCHEMAS.get((str(tool_id), normalized_action))
+                or action_meta.get("input_schema")
+                or _schema_from_required(required_params)
             )
-            output_schema = _SPECIAL_OUTPUT_SCHEMAS.get(
-                (str(tool_id), normalized_action),
-                _DEFAULT_OUTPUT_SCHEMA,
+            output_schema = (
+                _SPECIAL_OUTPUT_SCHEMAS.get((str(tool_id), normalized_action))
+                or action_meta.get("output_schema")
+                or _DEFAULT_OUTPUT_SCHEMA
             )
-            contract_samples = _SPECIAL_TOOL_CONTRACTS.get(
-                (str(tool_id), normalized_action),
-                _default_fixture(str(tool_id), normalized_action, input_schema, output_schema),
+            input_schema = deepcopy(input_schema)
+            input_schema.setdefault("required", required_params)
+            required_params = [str(x) for x in input_schema.get("required") or []]
+            contract_samples = (
+                _SPECIAL_TOOL_CONTRACTS.get((str(tool_id), normalized_action))
+                or action_meta.get("contract_samples")
+                or _default_fixture(str(tool_id), normalized_action, input_schema, output_schema)
             )
             spec = ToolActionSpecV2(
                 tool_id=str(tool_id),
                 action=normalized_action,
-                description=tool_description,
+                description=str(action_meta.get("description") or tool_description),
                 input_schema=deepcopy(input_schema),
                 output_schema=deepcopy(output_schema),
                 risk=risk,
-                permission=_special_permission(str(tool_id), normalized_action),
+                permission=str(
+                    action_meta.get(
+                        "permission", _special_permission(str(tool_id), normalized_action)
+                    )
+                ),
                 cost_units=_cost_units(str(tool_id), normalized_action, risk),
                 timeout_seconds=int(action_meta.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                 retry=dict(action_meta.get("retry") or DEFAULT_RETRY),
@@ -329,72 +355,38 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                     action_meta.get("availability") or tool_meta.get("availability") or "shared"
                 ),
                 contract_samples=deepcopy(contract_samples),
+                version=str(action_meta.get("version") or "2"),
+                owner_mod_id=str(
+                    action_meta.get("owner_mod_id") or tool_meta.get("owner_mod_id") or ""
+                ),
+                policy={
+                    key: deepcopy(action_meta[key])
+                    for key in (
+                        "approval",
+                        "compensate",
+                        "required_any",
+                        "action_class",
+                        "requires_write_approval",
+                        "provider_scope",
+                        "data_scope",
+                    )
+                    if key in action_meta
+                },
             )
             specs[(spec.tool_id, spec.action)] = spec
     _add_aiopen_tool_specs(specs)
-    for action in ("append_price", "correct_price"):
-        spec = ToolActionSpecV2(
-            tool_id="catalog_products_v1",
-            action=action,
-            permission="product.edit",
-            description="Reviewed protected mixed-source price edit with independent receipt verification",
-            input_schema={
-                "type": "object",
-                "required": [
-                    "operation_id",
-                    "product_id",
-                    "revision",
-                    "reason",
-                    "price",
-                    "action",
-                    "confirmed",
-                ],
-                "properties": {
-                    "product_id": {"type": "integer"},
-                    "action": {"enum": [action]},
-                    "confirmed": {"enum": [True]},
-                },
-            },
-            risk="medium",
-            retry={"max_attempts": 1},
-            idempotent=False,
-            version="catalog-price-v1",
-            availability="shared",
-            # Schema examples only: no session, approval, source binding or receipt authority.
-            contract_samples=[
-                {
-                    "name": "synthetic_unverified_price_request",
-                    "input": {
-                        "operation_id": "00000000-0000-4000-8000-000000000001",
-                        "product_id": 1,
-                        "revision": "0" * 64,
-                        "action": action,
-                        "price": "12.00",
-                        "period_start": "2026-02-01",
-                        "period_end": "2026-03-01",
-                        "selected_sources": ["1" * 64] if action == "correct_price" else [],
-                        "reason": "Synthetic contract example; not an authorized write",
-                        "confirmed": True,
-                    },
-                    "output": {
-                        "success": False,
-                        "error_code": "catalog_verification_required",
-                        "outcome": "unknown",
-                        "retryable": False,
-                        "message": "查询未能在已授权数据范围内完成",
-                        "reconciliation_required": True,
-                    },
-                }
-            ],
-        )
-        specs[(spec.tool_id, spec.action)] = spec
     _TOOL_SPECS_CACHE = specs
+    _TOOL_SPECS_SOURCE = deepcopy(registry)
     return specs
 
 
 def get_tool_action_spec(tool_id: str, action: str) -> ToolActionSpecV2 | None:
     normalized_tool_id = str(tool_id or "").strip()
-    normalized_action = _normalize_tool_action(str(action or "view"))
+    normalized_action = (
+        str(action).strip()
+        if normalized_tool_id.startswith("mcp__")
+        else _normalize_tool_action(str(action or "view"))
+    )
     return build_tool_specs_v2().get((normalized_tool_id, normalized_action))
 
 
@@ -603,9 +595,9 @@ def _validate_schema_payload(
                         subject=f"{subject}.{key}[{index}]",
                         allow_references_from=allow_references_from,
                         allow_missing_fields=allow_missing_fields,
-                        path_prefix=f"{path_prefix}.{key}[{index}]"
-                        if path_prefix
-                        else f"{key}[{index}]",
+                        path_prefix=(
+                            f"{path_prefix}.{key}[{index}]" if path_prefix else f"{key}[{index}]"
+                        ),
                     )
                     if not nested_ok:
                         return False, nested_message
@@ -700,7 +692,11 @@ def validate_tool_result(
     result: dict[str, Any] | None,
 ) -> ToolValidationResult:
     normalized_tool_id = str(tool_id or "").strip()
-    normalized_action = _normalize_tool_action(str(action or "view"))
+    normalized_action = (
+        str(action).strip()
+        if normalized_tool_id.startswith("mcp__")
+        else _normalize_tool_action(str(action or "view"))
+    )
     spec = get_tool_action_spec(normalized_tool_id, normalized_action)
     if spec is None:
         return ToolValidationResult(
@@ -769,7 +765,11 @@ def validate_tool_call(
     allow_missing_fields: set[str] | frozenset[str] | None = None,
 ) -> ToolValidationResult:
     normalized_tool_id = str(tool_id or "").strip()
-    normalized_action = _normalize_tool_action(str(action or "view"), dict(params or {}))
+    normalized_action = (
+        str(action).strip()
+        if normalized_tool_id.startswith("mcp__")
+        else _normalize_tool_action(str(action or "view"), dict(params or {}))
+    )
     spec = get_tool_action_spec(normalized_tool_id, normalized_action)
     if spec is None:
         return ToolValidationResult(

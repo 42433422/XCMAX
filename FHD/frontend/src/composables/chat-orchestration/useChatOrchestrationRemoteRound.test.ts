@@ -6,7 +6,7 @@
  * 归属失效、非流式回退与批量分支。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref, type Ref } from 'vue'
+import { ref } from 'vue'
 import type { UiChatMessage } from '@/types/chat-ui'
 import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import type { ChatRequestScope } from '../useChatRequest'
@@ -101,8 +101,6 @@ function setup(options: { tts?: boolean; multimodal?: number; excelContext?: boo
   const stateSteps = ref<StateStep[]>([])
   const currentTask = ref<unknown>({ type: 'existing' })
   const ttsEnabled = ref(options.tts ?? true)
-  const pendingDbWriteChatRetryMessages = ref<string[] | null>(['stale-retry'])
-  const plannerWriteUnlockResumeDraft = ref('draft-before')
   const multimodalPendingCount = ref(options.multimodal ?? 0)
   const resolveExcelAnalysisContextForRequest = vi.fn(() => (options.excelContext ? { file_path: 'x.xlsx' } : null))
 
@@ -149,10 +147,7 @@ function setup(options: { tts?: boolean; multimodal?: number; excelContext?: boo
     flushMessagesCache,
     ttsEnabled,
     chatSessionActivity: useChatSessionActivity(sessionId),
-    pendingDbWriteChatRetryMessages,
-    plannerWriteUnlockResumeDraft,
     chatRequest,
-    handleChatRequiresToken: vi.fn(),
     resolveExcelAnalysisContextForRequest,
     multimodalPendingCount,
     stateSteps,
@@ -177,7 +172,7 @@ function setup(options: { tts?: boolean; multimodal?: number; excelContext?: boo
   const appliedTexts = () => applyPlainTextToMessageIndex.mock.calls.map((call) => call[1] as string)
   const progressTexts = () => chatRequest.setLoadingProgress.mock.calls.map((call) => call[0] as string)
 
-  return { sessionId, messages, stateSteps, currentTask, ttsEnabled, pendingDbWriteChatRetryMessages, plannerWriteUnlockResumeDraft, deps, round, appliedTexts, progressTexts }
+  return { sessionId, messages, stateSteps, currentTask, ttsEnabled, deps, round, appliedTexts, progressTexts }
 }
 
 function routePayload() {
@@ -521,28 +516,30 @@ describe('executeRemoteChatRound 流式回合', () => {
     expect(messages.value[0].streamingShell).toBeUndefined()
   })
 
-  it('写入令牌暂停本轮并保存续跑草稿', async () => {
+  it('旧写入授权事件只保留原运行等待回执', async () => {
     const { round, deps, messages } = setup()
     feed([{ type: 'requires_token', token_name: 'DB_WRITE_TOKEN', token_description: '写入数据库', run_id: 'run-w' }])
 
     await round.executeRemoteChatRound(['导入数据'], undefined, scope())
 
-    expect(deps.handleChatRequiresToken).toHaveBeenCalledWith('DB_WRITE_TOKEN', '写入数据库', ['导入数据'])
-    expect(deps.plannerWriteUnlockResumeDraft.value).toBe('\n[需要授权：写入数据库]\n')
+    expect(deps.showTaskConfirm).not.toHaveBeenCalled()
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
+    expect(deps.chatSessionActivity.statuses.value['session-1']).toBe('waiting')
     expect(messages.value[0].content).toBe('\n[需要授权：写入数据库]\n')
     expect(deps.saveMessage).not.toHaveBeenCalled()
     expect(deps.flushMessagesCache).toHaveBeenCalled()
     expect(deps.syncAgentRunFromPayload).toHaveBeenCalledWith(expect.objectContaining({ run_id: 'run-w' }), '导入数据', expect.any(Function))
   })
 
-  it('只读令牌暂停时不覆盖续跑草稿', async () => {
+  it('旧只读授权事件仅显示等待，不执行后续动作', async () => {
     const { round, deps } = setup()
     feed([{ type: 'requires_token', token_name: 'DB_READ_TOKEN', token_description: '读取数据' }])
 
     await round.executeRemoteChatRound(['查询数据'], undefined, scope())
 
-    expect(deps.handleChatRequiresToken).toHaveBeenCalledWith('DB_READ_TOKEN', '读取数据', ['查询数据'])
-    expect(deps.plannerWriteUnlockResumeDraft.value).toBe('')
+    expect(deps.showTaskConfirm).not.toHaveBeenCalled()
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
+    expect(deps.chatSessionActivity.statuses.value['session-1']).toBe('waiting')
   })
 
   it('没有完成回执时用历史回执替换失败气泡', async () => {
@@ -568,7 +565,7 @@ describe('executeRemoteChatRound 流式回合', () => {
 
   it('服务端状态未确认时标记 unknown 并延迟回读补齐', async () => {
     vi.useFakeTimers()
-    const { round, deps, messages, appliedTexts } = setup()
+    const { round, messages, appliedTexts } = setup()
     feed([{ type: 'token', text: '半截回复' }])
     h.getConversation
       .mockRejectedValueOnce(new Error('history unavailable'))
@@ -605,7 +602,6 @@ describe('executeRemoteChatRound 流式回合', () => {
     await round.executeRemoteChatRound(['导入'], undefined, scope())
 
     expect(deps.applyPlainTextToMessageIndex).not.toHaveBeenCalled()
-    expect(deps.handleChatRequiresToken).not.toHaveBeenCalled()
     expect(deps.saveMessage).not.toHaveBeenCalled()
     expect(messages.value[0].streamingShell).toBe(true)
   })
@@ -633,7 +629,7 @@ describe('executeRemoteChatRound 流式回合', () => {
   })
 
   it('401 时探测企业会话并展示失败', async () => {
-    const { round, deps, messages, appliedTexts } = setup()
+    const { round, messages, appliedTexts } = setup()
     h.sendChatStream.mockRejectedValue(Object.assign(new Error('unauthorized'), { status: 401 }))
 
     await round.executeRemoteChatRound(['执行'], undefined, scope())
@@ -697,6 +693,37 @@ describe('executeRemoteChatRound 流式回合', () => {
 })
 
 describe('executeRemoteChatRound 断线续传与超时', () => {
+  it.each(['queued', 'running', 'waiting_user', 'waiting_input', 'waiting_auth', 'paused', 'unknown', 'future_state'])('JSON 与 SSE 保留 %s 原运行状态，不触发成功动作', async execution_state => {
+    const payload = { success: false, execution_state, run_id: 'original-run',
+      response: '原任务进度', task: { type: 'custom' }, autoAction: { type: 'should-not-run' } }
+    for (const streamEnabled of [true, false]) {
+      h.state.streamEnabled = streamEnabled
+      const { round, deps, messages } = setup()
+      feed([{ type: 'done', result: payload }])
+      deps.chatRequest.requestChatByModeWithTimeout.mockResolvedValue(payload)
+      await round.executeRemoteChatRound(['执行'], undefined, scope())
+      expect(messages.value[0]).toMatchObject({ content: '原任务进度', workflowAction: execution_state })
+      expect(deps.showTaskConfirm).not.toHaveBeenCalled()
+      expect(deps.handleAutoAction).not.toHaveBeenCalled()
+      expect(deps.syncAgentRunFromPayload).toHaveBeenCalledWith(expect.objectContaining({ run_id: 'original-run' }), '执行', expect.any(Function))
+    }
+  })
+
+  it('批量业务未完成时逐条保留原回执而非覆盖为批量失败', async () => {
+    h.state.streamEnabled = false
+    const { round, deps, messages } = setup()
+    deps.chatRequest.requestChatByModeBatchWithTimeout.mockResolvedValue({
+      batch: true, success: false, results: [
+        { success: true, response: '首项完成', execution_state: 'completed' },
+        { success: false, response: '第二项等待确认', execution_state: 'waiting_user', run_id: 'waiting-run' },
+      ],
+    })
+    await round.executeRemoteChatRound(['第一项', '第二项'], undefined, scope())
+    expect(messages.value.map(message => message.content)).toEqual(['首项完成', '第二项等待确认'])
+    expect(messages.value[1].workflowAction).toBe('waiting_user')
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
+  })
+
   it.each(['running', 'blocked'])('继续回执绑定原 %s 任务且不触发业务动作', async status => {
     const { round, deps, messages } = setup()
     feed([{ type: 'done', result: {
@@ -879,15 +906,12 @@ describe('executeRemoteChatRound 非流式回退', () => {
     expect(sessionId.value).toBe('session-1')
   })
 
-  it('单条成功时挂载全部回执并清理重试草稿', async () => {
-    const { round, deps, pendingDbWriteChatRetryMessages, plannerWriteUnlockResumeDraft, stateSteps } = setup()
+  it('单条成功时挂载全部回执', async () => {
+    const { round, deps, stateSteps } = setup()
     const route = routePayload()
     deps.chatRequest.requestChatByModeWithTimeout.mockResolvedValue({
       success: true,
       response: '已完成',
-      requires_token: true,
-      token_name: 'DB_READ_TOKEN',
-      token_description: '读取数据库',
       task: { type: 'custom', title: '任务A', description: '描述A' },
       autoAction: { type: 'show_products_float', query: '5003A' },
       cached: true,
@@ -900,10 +924,7 @@ describe('executeRemoteChatRound 非流式回退', () => {
 
     await round.executeRemoteChatRound(['查询'], undefined, scope())
 
-    expect(pendingDbWriteChatRetryMessages.value).toBeNull()
-    expect(plannerWriteUnlockResumeDraft.value).toBe('')
     expect(deps.chatRequest.setLoadingProgress).toHaveBeenCalledWith('执行完成，正在整理结果...', 'session-1')
-    expect(deps.handleChatRequiresToken).toHaveBeenCalledWith('DB_READ_TOKEN', '读取数据库', ['查询'])
     const extras = deps.addMessage.mock.calls[0][2]
     expect(extras).toMatchObject({
       turnId: 'turn-1',
@@ -920,6 +941,37 @@ describe('executeRemoteChatRound 非流式回退', () => {
     await vi.waitFor(() => expect(deps.attachAgentRunTraceToLastAiMessage).toHaveBeenCalledWith('run-json'))
   })
 
+  it.each(['single', 'batch'])('旧授权回执在 %s 响应中不能触发任务或自动动作', async mode => {
+    const { round, deps, messages } = setup()
+    const pending = {
+      success: true, response: '等待原任务授权', requires_token: true, run_id: 'original-run',
+      task: { type: 'custom', title: '未执行任务' }, autoAction: { type: 'show_orders' },
+    }
+    if (mode === 'batch') {
+      deps.chatRequest.requestChatByModeBatchWithTimeout.mockResolvedValue({ success: true, batch: true, results: [pending] })
+    } else {
+      deps.chatRequest.requestChatByModeWithTimeout.mockResolvedValue(pending)
+    }
+    await round.executeRemoteChatRound(mode === 'batch' ? ['第一条', '第二条'] : ['执行'], undefined, scope())
+    expect(messages.value.at(-1)?.workflowAction).toBe('waiting_auth')
+    expect(deps.chatSessionActivity.statuses.value['session-1']).toBe('waiting')
+    expect(deps.showTaskConfirm).not.toHaveBeenCalled()
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
+    expect(deps.syncAgentRunFromPayload).toHaveBeenCalledWith(expect.objectContaining({ run_id: 'original-run' }), expect.any(String), expect.any(Function))
+  })
+
+  it('待授权回执仍优先保留结果未知状态', async () => {
+    const { round, deps, messages } = setup()
+    deps.chatRequest.requestChatByModeWithTimeout.mockResolvedValue({
+      success: true, response: '请核对原任务', requires_token: true, requires_reconciliation: true,
+      autoAction: { type: 'show_orders' },
+    })
+    await round.executeRemoteChatRound(['执行'], undefined, scope())
+    expect(messages.value.at(-1)?.workflowAction).toBe('unknown')
+    expect(deps.chatSessionActivity.statuses.value['session-1']).toBe('review')
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
+  })
+
   it('单条失败且需要核对时挂载业务结果并同步执行链', async () => {
     const { round, deps, messages } = setup()
     deps.chatRequest.requestChatByModeWithTimeout.mockResolvedValue({
@@ -933,7 +985,7 @@ describe('executeRemoteChatRound 非流式回退', () => {
     await round.executeRemoteChatRound(['写入'], undefined, scope())
 
     expect(deps.addMessage).toHaveBeenCalledWith(
-      '处理失败: 写入失败',
+      '写入失败',
       'ai',
       expect.objectContaining({ workflowAction: 'unknown', businessResult: expect.objectContaining({ summary: '结果未知' }) }),
       expect.any(Object),
@@ -950,7 +1002,7 @@ describe('executeRemoteChatRound 非流式回退', () => {
       success: true,
       batch: true,
       results: [
-        { success: true, response: '第一条', requires_token: true, token_name: 'DB_READ_TOKEN', token_description: '读取' },
+        { success: true, response: '第一条' },
         { success: false, message: '第二条失败' },
         {
           success: true,
@@ -966,7 +1018,6 @@ describe('executeRemoteChatRound 非流式回退', () => {
     await round.executeRemoteChatRound(['第一条', '第二条', '第三条'], undefined, scope())
 
     expect(deps.chatRequest.requestChatByModeBatchWithTimeout).toHaveBeenCalledWith(['第一条', '第二条', '第三条'], 90_000, expect.any(Object))
-    expect(deps.handleChatRequiresToken).toHaveBeenCalledWith('DB_READ_TOKEN', '读取', ['第一条', '第二条', '第三条'])
     expect(deps.addMessage).toHaveBeenCalledWith('第一条', 'ai', expect.objectContaining({ turnId: 'turn-1' }), expect.any(Object))
     expect(deps.addMessage).toHaveBeenCalledWith('处理失败: 第二条失败', 'ai', expect.objectContaining({ workflowAction: 'failed' }), expect.any(Object))
     expect(deps.addMessage).toHaveBeenCalledWith('第三条', 'ai', expect.objectContaining({ turnId: 'turn-1' }), expect.any(Object))
@@ -1008,7 +1059,7 @@ describe('executeRemoteChatRound 非流式回退', () => {
     expect(deps.attachBusinessResultToLastAiMessage).toHaveBeenCalledWith(expect.objectContaining({ success: false }))
   })
 
-  it('请求异常携带 route_metadata 时写回失败提示', async () => {
+  it('请求异常保留 route_metadata 和 unknown，不重派任务', async () => {
     const { round, deps } = setup()
     const route = routePayload()
     deps.chatRequest.requestChatByModeWithTimeout.mockRejectedValue(Object.assign(new Error('上游超时'), { data: { route_metadata: route } }))
@@ -1016,11 +1067,13 @@ describe('executeRemoteChatRound 非流式回退', () => {
     await round.executeRemoteChatRound(['执行'], undefined, scope())
 
     expect(deps.addMessage).toHaveBeenCalledWith(
-      '处理失败: 上游超时',
+      expect.stringContaining('结果未知'),
       'ai',
-      expect.objectContaining({ workflowAction: 'failed', routeMetadata: route }),
+      expect.objectContaining({ workflowAction: 'unknown', routeMetadata: route }),
       expect.any(Object),
     )
+    expect(h.getConversation).toHaveBeenCalledExactlyOnceWith('session-1', { turn_id: 'turn-1' })
+    expect(deps.chatRequest.requestChatByModeWithTimeout).toHaveBeenCalledTimes(1)
   })
 
   it('请求抛出字符串时用兜底文案', async () => {
@@ -1029,7 +1082,21 @@ describe('executeRemoteChatRound 非流式回退', () => {
 
     await round.executeRemoteChatRound(['执行'], undefined, scope())
 
-    expect(deps.addMessage).toHaveBeenCalledWith('处理失败: 网络断开', 'ai', expect.objectContaining({ workflowAction: 'failed' }), expect.any(Object))
+    expect(deps.addMessage).toHaveBeenCalledWith(expect.stringContaining('结果未知'), 'ai', expect.objectContaining({ workflowAction: 'unknown' }), expect.any(Object))
+  })
+
+  it.each([false, true])('JSON 断线读取原 turn 完成回执，批量=%s', async batch => {
+    const { round, deps, messages } = setup()
+    const request = batch ? deps.chatRequest.requestChatByModeBatchWithTimeout : deps.chatRequest.requestChatByModeWithTimeout
+    request.mockRejectedValue(new Error('network error'))
+    h.getConversation.mockResolvedValue({ turn_receipt: {
+      turn_id: 'turn-1', run_id: 'original-run', status: 'completed', message: '原任务持久完成回执',
+    } })
+    await round.executeRemoteChatRound(batch ? ['a', 'b'] : ['a'], undefined, scope())
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(h.getConversation).toHaveBeenCalledExactlyOnceWith('session-1', { turn_id: 'turn-1' })
+    expect(messages.value[0]).toMatchObject({ content: '原任务持久完成回执', workflowAction: 'completed' })
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
   })
 
   it('会话切换后只把结果持久化到原会话，不写当前界面', async () => {
@@ -1185,7 +1252,6 @@ describe('executeRemoteChatRound 状态保护与边界分支', () => {
     await round.executeRemoteChatRound(['执行'], undefined, scope())
 
     expect(messages.value[0].routeMetadata).toBeUndefined()
-    expect(deps.handleChatRequiresToken).not.toHaveBeenCalled()
     expect(deps.applyPlainTextToMessageIndex).not.toHaveBeenCalled()
     expect(deps.flushMessagesCache).not.toHaveBeenCalled()
   })
@@ -1289,7 +1355,7 @@ describe('executeRemoteChatRound 状态保护与边界分支', () => {
   })
 
   it('续传只补齐终态，不重复授权等副作用', async () => {
-    const { round, deps, messages } = setup()
+    const { round, messages } = setup()
     let attempt = 0
     h.state.sseScript = async emit => {
       attempt += 1
@@ -1306,7 +1372,6 @@ describe('executeRemoteChatRound 状态保护与边界分支', () => {
     await round.executeRemoteChatRound(['执行'], undefined, scope())
 
     expect(attempt).toBe(2)
-    expect(deps.handleChatRequiresToken).not.toHaveBeenCalled()
     expect(messages.value[0].workflowAction).toBe('unknown')
     expect(messages.value[0].content).toContain('结果未知')
   })

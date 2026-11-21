@@ -3,7 +3,7 @@
  * 针对未覆盖行：errorMessage、normalizeServerContentToHtml、scrollToBottom、
  * runShipmentMgmtAfterPrintSuccess、
  * refetchTaskOrderNumber、setCustomOrderNumber、
- * shouldAutoRunTask/scheduleAutoConfirmTask、showTaskConfirm、emitAssistantPush、
+ * showTaskConfirm、emitAssistantPush、
  * maybeCloseAssistantFloatForShipmentTask、confirmTask 各分支、handleAutoAction 各分支、
  * maybePrefetchProductAssistantFloat、executeRemoteChatRound 快路径/批量/单条、
  * sendMessage 各分支、生命周期钩子等。
@@ -11,11 +11,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref, type Ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
+import agentRunsApi, { type AgentRunResponse } from '@/api/agentRuns'
 
 vi.mock('@/api/agentRuns', () => ({
   default: {
     observeTool: vi.fn().mockResolvedValue({ success: true }),
     taskEventStreamPath: vi.fn(() => '/api/agent/tasks/events/stream'),
+    createTask: vi.fn(),
+    getRun: vi.fn(),
+    continueRun: vi.fn(),
+    cancelRun: vi.fn(),
+    listTasks: vi.fn(),
+    listRuns: vi.fn(),
   },
 }))
 
@@ -25,7 +32,6 @@ const {
   mockAddMessage,
   mockExecutePrintTask,
   mockBuildPrintSummaryMessage,
-  mockHandleChatRequiresToken,
   mockRequestChatByModeWithTimeout,
   mockRequestChatByModeBatchWithTimeout,
   mockEnqueueChatBatchMessage,
@@ -76,7 +82,6 @@ const {
   mockAddMessage: vi.fn(),
   mockExecutePrintTask: vi.fn(),
   mockBuildPrintSummaryMessage: vi.fn(() => '打印完成'),
-  mockHandleChatRequiresToken: vi.fn(),
   mockRequestChatByModeWithTimeout: vi.fn(),
   mockRequestChatByModeBatchWithTimeout: vi.fn(),
   mockEnqueueChatBatchMessage: vi.fn(),
@@ -235,13 +240,6 @@ vi.mock('./useChatWorkflowPanel', () => ({
   }),
 }))
 
-vi.mock('./useChatDbTokenGate', () => ({
-  useChatDbTokenGate: () => ({
-    handleChatRequiresToken: mockHandleChatRequiresToken,
-    onDbWriteUnlockedForChatRetry: vi.fn(),
-    resolveChatDbTokensForPayload: vi.fn(() => ({})),
-  }),
-}))
 
 vi.mock('./useChatExcelContext', async () => {
   const { ref } = await import('vue')
@@ -357,9 +355,6 @@ vi.mock('@/workflow/coreWorkflowDispatcher', () => ({
 vi.mock('@/constants/coreWorkflowMod', () => ({
   isCoreWorkflowModInstalled: mockIsCoreWorkflowModInstalled,
 }))
-vi.mock('@/fhd/dbTokenHeaders', () => ({
-  FHD_DB_WRITE_UNLOCKED_EVENT: 'fhd:db-write-unlocked',
-}))
 
 import { useChatOrchestration } from './useChatOrchestration'
 import { createApp, defineComponent, h } from 'vue'
@@ -371,8 +366,39 @@ function createApi(sessionId = 'test-session') {
   })
 }
 
+function canonicalReceipt(status: string, output: Record<string, unknown> = {}): AgentRunResponse {
+  return {
+    success: true,
+    data: {
+      run_id: 'coverage-run', user_id: 'u1', message: '任务', status,
+      final_output: { node_outputs: { result: output } },
+    },
+  }
+}
+
+function mockCanonicalReceipt(status: string, output: Record<string, unknown> = {}) {
+  const receipt = canonicalReceipt(status, output)
+  vi.mocked(agentRunsApi.createTask).mockResolvedValue(receipt)
+  vi.mocked(agentRunsApi.getRun).mockResolvedValue(receipt)
+  return receipt
+}
+
+function shipmentPayload(params: Record<string, unknown> = {}) {
+  return {
+    tool_id: 'shipment_orders', action: 'generate',
+    params: { unit_name: '甲公司', products: [{ name: '产品甲', quantity: 1, specification: '1L' }], ...params },
+  }
+}
+
 function resetMockState() {
   vi.clearAllMocks()
+  vi.mocked(agentRunsApi.createTask).mockReset()
+  vi.mocked(agentRunsApi.getRun).mockReset()
+  vi.mocked(agentRunsApi.continueRun).mockReset()
+  vi.mocked(agentRunsApi.cancelRun).mockReset().mockResolvedValue(canonicalReceipt('cancelled'))
+  vi.mocked(agentRunsApi.listTasks).mockResolvedValue({ success: true, data: [] })
+  vi.mocked(agentRunsApi.listRuns).mockResolvedValue({ success: true, data: [] })
+  mockCanonicalReceipt('queued')
   state.taskList!.value = []
   state.lastShipmentExecution!.value = null
   state.multimodalPendingCount!.value = 0
@@ -604,7 +630,7 @@ describe('useChatOrchestration coverage – refetchTaskOrderNumber / setCustomOr
 
   it('refetchTaskOrderNumber 有效任务时调用 hydrate', async () => {
     const api = createApi()
-    api.currentTask.value = { type: 'shipment_generate', completed: false, api_url: '/x' } as never
+    api.currentTask.value = { type: 'shipment_generate', completed: false, payload: shipmentPayload() } as never
     await api.refetchTaskOrderNumber()
     expect(mockHydrateTaskOrderNumber).toHaveBeenCalledWith(expect.anything(), { force: true })
     expect(api.orderNumberFetching.value).toBe(false)
@@ -624,7 +650,7 @@ describe('useChatOrchestration coverage – refetchTaskOrderNumber / setCustomOr
   })
 })
 
-describe('useChatOrchestration coverage – shouldAutoRunTask / scheduleAutoConfirmTask', () => {
+describe('useChatOrchestration coverage – completed task receipt', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
@@ -636,36 +662,15 @@ describe('useChatOrchestration coverage – shouldAutoRunTask / scheduleAutoConf
     vi.useRealTimers()
   })
 
-  it('showTaskConfirm excel_import 类型任务自动确认', () => {
-    const api = createApi()
-    api.showTaskConfirm({
-      type: 'excel_import',
-      completed: false,
-      api_url: '/api/import',
-    })
-    expect(api.currentTask.value).toBeTruthy()
-    vi.advanceTimersByTime(1)
-  })
-
-  it('showTaskConfirm tool_id 为 import_excel_to_database 时自动确认', () => {
+  it('showTaskConfirm 保留已完成任务的回执卡片', () => {
     const api = createApi()
     api.showTaskConfirm({
       type: 'custom',
-      completed: false,
-      api_url: '/api/import',
-      payload: { tool_id: 'import_excel_to_database' },
-    })
-    vi.advanceTimersByTime(1)
-  })
-
-  it('showTaskConfirm 已完成任务不自动确认', () => {
-    const api = createApi()
-    api.showTaskConfirm({
-      type: 'excel_import',
       completed: true,
       api_url: '/api/import',
     })
     vi.advanceTimersByTime(1)
+    expect(api.currentTask.value?.completed).toBe(true)
   })
 })
 
@@ -681,7 +686,7 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
     api.showTaskConfirm({
       type: 'shipment_generate',
       completed: false,
-      api_url: '/api/test',
+      payload: shipmentPayload(),
       customOrderNumber: 'ORD-001',
     })
     expect(mockHydrateTaskOrderNumber).not.toHaveBeenCalled()
@@ -693,7 +698,7 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
     api.showTaskConfirm({
       type: 'shipment_generate',
       completed: false,
-      api_url: '/api/test',
+      payload: shipmentPayload(),
     })
     expect(mockHydrateTaskOrderNumber).toHaveBeenCalled()
     expect(mockEnrichShipmentPreviewProducts).toHaveBeenCalled()
@@ -705,7 +710,7 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
     api.showTaskConfirm({
       type: 'shipment_generate',
       completed: false,
-      api_url: '/api/test',
+      payload: shipmentPayload(),
       data: { order_number: 'ORD-002' },
     })
     expect((api.currentTask.value as { customOrderNumber: string }).customOrderNumber).toBe('ORD-002')
@@ -728,7 +733,7 @@ describe('useChatOrchestration coverage – maybeCloseAssistantFloatForShipmentT
       task: {
         type: 'shipment_generate',
         title: '发货任务',
-        api_url: '/api/ship',
+        payload: shipmentPayload(),
         completed: false,
       },
     })
@@ -748,191 +753,138 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     resetMockState()
+    vi.stubGlobal('fetch', vi.fn())
   })
 
-  it('GET 方法成功', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true, message: 'GET 成功' }),
-      }),
-    )
-    const api = createApi()
-    api.showTaskConfirm({
-      type: 'custom',
-      title: '查询',
-      api_url: '/api/get',
-      method: 'GET',
-      payload: {},
-    })
-    await api.confirmTask()
-    expect(fetch).toHaveBeenCalledWith('/api/get')
-    expect(api.currentTask.value?.completed).toBe(true)
+  afterEach(() => {
+    expect(fetch).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
 
-  it('POST 返回非 ok 时报告失败', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        json: async () => ({ message: '服务器错误' }),
-      }),
-    )
+  it.each(['GET', 'POST'])('只有 %s API 地址的任务明确未开始且不发请求', async method => {
     const api = createApi()
     api.showTaskConfirm({
-      type: 'custom',
-      title: '测试',
-      api_url: '/api/test',
-      method: 'POST',
-      payload: {},
+      type: 'custom', title: '旧任务', api_url: '/api/retired-task', method, payload: {},
     })
     await api.confirmTask()
+    expect(api.currentTask.value?.completed).toBe(false)
+    expect(api.currentTask.value?.data?.execution_state).toBe('not_started')
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
+      expect.stringContaining('任务未开始：缺少有效能力契约'), 'ai',
+      expect.objectContaining({ workflowAction: 'not_started' }), expect.any(Object),
+    )
+    expect(agentRunsApi.createTask).not.toHaveBeenCalled()
+    expect(agentRunsApi.getRun).not.toHaveBeenCalled()
+    expect(agentRunsApi.continueRun).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('统一任务失败回执保留服务器错误展示', async () => {
+    mockCanonicalReceipt('failed', { success: false, message: '服务器错误' })
+    const api = createApi()
+    api.showTaskConfirm({
+      type: 'custom', title: '测试',
+      payload: { tool_id: 'business_db', action: 'read', params: { entity: 'products' } },
+    })
+    await api.confirmTask()
+    expect(agentRunsApi.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      tool_id: 'business_db', action: 'read', params: { entity: 'products' },
+    }))
     expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('服务器错误'), 'ai', undefined, expect.any(Object))
     expect(api.currentTask.value).toBeNull()
-    vi.unstubAllGlobals()
   })
 
-  it('fetch 抛出异常时通过 errorMessage 报告', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('网络断开')))
+  it('任务准入接口异常时通过 errorMessage 报告', async () => {
+    vi.mocked(agentRunsApi.createTask).mockRejectedValue(new Error('网络断开'))
     const api = createApi()
     api.showTaskConfirm({
-      type: 'custom',
-      title: '测试',
-      api_url: '/api/test',
-      method: 'POST',
-      payload: {},
+      type: 'custom', title: '测试',
+      payload: { tool_id: 'business_db', action: 'read', params: { entity: 'products' } },
     })
     await api.confirmTask()
     expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('网络断开'), 'ai', undefined, expect.any(Object))
-    vi.unstubAllGlobals()
   })
 
-  it('fetch 抛出非 Error 类型时使用 fallback', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(null))
+  it('任务准入抛出非 Error 类型时使用 fallback', async () => {
+    vi.mocked(agentRunsApi.createTask).mockRejectedValue(null)
     const api = createApi()
     api.showTaskConfirm({
-      type: 'custom',
-      title: '测试',
-      api_url: '/api/test',
-      method: 'POST',
-      payload: {},
+      type: 'custom', title: '测试',
+      payload: { tool_id: 'business_db', action: 'read', params: { entity: 'products' } },
     })
     await api.confirmTask()
     expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('网络错误'), 'ai', undefined, expect.any(Object))
-    vi.unstubAllGlobals()
   })
 
-  it('requires_token 响应保留任务卡片并弹出令牌输入', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          requires_token: true,
-          token_name: 'DB_WRITE_TOKEN',
-          token_description: '需要二级写入令牌',
-          message: '请输入令牌',
-        }),
-      }),
-    )
+  it('原任务等待授权时保留卡片，确认只读取原回执', async () => {
+    mockCanonicalReceipt('waiting_user')
     const api = createApi()
     api.showTaskConfirm({
-      type: 'custom',
-      title: '写库',
-      api_url: '/api/write',
-      method: 'POST',
-      payload: {},
+      type: 'custom', title: '发货', payload: shipmentPayload(),
     })
     await api.confirmTask()
-    expect(mockHandleChatRequiresToken).toHaveBeenCalled()
-    expect(api.currentTask.value).toBeTruthy()
-    expect(api.currentTask.value?.description).toContain('令牌')
-    vi.unstubAllGlobals()
+    expect(api.currentTask.value?.completed).toBe(false)
+    expect(api.currentTask.value?.description).toContain('任务工作区')
+    expect(api.currentTask.value).toHaveProperty('agentRunId', 'coverage-run')
+    await api.confirmTask()
+    expect(agentRunsApi.createTask).toHaveBeenCalledTimes(1)
+    expect(agentRunsApi.getRun).toHaveBeenCalledExactlyOnceWith('coverage-run')
+    expect(agentRunsApi.continueRun).not.toHaveBeenCalled()
   })
 
   it('shipment_generate 成功时设置 lastShipmentExecution', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: '生成成功',
-          order_number: 'ORD-1',
-          file_path: '/tmp/doc.pdf',
-          labels: ['/tmp/label.pdf'],
-          purchase_unit: '甲公司',
-          order_id: 100,
-          doc_name: 'doc.pdf',
-        }),
-      }),
-    )
+    mockCanonicalReceipt('completed', {
+      success: true, message: '生成成功', order_number: 'ORD-1',
+      file_path: '/tmp/doc.pdf', labels: ['/tmp/label.pdf'],
+      purchase_unit: '甲公司', order_id: 100, doc_name: 'doc.pdf',
+    })
     const api = createApi()
     api.showTaskConfirm({
-      type: 'shipment_generate',
-      completed: false,
-      api_url: '/api/shipment',
-      method: 'POST',
-      payload: { params: {} },
+      type: 'shipment_generate', completed: false, payload: shipmentPayload(),
     })
     await api.confirmTask()
     expect(state.lastShipmentExecution!.value).toBeTruthy()
     expect(state.lastShipmentExecution!.value?.filePath).toBe('/tmp/doc.pdf')
-    vi.unstubAllGlobals()
+    expect(agentRunsApi.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      tool_id: 'shipment_orders', action: 'generate',
+    }))
   })
 
-  it('shipment_generate 成功且有 switch_view 时触发 autoAction', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: '成功',
-          order_number: 'ORD-1',
-        }),
-      }),
-    )
+  it('原任务审批回执完成后触发 switch_view', async () => {
+    const waiting: AgentRunResponse = {
+      ...canonicalReceipt('waiting_user'),
+      approval: {
+        grant: 'coverage-grant', run_id: 'coverage-run', step_id: 'shipment-step',
+        tool_id: 'shipment_orders', action: 'generate', expires_at: 2_000_000_000,
+      },
+    }
+    vi.mocked(agentRunsApi.createTask).mockResolvedValue(waiting)
+    vi.mocked(agentRunsApi.getRun).mockResolvedValue(waiting)
+    vi.mocked(agentRunsApi.continueRun).mockResolvedValue(canonicalReceipt('completed', {
+      success: true, message: '成功', order_number: 'ORD-1',
+    }))
     const api = createApi()
     api.showTaskConfirm({
-      type: 'shipment_generate',
-      completed: false,
-      api_url: '/api/shipment',
-      method: 'POST',
-      payload: {},
-      switch_view: 'show_products',
+      type: 'shipment_generate', completed: false, payload: shipmentPayload(), switch_view: 'show_products',
     })
     const handler = vi.fn()
     window.addEventListener('xcagi:open-assistant-float', handler)
     await api.confirmTask()
+    expect(agentRunsApi.continueRun).toHaveBeenCalledExactlyOnceWith('coverage-run', {
+      approval_grant: 'coverage-grant', runtime_context: { source: 'chat_task_card_approval' },
+    })
     expect(handler).toHaveBeenCalled()
     window.removeEventListener('xcagi:open-assistant-float', handler)
-    vi.unstubAllGlobals()
   })
 
   it('shipment_generate 无 customOrderNumber 时先 hydrate', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true, message: '成功' }),
-      }),
-    )
-    mockHydrateTaskOrderNumber.mockResolvedValue(undefined)
+    mockCanonicalReceipt('completed', { success: true, message: '成功' })
     const api = createApi()
     api.showTaskConfirm({
-      type: 'shipment_generate',
-      completed: false,
-      api_url: '/api/shipment',
-      method: 'POST',
-      payload: { params: { order_number: 'OLD' } },
+      type: 'shipment_generate', completed: false, payload: shipmentPayload({ order_number: 'OLD' }),
     })
     await api.confirmTask()
     expect(mockHydrateTaskOrderNumber).toHaveBeenCalled()
-    vi.unstubAllGlobals()
   })
 })
 
@@ -1121,7 +1073,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     const api = createApi()
     await api.sendMessage('批量')
     await vi.waitFor(() => {
-      expect(mockHandleChatRequiresToken).toHaveBeenCalled()
+      expect(mockAddMessage).toHaveBeenCalledWith('part-2', 'ai', expect.objectContaining({ workflowAction: 'waiting_auth' }), expect.any(Object))
     })
   })
 
@@ -1255,7 +1207,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     })
     const api = createApi()
     await api.sendMessage('查数据')
-    expect(mockHandleChatRequiresToken).toHaveBeenCalled()
+    expect(mockAddMessage).toHaveBeenCalledWith(expect.any(String), 'ai', expect.objectContaining({ workflowAction: 'waiting_auth' }), expect.any(Object))
   })
 
   it('单条失败', async () => {
@@ -1286,20 +1238,20 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     expect(mockAttachBusinessResult).toHaveBeenCalledWith(expect.objectContaining({ success: false, businessResult }))
   })
 
-  it('单条请求抛出异常', async () => {
+  it('单条请求异常且原回执不可用时保持 unknown', async () => {
     mockRequestChatByModeWithTimeout.mockRejectedValue(new Error('请求超时'))
     const api = createApi()
     await api.sendMessage('普通')
-    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('请求超时'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
+    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('结果未知'), 'ai', expect.objectContaining({ turnId: expect.any(String), workflowAction: 'unknown' }), expect.any(Object))
+    expect(mockRequestChatByModeWithTimeout).toHaveBeenCalledTimes(1)
   })
 
-  it('单条请求抛出非 Error 类型', async () => {
+  it('单条请求抛出非 Error 类型且原回执不可用时保持 unknown', async () => {
     mockRequestChatByModeWithTimeout.mockRejectedValue('字符串错误')
     const api = createApi()
     await api.sendMessage('普通')
-    await vi.waitFor(() => {
-      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('字符串错误'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
-    })
+    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('结果未知'), 'ai', expect.objectContaining({ turnId: expect.any(String), workflowAction: 'unknown' }), expect.any(Object))
+    expect(mockRequestChatByModeWithTimeout).toHaveBeenCalledTimes(1)
   })
 
   it('workflow_done action 设置 loadingProgress', async () => {
@@ -1369,7 +1321,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     window.removeEventListener('xcagi:switch-view', handler)
   })
 
-  it('流式 requires_token 事件且为 WRITE 令牌时保存 resumeDraft', async () => {
+  it('流式 requires_token 事件只保留等待状态', async () => {
     mockReadPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
       onEvent({
         type: 'requires_token',
@@ -1380,7 +1332,8 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     })
     const api = createApi()
     await api.sendMessage('导入数据')
-    expect(mockHandleChatRequiresToken).toHaveBeenCalled()
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '\n[需要授权：写入令牌]\n')
+    expect(mockSendChatStream).toHaveBeenCalledTimes(1)
   })
 
   it('流式 AbortError 时报告超时', async () => {
@@ -1617,36 +1570,38 @@ describe('useChatOrchestration coverage – errorMessage 间接覆盖', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     resetMockState()
+    vi.stubGlobal('fetch', vi.fn())
   })
 
-  it('confirmTask fetch 异常时 errorMessage 处理 Error 对象', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('连接超时')))
+  afterEach(() => {
+    expect(fetch).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('原任务回执读取异常时 errorMessage 处理 Error 对象', async () => {
+    vi.mocked(agentRunsApi.getRun).mockRejectedValue(new Error('连接超时'))
     const api = createApi()
     api.showTaskConfirm({
-      type: 'custom',
-      title: '测试',
-      api_url: '/api/test',
-      method: 'POST',
-      payload: {},
+      type: 'custom', title: '测试', agentRunId: 'coverage-run', agentTaskId: 'coverage-task',
+      payload: { tool_id: 'business_db', action: 'read', params: { entity: 'products' } },
     })
     await api.confirmTask()
+    expect(agentRunsApi.getRun).toHaveBeenCalledWith('coverage-run')
+    expect(agentRunsApi.createTask).not.toHaveBeenCalled()
     expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('连接超时'), 'ai', undefined, expect.any(Object))
-    vi.unstubAllGlobals()
   })
 
-  it('confirmTask fetch 异常时 errorMessage 处理非 Error 值', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(null))
+  it('原任务回执异常时 errorMessage 处理非 Error 值', async () => {
+    vi.mocked(agentRunsApi.getRun).mockRejectedValue(null)
     const api = createApi()
     api.showTaskConfirm({
-      type: 'custom',
-      title: '测试',
-      api_url: '/api/test',
-      method: 'POST',
-      payload: {},
+      type: 'custom', title: '测试', agentRunId: 'coverage-run', agentTaskId: 'coverage-task',
+      payload: { tool_id: 'business_db', action: 'read', params: { entity: 'products' } },
     })
     await api.confirmTask()
+    expect(agentRunsApi.getRun).toHaveBeenCalledWith('coverage-run')
+    expect(agentRunsApi.createTask).not.toHaveBeenCalled()
     expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('网络错误'), 'ai', undefined, expect.any(Object))
-    vi.unstubAllGlobals()
   })
 })
 
@@ -1655,140 +1610,85 @@ describe('useChatOrchestration coverage – buildTaskCompletedDescription / extr
     setActivePinia(createPinia())
     localStorage.clear()
     resetMockState()
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    expect(fetch).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 
   it('confirmTask shipment_generate 成功且数据含 labels 对象数组', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: '成功',
-          order_number: 'ORD-1',
-          file_path: '/tmp/doc.pdf',
-          purchase_unit: '甲公司',
-          order_id: 200,
-          labels: [
-            { file_path: '/tmp/label1.pdf' },
-            { path: '/tmp/label2.pdf' },
-            { filePath: '/tmp/label3.pdf' },
-            { filepath: '/tmp/label4.pdf' },
-            '  /tmp/label5.pdf  ',
-            '',
-            null,
-          ],
-          doc_name: 'doc.pdf',
-          record_id: 999,
-        }),
-      }),
-    )
+    mockCanonicalReceipt('completed', {
+      success: true, message: '成功', order_number: 'ORD-1',
+      file_path: '/tmp/doc.pdf', purchase_unit: '甲公司', order_id: 200,
+      labels: [
+        { file_path: '/tmp/label1.pdf' },
+        { path: '/tmp/label2.pdf' },
+        { filePath: '/tmp/label3.pdf' },
+        { filepath: '/tmp/label4.pdf' },
+        '  /tmp/label5.pdf  ', '', null,
+      ],
+      doc_name: 'doc.pdf', record_id: 999,
+    })
     const api = createApi()
     api.showTaskConfirm({
-      type: 'shipment_generate',
-      completed: false,
-      api_url: '/api/shipment',
-      method: 'POST',
-      payload: {},
+      type: 'shipment_generate', completed: false, payload: shipmentPayload(),
     })
     await api.confirmTask()
     expect(state.lastShipmentExecution!.value).toBeTruthy()
     expect(state.lastShipmentExecution!.value?.labelPaths.length).toBeGreaterThan(0)
-    vi.unstubAllGlobals()
+    expect(api.currentTask.value?.completed).toBe(true)
   })
 
   it('confirmTask shipment_generate 成功且数据嵌套在 data 字段', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: '成功',
-          data: {
-            order_number: 'ORD-2',
-            file_path: '/tmp/doc2.pdf',
-            purchase_unit: '乙公司',
-            order_id: 300,
-            labels: ['/tmp/label.pdf'],
-            doc_name: 'doc2.pdf',
-          },
-          document: { filename: 'doc2.pdf', filepath: '/tmp/doc2.pdf' },
-        }),
-      }),
-    )
+    mockCanonicalReceipt('completed', {
+      success: true, message: '成功',
+      data: {
+        order_number: 'ORD-2', file_path: '/tmp/doc2.pdf', purchase_unit: '乙公司',
+        order_id: 300, labels: ['/tmp/label.pdf'], doc_name: 'doc2.pdf',
+      },
+      document: { filename: 'doc2.pdf', filepath: '/tmp/doc2.pdf' },
+    })
     const api = createApi()
     api.showTaskConfirm({
-      type: 'shipment_generate',
-      completed: false,
-      api_url: '/api/shipment',
-      method: 'POST',
-      payload: {},
+      type: 'shipment_generate', completed: false, payload: shipmentPayload(),
     })
     await api.confirmTask()
     expect(state.lastShipmentExecution!.value?.filePath).toBe('/tmp/doc2.pdf')
-    vi.unstubAllGlobals()
+    expect(api.currentTask.value?.completed).toBe(true)
   })
 
   it('confirmTask shipment_generate 成功且有 download_url', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: '成功',
-          order_number: 'ORD-3',
-          download_url: '/api/shipment/download/doc.pdf',
-        }),
-      }),
-    )
+    mockCanonicalReceipt('completed', {
+      success: true, message: '成功', order_number: 'ORD-3',
+      download_url: '/api/shipment/download/doc.pdf',
+    })
     const api = createApi()
     api.showTaskConfirm({
-      type: 'shipment_generate',
-      completed: false,
-      api_url: '/api/shipment',
-      method: 'POST',
-      payload: {},
+      type: 'shipment_generate', completed: false, payload: shipmentPayload(),
     })
     await api.confirmTask()
     expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('成功'),
-      'ai',
+      expect.stringContaining('成功'), 'ai',
       expect.objectContaining({ shipmentDownloadUrl: '/api/shipment/download/doc.pdf' }),
       expect.any(Object),
     )
-    vi.unstubAllGlobals()
   })
 
   it('confirmTask shipment_generate 成功且无 download_url 但有 doc_name', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: '成功',
-          order_number: 'ORD-4',
-          doc_name: 'doc4.pdf',
-        }),
-      }),
-    )
+    mockCanonicalReceipt('completed', {
+      success: true, message: '成功', order_number: 'ORD-4', doc_name: 'doc4.pdf',
+    })
     const api = createApi()
     api.showTaskConfirm({
-      type: 'shipment_generate',
-      completed: false,
-      api_url: '/api/shipment',
-      method: 'POST',
-      payload: {},
+      type: 'shipment_generate', completed: false, payload: shipmentPayload(),
     })
     await api.confirmTask()
     expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.any(String),
-      'ai',
+      expect.any(String), 'ai',
       expect.objectContaining({ shipmentDownloadUrl: '/api/shipment/download/doc4.pdf' }),
       expect.any(Object),
     )
-    vi.unstubAllGlobals()
   })
 })

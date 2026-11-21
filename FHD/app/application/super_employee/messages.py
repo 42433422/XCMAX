@@ -111,6 +111,7 @@ class MessageSynchronizer:
         return match.group(1).strip() if match else ""
 
     def upsert_direct_reply_messages(self, *, user_id: int, rows: list[dict[str, Any]]) -> bool:
+        """Rebuild static presentation only; reading history never starts another CLI call."""
         request_ids_with_reply = {
             str(item.get("dispatch_request_id") or "")
             for item in rows
@@ -123,8 +124,17 @@ class MessageSynchronizer:
                 )
             )
         }
+        request_ids_with_reply.update(
+            str(item.get("dispatch_request_id") or "")
+            for item in rows
+            if int(item.get("user_id") or 0) == int(user_id)
+            and (
+                item.get("reconciliation_required")
+                or item.get("status") in {"dispatching", "dispatch_unknown"}
+                or item.get("dispatcher") in {"para_api", "webhook"}
+            )
+        )
         changed = False
-        cli_backfills = 0
         for item in list(rows):
             if int(item.get("user_id") or 0) != int(user_id):
                 continue
@@ -135,9 +145,6 @@ class MessageSynchronizer:
                 continue
             text = str(item.get("body") or "")
             body = self._ports.direct_reply(text)
-            if not body and cli_backfills < 1 and self._ports.should_reply(text, {}):
-                (body, _) = self._ports.compose_reply(text, {})
-                cli_backfills += 1
             if not body:
                 continue
             rows.append(
@@ -161,7 +168,9 @@ class MessageSynchronizer:
         body = self.para_task_status_reply(task)
         patch = {
             "body": body,
-            "status": task_status or str(row.get("status") or ""),
+            "status": "dispatch_unknown"
+            if row.get("reconciliation_required")
+            else task_status or str(row.get("status") or ""),
             "task_id": task_id,
             "task_status": task_status,
         }

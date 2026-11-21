@@ -30,6 +30,32 @@ from app.infrastructure.documents.price_list_export import (
 )
 
 
+def test_price_template_atomic_import_and_independent_digest(tmp_path, monkeypatch):
+    import hashlib
+
+    from docx import Document
+
+    from app.infrastructure.documents import price_list_export
+
+    monkeypatch.setattr(price_list_export, "fhd_repo_root", lambda: tmp_path)
+    document = Document()
+    document.add_paragraph("Approved price template")
+    stream = BytesIO()
+    document.save(stream)
+    content = stream.getvalue()
+    result = price_list_export.save_price_list_docx_template(content)
+    assert result["success"] is True
+    assert (
+        price_list_export.read_price_list_docx_template_digest()
+        == hashlib.sha256(content).hexdigest()
+    )
+    target = tmp_path / "424" / "document_templates" / "price_list_default.docx"
+    with pytest.raises(ValueError):
+        price_list_export.save_price_list_docx_template(b"broken")
+    assert target.read_bytes() == content
+    assert list(target.parent.glob("*.tmp")) == []
+
+
 # ---------------------------------------------------------------------------
 # _format_price_cell
 # ---------------------------------------------------------------------------

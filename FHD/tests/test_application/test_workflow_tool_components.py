@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-from copy import deepcopy
 from unittest.mock import Mock
 
 import pandas as pd
 import pytest
 
 from app.application.tools import workflow
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
@@ -25,8 +25,6 @@ def dispatch_ports(monkeypatch):
         "legacy": Mock(return_value=None),
         "registered": Mock(return_value={"source": "registered"}),
         "analysis": Mock(return_value={"source": "analysis"}),
-        "business": Mock(return_value=None),
-        "crud": Mock(return_value=None),
     }
     monkeypatch.setattr(employee_tool_registry, "is_employee_tool", ports["employee_match"])
     monkeypatch.setattr(employee_tool_registry, "execute_employee_tool", ports["employee"])
@@ -34,8 +32,6 @@ def dispatch_ports(monkeypatch):
     monkeypatch.setattr(employee_pack_runner, "try_execute_employee_planner_tool", ports["legacy"])
     monkeypatch.setattr(dispatch, "execute_registered_workflow_tool", ports["registered"])
     monkeypatch.setattr(workflow, "handle_excel_analysis", ports["analysis"])
-    monkeypatch.setattr(workflow, "try_execute_business_db_tool", ports["business"])
-    monkeypatch.setattr(workflow, "_resolve_new_tool_dispatch", ports["crud"])
     return ports
 
 
@@ -75,8 +71,6 @@ def test_empty_extension_result_is_handled_without_fallback(owner, dispatch_port
 
     assert result == ""
     dispatch_ports["analysis"].assert_not_called()
-    dispatch_ports["business"].assert_not_called()
-    dispatch_ports["crud"].assert_not_called()
     if owner == "employee":
         dispatch_ports["native"].assert_not_called()
     if owner in {"employee", "native"}:
@@ -84,7 +78,11 @@ def test_empty_extension_result_is_handled_without_fallback(owner, dispatch_port
 
 
 def test_native_mod_failure_does_not_execute_legacy_or_builtin(dispatch_ports):
-    failure = {"success": False, "error": "mod_execution_failed", "mod_id": "tenant-mod"}
+    failure = {
+        "success": False,
+        "error": "mod_execution_failed",
+        "mod_id": "tenant-mod",
+    }
     dispatch_ports["native"].return_value = (json.dumps(failure), "tenant-mod")
 
     result = workflow.execute_workflow_tool("excel_analysis", {}, db_write_token="write-token")
@@ -95,7 +93,8 @@ def test_native_mod_failure_does_not_execute_legacy_or_builtin(dispatch_ports):
     dispatch_ports["analysis"].assert_not_called()
 
 
-def test_recoverable_extension_failures_preserve_ordered_builtin_fallback(dispatch_ports):
+@pytest.mark.parametrize("owner", ["employee", "native", "legacy"])
+def test_extension_missing_receipt_cannot_fall_through_to_another_executor(owner, dispatch_ports):
     calls = []
 
     def fail(stage):
@@ -105,150 +104,309 @@ def test_recoverable_extension_failures_preserve_ordered_builtin_fallback(dispat
 
         return invoke
 
-    for name in ("employee_match", "native", "legacy"):
-        dispatch_ports[name].side_effect = fail(name)
+    if owner == "employee":
+        dispatch_ports["employee_match"].return_value = True
+    dispatch_ports[owner].side_effect = fail(owner)
     dispatch_ports["analysis"].side_effect = lambda *a, **kw: (
         calls.append("analysis") or {"ok": True}
     )
 
-    assert json.loads(workflow.execute_workflow_tool("excel_analysis", {})) == {"ok": True}
-    assert calls == ["employee_match", "native", "legacy", "analysis"]
-    dispatch_ports["business"].assert_not_called()
+    result = json.loads(workflow.execute_workflow_tool("excel_analysis", {}))
+    assert result["execution_state"] == "unknown"
+    assert result["retryable"] is False
+    assert calls == [owner]
+    dispatch_ports["analysis"].assert_not_called()
 
 
-def test_template_registration_precedes_legacy_employee(dispatch_ports):
+@pytest.mark.parametrize("legacy", [False, True])
+def test_native_handler_signature_is_selected_before_one_invocation(monkeypatch, legacy):
+    from types import SimpleNamespace
+
+    from app.mod_sdk import planner_native_tools as native
+
+    calls = []
+
+    def old_handler(tool, args, *, workspace_root, db_write_token):
+        calls.append(tool)
+        return '{"success":true}'
+
+    def new_handler(tool, args, *, workspace_root, db_write_token, runtime_context=None):
+        calls.append(tool)
+        raise TypeError("runtime_context failed after committing effect")
+
+    monkeypatch.setattr(native, "is_planner_native_tools_enabled", lambda: True)
+    monkeypatch.setattr(
+        native,
+        "_discover_native_tool_mods",
+        lambda: [{"mod_id": "tenant-mod", "mod_path": "/mod", "tool_names": ["write"]}],
+    )
+    monkeypatch.setattr(
+        native,
+        "_load_handler_module",
+        lambda *_: SimpleNamespace(run_native_tool=old_handler if legacy else new_handler),
+    )
+    raw, owner = native.try_execute_native_planner_tool(
+        "write", {}, runtime_context={"turn_id": "original-turn"}
+    )
+    result = json.loads(raw)
+    assert owner == "tenant-mod"
+    assert result["success"] is False
+    assert result["retryable"] is False
+    if legacy:
+        assert calls == []
+        assert result["error_code"] == "tool_context_unsupported"
+        assert result["execution_status"] == "not_started"
+    else:
+        assert calls == ["write"]
+        assert result["execution_state"] == "unknown"
+        assert result["reconciliation_required"] is True
+
+
+def test_template_registration_precedes_legacy_employee(monkeypatch, dispatch_ports):
     args = {"action": "create", "file_path": "quote.xlsx"}
+    registered = Mock(return_value=json.dumps({"source": "registered"}))
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability",
+        registered,
+    )
 
     assert json.loads(workflow.execute_workflow_tool("template_preview", args)) == {
         "source": "registered"
     }
-    dispatch_ports["registered"].assert_called_once_with("template_preview", "create", args)
+    registered.assert_called_once_with(
+        {"tool_id": "template_preview", "action": "create", "params": args},
+        workspace_root=None,
+        runtime_context=None,
+    )
+    dispatch_ports["registered"].assert_not_called()
     dispatch_ports["legacy"].assert_not_called()
 
 
-@pytest.mark.parametrize("raw_args", ["invalid-json", "[]", "null", "42"])
-def test_non_object_arguments_are_normalized_before_business_dispatch(raw_args, dispatch_ports):
-    dispatch_ports["business"].return_value = {"success": True, "source": "business"}
+@pytest.fixture
+def owned_csv_capability(tmp_path, monkeypatch, trusted_actor):
+    import io
+    from types import SimpleNamespace
 
-    assert json.loads(workflow.execute_workflow_tool("business_db_read", raw_args)) == {
-        "success": True,
-        "source": "business",
-    }
-    dispatch_ports["business"].assert_called_once_with("business_db_read", {})
-    dispatch_ports["crud"].assert_not_called()
+    from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
+    from app.application.elt.service_uploads import register_chat_upload
 
-
-@pytest.mark.parametrize("import_type", ["products", "customers", "orders"])
-def test_preview_reads_selected_rows_without_instantiating_any_writer(
-    import_type, tmp_path, monkeypatch
-):
-    from app import bootstrap
-    from app.services import unified_query_service
-
-    df = pd.DataFrame(
-        {"产品名称": ["涂料 A", "涂料 B"], "客户名称": ["客户甲", "客户乙"], "数量": [2, 3]}
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    actor = trusted_actor(user_id=17, role="admin")
+    upload = register_chat_upload(
+        user=SimpleNamespace(id=actor.user_id, tenant_id=actor.tenant_id),
+        filename="source.csv",
+        content_type="text/csv",
+        stream=io.BytesIO(b"item,count\npaint,2\nprimer,1\nbrush,5\nseal,0\n"),
     )
-    path = tmp_path / "source.xlsx"
-    df.to_excel(path, sheet_name="报价", startrow=2, index=False)
-    writers = []
-    for name in ("get_customer_app_service", "get_products_service", "get_shipment_app_service"):
-        factory = Mock(side_effect=AssertionError("preview must not construct a writer"))
-        monkeypatch.setattr(bootstrap, name, factory)
-        writers.append(factory)
-    lookup = Mock(side_effect=AssertionError("preview must not access customer persistence"))
-    monkeypatch.setattr(unified_query_service, "find_purchase_unit", lookup)
+    repo = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    repo._ensure_schema()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
+    return SimpleNamespace(actor=actor, upload=upload, repo=repo)
+
+
+@pytest.mark.parametrize("action", ["read", "structure", "query", "statistics"])
+def test_excel_read_actions_use_registered_contract_and_real_owned_upload(
+    action, owned_csv_capability
+):
+    from app.application.agent_orchestrator.result_verification import summarize_verification
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    actor = owned_csv_capability.actor
+    repo = owned_csv_capability.repo
+    params = {"file_path": owned_csv_capability.upload["upload_id"]}
+    if action == "read":
+        params["max_rows"] = 1
+    if action == "query":
+        params["query_expression"] = "count > 1 and item in ['paint', 'brush']"
+        params["question"] = "Which paint or brush rows have more than one item?"
+    context = {**actor.context, "idempotency_key": f"canonical-owned-{action}"}
     args = {
-        "file_path": "source.xlsx",
-        "import_type": import_type,
-        "preview_only": True,
-        "confirm": True,
-        "header_row": 3,
-        "last_data_row_1based": 4,
-        "context": {
-            "excel_analysis_selected_sheet": {"sheet_name": "报价"},
-            "preferred_sheet_name": "must-not-read",
-            "excel_customer_hint": "客户甲",
+        "tool_id": "excel_analysis",
+        "action": action,
+        "params": params,
+    }
+    result = json.loads(
+        workflow.execute_workflow_tool(
+            workflow.ERP_CAPABILITY_TOOL_NAME, args, runtime_context=context
+        )
+    )
+    assert result["success"] is True, json.dumps(result)
+    run = repo.get(result["run_id"])
+    assert run.status == "completed"
+    assert run.user_id == str(actor.user_id)
+    assert len(run.tool_calls) == 1
+    assert run.steps[0].tool_id == "excel_analysis"
+    assert run.steps[0].action == action
+    assert get_tool_action_spec("excel_analysis", action).read_only is True
+    assert get_tool_action_spec("excel_analysis", "export").read_only is False
+    verification = summarize_verification(run)
+    assert verification["accepted"] is True
+    assert verification["steps"][0]["status"] == "not_required"
+    assert verification["independently_verified_steps"] == 0
+    assert verification["contract_only_steps"] == 1
+    output = run.steps[0].output
+    data = output["data"]
+    if action == "read":
+        assert data["records"] == [{"item": "paint", "count": 2}]
+        assert output["returned_rows"] == 1
+        assert output["has_more"] is True
+    elif action == "structure":
+        assert data == {
+            "row_count": 4,
+            "column_count": 2,
+            "columns": ["item", "count"],
+            "dtypes": {"item": "object", "count": "int64"},
+            "sample_rows": [
+                {"item": "paint", "count": 2},
+                {"item": "primer", "count": 1},
+                {"item": "brush", "count": 5},
+            ],
+        }
+        assert "llm_understanding" not in output
+    elif action == "query":
+        assert data["records"] == [{"item": "paint", "count": 2}, {"item": "brush", "count": 5}]
+        assert data["row_count"] == 2
+    else:
+        assert output["row_count"] == 4
+        assert output["numeric_summary"]["count"] == {
+            "count": 4,
+            "sum": 8,
+            "mean": 2,
+            "min": 0,
+            "max": 5,
+        }
+    replay = json.loads(
+        workflow.execute_workflow_tool(
+            workflow.ERP_CAPABILITY_TOOL_NAME, args, runtime_context=context
+        )
+    )
+    assert replay["run_id"] == result["run_id"]
+    assert replay["deduplicated"] is True
+    assert len(repo.get(result["run_id"]).tool_calls) == 1
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "df.to_csv({target})",
+        "pd.read_csv('https://example.invalid/source.csv')",
+        "__import__('pathlib').Path({target}).write_text('changed')",
+    ],
+)
+def test_excel_query_rejects_call_expressions_without_file_or_network_effects(
+    expression, owned_csv_capability, tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    target = tmp_path / "must-not-be-written.csv"
+    effects = tmp_path / "forbidden-query-effect.txt"
+    expression = expression.format(target=repr(str(target)))
+    read_csv = pd.read_csv
+
+    def owned_input_only(path, *args, **kwargs):
+        assert isinstance(path, Path)
+        assert path.name == "input.csv"
+        return read_csv(path, *args, **kwargs)
+
+    def forbidden_effect(*args, **kwargs):
+        # Tool execution can fork; record attempted I/O where the parent can observe it.
+        effects.write_text("unexpected query I/O", encoding="utf-8")
+        raise AssertionError("query cannot write files or access the network")
+
+    monkeypatch.setattr(pd, "read_csv", owned_input_only)
+    monkeypatch.setattr(pd.DataFrame, "to_csv", forbidden_effect)
+    monkeypatch.setattr("urllib.request.urlopen", forbidden_effect)
+    context = {**owned_csv_capability.actor.context, "idempotency_key": "reject-expression-call"}
+    args = {
+        "tool_id": "excel_analysis",
+        "action": "query",
+        "params": {
+            "file_path": owned_csv_capability.upload["upload_id"],
+            "query_expression": expression,
         },
     }
-    original = deepcopy(args)
-
-    result = json.loads(workflow._handle_import_excel_to_database(args, str(tmp_path)))
-
-    assert result["success"] is True
-    assert result["preview"] is True
-    assert result["import_type"] == import_type
-    assert result["row_count"] == 1
-    assert len(result["sample_data"]) == 1
-    assert args == original
-    for writer in writers:
-        writer.assert_not_called()
-    lookup.assert_not_called()
-    if import_type == "products":
-        assert result["detected_unit"] == "客户甲"
-        assert result["read_options"] == {
-            "sheet_name": "报价",
-            "header_row": 3,
-            "last_data_row_applied": 4,
-        }
-
-
-def test_registry_cache_rebuilds_current_employee_tools_without_accumulation(monkeypatch):
-    from app.mod_sdk import employee_tool_registry
-
-    monkeypatch.setattr(workflow, "_workflow_tool_registry_cache", None)
-    monkeypatch.setattr(workflow, "_workflow_tool_registry_bulk_token_present", None)
-    monkeypatch.setattr(workflow, "_workflow_registry_cache_ver", None)
-    monkeypatch.setattr(workflow, "_WORKFLOW_REG_VER", 3)
-    monkeypatch.setattr(workflow, "_base_registry", lambda: [{"function": {"name": "base"}}])
-    monkeypatch.setattr(workflow, "extend_workflow_tool_registry", lambda specs: specs)
-    employees = Mock(
-        side_effect=[[{"function": {"name": "employee-a"}}], [{"function": {"name": "employee-b"}}]]
+    result = json.loads(
+        workflow.execute_workflow_tool(
+            workflow.ERP_CAPABILITY_TOOL_NAME, args, runtime_context=context
+        )
     )
-    invalidate = Mock()
-    monkeypatch.setattr(employee_tool_registry, "build_employee_pack_tool_definitions", employees)
-    monkeypatch.setattr(employee_tool_registry, "invalidate_employee_tool_cache", invalidate)
-
-    first = workflow.get_workflow_tool_registry()
-    assert workflow.get_workflow_tool_registry() is first
-    workflow.invalidate_workflow_tool_registry()
-    second = workflow.get_workflow_tool_registry()
-
-    assert second is not first
-    assert [tool["function"]["name"] for tool in first] == [
-        "base",
-        "employee-a",
-        "products_bulk_import",
-    ]
-    assert [tool["function"]["name"] for tool in second] == [
-        "base",
-        "employee-b",
-        "products_bulk_import",
-    ]
-    assert employees.call_count == 2
-    invalidate.assert_called_once_with()
+    assert result["success"] is False
+    run = owned_csv_capability.repo.get(result["run_id"])
+    assert run.steps[0].output["error_code"] == "invalid_query_expression"
+    assert len(run.tool_calls) == 1
+    assert not target.exists()
+    assert not effects.exists()
 
 
-@pytest.mark.parametrize("tool_name", ["excel_schema_understand", "excel_analysis"])
-def test_json_output_preserves_each_tools_error_boundary(
-    tool_name, dispatch_ports, monkeypatch, tmp_path
+@pytest.mark.parametrize("expression", [None, "", "   "])
+def test_excel_query_requires_nonempty_expression_before_admission(
+    expression, owned_csv_capability
 ):
-    path = tmp_path / "source.xlsx"
-    path.touch()
-    circular = {}
-    circular["self"] = circular
-    schema = Mock()
-    schema.understand_dataframe.return_value = circular
-    monkeypatch.setattr(workflow, "ExcelSchemaUnderstandingService", Mock(return_value=schema))
-    monkeypatch.setattr(workflow, "_read_excel_dataframe", Mock(return_value=pd.DataFrame()))
-    dispatch_ports["analysis"].return_value = circular
+    params = {
+        "file_path": owned_csv_capability.upload["upload_id"],
+        "question": "Write the source rows to another file",
+    }
+    if expression is not None:
+        params["query_expression"] = expression
+    result = json.loads(
+        workflow.execute_workflow_tool(
+            workflow.ERP_CAPABILITY_TOOL_NAME,
+            {"tool_id": "excel_analysis", "action": "query", "params": params},
+            runtime_context={
+                **owned_csv_capability.actor.context,
+                "idempotency_key": "missing-query-expression",
+            },
+        )
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "schema_validation_failed"
+    assert result["execution_status"] == "not_started"
+    assert not result.get("run_id")
 
-    if tool_name == "excel_analysis":
-        with pytest.raises(ValueError, match="Circular reference"):
-            workflow.execute_workflow_tool(tool_name, {"file_path": str(path)})
-    else:
-        result = json.loads(workflow.execute_workflow_tool(tool_name, {"file_path": str(path)}))
-        assert result == {
-            "success": False,
-            "error": "read_excel_failed",
-            "message": "读取 Excel 文件失败，请检查文件后重试",
-        }
+
+def test_office_generation_stays_in_original_approval_chain(tmp_path, monkeypatch, trusted_actor):
+    from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
+    from app.application.tools.workflow_tools import adapters
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    actor = trusted_actor(user_id=17, role="admin")
+    repo = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    repo._ensure_schema()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
+    generate = Mock(side_effect=AssertionError("approval must precede document generation"))
+    store = Mock(side_effect=AssertionError("approval must precede artifact storage"))
+    monkeypatch.setattr(adapters, "generate_document", generate)
+    monkeypatch.setattr(adapters, "store_document", store)
+    context = {**actor.context, "idempotency_key": "canonical-office-original"}
+    args = {
+        "tool_id": "generate_office_document",
+        "action": "execute",
+        "params": {"user_request": "Generate a quote", "output_format": "docx"},
+    }
+    first = json.loads(
+        workflow.execute_workflow_tool(
+            workflow.ERP_CAPABILITY_TOOL_NAME, args, runtime_context=context
+        )
+    )
+    assert first["success"] is False
+    assert first["execution_state"] == "waiting_approval", json.dumps(first)
+    assert first["pending_approval"] is True
+    assert first["approval_request_id"]
+    run = repo.get(first["run_id"])
+    assert run.status == "waiting_user"
+    assert run.steps[0].tool_id == "generate_office_document"
+    assert run.tool_calls == []
+    repeated = json.loads(
+        workflow.execute_workflow_tool(
+            workflow.ERP_CAPABILITY_TOOL_NAME, args, runtime_context=context
+        )
+    )
+    assert repeated["run_id"] == first["run_id"]
+    assert repeated["deduplicated"] is True
+    generate.assert_not_called()
+    store.assert_not_called()

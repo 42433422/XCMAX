@@ -265,6 +265,28 @@ describe('apiFetch', () => {
     vi.restoreAllMocks()
   })
 
+  it.each(['request_id', 'idempotency_key', 'client_request_id', 'turn_id'])('preserves the original %s on writes', async (field) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok'))
+    await apiFetch('/api/tools/execute', { method: 'POST', body: JSON.stringify({ [field]: 'original-turn' }) })
+    expect(new Headers(fetchSpy.mock.calls[0][1]?.headers).get('Idempotency-Key')).toBe('original-turn')
+  })
+
+  it.each([
+    { 'idempotency-key': 'original-header' },
+    new Headers({ 'Idempotency-Key': 'original-header' }),
+    [['Idempotency-Key', 'original-header']],
+  ] as HeadersInit[])('preserves an explicit identity across header representations', async (headers) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok'))
+    await apiFetch('/api/tools/execute', { method: 'POST', headers, body: '{}' })
+    expect(new Headers(fetchSpy.mock.calls[0][1]?.headers).get('Idempotency-Key')).toBe('original-header')
+  })
+
+  it.each(['GET', 'HEAD', 'OPTIONS'])('does not create an execution key for %s', async (method) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok'))
+    await apiFetch('/api/tools', { method })
+    expect(new Headers(fetchSpy.mock.calls[0][1]?.headers).has('Idempotency-Key')).toBe(false)
+  })
+
   it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('never replays a failed %s on the development fallback', async (method) => {
     vi.stubEnv('DEV', true)
     vi.stubEnv('VITE_API_BASE_URL', '')

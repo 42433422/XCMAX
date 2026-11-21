@@ -427,4 +427,6 @@ def _runtime_spec(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
     spec = function_spec(row["tool_key"], version["description"], schema)
     spec["tool_id"] = row["id"]
     spec["version_id"] = version["id"]
+    spec["kind"] = "definition"
+    spec["executable"] = False
     return spec

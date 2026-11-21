@@ -154,15 +154,21 @@ def _registered_router_template_preview(
         preview_data = {
             "sheet_name": picked_sheet_name,
             "selected_sheet_name": picked_sheet_name,
-            "sample_rows": selected_sheet.get("sample_rows")
-            if isinstance(selected_sheet.get("sample_rows"), list)
-            else [],
-            "grid_preview": selected_sheet.get("grid_preview")
-            if isinstance(selected_sheet.get("grid_preview"), dict)
-            else {},
-            "grid_style_cache": selected_sheet.get("style_cache")
-            if isinstance(selected_sheet.get("style_cache"), dict)
-            else {},
+            "sample_rows": (
+                selected_sheet.get("sample_rows")
+                if isinstance(selected_sheet.get("sample_rows"), list)
+                else []
+            ),
+            "grid_preview": (
+                selected_sheet.get("grid_preview")
+                if isinstance(selected_sheet.get("grid_preview"), dict)
+                else {}
+            ),
+            "grid_style_cache": (
+                selected_sheet.get("style_cache")
+                if isinstance(selected_sheet.get("style_cache"), dict)
+                else {}
+            ),
         }
         template_type = str(params.get("template_type") or "Excel").strip()
         business_scope = str(
@@ -236,6 +242,10 @@ def _registered_router_template_preview(
 def _registered_router_print(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    if action == "submit_label_job":
+        from app.application.label_job_service import submit_agent_label_job
+
+        return submit_agent_label_job(params, runtime_context)
     if action == "workflow_label_dispatch":
         from app.application.print_app_service import get_print_application_service
 
@@ -279,14 +289,9 @@ def _registered_router_print(
             )
             or {}
         )
-    if str(runtime_context.get("service_source") or "") == "fastapi_print_route":
-        from app.fastapi_routes import print_routes
+    from app.services import get_printer_service
 
-        svc = print_routes._svc()
-    else:
-        from app.services import get_printer_service
-
-        svc = get_printer_service()
+    svc = get_printer_service()
     if action == "view":
         return {"success": True, "redirect": "/console?view=print"}
     if action in ("list", "query"):
@@ -336,9 +341,9 @@ def _registered_router_print(
             return {"success": False, "message": "标签打印机不在当前可用打印机列表中"}
         result = dict(
             svc.save_printer_selection(
-                document_printer=str(document_printer).strip()
-                if document_printer is not None
-                else None,
+                document_printer=(
+                    str(document_printer).strip() if document_printer is not None else None
+                ),
                 label_printer=str(label_printer).strip() if label_printer is not None else None,
             )
             or {}

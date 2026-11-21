@@ -113,13 +113,6 @@ vi.mock('./useChatWorkflowPanel', () => ({
     unmountWorkflowPanel: vi.fn(),
   }),
 }))
-vi.mock('./useChatDbTokenGate', () => ({
-  useChatDbTokenGate: () => ({
-    handleChatRequiresToken: vi.fn(),
-    onDbWriteUnlockedForChatRetry: vi.fn(),
-    resolveChatDbTokensForPayload: vi.fn(() => ({})),
-  }),
-}))
 vi.mock('./useChatExcelContext', () => ({
   useChatExcelContext: () => ({
     bindExcelSheetToChat: vi.fn(),

@@ -55,10 +55,10 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
   const { cursorEnabled, cursorConnected } = options
 
   const TOOL_LABELS: Record<string, { label: string; desc: string }> = {
-    api_catalog: { label: '查看接口', desc: '列出可调用的业务接口' },
-    api_call: { label: '调用接口', desc: '代你请求订单、产品等业务数据' },
+    api_catalog: { label: '查看能力', desc: '列出当前账号可用的工具与员工' },
+    operation_call: { label: '执行能力', desc: '按当前账号权限执行已登记的业务能力' },
     chat: { label: '对话', desc: '和 XCAGI AI 助手聊天' },
-    capability_loop: { label: '闭环自检', desc: '一键验证 catalog→API→对话→光标通道' },
+    capability_loop: { label: '闭环自检', desc: '核对可用能力、只读执行与任务回执' },
     ui_sessions: { label: '查看屏幕', desc: '有哪些浏览器正在待命' },
     ui_snapshot: { label: '看页面', desc: '读取当前页面上的按钮和输入框' },
     ui_navigate: { label: '跳转', desc: '打开指定菜单或页面' },

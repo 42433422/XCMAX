@@ -3,7 +3,6 @@
  */
 import type { Ref } from 'vue'
 import type { useCanonicalChatTaskBridge } from '../useCanonicalChatTaskBridge'
-import type { useChatDbTokenGate } from '../useChatDbTokenGate'
 import type { useChatResponseAttach } from '../useChatResponseAttach'
 import type { useChatTaskList } from '../useChatTaskList'
 import type { useShipmentTask } from '../useShipmentTask'
@@ -15,6 +14,7 @@ import {
   errorMessage,
   extractShipmentExecutionContext,
   asShipmentTask,
+  plannerExecutionState,
   type ChatOrchestrationAddAndSaveMessage,
 } from './chatOrchestrationShared'
 
@@ -27,7 +27,7 @@ export interface ChatOrchestrationTaskExecutionDeps {
   orderNumberFetching: Ref<boolean>
   canonicalTaskBridge: Pick<
     ReturnType<typeof useCanonicalChatTaskBridge>,
-    'invalidateStagedTask' | 'stageCanonicalTask' | 'executeCanonicalTask' | 'cancelCanonicalTask'
+    'hasCanonicalTarget' | 'invalidateStagedTask' | 'stageCanonicalTask' | 'executeCanonicalTask' | 'cancelCanonicalTask'
   >
   hydrateTaskOrderNumber: ShipmentTaskApi['hydrateTaskOrderNumber']
   enrichShipmentPreviewProducts: ShipmentTaskApi['enrichShipmentPreviewProducts']
@@ -37,7 +37,6 @@ export interface ChatOrchestrationTaskExecutionDeps {
   upsertTask: TaskListApi['upsertTask']
   failTask: TaskListApi['failTask']
   getLastAiMessageRef: ReturnType<typeof useChatResponseAttach>['getLastAiMessageRef']
-  handleChatRequiresToken: ReturnType<typeof useChatDbTokenGate>['handleChatRequiresToken']
   persistTaskPanelStateForSession: (targetSessionId?: string) => void
   handleAutoAction: (action: unknown, userMessage?: string) => void
 }
@@ -56,7 +55,6 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
     upsertTask,
     failTask,
     getLastAiMessageRef,
-    handleChatRequiresToken,
     persistTaskPanelStateForSession,
     handleAutoAction,
   } = deps
@@ -83,8 +81,9 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
     const nextTask = asShipmentTask(task)
     currentTask.value = nextTask
 
-    if (nextTask.completed) return
-    if (nextTask.type !== 'shipment_generate') {
+    if (nextTask.completed || asRecord(nextTask).requires_token || nextTask.data?.requires_token
+      || !canonicalTaskBridge.hasCanonicalTarget(nextTask)) return
+    if (nextTask.type !== 'shipment_generate' || asRecord(nextTask).agentRunId) {
       void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => {
         /* execution stays blocked */
       })
@@ -117,11 +116,23 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
     if (!currentTask.value || isExecuting.value) return
 
     const task = currentTask.value
-    const apiUrl = task.api_url
-    const method = (task.method || 'POST').toUpperCase()
+    const waitingAuthorization = Boolean(asRecord(task).requires_token || task.data?.requires_token)
+    if (waitingAuthorization && !String(asRecord(task).agentRunId || '').trim()) {
+      const state = plannerExecutionState(task)
+      const message = state === 'unknown' ? '原任务结果待核对，请在任务工作区核对；未重复提交。'
+        : '原任务仍在等待授权，请在任务工作区处理；未重复提交。'
+      await addAndSaveMessage('[任务] ' + message, 'ai', { workflowAction: state })
+      return
+    }
+    if (!canonicalTaskBridge.hasCanonicalTarget(task)) {
+      const message = '任务未开始：缺少有效能力契约，请重新选择可用能力。'
+      currentTask.value = { ...task, completed: false, description: message, data: { ...task.data, execution_state: 'not_started' } }
+      await addAndSaveMessage('[任务] ' + message, 'ai', { workflowAction: 'not_started' })
+      return
+    }
     const payload = { ...(task.payload || {}) }
 
-    if (task?.type === 'shipment_generate') {
+    if (task?.type === 'shipment_generate' && !asRecord(task).agentRunId) {
       if (!String(task?.customOrderNumber || '').trim()) {
         await hydrateTaskOrderNumber(task)
       }
@@ -132,12 +143,6 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
       } else if (Object.prototype.hasOwnProperty.call(payload.params, 'order_number')) {
         delete payload.params.order_number
       }
-    }
-
-    if (!apiUrl) {
-      await addAndSaveMessage('任务执行失败：缺少 API 地址', 'ai')
-      currentTask.value = null
-      return
     }
 
     isExecuting.value = true
@@ -156,36 +161,49 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
     }
 
     try {
-      let result
       const canonicalResult = await canonicalTaskBridge.executeCanonicalTask(task, asRecord(payload.params))
-
-      if (canonicalResult) {
-        result = canonicalResult
-      } else if (method === 'GET') {
-        result = await fetch(apiUrl)
-      } else {
-        result = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
+      if (!canonicalResult) {
+        const message = '任务未开始：缺少有效能力契约，请重新选择可用能力。'
+        currentTask.value = { ...task, completed: false, description: message, data: { ...task.data, execution_state: 'not_started' } }
+        await addAndSaveMessage('[任务] ' + message, 'ai', { workflowAction: 'not_started' })
+        keepTaskCard = true
+        return
       }
 
-      const data = asRecord(await result.json().catch(() => ({})))
+      const data = asRecord(await canonicalResult.json().catch(() => ({})))
+
+      const executionState = String(data.execution_state || '')
+      if (!['completed', 'failed', 'cancelled', 'interrupted', 'rejected'].includes(executionState)) {
+        const message = String(data.message || '任务结果待核对，请查看原任务进度。')
+        await addAndSaveMessage('[任务] ' + message, 'ai')
+        keepTaskCard = true
+        currentTask.value = { ...task, completed: false, description: message }
+        if (shipmentTaskId) upsertTask({
+          id: shipmentTaskId, type: 'shipment', source: 'shipment', title: '发货单生成任务',
+          status: ['queued', 'accepted'].includes(executionState) ? 'queued'
+            : ['planning', 'running', 'retrying'].includes(executionState) ? 'running'
+              : executionState === 'paused' ? 'paused' : 'blocked',
+          stage: message, payload: { activeRunId: data.run_id, taskId: data.task_id, rawRunStatus: executionState },
+        })
+        return
+      }
 
       if (data?.requires_token) {
-        handleChatRequiresToken(asString(data.token_name), asString(data.token_description || data.message), [])
-        const tokenMsg = String(data.message || data.token_description || '当前操作需要二级数据库写入令牌').trim()
-        await addAndSaveMessage('[提示] ' + tokenMsg, 'ai')
+        const state = plannerExecutionState(data)
+        const message = state === 'unknown' ? '原任务结果待核对，请在任务工作区核对。'
+          : String(data.message || data.token_description || '原任务正在等待授权，请在任务工作区处理。').trim()
+        await addAndSaveMessage('[任务] ' + message, 'ai', { workflowAction: state })
         keepTaskCard = true
         currentTask.value = {
           ...task,
-          description: `${tokenMsg}（已弹出令牌输入框，输入后请再次点击确认执行）`,
+          completed: false,
+          data: { ...task.data, requires_token: true, execution_state: state },
+          description: `${message}（未重新执行）`,
         }
         return
       }
 
-      if (result.ok) {
+      if (canonicalResult.ok) {
         const successMsg = String(data.message || data.msg || '任务执行成功')
         const shipmentDocUrl = task?.type === 'shipment_generate' ? buildShipmentDownloadUrl(data) : ''
         await addAndSaveMessage('[成功] ' + successMsg, 'ai', {
@@ -225,7 +243,7 @@ export function useChatOrchestrationTaskExecution(deps: ChatOrchestrationTaskExe
           handleAutoAction({ type: task.switch_view })
         }
       } else {
-        const errMsg = String(data.message || data.msg || data.error || `执行失败 (HTTP ${result.status})`)
+        const errMsg = String(data.message || data.msg || data.error || `执行失败 (HTTP ${canonicalResult.status})`)
         await addAndSaveMessage('[失败] 任务执行失败：' + errMsg, 'ai')
         if (shipmentTaskId) {
           failTask(shipmentTaskId, errMsg)

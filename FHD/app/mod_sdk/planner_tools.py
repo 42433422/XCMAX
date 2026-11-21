@@ -84,7 +84,10 @@ def is_planner_mod_on_disk() -> bool:
 
 def is_planner_mod_installed() -> bool:
     try:
-        from app.infrastructure.mods.mod_manager import get_mod_manager, is_mods_disabled
+        from app.infrastructure.mods.mod_manager import (
+            get_mod_manager,
+            is_mods_disabled,
+        )
 
         if is_mods_disabled():
             return False
@@ -164,14 +167,12 @@ def load_mod_planner_tool_extensions() -> list[dict[str, Any]]:
     return []
 
 
-def get_planner_chat_tool_registry() -> list[dict[str, Any]]:
+def get_planner_chat_tool_registry(
+    runtime_context: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     from app.application.tools.workflow import get_workflow_tool_registry
 
-    reg = list(get_workflow_tool_registry())
-    extensions = load_mod_planner_tool_extensions()
-    if extensions:
-        reg = reg + extensions
-    return reg
+    return get_workflow_tool_registry(runtime_context)
 
 
 def resolve_planner_tool_executor() -> ExecuteToolFn:
@@ -182,21 +183,6 @@ def resolve_planner_tool_executor() -> ExecuteToolFn:
     return execute_workflow_tool
 
 
-def _with_owned_upload_path(
-    args: dict[str, Any] | str, runtime_context: dict[str, Any] | None
-) -> dict[str, Any] | str:
-    """后续轮次只说「导入」时，模型只能拿到文件名；按当前账号换成自己的上传路径。"""
-    if not isinstance(args, dict) or not isinstance(runtime_context, dict):
-        return args
-    file_path = str(args.get("file_path") or "").strip()
-    if not file_path:
-        return args
-    from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
-
-    resolved = resolve_owned_upload_path(file_path, runtime_context)
-    return {**args, "file_path": resolved} if resolved != file_path else args
-
-
 def execute_planner_workflow_tool(
     name: str,
     args: dict[str, Any] | str,
@@ -205,38 +191,7 @@ def execute_planner_workflow_tool(
     db_write_token: str | None = None,
     runtime_context: dict[str, Any] | None = None,
 ) -> str:
-    """里程碑 F：优先 Mod 原生 handler，其余委托宿主 workflow。"""
-    from app.mod_sdk.planner_native_tools import try_execute_native_planner_tool
-
-    if name == "import_excel_to_database":
-        args = _with_owned_upload_path(args, runtime_context)
-
-    native_raw, native_mod = try_execute_native_planner_tool(
-        name,
-        args,
-        workspace_root,
-        db_write_token=db_write_token,
-    )
-    if native_raw is not None:
-        logger.debug("planner tool native mod=%s tool=%s", native_mod, name)
-        return native_raw
-
-    try:
-        from app.domain.app_pure.employee_pack_runner import try_execute_employee_planner_tool
-
-        emp_raw = try_execute_employee_planner_tool(
-            name,
-            args,
-            workspace_root,
-            db_write_token=db_write_token,
-            runtime_context=runtime_context,
-        )
-        if emp_raw is not None:
-            logger.debug("planner tool employee pack tool=%s", name)
-            return emp_raw
-    except RECOVERABLE_ERRORS:
-        logger.debug("employee planner tool dispatch skipped", exc_info=True)
-
+    """Use the host's single extension dispatch chain, preserving authorization."""
     from app.application.tools.workflow import execute_workflow_tool
 
     raw = execute_workflow_tool(
@@ -255,79 +210,10 @@ def execute_planner_workflow_tool(
     return raw
 
 
-def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any]:
-    payload = body or {}
-    name = str(payload.get("tool_name") or payload.get("name") or "").strip()
-    if not name:
-        return {"success": False, "error": "tool_name required"}
-
-    args = payload.get("arguments") or payload.get("args") or {}
-    # A packaged desktop backend runs with its CWD inside the read-only app
-    # bundle.  Tool calls that do not explicitly provide a workspace must
-    # therefore default to the user's data directory, not ``os.getcwd()``;
-    # otherwise the bundled Office employees cannot write their verified
-    # artifacts on a fresh install.
-    workspace_root = str(
-        os.environ.get("WORKSPACE_ROOT") or os.environ.get("XCAGI_DATA_DIR") or os.getcwd()
-    ).strip()
-    db_write_token = payload.get("db_write_token")
-    if db_write_token is not None:
-        db_write_token = str(db_write_token)
-
-    try:
-        raw = resolve_planner_tool_executor()(
-            name,
-            args,
-            workspace_root,
-            db_write_token=db_write_token,
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("planner tool execute failed: %s", name)
-        return {
-            "success": False,
-            "error": "工具执行失败，请稍后重试",
-            "error_code": "planner_tool_execution_failed",
-            "tool_name": name,
-        }
-
-    execution_path = "host.workflow"
-    handler_mod: str | None = None
-    tool_success = False
-    tool_error = "工具执行返回了无效结果"
-    try:
-        probe = json.loads(raw)
-        if isinstance(probe, dict):
-            tool_success = bool(probe.get("success"))
-            if not tool_success:
-                tool_error = "工具执行失败，请检查输入后重试"
-            src = str(probe.get("source") or "")
-            if src.startswith("mod:"):
-                execution_path = "mod_native"
-                handler_mod = src.split(":", 1)[1] if ":" in src else None
-    except json.JSONDecodeError:
-        pass
-    if execution_path == "host.workflow" and is_planner_tools_via_mod_enabled():
-        execution_path = "mod_facade"
-        handler_mod = PLANNER_FACADE_MOD_ID
-
-    return {
-        # A planner facade must report the actual employee/tool outcome.  Do
-        # not turn a structured failure (or malformed response) into a
-        # completed task merely because dispatch itself returned normally.
-        "success": tool_success,
-        "tool_name": name,
-        "result": raw
-        if tool_success
-        else '{"success": false, "error_code": "planner_tool_failed"}',
-        "execution_path": execution_path,
-        "mod_id": handler_mod,
-        "delegate": "host.workflow" if execution_path != "mod_native" else None,
-        **({"error": tool_error} if not tool_success else {}),
-    }
-
-
-def list_planner_tools_registry_detail() -> dict[str, Any]:
-    reg = get_planner_chat_tool_registry()
+def list_planner_tools_registry_detail(
+    runtime_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    reg = get_planner_chat_tool_registry(runtime_context)
     names: list[str] = []
     for item in reg:
         fn = item.get("function") if isinstance(item, dict) else None
@@ -352,22 +238,25 @@ def list_planner_tools_registry_detail() -> dict[str, Any]:
             registered_capability_catalog,
         )
 
-        product_capabilities = registered_capability_catalog()
+        product_capabilities = registered_capability_catalog(dict(runtime_context or {}))
     except RECOVERABLE_ERRORS:
         product_capabilities = {}
         ERP_CAPABILITY_TOOL_NAME = "execute_erp_capability"
     try:
-        from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+        from app.application.capability_catalog import available_employees
 
-        employee_status = build_employee_tools_status()
+        employees = available_employees(dict(runtime_context or {}))
+        employee_status = {
+            "registered_tool_count": len(employees),
+            "employee_pack_tools": employees,
+        }
     except RECOVERABLE_ERRORS:
         employee_status = {}
     return {
         "success": True,
         "tool_count": len(names),
         "tool_names": names,
-        "mod_extension_count": len(ext_names),
-        "mod_extension_names": ext_names,
+        "unbound_extension_inventory": [{"name": name, "executable": False} for name in ext_names],
         "employee_planner": employee_status,
         "employee_pack_tools": employee_status.get("employee_pack_tools") or [],
         "registered_capability_tool": ERP_CAPABILITY_TOOL_NAME,
@@ -405,7 +294,6 @@ def list_planner_tools_registry_detail() -> dict[str, Any]:
 
 __all__ = [
     "PLANNER_FACADE_MOD_ID",
-    "execute_planner_tool_from_body",
     "execute_planner_workflow_tool",
     "get_planner_chat_tool_registry",
     "is_planner_mod_installed",

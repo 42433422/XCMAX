@@ -308,13 +308,10 @@ def _drain_background_run(run_id: str) -> AgentRun:
         recovered=claimed.recovery_count > 0,
     )
     assert run is not None
-    state = {
-        "completed": "completed",
-        "failed": "failed",
-        "cancelled": "cancelled",
-        "paused": "paused",
-    }.get(run.status, "blocked")
-    queue.finish(run_id, "route-test-worker", state)
+    from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+
+    state, error_code = dispatched_run_state(run)
+    queue.finish(run_id, "route-test-worker", state, error_code=error_code)
     return run
 
 
@@ -580,7 +577,7 @@ def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
     assert "观察记录" in retry.json()["message"]
 
 
-def test_continue_waiting_agent_run(local_tools) -> None:
+def test_approved_agent_run_without_source_evidence_stays_blocked(local_tools) -> None:
     get_agent_run_repository().clear()
     client = _client()
     patches = _planner_fallback_patches()
@@ -624,11 +621,12 @@ def test_continue_waiting_agent_run(local_tools) -> None:
     payload = continue_response.json()
     assert payload["success"] is True
     completed = completed_run.to_dict()
-    assert completed["status"] == "completed", completed["error"]
+    assert completed["status"] == "blocked", completed["error"]
     assert completed["steps"][0]["status"] == "completed"
+    assert completed["final_output"]["verification"]["accepted"] is False
     event_types = [event["event_type"] for event in completed["events"]]
     assert "step.approved" in event_types
-    assert "tool.completed" in event_types
+    assert "tool.completed" not in event_types
     mock_execute.assert_called_once()
 
 
@@ -704,17 +702,19 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
             == 403
         )
         completed = _drain_background_run(run_id)
-        assert completed.status == "completed"
+        assert completed.status == "blocked"
+        assert completed.final_output["verification"]["accepted"] is False
         assert len(completed.tool_calls) == 1
         finished = owner.post(
             f"/api/agent/runs/{run_id}/continue",
             json={"approval_grant": grant},
         )
-        assert finished.status_code == 409
-        assert finished.json()["message"] == "任务已结束，不能审批通过后执行"
+        assert finished.status_code == 403
+        assert "approval_grant" in finished.json()["message"]
         execution = get_task_execution_repository().get(run_id)
         assert execution is not None
-        assert execution.state == "succeeded"
+        # The adapter ran once, but its bare success flag cannot prove the effect.
+        assert execution.state == "unknown"
         assert execution.execution_count == 2
         execute.assert_called_once()
 
@@ -770,7 +770,9 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
                 f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
             )
             assert accepted.status_code == 202
-            assert _drain_background_run(run_id).status == "completed"
+            completed = _drain_background_run(run_id)
+            assert completed.status == "blocked"
+            assert completed.final_output["verification"]["accepted"] is False
             execute.assert_called_once()
     finally:
         engine.dispose()
@@ -1265,9 +1267,10 @@ def test_unified_task_requires_approval_and_deduplicates_execution(
         assert approved.status_code == 202
         assert approved.json()["data"]["status"] == "queued"
         completed = _drain_background_run(run["run_id"]).to_dict()
-        assert completed["status"] == "completed"
+        assert completed["status"] == "blocked"
         assert completed["tool_calls"][0]["status"] == "completed"
-        assert completed["final_output"]["node_outputs"]
+        assert completed["tool_calls"][0]["output"]["order_id"] == 41
+        assert completed["final_output"]["verification"]["accepted"] is False
         assert "step.approved" in [event["event_type"] for event in completed["events"]]
         execute.assert_called_once()
         assert execute.call_args.args[:2] == ("shipment_orders", "generate")

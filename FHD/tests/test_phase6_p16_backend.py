@@ -2476,101 +2476,53 @@ class TestExcelAiFileAnalyze:
         assert response.status_code == 500
 
 
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
 class TestExcelAiSqliteImport:
-    """Cover ``ai_sqlite_import_unit_products`` endpoint."""
+    """Legacy import is only an authenticated canonical transport."""
 
-    def test_sqlite_import_success(self, excel_client, local_tools):
-        from app.application.agent_orchestrator import (
-            AgentOrchestrator,
-            InMemoryAgentRunRepository,
-        )
+    def test_sqlite_import_requires_session(self, excel_client):
+        with patch("app.application.get_unit_products_import_app_service") as service:
+            response = excel_client.post(
+                "/api/ai/sqlite/import_unit_products",
+                json={"saved_name": "test.xlsx", "unit_name": "Acme", "user_id": "1"},
+                headers={"X-User-ID": "1", "Idempotency-Key": "unit-import"},
+            )
+        assert response.status_code == 401
+        service.assert_not_called()
 
-        repo = InMemoryAgentRunRepository()
+    @pytest.mark.parametrize("unit_field", ["unit_name", "unit_name_guess"])
+    def test_sqlite_import_without_tenant_approval_scope_stays_unexecuted(
+        self, excel_client, trusted_actor, unit_field
+    ):
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        actor = trusted_actor(user_id=7, tenant_id=None, role="admin", tier="admin")
         with (
-            patch(
-                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-                return_value=repo,
-            ),
-            patch("app.application.get_unit_products_import_app_service") as mock_get,
-        ):
-            mock_service = MagicMock()
-            mock_service.import_unit_products.return_value = {
-                "success": True,
-                "imported": 5,
-                "created_unit": True,
-            }
-            mock_get.return_value = mock_service
-
-            response = excel_client.post(
-                "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "test.xlsx", "unit_name": "Acme"},
-            )
-            assert response.status_code == 202
-            body = response.json()
-            run_id = body["run_id"]
-            run = repo.get(run_id)
-            assert run is not None
-            assert run.status == "waiting_user"
-            assert run.intent == "import_unit_products_db"
-            assert run.steps[0].tool_id == "unit_products_import"
-            assert run.steps[0].action == "execute_import"
-            mock_service.import_unit_products.assert_not_called()
-
-            completed = AgentOrchestrator(repository=repo).continue_run(
-                run_id,
-                approved_by="pytest",
-            )
-
-        assert completed is not None
-        assert completed.status == "completed"
-        mock_service.import_unit_products.assert_called_once_with(
-            saved_name="test.xlsx",
-            unit_name="Acme",
-            create_purchase_unit=True,
-            skip_duplicates=True,
-        )
-        output = completed.final_output["node_outputs"]["import_unit_products"]
-        assert output["success"] is True
-        assert output["created_customers"] == 1
-        assert output["created_products"] == 5
-        assert output["data"]["unit_name"] == "Acme"
-
-    def test_sqlite_import_failure_returns_400(self, excel_client):
-        with patch("app.application.get_unit_products_import_app_service") as mock_get:
-            response = excel_client.post(
-                "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "", "unit_name": ""},
-            )
-        mock_get.assert_not_called()
-        assert response.status_code == 400
-
-    def test_sqlite_import_exception_returns_500(self, excel_client):
-        with patch(
-            "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan",
-            side_effect=RuntimeError("db error"),
+            tenant_scope(None),
+            patch("app.application.get_unit_products_import_app_service") as service,
         ):
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "test.xlsx", "unit_name": "Acme"},
+                json={"saved_name": "test.xlsx", unit_field: "Acme"},
+                headers={**actor.headers, "Idempotency-Key": "unit-import"},
             )
-        assert response.status_code == 500
+        assert response.status_code == 403, response.text
+        assert response.json()["error_code"] == "approval_scope_required"
+        assert response.json()["execution_status"] == "not_started"
+        service.assert_not_called()
 
-    def test_sqlite_import_with_unit_name_guess(self, excel_client):
-        from app.application.agent_orchestrator import InMemoryAgentRunRepository
-
-        repo = InMemoryAgentRunRepository()
-        with patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ):
+    def test_sqlite_import_tenant_cannot_spoof_global_admin(self, excel_client, trusted_actor):
+        actor = trusted_actor(user_id=7, role="admin")
+        with patch("app.application.get_unit_products_import_app_service") as service:
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "test.xlsx", "unit_name_guess": "Guessed"},
+                json={"saved_name": "test.xlsx", "unit_name": "Acme", "user_id": "1"},
+                headers={**actor.headers, "X-User-ID": "1", "Idempotency-Key": "unit-import"},
             )
-        assert response.status_code == 202
-        run = repo.get(response.json()["run_id"])
-        assert run is not None
-        assert run.steps[0].params["unit_name"] == "Guessed"
+        assert response.status_code == 403, response.text
+        service.assert_not_called()
 
 
 class TestExcelSkillsAnalyze:
@@ -2584,7 +2536,9 @@ class TestExcelSkillsAnalyze:
         response = excel_client.post("/api/skills/analyze/excel", json={"sheet_name": "Sheet1"})
         assert response.status_code == 400
 
-    def test_skills_analyze_excel_success(self, excel_client):
+    def test_skills_analyze_excel_without_independent_verifier_stays_blocked(
+        self, excel_client, trusted_actor, local_tools
+    ):
         with patch(
             "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
         ) as mock_get:
@@ -2595,8 +2549,15 @@ class TestExcelSkillsAnalyze:
             response = excel_client.post(
                 "/api/skills/analyze/excel",
                 json={"file_path": "/tmp/test.xlsx", "sheet_name": "Sheet1"},
+                headers={
+                    **trusted_actor(role="admin").headers,
+                    "Idempotency-Key": "phase16-analyze",
+                },
             )
-        assert response.status_code == 200
+        assert response.status_code == 202, response.text
+        assert response.json()["success"] is False
+        assert response.json()["agent_status"] == "blocked"
+        mock_skill.execute.assert_called_once()
 
     def test_skills_view_excel_empty_body_returns_400(self, excel_client):
         response = excel_client.post("/api/skills/view/excel", json={})
@@ -2606,19 +2567,22 @@ class TestExcelSkillsAnalyze:
         response = excel_client.post("/api/skills/view/excel", json={"action": "view"})
         assert response.status_code == 400
 
-    def test_skills_view_excel_success(self, excel_client):
+    def test_skills_view_excel_success(self, excel_client, trusted_actor, local_tools):
         with patch(
             "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
         ) as mock_get:
             mock_skill = MagicMock()
-            mock_skill.execute.return_value = {"success": True, "data": "viewed"}
+            mock_skill.execute.return_value = {"success": True, "content": [], "row_count": 0}
             mock_get.return_value = mock_skill
 
             response = excel_client.post(
                 "/api/skills/view/excel",
                 json={"file_path": "/tmp/test.xlsx", "action": "view"},
+                headers=trusted_actor(role="admin").headers,
             )
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        mock_skill.execute.assert_called_once()
 
 
 class TestExcelSkillsGenerateLabelTemplate:
@@ -2635,7 +2599,9 @@ class TestExcelSkillsGenerateLabelTemplate:
         )
         assert response.status_code == 400
 
-    def test_generate_label_template_success(self, excel_client):
+    def test_generate_label_template_without_independent_verifier_stays_blocked(
+        self, excel_client, trusted_actor, local_tools
+    ):
         with patch(
             "app.infrastructure.skills.label_template_generator.get_label_template_generator_skill"
         ) as mock_get:
@@ -2650,10 +2616,16 @@ class TestExcelSkillsGenerateLabelTemplate:
                     "class_name": "MyTemplate",
                     "enable_ocr": True,
                 },
+                headers={**trusted_actor(role="admin").headers, "Idempotency-Key": "phase16-label"},
             )
-        assert response.status_code == 200
+        assert response.status_code == 202, response.text
+        assert response.json()["success"] is False
+        assert response.json()["agent_status"] == "blocked"
+        mock_skill.execute.assert_called_once()
 
-    def test_generate_label_template_default_class_name(self, excel_client, local_tools):
+    def test_generate_label_template_default_class_name(
+        self, excel_client, local_tools, trusted_actor
+    ):
         with patch(
             "app.infrastructure.skills.label_template_generator.get_label_template_generator_skill"
         ) as mock_get:
@@ -2664,7 +2636,13 @@ class TestExcelSkillsGenerateLabelTemplate:
             response = excel_client.post(
                 "/api/skills/generate-label-template",
                 json={"image_path": "/tmp/label.png"},
+                headers={
+                    **trusted_actor(role="admin").headers,
+                    "Idempotency-Key": "phase16-label-default",
+                },
             )
-        assert response.status_code == 200
+        assert response.status_code == 202, response.text
+        assert response.json()["success"] is False
+        assert response.json()["agent_status"] == "blocked"
         args = mock_skill.execute.call_args
         assert args.kwargs.get("class_name") == "LabelTemplateGenerator"

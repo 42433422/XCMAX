@@ -6,23 +6,12 @@ import logging
 import os
 import re
 import tempfile
-import time
-import uuid
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.fastapi_routes.print_agent_helpers import (
-    agent_node_output as _agent_node_output,
-)
-from app.fastapi_routes.print_agent_helpers import (
-    print_agent_status_code as _print_agent_status_code,
-)
-from app.fastapi_routes.print_agent_helpers import (
-    print_agent_user_id as _print_agent_user_id,
-)
 from app.fastapi_routes.print_agent_helpers import (
     run_print_agent as _run_print_agent,
 )
@@ -45,16 +34,11 @@ router = APIRouter(
 router.include_router(label_jobs_router)
 
 __all__ = [
-    "_agent_node_output",
-    "_print_agent_status_code",
-    "_print_agent_user_id",
     "_run_print_agent",
     "router",
 ]
 
-_PRINT_CONFIRM_TTL_SECONDS = 300
 _PRINT_UNAVAILABLE = "打印服务暂时不可用，请稍后重试"
-_print_confirm_cache: dict[str, dict[str, Any]] = {}
 
 
 def _resolve_print_input_path(file_arg: object) -> Path | None:
@@ -76,32 +60,6 @@ def _resolve_print_input_path(file_arg: object) -> Path | None:
     except (OSError, UnsafeDownloadPathError):
         return None
     return candidate if candidate.is_file() else None
-
-
-def _cleanup_print_confirm_cache() -> None:
-    now = time.time()
-    expired = [
-        token
-        for token, payload in _print_confirm_cache.items()
-        if float(payload.get("expires_at", 0.0)) <= now
-    ]
-    for token in expired:
-        _print_confirm_cache.pop(token, None)
-
-
-def _create_print_confirm_token(payload: dict[str, Any]) -> str:
-    _cleanup_print_confirm_cache()
-    token = uuid.uuid4().hex
-    _print_confirm_cache[token] = {
-        **payload,
-        "expires_at": time.time() + _PRINT_CONFIRM_TTL_SECONDS,
-    }
-    return token
-
-
-def _consume_print_confirm_token(token: str) -> dict[str, Any]:
-    _cleanup_print_confirm_cache()
-    return _print_confirm_cache.pop(token, {})
 
 
 def _svc():
@@ -147,7 +105,7 @@ def save_printer_selection(
     data: dict[str, Any] = Body(default_factory=dict),
 ):
     try:
-        result = _run_print_agent(
+        result, status = _run_print_agent(
             request=request,
             action="save_printer_selection",
             params={
@@ -156,7 +114,7 @@ def save_printer_selection(
             },
             route_path="/api/print/printer-selection",
         )
-        return JSONResponse(result, status_code=_print_agent_status_code(result))
+        return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("保存打印机选择失败")
         return JSONResponse(
@@ -186,7 +144,7 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
         resolved_file = _resolve_print_input_path(file_path)
         if resolved_file is None:
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=400)
-        result = _run_print_agent(
+        result, status = _run_print_agent(
             request=request,
             action="print_document",
             params={
@@ -196,7 +154,7 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
             },
             route_path="/api/print/document",
         )
-        return JSONResponse(result, status_code=_print_agent_status_code(result))
+        return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("打印文档失败")
         return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
@@ -208,9 +166,6 @@ def print_label(request: Request, data: dict[str, Any] = Body(default_factory=di
         file_path = data.get("file_path", "")
         printer_name = data.get("printer_name")
         copies = data.get("copies", 1)
-        require_confirm = bool(data.get("require_confirm", True))
-        confirm_token = str(data.get("confirm_token") or "").strip()
-        confirm_action = str(data.get("confirm_action") or "").strip().lower()
         try:
             copies = int(copies)
         except RECOVERABLE_ERRORS:
@@ -222,58 +177,7 @@ def print_label(request: Request, data: dict[str, Any] = Body(default_factory=di
                 {"success": False, "message": "打印份数必须在1-100之间"}, status_code=400
             )
 
-        service = _svc()
-        if require_confirm:
-            if confirm_action == "cancel":
-                if confirm_token:
-                    _consume_print_confirm_token(confirm_token)
-                return JSONResponse(
-                    {"success": True, "status": "print_cancelled", "message": "已取消打印"},
-                    status_code=200,
-                )
-            if not confirm_token:
-                resolved_printer = printer_name or service.get_label_printer()
-                token = _create_print_confirm_token(
-                    {
-                        "file_path": file_path,
-                        "printer_name": resolved_printer,
-                        "copies": copies,
-                    }
-                )
-                return JSONResponse(
-                    {
-                        "success": True,
-                        "status": "print_confirm_required",
-                        "require_confirm": True,
-                        "confirm_token": token,
-                        "confirm_prompt": (
-                            f"已准备打印 {copies} 份标签，是否立即打印到【{resolved_printer or '自动选择打印机'}】？"
-                        ),
-                        "preview": {
-                            "file_path": file_path,
-                            "label_count": copies,
-                            "printer": resolved_printer,
-                        },
-                        "message": "已生成标签，等待打印确认",
-                    },
-                    status_code=200,
-                )
-            token_payload = _consume_print_confirm_token(confirm_token)
-            if not token_payload:
-                return JSONResponse(
-                    {
-                        "success": False,
-                        "status": "print_confirm_required",
-                        "error_code": "print_confirm_required",
-                        "message": "打印确认已过期或无效，请重新发起打印请求",
-                    },
-                    status_code=400,
-                )
-            file_path = str(token_payload.get("file_path") or file_path)
-            copies = int(token_payload.get("copies") or copies)
-            printer_name = token_payload.get("printer_name") or printer_name
-
-        result = _run_print_agent(
+        result, status = _run_print_agent(
             request=request,
             action="print_label",
             params={
@@ -283,11 +187,7 @@ def print_label(request: Request, data: dict[str, Any] = Body(default_factory=di
             },
             route_path="/api/print/label",
         )
-        if isinstance(result, dict):
-            if result.get("success"):
-                result.setdefault("status", "printed")
-            result.setdefault("require_confirm", False)
-        return JSONResponse(result, status_code=_print_agent_status_code(result))
+        return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("打印标签失败")
         return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
@@ -301,13 +201,13 @@ def test_printer_post(request: Request, data: dict[str, Any] = Body(default_fact
             return JSONResponse(
                 {"success": False, "message": "打印机名称不能为空"}, status_code=400
             )
-        result = _run_print_agent(
+        result, status = _run_print_agent(
             request=request,
             action="test",
             params={"printer_name": str(printer_name)},
             route_path="/api/print/test",
         )
-        return JSONResponse(result, status_code=_print_agent_status_code(result))
+        return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("测试打印机失败")
         return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
@@ -373,22 +273,8 @@ def workflow_label_print_dispatch(
     if not model_number:
         return JSONResponse({"success": False, "message": "model_number 不能为空"}, status_code=400)
 
-    # 检查幂等缓存（5 分钟 TTL，与打印确认 token 同机制）
-    if idempotency_key:
-        cached = _print_confirm_cache.get(f"wf_lp:{idempotency_key}")
-        if cached and float(cached.get("expires_at", 0)) > time.time():
-            return JSONResponse(
-                {"success": True, "message": "已在幂等窗口内执行过，跳过重复打印", "skipped": True},
-                status_code=200,
-            )
-        # 写入幂等标记
-        _print_confirm_cache[f"wf_lp:{idempotency_key}"] = {
-            "model_number": model_number,
-            "expires_at": time.time() + _PRINT_CONFIRM_TTL_SECONDS,
-        }
-
     try:
-        result = _run_print_agent(
+        result, status = _run_print_agent(
             request=request,
             action="workflow_label_dispatch",
             params={
@@ -398,7 +284,7 @@ def workflow_label_print_dispatch(
             },
             route_path="/api/print/workflow/label-print/dispatch",
         )
-        return JSONResponse(result, status_code=_print_agent_status_code(result))
+        return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("workflow_label_print_dispatch 失败")
         return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)

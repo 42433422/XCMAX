@@ -13,6 +13,7 @@ from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.infrastructure.auth.agent_principal import AgentPrincipal
 
 
 class UnifiedTaskError(ValueError):
@@ -27,6 +28,85 @@ class UnifiedTaskConflictError(UnifiedTaskError):
 class UnifiedTaskResult:
     run: AgentRun
     deduplicated: bool = False
+
+
+def run_owned_by(run: Any, principal: AgentPrincipal) -> bool:
+    runtime_context = run.metadata.get("runtime_context") or {}
+    binding = runtime_context.get("_mod_authorization") or {}
+    requested_binding = principal.mod_authorization or {}
+    run_mod = str(binding.get("mod_id") or "")
+    requested_mod = str(requested_binding.get("mod_id") or "")
+    # Legacy unbound runs still require the authenticated owner and tenant.
+    # Platform administration is not a grant to access customer task data.
+    same_mod = (not run_mod) or run_mod == requested_mod
+    return (
+        same_mod
+        and run.user_id == principal.user_id
+        and tenant_id_of_run(run) == principal.tenant_id
+    )
+
+
+RunScopeMap = dict[str, list[tuple[str, str, str]]]
+
+
+def task_scope_matches(
+    orchestrator: AgentOrchestrator,
+    task: Any,
+    principal: AgentPrincipal,
+    scopes: RunScopeMap | None = None,
+) -> bool:
+    if task.user_id != principal.user_id or task.tenant_id != principal.tenant_id:
+        return False
+    if scopes is None:
+        runs = [
+            run
+            for run in orchestrator.list_task_runs(user_id=task.user_id, task_id=task.task_id)
+            if tenant_id_of_run(run) == task.tenant_id
+        ]
+        return all(run_owned_by(run, principal) for run in runs)
+    matching_scopes = [
+        scope for scope in scopes.get(task.task_id, ()) if scope[1] == task.tenant_id
+    ]
+    # Historical task rows without run records remain readable by their owner
+    # and tenant; they contain no authenticated Mod binding to override.
+    requested_mod = str((principal.mod_authorization or {}).get("mod_id") or "")
+    return all(
+        (not run_mod or run_mod == requested_mod)
+        and run_user == principal.user_id
+        and run_tenant == principal.tenant_id
+        for run_user, run_tenant, run_mod in matching_scopes
+    )
+
+
+def scoped_tasks(
+    orchestrator: AgentOrchestrator,
+    *,
+    principal: AgentPrincipal,
+    limit: int,
+    include_archived: bool = False,
+) -> list[Any]:
+    result: list[Any] = []
+    scopes = (
+        orchestrator.list_run_scopes(user_id=principal.user_id)
+        if hasattr(orchestrator, "list_run_scopes")
+        else None
+    )
+    offset = 0
+    while len(result) < limit:
+        page = orchestrator.list_tasks(
+            user_id=principal.user_id,
+            tenant_id=principal.tenant_id,
+            limit=100,
+            offset=offset,
+            include_archived=include_archived,
+        )
+        result.extend(
+            task for task in page if task_scope_matches(orchestrator, task, principal, scopes)
+        )
+        if len(page) < 100:
+            break
+        offset += len(page)
+    return result[:limit]
 
 
 def task_capabilities(run: AgentRun) -> dict[str, bool]:
@@ -57,17 +137,138 @@ def _request_fingerprint(tool_id: str, action: str, params: dict[str, Any]) -> s
 
 
 def _assert_reused_run_scope(
-    run: AgentRun, *, user_id: str, tenant_id: str, runtime_context: dict[str, Any] | None
+    run: AgentRun,
+    *,
+    user_id: str,
+    tenant_id: str,
+    runtime_context: dict[str, Any] | None,
 ) -> None:
+    from app.application.agent_orchestrator.approval_grant import (
+        authorization_scope_hash,
+    )
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
     previous_context = run.metadata.get("runtime_context") or {}
     previous_binding = previous_context.get("_mod_authorization") or {}
     requested_binding = (runtime_context or {}).get("_mod_authorization") or {}
+    scope = dict(runtime_context or {})
+    previous_scope = dict(previous_context)
+    if not isinstance(scope.get("_actor_authorization"), dict):
+        scope["user_id"] = user_id
+    if not isinstance(previous_scope.get("_actor_authorization"), dict):
+        previous_scope["user_id"] = run.user_id
     if (
         run.user_id != user_id
         or tenant_id_of_run(run) != tenant_id
+        or run.metadata.get("execution_authorization_scope") != authorization_scope_hash(scope)
+        or run.metadata.get("execution_authorization_scope")
+        != authorization_scope_hash(previous_scope)
+        or any(
+            actor_tool_denial(step.tool_id, step.action, scope, step.params) is not None
+            for step in run.steps
+        )
         or previous_binding.get("mod_id", "") != requested_binding.get("mod_id", "")
+        or str(previous_context.get("mod_id") or "")
+        != str((runtime_context or {}).get("mod_id") or "")
     ):
         raise UnifiedTaskConflictError("task_id 已绑定到不同的账号或 Mod 范围")
+
+
+def owned_task_receipt_ids(
+    orchestrator: AgentOrchestrator,
+    *,
+    task_id: str,
+    runtime_context: dict[str, Any],
+) -> dict[str, str]:
+    """Read original correlation IDs after a conflict, never its business payload."""
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        actor = _bound_actor(runtime_context)
+        tenant_id = str(runtime_context.get("tenant_id") or "")
+        task = orchestrator.get_task(user_id=str(actor.id), task_id=task_id, tenant_id=tenant_id)
+        if task is None:
+            return {}
+        run = orchestrator.get_run(task.active_run_id)
+        if run is None:
+            return {}
+        principal = AgentPrincipal(
+            user_id=str(actor.id),
+            tenant_id=tenant_id,
+            mod_authorization=runtime_context.get("_mod_authorization"),
+        )
+        original = run.metadata.get("runtime_context") or {}
+        original_mod = str((original.get("_mod_authorization") or {}).get("mod_id") or "")
+        current_mod = str((runtime_context.get("_mod_authorization") or {}).get("mod_id") or "")
+        if (
+            not run_owned_by(run, principal)
+            or original_mod != current_mod
+            or (run.metadata.get("task_context") or {}).get("task_id") != task_id
+        ):
+            return {}
+        ids = {"task_id": task.task_id, "run_id": run.run_id, "agent_run_id": run.run_id}
+        request_id = str(
+            original.get("idempotency_key")
+            or original.get("turn_id")
+            or original.get("call_id")
+            or ""
+        )
+        if request_id:
+            ids["request_id"] = request_id
+        return ids
+    except RECOVERABLE_ERRORS:
+        return {}
+
+
+def publish_task_run(
+    *,
+    orchestrator: AgentOrchestrator,
+    run: AgentRun,
+    tool_id: str,
+    action: str,
+    params: dict[str, Any],
+    risk: str,
+    idempotent: bool,
+    runtime_context: dict[str, Any] | None = None,
+) -> UnifiedTaskResult:
+    """Atomically publish the complete existing task/run before any tool executes."""
+    context = dict(runtime_context or {})
+    task_context = run.metadata.get("task_context") or {}
+    expected_task = str(context.get("task_id") or "")
+    user_id = str(context.get("user_id") or run.user_id)
+    if (
+        not expected_task
+        or task_context.get("task_id") != expected_task
+        or not isinstance(run.metadata.get("runtime_context"), dict)
+        or run.error == "execution_idempotency_conflict"
+    ):
+        raise UnifiedTaskConflictError("任务候选缺少原始身份或已发生幂等冲突")
+    _assert_reused_run_scope(
+        run,
+        user_id=user_id,
+        tenant_id=str(context.get("tenant_id") or ""),
+        runtime_context=context,
+    )
+    fingerprint = _request_fingerprint(tool_id, action, params)
+    run.metadata["task_request_fingerprint"] = fingerprint
+    run.metadata["task_request"] = {
+        "tool_id": tool_id,
+        "action": action,
+        "risk": risk,
+        "idempotent": idempotent,
+    }
+    run, created = orchestrator.create_task_run(run)
+    if not created:
+        _assert_reused_run_scope(
+            run,
+            user_id=user_id,
+            tenant_id=str((runtime_context or {}).get("tenant_id") or ""),
+            runtime_context=runtime_context,
+        )
+        if str(run.metadata.get("task_request_fingerprint") or "") != fingerprint:
+            raise UnifiedTaskConflictError("task_id 已绑定到不同的任务内容")
+    return UnifiedTaskResult(run=run, deduplicated=not created)
 
 
 def create_unified_task(
@@ -96,7 +297,13 @@ def create_unified_task(
         raise UnifiedTaskError(validation.message or "任务工具未注册")
 
     fingerprint = _request_fingerprint(spec.tool_id, spec.action, params)
-    tenant_id = str((runtime_context or {}).get("tenant_id") or "")
+    context = dict(runtime_context or {})
+    # Use the same server defaults before both creation and idempotent lookup.
+    if not str(context.get("conversation_id") or context.get("session_id") or "").strip():
+        context["conversation_id"] = normalized_task_id
+    if not str(context.get("workspace_id") or context.get("workspace") or "").strip():
+        context["workspace_id"] = normalized_task_id
+    tenant_id = str(context.get("tenant_id") or "")
     task = orchestrator.get_task(
         user_id=user_id,
         task_id=normalized_task_id,
@@ -117,7 +324,7 @@ def create_unified_task(
         if previous is None:
             raise UnifiedTaskError("任务账本缺少执行记录")
         _assert_reused_run_scope(
-            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=runtime_context
+            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=context
         )
         return UnifiedTaskResult(run=previous, deduplicated=True)
 
@@ -131,7 +338,7 @@ def create_unified_task(
     if existing:
         previous = existing[-1]
         _assert_reused_run_scope(
-            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=runtime_context
+            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=context
         )
         previous_fingerprint = str(previous.metadata.get("task_request_fingerprint") or "")
         if not previous_fingerprint and not previous.tool_calls and previous.steps:
@@ -148,14 +355,6 @@ def create_unified_task(
 
     normalized_title = str(title or message or f"任务 {normalized_task_id[-8:]}").strip()[:80]
     normalized_message = str(message or normalized_title).strip()[:2000]
-    context = dict(runtime_context or {})
-    # Every durable task is also an addressable conversation workspace.  Chat-created
-    # tasks keep their caller-provided session; non-chat entry points receive a stable
-    # task-scoped conversation instead of falling back to the last global chat.
-    if not str(context.get("conversation_id") or context.get("session_id") or "").strip():
-        context["conversation_id"] = normalized_task_id
-    if not str(context.get("workspace_id") or context.get("workspace") or "").strip():
-        context["workspace_id"] = normalized_task_id
     context.update(
         {
             "task_id": normalized_task_id,
@@ -191,16 +390,18 @@ def create_unified_task(
         message=normalized_message,
         plan=plan,
         runtime_context=context,
+        persist=False,
     )
-    run.metadata["task_request_fingerprint"] = fingerprint
-    run.metadata["task_request"] = {
-        "tool_id": spec.tool_id,
-        "action": spec.action,
-        "risk": spec.risk,
-        "idempotent": spec.idempotent,
-    }
-    run = orchestrator.save_run(run)
-    return UnifiedTaskResult(run=run)
+    return publish_task_run(
+        orchestrator=orchestrator,
+        run=run,
+        tool_id=spec.tool_id,
+        action=spec.action,
+        params=params,
+        risk=spec.risk,
+        idempotent=spec.idempotent,
+        runtime_context=context,
+    )
 
 
 __all__ = [
@@ -208,5 +409,10 @@ __all__ = [
     "UnifiedTaskError",
     "UnifiedTaskResult",
     "create_unified_task",
+    "owned_task_receipt_ids",
+    "publish_task_run",
+    "run_owned_by",
+    "scoped_tasks",
     "task_capabilities",
+    "task_scope_matches",
 ]

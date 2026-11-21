@@ -114,6 +114,8 @@ export type DutyEmployeeChatMessage = {
   body: string
   created_at: string
   status?: string
+  request_key?: string
+  run_id?: string
 }
 
 export type EmployeeExecuteResponse = {

@@ -18,6 +18,7 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
 from app.db.models.agent_approval import AgentApprovalConsumption
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
@@ -408,3 +409,256 @@ def test_durable_resume_rejects_unreconciled_result(waiting_task):
     assert runs.get(run.run_id).to_dict() == before
     assert runs.latest_task_control(run.run_id) is None
     assert queue.get(run.run_id) is None
+
+
+@pytest.fixture(params=["", "session-renewal-mod"])
+def real_session_task(request, trusted_actor, monkeypatch):
+    from datetime import timedelta
+    from types import SimpleNamespace
+
+    from app.db.models.user import Session as UserSession
+    from app.utils.time import utc_now_naive
+
+    monkeypatch.setenv("SECRET_KEY", "real-session-renewal-test-" * 4)
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    first = trusted_actor(user_id=1, mod_id=request.param)
+    second = trusted_actor(user_id=1, mod_id=request.param)
+    with first.factory.begin() as db:
+        db.get(UserSession, first.session_row_id).expires_at = utc_now_naive() - timedelta(
+            seconds=1
+        )
+    run = AgentRun(
+        user_id="1",
+        message="create the approved customer",
+        status="waiting_user",
+        steps=[
+            AgentStep(
+                node_id="create",
+                tool_id="customers",
+                action="create",
+                params={"unit_name": "Renewed customer"},
+                status="waiting_user",
+            )
+        ],
+        metadata={"runtime_context": first.context},
+    )
+    return SimpleNamespace(first=first, second=second, run=run)
+
+
+def _real_session_client(task, monkeypatch, *, durable=True):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.task_execution_repository import (
+        InMemoryTaskExecutionRepository,
+    )
+    from app.fastapi_routes.domains.agent import route_support, routes
+
+    runs = (
+        SQLAlchemyAgentRunRepository(session_factory=task.first.factory)
+        if durable
+        else InMemoryAgentRunRepository()
+    )
+    queue = (
+        SQLAlchemyTaskExecutionRepository(session_factory=task.first.factory)
+        if durable
+        else InMemoryTaskExecutionRepository()
+    )
+    runs.save(task.run)
+    monkeypatch.setattr(routes, "get_agent_run_repository", lambda: runs)
+    monkeypatch.setattr(routes, "get_task_execution_repository", lambda: queue)
+    monkeypatch.setattr(route_support, "get_task_execution_repository", lambda: queue)
+    monkeypatch.setattr(routes, "AgentOrchestrator", lambda: AgentOrchestrator(repository=runs))
+    monkeypatch.setattr(routes, "notify_agent_task_dispatcher", lambda: None)
+    monkeypatch.setattr(routes, "_enqueue_run", lambda *args, **kwargs: None)
+    app = FastAPI()
+    app.include_router(routes.router)
+    return runs, queue, TestClient(app)
+
+
+@pytest.mark.parametrize("durable", [True, False])
+@pytest.mark.parametrize("operation", ["continue", "resume", "retry"])
+def test_http_renews_real_actor_and_mod_sessions(
+    real_session_task, monkeypatch, durable, operation
+):
+    from app.application.agent_orchestrator.approval_grant import approval_scope_matches
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+    from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
+    task = real_session_task
+    run = task.run
+    if operation == "resume":
+        run.status = "paused"
+        run.steps[0].status = "pending"
+    elif operation == "retry":
+        run.status = "failed"
+        step = run.steps[0]
+        step.status, step.tool_id, step.action = "pending", "shipment_records", "query"
+        step.params, step.idempotent = {"keyword": "query after renewal"}, True
+        plan = PlanGraph(
+            plan_id="session-retry",
+            intent="query",
+            nodes=[
+                WorkflowNode(
+                    node_id=step.node_id,
+                    tool_id=step.tool_id,
+                    action=step.action,
+                    params=step.params,
+                    risk=step.risk,
+                    idempotent=step.idempotent,
+                )
+            ],
+        )
+        run.plan_id, run.metadata["plan"] = plan.plan_id, plan_to_dict(plan)
+    grant = issue_approval_grant(run, principal_id="1")
+    runs, _queue, client = _real_session_client(task, monkeypatch, durable=durable)
+    assert validate_actor_context(run.metadata["runtime_context"]) is not None
+    response = client.post(
+        f"/api/agent/runs/{run.run_id}/{operation}",
+        json={"approval_grant": grant["grant"]} if grant else {},
+        headers=task.second.headers,
+    )
+    assert response.status_code == (200 if operation == "retry" else 202), response.text
+    renewed = runs.get(run.run_id)
+    context = renewed.metadata["runtime_context"]
+    assert context["_actor_authorization"] == task.second.principal.actor_authorization
+    assert context.get("_mod_authorization") == task.second.principal.mod_authorization
+    assert validate_actor_context(context) is None
+    assert renewed.run_id == run.run_id and renewed.steps[0].step_id == run.steps[0].step_id
+    assert renewed.status == "queued"
+    assert len([e for e in renewed.events if e.event_type == "task.session_renewed"]) == 1
+    if operation == "continue":
+        assert approval_scope_matches(renewed, renewed.steps[0])
+    elif operation == "retry":
+        from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+        calls = []
+
+        def execute(tool, action, params):
+            calls.append((tool, action))
+            return {"success": True, "data": []}
+
+        monkeypatch.setattr(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool", execute
+        )
+        result = AgentToolExecutor().execute(renewed.steps[0], runtime_context=context)
+        assert result["success"], result
+        assert calls == [("shipment_records", "query")]
+    with task.first.factory() as db:
+        assert db.query(AgentApprovalConsumption).count() == (1 if operation == "continue" else 0)
+
+
+@pytest.mark.parametrize("change", ["role", "tier", "tenant_id", "expired", "revoked_mod"])
+def test_real_session_renewal_rejects_changed_authority(real_session_task, monkeypatch, change):
+    from datetime import timedelta
+
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.utils.time import utc_now_naive
+
+    task = real_session_task
+    if change == "revoked_mod" and task.second.principal.mod_authorization is None:
+        pytest.skip("Host session has no Mod entitlement to revoke")
+    runs, queue, client = _real_session_client(task, monkeypatch)
+    grant = issue_approval_grant(task.run, principal_id="1")["grant"]
+    before = runs.get(task.run.run_id).to_dict()
+    with task.first.factory.begin() as db:
+        if change in {"role", "tier", "tenant_id"}:
+            setattr(db.get(User, 1), change, 8 if change == "tenant_id" else "admin")
+        elif change == "expired":
+            db.get(UserSession, task.second.session_row_id).expires_at = (
+                utc_now_naive() - timedelta(seconds=1)
+            )
+        else:
+            db.get(UserSession, task.second.session_row_id).entitled_mod_ids_json = "[]"
+    response = client.post(
+        f"/api/agent/runs/{task.run.run_id}/continue",
+        json={"approval_grant": grant},
+        headers=task.second.headers,
+    )
+    assert 400 <= response.status_code < 500, response.text
+    assert runs.get(task.run.run_id).to_dict() == before
+    assert queue.get(task.run.run_id) is None
+    with task.first.factory() as db:
+        assert db.query(AgentApprovalConsumption).count() == 0
+
+
+@pytest.mark.parametrize("change", ["proof", "mixed_mod_row", "execution_tenant"])
+def test_renewal_validates_new_actor_proof_and_scope(real_session_task, monkeypatch, change):
+    from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
+
+    task = real_session_task
+    if change == "mixed_mod_row" and task.second.principal.mod_authorization is None:
+        pytest.skip("Host session has no Mod binding to mix")
+    runs, queue, _client = _real_session_client(task, monkeypatch)
+    grant = issue_approval_grant(task.run, principal_id="1")["grant"]
+    actor = dict(task.second.principal.actor_authorization)
+    mod = task.second.principal.mod_authorization
+    if change == "proof":
+        actor["proof"] = "forged"
+    elif change == "mixed_mod_row":
+        mod = task.first.principal.mod_authorization
+    else:
+        actor = bind_agent_actor_scope(
+            session_id=task.second.session_id,
+            user_id="1",
+            mod_id=actor["mod_id"],
+            execution_tenant_id="8",
+        )
+    before = runs.get(task.run.run_id).to_dict()
+    with pytest.raises(ApprovalGrantError):
+        approve_and_enqueue(
+            runs,
+            queue,
+            run_id=task.run.run_id,
+            token=grant,
+            principal_id="1",
+            runtime_context={},
+            authenticated_binding=mod,
+            authenticated_actor_binding=actor,
+        )
+    assert runs.get(task.run.run_id).to_dict() == before
+    assert queue.get(task.run.run_id) is None
+    with task.first.factory() as db:
+        assert db.query(AgentApprovalConsumption).count() == 0
+
+
+def test_real_actor_renewal_rolls_back_with_queue_failure(real_session_task, monkeypatch):
+    task = real_session_task
+    runs, queue, _client = _real_session_client(task, monkeypatch)
+    grant = issue_approval_grant(task.run, principal_id="1")["grant"]
+    before = runs.get(task.run.run_id).to_dict()
+    enqueue = queue.enqueue_in_session
+
+    def fail(db, run, **kwargs):
+        enqueue(db, run, **kwargs)
+        db.flush()
+        raise RuntimeError("interrupted renewed approval")
+
+    def approve_current():
+        return approve_and_enqueue(
+            runs,
+            queue,
+            run_id=task.run.run_id,
+            token=grant,
+            principal_id="1",
+            runtime_context={},
+            authenticated_binding=task.second.principal.mod_authorization,
+            authenticated_actor_binding=task.second.principal.actor_authorization,
+        )
+
+    monkeypatch.setattr(queue, "enqueue_in_session", fail)
+    with pytest.raises(RuntimeError, match="interrupted renewed approval"):
+        approve_current()
+    assert runs.get(task.run.run_id).to_dict() == before
+    assert queue.get(task.run.run_id) is None
+    with task.first.factory() as db:
+        assert db.query(AgentApprovalConsumption).count() == 0
+    monkeypatch.setattr(queue, "enqueue_in_session", enqueue)
+    renewed = approve_current()
+    assert (
+        renewed.metadata["runtime_context"]["_actor_authorization"]
+        == task.second.principal.actor_authorization
+    )
+    assert renewed.status == "queued"

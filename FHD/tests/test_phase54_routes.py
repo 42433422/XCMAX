@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import ai_assistant as ai_routes_mod
 from app.fastapi_routes import inventory as inventory_routes
 from app.fastapi_routes import materials as materials_routes
@@ -143,10 +144,26 @@ def mock_material_svc() -> MagicMock:
 
 
 @pytest.fixture
-def inventory_client(mock_inventory_svc: MagicMock) -> TestClient:
+def capability_runs(monkeypatch):
+    repository = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
+    return repository
+
+
+@pytest.fixture
+def inventory_client(
+    mock_inventory_svc: MagicMock, trusted_actor, request, capability_runs
+) -> TestClient:
     app = FastAPI()
     app.include_router(inventory_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={**trusted_actor(role="admin").headers, "Idempotency-Key": request.node.name},
+    )
 
 
 @pytest.fixture
@@ -162,10 +179,16 @@ def materials_client(mock_material_svc: MagicMock, monkeypatch: pytest.MonkeyPat
 
 
 @pytest.fixture
-def purchase_client(mock_purchase_svc: MagicMock) -> TestClient:
+def purchase_client(
+    mock_purchase_svc: MagicMock, trusted_actor, request, capability_runs
+) -> TestClient:
     app = FastAPI()
     app.include_router(purchase_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={**trusted_actor(role="admin").headers, "Idempotency-Key": request.node.name},
+    )
 
 
 @pytest.fixture
@@ -199,7 +222,7 @@ def ops_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 @pytest.fixture
-def customer_client(monkeypatch: pytest.MonkeyPatch, request) -> TestClient:
+def customer_client(monkeypatch: pytest.MonkeyPatch, request, capability_runs) -> TestClient:
     actor = None
     if "delete" in request.node.name:
         actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
@@ -231,7 +254,11 @@ def customer_client(monkeypatch: pytest.MonkeyPatch, request) -> TestClient:
     )
     app = FastAPI()
     app.include_router(customer_compat_router.router)
-    return TestClient(app, headers=actor.headers if actor else {}, raise_server_exceptions=False)
+    return TestClient(
+        app,
+        headers={**(actor.headers if actor else {}), "Idempotency-Key": request.node.name},
+        raise_server_exceptions=False,
+    )
 
 
 @pytest.fixture
@@ -334,13 +361,17 @@ def test_inventory_locations_crud(
         params={"warehouse_id": 1, "status": "active"},
     )
     assert listed.status_code == 200
-    assert (
-        inventory_client.post("/api/inventory/locations", json={"code": "A-01"}).status_code == 200
-    )
-    assert (
-        inventory_client.put("/api/inventory/locations/10", json={"status": "full"}).status_code
-        == 200
-    )
+    for method, path, data in (
+        ("POST", "/api/inventory/locations", {"code": "A-01"}),
+        ("PUT", "/api/inventory/locations/10", {"status": "full"}),
+    ):
+        response = inventory_client.request(
+            method, path, json=data, headers={"Idempotency-Key": f"locations-{method}"}
+        )
+        assert response.status_code == 202, response.text
+        assert response.json()["success"] is False and response.json()["approval_request_id"]
+    mock_inventory_svc.create_storage_location.assert_not_called()
+    mock_inventory_svc.update_storage_location.assert_not_called()
     mock_inventory_svc.get_storage_locations.assert_called_once_with(
         warehouse_id=1, status="active"
     )
@@ -354,25 +385,32 @@ def test_inventory_warehouses_lifecycle(
         == 200
     )
     assert inventory_client.get("/api/inventory/warehouses/3").status_code == 200
-    assert (
-        inventory_client.post("/api/inventory/warehouses", json={"name": "主仓"}).status_code == 200
-    )
-    assert (
-        inventory_client.put("/api/inventory/warehouses/3", json={"name": "副仓"}).status_code
-        == 200
-    )
-    assert inventory_client.delete("/api/inventory/warehouses/3").status_code == 200
+    for method, path, data in (
+        ("POST", "/api/inventory/warehouses", {"name": "主仓"}),
+        ("PUT", "/api/inventory/warehouses/3", {"name": "副仓"}),
+        ("DELETE", "/api/inventory/warehouses/3", None),
+    ):
+        response = inventory_client.request(
+            method, path, json=data, headers={"Idempotency-Key": f"warehouses-{method}"}
+        )
+        assert response.status_code == 202, response.text
+        assert response.json()["success"] is False and response.json()["approval_request_id"]
+    mock_inventory_svc.create_warehouse.assert_not_called()
+    mock_inventory_svc.update_warehouse.assert_not_called()
+    mock_inventory_svc.delete_warehouse.assert_not_called()
 
 
 def test_inventory_in_without_unit_price(
-    inventory_client: TestClient, mock_inventory_svc: MagicMock, local_tools
+    inventory_client: TestClient, mock_inventory_svc: MagicMock, local_tools, capability_runs
 ) -> None:
     r = inventory_client.post(
         "/api/inventory/in",
         json={"product_id": 1, "warehouse_id": 2, "quantity": 3},
     )
-    assert r.status_code == 200
-    assert mock_inventory_svc.inventory_in.call_args.kwargs["unit_price"] is None
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False and r.json()["approval_request_id"]
+    assert capability_runs.get(r.json()["run_id"]).steps[0].params["unit_price"] is None
+    mock_inventory_svc.inventory_in.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -386,33 +424,38 @@ def test_materials_create_missing_name_400(materials_client: TestClient) -> None
 
 
 def test_materials_create_maps_min_quantity(
-    materials_client: TestClient, mock_material_svc: MagicMock, local_tools
+    materials_client: TestClient, mock_material_svc: MagicMock, monkeypatch
 ) -> None:
+    admission = MagicMock(
+        return_value=({"success": False, "execution_state": "waiting_approval"}, 202)
+    )
+    monkeypatch.setattr(materials_routes, "_run_materials_agent", admission)
     r = materials_client.post(
         "/api/materials",
         json={"name": "树脂", "min_quantity": 12, "material_code": "R-54"},
     )
-    assert r.status_code == 200
-    payload = mock_material_svc.create_material.call_args[0][0]
+    assert r.status_code == 202
+    payload = admission.call_args.kwargs["params"]
     assert payload["min_stock"] == 12
+    mock_material_svc.create_material.assert_not_called()
 
 
-def test_materials_create_service_failure_400(
+def test_materials_create_requires_session_before_service_failure(
     materials_client: TestClient, mock_material_svc: MagicMock, local_tools
 ) -> None:
     mock_material_svc.create_material.return_value = {"success": False, "message": "duplicate"}
     r = materials_client.post("/api/materials", json={"name": "重复项"})
-    assert r.status_code == 400
-    assert r.json()["message"] == "duplicate"
+    assert r.status_code == 401
+    mock_material_svc.create_material.assert_not_called()
 
 
-def test_materials_create_exception_500(
+def test_materials_create_requires_session_before_service_exception(
     materials_client: TestClient, mock_material_svc: MagicMock, local_tools
 ) -> None:
     mock_material_svc.create_material.side_effect = RuntimeError("db locked")
     r = materials_client.post("/api/materials", json={"name": "异常项"})
-    assert r.status_code == 500
-    assert r.json()["message"] == "工具执行失败"
+    assert r.status_code == 401
+    mock_material_svc.create_material.assert_not_called()
 
 
 def test_materials_list_injects_count(
@@ -433,13 +476,21 @@ def test_materials_batch_delete_non_dict_400(materials_client: TestClient) -> No
     assert r.status_code == 422 or r.status_code == 400
 
 
-def test_materials_batch_delete_service_error_still_ok(
-    materials_client: TestClient, mock_material_svc: MagicMock
+def test_materials_batch_delete_adapter_never_reports_partial_exception_as_success(
+    monkeypatch, mock_material_svc: MagicMock
 ) -> None:
+    from app.domain.shared_services.tools_workflow_erp_master import _registered_router_materials
+
+    monkeypatch.setattr(
+        "app.application.get_material_application_service", lambda: mock_material_svc
+    )
     mock_material_svc.batch_delete_materials.side_effect = RuntimeError("partial fail")
-    r = materials_client.post("/api/materials/batch-delete", json={"ids": [1, 2]})
-    assert r.status_code == 200
-    assert r.json()["deleted_count"] == 2
+    result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "test", "")
+    assert result["success"] is False and result["execution_state"] == "unknown"
+    assert result["error_code"] == "material_delete_outcome_unknown"
+    assert result["retryable"] is False and result["reconciliation_required"] is True
+    assert "deleted_count" not in result
+    mock_material_svc.batch_delete_materials.assert_called_once_with([1, 2])
 
 
 def test_materials_export_file_success(
@@ -516,34 +567,37 @@ def test_customers_match_field_only(
 
 def test_customers_create_empty_name_400(customer_client: TestClient) -> None:
     with (
-        patch.object(customer_routes, "_customers_write_raise"),
         patch.object(customer_routes, "_customer_body_name_contact", return_value=("", "", "", "")),
     ):
         r = customer_client.post("/customers", json={"unit_name": ""})
     assert r.status_code == 400
 
 
-def test_customers_update_default_path(customer_client: TestClient, local_tools) -> None:
-    with (
-        patch(
-            "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
-            return_value=False,
-        ),
-        patch.object(customer_routes, "_customers_write_raise"),
-        patch.object(
-            customer_routes,
-            "_customer_body_name_contact",
-            return_value=("新名称", "张三", "13900000000", "上海"),
-        ),
-        patch.object(
-            customer_routes,
-            "_customer_pg_update",
-            return_value={"id": 1, "unit_name": "新名称"},
-        ),
-    ):
-        r = customer_client.put("/customers/1", json={"unit_name": "新名称"})
-    assert r.status_code == 200
-    assert r.json()["data"]["unit_name"] == "新名称"
+def test_customers_update_normalizes_fields_for_the_shared_entry(monkeypatch) -> None:
+    from starlette.requests import Request
+
+    request = Request({"type": "http", "method": "PUT", "path": "/customers/1", "headers": []})
+    entry = MagicMock(return_value=({"success": False, "state": "waiting_approval"}, 202))
+    monkeypatch.setattr(customer_routes, "_run_customers_agent", entry)
+    response = customer_routes.customers_update(
+        request,
+        1,
+        {"unit_name": "新名称", "contact_person": "张三", "contact_phone": "", "address": "上海"},
+    )
+    assert response.status_code == 202
+    entry.assert_called_once_with(
+        request=request,
+        action="update",
+        route_path="/customers/{customer_id}",
+        params={
+            "id": 1,
+            "customer_name": "新名称",
+            "unit_name": "新名称",
+            "contact_person": "张三",
+            "contact_phone": "",
+            "contact_address": "上海",
+        },
+    )
 
 
 def test_customers_delete_default_path(
@@ -558,12 +612,12 @@ def test_customers_delete_default_path(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
             return_value=False,
         ),
-        patch.object(customer_routes, "_customers_write_raise"),
         patch("app.application.get_customer_app_service", return_value=service),
     ):
         r = customer_client.delete("/customers/2")
-    assert r.status_code == 200
-    assert r.json()["message"] == "已删除"
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False and r.json()["approval_request_id"]
+    service.batch_delete.assert_not_called()
 
 
 def test_customers_batch_delete_rejects_invalid_atomically(
@@ -573,7 +627,6 @@ def test_customers_batch_delete_rejects_invalid_atomically(
     customer_client.headers.update(actor.headers)
     service = MagicMock()
     with (
-        patch.object(customer_routes, "_customers_write_raise"),
         patch("app.application.get_customer_app_service", return_value=service),
     ):
         body = customer_client.post(
@@ -586,8 +639,7 @@ def test_customers_batch_delete_rejects_invalid_atomically(
 
 
 def test_customers_batch_delete_empty_ids_400(customer_client: TestClient) -> None:
-    with patch.object(customer_routes, "_customers_write_raise"):
-        r = customer_client.post("/customers/batch-delete", json={"ids": []})
+    r = customer_client.post("/customers/batch-delete", json={"ids": []})
     assert r.status_code == 400
 
 
@@ -647,14 +699,16 @@ def test_purchase_inbounds_order_filter(
 
 
 def test_purchase_approve_custom_approver(
-    purchase_client: TestClient, mock_purchase_svc: MagicMock, local_tools
+    purchase_client: TestClient, mock_purchase_svc: MagicMock, local_tools, capability_runs
 ) -> None:
     r = purchase_client.post(
         "/api/purchase/orders/5/approve",
         params={"approver": "manager-p54"},
     )
-    assert r.status_code == 200
-    mock_purchase_svc.approve_purchase_order.assert_called_once_with(5, "manager-p54")
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False and r.json()["approval_request_id"]
+    assert capability_runs.get(r.json()["run_id"]).steps[0].params["approver"] == "manager-p54"
+    mock_purchase_svc.approve_purchase_order.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

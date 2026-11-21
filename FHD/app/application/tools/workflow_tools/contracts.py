@@ -10,7 +10,6 @@ from typing import Any, Protocol
 import pandas as pd
 
 Payload = dict[str, Any]
-JsonTool = Callable[[Payload], Payload]
 
 
 class ExcelReader(Protocol):
@@ -24,40 +23,6 @@ class ExcelIO:
     resolve: Callable[[str, str], Path]
     read: ExcelReader
     header: Callable[[Payload], int | None]
-
-
-class NaturalQuery(Protocol):
-    def __call__(self, df: pd.DataFrame, natural_language: str, **kwargs: Any) -> Payload: ...
-
-
-class WorkbookSchema(Protocol):
-    def understand_dataframe(self, df: pd.DataFrame, *, file_path: str) -> Payload: ...
-
-
-class VectorIngest(Protocol):
-    def __call__(
-        self, *, file_path: str, index_name: str | None, index_id: str | None
-    ) -> Payload: ...
-
-
-class CustomerWriter(Protocol):
-    def create(self, data: Payload) -> Payload: ...
-
-
-class ProductWriter(Protocol):
-    def batch_add_products(self, products_data: list[Payload]) -> Payload: ...
-
-
-class ShipmentWriter(Protocol):
-    def create_shipment(self, unit_name: str, items_data: list[Payload]) -> Payload: ...
-
-
-@dataclass(frozen=True)
-class ImportServices:
-    customer: Callable[[], CustomerWriter]
-    products: Callable[[], ProductWriter]
-    shipment: Callable[[], ShipmentWriter]
-    find_customer: Callable[[str], Payload | None]
 
 
 @dataclass(frozen=True)

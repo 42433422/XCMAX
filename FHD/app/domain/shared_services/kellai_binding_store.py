@@ -1,9 +1,4 @@
-"""Local pairing state for the 客来来 customer-IM data source.
-
-The two desktop apps deliberately pair over loopback.  The pairing request is
-short-lived, carries a one-time secret, and the resulting token is only used
-for XCMAX to read the customer data that the user explicitly approved.
-"""
+"""Explicit, revocable loopback grants for the 客来来 product module."""
 
 from __future__ import annotations
 
@@ -29,7 +24,18 @@ ALLOWED_SCOPES: tuple[dict[str, str], ...] = (
         "label": "读取客户会话",
         "description": "让 XCMAX AI 基于客来来中的客户消息生成建议。",
     },
+    {
+        "id": "channels.read",
+        "label": "读取渠道连接与能力",
+        "description": "读取客来来渠道的连接状态和实际收发能力，不读取渠道密钥。",
+    },
+    {
+        "id": "messages.send",
+        "label": "人工确认后发送消息",
+        "description": "允许当前 XCMAX 账号向已授权客户发送消息，并查询发送回执；解除绑定立即停止后续发送。",
+    },
 )
+DEFAULT_SCOPES = ("customer_profiles.read", "customer_conversations.read")
 _SCOPE_IDS = frozenset(scope["id"] for scope in ALLOWED_SCOPES)
 _LOCK = threading.Lock()
 
@@ -117,14 +123,30 @@ def status() -> dict[str, Any]:
         }
 
 
-def start_pairing() -> dict[str, Any]:
+def start_pairing(
+    *,
+    requested_scopes: list[str] | None = None,
+    actor: int | None = None,
+    tenant_id: str = "",
+) -> dict[str, Any]:
+    selected = list(
+        dict.fromkeys(requested_scopes if requested_scopes is not None else DEFAULT_SCOPES)
+    )
+    if not selected or any(scope not in _SCOPE_IDS for scope in selected):
+        raise ValueError("授权范围无效")
+    if not set(DEFAULT_SCOPES).issubset(selected):
+        raise ValueError("客来来模块需要客户档案与会话只读权限")
+    if actor is None:
+        raise ValueError("请先登录 XCMAX 企业账号，再申请渠道或发送权限")
     with _LOCK:
         state = _read()
         expires_at = _now() + timedelta(minutes=PAIRING_TTL_MINUTES)
         pending = {
             "request_id": secrets.token_urlsafe(18),
             "authorization_secret": secrets.token_urlsafe(32),
-            "requested_scopes": [scope["id"] for scope in ALLOWED_SCOPES],
+            "requested_scopes": selected,
+            "xcmax_user_id": actor,
+            "xcmax_tenant_id": tenant_id,
             "created_at": _iso(),
             "expires_at": _iso(expires_at),
         }
@@ -133,7 +155,7 @@ def start_pairing() -> dict[str, Any]:
         return {
             "request_id": pending["request_id"],
             "expires_at": pending["expires_at"],
-            "requested_scopes": list(ALLOWED_SCOPES),
+            "requested_scopes": [scope for scope in ALLOWED_SCOPES if scope["id"] in selected],
         }
 
 
@@ -150,7 +172,9 @@ def pending_for_kellai() -> dict[str, Any] | None:
         return {
             "request_id": str(pending["request_id"]),
             "authorization_secret": str(pending["authorization_secret"]),
-            "requested_scopes": list(ALLOWED_SCOPES),
+            "requested_scopes": [
+                scope for scope in ALLOWED_SCOPES if scope["id"] in pending["requested_scopes"]
+            ],
             "created_at": str(pending["created_at"]),
             "expires_at": str(pending["expires_at"]),
         }
@@ -175,9 +199,11 @@ def approve_pairing(
             str(pending.get("authorization_secret") or ""), authorization_secret
         ):
             raise ValueError("授权校验失败")
-        selected = [scope for scope in accepted_scopes if scope in _SCOPE_IDS]
-        if set(selected) != set(pending.get("requested_scopes") or []):
-            raise ValueError("必须确认全部只读权限后才能连接")
+        selected = list(dict.fromkeys(accepted_scopes))
+        if any(scope not in _SCOPE_IDS for scope in selected) or set(selected) != set(
+            pending.get("requested_scopes") or []
+        ):
+            raise ValueError("必须确认本次申请的全部只读权限及所选权限后才能连接")
         if len(access_token) < 32:
             raise ValueError("本地连接令牌无效")
 
@@ -185,6 +211,8 @@ def approve_pairing(
             "connection_id": request_id,
             "access_token": access_token,
             "authorized_scopes": selected,
+            "xcmax_user_id": pending.get("xcmax_user_id"),
+            "xcmax_tenant_id": str(pending.get("xcmax_tenant_id") or ""),
             "connected_at": _iso(),
             "authorized_by": {
                 "id": str(authorized_by.get("id") or ""),
@@ -218,6 +246,19 @@ def connection_credentials() -> dict[str, Any] | None:
         state = _read()
         connection = state.get("connection")
         return dict(connection) if isinstance(connection, dict) else None
+
+
+def binding_owners() -> set[int]:
+    """Legacy read-only grants have no owner; new grants retain the requesting actor."""
+    with _LOCK:
+        state = _read()
+        return {
+            int(item["xcmax_user_id"])
+            for item in (state.get("connection"), state.get("pending"))
+            if isinstance(item, dict)
+            and item.get("xcmax_user_id") is not None
+            and (item is state.get("connection") or _pending_is_valid(item))
+        }
 
 
 def disconnect() -> None:

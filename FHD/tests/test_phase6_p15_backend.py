@@ -2412,12 +2412,13 @@ class TestTWRMaterials:
     def test_materials_batch_delete(self) -> None:
         with patch("app.application.get_material_application_service") as mock_get:
             svc = MagicMock()
-            svc.batch_delete_materials.return_value = {"success": True}
+            svc.batch_delete_materials.return_value = {"success": True, "deleted_count": 1}
             mock_get.return_value = svc
             result = twr._registered_router_materials(
                 "batch_delete", {"ids": ["1", "2"]}, {}, "normal", ""
             )
             assert result["success"] is True
+            assert result["deleted_count"] == 1
 
     def test_materials_export(self) -> None:
         with patch("app.application.get_material_application_service") as mock_get:

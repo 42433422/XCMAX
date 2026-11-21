@@ -343,7 +343,7 @@ def test_agent_orchestrator_waits_for_user_on_medium_risk_step():
     assert "step.waiting_user" in [event.event_type for event in run.events]
 
 
-def test_agent_orchestrator_continues_waiting_run_after_approval():
+def test_approved_write_without_source_evidence_stays_blocked():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
@@ -370,7 +370,7 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
         completed = orchestrator.continue_run(waiting.run_id, approved_by="tester")
 
     assert completed is not None
-    assert completed.status == "completed", (
+    assert completed.status == "blocked", (
         completed.error,
         [(event.event_type, event.data) for event in completed.events[-5:]],
         [(step.status, step.error, step.output) for step in completed.steps],
@@ -379,9 +379,10 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
     assert completed.tool_calls[0].status == "completed"
     assert completed.tool_calls[0].cost_units == 2
     assert completed.metadata["cost_units_total"] == 2
-    assert completed.final_output["node_outputs"][completed.steps[0].node_id]["success"] is True
+    assert completed.tool_calls[0].output["success"] is True
+    assert completed.metadata["verification"]["accepted"] is False
     assert "step.approved" in [event.event_type for event in completed.events]
-    assert "tool.completed" in [event.event_type for event in completed.events]
+    assert "tool.completed" not in [event.event_type for event in completed.events]
     mock_execute.assert_called_once()
     tool_id, action, params = mock_execute.call_args.args
     assert tool_id == "business_db"
@@ -390,7 +391,7 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
     assert params["_runtime_context"]["source"] == "approval-test"
 
 
-def test_approved_sales_step_continues_the_dependent_export():
+def test_approved_sales_without_independent_receipt_stops_dependent_export():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -446,12 +447,10 @@ def test_approved_sales_step_continues_the_dependent_export():
         )
 
     assert completed is not None
-    assert completed.status == "completed"
-    assert [step.status for step in completed.steps] == ["completed", "completed", "completed"]
+    assert completed.status == "blocked"
+    assert [step.status for step in completed.steps] == ["completed", "pending", "pending"]
     assert [call.args[0:2] for call in mock_execute.call_args_list] == [
         ("sales", "execute_closed_loop"),
-        ("sales", "verify_closed_loop"),
-        ("reports", "export"),
     ]
 
 
@@ -1091,14 +1090,15 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
         run = orchestrator.continue_run(waiting.run_id, approved_by="u1")
 
     assert run is not None
-    assert run.status == "completed", (run.error, [step.to_dict() for step in run.steps])
+    assert run.status == "blocked", (run.error, [step.to_dict() for step in run.steps])
     assert [call.node_id for call in run.tool_calls] == [
         "find_customer",
         "find_product",
         "create_first_order",
     ]
     assert run.metadata["tool_call_count"] == 3
-    assert run.final_output["node_outputs"]["create_first_order"]["data"]["shipment_id"] == 30
+    assert run.tool_calls[-1].output["data"]["shipment_id"] == 30
+    assert run.metadata["verification"]["accepted"] is False
 
 
 def test_agent_orchestrator_skips_llm_repair_for_invalid_plan(tmp_path, monkeypatch):
@@ -1170,7 +1170,7 @@ def test_agent_orchestrator_skips_llm_repair_for_invalid_plan(tmp_path, monkeypa
     mock_execute.assert_not_called()
 
 
-def test_agent_orchestrator_generates_office_document_as_artifact_after_approval():
+def test_unverified_pickup_token_is_not_a_verified_download_after_approval():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -1225,15 +1225,12 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
 
     assert waiting.status == "waiting_user"
     assert run is not None
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.steps[0].risk == "medium"
     assert run.steps[0].idempotent is False
-    assert run.artifacts[0].artifact_type == "office_document"
-    assert run.artifacts[0].name == "contract.docx"
-    assert run.artifacts[0].uri == "/api/ai/kitten/document/pickup/doc-token"
-    assert run.metadata["artifact_count"] == 1
-    assert run.final_output["artifacts"][0]["mime_type"].endswith("wordprocessingml.document")
-    assert "artifact.attached" in [event.event_type for event in run.events]
+    assert not run.artifacts
+    assert run.metadata["verification"]["accepted"] is False
+    assert "artifact.attached" not in [event.event_type for event in run.events]
 
 
 def test_approval_resume_without_durable_snapshot_fails_closed():

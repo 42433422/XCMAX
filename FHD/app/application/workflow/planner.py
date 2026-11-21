@@ -185,22 +185,11 @@ class LLMWorkflowPlanner:
         context.pop("user_memory_rag", None)
         context.pop("memory_v2", None)
         if context.get("_actor_authorization"):
-            try:
-                from app.domain.shared_services.auth_service import get_auth_service
-                from app.infrastructure.auth.agent_mod_scope import _bound_actor
-                from app.mod_sdk.employee_directory import build_employee_directory
+            from app.application.capability_catalog import discover_capabilities, workflow_registry
 
-                if get_auth_service().has_permission(_bound_actor(context), "employee.list"):
-                    # 与员工工作台/通讯录共用同一目录，避免三处员工名单不一致。
-                    context["available_employees"] = [
-                        {
-                            "employee_id": row["pack_id"],
-                            "description": str(row.get("description") or "")[:200],
-                        }
-                        for row in build_employee_directory()
-                    ][:80]
-            except RECOVERABLE_ERRORS:
-                logger.warning("authorized employee discovery unavailable", exc_info=True)
+            registry_for_plan = workflow_registry(context)
+            discovery = discover_capabilities(context, limit=80)
+            context["available_employees"] = discovery["employees"]
         from app.application.ai_chat.conversation_history import authorized_memory_context
 
         authorized_memory = authorized_memory_context(user_id, context)

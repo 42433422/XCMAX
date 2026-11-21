@@ -180,8 +180,10 @@ def _task_envelope(
     payload = task.to_dict()
     if active is not None:
         payload["progress"] = task_progress_snapshot(active, viewer=viewer)
-    payload["runs"] = [public_run_dict(run) for run in runs]
-    payload["active_run"] = public_run_dict(active) if active is not None else None
+    payload["runs"] = [public_run_dict(run, read_run=orchestrator.get_run) for run in runs]
+    payload["active_run"] = (
+        public_run_dict(active, read_run=orchestrator.get_run) if active is not None else None
+    )
     payload["capabilities"] = task_capabilities(active) if active is not None else {}
     command = orchestrator.latest_task_control(active.run_id) if active is not None else None
     payload["control_command"] = command.to_dict() if command is not None else None

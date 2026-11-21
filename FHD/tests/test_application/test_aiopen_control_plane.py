@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from itertools import count
 
+import pytest
+
 from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
 from app.application.aiopen.usage import UsageLedger
 
@@ -60,6 +62,19 @@ def test_keys_survive_registry_reload(tmp_path):
     listed = second.list_keys()
     assert listed[0]["today_calls"] == 1
     assert listed[0]["total_calls"] == 1
+
+
+def test_failed_revocation_persistence_is_reported_and_keeps_original_key(tmp_path, monkeypatch):
+    registry, other_worker = _registry(tmp_path), _registry(tmp_path)
+    key = registry.generate("original")["key"]
+    with monkeypatch.context() as failure:
+        failure.setattr(registry, "_persist", lambda: False)
+        with pytest.raises(OSError, match="revocation"):
+            registry.revoke(key)
+        assert registry.verify(key) is True
+        assert other_worker.authorize(key, "chat")["ok"] is True
+    assert registry.revoke(key) is True
+    assert other_worker.authorize(key, "chat")["ok"] is False
 
 
 def test_client_revocation_is_visible_to_other_workers_and_not_resurrected(tmp_path):

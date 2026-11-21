@@ -3,7 +3,9 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import Mock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
@@ -26,47 +28,39 @@ from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch, trusted_actor
+def test_shipment_record_routes_keep_approval_and_real_tenant_data(
+    tmp_path, monkeypatch, trusted_actor, local_tools
 ):
-    actor7 = trusted_actor(user_id=11, tenant_id=7)
-    actor8 = trusted_actor(user_id=22, tenant_id=8)
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+    from app.application.agent_orchestrator.result_verification import verification_blocked
+    from app.infrastructure.auth.dependencies import resolve_session_user
+
+    actor7 = trusted_actor(user_id=11, tenant_id=7, role="admin")
+    actor8 = trusted_actor(user_id=22, tenant_id=8, role="admin")
+    weak = trusted_actor(user_id=33, tenant_id=7, permissions=[])
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'shipments.db'}")
-    engine = create_engine(f"sqlite:///{tmp_path / 'shipments.db'}")
-    Base.metadata.create_all(engine)
-    monkeypatch.setattr("app.db.session.SessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
     service = ShipmentApplicationService(
         SQLAlchemyShipmentRepository(),
         record_query=SQLAlchemyShipmentRecordQuery(),
         record_command=SQLAlchemyShipmentRecordCommand(),
     )
-    user = [SimpleNamespace(id=11, is_active=True, role="user", tier="enterprise", tenant_id=7)]
     monkeypatch.setattr(shipment_orders, "_svc", lambda: service)
-    monkeypatch.setattr(gate, "resolve_product_sku", lambda: "enterprise")
-    allowed = [True]
-    monkeypatch.setattr(
-        "app.application.facades.session_facade.get_auth_service",
-        lambda: SimpleNamespace(
-            has_permission=lambda _u, code: (
-                allowed[0] and code in {"shipment.view", "shipment.edit"}
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
-    )
-    monkeypatch.setattr("app.infrastructure.mods.hooks.trigger", lambda *a, **kw: None)
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+    monkeypatch.setattr("app.infrastructure.mods.hooks.trigger", lambda *_a, **_k: None)
     app = FastAPI()
     app.include_router(shipment_orders.router)
 
     @app.middleware("http")
     async def authenticated_tenant_scope(request, call_next):
-        with tenant_scope(user[0].tenant_id if user[0] else None):
+        user = resolve_session_user(request)
+        with tenant_scope(user.tenant_id if user else None):
             return await call_next(request)
 
     client = TestClient(app, headers=actor7.headers)
@@ -85,126 +79,115 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
         "contact_person": "验收员",
         "contact_phone": "13800000000",
     }
-    try:
-        response = client.post(
-            path, json={**params, "user_id": "forged"}, headers={"X-User-ID": "forged"}
-        )
-        assert response.status_code == 200, response.text
-        payload = response.json()
-        record_id = payload["shipment"]["id"]
-        run = repo.get(payload["run_id"])
-        assert run.user_id == "11" and run.status == "completed"
-        assert run.metadata["runtime_context"]["tenant_id"] == "7"
-        assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-            e.event_type for e in run.events
-        }
-        allowed[0] = False
-        assert client.patch(path, json={"id": record_id, "status": "printed"}).status_code == 403
-        allowed[0] = True
+
+    def approve(response, actor):
+        assert response.status_code == 202, response.text
+        receipt = response.json()
+        assert receipt["pending_approval"] is True and receipt["success"] is False
+        run = repo.get(receipt["run_id"])
+        assert not run.tool_calls and run.user_id == str(actor.user_id)
+        with tenant_scope(actor.tenant_id):
+            issue_approval_grant(run, principal_id=str(actor.user_id))
+            return AgentOrchestrator(repository=repo).continue_run(
+                run.run_id,
+                approved_by=str(actor.user_id),
+                runtime_context=run.metadata["runtime_context"],
+                approval_request_id=run.metadata["approval_request_id"],
+            )
+
+    created = client.post(
+        path,
+        json={**params, "user_id": "forged"},
+        headers={"X-User-ID": "forged", "Idempotency-Key": "record-create"},
+    )
+    with tenant_scope(7):
+        assert service.get_shipment_records() == []
+    run = approve(created, actor7)
+    assert run.status == "blocked" and verification_blocked(run), run.error
+    assert run.metadata["runtime_context"]["tenant_id"] == "7"
+    with tenant_scope(7):
+        records = service.get_shipment_records()
+        assert len(records) == 1 and records[0]["tenant_id"] == 7
+        record_id = records[0]["id"]
+    replay = client.post(path, json=params, headers={"Idempotency-Key": "record-create"})
+    assert replay.json()["run_id"] == run.run_id
+    with tenant_scope(7):
+        assert len(service.get_shipment_records()) == 1
+    denied = client.patch(
+        path,
+        json={"id": record_id, "status": "printed", "user_id": "11"},
+        headers={**weak.headers, "X-User-ID": "11", "Idempotency-Key": "denied-patch"},
+    )
+    assert denied.status_code == 403
+    updated = approve(
+        client.patch(
+            path,
+            json={"id": record_id, "tenant_id": 8, "status": "printed", "product_name": "更新产品"},
+            headers={"Idempotency-Key": "record-update"},
+        ),
+        actor7,
+    )
+    assert updated.status == "blocked" and verification_blocked(updated)
+    with tenant_scope(7):
+        row = service._record_query.get_shipment_by_id(str(record_id))
+        assert row["tenant_id"] == 7 and row["status"] == "printed"
+        reopened = service.get_shipment(record_id)
         assert (
-            client.patch(
+            reopened.contact_info.person == "验收员"
+            and reopened.items[0].product_name == "更新产品"
+        )
+        assert reopened.total_quantity.kg == 20 and reopened.total_amount.amount == 500
+    client.headers.update(actor8.headers)
+    assert client.get(path + "s").json()["data"] == []
+    for method in ("PATCH", "DELETE"):
+        foreign = approve(
+            client.request(
+                method,
                 path,
-                json={
-                    "id": record_id,
-                    "tenant_id": 8,
-                    "status": "printed",
-                    "product_name": "更新产品",
-                },
-            ).status_code
-            == 200
+                json={"id": record_id, "status": "cancelled"},
+                headers={"Idempotency-Key": f"foreign-{method}"},
+            ),
+            actor8,
         )
-        with tenant_scope(7):
-            rows = service.get_shipment_records()
-            assert len(rows) == 1 and rows[0]["tenant_id"] == 7 and rows[0]["status"] == "printed"
-            assert service._record_query.get_shipment_by_id(str(record_id))["id"] == record_id
-            assert service._record_query.get_latest_shipments(1)[0]["id"] == record_id
-            reopened = service.get_shipment(record_id)
-            assert (
-                reopened.contact_info.person == "验收员"
-                and reopened.items[0].product_name == "更新产品"
-            )
-            assert reopened.total_quantity.kg == 20 and reopened.total_amount.amount == 500
-            reopened.metadata["document"] = {"order_number": "SHIP-metadata"}
-            service._repository.save(reopened)
-            assert service.mark_as_printed(record_id)["success"]
-            assert (
-                service._record_query.get_shipment_by_id(str(record_id))["order_number"]
-                == "SHIP-metadata"
-            )
-            assert service.get_shipment(record_id).items[0].product_name == "更新产品"
-        user[0] = SimpleNamespace(
-            id=22, is_active=True, role="user", tier="enterprise", tenant_id=8
-        )
-        client.headers.update(actor8.headers)
-        assert client.get(path + "s").json()["data"] == []
-        assert client.patch(path, json={"id": record_id, "status": "cancelled"}).status_code == 404
-        assert client.request("DELETE", path, json={"id": record_id}).status_code == 404
-        missing = client.post(path, json={"unit_name": "同名客户", "products": []})
-        assert missing.status_code == 400
-        assert missing.json()["message"] == "出货单操作失败"
-        assert "缺少" not in missing.json()["message"]
-        step = AgentStep(
-            node_id="create", tool_id="shipment_records", action="create", params=params
-        )
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            created = pool.submit(
-                AgentToolExecutor().execute,
-                step,
-                runtime_context={
-                    "tenant_id": "8",
-                    "service_source": "fastapi_shipment_records_route",
-                },
-            ).result(timeout=20)
-            assert created["success"], created
-            assert pool.submit(current_tenant_id).result() is None
-            denied = pool.submit(
-                AgentToolExecutor().execute,
-                step,
-                runtime_context={"service_source": "fastapi_shipment_records_route"},
-            ).result(timeout=20)
-            assert denied["success"] is False
-        with tenant_scope(8):
-            assert len(service.get_shipment_records()) == 1
-            assert service._record_query.get_shipment_by_id(str(record_id)) is None
+        assert foreign.tool_calls[0].output["success"] is False
+    second = approve(
+        client.post(path, json=params, headers={"Idempotency-Key": "tenant8-create"}), actor8
+    )
+    assert second.status == "blocked" and verification_blocked(second)
+    with tenant_scope(8):
+        assert service._record_query.get_shipment_by_id(str(record_id)) is None
+        assert len(service.get_shipment_records()) == 1
 
-        def read_tenant(tid):
-            with tenant_scope(tid):
-                return {row["tenant_id"] for row in service.get_shipment_records()}
+    def read_tenant(tid):
+        with tenant_scope(tid):
+            return {row["tenant_id"] for row in service.get_shipment_records()}
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            assert list(pool.map(read_tenant, [7, 8] * 20)) == [{7}, {8}] * 20
-        exported = client.get("/api/shipment/shipment-records/export")
-        assert exported.status_code == 200
-        workbook = load_workbook(BytesIO(exported.content), read_only=True)
-        values = list(workbook.active.values)
-        workbook.close()
-        assert "验收产品" in str(values) and "更新产品" not in str(values)
-        summary = next(row for row in values if row and row[0] == "合计")
-        assert summary[8] in (500, 500.0)
-        with tenant_scope(8):
-            assert (
-                service.export_shipment_records()["file_path"]
-                != service.export_shipment_records()["file_path"]
-            )
-        user[0] = None
-        del client.headers["X-Session-ID"]
-        assert client.post(path, json=params, headers={"X-User-ID": "11"}).status_code == 401
-        user[0] = SimpleNamespace(
-            id=11, is_active=True, role="user", tier="enterprise", tenant_id=7
-        )
-        client.headers.update(actor7.headers)
-        assert client.request("DELETE", path, json={"id": record_id}).status_code == 200
-        with tenant_scope(7):
-            assert service.get_shipment_records() == []
-            assert service._record_query.query_shipments()["total"] == 0
-            assert service.clear_all_orders()["success"]
-        with tenant_scope(8):
-            assert len(service.get_shipment_records()) == 1
-    finally:
-        engine.dispose()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(read_tenant, [7, 8] * 20)) == [{7}, {8}] * 20
+    exported = client.get("/api/shipment/shipment-records/export")
+    assert exported.status_code == 200, exported.text
+    workbook = load_workbook(BytesIO(exported.content), read_only=True)
+    values = list(workbook.active.values)
+    workbook.close()
+    assert "验收产品" in str(values) and "更新产品" not in str(values)
+    assert next(row for row in values if row and row[0] == "合计")[8] in (500, 500.0)
+    client.headers.pop("X-Session-ID")
+    assert client.post(path, json=params, headers={"X-User-ID": "11"}).status_code == 401
+    client.headers.update(actor7.headers)
+    deleted = approve(
+        client.request(
+            "DELETE", path, json={"id": record_id}, headers={"Idempotency-Key": "record-delete"}
+        ),
+        actor7,
+    )
+    assert deleted.status == "blocked" and verification_blocked(deleted)
+    with tenant_scope(7):
+        assert service.get_shipment_records() == []
+    with tenant_scope(8):
+        assert len(service.get_shipment_records()) == 1
 
 
-def test_approved_shipment_then_export_uses_full_persisted_plan(
+def test_approved_inventory_without_independent_proof_stops_dependent_shipment(
     tmp_path, monkeypatch, trusted_actor
 ):
     import logging
@@ -346,7 +329,14 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         assert shipment.get_shipment_records() == []
         request_no = reply["data"]["data"]["approval_request_ids"][0]
         outcome = bridge.resume(request_no=request_no, opinion="同意", approved_by="11")
-        assert outcome.get("waiting_approval") is True, outcome
+        assert outcome["success"] is False, outcome
+        stored = repo.get(outcome["agent_run_id"])
+        assert stored.status == "blocked"
+        assert stored.steps[0].status == "completed"
+        assert (
+            stored.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
+        )
+        assert [step.status for step in stored.steps[1:]] == ["pending", "pending"]
         with factory() as db:
             assert float(db.query(InventoryLedger).filter_by(tenant_id=7).one().quantity) == 8
         assert shipment.get_shipment_records() == []
@@ -354,67 +344,192 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         assert replay["success"] is False
         with factory() as db:
             assert float(db.query(InventoryLedger).filter_by(tenant_id=7).one().quantity) == 8
-        outcome = bridge.resume(
-            request_no=outcome["next_approval_request_id"], opinion="同意", approved_by="11"
-        )
-        assert outcome["success"], outcome
-        stored = repo.get(outcome["agent_run_id"])
-        assert [step.status for step in stored.steps] == ["completed", "completed", "completed"]
-        output = stored.steps[2].output
-        path = output.get("file_path") or (output.get("data") or {}).get("file_path")
-        assert path and Path(path).is_file(), output
-        book = load_workbook(path, read_only=True)
-        rows = list(book.active.iter_rows(values_only=True))
-        book.close()
-        cells = [cell for row in rows for cell in row]
-        text = {str(cell) for cell in cells}
-        assert "隔离测试产品" in text
-        assert 2 in cells or "2" in text
-        assert 500 in cells or "500" in text
-        summary = next(row for row in rows if row and row[0] == "合计")
-        assert summary[8] in (500, 500.0)
+        assert shipment.get_shipment_records() == []
     engine.dispose()
 
 
-def test_r05_export_without_a_file_fails_the_business_assertion(
-    tmp_path, monkeypatch, trusted_actor
+def test_export_success_without_a_file_remains_unverified(
+    tmp_path, monkeypatch, trusted_actor, local_tools
 ):
-    import os
-    import subprocess
-    import sys
-    from pathlib import Path
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.result_verification import verification_blocked
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
-    from app.application.shipment_document_workflows import ShipmentDocumentWorkflowMixin
-
-    def empty_export(self, *_args, **_kwargs):
-        return {"success": True, "file_path": ""}
-
-    monkeypatch.setattr(ShipmentDocumentWorkflowMixin, "export_shipment_records", empty_export)
-    try:
-        test_approved_shipment_then_export_uses_full_persisted_plan(
-            tmp_path, monkeypatch, trusted_actor
-        )
-    except AssertionError as exc:
-        assert "is_file" in str(exc) or "file_path" in str(exc)
-    else:
-        raise AssertionError("an export without a file was accepted")
-    env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-    restored = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "tests/test_application/test_shipment_records_agent_routes.py::test_approved_shipment_then_export_uses_full_persisted_plan",
-            "-q",
-            "-o",
-            "addopts=",
-            "--tb=line",
-        ],
-        cwd=str(Path(__file__).resolve().parents[2]),
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
+    actor = trusted_actor(user_id=11, role="admin")
+    repository = InMemoryAgentRunRepository()
+    service = SimpleNamespace(
+        export_shipment_records=lambda **_: {"success": True, "file_path": ""}
     )
-    assert restored.returncode == 0, restored.stdout + restored.stderr
+    monkeypatch.setattr(shipment_orders, "_svc", lambda: service)
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    plan = PlanGraph(
+        plan_id="missing-export-file",
+        intent="export",
+        nodes=[
+            WorkflowNode(
+                node_id="export",
+                tool_id="shipment_records",
+                action="export",
+                params={},
+                risk="low",
+                idempotent=True,
+            )
+        ],
+    )
+    with tenant_scope(actor.tenant_id):
+        run = AgentOrchestrator(repository=repository).start_run_from_plan(
+            user_id=str(actor.user_id),
+            message="导出出货记录",
+            plan=plan,
+            runtime_context={**actor.context, "service_source": "fastapi_shipment_records_route"},
+        )
+    assert run.status == "blocked", run.error
+    assert verification_blocked(run)
+    assert run.tool_calls[0].output["success"] is True
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is False
+    assert not run.artifacts
+
+
+def _canonical_record_service(monkeypatch):
+    service = ShipmentApplicationService(
+        SQLAlchemyShipmentRepository(),
+        record_query=SQLAlchemyShipmentRecordQuery(),
+        record_command=SQLAlchemyShipmentRecordCommand(),
+    )
+    monkeypatch.setattr("app.bootstrap.get_shipment_application_service_core", lambda: service)
+    monkeypatch.setattr("app.infrastructure.mods.hooks.trigger", lambda *_a, **_k: None)
+    return service
+
+
+@pytest.mark.parametrize("products_key", ["products", "items"])
+@pytest.mark.parametrize(
+    "contacts",
+    [
+        {},
+        {"contact_person": None, "contact_phone": None},
+        {"contact_person": "真实联系人", "contact_phone": "13800000000"},
+    ],
+)
+def test_canonical_record_create_uses_actual_service_parameter_types(
+    trusted_actor, monkeypatch, products_key, contacts
+):
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
+        _registered_router_shipment_records,
+    )
+
+    actor = trusted_actor(role="admin")
+    service = _canonical_record_service(monkeypatch)
+    create = Mock(wraps=service.create_shipment)
+    monkeypatch.setattr(service, "create_shipment", create)
+    products = [{"product_name": "真实产品", "quantity_kg": 2.5, "unit_price": 4}]
+    with tenant_scope(actor.tenant_id):
+        result = _registered_router_shipment_records(
+            "create",
+            {"unit_name": "真实客户", products_key: products, **contacts},
+            actor.context,
+            "admin",
+            "",
+        )
+        assert result["success"] is True, result
+        rows = service.get_shipment_records()
+        assert isinstance(rows, list) and len(rows) == 1
+        stored = service.get_shipment(rows[0]["id"])
+    expected_person = contacts.get("contact_person") or ""
+    expected_phone = contacts.get("contact_phone") or ""
+    create.assert_called_once_with(
+        unit_name="真实客户",
+        items_data=products,
+        contact_person=expected_person,
+        contact_phone=expected_phone,
+    )
+    assert stored.contact_info.person == expected_person
+    assert stored.contact_info.phone == expected_phone
+    assert stored.items[0].product_name == "真实产品"
+    assert stored.total_quantity.kg == 2.5
+
+
+def test_canonical_record_create_rejects_invalid_items_before_service(trusted_actor, monkeypatch):
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
+        _registered_router_shipment_records,
+    )
+
+    actor = trusted_actor(role="admin")
+    service = _canonical_record_service(monkeypatch)
+    create = Mock(wraps=service.create_shipment)
+    monkeypatch.setattr(service, "create_shipment", create)
+    with tenant_scope(actor.tenant_id):
+        result = _registered_router_shipment_records(
+            "create", {"unit_name": "真实客户", "products": [None]}, actor.context, "admin", ""
+        )
+        assert result["success"] is False
+        assert service.get_shipment_records() == []
+    create.assert_not_called()
+
+
+def test_canonical_record_clear_removes_over_one_page_only_in_original_tenant(
+    trusted_actor, monkeypatch
+):
+    from app.db.models import ShipmentRecord
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
+        _registered_router_shipment_records,
+    )
+
+    actor = trusted_actor(role="admin")
+    service = _canonical_record_service(monkeypatch)
+    for tenant_id, count in ((actor.tenant_id, 137), (8, 2)):
+        with tenant_scope(tenant_id), actor.factory.begin() as db:
+            db.add_all(
+                ShipmentRecord(
+                    tenant_id=tenant_id,
+                    purchase_unit="真实客户",
+                    product_name=f"产品-{index}",
+                    quantity_kg=1,
+                    quantity_tins=1,
+                    tin_spec=1,
+                )
+                for index in range(count)
+            )
+    with tenant_scope(actor.tenant_id):
+        listed = _registered_router_shipment_records("list", {}, actor.context, "admin", "")
+        assert listed["success"] is True and isinstance(listed["data"], list)
+        assert len(listed["data"]) == 100
+        list_again = Mock(side_effect=AssertionError("clear must use the existing atomic command"))
+        delete_one = Mock(
+            side_effect=AssertionError("clear must not recreate a per-row implementation")
+        )
+        monkeypatch.setattr(service, "get_shipment_records", list_again)
+        monkeypatch.setattr(service, "delete_shipment_record", delete_one)
+        result = _registered_router_shipment_records("clear", {}, actor.context, "admin", "")
+        assert result["success"] is True, result
+        assert "deleted_count" not in result and "failed_count" not in result
+        with actor.factory() as db:
+            assert db.query(ShipmentRecord).count() == 0
+    with tenant_scope(8), actor.factory() as db:
+        assert db.query(ShipmentRecord).count() == 2
+    list_again.assert_not_called()
+    delete_one.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", ["unconfigured", "database"])
+def test_canonical_record_clear_preserves_real_service_failure(trusted_actor, monkeypatch, failure):
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
+        _registered_router_shipment_records,
+    )
+
+    actor = trusted_actor(role="admin")
+    service = _canonical_record_service(monkeypatch)
+    if failure == "unconfigured":
+        service._record_command = None
+        expected = {"success": False, "message": "record_command 未配置"}
+    else:
+        monkeypatch.setattr(
+            "app.infrastructure.persistence.shipment_record_command_impl.get_db",
+            Mock(side_effect=OSError("database unavailable")),
+        )
+        expected = {"success": False, "message": "清空失败：database unavailable"}
+    with tenant_scope(actor.tenant_id):
+        result = _registered_router_shipment_records("clear", {}, actor.context, "admin", "")
+    assert result == expected
+    assert "deleted_count" not in result
+    assert "failed_count" not in result

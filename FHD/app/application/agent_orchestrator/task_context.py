@@ -86,9 +86,10 @@ def build_task_context(
         "workspace_path": workspace_path,
         "isolation": isolation,
     }
-    turn_id = _text(context.get("turn_id") or previous.get("turn_id"), limit=160)
-    if turn_id:
-        task_context["turn_id"] = turn_id
+    for key in ("turn_id", "client_request_id"):
+        value = _text(context.get(key) or previous.get(key), limit=160)
+        if value:
+            task_context[key] = value
     return task_context
 
 

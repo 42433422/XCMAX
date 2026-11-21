@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.application import auth_permission_resolver as permissions
+from app.domain.app_pure import auth_permission_resolver as permissions
 
 
 @pytest.mark.parametrize(

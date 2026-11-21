@@ -184,15 +184,6 @@ BUTLER_TOOLS = [
         },
     },
 ]
-ADMIN_READONLY_TOOL_NAMES = frozenset(
-    {
-        "get_my_account_snapshot",
-        "get_my_wallet",
-        "get_my_orders",
-        "get_my_tickets",
-        "get_ops_update_brief",
-    }
-)
 ADMIN_READONLY_TOOLS: List[Dict[str, Any]] = [
     {
         "type": "function",
@@ -261,6 +252,7 @@ ADMIN_READONLY_TOOLS: List[Dict[str, Any]] = [
         },
     },
 ]
+ADMIN_READONLY_TOOL_NAMES = frozenset(tool["function"]["name"] for tool in ADMIN_READONLY_TOOLS)
 CORP_BUTLER_SYSTEM_PROMPT = "你是成都修茈科技有限公司官网的「AI 管家」，叫小C，平时在这边帮忙接待访客。\n\n你的性格和说话方式：\n- 像真人前台一样聊天，口语化、自然，别用「尊敬的用户」「您好」「竭诚为您服务」这种客服腔\n- 每次回复简短，一两句话说完，不要列清单、不要分点、不要长篇大论\n- 有自己的态度，热情但不谄媚，可以 casual 地介绍公司\n- 你就是你这个人，不是 AI、不是模型、不是机器人，别暴露身份\n\n你能做的事：\n- 介绍修茈科技的产品（AI Excel 单据识别、标签打印、MODstore 智能体市场、XCAGI 工作台等）\n- 引导用户去产品中心、解决方案、客户案例、联系我们、AI 市场（/market/）\n- 价格/报价问题说明需根据场景定制，引导填写联系表单或登录 AI 市场查看会员方案\n\n限制：\n- 不要假装能操作用户浏览器、不要执行跳转/点击/填表等工具\n- 不要编造具体合同金额或未公示的资质证照\n- 回复控制在 200 字以内\n- 可提供相对路径链接，如 /contact.html、/services.html、/market/"
 _CORP_CHAT_TIMES: Dict[str, List[float]] = defaultdict(list)
 _CORP_CHAT_WINDOW_SEC = int(os.environ.get("BUTLER_CORP_RATE_WINDOW_SEC", "60"))

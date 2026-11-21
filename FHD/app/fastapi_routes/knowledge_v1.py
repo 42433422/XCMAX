@@ -35,8 +35,6 @@ from app.fastapi_routes.knowledge.access import (
     _request_tenant_key as _request_tenant_key,
 )
 from app.fastapi_routes.knowledge.agent import DatasetAgent
-from app.fastapi_routes.knowledge.agent import _agent_node_output as _agent_node_output
-from app.fastapi_routes.knowledge.agent import _dataset_agent_user_id as _dataset_agent_user_id
 from app.fastapi_routes.knowledge.document_routes import DocumentRoutes
 from app.fastapi_routes.knowledge.maintenance_routes import MaintenanceRoutes
 from app.fastapi_routes.knowledge.memory import MemoryReview, dataset_error, memory_response
@@ -198,17 +196,9 @@ def _merge_persy_recall(
 def _run_dataset_rag_agent(
     *, request: Request, action: str, params: dict[str, Any], route_path: str
 ) -> JSONResponse:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    return DatasetAgent(
-        runtime=AgentOrchestrator,
-        registry=get_workflow_tool_registry,
-        access_payload=_dataset_access_payload_from_request,
-        actor=_dataset_agent_user_id,
-        output=_agent_node_output,
-        recall=_merge_persy_recall,
-    ).run(request=request, action=action, params=params, route_path=route_path)
+    return DatasetAgent(recall=_merge_persy_recall).run(
+        request=request, action=action, params=params, route_path=route_path
+    )
 
 
 def _knowledge_runtime_snapshot(request: Request | None = None) -> dict[str, Any]:
@@ -254,9 +244,8 @@ _legacy_routes = LegacyRoutes(
 )
 _document_routes = DocumentRoutes(
     dispatch=lambda: _run_dataset_rag_agent,
-    uploads=lambda directory: DocumentUpload(
+    uploads=lambda: DocumentUpload(
         dispatch=_run_dataset_rag_agent,
-        directory=directory,
         extensions=_DATASET_UPLOAD_EXTENSIONS,
         max_bytes=_DATASET_UPLOAD_MAX_BYTES,
         logger=logger,

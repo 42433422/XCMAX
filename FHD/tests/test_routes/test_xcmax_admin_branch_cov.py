@@ -38,6 +38,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 
 import app.fastapi_routes.xcmax_admin as admin_routes
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_routes.test_admin_employee_admission import admin_employee as admin_employee
 
 
 @_shared_scope_contextmanager
@@ -733,130 +735,60 @@ class TestLocalEmployeeExecuteBranches:
                 stack.enter_context(cm)
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
-                json={"task": "t", "input_data": "not-a-dict"},
+                json={"task": "t", "input_data": "not-a-dict", "idempotency_key": "invalid-input"},
             )
         assert resp.status_code == 400
 
-    def test_input_data_none_ok(self, client: TestClient):
-        """Line 1206: input_data None → uses empty dict."""
-        with ExitStack() as stack:
-            for cm in _local_employee_execute_session_patches():
-                stack.enter_context(cm)
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.executor.execute_employee_task_local",
-                    return_value={"success": True},
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
-                    return_value=(True, "ok"),
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
-                    return_value="run-1",
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
-                    return_value=None,
-                )
-            )
-            resp = client.post(
-                "/api/xcmax/local/employees/emp1/execute",
-                json={"task": "t", "input_data": None},
-            )
-        assert resp.status_code == 200
+    def test_input_data_none_ok(self, client: TestClient, admin_employee):
+        entry = admin_employee
+        resp = client.post(
+            "/api/xcmax/local/employees/emp1/execute",
+            json={"task": "t", "input_data": None, "idempotency_key": "empty-input"},
+            headers=entry.actor.headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is False and resp.json()["execution_state"] == "unknown"
+        entry.invocation.assert_called_once()
+        assert entry.invocation.call_args.args[2]["trigger"] == "admin_execute"
 
-    def test_invalid_body_user_id_keeps_authenticated_owner(self, client: TestClient):
-        """Untrusted request identity never overrides the authenticated owner."""
-        with ExitStack() as stack:
-            for cm in _local_employee_execute_session_patches():
-                stack.enter_context(cm)
-            mock_exec = stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.executor.execute_employee_task_local",
-                    return_value={"success": True},
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
-                    return_value=(True, "ok"),
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
-                    return_value="run-1",
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
-                    return_value=None,
-                )
-            )
-            resp = client.post(
-                "/api/xcmax/local/employees/emp1/execute",
-                json={"task": "t", "user_id": "abc"},
-            )
-        assert resp.status_code == 200
-        args, kwargs = mock_exec.call_args
-        assert kwargs["user_id"] == 1
+    def test_invalid_body_user_id_keeps_authenticated_owner(
+        self, client: TestClient, admin_employee
+    ):
+        entry = admin_employee
+        resp = client.post(
+            "/api/xcmax/local/employees/emp1/execute",
+            json={"task": "t", "user_id": "abc", "idempotency_key": "bound-owner"},
+            headers=entry.actor.headers,
+        )
+        assert resp.status_code == 200, resp.text
+        entry.invocation.assert_called_once()
+        assert entry.invocation.call_args.kwargs["user_id"] == entry.actor.user_id
+        from app.infrastructure.auth.agent_mod_scope import validate_actor_context
 
-    def test_approved_write_propagated_to_payload(self, client: TestClient):
-        """Lines 1207-1209: approved_write/allow_write/write_token/approval_token propagated."""
-        with ExitStack() as stack:
-            for cm in _local_employee_execute_session_patches():
-                stack.enter_context(cm)
-            mock_exec = stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.executor.execute_employee_task_local",
-                    return_value={"success": True},
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
-                    return_value=(True, "ok"),
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
-                    return_value="run-1",
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
-                    return_value=None,
-                )
-            )
-            resp = client.post(
-                "/api/xcmax/local/employees/emp1/execute",
-                json={
-                    "task": "t",
-                    "approved_write": True,
-                    "allow_write": True,
-                    "write_token": "wt",
-                    "approval_token": "at",
-                },
-            )
-        assert resp.status_code == 200
-        # execute_employee_task_local(pid, task, payload, user_id=..., ...)
-        args, kwargs = mock_exec.call_args
-        # pid, task are positional; payload is positional arg index 2
-        payload = args[2] if len(args) > 2 else kwargs.get("payload", {})
-        assert payload["approved_write"] is True
-        assert payload["allow_write"] is True
-        assert payload["write_token"] == "wt"
-        assert payload["approval_token"] == "at"
+        context = entry.invocation.call_args.kwargs["runtime_context"]
+        assert validate_actor_context(context) is None
+        assert context["_actor_authorization"]["session_row_id"] == entry.actor.session_row_id
+
+    def test_approved_write_propagated_to_payload(self, client: TestClient, admin_employee):
+        entry = admin_employee
+        resp = client.post(
+            "/api/xcmax/local/employees/emp1/execute",
+            json={
+                "task": "t",
+                "idempotency_key": "write-input",
+                "approved_write": True,
+                "allow_write": True,
+                "write_token": "wt",
+                "approval_token": "at",
+            },
+            headers=entry.actor.headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is False and resp.json()["execution_state"] == "unknown"
+        entry.invocation.assert_called_once()
+        payload = entry.invocation.call_args.args[2]
+        assert payload["approved_write"] is True and payload["allow_write"] is True
+        assert payload["write_token"] == "wt" and payload["approval_token"] == "at"
         assert payload["trigger"] == "admin_execute"
 
 

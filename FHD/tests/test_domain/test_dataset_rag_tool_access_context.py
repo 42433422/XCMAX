@@ -5,48 +5,51 @@ from types import SimpleNamespace
 import pytest
 
 from app.domain.shared_services.tools_workflow_memory_rag import _registered_router_dataset_rag
+from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
 def captured(monkeypatch):
-    calls: list[dict] = []
+    calls = []
 
-    def _record(**kwargs):
+    def record(**kwargs):
         calls.append(kwargs)
         return {"success": True}
 
-    service = SimpleNamespace(query=_record, answer=_record)
     monkeypatch.setattr(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", lambda: service
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+        lambda: SimpleNamespace(query=record, answer=record),
     )
     return calls
 
 
-def _query(params: dict, runtime_context: dict) -> None:
-    _registered_router_dataset_rag(
-        "query", {"dataset_id": "ds", "query": "q", **params}, runtime_context, "", ""
-    )
-
-
-def test_model_params_cannot_grant_dataset_admin(captured) -> None:
-    with tenant_scope(None):
-        _query(
+def test_dataset_acl_comes_from_bound_actor_not_params_or_ambient(captured, trusted_actor):
+    actor = trusted_actor(user_id=7, permissions=["dataset.read"])
+    with tenant_scope(999):
+        _registered_router_dataset_rag(
+            "query",
             {
-                "tenant_id": "other",
-                "dataset_admin": True,
-                "permissions": "dataset.admin",
-                "access_context": {"tenant_id": "other", "is_admin": True},
+                "dataset_id": "ds",
+                "query": "q",
+                "tenant_id": "999",
+                "access_context": {"is_admin": True},
             },
-            {"tenant_id": "mine"},
+            {
+                **actor.context,
+                "dataset_access_context": {"is_admin": True, "permissions": ["dataset.admin"]},
+            },
+            "",
+            "",
         )
     context = captured[0]["access_context"]
+    assert context.actor_id == "7" and context.tenant_id == "7"
     assert context.is_admin is False
-    assert context.tenant_id == "mine"
-    assert "dataset.admin" not in context.permissions
+    assert context.permissions == frozenset({"dataset.read"})
 
 
-def test_missing_context_scopes_to_ambient_tenant(captured) -> None:
-    with tenant_scope(7):
-        _query({}, {})
-    assert captured[0]["access_context"].tenant_id == "7"
+def test_missing_bound_actor_never_inherits_ambient_dataset_authority(captured):
+    with tenant_scope(7), pytest.raises(AgentModAuthorizationError):
+        _registered_router_dataset_rag("query", {"dataset_id": "ds", "query": "q"}, {}, "", "")
+    assert captured == []

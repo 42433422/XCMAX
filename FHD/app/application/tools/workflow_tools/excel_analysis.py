@@ -13,7 +13,9 @@ from typing import Any, cast
 
 import pandas as pd
 
-from app.application.tools.workflow_tools.contracts import ExcelIO, NaturalQuery, Payload
+from app.application.tools.workflow_tools.contracts import ExcelIO, Payload
+from app.infrastructure.excel.schema_service import dataframe_schema_snapshot
+from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS = 1000
@@ -110,35 +112,6 @@ def table_result(df: pd.DataFrame, *, offset: int = 0, max_rows: Any = None) -> 
     }
 
 
-def natural_language_query(
-    df: pd.DataFrame,
-    natural_language: str,
-    translate: Callable[[str, pd.DataFrame], str | None],
-    execute: Callable[[str, pd.DataFrame], pd.DataFrame],
-    *,
-    offset: int = 0,
-    max_rows: Any = None,
-) -> Payload:
-    generated_code = ""
-    error: str | None = None
-    result = df
-    try:
-        code = translate(natural_language, df)
-        if code and code.strip():
-            generated_code = code
-            result = execute(code, df)
-    except ValueError:
-        error = "invalid_pandas_query"
-    except RECOVERABLE_ERRORS:
-        error = "excel_query_failed"
-    return {
-        "generated_code": generated_code,
-        "result_kind": "dataframe",
-        **table_result(result, offset=offset, max_rows=max_rows),
-        **({"error": error} if error else {}),
-    }
-
-
 def aggregate_frame(df: pd.DataFrame, args: Payload) -> pd.DataFrame:
     group_by = [str(value) for value in args.get("group_by") or [] if str(value)]
     metrics = args.get("metrics") or []
@@ -178,7 +151,6 @@ def aggregate_frame(df: pd.DataFrame, args: Payload) -> pd.DataFrame:
 @dataclass(frozen=True)
 class ExcelAnalysis:
     io: ExcelIO
-    query: NaturalQuery
     filter_frame: Callable[[pd.DataFrame, str], pd.DataFrame]
     customer_hint: Callable[[str, str | None], str]
     logger: logging.Logger
@@ -190,6 +162,13 @@ class ExcelAnalysis:
         header = self.io.header(args)
         if not file_path:
             return {"success": False, "error": "file_path is required"}
+        expression = args.get("query_expression")
+        if action == "query" and (not isinstance(expression, str) or not expression.strip()):
+            return {
+                "success": False,
+                "error_code": "missing_query_expression",
+                "message": "查询需要非空的受限筛选表达式",
+            }
         root = workspace_root or str(Path.cwd())
         if action == "export":
             return self.export_table(args, root)
@@ -222,17 +201,14 @@ class ExcelAnalysis:
                 "header_row": header,
             }
         offset, max_rows = page_budget(args)
-        if action == "excel_query":
-            out = self.query(
-                df,
-                str(args.get("natural_language") or "").strip(),
-                file_path=file_path,
-                offset=offset,
-                max_rows=max_rows,
-            )
-            out["action"] = "excel_query"
-            return out
         base = {"success": True, "action": action, "file_path": file_path}
+        if action == "structure":
+            return {
+                **base,
+                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
+                "header_row": header if header is not None else 1,
+                "data": json_safe(dataframe_schema_snapshot(df)),
+            }
         if action == "read":
             out = {
                 **base,
@@ -252,7 +228,14 @@ class ExcelAnalysis:
             out["header_row"] = header if header is not None else 1
             return out
         if action == "query":
-            result = self.filter_frame(df, str(args.get("query_expression") or "").strip())
+            try:
+                result = self.filter_frame(df, str(expression).strip())
+            except ValueError as exc:
+                return {
+                    "success": False,
+                    "error_code": "invalid_query_expression",
+                    "message": str(exc),
+                }
             return {**base, **table_result(result, offset=offset, max_rows=max_rows)}
         if action == "aggregate":
             try:

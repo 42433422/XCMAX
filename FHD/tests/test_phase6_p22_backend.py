@@ -61,7 +61,6 @@ from app.mod_sdk.industry_baseline import (
 )
 from app.mod_sdk.planner_tools import (
     PLANNER_FACADE_MOD_ID,
-    execute_planner_tool_from_body,
     execute_planner_workflow_tool,
     list_planner_tools_registry_detail,
     load_mod_planner_tool_extensions,
@@ -373,7 +372,10 @@ class TestAiAssistantBranches:
         output_dir.mkdir()
         (output_dir / "foo.docx").write_bytes(b"docx")
         with (
-            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
+            patch(
+                "app.utils.path_io.path_utils.get_app_data_dir",
+                return_value=str(tmp_path),
+            ),
             patch.object(ai_assistant, "_printer_svc") as mock_svc_get,
         ):
             mock_svc = MagicMock()
@@ -394,7 +396,10 @@ class TestAiAssistantBranches:
         output_dir.mkdir()
         (output_dir / "foo.docx").write_bytes(b"docx")
         with (
-            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
+            patch(
+                "app.utils.path_io.path_utils.get_app_data_dir",
+                return_value=str(tmp_path),
+            ),
             patch.object(ai_assistant, "_printer_svc") as mock_svc_get,
         ):
             mock_svc = MagicMock()
@@ -895,87 +900,6 @@ class TestPlannerToolsBranches:
             result = execute_planner_workflow_tool("tool1", {"arg": 1}, "/ws")
         assert result == "host-result"
         mock_host.assert_called_once()
-
-    def test_execute_planner_tool_from_body_with_db_write_token(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """body 中包含 db_write_token → 透传到 executor。"""
-        monkeypatch.delenv("XCAGI_DISABLE_PLANNER_MOD_TOOLS", raising=False)
-        monkeypatch.delenv("XCAGI_PLANNER_TOOLS_VIA_MOD", raising=False)
-        monkeypatch.setenv("WORKSPACE_ROOT", "/custom/ws")
-
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"success": true}',
-        ) as mock_exec:
-            result = execute_planner_tool_from_body(
-                {
-                    "tool_name": "tool1",
-                    "arguments": {"a": 1},
-                    "db_write_token": "tok-123",
-                }
-            )
-        assert result["success"] is True
-        call_kwargs = mock_exec.call_args.kwargs
-        assert call_kwargs["db_write_token"] == "tok-123"
-
-    def test_execute_planner_tool_from_body_args_from_args_field(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """args 字段作为 arguments 的回退。"""
-        monkeypatch.delenv("XCAGI_DISABLE_PLANNER_MOD_TOOLS", raising=False)
-        monkeypatch.delenv("XCAGI_PLANNER_TOOLS_VIA_MOD", raising=False)
-
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"success": true}',
-        ) as mock_exec:
-            result = execute_planner_tool_from_body(
-                {
-                    "name": "tool1",
-                    "args": {"b": 2},  # 使用 args 而非 arguments
-                }
-            )
-        assert result["success"] is True
-        # 验证 args 被透传
-        call_args = mock_exec.call_args.args
-        assert call_args[1] == {"b": 2}
-
-    def test_execute_planner_tool_from_body_mod_native_with_source_prefix(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """result JSON 含 source: mod:xxx → execution_path=mod_native。"""
-        monkeypatch.delenv("XCAGI_DISABLE_PLANNER_MOD_TOOLS", raising=False)
-        monkeypatch.delenv("XCAGI_PLANNER_TOOLS_VIA_MOD", raising=False)
-
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"source": "mod:custom-mod", "data": "x"}',
-        ):
-            result = execute_planner_tool_from_body({"tool_name": "tool1"})
-        assert result["execution_path"] == "mod_native"
-        assert result["mod_id"] == "custom-mod"
-        assert result["delegate"] is None
-
-    def test_execute_planner_tool_from_body_mod_native_no_colon(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """source: mod: 无后续字符 → mod_id 为 None（split 后为空字符串）。
-
-        注意：source 必须以 "mod:" 开头才进入 mod_native 分支。
-        "mod:" split(":", 1)[1] = "" → handler_mod = ""（falsy 但非 None）。
-        """
-        monkeypatch.delenv("XCAGI_DISABLE_PLANNER_MOD_TOOLS", raising=False)
-        monkeypatch.delenv("XCAGI_PLANNER_TOOLS_VIA_MOD", raising=False)
-
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"source": "mod:"}',  # mod: 后无字符
-        ):
-            result = execute_planner_tool_from_body({"tool_name": "tool1"})
-        assert result["execution_path"] == "mod_native"
-        # split(":", 1)[1] = "" → if ":" in src 为 True，handler_mod = ""
-        assert result["mod_id"] == ""
 
     def test_resolve_planner_tool_executor_via_mod_enabled(
         self, monkeypatch: pytest.MonkeyPatch
