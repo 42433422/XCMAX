@@ -14,6 +14,7 @@ from app.infrastructure.modstore_transport import MarketModelError
 from app.infrastructure.modstore_transport import safe_route_metadata as route_metadata
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .catalog import public_model_capabilities
 from .protocols import Connection, Payload, Route, SyncClientFactory
 from .protocols import preflight_timeout as _preflight_timeout
 from .responses import _response_status_code
@@ -66,6 +67,7 @@ def resolve_account_route(
                 "provider": provider.strip().lower(),
                 "model": model.strip(),
                 "route_source": data.get("route_source") or data.get("source") or "unknown",
+                "model_capabilities": public_model_capabilities(data.get("model_capabilities")),
                 **(
                     {"route_token": data["route_token"]}
                     if isinstance(data.get("route_token"), str)

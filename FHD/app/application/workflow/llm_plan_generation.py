@@ -149,7 +149,7 @@ class PlannerCompletion(Protocol):
         messages: list[dict[str, str]],
         http_client_factory: Callable[[], httpx.Client] | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 1200,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | None: ...
 
