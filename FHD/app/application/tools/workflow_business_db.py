@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 
@@ -87,6 +88,32 @@ def try_execute_business_db_tool(name: str, args: dict[str, Any]) -> dict[str, A
     action = actions.get(name)
     if action is None:
         return None
+
+    # The model-facing workflow dispatcher always supplies a separate trusted
+    # context, even when empty. Keep direct domain callers compatible while
+    # routing every model alias through the existing approval/idempotency run.
+    if "_runtime_context" in args:
+        from app.application.tools.registered_capabilities import (
+            execute_registered_capability,
+        )
+
+        params = dict(args)
+        context = params.pop("_runtime_context")
+        result = json.loads(
+            execute_registered_capability(
+                {"tool_id": "business_db", "action": action, "params": params},
+                runtime_context=context if isinstance(context, dict) else {},
+            )
+        )
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": "invalid_capability_receipt",
+                "outcome": "unknown",
+                "reconciliation_required": True,
+                "retryable": False,
+            }
+        return result
 
     from app.domain.shared_services.tools_workflow_registered import (
         execute_registered_workflow_tool,

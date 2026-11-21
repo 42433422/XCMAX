@@ -1,0 +1,370 @@
+"""Remote acknowledgement loss must never dispatch a second logical action."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import httpx
+import pytest
+
+from app.application.codex_super_employee_service import CodexSuperEmployeeService
+
+
+def _service(tmp_path, monkeypatch, task_handler, *, devices=1, webhook_handler=None):
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "auto")
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "https://para.test")
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", "test-token")
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "https://hook.test/execute")
+    requests = []
+
+    def handle(request):
+        requests.append((request.method, request.url.host, request.url.path))
+        if request.url.host == "hook.test":
+            if webhook_handler:
+                return webhook_handler(request)
+            return httpx.Response(200, json={"accepted": True})
+        if request.url.path == "/api/health":
+            return httpx.Response(200, json={"ok": True})
+        if request.url.path == "/api/devices":
+            return httpx.Response(
+                200,
+                json={
+                    "devices": [
+                        {
+                            "id": f"device-{i}",
+                            "name": f"Worker {i}",
+                            "status": "online",
+                            "devTool": "codex",
+                            "tools": [{"toolName": "codex", "status": "idle"}],
+                        }
+                        for i in range(devices)
+                    ]
+                },
+            )
+        if request.method == "POST" and request.url.path == "/api/tasks":
+            return task_handler(request)
+        if request.method == "GET" and request.url.path == "/api/tasks/task-original":
+            return httpx.Response(200, json={"task": {"id": "task-original", "status": "running"}})
+        raise AssertionError(f"unexpected request {request.method} {request.url}")
+
+    def create():
+        service = CodexSuperEmployeeService(
+            storage_root=tmp_path,
+            http_client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handle)),
+        )
+        monkeypatch.setattr(
+            service,
+            "_compose_direct_chat_reply",
+            lambda *args: pytest.fail("remote dispatch fell through to local CLI"),
+        )
+        return service
+
+    return create, requests
+
+
+@pytest.mark.parametrize(
+    "error_type", [httpx.ReadTimeout, httpx.WriteError, httpx.RemoteProtocolError]
+)
+def test_lost_ack_is_durable_and_never_falls_through(tmp_path, monkeypatch, error_type):
+    effects = []
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        raise error_type("ack lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    context = {"request_id": "original-request", "mode": "code"}
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert first["dispatch"]["status"] == "dispatch_unknown"
+    assert first["dispatch"]["queued"] is False
+    saved = json.loads(Path(first["dispatch"]["outbox_path"]).read_text())
+    assert saved["request_id"] == "original-request"
+    assert saved["dispatch_receipt"]["reconciliation_required"] is True
+
+    second_service = create()
+    second = second_service.invoke(user_id=7, message="修复登录问题", context=context)
+    assert second["dispatch"]["request_id"] == "original-request"
+    assert second["dispatch"]["status"] == "dispatch_unknown"
+    assert len(effects) == 1
+    assert not any(host == "hook.test" for _, host, _ in requests)
+    assert len(second_service._read_all_message_rows()) == 2
+    # A message-list backfill must not turn an unresolved remote action into CLI work.
+    monkeypatch.setattr(second_service, "_should_reply_with_cli", lambda *args: True)
+    second_service.list_messages(user_id=7)
+
+
+def test_process_exit_after_send_recovers_the_pre_send_receipt(tmp_path, monkeypatch):
+    effects = []
+
+    def submit(request):
+        effects.append("created")
+        raise SystemExit("process died before ack")
+
+    create, _ = _service(tmp_path, monkeypatch, submit)
+    context = {"request_id": "crash-request", "mode": "code"}
+    with pytest.raises(SystemExit):
+        create().invoke(user_id=7, message="修复登录问题", context=context)
+    recovered = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert recovered["dispatch"]["status"] == "dispatch_unknown"
+    assert effects == ["created"]
+
+
+@pytest.mark.parametrize("error_type", [httpx.ReadTimeout, httpx.ConnectError])
+def test_partial_fleet_dispatch_keeps_task_and_device_receipts(tmp_path, monkeypatch, error_type):
+    effects = []
+
+    def submit(request):
+        body = json.loads(request.content)
+        effects.append(body)
+        if len(effects) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "task": {"id": "task-original", "status": "running"},
+                    "subtask": {"id": "sub-1"},
+                },
+            )
+        assert body["task_id"] == "task-original"
+        raise error_type("second device did not acknowledge", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit, devices=2)
+    context = {"request_id": "fleet-request", "mode": "code", "para_tier": 2}
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    receipt = first["dispatch"]
+    assert receipt["status"] == "dispatch_unknown"
+    assert receipt["task_id"] == "task-original"
+    assert receipt["devices"][0]["subtask_id"] == "sub-1"
+    assert receipt["pending_device_id"] == "device-1"
+    saved = json.loads(Path(receipt["outbox_path"]).read_text())
+    assert saved["dispatch_receipt"]["task_id"] == "task-original"
+    resumed = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert resumed["dispatch"]["task_status"] == "running"
+    assert resumed["dispatch"]["status"] == "dispatch_unknown"
+    assert len(effects) == 2
+    assert ("GET", "para.test", "/api/tasks/task-original") in requests
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+def test_connect_failure_before_first_send_can_use_webhook(tmp_path, monkeypatch):
+    def submit(request):
+        raise httpx.ConnectError("connection never established", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    service = create()
+    context = {"request_id": "connect-request", "mode": "code"}
+    result = service.invoke(user_id=7, message="修复登录问题", context=context)
+    assert result["dispatch"]["accepted"] is True
+    assert result["dispatch"]["dispatcher"] == "webhook"
+    create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert sum(host == "hook.test" for _, host, _ in requests) == 1
+
+
+def test_successful_remote_request_replays_without_creating_a_task(tmp_path, monkeypatch):
+    def submit(request):
+        return httpx.Response(
+            200,
+            json={"task": {"id": "task-original", "status": "running"}, "subtask": {"id": "sub-1"}},
+        )
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    context = {"request_id": "accepted-request", "mode": "code"}
+    assert create().invoke(user_id=7, message="修复登录问题", context=context)["dispatch"][
+        "accepted"
+    ]
+    replay = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert replay["dispatch"]["task_id"] == "task-original"
+    with pytest.raises(ValueError, match="已绑定其他任务参数"):
+        create().invoke(user_id=7, message="部署另一个项目", context=context)
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+
+
+@pytest.mark.parametrize("corrupted_receipt", [None, [], "not-an-object"])
+def test_corrupt_dispatch_receipt_cannot_replay_effect(tmp_path, monkeypatch, corrupted_receipt):
+    def submit(request):
+        return httpx.Response(200, json={"task": {"id": "task-original", "status": "running"}})
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    context = {"request_id": "corrupt-request", "mode": "code"}
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    Path(first["dispatch"]["outbox_path"]).write_text(json.dumps(corrupted_receipt))
+
+    with pytest.raises(ValueError, match="持久化执行回执必须是对象"):
+        create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+
+
+def test_receipt_lookup_is_user_scoped(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.application.super_employee_service._utc_now", lambda: "2026-01-01T00:00:00Z"
+    )
+
+    def submit(request):
+        raise httpx.ReadTimeout("ack lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    context = {"request_id": "same-client-id", "mode": "code"}
+    create().invoke(user_id=7, message="修复用户七的问题", context=context)
+    create().invoke(user_id=8, message="修复用户八的问题", context=context)
+    create().invoke(user_id=7, message="修复用户七的问题", context=context)
+    create().invoke(user_id=8, message="修复用户八的问题", context=context)
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 2
+
+
+def test_webhook_lost_ack_does_not_fall_through_to_cli(tmp_path, monkeypatch):
+    def submit(request):
+        raise httpx.ConnectError("para was never reached", request=request)
+
+    def webhook(request):
+        raise httpx.ReadTimeout("webhook may have executed", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit, webhook_handler=webhook)
+    context = {"request_id": "webhook-request", "mode": "code"}
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    second = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert first["dispatch"]["status"] == second["dispatch"]["status"] == "dispatch_unknown"
+    assert first["dispatch"]["dispatcher"] == "webhook"
+    assert sum(host == "hook.test" for _, host, _ in requests) == 1
+
+
+def test_safe_local_fallback_is_saved_before_replay(tmp_path, monkeypatch):
+    def not_sent(request):
+        raise httpx.ConnectError("connection never established", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, not_sent, webhook_handler=not_sent)
+    service = create()
+    cli_calls = []
+
+    def reply(*args):
+        cli_calls.append("ran")
+        return "本地任务已完成。", "codex_cli"
+
+    monkeypatch.setattr(service, "_compose_direct_chat_reply", reply)
+    context = {"request_id": "local-request", "mode": "code"}
+    first = service.invoke(user_id=7, message="修复登录问题", context=context)
+    second = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert first["dispatch"]["status"] == second["dispatch"]["status"] == "completed"
+    assert first["dispatch"]["accepted"] is True
+    assert first["dispatch"]["queued"] is False
+    assert second["assistant_message"]["body"] == "本地任务已完成。"
+    assert cli_calls == ["ran"]
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+
+
+def test_malformed_second_ack_retains_first_task_id(tmp_path, monkeypatch):
+    effects = []
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        if len(effects) == 1:
+            return httpx.Response(
+                200, json={"task": {"id": "task-original"}, "subtask": {"id": "sub-1"}}
+            )
+        return httpx.Response(200, json={"unexpected": "response shape"})
+
+    create, requests = _service(tmp_path, monkeypatch, submit, devices=2)
+    context = {"request_id": "malformed-request", "mode": "code", "para_tier": 2}
+    result = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert result["dispatch"]["status"] == "dispatch_unknown"
+    assert result["dispatch"]["task_id"] == "task-original"
+    assert [device["subtask_id"] for device in result["dispatch"]["devices"]] == ["sub-1"]
+    create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert len(effects) == 2
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+def test_streaming_resume_does_not_escape_unknown_remote_dispatch(tmp_path, monkeypatch):
+    def submit(request):
+        raise httpx.ReadTimeout("ack lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    context = {"request_id": "stream-request", "mode": "code"}
+    create().invoke(user_id=7, message="修复登录问题", context=context)
+
+    async def consume():
+        return [
+            event
+            async for event in create().invoke_stream(
+                user_id=7, message="修复登录问题", context=context
+            )
+        ]
+
+    events = asyncio.run(consume())
+    assert events[-1]["result"]["dispatch"]["status"] == "dispatch_unknown"
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+
+
+def _process_dispatch(storage, crash):
+    """Subprocess probe: persist a synthetic side effect, then lose the process/ACK."""
+    storage = Path(storage)
+
+    def submit(request):
+        with (storage / "effects").open("a", encoding="utf-8") as stream:
+            stream.write("created\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        if crash:
+            os._exit(17)
+        return httpx.Response(200, json={"task": {"id": "task-original", "status": "running"}})
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        create, _ = _service(storage, monkeypatch, submit)
+        service = create()
+        # This text would be classified as chat if the explicit code mode or
+        # remote receipt were discarded by historical message backfill.
+        result = service.invoke(
+            user_id=7,
+            message="repair synthetic task",
+            context={"request_id": "process-request", "mode": "code"},
+        )
+        create().list_messages(user_id=7)
+        print(json.dumps({key: result["dispatch"][key] for key in ("status", "request_id")}))
+
+
+def _process_command(storage, *, crash=False):
+    return [
+        sys.executable,
+        "-c",
+        "import runpy, sys; runpy.run_path(sys.argv[1])['_process_dispatch'](sys.argv[2], sys.argv[3] == 'crash')",
+        str(Path(__file__).resolve()),
+        str(storage),
+        "crash" if crash else "normal",
+    ]
+
+
+def test_hard_process_exit_keeps_original_request_non_replayable(tmp_path):
+    first = subprocess.run(
+        _process_command(tmp_path, crash=True), capture_output=True, text=True, timeout=20
+    )
+    assert first.returncode == 17, first.stderr
+    second = subprocess.run(_process_command(tmp_path), capture_output=True, text=True, timeout=20)
+    assert second.returncode == 0, second.stderr
+    assert json.loads(second.stdout) == {
+        "status": "dispatch_unknown",
+        "request_id": "process-request",
+    }
+    assert (tmp_path / "effects").read_text().splitlines() == ["created"]
+
+
+def test_two_processes_replay_accepted_code_request_without_cli_backfill(tmp_path):
+    workers = [
+        subprocess.Popen(
+            _process_command(tmp_path), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        for _ in range(2)
+    ]
+    try:
+        for worker in workers:
+            stdout, stderr = worker.communicate(timeout=20)
+            assert worker.returncode == 0, stderr
+            assert json.loads(stdout) == {"status": "accepted", "request_id": "process-request"}
+    finally:
+        for worker in workers:
+            if worker.poll() is None:
+                worker.kill()
+                worker.wait(timeout=5)
+    assert (tmp_path / "effects").read_text().splitlines() == ["created"]

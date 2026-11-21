@@ -376,9 +376,18 @@ class TestWriteApprovalGateCodeWrite:
         assert result["pending_approval"] is True
         assert result["risk_decision"]["decision"] == "require_human"
 
-    def test_explicit_human_approval_passes(self):
+    def test_user_input_cannot_self_declare_human_approval(self):
         gate = build_write_approval_gate(
             "fhd-core-maintainer", {"human_approved": True, "approved_by": "reviewer"}
+        )
+        result = gate("write_file", {"path": "x.py"})
+        assert not result["ok"]
+        assert result["pending_approval"] is True
+
+    def test_server_human_approval_passes(self):
+        gate = build_write_approval_gate(
+            "fhd-core-maintainer",
+            runtime_context={"human_approved": True, "approved_by": "reviewer"},
         )
         result = gate("write_file", {"path": "x.py"})
         assert result["ok"]

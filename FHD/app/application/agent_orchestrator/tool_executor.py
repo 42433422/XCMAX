@@ -26,6 +26,7 @@ from app.application.tool_execution_deadline import (
     invocation_deadline,
     invocation_requires_reconciliation,
 )
+from app.application.workflow.retry_policy import is_transport_error
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -109,9 +110,11 @@ def _reviewed_query_tenant(
             permission = (
                 "customer.view"
                 if (spec.tool_id, spec.action) in _CUSTOMER_READ_ACTIONS
-                else "shipment.view"
-                if (spec.tool_id, spec.action) in _SHIPMENT_READ_ACTIONS
-                else "product.view"
+                else (
+                    "shipment.view"
+                    if (spec.tool_id, spec.action) in _SHIPMENT_READ_ACTIONS
+                    else "product.view"
+                )
             )
             tenant = check_owned_business_permission(actor, permission)
             if str(context.get("tenant_id")) != str(tenant):
@@ -353,6 +356,16 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action,
             }
+        if validation.spec is not None and validation.spec.availability == "aiopen":
+            # AIOPEN owns key scopes and live screen sessions in its async entry.
+            # Its catalog entry does not bind a handler in this process boundary.
+            return {
+                "success": False,
+                "error_code": "tool_entry_unsupported",
+                "execution_status": "not_started",
+                "retryable": False,
+                "message": "此工具需通过已授权的 AIOPEN 入口执行",
+            }
         from app.application.chat_turn_guard import _is_mutation
 
         guard_policy = str((runtime_context or {}).get("mutation_policy") or "")
@@ -419,7 +432,10 @@ class AgentToolExecutor:
         action = validation.action or step.action
         runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
         runtime_tenant_id: int | None = query_tenant
-        if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
+        if (
+            step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS
+            or (validation.tool_id, action) == ("products", "batch_delete")
+        ) and runtime_tenant_raw not in (None, ""):
             try:
                 if isinstance(runtime_tenant_raw, bool) or not str(runtime_tenant_raw).isdigit():
                     raise ValueError
@@ -530,15 +546,24 @@ class AgentToolExecutor:
                 except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
                     raise
                 except RECOVERABLE_ERRORS as exc:
+                    safe_read_retry = (
+                        validation.spec is not None
+                        and validation.spec.read_only
+                        and is_transport_error(exc)
+                        and not isinstance(
+                            exc, (FileNotFoundError, IsADirectoryError, NotADirectoryError)
+                        )
+                        and not invocation_requires_reconciliation()
+                    )
                     result = {
                         "success": False,
-                        "error_code": "tool_exception",
+                        "error_code": "tool_unavailable" if safe_read_retry else "tool_exception",
                         "message": "工具执行失败",
                         "exception_type": type(exc).__name__,
-                        "outcome": "unknown",
-                        "retryable": False,
-                        "reconciliation_required": True,
+                        "retryable": safe_read_retry,
                     }
+                    if not safe_read_retry:
+                        result.update(outcome="unknown", reconciliation_required=True)
                 finally:
                     if idem_key and not isinstance(result, dict):
                         finish_idempotent_replay(
@@ -584,7 +609,10 @@ class AgentToolExecutor:
             status_value = 0
         if status_value >= 400:
             result = {**result, **classify_http_status(status_value)}
-        empty = reject_empty_business_result(result, action=action)
+        empty = reject_empty_business_result(
+            result,
+            action="read" if validation.spec is not None and validation.spec.read_only else action,
+        )
         if empty is not None:
             result = {**empty, "outcome": "unknown", "reconciliation_required": True}
 
@@ -615,6 +643,27 @@ class AgentToolExecutor:
             }
             if requires_reconciliation:
                 result.update(outcome="unknown", retryable=False, reconciliation_required=True)
+        # Settle the durable receipt with the same trusted uncertainty as the
+        # outer deadline wrapper. A schema-valid employee "success" cannot erase
+        # a lost HTTP response and leave a successful cached receipt behind.
+        # After entering a mutating handler, failure alone is not proof of no
+        # effect (adapters may have caught an exception after commit). Genuine
+        # pre-dispatch validation/authorization refusals returned before claim.
+        if (
+            invocation_requires_reconciliation()
+            or execution_result_requires_reconciliation(result)
+            or (
+                result.get("success") is not True
+                and (validation.spec is None or not validation.spec.read_only)
+            )
+        ):
+            result = {
+                **result,
+                "success": False,
+                "outcome": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
+            }
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)

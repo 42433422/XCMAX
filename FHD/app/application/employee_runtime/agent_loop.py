@@ -168,8 +168,10 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
         return False, "工具返回不是有效 JSON", True
     if not isinstance(payload, dict):
         return False, "工具返回必须是 JSON 对象", True
-    if payload.get("error") or payload.get("ok") is False:
-        return False, str(payload.get("error") or "工具返回失败")[:500], True
+    from app.application.employee_runtime.result_verifier import execution_result_error
+
+    if error := execution_result_error(payload):
+        return False, error[:500], True
     if "success" in payload:
         if payload.get("success") is True:
             return True, None, True
@@ -178,14 +180,6 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
             str(payload.get("error") or payload.get("message") or "工具返回失败")[:500],
             True,
         )
-    if payload.get("requires_token") or payload.get("pending_approval"):
-        return (
-            False,
-            str(payload.get("message") or "工具等待授权")[:500],
-            True,
-        )
-    if payload.get("error"):
-        return False, str(payload.get("error"))[:500], True
     # Older read-only handlers can return data without a success envelope.
     # Preserve their compatibility, but make the weaker proof visible in the
     # trajectory and never use it to justify a side-effect claim.
@@ -289,6 +283,7 @@ def run_employee_agent_loop(
     gate: GateFn | None = None,
     model: str | None = None,
     history: list[dict[str, Any]] | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """运行员工多轮工具循环，返回统一结果 dict。"""
     deadline = time.monotonic() + remaining_invocation_seconds(max(0.001, wall_time_limit_sec))
@@ -623,8 +618,10 @@ def run_employee_agent_loop(
                         args,
                         workspace_root,
                         runtime_context={
+                            **dict(runtime_context or {}),
                             "employee_id": employee_id,
                             "source": "employee_runtime",
+                            "tool_call_id": tc_id,
                         },
                     )
                 if time.monotonic() >= deadline or budget.uncertain:
@@ -657,11 +654,16 @@ def run_employee_agent_loop(
             invalid_receipt = not isinstance(result_payload, dict)
             if invalid_receipt:
                 result_payload = {}
-            state = str(result_payload.get("execution_state") or result_payload.get("status") or "")
+            from app.domain.task_lifecycle.results import (
+                execution_result_requires_reconciliation,
+                execution_result_states,
+            )
+
             unknown = (
                 invalid_receipt
-                or state in {"unknown", "accepted", "pending", "running"}
-                or bool(result_payload.get("reconciliation_required"))
+                or execution_result_requires_reconciliation(result_payload)
+                or bool(execution_result_states(result_payload) & {"timeout", "timed_out"})
+                or result_payload.get("accepted") is True
             )
             tool_success, tool_error, verified = _tool_result_state(str(result_raw))
             if unknown:
@@ -730,7 +732,7 @@ def run_employee_agent_loop(
                     "tool_calls": tool_trace,
                     "trajectory": trajectory,
                     "exit_status": "unknown" if unknown else "tool_failed",
-                    "execution_state": (state or "unknown") if unknown else "failed",
+                    "execution_state": "unknown" if unknown else "failed",
                     "error": tool_error,
                     "retryable": False,
                     "reconciliation_required": unknown,

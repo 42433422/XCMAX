@@ -57,15 +57,28 @@ def _request_fingerprint(tool_id: str, action: str, params: dict[str, Any]) -> s
 
 
 def _assert_reused_run_scope(
-    run: AgentRun, *, user_id: str, tenant_id: str, runtime_context: dict[str, Any] | None
+    run: AgentRun,
+    *,
+    user_id: str,
+    tenant_id: str,
+    runtime_context: dict[str, Any] | None,
 ) -> None:
-    previous_context = run.metadata.get("runtime_context") or {}
-    previous_binding = previous_context.get("_mod_authorization") or {}
-    requested_binding = (runtime_context or {}).get("_mod_authorization") or {}
+    from app.application.agent_orchestrator.approval_grant import (
+        authorization_scope_hash,
+    )
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+    scope = dict(runtime_context or {})
+    if not isinstance(scope.get("_actor_authorization"), dict):
+        scope["user_id"] = user_id
     if (
         run.user_id != user_id
         or tenant_id_of_run(run) != tenant_id
-        or previous_binding.get("mod_id", "") != requested_binding.get("mod_id", "")
+        or run.metadata.get("execution_authorization_scope") != authorization_scope_hash(scope)
+        or any(
+            actor_tool_denial(step.tool_id, step.action, scope, step.params) is not None
+            for step in run.steps
+        )
     ):
         raise UnifiedTaskConflictError("task_id 已绑定到不同的账号或 Mod 范围")
 
@@ -96,7 +109,13 @@ def create_unified_task(
         raise UnifiedTaskError(validation.message or "任务工具未注册")
 
     fingerprint = _request_fingerprint(spec.tool_id, spec.action, params)
-    tenant_id = str((runtime_context or {}).get("tenant_id") or "")
+    context = dict(runtime_context or {})
+    # Use the same server defaults before both creation and idempotent lookup.
+    if not str(context.get("conversation_id") or context.get("session_id") or "").strip():
+        context["conversation_id"] = normalized_task_id
+    if not str(context.get("workspace_id") or context.get("workspace") or "").strip():
+        context["workspace_id"] = normalized_task_id
+    tenant_id = str(context.get("tenant_id") or "")
     task = orchestrator.get_task(
         user_id=user_id,
         task_id=normalized_task_id,
@@ -117,7 +136,7 @@ def create_unified_task(
         if previous is None:
             raise UnifiedTaskError("任务账本缺少执行记录")
         _assert_reused_run_scope(
-            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=runtime_context
+            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=context
         )
         return UnifiedTaskResult(run=previous, deduplicated=True)
 
@@ -131,7 +150,7 @@ def create_unified_task(
     if existing:
         previous = existing[-1]
         _assert_reused_run_scope(
-            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=runtime_context
+            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=context
         )
         previous_fingerprint = str(previous.metadata.get("task_request_fingerprint") or "")
         if not previous_fingerprint and not previous.tool_calls and previous.steps:
@@ -148,14 +167,6 @@ def create_unified_task(
 
     normalized_title = str(title or message or f"任务 {normalized_task_id[-8:]}").strip()[:80]
     normalized_message = str(message or normalized_title).strip()[:2000]
-    context = dict(runtime_context or {})
-    # Every durable task is also an addressable conversation workspace.  Chat-created
-    # tasks keep their caller-provided session; non-chat entry points receive a stable
-    # task-scoped conversation instead of falling back to the last global chat.
-    if not str(context.get("conversation_id") or context.get("session_id") or "").strip():
-        context["conversation_id"] = normalized_task_id
-    if not str(context.get("workspace_id") or context.get("workspace") or "").strip():
-        context["workspace_id"] = normalized_task_id
     context.update(
         {
             "task_id": normalized_task_id,

@@ -6,11 +6,19 @@ from __future__ import annotations
 import importlib
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from modstore_server.script_agent.brief import AgentEvent, Brief
+from modstore_server.customer_issue_delivery_contract import (
+    execution_requires_reconciliation,
+    execution_succeeded,
+)
+from modstore_server.employee_executor_policies import execution_blocks_redispatch
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.script_agent.agent_loop import AgentLoopOutcome, _outcome_dict
+from modstore_server.script_agent.brief import AgentEvent, Brief, PlanResult, Verdict
 from modstore_server.script_agent.llm_client import (
     SCRIPT_AGENT_CODE_MAX_TOKENS,
     LlmClient,
 )
+from modstore_server.script_agent.observer import judge
 from modstore_server.script_agent.sandbox_runner import run_in_sandbox
 
 DEFAULT_MAX_ITERATIONS = 4
@@ -63,7 +71,7 @@ async def run_agent_loop_v2(
             yield ev
         return
 
-    async def _maybe_await(value: _facade().Any) -> _facade().Any:
+    async def _maybe_await(value: Any) -> Any:
         import inspect as _inspect
 
         if _inspect.isawaitable(value):
@@ -85,7 +93,7 @@ async def run_agent_loop_v2(
             return str(result or "")
 
     ctx = await _facade().collect_context(brief, user_id=user_id, upload_items=files)
-    yield _facade().AgentEvent(
+    yield AgentEvent(
         "context",
         0,
         {
@@ -99,6 +107,11 @@ async def run_agent_loop_v2(
     from vibe_coding.agent.react.tools import ToolRegistry, tool
 
     reg = ToolRegistry()
+    outcome = AgentLoopOutcome(
+        ok=False, iterations=0, plan_md=ctx.brief_md or brief.goal or "", trace=trace
+    )
+    executed_code = ""
+    replay_blocked = ""
 
     @tool(
         "static_check",
@@ -109,13 +122,62 @@ async def run_agent_loop_v2(
         return {"ok": not errs, "errors": errs}
 
     async def _run_sandbox(code: str) -> dict:
-        res = await sandbox_runner(
-            user_id=user_id,
-            session_id=f"{session_id}_v2",
-            script_text=code,
-            files=files,
-            **sandbox_kwargs,
-        )
+        nonlocal executed_code, replay_blocked
+        if replay_blocked:
+            outcome.error = replay_blocked
+            outcome.last_verdict = Verdict(ok=False, reason=replay_blocked)
+            return {
+                "ok": False,
+                "outcome": "unverified",
+                "retryable": False,
+                "errors": [replay_blocked],
+            }
+        # Keep evidence in this trusted tool closure. Model answers and tool
+        # event payloads cannot create a successful execution receipt.
+        executed_code = code.strip()
+        outcome.last_result = outcome.last_verdict = None
+        outcome.error = ""
+        errs = _facade().validate_script(code)
+        if errs:
+            outcome.error = "static_check: " + "; ".join(errs)
+            return {"ok": False, "errors": errs}
+        try:
+            res = await sandbox_runner(
+                user_id=user_id,
+                session_id=f"{session_id}_v2",
+                script_text=code,
+                files=files,
+                **sandbox_kwargs,
+            )
+            outcome.last_result = res
+            calls = res.sdk_calls
+            employee_calls = [call for call in calls if call.get("method") == "employee_run"]
+            if (
+                res.timed_out
+                or employee_calls
+                or any(execution_blocks_redispatch(call) for call in calls)
+            ):
+                # SDK calls may outlive a timed-out subprocess, and the legacy
+                # RPC log lacks their business receipts. Never start them again.
+                replay_blocked = "sandbox execution requires reconciliation before another run"
+            if any(execution_requires_reconciliation(call) for call in calls) or any(
+                not execution_succeeded(call.get("result")) for call in employee_calls
+            ):
+                outcome.last_verdict = Verdict(
+                    ok=False, reason="employee execution has no confirmed business receipt"
+                )
+            else:
+                outcome.last_verdict = await judge(
+                    brief, PlanResult(plan_md=outcome.plan_md), res, llm=llm
+                )
+        except RECOVERABLE_ERRORS as exc:
+            if outcome.last_result is None:
+                replay_blocked = (
+                    "sandbox execution outcome is unknown; reconcile before another run"
+                )
+            outcome.error = f"sandbox validation: {exc}"
+            outcome.last_verdict = Verdict(ok=False, reason=outcome.error)
+            return {"ok": False, "errors": [outcome.error], "retryable": False}
         return {
             "ok": res.ok,
             "returncode": res.returncode,
@@ -123,6 +185,7 @@ async def run_agent_loop_v2(
             "stderr": res.stderr[-3000:],
             "outputs": res.outputs,
             "timed_out": res.timed_out,
+            "verdict": _outcome_dict(outcome)["last_verdict"],
         }
 
     @tool(
@@ -135,7 +198,7 @@ async def run_agent_loop_v2(
     reg.register(static_check_tool)
     reg.register(run_sandbox_tool)
     goal = f"Write Python code for this task and validate it:\n\n{ctx.brief_md or brief.goal}\n\nAcceptance: {brief.acceptance}\n\nSteps:\n1. Generate code\n2. Call static_check; fix errors if any\n3. Call run_sandbox with the code; fix if returncode != 0 or no outputs\n4. When sandbox ok=true and acceptance is met, give final_answer with the code."
-    yield _facade().AgentEvent("plan", 0, {"plan_md": ctx.brief_md or brief.goal or ""})
+    yield AgentEvent("plan", 0, {"plan_md": ctx.brief_md or brief.goal or ""})
     trace.append({"phase": "plan", "iteration": 0, "engine": "v2"})
     agent_loop = AgentLoop(
         _LLMBridge(),
@@ -148,11 +211,18 @@ async def run_agent_loop_v2(
     )
     final_code = ""
     last_iteration = 0
-    final_outcome: Dict[str, Any] = {}
     run_id = f"script-{session_id}"
-    events_seen = 0
+
+    def finish(*, ok: bool = False, error: str = "") -> Dict[str, Any]:
+        outcome.ok, outcome.error = ok, error
+        outcome.iterations, outcome.final_code = last_iteration + 1, final_code
+        return {
+            **_outcome_dict(outcome),
+            "outcome": "success" if ok else "unverified",
+            "retryable": False,
+        }
+
     async for v2ev in agent_loop.arun(goal, run_id=run_id):
-        events_seen += 1
         evtype = v2ev.type if isinstance(v2ev.type, str) else v2ev.type.value
         payload = v2ev.payload or {}
         if evtype == "tool_call_end":
@@ -164,25 +234,17 @@ async def run_agent_loop_v2(
                 if isinstance(out, dict):
                     errs = list(out.get("errors") or [])
                 ok = not errs
-                yield _facade().AgentEvent("check", it, {"ok": ok, "errors": errs})
+                yield AgentEvent("check", it, {"ok": ok, "errors": errs})
                 trace.append({"phase": "check", "iteration": it, "errors": errs, "engine": "v2"})
                 last_iteration = it
             elif tname == "run_sandbox":
-                out = payload.get("output") or {}
-                if isinstance(out, dict):
-                    ok = bool(out.get("ok"))
-                    yield _facade().AgentEvent(
+                receipt = _outcome_dict(outcome)
+                out = receipt["last_result"]
+                if out is not None:
+                    yield AgentEvent(
                         "run",
                         it,
-                        {
-                            "ok": ok,
-                            "returncode": out.get("returncode"),
-                            "stdout_tail": out.get("stdout", ""),
-                            "stderr_tail": out.get("stderr", ""),
-                            "outputs": out.get("outputs") or [],
-                            "timed_out": bool(out.get("timed_out")),
-                            "sdk_calls": [],
-                        },
+                        out,
                     )
                     trace.append(
                         {
@@ -191,6 +253,12 @@ async def run_agent_loop_v2(
                             "engine": "v2",
                             "returncode": out.get("returncode"),
                         }
+                    )
+                if receipt["last_verdict"] is not None:
+                    verdict = receipt["last_verdict"]
+                    yield AgentEvent("observe", it, verdict)
+                    trace.append(
+                        {"phase": "observe", "iteration": it, "verdict": verdict, "engine": "v2"}
                     )
                 last_iteration = it
         elif evtype == "final_answer":
@@ -201,43 +269,50 @@ async def run_agent_loop_v2(
                 m = _re.search("```python\\n(.*?)```", final_code, _re.DOTALL)
                 if m:
                     final_code = m.group(1).strip()
-            final_outcome = {
-                "ok": True,
-                "iterations": last_iteration + 1,
-                "final_code": final_code,
-                "plan_md": ctx.brief_md or "",
-                "trace": trace,
-                "error": "",
-            }
-            yield _facade().AgentEvent(
+            final_code = final_code.strip()
+            result, verdict = outcome.last_result, outcome.last_verdict
+            verified = bool(
+                final_code
+                and final_code == executed_code
+                and result is not None
+                and result.ok is True
+                and type(result.returncode) is int
+                and result.returncode == 0
+                and result.timed_out is False
+                and isinstance(result.outputs, list)
+                and result.outputs
+                and verdict is not None
+                and verdict.ok is True
+            )
+            if not verified or result is None:
+                reason = (
+                    "final_answer does not match the latest sandbox code"
+                    if final_code != executed_code
+                    else outcome.error
+                    or (verdict.reason if verdict is not None else "")
+                    or "final_answer has no successful sandbox and acceptance receipt"
+                )
+                yield AgentEvent(
+                    "error", last_iteration, {"reason": reason, "outcome": finish(error=reason)}
+                )
+                return
+            yield AgentEvent(
                 "done",
                 last_iteration,
-                {"code": final_code, "outputs": [], "outcome": final_outcome},
+                {"code": final_code, "outputs": result.outputs, "outcome": finish(ok=True)},
             )
             return
         elif evtype == "error":
             reason = str(payload.get("reason") or "agent v2 error")
-            final_outcome = {
-                "ok": False,
-                "iterations": last_iteration + 1,
-                "final_code": final_code,
-                "trace": trace,
-                "error": reason,
-            }
-            yield _facade().AgentEvent(
-                "error", last_iteration, {"reason": reason, "outcome": final_outcome}
+            yield AgentEvent(
+                "error", last_iteration, {"reason": reason, "outcome": finish(error=reason)}
             )
             return
-    yield _facade().AgentEvent(
+    yield AgentEvent(
         "error",
         last_iteration,
         {
             "reason": "agent_loop_v2: no final answer produced",
-            "outcome": {
-                "ok": False,
-                "iterations": last_iteration,
-                "trace": trace,
-                "error": "no answer",
-            },
+            "outcome": finish(error="no answer"),
         },
     )

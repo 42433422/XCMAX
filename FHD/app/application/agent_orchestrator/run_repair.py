@@ -5,11 +5,18 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_repository import AgentRunRepository
 from app.application.agent_orchestrator.run_usage import RunUsageLedger
 from app.application.agent_orchestrator.runtime_dependencies import RuntimeDependencies
+from app.application.employee_runtime.result_verifier import (
+    execution_result_requires_reconciliation,
+)
+from app.domain.task_lifecycle.results import execution_result_envelopes, execution_result_states
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+_MAX_REPAIR_ATTEMPTS = 4
 
 
 class RunRepair:
@@ -30,9 +37,7 @@ class RunRepair:
         *,
         runtime_context: dict[str, Any],
     ) -> bool:
-        if run.metadata.get("non_retryable") or (step.output or {}).get("retryable") is False:
-            return False
-        if str((step.output or {}).get("error_code") or "") == "tool_billing_blocked":
+        if self.requires_reconciliation(run, step):
             return False
         if not self.can_auto_execute(step):
             return False
@@ -40,11 +45,13 @@ class RunRepair:
             override = self.repair_override_for_step(step, overrides)
             if override is None:
                 continue
-            limit = (
+            limit = min(
+                _MAX_REPAIR_ATTEMPTS,
                 self.coerce_positive_int(override.get("max_attempts"))
                 or step.max_repair_attempts
-                or 1
+                or 1,
             )
+            limit = self._limit_from_tool_spec(step, limit)
             if limit <= 0 or len(step.repair_history) >= limit:
                 return False
             params_patch = self.params_patch_from_repair(override)
@@ -130,11 +137,16 @@ class RunRepair:
         # A repair can change business parameters. Keep that capability limited to
         # actions that the server independently marked low-risk and idempotent;
         # a prior human approval never authorizes a different repaired payload.
+        if self.requires_reconciliation(run, step):
+            return False
         if not self.can_auto_execute(step):
             return False
         if not self.dependencies.repair_enabled(run, runtime_context):
             return False
-        limit = self.dependencies.repair_limit(run, step, runtime_context)
+        limit = min(
+            _MAX_REPAIR_ATTEMPTS, self.dependencies.repair_limit(run, step, runtime_context)
+        )
+        limit = self._limit_from_tool_spec(step, limit)
         if limit <= 0 or len(step.repair_history) >= limit:
             return False
         run.add_event(
@@ -242,12 +254,48 @@ class RunRepair:
         return True
 
     @staticmethod
+    def requires_reconciliation(run: AgentRun, step: AgentStep) -> bool:
+        output = step.output or {}
+        return bool(
+            requires_retry_reconciliation(run)
+            or output.get("retryable") is False
+            or output.get("error_code") == "tool_billing_blocked"
+            or execution_result_requires_reconciliation(output)
+            or any(
+                execution_result_states(item) & {"timeout", "timed_out"}
+                or "unknown" in str(item.get("error_code") or "").lower()
+                for item in execution_result_envelopes(output)
+            )
+        )
+
+    @staticmethod
     def coerce_positive_int(value: Any) -> int:
         try:
             parsed = int(value or 0)
         except (TypeError, ValueError):
             return 0
         return max(parsed, 0)
+
+    def _limit_from_tool_spec(self, step: AgentStep, limit: int) -> int:
+        """Cap existing repair ownership; never create another retry loop/counter."""
+        if limit <= 0 or len(step.repair_history) >= limit:
+            return 0
+        spec = self.dependencies.action_spec(step.tool_id, step.action)
+        if spec is None:
+            return limit
+        policy = spec.retry
+        if not isinstance(policy, dict):
+            return 0
+        total = policy.get("max_attempts", 0)
+        # Only the historical integer zero means unspecified. Malformed explicit
+        # server policies fail closed, without coercing booleans or fractions.
+        if type(total) is not int or total < 0:
+            return 0
+        if total == 0:
+            return limit
+        if step.attempt_count >= total:
+            return 0
+        return min(limit, total - 1)
 
     def apply_repair_policy(self, run: AgentRun, plan_metadata: dict[str, Any]) -> None:
         repair_policy = plan_metadata.get("repair_policy")
@@ -263,8 +311,12 @@ class RunRepair:
             node_limit = self.coerce_positive_int(node_policy.get("max_attempts"))
             has_override = self.repair_override_for_step(step, overrides) is not None
             has_llm_repair = self.dependencies.repair_enabled(run, plan_metadata)
-            step.max_repair_attempts = (
-                node_limit or global_limit or (1 if has_override or has_llm_repair else 0)
+            step.max_repair_attempts = self._limit_from_tool_spec(
+                step,
+                min(
+                    _MAX_REPAIR_ATTEMPTS,
+                    node_limit or global_limit or (1 if has_override or has_llm_repair else 0),
+                ),
             )
 
     @staticmethod

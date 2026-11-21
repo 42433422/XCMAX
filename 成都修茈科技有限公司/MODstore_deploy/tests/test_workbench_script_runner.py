@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from modstore_server.workbench_script_runner import (
     _looks_like_non_python,
     run_script_agent_job,
@@ -541,6 +543,111 @@ def test_run_script_agent_job_adapts_agent_loop_failure(tmp_path, monkeypatch):
     assert result["ok"] is False
     assert "脚本代理运行 3 轮仍未通过" in "；".join(result["errors"])
     assert result["script"] == "print('bad')"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "verified",
+        "missing_receipts",
+        "unverified_no_outputs",
+        "unverified_timeout",
+        "legacy_no_outputs",
+        "legacy_timeout",
+        "invalid_outputs",
+        "missing_timeout",
+        "boolean_returncode",
+        "missing_code",
+        "zero_rc_failed",
+    ],
+)
+def test_v2_workbench_requires_receipts_and_never_salvages_unverified(tmp_path, monkeypatch, case):
+    import modstore_server.workbench_script_runner as runner
+    from modstore_server.script_agent.brief import AgentEvent
+
+    receipt = {
+        "ok": True,
+        "returncode": 0,
+        "stdout_tail": "done",
+        "stderr_tail": "",
+        "outputs": [{"filename": "result.txt", "path": str(tmp_path / "result.txt")}],
+        "errors": [],
+        "timed_out": False,
+        "sdk_calls": [],
+        "work_dir": str(tmp_path),
+    }
+    outcome = {
+        "ok": True,
+        "iterations": 1,
+        "final_code": "print('ok')",
+        "last_result": receipt,
+        "last_verdict": {"ok": True, "reason": "accepted"},
+        "trace": [],
+        "error": "",
+    }
+    if case == "missing_receipts":
+        outcome.pop("last_result")
+        outcome.pop("last_verdict")
+    elif case in {"unverified_no_outputs", "legacy_no_outputs"}:
+        outcome["ok"], receipt["outputs"] = False, []
+    elif case in {"unverified_timeout", "legacy_timeout"}:
+        outcome["ok"], receipt["ok"], receipt["timed_out"] = False, False, True
+        receipt["returncode"], receipt["outputs"] = -1, []
+    elif case == "invalid_outputs":
+        receipt["outputs"] = "not-a-list"
+    elif case == "missing_timeout":
+        receipt.pop("timed_out")
+    elif case == "boolean_returncode":
+        receipt["returncode"] = False
+    elif case == "missing_code":
+        outcome["final_code"] = ""
+    elif case == "zero_rc_failed":
+        outcome["ok"], receipt["ok"] = False, False
+    if case.startswith("unverified"):
+        outcome.update(outcome="unverified", retryable=False)
+
+    async def fake_loop(*args, **kwargs):
+        yield AgentEvent("done" if outcome["ok"] else "error", 0, {"outcome": outcome})
+
+    fallback_calls, messages = [], []
+
+    def fallback(**kwargs):
+        fallback_calls.append(kwargs)
+        return [{"filename": "summary.md"}]
+
+    async def notify(message):
+        messages.append(message)
+
+    monkeypatch.setattr(runner, "_AGENT_V2", True)
+    monkeypatch.setattr(runner, "run_agent_loop_v2", fake_loop)
+    monkeypatch.setattr(runner, "SCRIPT_ROOT", tmp_path)
+    monkeypatch.setattr(runner, "resolve_api_key", lambda *args, **kwargs: ("key", "test"))
+    monkeypatch.setattr(
+        runner, "resolve_base_url", lambda *args, **kwargs: "https://example.test/v1"
+    )
+    monkeypatch.setattr(runner, "_materialize_fallback_output", fallback)
+    result = asyncio.run(
+        run_script_agent_job(
+            db=object(),
+            user_id=1,
+            session_id="v2-receipt",
+            brief="write result",
+            files=[],
+            provider="deepseek",
+            model="deepseek-chat",
+            status_hook=notify,
+        )
+    )
+    assert result["ok"] is (case == "verified")
+    assert not fallback_calls
+    assert any("通过验收" in message for message in messages) is (case == "verified")
+    if case != "verified":
+        assert result["outcome"] == "unverified" and result["retryable"] is False
+        assert result["agent_outcome"]["ok"] is False and result["errors"]
+    if case in {"unverified_timeout", "legacy_timeout"}:
+        assert result["timed_out"] is True and result["returncode"] == -1
+    if case == "zero_rc_failed":
+        assert result["returncode"] == 0
 
 
 def _xlsx_bytes() -> bytes:

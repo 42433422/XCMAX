@@ -239,16 +239,45 @@ async def run_script_agent_job(
                 await _notify(f"第 {it} 轮：验收未通过 — {hint}（准备回修）")
         elif typ == "done":
             final_outcome = payload.get("outcome") or {}
-            await _notify(f"代理在第 {it} 轮通过验收，准备落库")
             break
         elif typ == "error":
             final_outcome = payload.get("outcome") or final_outcome
             error_reason = str(
                 payload.get("reason") or final_outcome.get("error") or "脚本代理失败"
             )
-    last_result = final_outcome.get("last_result") if isinstance(final_outcome, dict) else None
+    final_outcome = final_outcome if isinstance(final_outcome, dict) else {}
+    last_result = final_outcome.get("last_result")
     last_result = last_result if isinstance(last_result, dict) else {}
-    ok = bool(final_outcome.get("ok")) if isinstance(final_outcome, dict) else False
+    ok = final_outcome.get("ok") is True
+    unverified = final_outcome.get("outcome") == "unverified" or (
+        not ok and final_outcome.get("retryable") is False
+    )
+    if _loop_label == "v2":
+        verdict = final_outcome.get("last_verdict")
+        unverified = unverified or not (
+            ok
+            and last_result.get("ok") is True
+            and type(last_result.get("returncode")) is int
+            and last_result["returncode"] == 0
+            and last_result.get("timed_out") is False
+            and isinstance(last_result.get("outputs"), list)
+            and last_result["outputs"]
+            and isinstance(final_outcome.get("final_code"), str)
+            and final_outcome["final_code"].strip()
+            and isinstance(verdict, dict)
+            and verdict.get("ok") is True
+        )
+    if unverified:
+        ok = False
+        final_outcome = {
+            **final_outcome,
+            "ok": False,
+            "outcome": "unverified",
+            "retryable": False,
+            "error": final_outcome.get("error") or "缺少有效的沙箱与验收回执",
+        }
+    elif ok:
+        await _notify(f"代理在第 {int(final_outcome.get('iterations') or 1)} 轮通过验收，准备落库")
     script = str(final_outcome.get("final_code") or "") if isinstance(final_outcome, dict) else ""
     outputs = last_result.get("outputs") if isinstance(last_result.get("outputs"), list) else []
     errors: List[str] = []
@@ -278,7 +307,8 @@ async def run_script_agent_job(
             parts.append(f"最后产物数：{len(last_outputs)}")
         errors = [" | ".join(parts)[:1500]]
         no_output_failure = (
-            not outputs
+            not unverified
+            and not outputs
             and int(last_result.get("returncode") or 0) == 0
             and (
                 "没有产物" in (verdict_reason or reason)
@@ -302,7 +332,7 @@ async def run_script_agent_job(
                 last_result["stdout_tail"] = (
                     str(last_result.get("stdout_tail") or "") + "\n已生成兜底 outputs/summary.md"
                 ).strip()
-        timeout_failure = not ok and bool(last_result.get("timed_out"))
+        timeout_failure = not unverified and not ok and bool(last_result.get("timed_out"))
         if timeout_failure:
             fallback_outputs = _facade()._materialize_fallback_output(
                 work_dir=str(last_result.get("work_dir") or ""),
@@ -327,10 +357,16 @@ async def run_script_agent_job(
         "script": script,
         "stdout": str(last_result.get("stdout_tail") or ""),
         "stderr": str(last_result.get("stderr_tail") or ""),
-        "returncode": int(last_result.get("returncode") or (0 if ok else -1)),
+        "returncode": (
+            int(last_result["returncode"])
+            if last_result.get("returncode") is not None
+            else (0 if ok else -1)
+        ),
         "outputs": outputs,
         "errors": errors,
         "sdk_calls": last_result.get("sdk_calls") or [],
+        "timed_out": bool(last_result.get("timed_out")),
         "repair_trace": trace,
         "agent_outcome": final_outcome,
+        **{key: final_outcome[key] for key in ("outcome", "retryable") if key in final_outcome},
     }

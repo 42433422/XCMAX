@@ -404,6 +404,7 @@ def continue_agent_run(
                     principal_id=principal.user_id,
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
             else:
                 durable = False
@@ -415,6 +416,7 @@ def continue_agent_run(
                     current,
                     principal_id=principal.user_id,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
                 claims = consume_approval_grant(
                     str(data.get("approval_grant") or ""),
@@ -427,6 +429,8 @@ def continue_agent_run(
                     approved_step_id=str(claims["step_id"]),
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
+                    approval_claims=claims,
                 )
         if run is None:
             return JSONResponse(
@@ -491,6 +495,7 @@ def _control_agent_run(
                     principal_id=principal.user_id,
                     runtime_context=runtime_context or {},
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
                 durable_resume = True
             else:
@@ -499,6 +504,7 @@ def _control_agent_run(
                     requested_by=principal.user_id,
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
         if run is None:
             return JSONResponse(
@@ -607,6 +613,7 @@ def retry_agent_run(
                 requested_by=principal.user_id,
                 auto_execute=False,
                 authenticated_binding=principal.mod_authorization,
+                authenticated_actor_binding=principal.actor_authorization,
             )
             if retried is not None and retried.status == "queued":
                 if isinstance(get_agent_run_repository(), SQLAlchemyAgentRunRepository):

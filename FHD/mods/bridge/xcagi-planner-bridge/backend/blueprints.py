@@ -95,21 +95,15 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return {"success": True, "data": data}
 
     @router.post("/tools/execute")
-    def mod_tools_execute(body: dict | None = Body(default=None)):
+    def mod_tools_execute(request: Request, body: dict | None = Body(default=None)):
         from fastapi.responses import JSONResponse
 
-        from app.mod_sdk.planner_compat import execute_planner_tool
+        from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
-        data = execute_planner_tool(body)
+        data, code = run_tools_execute_agent(
+            request=request, body=body or {}, route_path=str(request.url.path)
+        )
         ok = bool(data.get("success"))
-        code = 200 if ok else 400
-        if not ok:
-            data = {
-                "success": False,
-                "error": "工具执行失败，请检查输入后重试",
-                "error_code": str(data.get("error_code") or "planner_tool_failed")[:64],
-                "tool_name": str(data.get("tool_name") or "")[:128],
-            }
         return JSONResponse({"success": ok, "data": data}, status_code=code)
 
     @router.get("/host-capabilities")

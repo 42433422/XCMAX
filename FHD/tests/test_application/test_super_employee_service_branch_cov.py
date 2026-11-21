@@ -512,7 +512,8 @@ class TestInvoke:
             patch.object(svc, "_compose_direct_chat_reply", return_value=("兜底答案", "codex_cli")),
         ):
             result = svc.invoke(user_id=1, message="修复 bug", context={"mode": "code"})
-        assert result["dispatch"]["accepted"] is False
+        assert result["dispatch"]["accepted"] is True
+        assert result["dispatch"]["queued"] is False
         assert result["dispatch"]["fallback"] == "codex_cli"
         assert "兜底答案" in result["assistant_message"]["body"]
 

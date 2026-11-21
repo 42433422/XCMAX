@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from functools import lru_cache
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,10 @@ def is_planner_native_tools_enabled() -> bool:
 def _discover_native_tool_mods() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
-        from app.infrastructure.mods.mod_manager import get_mod_manager, is_mods_disabled
+        from app.infrastructure.mods.mod_manager import (
+            get_mod_manager,
+            is_mods_disabled,
+        )
 
         if is_mods_disabled():
             return rows
@@ -125,39 +129,63 @@ def try_execute_native_planner_tool(
             continue
         mod_id = str(row.get("mod_id") or "")
         mod_path = str(row.get("mod_path") or "")
-        if not mod_path:
-            continue
+        handler_started = False
         try:
+            if not mod_path:
+                raise ValueError("Registered native tool has no module path")
             mod = _load_handler_module(mod_path, mod_id)
             fn = getattr(mod, "run_native_tool", None)
             if not callable(fn):
-                continue
-            try:
-                out = fn(
-                    tool,
-                    args,
-                    workspace_root=workspace_root,
-                    db_write_token=db_write_token,
-                    runtime_context=runtime_context,
+                raise ValueError("Registered native tool has no executable handler")
+            kwargs: dict[str, Any] = {
+                "workspace_root": workspace_root,
+                "db_write_token": db_write_token,
+            }
+            signature = inspect.signature(fn)
+            if "runtime_context" in signature.parameters or any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in signature.parameters.values()
+            ):
+                kwargs["runtime_context"] = runtime_context
+            elif runtime_context:
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "error_code": "tool_context_unsupported",
+                            "retryable": False,
+                            "execution_status": "not_started",
+                            "message": "模块工具尚不支持传递当前授权上下文",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    mod_id,
                 )
-            except TypeError as error:
-                if "runtime_context" not in str(error):
-                    raise
-                # 旧版 Mod 处理器没有 runtime_context 形参，退回到原调用签名。
-                out = fn(
-                    tool,
-                    args,
-                    workspace_root=workspace_root,
-                    db_write_token=db_write_token,
-                )
+            # Inspect compatibility before execution. Retrying a TypeError from
+            # inside a handler can repeat a write which already completed.
+            signature.bind(tool, args, **kwargs)
+            handler_started = True
+            out = fn(tool, args, **kwargs)
             if out is None:
-                continue
+                raise ValueError("Registered native tool returned no execution receipt")
             return str(out), mod_id
-        except RECOVERABLE_ERRORS:
+        except BOUNDARY_ERRORS:
+            # A plugin may raise a programming error after a side effect. This
+            # isolation boundary must retain that unknown result, never call a
+            # second handler or retry with fewer authorization arguments.
             logger.exception("native planner tool failed mod=%s tool=%s", mod_id, tool)
             return (
                 json.dumps(
-                    {"success": False, "error": "native_tool_failed", "mod_id": mod_id},
+                    {
+                        "success": False,
+                        "error": "native_tool_failed",
+                        "error_code": "native_tool_failed",
+                        "mod_id": mod_id,
+                        "outcome": "unknown" if handler_started else "not_started",
+                        "execution_status": ("unknown" if handler_started else "not_started"),
+                        "retryable": False,
+                        "reconciliation_required": handler_started,
+                    },
                     ensure_ascii=False,
                 ),
                 mod_id,

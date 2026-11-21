@@ -55,6 +55,7 @@ def run_agent_handler(
     tools: list[dict[str, Any]] | None = None,
     gate: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
     max_iterations: int | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """委托多轮 function-calling 循环执行 agent handler。
 
@@ -98,6 +99,7 @@ def run_agent_handler(
         wall_time_limit_sec=max(1.0, wall_time_limit_sec),
         repeat_limit=max(2, repeat_limit),
         history=history,
+        runtime_context=runtime_context,
     )
 
 

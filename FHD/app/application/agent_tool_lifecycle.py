@@ -745,7 +745,12 @@ def invoke_tool(
             at, _at_sh = _now()
             result = {
                 "ok": True,
-                "success": True,
+                "success": False,
+                "execution_status": "not_started",
+                "validation_status": "validated",
+                "error_code": "tool_execution_unbound",
+                "retryable": False,
+                "message": "工具定义已校验，但尚未绑定可执行实现，未执行业务操作",
                 "call_id": call_id,
                 "tool_id": row["id"],
                 "version_id": version["id"],
@@ -757,7 +762,7 @@ def invoke_tool(
                 INSERT INTO calls (
                   id, tenant_id, tool_id, version_id, definition_json, args_json, status,
                   actor_id, employee_id, started_at, finished_at, result_json
-                ) VALUES (?, ?, ?, ?, ?, ?, 'ok', ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, 'validated', ?, ?, ?, ?, ?)
                 """,
                 (
                     call_id,
@@ -798,9 +803,10 @@ def finish_call(actor: Actor, call_id: str) -> dict[str, Any]:
     try:
         with _tx(conn):
             row = conn.execute(
-                "SELECT * FROM calls WHERE id = ? AND tenant_id = ?", (call_id, actor.tenant_id)
+                "SELECT * FROM calls WHERE id = ? AND tenant_id = ?",
+                (call_id, actor.tenant_id),
             ).fetchone()
-            if row is None or row["status"] not in {"inflight", "ok"}:
+            if row is None or row["status"] not in {"inflight", "validated"}:
                 raise ToolLifecycleError("unknown_call", "调用不存在", 404)
             if actor.role != "admin" and row["actor_id"] != actor.actor_id:
                 raise ToolLifecycleError("unknown_call", "调用不存在", 404)
@@ -809,16 +815,20 @@ def finish_call(actor: Actor, call_id: str) -> dict[str, Any]:
             validated = json.loads(row["args_json"])
             result = {
                 "ok": True,
-                "success": True,
+                "success": False,
+                "execution_status": "not_started",
+                "validation_status": "validated",
+                "error_code": "tool_execution_unbound",
+                "retryable": False,
                 "call_id": row["id"],
                 "tool_id": row["tool_id"],
                 "version_id": row["version_id"],
                 "validated": validated,
                 "definition": definition,
-                "status": "ok",
+                "status": "validated",
             }
             conn.execute(
-                "UPDATE calls SET status = 'ok', finished_at = ?, result_json = ? WHERE id = ?",
+                "UPDATE calls SET status = 'validated', finished_at = ?, result_json = ? WHERE id = ?",
                 (at, _dumps(result), call_id),
             )
     finally:

@@ -63,7 +63,7 @@ class EmployeeAgent:
         manifest: dict[str, Any],
         config: dict[str, Any],
         workspace_root: str | None,
-        input_data: dict[str, Any] | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ) -> Any:
         """任一必需授权门初始化失败时拒绝执行。"""
         try:
@@ -77,7 +77,7 @@ class EmployeeAgent:
 
             return compose_gates(
                 build_employee_gate(self.employee_id, manifest, config, workspace_root),
-                build_write_approval_gate(self.employee_id, input_data),
+                build_write_approval_gate(self.employee_id, runtime_context=runtime_context),
             )
         except RECOVERABLE_ERRORS:
             logger.exception("employee authorization initialization failed closed")
@@ -297,7 +297,7 @@ class EmployeeAgent:
             handler_list = _ex._handler_list(actions_cfg)
             upstream: dict[str, Any] | None = None
 
-            gate = gate_action_or_block(employee_id, manifest, handler_list, payload)
+            gate = gate_action_or_block(employee_id, manifest, handler_list, trusted_context)
             if not gate.get("ok"):
                 from app.application.employee_runtime.metrics import record_employee_run
 
@@ -496,7 +496,7 @@ class EmployeeAgent:
                 self._build_agent_tools(manifest, config) if "agent" in handler_list else None
             )
             agent_gate = (
-                self._build_agent_gate(manifest, config, workspace_root, payload)
+                self._build_agent_gate(manifest, config, workspace_root, trusted_context)
                 if "agent" in handler_list
                 else None
             )
@@ -509,6 +509,7 @@ class EmployeeAgent:
                 workspace_root,
                 agent_tools=agent_tools,
                 agent_gate=agent_gate,
+                runtime_context=trusted_context,
             )
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             ok = _ex._handlers_execution_ok(result)

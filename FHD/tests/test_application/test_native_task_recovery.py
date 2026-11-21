@@ -628,7 +628,9 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     trusted_actor, monkeypatch, tmp_path, cleanup_verified
 ):
     from app.application.agent_orchestrator import tool_process
-    from app.application.agent_orchestrator.approval_grant import _params_hash
+    from app.application.agent_orchestrator.approval_grant import (
+        approval_receipt_claims,
+    )
     from app.application.agent_orchestrator.elt_checkpoint_recovery import ELT_CHECKPOINT_PROTOCOL
     from app.application.workflow.workflow_types import plan_fingerprint
 
@@ -675,10 +677,10 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
             "tool_id": step.tool_id,
             "action": step.action,
             "approved_by": run.user_id,
-            "params_sha256": _params_hash(step),
             "plan_sha256": plan_fingerprint(plan),
         },
     )
+    run.metadata["approval_receipt"].update(approval_receipt_claims(run, step))
     repository.save(run)
     queue.enqueue(run)
     old = queue.claim("old", lease_seconds=60)
