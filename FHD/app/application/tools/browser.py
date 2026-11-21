@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from app.application.tools.surface_authority import require_surface_authority
 from app.domain.browser_contract import BrowserExecute, BrowserObserve
+from app.domain.browser_receipt import mark_delivery_incomplete
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
@@ -87,22 +88,6 @@ def _uploads(plan: dict, owner_id: int, tenant_id: str) -> None:
         step["files"] = files
 
 
-def _delivery_failed(result: dict, error_code: str) -> None:
-    if "execution_outcome" not in result:
-        result["execution_outcome"] = result.get("outcome", "unknown")
-        if result.get("error_code"):
-            result["execution_error_code"] = result["error_code"]
-    result.update(
-        success=False,
-        outcome="unknown",
-        retryable=False,
-        reconciliation_required=True,
-        delivery_status="incomplete",
-        error_code=error_code,
-        message="浏览器证据未完整保存；请核对原执行和核验记录，勿重复提交原操作。",
-    )
-
-
 def _persist_artifacts(
     result: dict, root: Path, run_id: str, owner_id: int, tenant_id: str
 ) -> None:
@@ -113,9 +98,7 @@ def _persist_artifacts(
 
     persisted: list[dict] = []
     unsaved = []
-    temporary_artifacts = result.get("artifacts", [])
-    result["artifacts"] = persisted
-    for item in temporary_artifacts:
+    for item in result.pop("artifacts", []):
         evidence: dict = {"name": Path(item["name"]).name, "status": "not_saved"}
         error_code = "browser_artifact_invalid"
         try:
@@ -139,13 +122,13 @@ def _persist_artifacts(
             )
         except RECOVERABLE_ERRORS:
             unsaved.append({**evidence, "error_code": error_code})
+    result["artifacts"] = persisted
     if unsaved:
         result["unsaved_artifacts"] = unsaved
-        _delivery_failed(result, "browser_artifact_persistence_failed")
+        mark_delivery_incomplete(result, "browser_artifact_persistence_failed")
     # An attachment failure must not discard evidence of completed browser effects.
     receipt = {k: v for k, v in result.items() if k not in {"artifacts", "snapshot"}}
-    receipt["run_id"] = run_id
-    receipt["artifacts"] = persisted
+    receipt.update(run_id=run_id, artifacts=persisted)
     try:
         persisted.append(
             store_run_file(
@@ -157,7 +140,7 @@ def _persist_artifacts(
             )
         )
     except RECOVERABLE_ERRORS:
-        _delivery_failed(result, "browser_receipt_persistence_failed")
+        mark_delivery_incomplete(result, "browser_receipt_persistence_failed")
 
 
 def execute_browser(action: str, params: dict, context: dict) -> dict:
@@ -189,7 +172,6 @@ def execute_browser(action: str, params: dict, context: dict) -> dict:
             "browser", action, params, context, approval_required=action == "execute"
         )
 
-    result = {"success": False, "outcome": "unknown", "reconciliation_required": True}
     try:
         budget = remaining_invocation_seconds(120.0)
         if budget <= 0:

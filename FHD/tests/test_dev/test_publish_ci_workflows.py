@@ -199,6 +199,7 @@ def test_browser_contract_rejects_missing_or_unexecuted_evidence(tmp_path, repor
     for event in ("push", "pull_request"):
         paths = workflow["on"][event]["paths"]
         assert "FHD/app/infrastructure/browser/**" in paths
+        assert "FHD/app/domain/browser_*.py" in paths
         assert "FHD/tests/test_application/test_browser_agent_e2e.py" in paths
         assert "FHD/ops/deploy/requirements-server-api.lock.txt" in paths
         assert "FHD/.github/workflows/browser-runtime.*" in paths

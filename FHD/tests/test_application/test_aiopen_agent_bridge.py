@@ -27,6 +27,7 @@ from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2, validate_tool_call
 from app.application.aiopen import agent_bridge, service
 from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
 from app.application.tools.surface_authority import surface_invocation_scope
@@ -562,3 +563,89 @@ def test_lost_or_invalid_write_receipt_is_never_replayed(bridge, mode):
     assert repeated["success"] is False and repeated["retryable"] is False
     assert len(bridge.own.sent) == len(bridge.posts) == 1
     assert bridge.keys.resolve_principal(bridge.posts[0][0]) is None
+
+
+def test_aiopen_schema_enrichment_preserves_registered_authority_and_execution_policy():
+    from app.application.agent_orchestrator.tool_spec import (
+        ToolActionSpecV2,
+        _add_aiopen_tool_specs,
+    )
+
+    prior = ToolActionSpecV2(
+        tool_id="aiopen",
+        action="ui_click",
+        risk="high",
+        permission="aiopen.ui_click",
+        timeout_seconds=7,
+        retry={"max_attempts": 1},
+        idempotent=False,
+        read_only=False,
+        cost_units=9,
+        availability="aiopen",
+        version="reviewed-surface-v1",
+    )
+    specs = {("aiopen", "ui_click"): prior}
+    _add_aiopen_tool_specs(specs)
+    enriched = specs[("aiopen", "ui_click")]
+    for field in (
+        "risk",
+        "permission",
+        "timeout_seconds",
+        "retry",
+        "idempotent",
+        "read_only",
+        "cost_units",
+        "availability",
+        "version",
+        "owner_mod_id",
+    ):
+        assert getattr(enriched, field) == getattr(prior, field)
+    assert "ref" in enriched.input_schema["properties"]
+    assert enriched.contract_samples
+
+
+def test_registered_aiopen_writes_expose_session_and_unconditional_verification_contract():
+    from app.application.agent_orchestrator.tool_spec import _add_aiopen_tool_specs
+    from app.application.aiopen.service import TOOL_DEFINITIONS
+
+    external_before = deepcopy(TOOL_DEFINITIONS)
+    specs = dict(build_tool_specs_v2())
+    _add_aiopen_tool_specs(specs)
+    writers = [
+        spec
+        for (tool_id, action), spec in specs.items()
+        if tool_id == "aiopen"
+        and action.startswith("ui_")
+        and spec.risk == "high"
+        and not spec.read_only
+    ]
+    assert writers
+    for spec in writers:
+        assert (
+            "session_id" in spec.required_params and "session_id" in spec.input_schema["required"]
+        )
+        for guidance in (
+            "session_id",
+            "aiopen.ui_verify",
+            "depends_on",
+            "next",
+            "无条件",
+            "branches",
+        ):
+            assert guidance in spec.description
+        sample = spec.contract_samples[0]["input"]
+        assert sample["session_id"] == "screen-session-1"
+        assert validate_tool_call("aiopen", spec.action, sample).ok
+        missing = {key: value for key, value in sample.items() if key != "session_id"}
+        assert not validate_tool_call("aiopen", spec.action, missing).ok
+        for invalid in ("", " \t\n", None, 1):
+            assert not validate_tool_call(
+                "aiopen", spec.action, {**sample, "session_id": invalid}
+            ).ok
+    assert external_before == TOOL_DEFINITIONS
+    assert "session_id" not in specs[("aiopen", "ui_snapshot")].required_params
+    fallback = {}
+    _add_aiopen_tool_specs(fallback)
+    assert "session_id" not in fallback[("aiopen", "ui_click")].required_params
+    assert "Agent 写入要求" not in fallback[("aiopen", "ui_click")].description
+    assert external_before == TOOL_DEFINITIONS
