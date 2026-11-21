@@ -148,6 +148,35 @@ def test_scheduler_runs_approved_work_once_and_rechecks_principal(api, database,
     assert scheduler.tick()["selected"] == 0
 
 
+def test_generic_scheduler_leaves_life_work_for_its_own_lease(api, monkeypatch):
+    client, _identity = api
+    created = client.post(
+        BASE + "/portfolios",
+        json={
+            "goal": "带生命租约的工作",
+            "period": "xiaoc-life:goal",
+            "limits": limits(),
+            "opportunities": [opportunity()],
+            "idempotency_key": "life-scheduler-owner",
+        },
+    )
+    assert created.status_code == 200, created.text
+    record = created.json()["decision"]
+    decision_id = record["decision_id"]
+    approved = client.post(
+        BASE + f"/portfolios/{decision_id}/approve",
+        json={
+            "expected_proposal_sha256": record["decision_payload"]["proposal_sha256"],
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    monkeypatch.setattr(
+        scheduler, "run_portfolio_cycle", lambda *_a, **_k: pytest.fail("wrong scheduler")
+    )
+    assert scheduler.tick(limit=1) == {"selected": 0, "results": []}
+    assert portfolio.portfolio_status(decision_id)["status"] == "approved"
+
+
 @pytest.mark.parametrize("account_state", ["disabled", "suspended", "blocked", "deleted"])
 def test_scheduler_withdraws_frozen_owner_before_dispatch(
     api, database, monkeypatch, account_state

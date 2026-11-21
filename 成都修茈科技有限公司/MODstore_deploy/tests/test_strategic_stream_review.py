@@ -15,6 +15,7 @@ from tests import test_strategic_stream_usage as stream_tests
 from tests.test_strategic_stream_usage import _calls, _stream
 
 mandate = stream_tests.mandate
+pytestmark = [pytest.mark.filterwarnings(*stream_tests.ROUTER_SDK_WARNINGS)]
 
 
 def _router_sse(monkeypatch, mandate):

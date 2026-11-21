@@ -85,13 +85,28 @@ def test_real_executor_rejects_drift_before_perception_or_model(database, monkey
         runtime._execute(task)
 
 
-def test_real_cognition_phase_cannot_replace_approved_inputs(database, monkeypatch):
+@pytest.mark.parametrize("perception", ["json", "text"])
+def test_real_cognition_phase_cannot_replace_approved_inputs(database, monkeypatch, perception):
     from modstore_server import employee_executor as facade
     from modstore_server import employee_executor_merged_mod2 as executor
-    from modstore_server import employee_runtime
+    from modstore_server import employee_perception_enricher, employee_runtime
+    from modstore_server.strategic_execution_contract import verify_execution_binding
 
+    original_resolver = employee_runtime.load_employee_pack_resolved
+
+    def pack_for_perception(*args, **kwargs):
+        pack = original_resolver(*args, **kwargs)
+        pack["manifest"]["employee_config_v2"]["perception"] = {"type": perception}
+        return pack
+
+    def enrich(**kwargs):
+        normalized = kwargs["perceived"]["normalized_input"]
+        normalized["_scope_summary"] = "observed scope"
+        normalized["record_ids"].append(999)
+
+    monkeypatch.setattr(employee_runtime, "load_employee_pack_resolved", pack_for_perception)
+    monkeypatch.setattr(employee_perception_enricher, "enrich_perception", enrich)
     decision, task = claim_proposal(database, rows=[opportunity(input_data={"record_ids": [7]})])
-    monkeypatch.setattr(facade, "_perception_real", lambda *_args: {})
     monkeypatch.setattr(facade, "_memory_real", lambda *_args: {})
     monkeypatch.setattr(facade, "_evaluate_employee_risk_gate", lambda *_args: {"ok": True})
     monkeypatch.setattr(
@@ -116,6 +131,10 @@ def test_real_cognition_phase_cannot_replace_approved_inputs(database, monkeypat
             "bench_llm_override": None,
         }
         assert executor._execute_employee_phase_01(state) == (False, None)
+        verify_execution_binding(task["employee_id"], user_id=7, payload=state["payload"])
+    assert state["perceived"]["normalized_input"]["_scope_summary"] == "observed scope"
+    assert state["perceived"]["normalized_input"]["record_ids"] == [7, 999]
+    assert state["payload"] == execution_payload(task)
     assert state["reasoning"]["input"] == execution_payload(task)
     assert state["reasoning"]["reasoning"] == "plan"
 

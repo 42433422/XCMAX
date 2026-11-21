@@ -71,6 +71,12 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
             ):
                 continue
             reservation = {field: opportunity[field] for field in RESOURCES}
+            from modstore_server.xiaoc_life_store import LifePolicyError, require_life_task_capacity
+
+            try:
+                require_life_task_capacity(proposal, reservation["tokens"])
+            except LifePolicyError as exc:
+                raise PortfolioError(str(exc)) from exc
             if any(
                 sum(_consumed(task, field) for task in tasks.values()) + reservation[field]
                 > proposal["limits"][field]

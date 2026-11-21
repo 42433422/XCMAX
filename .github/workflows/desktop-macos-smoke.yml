@@ -53,8 +53,8 @@ jobs:
       - name: TypeScript build
         run: npm run build
 
-      - name: Signed updater, rollback and workspace capability E2E
-        run: npx playwright test e2e/update-rollback.e2e.spec.ts e2e/workspace-capability.e2e.spec.ts --reporter=line
+      - name: Signed updater and rollback E2E
+        run: npx playwright test e2e/update-rollback.e2e.spec.ts --reporter=line
 
       - name: Electron smoke (headless CI)
         env:

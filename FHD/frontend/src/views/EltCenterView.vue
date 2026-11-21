@@ -10,7 +10,6 @@
     </div>
   </header>
 
-  <AwEltAutoIngestList />
   <section class="elt-intake-shell" aria-label="导入会话">
     <ol class="elt-workflow-steps elt-workflow-steps--quiet" aria-label="导入流程">
       <li v-for="(step, index) in steps" :key="step.id" :aria-current="currentStep === step.id ? 'step' : undefined" :class="{ active: currentStep === step.id }"><span>{{ index + 1 }}</span>{{ step.label }}</li>
@@ -23,7 +22,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ReviewedExcelTemplate from '@/components/template/ReviewedExcelTemplate.vue'
-import AwEltAutoIngestList from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/AwEltAutoIngestList.vue'
 import { ELT_CENTER_TABS } from './eltCenter/eltCenterState'
 
 const steps = ELT_CENTER_TABS

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from app.application import agent_task_context
@@ -24,6 +25,21 @@ def _customer_query_summary(output: Any) -> str | None:
             name = str(row.get("customer_name") or row.get("unit_name") or "").strip()
             if name:
                 lines.append(f"- {name}")
+    return "\n".join(lines)
+
+
+def _image_generate_summary(output: Any) -> str | None:
+    from app.application.market_llm.multimodal import safe_image_result_urls
+
+    if not isinstance(output, dict):
+        return None
+    images = safe_image_result_urls(output.get("images"))
+    if not images:
+        return None
+    lines = [f"![生成图片]({url})" for url in images]
+    model = " ".join(str(output.get("model") or "").split())
+    if model:
+        lines.append("\n" + re.sub(r"([\\`*_[\]{}<>()!#|])", r"\\\1", model))
     return "\n".join(lines)
 
 
@@ -299,6 +315,12 @@ class AIChatWorkflowResponseMixin:
             ):
                 # TODO 最后一步是「根据检索结果作答」，不能只回一行「成功」。
                 response_text = self._knowledge_answer(step, user_message) or response_text
+            elif (step.status, step.tool_id, step.action) == (
+                "completed",
+                "image_generate",
+                "generate",
+            ):
+                response_text = _image_generate_summary(step.output) or response_text
         if (
             success
             and steps

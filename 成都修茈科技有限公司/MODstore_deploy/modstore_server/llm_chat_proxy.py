@@ -35,6 +35,7 @@ from modstore_server.llm_media_proxy import video_openai_compatible as video_ope
 from modstore_server.multimodal_llm import messages_use_openai_multipart_content
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.platform_model_config import PlatformApiKey
+from modstore_server.xiaoc_life_chat import require_manual_life_capability
 
 _MODEL_ALIASES: dict[tuple[str, str], str] = {
     # 官方 V2.5 于 2026-10-21 下线；保留原账号凭证和私有兼容端点。
@@ -169,6 +170,7 @@ def _strategic_budgeted_dispatch(invoke):
     async def wrapped(provider: str, **kwargs) -> Dict[str, Any]:
         from modstore_server.strategic_portfolio_usage import dispatch_budgeted
 
+        require_manual_life_capability()
         return await dispatch_budgeted(invoke, provider, kwargs)
 
     return wrapped
@@ -180,6 +182,7 @@ def _strategic_budgeted_stream(invoke):
         from modstore_server.strategic_portfolio import PortfolioError
         from modstore_server.strategic_portfolio_usage import dispatch_budgeted_stream, scope_active
 
+        require_manual_life_capability()
         if scope_active() and (
             provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
             or (provider == "minimax" and is_minimax_token_plan_key(kwargs["api_key"]))
@@ -274,6 +277,7 @@ async def chat_dispatch(
             return routed
 
     async def _primary() -> Dict[str, Any]:
+        require_manual_life_capability()
         if messages_use_openai_multipart_content(messages):
             if provider == "minimax" and is_minimax_token_plan_key(api_key):
                 return {
@@ -397,6 +401,7 @@ async def chat_dispatch(
         else fallback_base_url or base_url
     )
     fb_model = normalize_model(fb_provider, str(fallback_model), fb_base)
+    require_manual_life_capability()
     try:
         if fb_provider == "minimax" and is_minimax_token_plan_key(fb_key):
             fb_result = await chat_anthropic_compatible(
@@ -500,6 +505,7 @@ async def chat_dispatch_stream(
     tool_choice: Any = None,
     fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
+    require_manual_life_capability()
     if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         yield {"type": "error", "error": "平台密钥不允许跨供应商使用"}
         return

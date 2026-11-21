@@ -37,7 +37,16 @@ class BootstrapPreflightTests(unittest.TestCase):
             path = Path(td) / "manifest.json"
             path.write_text(json.dumps(manifest), encoding="utf-8")
             valid = subprocess.run(
-                ["python3", "-c", code, str(path), release_sha, "production", "apply-latest"],
+                [
+                    "python3",
+                    "-c",
+                    code,
+                    str(path),
+                    release_sha,
+                    "production",
+                    "apply-latest",
+                    manifest["sha256"],
+                ],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -56,21 +65,63 @@ class BootstrapPreflightTests(unittest.TestCase):
             )
 
             wrong_sha = subprocess.run(
-                ["python3", "-c", code, str(path), "c" * 40, "production", "apply-latest"],
+                [
+                    "python3",
+                    "-c",
+                    code,
+                    str(path),
+                    "c" * 40,
+                    "production",
+                    "apply-latest",
+                    manifest["sha256"],
+                ],
                 check=False,
                 capture_output=True,
                 text=True,
             )
             self.assertNotEqual(wrong_sha.returncode, 0)
+            self.assertIn("manifest git_sha differs from authorized release_sha", wrong_sha.stderr)
+            wrong_artifact = subprocess.run(
+                [
+                    "python3",
+                    "-c",
+                    code,
+                    str(path),
+                    release_sha,
+                    "production",
+                    "apply-latest",
+                    "e" * 64,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(wrong_artifact.returncode, 0)
+            self.assertIn(
+                "manifest artifact differs from dispatched release_artifact_sha256",
+                wrong_artifact.stderr,
+            )
             manifest["artifact"] = "../fhd-full-1.2.3.tar.gz"
             path.write_text(json.dumps(manifest), encoding="utf-8")
             unsafe_path = subprocess.run(
-                ["python3", "-c", code, str(path), release_sha, "production", "apply-latest"],
+                [
+                    "python3",
+                    "-c",
+                    code,
+                    str(path),
+                    release_sha,
+                    "production",
+                    "apply-latest",
+                    manifest["sha256"],
+                ],
                 check=False,
                 capture_output=True,
                 text=True,
             )
             self.assertNotEqual(unsafe_path.returncode, 0)
+            self.assertIn(
+                "manifest artifact is not a safe FHD tarball basename", unsafe_path.stderr
+            )
 
     def test_workflow_hashes_archive_before_extract_and_preserves_old_sha_stamp(self) -> None:
         workflow = (ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")

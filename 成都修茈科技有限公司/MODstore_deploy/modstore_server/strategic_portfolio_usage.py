@@ -57,6 +57,11 @@ def platform_call_reservation(reservation: dict[str, Any] | None) -> Iterator[No
 def require_call_reservation(
     *, provider: str | None = None, model: str | None = None, start_transport: bool = False
 ) -> None:
+    from modstore_server.xiaoc_life_chat import require_manual_life_capability
+    from modstore_server.xiaoc_life_store import require_current_life_call
+
+    require_manual_life_capability()
+    require_current_life_call()
     if not scope_active():
         return
     active = _CALL.get()
@@ -101,6 +106,9 @@ async def dispatch_budgeted(
     invoke: Callable[..., Awaitable[dict[str, Any]]], provider: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
     """One admission point covers direct pipelines as well as the platform facade."""
+    from modstore_server.xiaoc_life_store import require_current_life_call
+
+    require_current_life_call()
     if not scope_active():
         return await invoke(provider, **kwargs)
     _authorize_platform_route(provider, kwargs)
@@ -141,6 +149,9 @@ async def dispatch_budgeted_stream(
     Context tokens never cross a yield: callers may close an iterator from another
     task, and the processing-status adapter advances each chunk in its own task.
     """
+    from modstore_server.xiaoc_life_store import require_current_life_call
+
+    require_current_life_call()
     if not scope_active():
         async with contextlib.aclosing(invoke(provider, **kwargs)) as unbudgeted:
             async for event in unbudgeted:
@@ -167,8 +178,7 @@ async def dispatch_budgeted_stream(
     try:
         source = invoke(provider, **kwargs)
         while True:
-            if _SCOPE.get() is not None:
-                remaining_execution_seconds()
+            remaining_execution_seconds()
             if (planning := _PLANNING.get()) is not None:
                 require_active_portfolio_owner(planning["owner_user_id"])
             remaining = deadline - asyncio.get_running_loop().time()
@@ -223,6 +233,11 @@ def scope_active() -> bool:
 
 def remaining_execution_seconds() -> float | None:
     """Stop at operation boundaries; a running synchronous tool is not preemptible."""
+    from modstore_server.xiaoc_life_chat import require_manual_life_capability
+    from modstore_server.xiaoc_life_store import require_current_life_call
+
+    require_manual_life_capability()
+    require_current_life_call()
     scope = _SCOPE.get()
     if scope is None:
         return None
@@ -263,6 +278,8 @@ def unmetered_delegate_block(
 
 def bind_portfolio_worker(receipt_id: str, *, owner_user_id: int) -> dict[str, Any]:
     """A trusted local queue persists this binding, then returns its queue receipt."""
+    from modstore_server.strategic_portfolio_worker import capture_life_worker_scope
+
     scope = _SCOPE.get()
     if scope is None or not receipt_id or len(receipt_id) > 160:
         raise PortfolioError("worker binding requires an active strategy lease and queue identity")
@@ -289,6 +306,8 @@ def bind_portfolio_worker(receipt_id: str, *, owner_user_id: int) -> dict[str, A
             "receipt_id": receipt_id,
             "binding_id": binding_id,
         }
+        if life_scope := capture_life_worker_scope():
+            binding["life_scope"] = life_scope
         task["worker_binding"] = binding
         return binding
 
@@ -301,6 +320,7 @@ def portfolio_worker_scope(
 ) -> Iterator[dict[str, Any]]:
     """Restore a durable local queue lease once, including the platform model scope."""
     from modstore_server.platform_llm_scope import platform_llm_scope
+    from modstore_server.strategic_portfolio_worker import restore_life_worker_scope
 
     def claim(row: Any, proposal: dict[str, Any], state: dict[str, Any], _session: Any):
         require_authorization(row, proposal, state)
@@ -326,14 +346,15 @@ def portfolio_worker_scope(
             "started_at": task["started_at"],
         }
 
-    task = mutate_portfolio(binding["decision_id"], claim, owner_user_id=owner_user_id)
-    with (
-        platform_llm_scope(),
-        portfolio_usage_scope(
-            binding["decision_id"], binding["opportunity_id"], binding["lease_token"]
-        ),
-    ):
-        yield task
+    with restore_life_worker_scope(binding, owner_user_id=owner_user_id):
+        task = mutate_portfolio(binding["decision_id"], claim, owner_user_id=owner_user_id)
+        with (
+            platform_llm_scope(),
+            portfolio_usage_scope(
+                binding["decision_id"], binding["opportunity_id"], binding["lease_token"]
+            ),
+        ):
+            yield task
 
 
 async def planning_admission(provider: str, model: str) -> dict[str, Any] | None:
@@ -389,6 +410,7 @@ def _reserve_planning(
     context: dict[str, Any], provider: str, model: str, prompt_bound: int, output_bound: int
 ) -> dict[str, Any]:
     from modstore_server.db.llm_chat import LlmClientRequest
+    from modstore_server.xiaoc_life_store import record_life_reservation
 
     admission = context["admission"]
     if (provider, model) != (admission["provider"], admission["model"]) or context["receipts"]:
@@ -405,6 +427,9 @@ def _reserve_planning(
         "status": "pending",
     }
     record_sha = digest(record)
+    # Journal before the ledger write: an empty life journal then proves no
+    # provider call was admitted. A crash after this point must read this ID.
+    record_life_reservation(record)
     with get_session_factory()() as session:
         require_active_portfolio_owner(context["owner_user_id"], session)
         unresolved = session.execute(
@@ -572,6 +597,9 @@ def _cost(prompt: int, completion: int, tariff: dict[str, Any]) -> int:
 def prepare_platform_call(
     provider: str, model: str, messages: list[dict[str, Any]], max_tokens: int | None
 ) -> dict[str, Any] | None:
+    from modstore_server.xiaoc_life_store import record_life_reservation, require_current_life_call
+
+    require_current_life_call()
     scope = _SCOPE.get()
     planning = _PLANNING.get()
     if scope is None and planning is None:
@@ -584,9 +612,17 @@ def prepare_platform_call(
     output_bound = max_tokens if type(max_tokens) is int and max_tokens > 0 else 1024
     if scope is None:
         assert planning is not None
-        return _reserve_planning(planning, provider, model, prompt_bound, output_bound)
+        reservation = _reserve_planning(planning, provider, model, prompt_bound, output_bound)
+        return reservation
     decision_id, opportunity_id, lease_token = scope
     request_id = uuid.uuid4().hex
+    record_life_reservation(
+        {
+            "request_id": request_id,
+            "decision_id": decision_id,
+            "opportunity_id": opportunity_id,
+        }
+    )
 
     def reserve(
         row: Any, proposal: dict[str, Any], state: dict[str, Any], _session: Any
@@ -662,7 +698,8 @@ def prepare_platform_call(
             ),
         }
 
-    return mutate_portfolio(decision_id, reserve)
+    reservation = mutate_portfolio(decision_id, reserve)
+    return reservation
 
 
 def complete_platform_call(

@@ -35,6 +35,9 @@ PERMISSION_OVERRIDES: dict[str, str] = {
     # Like the history API, current-conversation reads require a live owner binding,
     # enforced again by the adapter; they grant no access to other users' sessions.
     "conversation_history": "",
+    # Like /conversation/image, the tool requires a live owner-bound market
+    # session; market routing and the wallet still enforce model authorization.
+    "image_generate": "",
     "memory_v2": "memory_v2.write",
     "client_product_issue": "",
     # Excel 导入属于数据对接（ELT）执行，沿用 elt.execute，而不是发明新的权限码。

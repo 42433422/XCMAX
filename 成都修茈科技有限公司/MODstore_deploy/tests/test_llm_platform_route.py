@@ -201,6 +201,50 @@ async def test_empty_gateway_does_not_fall_back_to_legacy_platform(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "runtime_models",
+    [None, ["text-embedding-3-small", "xcmax-kimi-code"], []],
+    ids=["legacy-platform", "gateway-priority", "empty-gateway"],
+)
+async def test_xiaoc_cognition_uses_canonical_platform_route(database, monkeypatch, runtime_models):
+    from modstore_server import llm_catalog, strategic_portfolio_usage, xiaoc_life_runtime
+
+    save("openai", model="gpt-4o-mini")
+    if runtime_models is not None:
+        monkeypatch.setenv("LITELLM_MASTER_KEY", "synthetic-gateway-key")
+    catalog = AsyncMock(
+        return_value={
+            "models": ["text-embedding-3-small", "xcmax-kimi-code"],
+            "runtime_models": runtime_models,
+        }
+    )
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog)
+    monkeypatch.setattr(keys, "resolve_credentials", Mock(side_effect=AssertionError("BYOK read")))
+    admission = AsyncMock(return_value=None)
+    monkeypatch.setattr(strategic_portfolio_usage, "planning_admission", admission)
+    ports = xiaoc_life_runtime.CyclePorts({"owner_user_id": 1, "domain": "enterprise", "state": {}})
+    monkeypatch.setattr(ports, "active", lambda: None)
+    blocked = (
+        "platform_model_not_configured"
+        if runtime_models == []
+        else "platform_quota_unknown_or_exhausted"
+    )
+    with pytest.raises(xiaoc_life_runtime.LifeBlocked, match=blocked):
+        await ports.decide({})
+
+    if runtime_models == []:
+        admission.assert_not_awaited()
+    else:
+        expected = (
+            ("openai", "gpt-4o-mini") if runtime_models is None else ("litellm", "xcmax-kimi-code")
+        )
+        admission.assert_awaited_once_with(*expected)
+    assert [call.args[1] for call in catalog.await_args_list] == (
+        [] if runtime_models is None else ["litellm"]
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("runtime_models", [["text-embedding-3-small", "xcmax-kimi-code"], []])
 async def test_scaffold_uses_gateway_chat_catalog_and_preserves_empty_runtime_catalog(
     database, monkeypatch, runtime_models

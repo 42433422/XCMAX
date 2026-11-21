@@ -366,6 +366,22 @@ async def test_total_deadline_includes_wait_for_terminal_usage(mandate, monkeypa
     assert calls[0]["status"] == "unknown"
 
 
+# LiteLLM 1.109.3 installs import-time filters that pytest restores between tests.
+# Its lazy schemas/response introspection must tolerate only these known notices
+# regardless of whether a preceding catalog test already imported the SDK.
+ROUTER_SDK_WARNINGS = (
+    r"ignore:^Items? '[^']+'(, '[^']+')* on TypedDict class '[^']+' "
+    r"(is|are) using the `ReadOnly` qualifier\. Pydantic will not protect items "
+    r"from any mutation on dictionary instances\.$:UserWarning:"
+    r"pydantic\._internal\._generate_schema$",
+    r"ignore:^Accessing the 'model_(fields|computed_fields)' attribute on the instance "
+    r"is deprecated\. Instead, you should access this attribute from the model class\.$:"
+    r"pydantic.warnings.PydanticDeprecatedSince211:"
+    r"litellm\.litellm_core_utils\.model_response_utils$",
+)
+
+
+@pytest.mark.filterwarnings(*ROUTER_SDK_WARNINGS)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fallback", [False, True])
 @pytest.mark.parametrize("receipt", ["reported", "absent", "partial"])

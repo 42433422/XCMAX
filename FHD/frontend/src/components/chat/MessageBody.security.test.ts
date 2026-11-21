@@ -5,6 +5,29 @@ import MessageBody from './MessageBody.vue'
 enableAutoUnmount(afterEach)
 
 describe('MessageBody with the real Markdown renderer', () => {
+  it.each(['png', 'jpeg', 'webp'])('renders generated %s bitmap receipts during and after streaming', async (format) => {
+    const src = `data:image/${format};base64,AA==`
+    const wrapper = mount(MessageBody, { props: { content: `![生成图片](${src})\n\nimage-model`, streaming: true } })
+    expect(wrapper.get('img').attributes('src')).toBe(src)
+    expect(wrapper.text()).toContain('image-model')
+    await wrapper.setProps({ streaming: false })
+    expect(wrapper.get('img').attributes('src')).toBe(src)
+  })
+
+  it.each([
+    'data:image/svg+xml;base64,PHN2Zy8+',
+    'data:image/gif;base64,R0lGODlh',
+    'data:image/bmp;base64,Qk0=',
+    'data:image/png,raw-data',
+    'data:image/png;base64,',
+    'data:image/png;base64,AA==;extra',
+    'data:text/html;base64,PHNjcmlwdD4=',
+    'javascript:alert(1)',
+  ])('rejects unsafe or unsupported generated image URLs: %s', (src) => {
+    const wrapper = mount(MessageBody, { props: { content: `![生成图片](${src})` } })
+    expect(wrapper.find('img[src]').exists()).toBe(false)
+  })
+
   it.each([false, true])('keeps raw HTML after a code fence as text (streaming=%s)', (streaming) => {
     const marker = '<aside id="markdown-injection-probe">raw node</aside>'
     const wrapper = mount(MessageBody, { props: {

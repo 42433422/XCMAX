@@ -53,8 +53,9 @@ export function useLoginViewActions(
     await submitLogin()
   }
 
-  function switchLoginMode(mode: 'password' | 'qr') {
-    if (mode !== 'password' && mode !== 'qr') return
+  function switchLoginMode(mode: 'password' | 'qr' | 'offline') {
+    if (mode !== 'password' && mode !== 'qr' && mode !== 'offline') return
+    if (mode === 'offline' || loginMode.value === 'offline') password.value = ''
     loginMode.value = mode
     errorMessage.value = ''
     altLoginHint.value = ''
@@ -105,12 +106,15 @@ export function useLoginViewActions(
       return
     }
     const attempt = ++loginAttempt
+    const offline = loginMode.value === 'offline'
     loading.value = true
     errorMessage.value = ''
     const invitation = invitationCode.value.trim()
     const invitationForRequest = invitation && invitation !== password.value ? invitation : ''
     try {
-      const result = await authApi.login(username.value.trim(), password.value, accountKind.value, invitationForRequest)
+      const result = offline
+        ? await authApi.offlineLogin(username.value.trim(), password.value)
+        : await authApi.login(username.value.trim(), password.value, accountKind.value, invitationForRequest)
       if (attempt !== loginAttempt) return
       const raw = result as unknown as Record<string, unknown>
       const ok = raw?.success === true || (raw?.data as Record<string, unknown> | undefined)?.success === true
@@ -124,12 +128,14 @@ export function useLoginViewActions(
         })
         return
       }
-      saveLoginPreferences({
-        rememberPassword: rememberPassword.value,
-        autoLogin: autoLogin.value,
-        username: username.value.trim(),
-        password: password.value,
-      })
+      if (!offline) {
+        saveLoginPreferences({
+          rememberPassword: rememberPassword.value,
+          autoLogin: autoLogin.value,
+          username: username.value.trim(),
+          password: password.value,
+        })
+      }
       await completeLoginSuccess(raw)
     } catch (error: unknown) {
       if (attempt !== loginAttempt) return

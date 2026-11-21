@@ -7,6 +7,7 @@ from collections import Counter
 from types import SimpleNamespace
 from typing import Any
 
+from app.application.workflow.planner_prompt_profile import _slim_schema
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,44 @@ def _compact_tool_registry(prompt: dict[str, Any]) -> None:
         )
 
 
+def _shrink_planner_prompt(outbound: list[dict[str, Any]]) -> bool:
+    """Retry with shorter annotations, preserving every selected action and schema."""
+    if not outbound:
+        return False
+    last = outbound[-1]
+    try:
+        prompt = json.loads(str(last.get("content") or ""))
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(prompt, dict) or not isinstance(prompt.get("tool_registry"), list):
+        return False
+    original = json.dumps(prompt, ensure_ascii=False, separators=(",", ":"))
+    for tool in prompt["tool_registry"]:
+        if not isinstance(tool, dict):
+            continue
+        tool.pop("description", None)
+        for action in tool.get("actions") or []:
+            if not isinstance(action, dict):
+                continue
+            action.pop("description", None)
+            for field in ("input_schema", "output_schema"):
+                if field in action:
+                    action[field] = _slim_schema(action[field], description_limit=0)
+    if isinstance(prompt.get("tool_schemas"), dict):
+        prompt["tool_schemas"] = {
+            name: _slim_schema(schema, description_limit=0)
+            for name, schema in prompt["tool_schemas"].items()
+        }
+    content = json.dumps(prompt, ensure_ascii=False, separators=(",", ":"))
+    if content == original:
+        return False
+    outbound[-1] = {
+        **last,
+        "content": content,
+    }
+    return True
+
+
 def planner_max_tokens() -> int:
     raw = (os.environ.get(_ENV_MAX_TOKENS) or "").strip()
     try:
@@ -106,6 +145,7 @@ def _meter_planner_completion(payload: dict[str, Any] | None, *, model: str) -> 
 async def _prepare_model_messages(provider, context, messages, max_tokens, extra):
     """One final budget boundary for sync, stream, repairs and native tools."""
     from app.application.agent_orchestrator.context_window_manager import (
+        ContextWindowExceeded,
         estimate_messages_tokens,
         get_context_window_manager,
         summary_fingerprint,
@@ -168,14 +208,28 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
         if schemas
         else 0
     )
-    result = await get_context_window_manager().compress(
-        outbound,
-        provider=provider,
-        context=state,
-        user_id=str((context or {}).get("local_user_id") or ""),
-        reserved_tokens=max_tokens + schema_tokens,
-        model=await model_for_budget(provider, extra.get("model"), extra.get("provider")),
-    )
+    manager = get_context_window_manager()
+    compress_kwargs = {
+        "provider": provider,
+        "context": state,
+        "user_id": str((context or {}).get("local_user_id") or ""),
+        "reserved_tokens": max_tokens + schema_tokens,
+        "model": await model_for_budget(provider, extra.get("model"), extra.get("provider")),
+    }
+    try:
+        result = await manager.compress(outbound, **compress_kwargs)
+    except ContextWindowExceeded:
+        # 只减说明冗余，不删业务能力；仍超限时保留原输入并提示分批。
+        if not _shrink_planner_prompt(outbound):
+            raise
+        logger.warning("planner tool descriptions trimmed to fit context budget")
+        try:
+            from app.utils import metrics
+
+            metrics.context_window_overflow_total.labels(stage="tool_catalog_trimmed").inc()
+        except RECOVERABLE_ERRORS:
+            logger.debug("planner context metric skipped", exc_info=True)
+        result = await manager.compress(outbound, **compress_kwargs)
     if context is not None and result.summary_llm_call is not None:
         save_conversation_summary(
             context, history, result.summary_covered_count, result.summary_text

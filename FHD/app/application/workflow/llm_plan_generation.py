@@ -14,6 +14,7 @@ from app.application.workflow.clarification_selection import CLARIFICATION_PARSE
 from app.application.workflow.planner_prompt_profile import (
     BASE_RULES,
     ELT_IMPORT_RULE,
+    _slim_schema,
     attachment_import_manifest,
     select_rules_for_prompt,
     select_tools_for_prompt,
@@ -275,7 +276,9 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
 
     contracts = build_tool_specs_v2()
     result = []
-    for tool_id, spec in tool_registry.items():
+    # 固定顺序保证 system 前缀稳定，命中供应商的 prompt 缓存。
+    for tool_id in sorted(tool_registry, key=str):
+        spec = tool_registry[tool_id]
         actions = spec.get("actions", {})
         action_specs = []
         for name, metadata in actions.items():
@@ -286,12 +289,12 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
                     "action": name,
                     "description": str(
                         getattr(contract, "description", "") or spec.get("description") or ""
-                    )[:240],
+                    )[:160],
                     "risk": metadata.get("risk", "low"),
                     "idempotent": bool(metadata.get("idempotent", False)),
-                    "output_schema": getattr(contract, "output_schema", {}),
+                    "output_schema": _slim_schema(getattr(contract, "output_schema", {})),
                     "required_params": metadata.get("required_params", []),
-                    "input_schema": raw_schema,
+                    "input_schema": _slim_schema(raw_schema),
                 }
             )
         result.append(
