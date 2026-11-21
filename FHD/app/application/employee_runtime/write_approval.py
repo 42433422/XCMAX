@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
-import uuid
 from typing import Any, cast
 
-from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS
-from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -16,21 +14,29 @@ logger = logging.getLogger(__name__)
 def build_write_approval_gate(
     employee_id: str,
     input_data: dict[str, Any] | None = None,
+    *,
+    runtime_context: dict[str, Any] | None = None,
 ):
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
     代码修改工具（``patch_file`` / ``write_file``）统一委托 autonomy_guard；
-    写库类业务工具（``import_excel_to_database`` / ``products_bulk_import``）只能由
-    ApprovalService 创建并持久化审批记录。模型参数和员工输入不能自我声明批准，
-    也不能携带服务端写令牌绕过审批。
+    业务写操作从当前注册契约解析动作，绑定原 AgentRun 后持久化审批。
+    模型参数和员工输入不能自我声明批准，也不能携带服务端写令牌绕过审批。
     """
-    payload = dict(input_data or {})
+    # Legacy positional input is model/user data, never approval evidence.
+    payload = dict(runtime_context or {})
 
     def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+        from resources.config.risk_actions_loader import (
+            list_code_write_tools,
+            list_write_tools,
+        )
+
         name = str(tool_name or "").strip()
-        if name not in WRITE_TOOLS and name not in CODE_WRITE_TOOLS:
+        code_writes = list_code_write_tools()
+        if name not in list_write_tools() and name not in code_writes:
             return {"ok": True}
-        if name in CODE_WRITE_TOOLS:
+        if name in code_writes:
             from app.domain.autonomy.autonomy_guard import evaluate_risk
 
             decision = evaluate_risk(
@@ -48,58 +54,65 @@ def build_write_approval_gate(
                 "pending_approval": decision.requires_confirmation,
                 "risk_decision": decision.to_dict(),
             }
-        try:
-            from app.application.workflow.approval_policy import WorkflowApprovalPolicy
-            from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-            from resources.config.risk_actions_loader import get_action_risk
+        from app.application.employee_runtime.result_verifier import pending_employee_result
+        from app.application.tools.registered_capabilities import execute_registered_capability
+        from resources.config.risk_actions_loader import (
+            get_action_approval,
+            get_action_risk,
+            get_workflow_tools_from_registry,
+            requires_write_approval,
+        )
 
-            write_action = "execute"
-            if name in ("import_excel_to_database", "products_bulk_import"):
-                write_action = "import"
-            risk = get_action_risk(name, write_action, default="high")
-            plan = PlanGraph(
-                plan_id=f"emp-write-{employee_id}-{uuid.uuid4().hex[:8]}",
-                intent=f"员工 {employee_id} 写操作审批",
-                nodes=[
-                    WorkflowNode(
-                        node_id="write",
-                        tool_id=name,
-                        action=write_action,
-                        params=dict(args or {}),
-                        risk=normalize_workflow_risk(risk),
-                    )
-                ],
-                risk_level=normalize_workflow_risk(risk),
-            )
-            gated = WorkflowApprovalPolicy()
-            gated_decision = gated.evaluate_plan(plan, runtime_context=payload)
-            if gated_decision.all_approved and not gated_decision.any_rejected:
-                return {"ok": True}
-            if gated_decision.pending_approval:
+        try:
+            actions = (get_workflow_tools_from_registry().get(name) or {}).get("actions") or {}
+            action = str(args.get("action") or "").strip()
+            if not action and len(actions) == 1:
+                action = next(iter(actions))
+            if not action or action not in actions:
                 return {
                     "ok": False,
-                    "reason": "写操作待审批（请在审批工作台通过后重试）",
-                    "pending_approval": True,
-                    "approval_request_ids": list(gated_decision.approval_request_ids or []),
+                    "blocked": True,
+                    "reason": "工具缺少明确的已登记动作，未执行或创建审批；请使用已登记能力，导入可先发起 ELT 预演。",
                 }
-        except RECOVERABLE_ERRORS:
-            logger.debug(
-                "write approval gate fallback emp=%s tool=%s",
-                employee_id,
-                name,
-                exc_info=True,
+            if (
+                not requires_write_approval(name, action)
+                and get_action_approval(name, action) not in {"always", "interactive"}
+                and get_action_risk(name, action) == "low"
+                and actions[action].get("idempotent") is True
+            ):
+                return {"ok": True}
+            params = (
+                dict(args["params"])
+                if isinstance(args.get("params"), dict)
+                else {key: value for key, value in args.items() if key != "action"}
             )
-
-        try:
-            from app.application.employee_runtime.metrics import record_write_block
-
-            record_write_block(employee_id)
+            receipt = json.loads(
+                execute_registered_capability(
+                    {"tool_id": name, "action": action, "params": params},
+                    workspace_root=payload.get("workspace_root"),
+                    runtime_context=payload,
+                    require_approval=True,
+                )
+            )
+            return {
+                "ok": False,
+                "reason": str(
+                    receipt.get("message") or receipt.get("error") or "请查询原任务回执。"
+                ),
+                "execution_result": receipt,
+                **pending_employee_result(receipt),
+            }
         except RECOVERABLE_ERRORS:
-            pass
-        return {
-            "ok": False,
-            "reason": (f"写库工具 {name} 被审批门拦截：需在审批工作台通过"),
-        }
+            logger.exception(
+                "employee approval receipt unavailable emp=%s tool=%s", employee_id, name
+            )
+            return {
+                "ok": False,
+                "reason": "原任务审批回执尚未确认，请核对原任务，勿重复提交。",
+                "execution_state": "unknown",
+                "retryable": False,
+                "requires_reconciliation": True,
+            }
 
     return gate
 

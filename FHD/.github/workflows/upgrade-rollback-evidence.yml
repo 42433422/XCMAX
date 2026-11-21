@@ -35,7 +35,7 @@ jobs:
           printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           printf '%s\n' "$EVIDENCE_JSON" > "${RUNNER_TEMP}/upgrade-rollback-raw.json"
-          python FHD/scripts/release/verify_upgrade_rollback_evidence.py \
+          python scripts/release/verify_upgrade_rollback_evidence.py \
             --evidence "${RUNNER_TEMP}/upgrade-rollback-raw.json" \
             --release-sha "$RELEASE_SHA" \
             --output "${RUNNER_TEMP}/upgrade-rollback-verification.json"

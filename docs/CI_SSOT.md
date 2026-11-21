@@ -232,7 +232,7 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 > **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
 > `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
 > 以下根仓 workflow 为手写（无生成头，直接在根仓维护）：
-> `archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
+> `corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
 > `e2e.yml`、`e2e-playwright-reusable.yml`。
 
 ## 常用 workflow
@@ -244,11 +244,11 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 | FHD Release gate | [`fhd-release-gate-ci.yml`](../.github/workflows/fhd-release-gate-ci.yml) |
 | 前端 Vitest | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → `frontend-test-shard` / `frontend-test` |
 | Playwright 全栈 | [`e2e.yml`](../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml) |
+| 浏览器工具执行契约（path 过滤） | [`fhd-browser-runtime.yml`](../.github/workflows/fhd-browser-runtime.yml)，真实 Chromium 必跑、禁止 skip |
 | Flutter Android+iOS CI | [`fhd-ci-mobile-flutter.yml`](../.github/workflows/fhd-ci-mobile-flutter.yml) |
 | Flutter Android 发布 | [`fhd-release-android.yml`](../.github/workflows/fhd-release-android.yml) |
 | Flutter iOS / TestFlight 发布 | [`fhd-release-ios.yml`](../.github/workflows/fhd-release-ios.yml) |
 | MODstore Python CI | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
-| Archive 卫生 | [`archive-hygiene.yml`](../.github/workflows/archive-hygiene.yml) |
 | FHD 服务器 API 发布包校验 | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → job `pack-verify` |
 | FHD 全产品线 tag 编排 | [`fhd-release-orchestrator.yml`](../.github/workflows/fhd-release-orchestrator.yml) |
 | FHD 单机 CVM 手动 rolling | [`fhd-deploy.yml`](../.github/workflows/fhd-deploy.yml) |
@@ -485,6 +485,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | 静态代码（广） | `security-scan`（bandit `-lll --skip B101,B601,B110 --exit-zero`） | **Advisory** |
 | 静态代码（SQL 注入） | `security-scan`（bandit `-lll -s B608`，无 `--exit-zero`） | **硬门禁** |
 
+全量安全扫描的定时任务只作趋势检查，历史风险 baseline 仅在此模式使用，制品命名为 `xcagi-security-trend-*`。
+手动发布扫描直接运行部署端同一个 `verify_security_scan_pair.py`，核对同 SHA、扫描器完整性、新鲜度、同 UTC 日及零适用高危；保留 `xcagi-security-release-*` 制品名称，趋势制品不能作为发布准入。
+
 > 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
 
 ## 供应链信任（Phase 1 · SBOM + 签名 + Provenance）
@@ -519,6 +522,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 |------|----------|------|------|
 | FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **8 pass / 6 skip** |
 | 前端/后端 path 过滤、nightly、手动 | `e2e.yml` → `e2e-playwright-reusable.yml` | 每次运行均为 `E2E_FULL_STACK=1`，含严格构建和真实 FastAPI | 全栈 P0 与 `plan2026-skeleton`，结果以当次报告为准 |
+| 浏览器执行器、Agent 工具入口、契约、测试或依赖变化 | `fhd-browser-runtime.yml` | `XCMAX_BROWSER_REQUIRE_REAL=1`，固定 Playwright 依赖与 Chromium，保持 sandbox 开启 | runtime/snapshot：真实表单回执、下载、隔离、域名策略、快照隐私、iframe 遮罩、生产资源限制、超时及租约；Agent 整链：真实审批、spawn、归属文件和幂等回读。两份独立 JUnit 缺失、skip 或失败均阻断该 job |
+
+浏览器专项源位于 `FHD/.github/workflows/browser-runtime.yml`；先只安装 `pyproject.toml` 的 browser extra 与 `uv.lock` 中的 pytest、pytest-asyncio、SQLAlchemy、PyYAML、psutil、Pillow，以 `--confcutdir=tests/test_infrastructure` 执行 runtime/snapshot。随后按 `requirements-server-api.txt` 和既有部署锁约束安装服务器依赖，以 `--confcutdir=tests/test_application` 单独执行 `test_browser_agent_e2e.py`，保留原 AgentToolExecutor 与真实子进程浏览器。每轮保存提交、run/attempt、Python/Playwright 版本、服务器锁摘要及实际依赖版本、两份 JUnit 和合成页面产物。本地 skip 不构成验收；专项成功须由对应提交的实际运行确认，不改变既有分支保护清单。
 
 SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。
 

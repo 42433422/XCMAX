@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
 
 # Re-export tool data for existing callers.
@@ -212,6 +212,7 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
         input_schema = tool.get("inputSchema")
         if not isinstance(input_schema, dict):
             input_schema = {"type": "object", "properties": {}}
+        input_schema = deepcopy(input_schema)
         raw_required = input_schema.get("required")
         required = list(raw_required) if isinstance(raw_required, list) else []
         required_params = [str(item) for item in required]
@@ -253,20 +254,55 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
                     "output": {"success": True, "uploaded": ["sample.txt"]},
                 }
             ]
-        specs[("aiopen", action)] = ToolActionSpecV2(
+        registered = specs.get(("aiopen", action))
+        prior = registered or ToolActionSpecV2(
             tool_id="aiopen",
             action=action,
-            description=str(tool.get("description") or f"AIOPEN {action}"),
-            input_schema=deepcopy(input_schema),
-            output_schema=deepcopy(output_schema),
             risk=risk,
             permission=_special_permission("aiopen", action),
             cost_units=_cost_units("aiopen", action, risk),
             timeout_seconds=30,
             retry=dict(DEFAULT_RETRY),
             idempotent=idempotent,
+            # RoutePolicy.catalog only reads the local whitelist. Other low-risk
+            # AIOPEN actions still need their own explicit side-effect review.
+            read_only=action == "api_catalog",
             required_params=required_params,
             availability="aiopen",
+        )
+        description = str(tool.get("description") or f"AIOPEN {action}")
+        if (
+            registered is not None
+            and action.startswith("ui_")
+            and prior.risk == "high"
+            and not prior.read_only
+        ):
+            if "session_id" not in required_params:
+                required_params.append("session_id")
+            input_schema["required"] = list(required_params)
+            properties = input_schema.setdefault("properties", {})
+            properties["session_id"] = {
+                **properties.get("session_id", {}),
+                "type": "string",
+                "minLength": 1,
+                "pattern": r"[\s\S]*\S[\s\S]*",
+                "description": "必须显式指定已绑定的屏幕会话，后续 ui_verify 使用完全相同的 session_id。",
+            }
+            description += (
+                " Agent 写入要求：显式提供非空 session_id，并在同一任务计划中安排"
+                "使用相同 session_id 的后续 aiopen.ui_verify；通过 depends_on 或 next"
+                "连接为无条件下游，计划不得包含 branches。ui_verify 必须检查本次写入的预期结果。"
+            )
+            for sample in fixture:
+                sample["input"]["session_id"] = "screen-session-1"
+        # The registry owns authority/retries; wire definitions only supply the
+        # schema and guidance. Do not downgrade a high-risk registered UI write.
+        specs[("aiopen", action)] = replace(
+            prior,
+            description=description,
+            input_schema=deepcopy(input_schema),
+            output_schema=deepcopy(output_schema),
+            required_params=required_params,
             contract_samples=deepcopy(fixture),
         )
 
@@ -299,13 +335,17 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             required = action_meta.get("required_params")
             required_params = [str(x) for x in required] if isinstance(required, list) else []
             risk = _risk_value(action_meta.get("risk"))
+            declared_input = action_meta.get("input_schema")
+            declared_output = action_meta.get("output_schema")
             input_schema = _SPECIAL_INPUT_SCHEMAS.get(
                 (str(tool_id), normalized_action),
-                _schema_from_required(required_params),
+                declared_input
+                if isinstance(declared_input, dict)
+                else _schema_from_required(required_params),
             )
             output_schema = _SPECIAL_OUTPUT_SCHEMAS.get(
                 (str(tool_id), normalized_action),
-                _DEFAULT_OUTPUT_SCHEMA,
+                declared_output if isinstance(declared_output, dict) else _DEFAULT_OUTPUT_SCHEMA,
             )
             contract_samples = _SPECIAL_TOOL_CONTRACTS.get(
                 (str(tool_id), normalized_action),
@@ -314,7 +354,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             spec = ToolActionSpecV2(
                 tool_id=str(tool_id),
                 action=normalized_action,
-                description=tool_description,
+                description=str(action_meta.get("description") or tool_description),
                 input_schema=deepcopy(input_schema),
                 output_schema=deepcopy(output_schema),
                 risk=risk,
@@ -603,9 +643,9 @@ def _validate_schema_payload(
                         subject=f"{subject}.{key}[{index}]",
                         allow_references_from=allow_references_from,
                         allow_missing_fields=allow_missing_fields,
-                        path_prefix=f"{path_prefix}.{key}[{index}]"
-                        if path_prefix
-                        else f"{key}[{index}]",
+                        path_prefix=(
+                            f"{path_prefix}.{key}[{index}]" if path_prefix else f"{key}[{index}]"
+                        ),
                     )
                     if not nested_ok:
                         return False, nested_message

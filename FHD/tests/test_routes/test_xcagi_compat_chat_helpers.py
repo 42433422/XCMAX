@@ -699,6 +699,30 @@ class TestSseEventLine:
         assert result.endswith(b"\n\n")
         assert b"hello" in result
 
+    def test_trace_is_shared_without_promoting_done_to_success(self):
+        import json
+
+        from app.neuro_bus.tracer import TraceContext
+
+        payload = {"type": "done", "result": {"execution_state": "waiting_approval"}}
+        with TraceContext("a" * 32, "b" * 16, request_id="request-stream"):
+            encoded = json.loads(ch._sse_event_line(payload)[6:])
+        assert encoded["trace_id"] == "a" * 32
+        assert encoded["span_id"] == "b" * 16
+        assert encoded["request_id"] == "request-stream"
+        assert encoded["result"] == payload["result"]
+        assert "trace_id" not in payload
+
+    def test_replayed_trace_is_not_mixed_with_current_request_span(self):
+        import json
+
+        from app.neuro_bus.tracer import TraceContext
+
+        payload = {"type": "tool_call", "trace_id": "c" * 32, "duration_ms": 0}
+        with TraceContext("c" * 32, "b" * 16, request_id="new-request"):
+            encoded = json.loads(ch._sse_event_line(payload)[6:])
+        assert encoded == payload
+
 
 # ---------------------------------------------------------------------------
 # _thinking_steps_from_planner_stream_text

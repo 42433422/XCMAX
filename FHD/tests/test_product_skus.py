@@ -18,6 +18,21 @@ def test_enterprise_includes_erp():
     assert ERP_DOMAIN_BRIDGE_MOD_ID in ENTERPRISE_HOST_MOD_IDS
 
 
+def test_kellai_is_a_bundled_product_module_visible_in_the_market():
+    from pathlib import Path
+
+    from app.infrastructure.mods.manifest import parse_manifest
+    from app.mod_sdk.host_foundation import is_infrastructure_mod_hidden_from_store
+
+    assert "kellai" in ENTERPRISE_HOST_MOD_IDS
+    assert not is_infrastructure_mod_hidden_from_store("kellai")
+    source = Path(__file__).resolve().parents[1] / "mods" / "tools" / "kellai"
+    metadata = parse_manifest(str(source))
+    assert metadata is not None and metadata.id == "kellai"
+    assert metadata.frontend_menu[0]["path"] == "/kellai"
+    assert metadata.backend_entry == ""
+
+
 def test_personal_blocks_erp(monkeypatch):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "personal")
     assert is_mod_blocked_for_sku(ERP_DOMAIN_BRIDGE_MOD_ID)

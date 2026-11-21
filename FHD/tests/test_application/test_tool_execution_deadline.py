@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.application.agent_orchestrator.run_models import AgentStep
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
 
 
@@ -56,6 +56,64 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
     assert result["retryable"] is False and result["reconciliation_required"] is True
 
 
+@pytest.mark.parametrize("claimed_success", [False, True])
+@pytest.mark.parametrize("condition", ["timely", "late", "unknown_io"])
+def test_reconciliation_receipt_keeps_evidence_only_when_returned_within_budget(
+    monkeypatch, claimed_success, condition
+):
+    from app.application.agent_orchestrator import tool_executor as tools
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    monkeypatch.setenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", "true")
+    moments = iter((10.0, 12.0 if condition == "late" else 10.5))
+    monkeypatch.setattr(tools, "time", SimpleNamespace(monotonic=lambda: next(moments)))
+    receipt = {
+        "success": claimed_success,
+        "outcome": "succeeded" if claimed_success else "unknown",
+        "execution_outcome": "succeeded",
+        "error_code": "tool_delivery_incomplete",
+        "message": "The action was verified; one attachment was not delivered.",
+        "retryable": True,
+        "reconciliation_required": True,
+        "run_id": "existing-run",
+        "steps": [{"index": 0, "status": "completed"}],
+        "verification": [{"status": "passed"}],
+        "artifacts": [{"artifact_id": "json_receipt", "artifact_type": "file"}],
+    }
+    calls = []
+
+    def execute(step, *, runtime_context, deadline_monotonic):
+        calls.append(deadline_monotonic)
+        if condition == "unknown_io":
+            with invocation_deadline(deadline_monotonic) as budget:
+                budget.uncertain.append({"kind": "http_timeout", "method": "POST"})
+        return receipt
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute_with_deadline=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=1,
+    )
+    assert calls == [11.0]
+    assert result["success"] is False and result["outcome"] == "unknown"
+    assert result["retryable"] is False and result["reconciliation_required"] is True
+    assert receipt["success"] is claimed_success and receipt["retryable"] is True
+    if condition == "timely":
+        assert result["error_code"] == receipt["error_code"]
+        assert result["message"] == receipt["message"]
+        for key in ("artifacts", "run_id", "execution_outcome", "steps", "verification"):
+            assert result[key] == receipt[key]
+        assert "reconciliation_evidence" not in result
+    else:
+        assert result["error_code"] == "tool_timeout_unknown"
+        assert result["reconciliation_evidence"] == receipt
+        assert "artifacts" not in result
+        assert result["io_reconciliation"] == (
+            [{"kind": "http_timeout", "method": "POST"}] if condition == "unknown_io" else []
+        )
+
+
 @pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
 def test_invalid_timeout_never_dispatches(timeout):
     result = execute_with_tool_deadline(
@@ -69,7 +127,7 @@ def test_unknown_outcome_blocks_automatic_repair_without_dispatch():
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
     runner = AgentOrchestrator(repository=InMemoryAgentRunRepository())
-    run = SimpleNamespace(metadata={"non_retryable": True})
+    run = AgentRun(user_id="test-owner", message="original task", metadata={"non_retryable": True})
     assert runner._prepare_repair_or_retry(run, _step(), runtime_context={}) is False
 
 
@@ -189,7 +247,9 @@ def test_employee_cannot_hide_early_http_timeout_from_outer_invocation(
         SimpleNamespace(execute=execute),
         _step(),
         runtime_context={},
-        timeout_seconds=0.05 if timeout_kind == "budget" else 30,
+        # Exercise a timeout after provider entry, allowing SDK setup under CI
+        # load; the mocked request still waits 10 seconds and cannot complete.
+        timeout_seconds=0.5 if timeout_kind == "budget" else 30,
     )
     assert len(calls) == 1 and result["outcome"] == "unknown"
     assert result["retryable"] is False and result["reconciliation_required"]
@@ -272,3 +332,136 @@ def test_employee_async_bridge_preserves_invocation_budget(bridge):
         assert _DEADLINE.get() is None
     finally:
         tenant.reset(token)
+
+
+@pytest.mark.parametrize("failure", ["read_error", "protocol_error", "cancelled", 429, 503])
+def test_remote_write_failure_cannot_be_hidden_by_employee_success(monkeypatch, failure):
+    import asyncio
+
+    import httpx
+
+    from app.application.tool_execution_deadline import build_http_helpers
+
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    calls = []
+
+    async def request(self, method, url, **kwargs):
+        calls.append(method)
+        if failure == "read_error":
+            raise httpx.ReadError("private upstream error")
+        if failure == "protocol_error":
+            raise httpx.RemoteProtocolError("private upstream error")
+        if failure == "cancelled":
+            raise asyncio.CancelledError
+        return httpx.Response(failure, json={"message": "result unavailable"})
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", request)
+
+    def execute(*args, **kwargs):
+        _, post = build_http_helpers()
+        try:
+            asyncio.run(post("https://fixture.invalid", {"private": "payload"}))
+        except asyncio.CancelledError:
+            pass  # An employee swallowing cancellation still cannot settle success.
+        return {"success": True, "data": {"claimed": "complete"}}
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=30,
+    )
+    assert calls == ["POST"]
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert result["reconciliation_evidence"]["success"] is True
+    assert result["io_reconciliation"] == [
+        {
+            "kind": (
+                "http_failure"
+                if isinstance(failure, int)
+                else "http_cancelled"
+                if failure == "cancelled"
+                else "http_transport_error"
+            ),
+            "method": "POST",
+        }
+    ]
+
+
+@pytest.mark.parametrize("entry", ["prepare_repair_or_retry", "prepare_llm_repair_or_retry"])
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"success": False, "outcome": "unknown", "retryable": True},
+        {"success": False, "result": {"outputs": [{"execution_state": "running"}]}},
+        {"success": False, "requires_reconciliation": True},
+        {"success": False, "result": {"execution_status": "timeout"}},
+        {"success": False, "error_code": "tool_timeout_unknown"},
+        {"success": False, "error_code": "tool_billing_blocked"},
+    ],
+)
+def test_repair_rechecks_receipt_when_old_run_lacks_non_retryable_flag(entry, output):
+    from app.application.agent_orchestrator.run_repair import RunRepair
+
+    # None dependencies intentionally fail if an uncertain receipt reaches repair,
+    # billing, LLM generation or persistence rather than being refused at entry.
+    repair = RunRepair(None, None, None)
+    step = _step()
+    step.risk, step.idempotent, step.output = "low", True, output
+    run = AgentRun(user_id="test-owner", message="original task", steps=[step])
+    assert not getattr(repair, entry)(run, step, runtime_context={})
+
+
+@pytest.mark.parametrize("entry", ["prepare_repair_or_retry", "prepare_llm_repair_or_retry"])
+def test_repair_override_cannot_extend_server_attempt_limit(entry):
+    from app.application.agent_orchestrator.run_repair import RunRepair
+
+    dependencies = SimpleNamespace(repair_enabled=lambda *_: True, repair_limit=lambda *_: 99999)
+    repair = RunRepair(None, None, dependencies)
+    step = _step()
+    step.risk, step.idempotent = "low", True
+    step.output = {"success": False, "retryable": True}
+    step.repair_history = [{"attempt_count": attempt} for attempt in range(1, 5)]
+    run = AgentRun(
+        user_id="test-owner",
+        message="original task",
+        steps=[step],
+        metadata={
+            "plan": {
+                "metadata": {
+                    "repair_overrides": {step.node_id: {"max_attempts": 99999, "retry": True}},
+                }
+            }
+        }
+    )
+    assert not getattr(repair, entry)(run, step, runtime_context={})
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        {"requires_reconciliation": True},
+        {"outcome_unknown": True},
+        {"execution_status": "unknown"},
+        {"result": {"outputs": [{"execution_state": "unknown"}]}},
+    ],
+)
+def test_on_time_receipt_cannot_hide_unknown_effect(monkeypatch, marker):
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    raw = {"success": True, "request_id": "original-request", **marker}
+    calls = []
+
+    def execute(*_args, **_kwargs):
+        calls.append(True)
+        return raw
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=30,
+    )
+    assert result["success"] is False and result["outcome"] == "unknown"
+    assert result["retryable"] is False and result["reconciliation_required"] is True
+    assert result["request_id"] == "original-request" and calls == [True]
+    assert raw["success"] is True  # A projection must not rewrite the original evidence.

@@ -22,6 +22,7 @@ from modstore_server.autonomy_decision_audit import (
 from modstore_server.autonomy_decision_evidence_api import router
 from modstore_server.redline_approval_api import router as redline_router
 from modstore_server.redline_approval_gate import (
+    approve_redline_request,
     create_redline_request,
     reject_redline_request,
 )
@@ -395,6 +396,25 @@ def test_redline_approval_center_is_wired_without_new_write_endpoint(
         "ai_employee",
         "human",
     }
+
+
+@pytest.mark.parametrize("action", [approve_redline_request, reject_redline_request])
+def test_failed_redline_transition_never_reports_or_publishes_success(
+    action, session_factory, monkeypatch
+):
+    events = []
+    transitions = []
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.publish", lambda *args, **kwargs: events.append(args)
+    )
+    monkeypatch.setattr(
+        "modstore_server.redline_approval_gate._append_redline_transition",
+        lambda *args, **kwargs: transitions.append(kwargs),
+    )
+    result = action(987654, admin_user_id=42)
+    assert result["ok"] is False
+    assert result["result"]["ok"] is False
+    assert events == [] and transitions == []
 
 
 def test_admin_evidence_endpoint_requires_admin_and_is_read_only(monkeypatch):

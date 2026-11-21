@@ -221,6 +221,18 @@ streams:
       will scan route registry and add to SSOT). MOD bridge mods/bridge/xcagi-neuro-bus-bridge/
       passes through arbitrary event_type from MOD authors — also NOT enumerated.
     events:
+      - { type: "enterprise.entity_changed", const: ENTERPRISE_ENTITY_CHANGED, payload_fields: [tenant_id, mod_id, entity_type, entity_id, source_table] }
       - { type: "http.request.started",    const: HTTP_REQUEST_STARTED }
       - { type: "http.request.completed",  const: HTTP_REQUEST_COMPLETED }
       - { type: "http.request.failed",     const: HTTP_REQUEST_FAILED }
+
+# Only identity invalidation is consumed; payload business values are never applied.
+enterprise_subscriptions:
+  mode: read_only_invalidation
+  missing_scope: ignore_and_use_authoritative_ttl
+  subscriptions:
+    - {event_type: enterprise.entity_changed, id_field: entity_id, require_source: true}
+    - {event_type: order.status_changed, entity_type: order, id_field: order_id}
+    - {event_type: order.item_updated, entity_type: order, id_field: order_id}
+    - {event_type: customer.updated, entity_type: customer, id_field: customer_id}
+    - {event_type: customer.deactivated, entity_type: customer, id_field: customer_id}

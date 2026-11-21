@@ -460,6 +460,7 @@ class TestExecuteRegisteredWorkflowTool:
         expected_keys = {
             "client_product_issue",
             "conversation_history",
+            "kellai",
             "desktop_automation",
             "customers",
             "products",

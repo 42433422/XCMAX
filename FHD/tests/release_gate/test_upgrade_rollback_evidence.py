@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import yaml
 
 
 def _module():
@@ -91,3 +97,59 @@ def test_customer_device_or_synthetic_rollback_cannot_pass() -> None:
     assert result["passed"] is False
     assert "server_real_production_rollback_missing" in result["blockers"]
     assert "windows11_real_controlled_device_missing" in result["blockers"]
+
+
+def test_published_rollback_step_executes_from_its_workflow_directory(tmp_path) -> None:
+    repo = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load(
+        (repo / ".github/workflows/fhd-upgrade-rollback-evidence.yml").read_text()
+    )
+    step = next(item for item in workflow["jobs"]["verify"]["steps"] if "run" in item)
+    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    evidence = _evidence(sha)
+    for target, version in (
+        ("macos", "26.3"),
+        ("windows10", "10.0.19045"),
+        ("windows11", "11.0.26100"),
+    ):
+        evidence["desktops"][target]["os_version"] = version
+    result = subprocess.run(
+        ["bash", "-c", step["run"]],
+        cwd=repo / workflow["defaults"]["run"]["working-directory"],
+        env={
+            **os.environ,
+            "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+            "RUNNER_TEMP": str(tmp_path),
+            "RELEASE_SHA": sha,
+            "EVIDENCE_JSON": json.dumps(evidence),
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads((tmp_path / "upgrade-rollback-verification.json").read_text())["passed"]
+
+
+def test_readback_preflight_runs_without_checkout_and_rejects_invalid_sha(
+    tmp_path,
+) -> None:
+    repo = Path(__file__).resolve().parents[3]
+    for path in (
+        repo / "FHD/.github/workflows/release-convergence-readback.yml",
+        repo / ".github/workflows/fhd-release-convergence-readback.yml",
+    ):
+        workflow = yaml.safe_load(path.read_text())
+        job = workflow["jobs"]["readback"]
+        step = job["steps"][0]
+        defaults = job.get("defaults", workflow.get("defaults", {}))
+        cwd = step.get("working-directory", defaults.get("run", {}).get("working-directory", "."))
+        result = subprocess.run(
+            ["bash", "-c", step["run"]],
+            cwd=tmp_path / cwd,
+            env={**os.environ, "ADMIN_TOKEN": "fixture-only", "RELEASE_SHA": "invalid"},
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr

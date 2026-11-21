@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import importlib
+from fastapi import HTTPException
 
 # --- from strategic_layer_api_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -25,6 +26,23 @@ def _meeting_service() -> _facade().CouncilMeetingService:
 
 def _report_service() -> _facade().StrategicReportService:
     return _facade().StrategicReportService()
+
+
+def _portfolio_boundary(decision_id, principal=None):
+    """Portfolio budget approval/results have their own authenticated contract."""
+    record = _ledger().get(decision_id)
+    if record is None or record.decision_payload.get("schema") not in {
+        "xcagi.strategic_portfolio/v1",
+        "xcagi.strategy_company_budget/v1",
+        "xcagi.strategy_company_policy/v1",
+    }:
+        return
+    if principal is None:
+        raise HTTPException(409, "Use the portfolio API for budget and execution changes")
+    if not getattr(principal, "is_admin", False) or record.decision_payload.get(
+        "owner_user_id"
+    ) != getattr(principal, "id", None):
+        raise HTTPException(404, "decision not found")
 
 
 def _parse_dt(s: _facade().Optional[str]) -> _facade().Optional[_facade().datetime]:
@@ -157,6 +175,16 @@ def propose_decision(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """提议新决策；服务层立即评估自治边界并决定初始状态。"""
+    if body.scope in {
+        "strategy_portfolio",
+        "strategy_company_budget",
+        "strategy_company_policy",
+    } or body.payload.get("schema") in {
+        "xcagi.strategic_portfolio/v1",
+        "xcagi.strategy_company_budget/v1",
+        "xcagi.strategy_company_policy/v1",
+    }:
+        raise HTTPException(409, "Use the authenticated portfolio proposal API")
     try:
         decision_type = _facade().DecisionType(body.decision_type)
     except ValueError as exc:
@@ -208,6 +236,16 @@ def list_decisions(
         ._ledger()
         .list_recent(status=status_enum, decision_type=type_enum, scope=scope, limit=limit)
     )
+    records = [
+        r
+        for r in records
+        if r.decision_payload.get("schema")
+        not in {
+            "xcagi.strategic_portfolio/v1",
+            "xcagi.strategy_company_budget/v1",
+            "xcagi.strategy_company_policy/v1",
+        }
+    ]
     return {
         "ok": True,
         "count": len(records),
@@ -220,6 +258,7 @@ def get_decision(
     decision_id: str, _: _facade().User = _facade().Depends(_facade().get_current_user)
 ) -> _facade().Dict[str, _facade().Any]:
     """查询单条决策详情。"""
+    _portfolio_boundary(decision_id, _)
     record = _facade()._ledger().get(decision_id)
     if record is None:
         raise _facade().HTTPException(404, f"decision not found: {decision_id}")
@@ -236,6 +275,7 @@ def approve_decision(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """人工或会议通过决策（仅 proposed 状态可调用）。"""
+    _portfolio_boundary(decision_id)
     try:
         decided_by = _facade().DecidedBy(body.decided_by)
     except ValueError as exc:
@@ -260,6 +300,7 @@ def reject_decision(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """人工或会议否决决策（仅 proposed 状态可调用，review_notes 必填）。"""
+    _portfolio_boundary(decision_id)
     try:
         decided_by = _facade().DecidedBy(body.decided_by)
     except ValueError as exc:
@@ -285,6 +326,7 @@ def withdraw_decision(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """撤回决策（任意非终态可调用）。"""
+    _portfolio_boundary(decision_id)
     try:
         record = _facade()._ledger().withdraw(decision_id, actor=body.actor, reason=body.reason)
         return {"ok": True, "decision": _facade()._to_public_dict(record)}
@@ -301,6 +343,7 @@ def start_decision(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """开始执行决策（auto_approved 或 approved 状态可调用）。"""
+    _portfolio_boundary(decision_id)
     try:
         record = (
             _facade()
@@ -322,6 +365,7 @@ def complete_decision(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """执行层回写完成结果（executing 状态可调用）。"""
+    _portfolio_boundary(decision_id)
     review_at = _facade()._parse_dt(body.review_at)
     try:
         record = (
@@ -345,6 +389,7 @@ def review_decision(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """复盘（completed 状态可调用，仅一次）。"""
+    _portfolio_boundary(decision_id)
     try:
         record = (
             _facade()

@@ -285,11 +285,24 @@ async def probe_runtime_route(provider: str, model: str) -> dict[str, Any]:
         model,
         [{"role": "user", "content": "Reply OK."}],
         max_tokens=8,
+        allow_fallback=False,
+    )
+    reported_provider = str(result.get("provider") or provider).strip().lower()
+    route_mismatch = bool(
+        result.get("_fallback_used")
+        or result.get("fallback_used")
+        or result.get("_fallback_provider")
+        or result.get("_fallback_model")
+        or reported_provider != provider.strip().lower()
     )
     return {
-        "ok": bool(result.get("ok")),
-        "status": result.get("status"),
-        "error": str(_secret_safe(result.get("error")))[:500],
+        "ok": bool(result.get("ok")) and not route_mismatch,
+        "status": "probe_route_mismatch" if route_mismatch else result.get("status"),
+        "error": (
+            "指定路由的健康探测收到备用路由结果"
+            if route_mismatch
+            else str(_secret_safe(result.get("error") or ""))[:500]
+        ),
         "checked_at": _now_iso(),
     }
 

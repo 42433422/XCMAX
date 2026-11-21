@@ -6,6 +6,7 @@ import io
 import json
 import zipfile
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -16,13 +17,18 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from modstore_server import employee_api, employee_executor, employee_executor_merged_mod2
+from modstore_server import (
+    employee_api,
+    employee_executor,
+    employee_executor_merged_mod2,
+)
 from modstore_server.models import (
     Base,
     CatalogItem,
     EmployeeExecutionMetric,
     Entitlement,
     ESkill,
+    OutboxEvent,
     PlanTemplate,
     User,
     UserMod,
@@ -31,6 +37,7 @@ from modstore_server.models import (
     WorkflowEdge,
     WorkflowExecution,
     WorkflowNode,
+    WorkflowSandboxRun,
 )
 from modstore_server.services.employee import InProcessEmployeeRuntimeClient
 
@@ -61,6 +68,8 @@ def employee_access(tmp_path, monkeypatch):
                 WorkflowNode,
                 WorkflowEdge,
                 WorkflowExecution,
+                WorkflowSandboxRun,
+                OutboxEvent,
                 ESkill,
             )
         ],
@@ -77,13 +86,16 @@ def employee_access(tmp_path, monkeypatch):
     monkeypatch.setattr("modstore_server.db.catalog.get_session_factory", lambda: factory)
     monkeypatch.setattr("modstore_server.workflow_engine.get_session_factory", lambda: factory)
     monkeypatch.setattr(
+        "modstore_server.workflow_event_runner.get_session_factory", lambda: factory
+    )
+    monkeypatch.setattr(
         "modstore_server.workflow_api.execution.get_session_factory", lambda: factory
     )
     monkeypatch.setattr(
         "modstore_server.workflow_api.execution.require_llm_credit", lambda *_a: None
     )
     monkeypatch.setattr("modstore_server.llm_billing.bill_internal_llm_floor", AsyncMock())
-    monkeypatch.setattr(employee_api, "_list_duty_employee_rows", lambda: [])
+    monkeypatch.setattr(employee_api, "_list_duty_employee_rows", list)
     monkeypatch.setattr("modstore_server.webhook_dispatcher.publish_event", lambda *_a, **_k: None)
     users = {}
     with factory() as db:
@@ -541,7 +553,7 @@ def _workflow_chain(db, workflow_id, user_id, node_type, config):
     db.flush()
     db.add_all(
         WorkflowEdge(workflow_id=workflow_id, source_node_id=left.id, target_node_id=right.id)
-        for left, right in zip(nodes, nodes[1:])
+        for left, right in pairwise(nodes)
     )
 
 

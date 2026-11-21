@@ -28,7 +28,7 @@ const modRoutes = [
   route('/traditional-mode', 'mod-erp-traditional-mode', 'TraditionalModeView.vue', '表格模式'),
 // 旧「业务对接」页已退役；数据对接中心由宿主 EltCenterView（/business-docking）承担
   { path: `${PREFIX}/business-docking`, name: 'mod-erp-business-docking', redirect: '/business-docking' },
-  route('/data-sources', 'mod-erp-data-sources', 'DataSourcesView.vue', '数据来源'),
+  { path: `${PREFIX}/data-sources`, name: 'mod-erp-data-sources', redirect: to => ({ path: '/kellai', query: to.query, hash: to.hash }) },
   route('/print', 'mod-erp-print', 'PrintView.vue', '标签输出与打印'),
   route('/printer-list', 'mod-erp-printer-list', 'PrinterListView.vue', '打印机列表'),
   route('/template-preview', 'mod-erp-template-preview', 'TemplatePreviewView.vue', '模板库'),
@@ -47,7 +47,6 @@ const modMenu = [
   { id: 'mod-erp-materials', label: '资源库', icon: 'fa-archive', path: `${PREFIX}/materials` },
   { id: 'mod-erp-traditional-mode', label: '表格模式', icon: 'fa-table', path: `${PREFIX}/traditional-mode` },
   { id: 'mod-erp-business-docking', label: '数据对接中心', icon: 'fa-exchange', path: `${PREFIX}/business-docking` },
-  { id: 'mod-erp-data-sources', label: '数据来源', icon: 'fa-database', path: `${PREFIX}/data-sources` },
   { id: 'mod-erp-print', label: '标签输出与打印', icon: 'fa-print', path: `${PREFIX}/print` },
   { id: 'mod-erp-printer-list', label: '打印机列表', icon: 'fa-print', path: `${PREFIX}/printer-list` },
   { id: 'mod-erp-template-preview', label: '模板库', icon: 'fa-file-o', path: `${PREFIX}/template-preview` },

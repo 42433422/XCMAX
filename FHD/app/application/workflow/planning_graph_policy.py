@@ -12,6 +12,7 @@ from app.application.workflow.workflow_types import (
     WorkflowNode,
     validate_plan_graph,
 )
+from app.utils.deployment import env_flag
 
 
 def filter_registry_for_profile(tool_registry: dict[str, Any], profile: str) -> dict[str, Any]:
@@ -34,6 +35,12 @@ def filter_registry_for_profile(tool_registry: dict[str, Any], profile: str) -> 
         kept_actions: dict[str, Any] = {}
         for aname, ameta in actions.items():
             if not isinstance(ameta, dict):
+                continue
+            if (
+                tool_id == "desktop_automation"
+                and aname in {"computer_observe", "computer_execute"}
+                and not env_flag("XCAGI_COMPUTER_USE_ENABLED")
+            ):
                 continue
             av = str(ameta.get("availability") or "shared").strip().lower()
             if profile == "normal" and av == "pro_only":

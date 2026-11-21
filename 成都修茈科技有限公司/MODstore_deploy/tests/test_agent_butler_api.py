@@ -16,6 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.test_xiaoc_life_chat import life_database as life_database
+
+pytestmark = pytest.mark.usefixtures("life_database")
+
 # ─── Fixtures ────────────────────────────────────────────────────────
 
 

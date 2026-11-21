@@ -28,6 +28,11 @@ async def register_neuro_runtime() -> NeuroBus:
     handler_result = await register_domain_handlers_for_runtime(bus)
     if handler_result:
         logger.info("NeuroBus domain handlers: %s", handler_result.get("execution_path"))
+    from app.application.enterprise_cognition.projection import (
+        register_enterprise_subscriptions,
+    )
+
+    register_enterprise_subscriptions(bus)
     log_subscription_snapshot(bus)
     logger.info("Neuro runtime registered; DomainRegistry=%s", bus.registered_domains)
     _runtime_registered = True

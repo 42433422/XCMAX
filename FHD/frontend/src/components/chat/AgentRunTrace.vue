@@ -14,6 +14,10 @@
     </summary>
 
     <div class="art-body">
+      <details v-if="trace.trace_id" class="art-tool-meta">
+        <summary>诊断信息</summary>
+        <pre>{{ executionObservationDetails(trace) }}</pre>
+      </details>
       <div class="art-stream">
         <details
           v-for="(phase, idx) in trace.phases"
@@ -83,7 +87,11 @@
               </button>
             </template>
             <pre v-else-if="isRun(phase) && phase.final_output_preview" class="art-final-output">{{ phase.final_output_preview }}</pre>
-            <pre v-else-if="isPlanner(phase) && phase.detail" class="art-final-output is-error">{{ phase.detail }}</pre>
+            <pre v-else-if="phase.detail || phase.error" class="art-final-output is-error">{{ phase.detail || phase.error }}</pre>
+            <details v-if="phase.trace_id || phase.error_code" class="art-tool-meta">
+              <summary>诊断信息</summary>
+              <pre>{{ executionObservationDetails(phase) }}</pre>
+            </details>
           </div>
         </details>
       </div>
@@ -106,7 +114,7 @@ import type {
   TraceRunPhase,
   TraceToolPhase,
 } from '@/utils/agentRunTraceModel'
-import { shouldShowAgentRunPlanGraph } from '@/utils/agentRunTraceModel'
+import { executionObservationDetails, shouldShowAgentRunPlanGraph } from '@/utils/agentRunTraceModel'
 import { traceToMermaid } from '@/utils/agentRunTraceToMermaid'
 import { getToolPermission, setToolPermission, type ToolPermissionScope } from '@/utils/toolPermissionCache'
 
@@ -125,6 +133,8 @@ const STATUS_LABELS: Record<string, string> = {
   failed: '执行失败',
   waiting: '等待确认',
   blocked: '已阻断',
+  paused: '已暂停',
+  cancelled: '已取消',
 }
 
 const TOOL_LABELS: Array<[RegExp, string]> = [
@@ -188,7 +198,7 @@ const taskTitle = computed(() => {
 
 const durationLabel = computed(() => {
   const ms = props.trace.total_duration_ms
-  return ms == null ? '' : formatDuration(ms)
+  return ms == null ? '' : `${props.trace.duration_scope === 'active' ? '执行耗时 ' : ''}${formatDuration(ms)}`
 })
 
 function isTool(phase: TracePhase): phase is TraceToolPhase {
@@ -244,6 +254,8 @@ function statusIconClass(status: string): string {
   if (status === 'success') return 'fa-check-circle'
   if (status === 'failed') return 'fa-times-circle'
   if (status === 'waiting') return 'fa-pause-circle'
+  if (status === 'paused') return 'fa-pause-circle'
+  if (status === 'cancelled') return 'fa-ban'
   if (status === 'blocked') return 'fa-ban'
   return 'fa-circle-o-notch fa-spin'
 }
@@ -261,6 +273,7 @@ function phaseDisplaySubtitle(phase: TracePhase): string {
 }
 
 function hasPhaseDetails(phase: TracePhase): boolean {
+  if (phase.trace_id || phase.error_code || phase.error || phase.detail) return true
   if (isTool(phase)) {
     return Boolean(
       phase.params_json ||

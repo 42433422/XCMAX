@@ -35,9 +35,7 @@ _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS = 0.0
 _LAST_TIME_RAIL_OBSERVABILITY_MISSING = -1
 _REQUIRED_CORE_JOB_IDS = frozenset(
     {
-        "auto_fix_event_bindings_refresh",
         "auto_merge_audit_sampling",
-        "auto_version_bump_daily",
         "autonomy_metrics_snapshot",
         "autonomy_posthoc_audit",
         "capability_proposal_relay",
@@ -66,6 +64,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "telemetry_backlog_scan",
         "time_rail_observability_sync",
         "xiaoc_delivery_followups",
+        "xiaoc_life",
     }
 )
 _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
@@ -129,6 +128,16 @@ def start_scheduler() -> None:
     _scheduler = BackgroundScheduler()
     _scheduler.start()
     _register_scheduler_phase_01()
+    from modstore_server.xiaoc_life_runtime import tick as tick_xiaoc_life
+
+    _scheduler.add_job(
+        lambda: _run_tracked_scheduler_job("xiaoc_life", tick_xiaoc_life),
+        IntervalTrigger(seconds=60),
+        id="xiaoc_life",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
     from modstore_server.xiaoc_delivery_followup import run_delivery_followups
 
     _scheduler.add_job(

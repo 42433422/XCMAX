@@ -63,8 +63,13 @@ Write-Host "[ok] vue-dist gate: index.html present, assets/js count=$jsCount"
 
 Write-Host "[backend-build] $(Get-Date -Format o) runtime dependency installation started"
 python -m pip install --upgrade pip
-python -m pip install -c ops/deploy/requirements-server-api.lock.txt -r requirements-server-api.txt -e ".[server-api]"
-if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
+if ($env:XCAGI_BUNDLE_COMPUTER_USE -eq '1') {
+  python -m pip install -c ops/deploy/requirements-server-api.lock.txt -r requirements-server-api.txt -e ".[server-api,computer-use]"
+  if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api,computer-use] failed" }
+} else {
+  python -m pip install -c ops/deploy/requirements-server-api.lock.txt -r requirements-server-api.txt -e ".[server-api]"
+  if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
+}
 python -m pip check
 if ($LASTEXITCODE -ne 0) { throw "server-api runtime dependencies are inconsistent" }
 python -m pip install "pyinstaller>=6.0" appdirs

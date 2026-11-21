@@ -243,7 +243,7 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
     """Read predecessors under the live SQL lease, never from customer prompt fields."""
     from modstore_server.incident_team_escalation_contract import active_context
     from modstore_server.incident_team_handoff import role_handoff
-    from modstore_server.models import IncidentEvent, get_session_factory
+    from modstore_server.models import IncidentEvent, RetortEvolutionRun, get_session_factory
     from modstore_server.node_coordinator import assert_incident_claim
     from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -317,16 +317,32 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
                     raise DoltIncidentContractError("retry_handoff_missing")
                 handoffs.append(previous_fix)
             feedback = None
+            isolation = None
+            requires_isolation = False
             if source.get("retort_run_id"):
+                from modstore_server.para_execution_isolation import (
+                    HEADER_ONLY_PLATFORM_PROFILE,
+                    feedback_execution_kind,
+                )
                 from modstore_server.retort_customer_feedback import private_execution_context
+                from modstore_server.retort_github_workspace import authorized_incident
 
                 feedback = private_execution_context(db, event_id, source)
+                retort_run = db.get(RetortEvolutionRun, source["retort_run_id"])
+                requires_isolation = bool(
+                    retort_run
+                    and feedback_execution_kind(json.loads(str(retort_run.effects_json or "{}")))
+                )
+                if requires_isolation and authorized_incident(db, source, event_id):
+                    isolation = HEADER_ONLY_PLATFORM_PROFILE
             return {
                 "role": role,
                 "source": source,
                 "handoffs": handoffs,
                 "review": actions,
                 "customer_feedback": feedback,
+                "execution_isolation": isolation,
+                "requires_isolated_execution": requires_isolation,
             }
     except DoltIncidentContractError:
         raise
@@ -340,10 +356,15 @@ def _incident_prompt(
     contract: Dict[str, Any], req: Dict[str, Any], tool_name: str = DOLT_TOOL
 ) -> str:
     """Project only bounded handoff fields through the existing PII redactor."""
-    if contract.get("customer_feedback"):
+    if contract.get("customer_feedback") or contract.get("requires_isolated_execution"):
+        from modstore_server.para_execution_isolation import HEADER_ONLY_PLATFORM_PROFILE
         from modstore_server.retort_customer_feedback import CREDENTIAL_BLOCK
 
-        raise DoltIncidentContractError(CREDENTIAL_BLOCK)
+        if (
+            tool_name != "opencode"
+            or contract.get("execution_isolation") != HEADER_ONLY_PLATFORM_PROFILE
+        ):
+            raise DoltIncidentContractError(CREDENTIAL_BLOCK)
     sensitive = _sensitive_values(contract["source"])
 
     def clean(value: Any, limit: int = 1000) -> str:
@@ -401,6 +422,23 @@ def _incident_prompt(
         f"role: {role}",
         goals[role],
     ]
+    if contract.get("customer_feedback"):
+        feedback = contract["customer_feedback"]
+        lines.append(
+            "private_reproduction: "
+            + json.dumps(
+                {
+                    "intent": clean(feedback.get("intent"), 100),
+                    "reproduction": [
+                        clean(value, 2000) for value in (feedback.get("reproduction") or [])[:8]
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        )
+        lines.append(
+            "复现场景只用于受限任务；禁止将该原文、客户标识或附件写入共享代码、Issue、PR或外部日志。"
+        )
     if resolution.get("route") == "private_mod":
         lines += [
             "客户需求仅交付到原账号授权的私有 Mod；禁止客户专用宿主分支，禁止把客户业务数据并入共享代码。",

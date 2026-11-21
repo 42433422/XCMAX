@@ -85,6 +85,7 @@ class DispatchReceipt:
     environment: str
     action_id: str
     url: str = ""
+    controller_sha: str = ""
 
     def require_correlation(self, *, merge_sha: str, environment: str) -> DispatchReceipt:
         if not str(self.workflow_run_id or "").strip():
@@ -107,7 +108,7 @@ class WorkflowCompletion:
     def require_success(self, receipt: DispatchReceipt) -> WorkflowCompletion:
         if str(self.workflow_run_id) != str(receipt.workflow_run_id):
             raise DeploymentReceiptError("workflow_run_id_mismatch")
-        if _sha(self.head_sha) != _sha(receipt.head_sha):
+        if _sha(self.head_sha) != _sha(receipt.controller_sha or receipt.head_sha):
             raise DeploymentReceiptError("workflow_head_sha_mismatch")
         if str(self.status or "").lower() != "completed":
             raise DeploymentReceiptError("workflow_not_completed")
@@ -165,9 +166,20 @@ def _deploy_one(
     merge_sha: str,
     environment: str,
 ) -> Dict[str, Any]:
-    action_id = f"loop:{run_id}:deploy:{environment}:{merge_sha[:12]}"
+    action_id = (
+        f"release:{merge_sha}"
+        if environment == "production"
+        else f"loop:{run_id}:deploy:{environment}:{merge_sha[:12]}"
+    )
     receipt: DispatchReceipt | None = None
     try:
+        recover = getattr(gateway, "recover_verified_deployment", None)
+        if recover is not None:
+            verified = recover(
+                run_id=run_id, merge_sha=merge_sha, environment=environment, action_id=action_id
+            )
+            if verified is not None:
+                return dict(verified)
         receipt = gateway.dispatch(
             environment=environment, merge_sha=merge_sha, action_id=action_id
         ).require_correlation(merge_sha=merge_sha, environment=environment)
@@ -177,6 +189,7 @@ def _deploy_one(
             "environment": environment,
             "workflow_run_id": str(receipt.workflow_run_id),
             "action_id": action_id,
+            "controller_sha": receipt.controller_sha or receipt.head_sha,
         }
         record_event(
             {
@@ -433,12 +446,12 @@ def resolve_pending_merge_request(
     return attested_matches[0]
 
 
-from modstore_server.self_maintenance_receipt_recording import (  # noqa: E402
+from modstore_server.self_maintenance_receipt_recording import (
     record_completed_deployment_receipt as record_completed_deployment_receipt,
 )
 
 
-from modstore_server.self_maintenance_gh_gateway import (  # noqa: E402
+from modstore_server.self_maintenance_gh_gateway import (
     GhActionsDeploymentGateway as GhActionsDeploymentGateway,
 )
 

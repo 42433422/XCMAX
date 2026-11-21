@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import modstore_server.maintenance_loop.memory as memory_domain
 from modstore_server import (
     self_evolution_knowledge,
     self_maintenance_para_merge_remediation,
@@ -13,9 +14,7 @@ from modstore_server import (
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
-from . import config
-from . import memory as memory_domain
-from . import para_client, store
+from . import config, deployment, para_client, store
 
 
 def _close_items_resolved_by_final(
@@ -79,17 +78,29 @@ def _reconcile_requested_merge_feedback(
     base = (api_base or os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
     recent_runs = memory.get("recent_runs")
     open_items = memory.get("open_items")
-    if not base or not isinstance(recent_runs, list):
+    if not base:
         return {"changed": False, "merged": 0, "remediation_added": 0}
+    recent_runs = recent_runs if isinstance(recent_runs, list) else []
     if not isinstance(open_items, list):
         open_items = []
         memory["open_items"] = open_items
     fetcher = task_fetcher or para_client._fetch_para_task_state
     changed = False
+    cursor = memory.get("delivery_recovery_cursor") or {}
+    try:
+        recovered, next_cursor = store._pending_delivery_page(cursor)
+        if cursor != next_cursor:
+            memory["delivery_recovery_cursor"] = next_cursor
+            changed = True
+    except RECOVERABLE_ERRORS:
+        config.logger.exception("failed to page durable pending deliveries")
+        recovered = []
+    known_runs = {str(run.get("run_id") or "") for run in recent_runs if isinstance(run, dict)}
+    runs = recent_runs + [run for run in recovered if run["run_id"] not in known_runs]
     merged = 0
     remediation_added = 0
     checked_task_ids: set[str] = set()
-    for run in reversed(recent_runs):
+    for run in reversed(runs):
         if not isinstance(run, dict):
             continue
         if str(run.get("status") or "") != "completed_merge_requested":
@@ -108,6 +119,14 @@ def _reconcile_requested_merge_feedback(
         if task_status == "merged" and str(task.get("merge_commit_sha") or "").strip():
             merge_sha = str(task.get("merge_commit_sha") or "").strip()
             existing_receipt = run.get("merge_reconciliation")
+            bound_sha = run.get("delivery_merge_sha") or (
+                existing_receipt.get("merge_commit_sha")
+                if isinstance(existing_receipt, dict)
+                else ""
+            )
+            if bound_sha and bound_sha != merge_sha:
+                config.logger.error("recovered merge SHA changed run_id=%s", run.get("run_id"))
+                continue
             receipt = {
                 "merge_commit_sha": merge_sha,
                 "reconciled_at": config._iso(config._utc_now()),
@@ -130,6 +149,43 @@ def _reconcile_requested_merge_feedback(
                 task_ids=[task_id],
             )
             if closed.get("closed_count"):
+                changed = True
+            delivery = deployment._run_deploy_receipts_after_merge(
+                run_id=str(run.get("run_id") or ""),
+                merge_result={
+                    "ok": True,
+                    "merge_commit_sha": merge_sha,
+                    "remote_task_id": task_id,
+                    "branch": branch,
+                },
+            )
+            if run.get("deployment_receipt") != delivery:
+                run["deployment_receipt"] = delivery
+                changed = True
+            if (
+                delivery.get("enabled") is True
+                and delivery.get("ok") is True
+                and delivery.get("staging_verified") is True
+                and (
+                    delivery.get("production_enabled") is False
+                    or (delivery.get("production") or {}).get("verified") is True
+                )
+            ):
+                deployment._append_deploy_receipt_event(
+                    {
+                        **{
+                            key: str(run.get(key) or "")
+                            for key in ("run_id", "para_task_id", "branch")
+                        },
+                        "event": "delivery_reconciled",
+                        "phase": "deployment",
+                        "merge_sha": merge_sha,
+                        "status": "completed_merged",
+                        "ok": True,
+                        "deployment_receipt": delivery,
+                    }
+                )
+                run["status"] = "completed_merged"
                 changed = True
             merged += 1
             continue
@@ -175,13 +231,11 @@ def _reconcile_requested_merge_feedback(
             run["merge_reconciliation"] = receipt
             changed = True
         already_open = any(
-            (
-                isinstance(item, dict)
-                and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
-                and (item.get("reason") == reason)
-                and (item.get("kind") == item_kind)
-                for item in open_items
-            )
+            isinstance(item, dict)
+            and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
+            and (item.get("reason") == reason)
+            and (item.get("kind") == item_kind)
+            for item in open_items
         )
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()
@@ -245,7 +299,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     raw_steps = final.get("steps")
     steps = raw_steps if isinstance(raw_steps, list) else []
     failed_steps = [
-        step.get("step") for step in steps if isinstance(step, dict) and not step.get("ok")
+        step.get("step")
+        for step in steps
+        if isinstance(step, dict) and not step.get("ok") and not step.get("requires_reconciliation")
     ]
     if failed_steps:
         run_id = str(final.get("run_id") or "")

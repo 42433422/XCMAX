@@ -2,6 +2,7 @@
  * 编制图读路径走 FHD 本地 API；写操作 / LLM 仍经 market-proxy（需市场管理员）。
  */
 import api from '@/api/core'
+import { executeAdminEmployee } from '@/utils/adminEmployeeRequest'
 
 const MARKET_PREFIX = '/api/xcmax/market-proxy'
 const LOCAL_PREFIX = '/api/xcmax/local'
@@ -154,22 +155,11 @@ const xcmaxMarketProxy = {
   },
   executeEmployeeTask: async (employeeId: string, task: string, inputData: unknown) => {
     const body = { task, input_data: inputData ?? {} }
-    const marketExecute = () =>
-      marketReq(`employees/${encodeURIComponent(employeeId)}/execute`, {
-        method: 'POST',
-        body,
-      })
-    if (!(await isLocalDutyApiAvailable())) return marketExecute()
-    try {
-      return await api.post(`${LOCAL_PREFIX}/employees/${encodeURIComponent(employeeId)}/execute`, body)
-    } catch (e: unknown) {
-      const err = e as { status?: number }
-      if (err?.status === 404) {
-        localDutyApiAvailable = false
-        return marketExecute()
-      }
-      throw e
-    }
+    if (!(await isLocalDutyApiAvailable())) throw dutyRuntimeUnavailable(`员工 ${employeeId} 的任务回执`)
+    return executeAdminEmployee(employeeId, body, {
+      post: (path, payload) => api.post(path, payload, { retry: false }),
+      get: (path) => api.get(path, {}, { retry: false }),
+    })
   },
   localEmployeeCronJobs: () => api.get(`${LOCAL_PREFIX}/employee-cron/jobs`) as Promise<unknown>,
   localRunEmployeeCronJob: (jobId: string, payload?: { task?: string; input_data?: unknown }) =>

@@ -9,6 +9,14 @@ import importlib
 from typing import Any, Dict
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.xiaoc_life_chat import (
+    admin_life_context,
+    butler_tools_for_user as _butler_tools_for_user,  # noqa: F401  # Public facade export.
+    manual_life_action,
+    partition_butler_tool_calls as _partition_butler_tool_calls,  # noqa: F401  # Public facade export.
+    require_admin_life_capability,
+    require_manual_life_capability,
+)
 
 "Implementation extracted from the public facade module."
 
@@ -321,14 +329,6 @@ async def butler_daily_digest_artifacts(
 "Implementation extracted from the public facade module."
 
 
-def _butler_tools_for_user(
-    user: _facade().User | None,
-) -> _facade().List[_facade().Dict[str, _facade().Any]]:
-    if user is not None and bool(getattr(user, "is_admin", False)):
-        return list(_facade().BUTLER_TOOLS) + list(_facade().ADMIN_READONLY_TOOLS)
-    return list(_facade().BUTLER_TOOLS)
-
-
 def _clip_tool_text(text: str, *, max_chars: int = 2800) -> str:
     t = (text or "").strip()
     if len(t) <= max_chars:
@@ -346,6 +346,7 @@ def _execute_admin_readonly_tool(
     """执行管理员会话只读工具；强制本人数据隔离。"""
     if not bool(getattr(user, "is_admin", False)):
         return "错误：仅管理员会话可用此工具"
+    require_admin_life_capability(user, 2)
     tool = (name or "").strip()
     if tool not in _facade().ADMIN_READONLY_TOOL_NAMES:
         return f"错误：未知只读工具 {tool}"
@@ -477,31 +478,6 @@ def _execute_admin_readonly_tool(
     return f"错误：未处理工具 {tool}"
 
 
-def _partition_butler_tool_calls(
-    tool_calls: _facade().List[_facade().Dict[str, _facade().Any]],
-    *,
-    user: _facade().User,
-    db: _facade().Session,
-) -> tuple[_facade().List[_facade().Dict[str, _facade().Any]], str]:
-    """拆分页面工具 vs 只读工具；只读在服务端执行并返回摘要文本。"""
-    page_calls: _facade().List[_facade().Dict[str, _facade().Any]] = []
-    briefs: _facade().List[str] = []
-    is_admin = bool(getattr(user, "is_admin", False))
-    for tc in tool_calls or []:
-        name = str((tc or {}).get("name") or "").strip()
-        if is_admin and name in _facade().ADMIN_READONLY_TOOL_NAMES:
-            args = (tc or {}).get("args")
-            if not isinstance(args, dict):
-                args = {}
-            briefs.append(_facade()._execute_admin_readonly_tool(name, args, user=user, db=db))
-        else:
-            page_calls.append(tc)
-    brief = ""
-    if briefs:
-        brief = "\n\n".join(briefs)
-    return (page_calls, brief)
-
-
 class ButlerMessageDTO(_facade().BaseModel):
     role: str
     content: _facade().Any
@@ -605,7 +581,7 @@ def _build_messages(
         xiaoc_system_prompt,
     )
 
-    system_content = xiaoc_system_prompt(mode="admin")
+    system_content = xiaoc_system_prompt(mode="admin") + admin_life_context(user)
     if admin_context and user is not None and getattr(user, "is_admin", False) is True:
         system_content += f"\n\n{admin_context}"
     if user is not None:
@@ -1153,8 +1129,8 @@ async def butler_chat(
         from modstore_server.llm_chat_proxy import _normalize_openai_base
 
         tool_resp = None
-        tools_schema = _api._butler_tools_for_user(user)
-        if provider in _api.OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
+        tools_schema = _api._butler_tools_for_user(user, body.messages)
+        if tools_schema and provider in _api.OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
             try:
                 base = _normalize_openai_base(provider, base_url)
                 url = f"{base}/chat/completions"
@@ -1430,6 +1406,7 @@ async def update_butler_skill_active(
 
 
 @_facade().router.post("/orchestrate")
+@manual_life_action(3)
 async def butler_orchestrate(
     body: _facade()._ButlerOrchestrateBody,
     db: _facade().Session = _facade().Depends(_facade().get_db),
@@ -1654,6 +1631,7 @@ async def _run_all_hands_report_session(
             )
 
     try:
+        require_manual_life_capability()
         report = await build_all_hands_report(
             employee_ids=employee_ids,
             max_employees=max_employees,
@@ -1731,6 +1709,7 @@ async def _run_all_hands_report_session(
         html_body = f'<html><body style="font-family:sans-serif;padding:20px"><h2 style="color:#1e293b">员工大会 · 会议摘要</h2><pre style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:#334155">{_facade().html.escape(body_text)}</pre></body></html>'
         any_delivered = False
         for to_email in recipients:
+            require_manual_life_capability()
             result = send_simple_html_email(to_email, subject, html_body)
             deliv = bool(result.get("delivered"))
             if deliv:
@@ -1778,6 +1757,7 @@ async def _run_all_hands_report_session(
 
 
 @_facade().router.post("/all-hands-report/sessions")
+@manual_life_action(3)
 async def butler_all_hands_report_session_start(
     body: AllHandsReportDTO,
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
@@ -1846,6 +1826,7 @@ async def butler_all_hands_report_session_start(
 
 
 @_facade().router.post("/all-hands-report")
+@manual_life_action(3)
 async def butler_all_hands_report(
     body: AllHandsReportDTO,
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
@@ -1980,6 +1961,7 @@ async def _run_digest_vibe_prep_session(
             )
 
     try:
+        require_manual_life_capability()
         result = await build_digest_vibe_prep(
             digest_day=str(digest_row.day or ""),
             digest_subject=str(digest_row.subject or ""),
@@ -2027,6 +2009,7 @@ async def _run_digest_vibe_prep_session(
     from modstore_server.digest_vibe_prep import persist_vibe_prep_on_digest_record
 
     persist_vibe_prep_on_digest_record(int(digest_row.id), result)
+    require_manual_life_capability()
     dispatch_vibe_prep_to_production_lines(int(digest_row.id), result)
     await _finalize_session_done(sid, artifact)
 
@@ -2048,6 +2031,7 @@ class DigestLineExecuteDTO(_facade().BaseModel):
 
 
 @_facade().router.post("/daily-digests/{record_id}/line-execute")
+@manual_life_action(3)
 async def butler_digest_line_execute(
     record_id: int,
     body: DigestLineExecuteDTO,
@@ -2090,6 +2074,7 @@ async def butler_digest_line_execute(
 
 
 @_facade().router.post("/daily-digests/{record_id}/vibe-prep/sessions")
+@manual_life_action(3)
 async def butler_digest_vibe_prep_session_start(
     record_id: int,
     body: DigestVibePrepDTO,

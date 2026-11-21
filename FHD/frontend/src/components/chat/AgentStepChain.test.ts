@@ -18,13 +18,29 @@ function step(overrides: Partial<AgentStepView> = {}): AgentStepView {
 }
 
 describe('AgentStepChain', () => {
-  it('渲染步骤数、状态与耗时', () => {
+  it('labels cumulative tool time and keeps observation data in expandable details', async () => {
+    const wrapper = mount(AgentStepChain, { props: { steps: [step({
+      state: 'failed', durationMs: 0, trace_id: 'trace-a', run_id: 'run-a', error_code: 'tool_timeout',
+    })] } })
+    expect(wrapper.text()).toContain('工具累计 0ms')
+    expect(wrapper.get('.asc-step-duration').text()).toBe('0ms')
+    await wrapper.get('button.asc-step-row').trigger('click')
+    expect(wrapper.text()).toContain('诊断信息')
+    expect(wrapper.text()).toContain('trace-a')
+    expect(wrapper.text()).toContain('tool_timeout')
+    await wrapper.setProps({ steps: [step({ durationMs: 100 }), step({ id: 'unknown-duration' })] })
+    expect(wrapper.text()).not.toContain('工具累计')
+  })
+
+  it('渲染步骤数、状态与单步耗时，不把缺失数据当成零汇总', async () => {
     const wrapper = mount(AgentStepChain, {
       props: { steps: [step({ durationMs: 320 }), step({ id: 'n2', title: '表格' })] },
     })
     expect(wrapper.text()).toContain('工具步骤')
     expect(wrapper.text()).toContain('2 步')
     expect(wrapper.text()).toContain('已完成')
+    expect(wrapper.text()).not.toContain('工具累计')
+    await wrapper.get('button.asc-summary').trigger('click')
     expect(wrapper.text()).toContain('320ms')
   })
 

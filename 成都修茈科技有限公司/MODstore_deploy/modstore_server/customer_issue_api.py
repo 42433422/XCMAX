@@ -575,6 +575,9 @@ def decide_product_issue(
         evidence = json_loads(ticket.evidence_json, {})
         evidence["customer_decisions"][-1]["event_id"] = event_id
         ticket.evidence_json = json_dumps(evidence)
+        from modstore_server.retort_customer_feedback import queue_reopened_impact
+
+        queue_reopened_impact(db, ticket, retort_delivery)
     audit(
         db,
         event_type=f"customer_issue_{body.decision}",

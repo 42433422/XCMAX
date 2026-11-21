@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.infrastructure.llm import modstore_response_normalize as _normalization
 from app.infrastructure.modstore_transport import MarketModelError, safe_route_metadata
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .protocols import Connection, Payload, ResponsePorts, Route
+
+absorb_stream_payload = _normalization.absorb_stream_payload
+normalize_collected_stream = _normalization.normalize_collected_stream
+normalize_market_chat_response = _normalization.normalize_market_chat_response
 
 
 def _response_status_code(response: object, default: int = 200) -> int:

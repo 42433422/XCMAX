@@ -20,8 +20,6 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
       _failedAttachments.clear();
       if (_lastSentAttachments.isNotEmpty) _stopRequested = true;
       _lastSentAttachments = const [];
-      _lastAttachmentTurnId = '';
-      _lastAttachmentOutgoing = '';
       _attachmentScope = null;
     });
     _showMessage('账号或连接已切换，请重新选择附件');

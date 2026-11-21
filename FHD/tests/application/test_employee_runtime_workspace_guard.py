@@ -116,6 +116,48 @@ class TestNormalizeRel:
 
 
 class TestBuildEmployeeGate:
+    def test_readonly_policy_from_runtime_config_blocks_write(self):
+        gate = wg.build_employee_gate("e", {}, {"workspace_policy": {"read_only": True}}, None)
+        assert gate is not None
+        assert gate("patch_file", {"path": "app.py"})["ok"] is False
+
+    def test_readonly_gate_uses_current_registered_write_tools(self, monkeypatch):
+        from resources.config import risk_actions_loader
+
+        gate = wg.build_employee_gate(
+            "e",
+            {"employee_config_v2": {"workspace_policy": {"read_only": True}}},
+            {},
+            None,
+        )
+        monkeypatch.setattr(
+            risk_actions_loader,
+            "list_write_tools",
+            lambda: frozenset({"new_write_tool"}),
+        )
+        assert gate("new_write_tool", {})["ok"] is False
+
+    @pytest.mark.parametrize("kind", ["absolute", "parent", "symlink"])
+    def test_broad_scope_cannot_write_outside_workspace(self, tmp_path, kind):
+        root = tmp_path / "workspace"
+        root.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        path = str(outside / "changed.txt")
+        if kind == "parent":
+            path = "../outside/changed.txt"
+        elif kind == "symlink":
+            (root / "link").symlink_to(outside, target_is_directory=True)
+            path = "link/changed.txt"
+        gate = wg.build_employee_gate(
+            "e", {}, {"workspace_policy": {"scope_globs": ["**"]}}, str(root)
+        )
+        assert gate("write_file", {"path": path})["ok"] is False
+
+    def test_parent_path_not_hidden_when_workspace_root_missing(self):
+        gate = wg.build_employee_gate("e", {}, {"workspace_policy": {"scope_globs": ["**"]}}, None)
+        assert gate("write_file", {"path": "../outside.txt"})["ok"] is False
+
     def test_returns_none_when_nothing_to_enforce(self):
         gate = wg.build_employee_gate("e", {}, {}, None)
         assert gate is None
