@@ -159,7 +159,7 @@
     },
     "FHD/app/application/workflow/llm_plan_generation.py": {
       "base_file": "FHD/app/application/workflow/llm_plan_generation.py",
-      "base_blob": "f37cad749d154240569bb7ebb14a4e06a30d85ad",
+      "base_blob": "cb0e99baa21defb84c7ed86beee5f1dbea21cf9e",
       "head_blob": "838897d6e3c300239bd02abe136e5f4872522747",
       "before_lines": 927,
       "after_lines": 942,
@@ -795,9 +795,9 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py",
-      "base_blob": "b2be0908fb47e0522f94627c258b5af3c2b03095",
+      "base_blob": "c154b9a819d76f55af460ae5f2f091516ff37ec6",
       "head_blob": "fb339b6ab84c2a7926458200f1b5ffe361f57e6f",
-      "before_lines": 634,
+      "before_lines": 654,
       "after_lines": 895,
       "reason": "评审请求：将发送前已冻结的原调用ID传给原LiteLLM请求，以便原生实测账本恢复。 并行修复：沿已集成LiteLLM规范化器新增原finish_reason透传，避免后续网关把length/filter/缺终态误当完整回答；保留现有路由和预算实现。",
       "boundary": "未知usage、原attempt和首次模型身份约束不变；禁止估计或重复模型请求结清责任。 并行修复：继续在原职责入口完成协议归一化、身份授权与事实回执；通用模型、队列和图运行时复用现有组件，不机械拆成part模块规避审查。",
