@@ -461,6 +461,7 @@ class TestExecuteRegisteredWorkflowTool:
             "client_product_issue",
             "conversation_history",
             "desktop_automation",
+            "image_generate",
             "customers",
             "products",
             "materials",
