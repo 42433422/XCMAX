@@ -51,13 +51,13 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_runtime.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "e7d9c460afbcbba37a9f41529b819fcc9726cc84",
+      "head_blob": "7bdda37056a979f337dbfad67398c90c5ded9d29",
       "before_lines": 0,
-      "after_lines": 858,
-      "reason": "评审请求：原批准组合承担实际业务输入、客户/市场依据、真实任务终态和经营复盘，并在原认领事务接公司全部已批准就绪候选的联合CP-SAT选择。",
+      "after_lines": 861,
+      "reason": "评审请求：原批准组合承担实际业务输入、客户/市场依据、真实任务终态和经营复盘，并在原认领事务接公司全部已批准就绪候选的联合CP-SAT选择。生产者与小C反馈投影复用同一归因常量，保持原返回标签和测量语义。",
       "boundary": "复用StrategicDecision/ActionItem与原员工消费者；市场、客户归因、公司选择和远程授权分别由专用薄适配承接，原提案hash、额度与未知责任保持。",
-      "validation": "真实公司全候选调度/SQL/并发87项、长期原工程65项、原生文件及客户链44项等定向组通过；这些组有重叠不累加。全包normal mypy及原静态门通过，精确head CI和人审待完成。",
-      "follow_up": "维护者须审核该新运行编排模块的职责与858行增长；未来市场/资产扩展应继续使用已抽取适配边界，本请求不代表架构批准。",
+      "validation": "真实公司全候选调度/SQL/并发87项、长期原工程65项、原生文件及客户链44项等定向组通过；这些组有重叠不累加。全包normal mypy及原静态门通过，精确head CI和人审待完成。归因、生命周期、原生CSV与客户交付7个完整模块150项通过；真实生产者到SQL复盘和下一轮输入保留verified/unknown区别。",
+      "follow_up": "维护者须审核该新运行编排模块的职责与861行增长；未来市场/资产扩展应继续使用已抽取适配边界，本请求不代表架构批准。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_pipeline_merged.py": {

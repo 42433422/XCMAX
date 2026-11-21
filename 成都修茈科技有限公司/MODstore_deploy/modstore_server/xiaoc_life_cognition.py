@@ -87,6 +87,10 @@ def _timestamp(value: Any) -> str:
 
 def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
     """Project original review evidence, never customer text or a model's verdict."""
+    from modstore_server.strategic_customer_outcomes import (
+        BUSINESS_OUTCOME_ATTRIBUTION,
+        LEGACY_BUSINESS_OUTCOME_ATTRIBUTION,
+    )
     from modstore_server.strategy_bets import (
         CUSTOMER_ACCEPTANCE_METRIC,
         DOMAIN_METRIC,
@@ -198,8 +202,9 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
         "window_end": _timestamp(business.get("window_end")),
         "attribution": (
             "artifact_acceptance_and_order_outcome_not_incremental_causality"
-            if business.get("attribution")
-            == "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality"
+            if verified
+            and business.get("attribution")
+            in (BUSINESS_OUTCOME_ATTRIBUTION, LEGACY_BUSINESS_OUTCOME_ATTRIBUTION)
             else "unverified"
         ),
         "decision": (

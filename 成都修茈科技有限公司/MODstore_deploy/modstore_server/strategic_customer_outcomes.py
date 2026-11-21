@@ -18,6 +18,12 @@ from sqlalchemy import select
 
 from modstore_server.db.customer_value import CustomerValueReceipt
 
+BUSINESS_OUTCOME_ATTRIBUTION = "approved_customer_goal_order_completed_artifact_and_verified_acceptance_not_incremental_causality"
+LEGACY_BUSINESS_OUTCOME_ATTRIBUTION = (
+    "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome"
+    "_not_incremental_causality"
+)
+
 
 class CustomerGoalBinding(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
