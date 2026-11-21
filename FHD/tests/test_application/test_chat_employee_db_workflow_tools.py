@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+from app.application.task_conversation_store import task_conversation_store
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
@@ -71,6 +72,11 @@ def _shared_setup_ai_chat_1(trusted_actor, case_value_1):
         risk_level="medium",
     )
     return AIChatApplicationService, actor, repo, plan
+
+
+def _chat_context(actor, **kwargs):
+    revision = task_conversation_store.prepare_revision(session_id="u1", user_id=actor.user_id)
+    return dict(actor.context, conversation_id="u1", _conversation_revision=revision, **kwargs)
 
 
 def test_workflow_registry_exposes_employee_and_business_db_tools():
@@ -642,7 +648,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
             user_id="u1",
             message="请调用员工 quality-validator 检查这个包",
             source="pro",
-            context={**actor.context, "conversation_id": "u1"},
+            context=_chat_context(actor),
             file_context={},
         )
 
@@ -661,7 +667,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
             user_id="u1",
             message="确认",
             source="pro",
-            context={**actor.context, "conversation_id": "u1"},
+            context=_chat_context(actor),
             file_context={},
         )
 
@@ -906,7 +912,7 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, t
             user_id="u1",
             message="调用员工 quality-validator 检查这个包",
             source=None,
-            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
+            context=_chat_context(actor, tool_execution_profile="normal"),
             file_context={},
         )
 
@@ -925,7 +931,7 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, t
             user_id="u1",
             message="确认",
             source=None,
-            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
+            context=_chat_context(actor, tool_execution_profile="normal"),
             file_context={},
         )
 
@@ -958,7 +964,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
             user_id="u1",
             message="请把客户 星光贸易 写入数据库",
             source=None,
-            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
+            context=_chat_context(actor, tool_execution_profile="normal"),
             file_context={},
         )
 
@@ -977,7 +983,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
             user_id="u1",
             message="确认",
             source=None,
-            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
+            context=_chat_context(actor, tool_execution_profile="normal"),
             file_context={},
         )
 
@@ -1002,25 +1008,18 @@ def test_ai_chat_medium_risk_confirmation_stays_pending_until_user_confirms(
     )
 
     with _shared_scope_ai_chat_0(repo, case_value_1_value="normal") as mock_dispatch:
-        service = AIChatApplicationService()
-        service.workflow_planner.plan = Mock(return_value=plan)
-        service.risk_gate.evaluate = Mock(
-            return_value=Mock(
-                requires_confirmation=True,
-                allowed=False,
-                denied_nodes=[],
-                blocking_nodes=["write_customer"],
-                reason="explicit db write needs confirmation",
-            )
+        service = _shared_setup_ai_chat_0(
+            AIChatApplicationService, plan, case_value_1="explicit db write needs confirmation"
         )
-        service.approval_service = Mock()
-        service.approval_service.get_approval_required_nodes.return_value = []
+        service.risk_gate.evaluate.return_value.configure_mock(
+            requires_confirmation=True, allowed=False, blocking_nodes=["write_customer"]
+        )
 
         waiting = service._try_handle_dynamic_workflow(
             user_id="u1",
             message="请把客户 星光贸易 写入数据库",
             source=None,
-            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
+            context=_chat_context(actor, tool_execution_profile="normal"),
             file_context={},
         )
 
