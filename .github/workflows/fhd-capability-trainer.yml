@@ -24,15 +24,9 @@ jobs:
     concurrency:
       group: capability-trainer
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     env:
-      DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
-      API_BASE: ${{ secrets.MODSTORE_PARA_GITHUB_API_BASE }}
-      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
-      XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
-      XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
-      OPENAI_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
       PYTHONPATH: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy
       PACKS_DIR: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files
       CORPUS_DIR: ${{ github.workspace }}/FHD/evals/employee
@@ -50,11 +44,28 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install bounded model client
-        run: python -m pip install httpx==0.28.1
+      - name: Install product validation and bounded model client
+        run: python -m pip install -e '../成都修茈科技有限公司/MODstore_deploy[web]' httpx==0.28.1
+
+      - name: Install fixed training CLI and native sandbox
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap socat ripgrep
+          training_runtime="$RUNNER_TEMP/capability-trainer-runtime"
+          mkdir -p "$training_runtime"
+          cp scripts/autonomy/runtime_tools/capability_trainer_deps/package.json \
+            scripts/autonomy/runtime_tools/capability_trainer_deps/package-lock.json "$training_runtime/"
+          npm ci --prefix "$training_runtime" --ignore-scripts --no-audit --no-fund
+          printf 'PROMPTFOO_CLI=%s\n' "$training_runtime/node_modules/.bin/promptfoo" >> "$GITHUB_ENV"
+          printf 'PROMPTFOO_SANDBOX_ENTRY=%s\n' "$training_runtime/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" >> "$GITHUB_ENV"
+          printf 'PROMPTFOO_PYTHON=%s\n' "$(command -v python)" >> "$GITHUB_ENV"
 
       - name: Fetch failure clusters
         id: fetch
+        env:
+          DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+          API_BASE: ${{ secrets.MODSTORE_PARA_GITHUB_API_BASE }}
         run: |
           set -euo pipefail
           if [ -z "${DISPATCH_TOKEN:-}" ] || [ -z "${API_BASE:-}" ]; then
@@ -74,25 +85,45 @@ jobs:
 
       - name: Suggest candidate prompt
         if: steps.fetch.outputs.clusters != '0'
+        env:
+          XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+          XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+          XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
         run: |
           set -euo pipefail
-          employee="$(jq -r '.[0].employee_id // empty' /tmp/top-cluster.json)"
+          surface="$(jq -r '.[0].surface // "employee_prompt"' /tmp/top-cluster.json)"
+          employee="$(jq -r '.[0].resource_id // .[0].employee_id // empty' /tmp/top-cluster.json)"
           [[ "$employee" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || exit 1
           echo "employee=$employee" >> "$GITHUB_ENV"
-          pack="$(ls -d "$PACKS_DIR/${employee}@"* 2>/dev/null | sort -V | tail -1 || true)"
-          if [ -z "$pack" ] || [ ! -f "$pack/prompt.txt" ]; then
-            echo "::warning::找不到 $employee 的员工包 prompt，跳过"
-            echo "skip=true" >> "$GITHUB_ENV"
-            exit 0
+          echo "surface=$surface" >> "$GITHUB_ENV"
+          if [ "$surface" = workflow_nl_prompt ]; then
+            [[ "$employee" = workflow_nl_generator ]] || exit 1
+            baseline=/tmp/workflow-baseline.txt
+            python -m modstore_server.capability_trainer baseline \
+              --surface "$surface" --source "$PYTHONPATH/modstore_server/workflow_nl_graph.py" \
+              --out "$baseline"
+          elif [ "$surface" = employee_prompt ]; then
+            pack="$(ls -d "$PACKS_DIR/${employee}@"* 2>/dev/null | sort -V | tail -1 || true)"
+            if [ -z "$pack" ] || [ ! -f "$pack/prompt.txt" ]; then
+              echo "::warning::找不到 $employee 的员工包 prompt，跳过"
+              echo "skip=true" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            baseline="$pack/prompt.txt"
+          else
+            exit 1
           fi
-          echo "pack=$pack" >> "$GITHUB_ENV"
+          echo "baseline=$baseline" >> "$GITHUB_ENV"
           python -m modstore_server.capability_trainer suggest \
-            --baseline "$pack/prompt.txt" \
+            --baseline "$baseline" \
             --clusters /tmp/top-cluster.json \
             --out /tmp/candidate-prompt.txt
 
       - name: Prepare regression cases and promptfoo config
         if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
+        env:
+          XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+          XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
         run: |
           set -euo pipefail
           python -m modstore_server.capability_trainer prepare \
@@ -101,6 +132,7 @@ jobs:
             --corpus-dir "$CORPUS_DIR" \
             --out-dir /tmp/eval \
             --employee-id "$employee" \
+            --surface "$surface" --baseline "$baseline" \
             --candidate-prompt /tmp/candidate-prompt.txt > /tmp/prepare.json
           cat /tmp/prepare.json
           jq -e '.ok == true' /tmp/prepare.json > /dev/null
@@ -108,14 +140,20 @@ jobs:
       - name: Run promptfoo regression
         if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
         env:
+          XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+          XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+          XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
           PROMPTFOO_DISABLE_TELEMETRY: '1'
+          PROMPTFOO_DISABLE_UPDATE: '1'
+          PROMPTFOO_DISABLE_SHARING: '1'
+          PROMPTFOO_DISABLE_REMOTE_GENERATION: '1'
+          PROMPTFOO_SELF_HOSTED: '1'
         run: |
           set -euo pipefail
           umask 077
-          if npx -y promptfoo@0.126.0 eval \
-            -c /tmp/eval/promptfooconfig.yaml \
-            -o /tmp/eval/result.json \
-            --no-cache --max-concurrency 2 > /tmp/promptfoo-private.log 2>&1; then
+          if node scripts/autonomy/runtime_tools/promptfoo_sandbox.mjs \
+            --config /tmp/eval/promptfooconfig.yaml \
+            --output /tmp/eval/result.json > /tmp/promptfoo-private.log 2>&1; then
             evaluation_status=0
           else
             evaluation_status=$?
@@ -129,6 +167,9 @@ jobs:
 
       - name: Create the reviewed candidate request
         if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
+        env:
+          DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+          API_BASE: ${{ secrets.MODSTORE_PARA_GITHUB_API_BASE }}
         run: |
           set -euo pipefail
           python -m modstore_server.capability_trainer decide \
@@ -146,7 +187,9 @@ jobs:
           clusters = json.loads(Path('/tmp/top-cluster.json').read_text())
           payload = {
               'request_key': f"training:{os.environ['GITHUB_RUN_ID']}:{os.environ['employee']}",
-              'employee_id': os.environ['employee'], 'source_sha': os.environ['GITHUB_SHA'],
+              'surface': os.environ['surface'],
+              **({'employee_id': os.environ['employee']} if os.environ['surface'] == 'employee_prompt' else {'resource_id': os.environ['employee']}),
+              'source_sha': os.environ['GITHUB_SHA'],
               'workflow_run_id': int(os.environ['GITHUB_RUN_ID']),
               'failure_run_ids': sorted({str(sample['run_id']) for cluster in clusters for sample in cluster['samples'] if sample.get('run_id')}),
               'bundle_json': (folder / 'training-bundle.json').read_bytes().decode('utf-8'),

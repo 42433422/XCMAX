@@ -90,7 +90,8 @@ def ports(monkeypatch):
     )
     monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "test-model"))
 
-    async def admission(_provider, _model):
+    async def admission(_provider, _model, *, owner_user_id):
+        assert owner_user_id == 17
         return {
             "provider": "test",
             "model": "test-model",
@@ -205,7 +206,7 @@ def test_unknown_usage_retains_hold_and_never_learns_from_model_output(ports, mo
 def test_unknown_platform_quota_blocks_before_call(ports, monkeypatch):
     from modstore_server import strategic_portfolio_usage
 
-    async def unavailable(*args):
+    async def unavailable(*args, **kwargs):
         return None
 
     monkeypatch.setattr(strategic_portfolio_usage, "planning_admission", unavailable)
@@ -452,13 +453,19 @@ def test_same_goal_across_cycles_preserves_execution_identity(ports):
 
 
 @pytest.mark.parametrize("outcome", ["settled", "unknown", "downgraded", "restarted"])
-def test_graph_sql_lifecycle_and_platform_reservation_agree(tmp_path, monkeypatch, outcome):
-    """Only the supplier HTTP response is simulated; both SQL ledgers are real."""
+@pytest.mark.parametrize("company_enabled", [False, True], ids=["legacy", "company"])
+def test_graph_sql_lifecycle_and_platform_reservation_agree(
+    tmp_path, monkeypatch, outcome, company_enabled
+):
+    """Only the supplier response is simulated; original SQL ledgers are real."""
     from datetime import timedelta
 
-    from sqlalchemy import create_engine, select
+    from sqlalchemy import create_engine
+    from sqlalchemy import event as sa_event
+    from sqlalchemy import select
     from sqlalchemy.orm import sessionmaker
 
+    import modstore_server.strategic_company_resources as company
     from modstore_server import (
         llm_chat_proxy,
         llm_key_resolver,
@@ -471,20 +478,35 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(tmp_path, monkeypatc
     )
     from modstore_server.db import db_base
     from modstore_server.db.identity import User
-    from modstore_server.db.llm_chat import LlmCallLog, LlmClientRequest
+    from modstore_server.db.llm_chat import (
+        ChatConversation,
+        LlmCallLog,
+        LlmClientRequest,
+    )
+    from modstore_server.db.strategic import StrategicDecision
     from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
     from modstore_server.services import llm
+    from modstore_server.strategic_layer import decision_ledger
     from modstore_server.xiaoc_life_policy import LifeUpdate
 
     engine = create_engine(f"sqlite:///{tmp_path / 'integrated-life.sqlite'}")
+
+    @sa_event.listens_for(engine, "connect")
+    def enable_foreign_keys(connection, _record):
+        # The real CSV employee imports FHD's equivalent global hook. Exercise
+        # the same FK contract even when this module is the first test collected.
+        connection.execute("PRAGMA foreign_keys=ON")
+
     db_base.Base.metadata.create_all(
         engine,
         tables=[
             User.__table__,
             XiaoCLifeState.__table__,
             XiaoCLifeEvent.__table__,
+            ChatConversation.__table__,
             LlmCallLog.__table__,
             LlmClientRequest.__table__,
+            StrategicDecision.__table__,
         ],
     )
     factory = sessionmaker(bind=engine, expire_on_commit=False)
@@ -494,6 +516,7 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(tmp_path, monkeypatc
         xiaoc_life_reconciliation,
         strategic_portfolio,
         strategic_portfolio_usage,
+        decision_ledger,
     ):
         if hasattr(module, "get_session_factory"):
             monkeypatch.setattr(module, "get_session_factory", lambda: factory)
@@ -508,6 +531,47 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(tmp_path, monkeypatc
             )
         )
         session.commit()
+    company_id = None
+    if company_enabled:
+        monkeypatch.setenv(
+            company.CONTROL_ENV,
+            json.dumps(
+                {
+                    "scope": "life-company",
+                    "authorizer_user_ids": [17],
+                    "eligible_owner_user_ids": [17],
+                }
+            ),
+        )
+        funding = company.create_company_proposal(
+            authorizer_user_id=17,
+            period="life-tests",
+            idempotency_key="life-tests",
+            member_owner_ids=[17],
+            limits={
+                "cost_cents": 1000,
+                "tokens": 100000,
+                "compute_seconds": 600,
+                "max_parallel": 1,
+                "expires_at": (xiaoc_life_store.utcnow() + timedelta(days=1)).isoformat(),
+                "tariffs": [
+                    {
+                        "provider": "test",
+                        "model": "model",
+                        "input_cents_per_million": 100,
+                        "output_cents_per_million": 100,
+                        "source": "approved-test-tariff",
+                    }
+                ],
+            },
+        )["decision"]
+        company_id = funding["decision_id"]
+        company.authorize_company(
+            company_id,
+            authorizer_user_id=17,
+            actor="admin:17",
+            expected_proposal_sha256=funding["decision_payload"]["proposal_sha256"],
+        )
     state = xiaoc_life_store.read_state()
     xiaoc_life_store.update_settings(
         LifeUpdate(
@@ -559,6 +623,9 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(tmp_path, monkeypatc
             ]
         current = xiaoc_life_store.read_state()
         assert current["budget"]["reserved_tokens"] > 0
+        if company_id:
+            held = company.company_status(company_id, owner_user_id=17)["totals"]
+            assert held["held"]["tokens"] > 0 and held["slots"] == 1
         if outcome == "downgraded":
             xiaoc_life_store.update_settings(
                 LifeUpdate(expected_revision=current["revision"], level=2),
@@ -592,6 +659,14 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(tmp_path, monkeypatc
         return await strategic_portfolio_usage.dispatch_budgeted(transport, provider, kwargs)
 
     monkeypatch.setattr(llm_chat_proxy, "chat_dispatch", dispatch)
+
+    def check_company_receipt():
+        if company_id:
+            totals = company.company_status(company_id, owner_user_id=17)["totals"]
+            assert totals["spent"]["tokens"] == (0 if outcome == "unknown" else 17)
+            assert (totals["held"]["tokens"] > 0) is (outcome == "unknown")
+            assert totals["slots"] == (1 if outcome == "unknown" else 0)
+
     try:
         if outcome == "restarted":
             original_finish = xiaoc_life_store.finish_cycle
@@ -616,6 +691,7 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(tmp_path, monkeypatc
                 event["kind"] == "reconciliation" and event["status"] == "verified"
                 for event in recovered["events"]
             )
+            check_company_receipt()
             return
         result = asyncio.run(runtime.tick_async())
         assert calls == ["test"]
@@ -633,5 +709,6 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(tmp_path, monkeypatc
             assert len(logs) == 1
             assert logs[0].total_tokens == (0 if outcome == "unknown" else 17)
             assert logs[0].estimated is (outcome == "unknown")
+        check_company_receipt()
     finally:
         engine.dispose()

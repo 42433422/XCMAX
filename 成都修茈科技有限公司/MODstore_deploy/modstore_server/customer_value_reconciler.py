@@ -102,7 +102,13 @@ def reconcile_paid_customer_value(
 ) -> dict[str, Any]:
     """Append goal and delivery proof for each eligible, fulfilled payment."""
 
+    refund_result = None
     if orders is None:
+        from modstore_server.customer_value_refunds import reconcile_wallet_refunds
+
+        refund_result = reconcile_wallet_refunds(
+            window_days=window_days, session_factory=session_factory, now=now
+        )
         source = load_authoritative_payment_orders(window_days)
         source_owner = str(source.get("source_owner") or "unavailable")
         source_ready = bool(
@@ -123,6 +129,7 @@ def reconcile_paid_customer_value(
             "created": 0,
             "existing": 0,
             "skipped": {},
+            **({"refunds": refund_result} if refund_result is not None else {}),
         }
 
     created = 0
@@ -200,6 +207,7 @@ def reconcile_paid_customer_value(
         "created": created,
         "existing": existing,
         "skipped": dict(sorted(skipped.items())),
+        **({"refunds": refund_result} if refund_result is not None else {}),
     }
     if include_evidence:
         evidence = build_customer_value_evidence(

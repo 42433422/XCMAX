@@ -39,8 +39,13 @@ def freeze_experiment_policy(spec):
     if not life:
         return spec
     if not isinstance(life, dict):
-        raise ValueError("invalid_feedback_experiment_lifecycle")
+        raise ValueError(  # noqa: TRY004 — public policy error contract
+            "invalid_feedback_experiment_lifecycle"
+        )
     surface_identity(life)
+    from modstore_server.retort_workflow_metrics import execution_policy
+
+    execution_policy(spec)
     users, weights = life.get("cohort_user_ids"), life.get("weights", [0.5, 0.5])
     if (
         not isinstance(users, list)
@@ -148,7 +153,11 @@ def traffic_block_reason(db, row, effects):
         acceptance.get("actor_id"),
     )
     for user_id in actor_ids:
-        user = db.get(User, user_id) if type(user_id) is int and user_id > 0 else None
+        user = (
+            db.get(User, user_id, populate_existing=True)
+            if type(user_id) is int and user_id > 0
+            else None
+        )
         if (
             user is None
             or not user.is_admin
@@ -173,7 +182,17 @@ def traffic_block_reason(db, row, effects):
             or (resolution.get("reopened_at") or "") != source["revision"]
         ):
             return "experiment_customer_reopened"
-    return ""
+    from modstore_server.retort_workflow_metrics import execution_stop_loss
+
+    policy = (effects.get("customer_feedback") or effects.get("training_candidate") or {}).get(
+        "growthbook"
+    ) or {}
+    from modstore_server.workflow_customer_feedback import customer_stop_reason
+
+    customer_block = customer_stop_reason(db, row.id, policy)
+    if customer_block:
+        return customer_block
+    return "workflow_execution_stop_loss" if execution_stop_loss(db, row, policy) else ""
 
 
 def _save(request_id, progress):
@@ -289,10 +308,17 @@ def advance_experiment(request_id, delivery, *, state=None, reject=False):
     """Run under Retort's run lock; absent traffic/data never becomes an improvement."""
     progress = {}
     try:
+        from modstore_server.workflow_customer_feedback import (
+            reconcile_customer_executions,
+        )
+
+        customer_results = reconcile_customer_executions(request_id)
         with get_session_factory()() as db:
             row = db.get(RetortEvolutionRun, request_id)
             spec, effects = approved_policy(row)
             block = traffic_block_reason(db, row, effects)
+        if block in {"workflow_execution_stop_loss", "workflow_customer_refunded"}:
+            reject = True
         progress = effects.get("experiment") or {}
         if block and not reject:
             raise ValueError(block)
@@ -318,6 +344,13 @@ def advance_experiment(request_id, delivery, *, state=None, reject=False):
             progress.update(traffic="control", decision="rollback")
             _save(request_id, progress)
         with growthbook_client() as client:
+            from modstore_server.retort_workflow_metrics import verify_execution_source
+
+            # A rollback must remain possible if the warehouse configuration is
+            # unavailable or has drifted. Promotion/traffic require exact sources.
+            if not reject:
+                verify_execution_source(client, spec)
+                progress["execution_source_verified"] = True
             listing = client.get(
                 "experiments",
                 params={
@@ -381,6 +414,8 @@ def advance_experiment(request_id, delivery, *, state=None, reject=False):
                 }
             progress["traffic"] = "control"
             _save(request_id, progress)
+            if not reject and customer_results["pending"]:
+                raise ValueError("workflow_customer_outcomes_pending")
             measured = progress.get("final_measurement") or {}
             if not reject and not measured:
                 _post_once(

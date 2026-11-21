@@ -6,6 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ARK_AGENT_PLAN_MODEL } from './codex_model_gateway.mjs';
 import { assertOpenCodeHost, openCodeSandboxEntry, openCodePlatformConfig,
   OPENCODE_CREDENTIAL_ISOLATION } from './opencode_agent.mjs';
+import { controlServiceBase, runStrategicReport } from './strategic_report_controller.mjs';
+import { beginWorkspacePhase } from './strategic_workspace_controller.mjs';
 
 function assertFeedbackIsolation(env) {
   assertOpenCodeHost();
@@ -16,7 +18,7 @@ function assertFeedbackIsolation(env) {
 
 export async function runGithubExecutor({ env = process.env, fetchStatus = fetch, spawnWorker = spawn,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now,
-  verifyFeedbackIsolation = assertFeedbackIsolation } = {}) {
+  verifyFeedbackIsolation = assertFeedbackIsolation, runReport = runStrategicReport } = {}) {
   const request = env.PARA_GITHUB_REQUEST_ID || '', run = env.GITHUB_RUN_ID || '';
   const stage = env.PARA_GITHUB_STAGE, directory = env.PARA_GITHUB_EVIDENCE_DIR;
   if (['GH_TOKEN', 'CI_COMMIT_TOKEN', 'GITHUB_PERSONAL_ACCESS_TOKEN'].some(key => env[key])) {
@@ -27,19 +29,23 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
       || !/^\d+$/.test(run) || !/^[0-9a-f]{40}$/.test(env.GITHUB_SHA || '')
       || !directory || !env.MODSTORE_PARA_DISPATCH_TOKEN) throw new Error('invalid_executor_identity');
   async function state() {
-    const response = await fetchStatus(`https://xiu-ci.com/api/service/mac-control/github-runs/${request}`, {
+    const response = await fetchStatus(`${controlServiceBase(env)}/github-runs/${request}`, {
       headers: { Authorization: `Bearer ${env.MODSTORE_PARA_DISPATCH_TOKEN}` }, redirect: 'error',
       signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) throw new Error(`management_readback_http_${response.status}`);
     const value = await response.json();
     if (value.request_id !== request || (value.run_id && String(value.run_id) !== run)
-        || value.repository !== env.GITHUB_REPOSITORY || !Number.isSafeInteger(value.issue_number)
-        || value.issue_number < 1 || (value.benchmark_protocol
+        || value.repository !== env.GITHUB_REPOSITORY || (value.kind !== 'github_opencode_report'
+          && (!Number.isSafeInteger(value.issue_number) || value.issue_number < 1)) || (value.benchmark_protocol
           && value.benchmark_protocol.source_sha !== env.GITHUB_SHA)) throw new Error('management_dispatch_mismatch');
     return value;
   }
   let accepted = await state();
+  if (accepted.kind === 'github_opencode_report') {
+    verifyFeedbackIsolation(env);
+    return runReport({ env, accepted, state, fetchControl: fetchStatus, now, sleep });
+  }
   const repair = accepted.kind === 'original_pr_repair';
   const customerRepair = ['customer_feedback_repair', 'training_candidate_repair'].includes(accepted.kind);
   if (repair) {
@@ -58,6 +64,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     writeFileSync(join(directory, 'execution.json'), JSON.stringify(accepted) + '\n');
     return accepted.conclusion === 'success' ? 0 : 1;
   }
+  const budgeted = accepted.strategic_budget?.kind === 'github_opencode_workspace';
   const isolatedFeedback = customerRepair && env.DEVFLEET_FORCE_OPENCODE === '1'
     && env.PARA_PLATFORM_POOL === '1'
     && accepted.model_allocation?.execution_isolation === OPENCODE_CREDENTIAL_ISOLATION;
@@ -71,6 +78,12 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
       request_id: request, run_id: run, finished: true, conclusion: 'failure', status: 'blocked', reason,
     }) + '\n');
     throw new Error(reason);
+  }
+  if (customerRepair && !budgeted) throw new Error('workspace_requires_original_isolated_budget_binding');
+  let phase;
+  if (budgeted) {
+    verifyFeedbackIsolation(env);
+    phase = await beginWorkspacePhase({ env, accepted, fetchControl: fetchStatus });
   }
   const agentEnv = { ...env, PARA_GITHUB_ISSUE_NUMBER: String(accepted.issue_number) };
   delete agentEnv.PARA_GITHUB_SOURCE_SHA;
@@ -87,7 +100,10 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
   if (openCode && env.PARA_PLATFORM_POOL !== '1') throw new Error('opencode_requires_platform_admission');
   delete agentEnv.OPENCODE_API_KEY;
   delete agentEnv.PARA_OPENCODE_MODEL;
-  if (env.PARA_PLATFORM_POOL === '1' || allocation) {
+  if (phase) {
+    Object.assign(agentEnv, phase.env);
+    for (const key of ['CODEX_API_KEY', 'OPENAI_API_KEY', 'DEVFLEET_CODEX_API_KEY_ENV']) delete agentEnv[key];
+  } else if (env.PARA_PLATFORM_POOL === '1' || allocation) {
     const approved = allocation?.approved_models ?? [allocation?.model];
     if (env.PARA_PLATFORM_POOL !== '1' || allocation?.status !== 'admitted'
         || !Array.isArray(approved) || !approved.length || approved[0] !== allocation.model
@@ -138,9 +154,15 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     }
   }
   delete agentEnv.PARA_PLATFORM_GATEWAY_KEY;
-  const agent = spawnWorker(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'para_e2e_agent.mjs')], {
-    env: agentEnv, stdio: ['ignore', 'inherit', 'inherit'],
-  });
+  let agent;
+  try {
+    agent = spawnWorker(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'para_e2e_agent.mjs')], {
+      env: agentEnv, stdio: ['ignore', 'inherit', 'inherit'],
+    });
+  } catch (error) {
+    if (phase) await phase.close();
+    throw error;
+  }
   let ended = false;
   agent.once('exit', () => { ended = true; });
   agent.once('error', () => { ended = true; });
@@ -148,7 +170,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
   process.once('SIGTERM', stop); process.once('SIGINT', stop);
   mkdirSync(directory, { recursive: true });
   try {
-    const deadline = now() + 100 * 60 * 1000;
+    const deadline = Math.min(now() + 100 * 60 * 1000, phase?.deadline ?? Infinity);
     while (now() < deadline) {
       if (ended) throw new Error('Para exited before its original receipt was acknowledged');
       const current = await state();
@@ -169,7 +191,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
         }
         writeFileSync(join(directory, 'execution.json'), JSON.stringify({ request_id: request,
           run_id: run, status: 'awaiting_publication', finished: false,
-          ...(isolatedFeedback ? { execution_isolation: OPENCODE_CREDENTIAL_ISOLATION,
+          ...((isolatedFeedback || phase) ? { execution_isolation: OPENCODE_CREDENTIAL_ISOLATION,
             source_sha: env.GITHUB_SHA } : {}),
           candidate_sha: manifest.commit_sha }) + '\n');
         return 0; // This stage is done; neither the team nor delivery is complete.
@@ -182,6 +204,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     throw new Error('management_receipt_deadline');
   } finally {
     stop(); process.off('SIGTERM', stop); process.off('SIGINT', stop);
+    if (phase) await phase.close();
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

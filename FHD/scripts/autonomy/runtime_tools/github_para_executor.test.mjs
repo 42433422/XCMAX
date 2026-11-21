@@ -22,8 +22,18 @@ test(`${kind} requires the admitted header-only native profile and bound candida
   writeFileSync(join(env.PARA_GITHUB_CANDIDATE_DIR, 'manifest.json'), JSON.stringify(manifest));
   const accepted = { ...identity, kind, publication_candidate: manifest,
     model_allocation: { status: 'admitted', model: 'coding', approved_models: ['coding'],
-      execution_isolation: OPENCODE_CREDENTIAL_ISOLATION } };
-  const fetchStatus = async () => ({ ok: true, json: async () => accepted });
+      provider: 'openai', execution_isolation: OPENCODE_CREDENTIAL_ISOLATION },
+    strategic_budget: { kind: 'github_opencode_workspace', request_id: identity.request_id,
+      binding_id: 'd'.repeat(32), source_sha: env.GITHUB_SHA, model: 'coding', provider: 'openai' } };
+  const fetchStatus = async (url, options) => ({ ok: true, json: async () => {
+    if (url.endsWith('/claim')) return { ...JSON.parse(options.body), schema: 'strategic-workspace/v1',
+      kind: 'github_opencode_workspace', request_id: identity.request_id, binding_id: 'd'.repeat(32),
+      deadline: new Date(Date.now()+60000).toISOString(), model: 'coding', device_id: 'cloud',
+      bootstrap_token: 'fixture-bootstrap-token-at-least-32-characters',
+      gateway_url: `https://xiu-ci.com/api/service/mac-control/strategic-runs/${identity.request_id}/v1` };
+    if (url.endsWith('/close-grant')) return { accepted: true };
+    return accepted;
+  } });
   let verified = 0, launched = 0;
   const options = { env, fetchStatus,
     verifyFeedbackIsolation: () => { verified += 1; },
@@ -35,6 +45,11 @@ test(`${kind} requires the admitted header-only native profile and bound candida
     execution_isolation: OPENCODE_CREDENTIAL_ISOLATION, source_sha: env.GITHUB_SHA, candidate_sha: manifest.commit_sha,
   });
   await assert.rejects(runGithubExecutor({ ...options, verifyFeedbackIsolation: () => { throw new Error('native_boundary_missing'); } }), /native_boundary_missing/);
+  assert.equal(launched, 1);
+  const binding = accepted.strategic_budget;
+  delete accepted.strategic_budget;
+  await assert.rejects(runGithubExecutor(options), /requires_original_isolated_budget_binding/);
+  accepted.strategic_budget = binding;
   assert.equal(launched, 1);
   accepted.model_allocation.execution_isolation = 'srt-0.0.83-masked-platform-v1';
   await assert.rejects(runGithubExecutor(options), /requires_non_exportable/);

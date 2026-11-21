@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from modstore_server.llm_gateway_contract import gateway_single_attempt
 from modstore_server.platform_model_transport import llm_http_response, redact_key
 
 
@@ -36,7 +37,9 @@ async def chat_openai_compatible(
     response_format: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     from modstore_server.llm_litellm_router import fallback_receipt_from_headers
+    from modstore_server.strategic_portfolio_usage import require_call_reservation
 
+    require_call_reservation(provider=provider, model=model, start_transport=True)
     url = f"{base_url.rstrip('/')}/chat/completions"
     body = _facade()._openai_chat_body(
         provider,
@@ -56,6 +59,15 @@ async def chat_openai_compatible(
         text = r.text if r.status_code < 300 else ""
         data = redact_key(_json_dict(text), api_key) if text else None
         fallback = fallback_receipt_from_headers(getattr(r, "headers", None))
+        gateway = (
+            {
+                "gateway_attempts_verified": gateway_single_attempt(
+                    getattr(r, "headers", {}) or {}
+                ),
+            }
+            if provider == "litellm"
+            else {}
+        )
     if r.status_code >= 300:
         return {
             "ok": False,
@@ -89,6 +101,7 @@ async def chat_openai_compatible(
                 "provider": provider,
                 "model": data.get("model"),
                 **fallback,
+                **gateway,
             }
             if reasoning_trace:
                 out_fail["reasoning_trace"] = reasoning_trace
@@ -104,6 +117,7 @@ async def chat_openai_compatible(
         "provider": provider,
         "model": data.get("model"),
         **fallback,
+        **gateway,
     }
     if reasoning_trace:
         out["reasoning_trace"] = reasoning_trace
@@ -184,6 +198,13 @@ async def stream_openai_compatible(
                     "provider": provider,
                     "model": reported_model,
                     **fallback,
+                    **(
+                        {
+                            "gateway_attempts_verified": gateway_single_attempt(r.headers),
+                        }
+                        if provider == "litellm"
+                        else {}
+                    ),
                 }
             choice0 = (data.get("choices") or [{}])[0] or {}
             delta = choice0.get("delta") or {}

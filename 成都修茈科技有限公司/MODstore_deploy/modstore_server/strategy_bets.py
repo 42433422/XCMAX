@@ -14,15 +14,15 @@ import math
 import os
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from modstore_server import evolution_ledger
 
-UTC = timezone.utc
+UTC = UTC
 BET_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 DEFAULT_BUDGET: Dict[str, int] = {
     "proposals": 4,
@@ -40,6 +40,7 @@ METRIC_SOURCES: Dict[str, str] = {
     "legacy_ratio": "FHD/metrics/legacy-usage-168h.json",
 }
 REVENUE_METRIC = "revenue_monthly"
+CUSTOMER_ACCEPTANCE_METRIC = "customer_acceptance_ratio"
 DOMAIN_METRIC = "domain_rated_ratio"
 DEFAULT_DOMAIN_AUDIT = "FHD/config/domain_audit.json"
 
@@ -63,10 +64,13 @@ class BetHypothesis(BaseModel):
     @model_validator(mode="after")
     def valid_metric(self):
         if (
-            self.metric_id not in {*METRIC_SOURCES, REVENUE_METRIC, DOMAIN_METRIC}
+            self.metric_id
+            not in {*METRIC_SOURCES, REVENUE_METRIC, DOMAIN_METRIC, CUSTOMER_ACCEPTANCE_METRIC}
             or self.direction not in DIRECTIONS
         ):
             raise ValueError("unsupported strategy metric or direction")
+        if self.metric_id == CUSTOMER_ACCEPTANCE_METRIC and not 0 <= self.threshold <= 1:
+            raise ValueError("customer acceptance threshold must be between zero and one")
         return self
 
 
@@ -127,7 +131,7 @@ def _spend_totals() -> Dict[str, Dict[str, int]]:
         bet_id = event.get("bet_id")
         if not bet_id:
             continue
-        bucket = totals.setdefault(bet_id, {key: 0 for key in DEFAULT_BUDGET})
+        bucket = totals.setdefault(bet_id, dict.fromkeys(DEFAULT_BUDGET, 0))
         for key in DEFAULT_BUDGET:
             bucket[key] += int(event.get(key) or 0)
     return totals
@@ -145,7 +149,7 @@ def bet_state(bet_id: str) -> Dict[str, Any]:
     bet = _bets().get(bet_id)
     if not bet:
         raise ValueError(f"未登记的赌注: {bet_id}")
-    spent = _spend_totals().get(bet_id, {key: 0 for key in DEFAULT_BUDGET})
+    spent = _spend_totals().get(bet_id, dict.fromkeys(DEFAULT_BUDGET, 0))
     remaining = {key: int(bet["budget"][key]) - int(spent.get(key, 0)) for key in DEFAULT_BUDGET}
     review_at = _parse(bet.get("review_at"))
     return {
@@ -263,6 +267,19 @@ def capture_metric(
     metric_id: str, *, start: datetime, end: datetime, business: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Read only in-window source evidence; preserve the exact bytes' identity."""
+    if metric_id == CUSTOMER_ACCEPTANCE_METRIC:
+        outcome = business or {}
+        ratio = _number(outcome.get("acceptance_ratio"))
+        if outcome.get("status") == "verified" and ratio is not None and 0 <= ratio <= 1:
+            return {
+                "value": ratio,
+                "source": outcome.get("source"),
+                "evidence_sha256": outcome.get("evidence_sha256"),
+                "accepted_goals": outcome.get("accepted_goals"),
+                "target_goals": outcome.get("target_goals"),
+                "basis": "approved_goals_with_completed_artifact_and_customer_acceptance",
+            }
+        return {"value": None, "reason": "customer_delivery_evidence_unavailable"}
     if metric_id == REVENUE_METRIC:
         outcome = business or {}
         cents = outcome.get("revenue_cents")

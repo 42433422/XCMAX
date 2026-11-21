@@ -4,10 +4,40 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+_WORKFLOW_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar(
+    "approved_workflow_file_execution", default=None
+)
+
+
+@contextmanager
+def workflow_execution_scope(contract: dict[str, Any]) -> Iterator[None]:
+    """Restore a server-recorded workflow contract without creating a strategy lease."""
+    from modstore_server import strategic_portfolio_usage as usage
+    from modstore_server.workflow_customer_delivery import require_running_contract
+
+    if usage._SCOPE.get() is not None or _WORKFLOW_SCOPE.get() is not None:
+        raise ValueError("workflow file execution cannot replace another execution scope")
+    require_running_contract(contract)
+    token = _WORKFLOW_SCOPE.set(deepcopy(contract))
+    try:
+        yield
+    finally:
+        _WORKFLOW_SCOPE.reset(token)
+
+
+def _workflow_contract() -> dict[str, Any] | None:
+    contract = _WORKFLOW_SCOPE.get()
+    if contract is not None:
+        from modstore_server.workflow_customer_delivery import require_running_contract
+
+        require_running_contract(contract)
+    return contract
 
 
 def validate_input(value: dict[str, Any]) -> dict[str, Any]:
@@ -28,6 +58,7 @@ def validate_input(value: dict[str, Any]) -> dict[str, Any]:
         "work_contract",
         "bench_llm_override",
         "customer_goal_ids",
+        "customer_goal_bindings",
         "provider",
         "model",
         "api_key",
@@ -156,7 +187,7 @@ def bind_file_receipts(
     from modstore_server.strategic_execution_receipts import _control
     from modstore_server.strategic_portfolio import PortfolioError
 
-    if usage._SCOPE.get() is None:
+    if usage._SCOPE.get() is None and _workflow_contract() is None:
         return
     workspace = payload["project_root"]
     for handler in result.get("outputs") or []:
@@ -178,10 +209,11 @@ def bind_file_receipts(
                 or len(str(output.get("summary") or "").strip()) < 10
             ):
                 raise PortfolioError("file employee did not report a completed result with summary")
-            files = [
-                _workspace_file(path, workspace, user_id, exists=True)
+            verified_paths = {
+                path: _workspace_file(path, workspace, user_id, exists=True)
                 for path in dict.fromkeys(paths)
-            ]
+            }
+            files = list(dict.fromkeys(verified_paths.values()))
             relative = [path.relative_to(Path(workspace)).as_posix() for path in files]
             checked = {"handler": "direct_python", "files_changed": relative}
             guard = check_path_guard(config=config, result={"outputs": [checked]}, employee_id="")
@@ -191,7 +223,23 @@ def bind_file_receipts(
             for rel, path in zip(relative, files, strict=True):
                 before = path.stat()
                 sha = sha256_file(path)
-                if before != path.stat():
+                after = path.stat()
+                # Hashing may update atime; retain the archive check's content
+                # identity fields plus ownership/mode, never access time.
+                if any(
+                    getattr(before, field) != getattr(after, field)
+                    for field in (
+                        "st_dev",
+                        "st_ino",
+                        "st_mode",
+                        "st_nlink",
+                        "st_uid",
+                        "st_gid",
+                        "st_size",
+                        "st_mtime_ns",
+                        "st_ctime_ns",
+                    )
+                ):
                     raise PortfolioError("file artifact changed while verifying its bytes")
                 artifacts.append(
                     {
@@ -220,8 +268,10 @@ def freeze_execution(owner_user_id: int, opportunity: dict[str, Any]) -> dict[st
         _tenant_workspace_root,
         ensure_within_workspace,
     )
+    from modstore_server.strategic_customer_outcomes import validate_customer_goal_bindings
     from modstore_server.strategic_portfolio import PortfolioError, digest
 
+    validate_customer_goal_bindings(opportunity)
     employee_id = opportunity["employee_id"]
     payload = deepcopy(validate_input(opportunity.get("input_data") or {}))
     root = (
@@ -283,6 +333,7 @@ def execution_payload(task: dict[str, Any]) -> dict[str, Any]:
         "strategic_opportunity_id": task["opportunity_id"],
         "strategic_source_refs": list(task["source_refs"]),
         "customer_goal_ids": list(task["customer_goal_ids"]),
+        "customer_goal_bindings": deepcopy(task.get("customer_goal_bindings") or []),
         "idempotency_key": "portfolio-"
         + digest([task["decision_id"], task["opportunity_id"]])[:32],
         "deadline_epoch": _date(task["deadline"]).timestamp(),
@@ -296,10 +347,35 @@ def execution_payload(task: dict[str, Any]) -> dict[str, Any]:
 def bind_reasoning_input(reasoning: dict[str, Any], payload: dict[str, Any]) -> None:
     """A model may plan work, but cannot replace approved business identifiers or paths."""
     from modstore_server import strategic_portfolio_usage as usage
+    from modstore_server.strategic_portfolio import PortfolioError, portfolio_status
 
-    if usage._SCOPE.get() is not None:
+    scope = usage._SCOPE.get()
+    workflow = _workflow_contract()
+    if workflow is not None:
+        approved = deepcopy(workflow["input_data"])
+        if any(key not in payload or payload[key] != value for key, value in approved.items()):
+            raise PortfolioError("perception changed approved workflow business input")
+        reasoning["input"] = approved
+        return
+    if scope is not None:
         usage.remaining_execution_seconds()
-        reasoning["input"] = deepcopy(payload)
+        decision_id, opportunity_id, _lease = scope
+        status = portfolio_status(decision_id)
+        item = next(
+            row for row in status["opportunities"] if row["opportunity_id"] == opportunity_id
+        )
+        approved = execution_payload(
+            {
+                **item,
+                "decision_id": decision_id,
+                "deadline": status["tasks"][opportunity_id]["deadline"],
+            }
+        )
+        if any(key not in payload or payload[key] != value for key, value in approved.items()):
+            raise PortfolioError("perception changed approved strategy business input")
+        # Perception adds live _workspace_signals/_recent_runs context in-place.
+        # Those observations remain cognition context, not executable business input.
+        reasoning["input"] = approved
 
 
 def verify_execution_binding(
@@ -320,6 +396,24 @@ def verify_execution_binding(
     )
 
     scope = usage._SCOPE.get()
+    workflow = _workflow_contract()
+    if workflow is not None:
+        binding = workflow["execution_binding"]
+        if employee_id != workflow["employee_id"] or (
+            user_id is not None and user_id != workflow["user_id"]
+        ):
+            raise PortfolioError("workflow executor owner or employee changed")
+        if pack is not None and any(
+            binding.get(key) != value for key, value in _pack_identity(pack).items()
+        ):
+            raise PortfolioError("approved employee package changed")
+        if config is not None and digest(config) != binding["config_sha256"]:
+            raise PortfolioError("approved employee runtime configuration changed")
+        if payload is not None:
+            if payload != workflow["input_data"] or digest(payload) != binding["input_sha256"]:
+                raise PortfolioError("approved workflow business input changed")
+            _verify_file_paths(payload, config or {}, workflow["user_id"])
+        return
     if scope is None:
         return
     usage.remaining_execution_seconds()
@@ -365,7 +459,7 @@ def approved_python_module(
     """Execute the approved archive snapshot, never a mutable extraction/pyc cache."""
     from modstore_server import strategic_portfolio_usage as usage
 
-    if usage._SCOPE.get() is None:
+    if usage._SCOPE.get() is None and _workflow_contract() is None:
         yield None
         return
 
@@ -451,7 +545,10 @@ def approved_python_module(
         if spec is None:
             raise PortfolioError("approved Python module could not be loaded")
         module = module_from_spec(spec)
-        usage.remaining_execution_seconds()
+        if usage._SCOPE.get() is not None:
+            usage.remaining_execution_seconds()
+        else:
+            _workflow_contract()
         loader.exec_module(module)
         _verify_file_support(module, payload, config, user_id)
         yield module

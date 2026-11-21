@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from modstore_server import capability_trainer as trainer
+from tests.promptfoo_local_only import local_only_environment
 
 FIXTURE = Path(__file__).parent / "fixtures" / "promptfoo-0.126.0"
 RESULT_SHA256 = "9cbc0c0327376ebeb03112aab6c76b4605399efb97751d45c0dbead0d69e4844"
@@ -102,34 +103,30 @@ def test_real_promptfoo_cli_seals_paired_results_without_model_credentials(tmp_p
         bundle["files"][key]["sha256"] = trainer._file_hash(Path(built[key]))
     bundle_path.write_text(json.dumps(bundle, sort_keys=True), encoding="utf-8")
     output_path = tmp_path / "actual-promptfoo-result.json"
-    environment = {
-        "PATH": os.environ["PATH"],
-        "CI": "1",
-        "PROMPTFOO_DISABLE_TELEMETRY": "1",
-        "PROMPTFOO_DISABLE_UPDATE": "1",
-        "PROMPTFOO_CONFIG_DIR": str(tmp_path / "state"),
-        "PROMPTFOO_LOG_DIR": str(tmp_path / "logs"),
-    }
-    process = subprocess.run(
-        [
-            str(cli),
-            "eval",
-            "-c",
-            str(config_path),
-            "-o",
-            str(output_path),
-            "--no-cache",
-            "--no-write",
-            "--max-concurrency",
-            "1",
-            "--no-progress-bar",
-        ],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=45,
-    )
+    with local_only_environment(tmp_path) as (environment, denied_hosts):
+        process = subprocess.run(
+            [
+                str(cli),
+                "eval",
+                "-c",
+                str(config_path),
+                "-o",
+                str(output_path),
+                "--no-cache",
+                "--no-write",
+                "--no-share",
+                "--max-concurrency",
+                "1",
+                "--no-progress-bar",
+            ],
+            cwd=tmp_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+    assert denied_hosts and set(denied_hosts) == {"r.promptfoo.app"}
     assert process.returncode == 100, process.stderr
     actual = json.loads(output_path.read_bytes())
     assert actual["metadata"]["promptfooVersion"] == trainer.PROMPTFOO_VERSION

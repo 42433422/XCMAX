@@ -178,3 +178,31 @@ def test_scheduled_plan_is_sql_proposal_then_authenticated_approval_and_executio
     state = runtime.run_portfolio_cycle(decision_id, owner_user_id=7)
     assert len(executions) == 1 and state["tasks"]["a"]["status"] == "completed"
     assert not ledger.exists()
+
+
+def test_historical_domain_aliases_retain_unrated_status_without_stale_gaps(tmp_path, monkeypatch):
+    from modstore_server import strategy_planner
+
+    report = tmp_path / "domain.json"
+    report.write_text(
+        json.dumps(
+            {
+                "audited_at": "2026-11-15T00:00:00+00:00",
+                "source": "historical-3396",
+                "domains": [
+                    {
+                        "domain_id": "di-layering",
+                        "status": "UNRATED",
+                        "score": 9,
+                        "blocking_gap": "outdated gap must not become current evidence",
+                    }
+                ],
+            }
+        )
+    )
+    monkeypatch.setenv("MODSTORE_DOMAIN_AUDIT_PATH", str(report))
+    context = strategy_planner._domain_status()
+    assert context["domains"][0]["domain_id"] == "architecture"
+    assert context["domains"][0]["score"] is None
+    assert context["audited_at"].startswith("2026-11-15")
+    assert "blocking_gap" not in json.dumps(context)

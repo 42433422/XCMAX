@@ -17,7 +17,6 @@ from typing import Any, AsyncGenerator, Awaitable, Callable, Iterator, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
-from sqlalchemy.exc import IntegrityError
 
 from modstore_server.db.db_base import get_session_factory
 from modstore_server.strategic_portfolio import (
@@ -82,6 +81,14 @@ def _authorize_platform_route(provider: str, kwargs: dict[str, Any]) -> None:
         remaining_execution_seconds()
     if (planning := _PLANNING.get()) is not None:
         require_active_portfolio_owner(planning["owner_user_id"])
+        from modstore_server.strategic_company_resources import active_budget
+
+        with get_session_factory()() as session:
+            active_budget(
+                session,
+                planning["owner_user_id"],
+                str(planning["admission"].get("company_budget_id") or ""),
+            )
     from modstore_server.llm_chat_proxy import _normalize_openai_base, normalize_model
     from modstore_server.llm_key_resolver import (
         OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
@@ -201,6 +208,7 @@ async def dispatch_budgeted_stream(
                     "usage": event.get("usage"),
                     "usage_estimated": event.get("usage_estimated", False),
                     "_fallback_used": event.get("fallback_used", False),
+                    "gateway_attempts_verified": event.get("gateway_attempts_verified"),
                 }
             yield event
     finally:
@@ -355,9 +363,32 @@ def portfolio_worker_scope(
             yield task
 
 
-async def planning_admission(provider: str, model: str) -> dict[str, Any] | None:
-    """Use verified platform quota or gateway budget, not an unapproved proposal."""
+async def planning_admission(
+    provider: str, model: str, *, owner_user_id: int | None = None
+) -> dict[str, Any] | None:
+    """Use the approved company budget or verified platform quota/gateway headroom."""
     from modstore_server.llm_quota_monitor import platform_quota_snapshot
+    from modstore_server.strategic_company_resources import active_budget
+
+    if owner_user_id is not None:
+        with get_session_factory()() as session:
+            budget = active_budget(session, owner_user_id)
+            if budget is not None:
+                row, company, _state = budget
+                if not any(
+                    (item["provider"], item["model"]) == (provider, model)
+                    for item in company["limits"]["tariffs"]
+                ):
+                    return None
+                return {
+                    "provider": provider,
+                    "model": model,
+                    "company_budget_id": row.decision_id,
+                    "budget_source": "approved_company_budget",
+                    "max_calls": 1,
+                    "max_total_tokens": min(32768, company["limits"]["tokens"]),
+                    "max_output_tokens": 1600,
+                }
 
     snapshot = await platform_quota_snapshot(
         live_probe=False,
@@ -412,6 +443,8 @@ def _reserve_planning(
     context: dict[str, Any], provider: str, model: str, prompt_bound: int, output_bound: int
 ) -> dict[str, Any]:
     from modstore_server.db.llm_chat import LlmClientRequest
+    from modstore_server.strategic_company_accounting import reserve_planning
+    from modstore_server.strategic_company_resources import transaction
     from modstore_server.xiaoc_life_store import record_life_reservation
 
     admission = context["admission"]
@@ -427,12 +460,13 @@ def _reserve_planning(
         "admission": admission,
         "reserved_tokens": prompt_bound + output_bound,
         "status": "pending",
+        "started_at": datetime.now(UTC).isoformat(),
     }
-    record_sha = digest(record)
     # Journal before the ledger write: an empty life journal then proves no
     # provider call was admitted. A crash after this point must read this ID.
     record_life_reservation(record)
-    with get_session_factory()() as session:
+
+    def persist(session: Any) -> None:
         require_active_portfolio_owner(context["owner_user_id"], session)
         unresolved = session.execute(
             select(LlmClientRequest.id)
@@ -445,6 +479,8 @@ def _reserve_planning(
         ).first()
         if unresolved:
             raise PortfolioError("previous planning usage requires reconciliation")
+        reserve_planning(session, record, prompt_bound, output_bound)
+        record_sha = digest(record)
         slot = session.execute(
             select(LlmClientRequest).where(
                 LlmClientRequest.user_id == context["owner_user_id"],
@@ -484,23 +520,22 @@ def _reserve_planning(
                 done_json=_json(record),
             )
         )
-        try:
-            session.commit()
-        except IntegrityError as exc:
-            session.rollback()
-            raise PortfolioError("another planning call owns the account quota slot") from exc
+
+    transaction(persist)
     context["receipts"].append(record)
     return {
         **record,
         "provider": provider,
         "model": model,
         "max_tokens": output_bound,
-        "timeout_seconds": 45,
+        "timeout_seconds": record.get("reserved_compute_seconds", 45),
     }
 
 
 def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None) -> None:
     from modstore_server.db.llm_chat import LlmCallLog, LlmClientRequest
+    from modstore_server.strategic_company_accounting import settle_planning
+    from modstore_server.strategic_company_resources import transaction
 
     values = (result or {}).get("usage") or {}
     prompt = (
@@ -524,6 +559,8 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
         and values.get("estimated") is not True
     )
     admission = reservation["admission"]
+    if admission["provider"] == "litellm":
+        known = known and (result or {}).get("gateway_attempts_verified") is True
     known = known and (result or {}).get("provider") in (None, "", admission["provider"])
     known = known and (result or {}).get("model") in (None, "", admission["model"])
     total = cast(int, prompt) + cast(int, completion) if known else None
@@ -538,8 +575,15 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
             if admission.get("budget_source") == "existing_platform_gateway_budget"
             else "existing_subscription_usage_not_supplier_invoice"
         ),
+        "completed_at": datetime.now(UTC).isoformat(),
+        **(
+            {"gateway_attempts_verified": (result or {}).get("gateway_attempts_verified") is True}
+            if admission["provider"] == "litellm"
+            else {}
+        ),
     }
-    with get_session_factory()() as session:
+
+    def persist(session: Any) -> None:
         row = session.execute(
             select(LlmClientRequest).where(
                 LlmClientRequest.client_request_id == reservation["request_id"],
@@ -548,6 +592,12 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
         ).scalar_one()
         if row.state != "processing":
             return
+        settle_planning(
+            session,
+            report,
+            prompt=prompt if known else None,
+            completion=completion if known else None,
+        )
         final_state = "completed" if known and not exceeded else "unknown"
         changed = cast(
             CursorResult[Any],
@@ -587,7 +637,8 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
                 hold_no=reservation["request_id"][-64:],
             )
         )
-        session.commit()
+
+    transaction(persist)
     context = _PLANNING.get()
     if context is not None:
         context["receipts"][:] = [report]
@@ -601,7 +652,12 @@ def _cost(prompt: int, completion: int, tariff: dict[str, Any]) -> int:
 
 
 def prepare_platform_call(
-    provider: str, model: str, messages: list[dict[str, Any]], max_tokens: int | None
+    provider: str,
+    model: str,
+    messages: list[dict[str, Any]],
+    max_tokens: int | None,
+    *,
+    caller_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     from modstore_server.xiaoc_life_store import record_life_reservation, require_current_life_call
 
@@ -609,7 +665,39 @@ def prepare_platform_call(
     scope = _SCOPE.get()
     planning = _PLANNING.get()
     if scope is None and planning is None:
+        if caller_binding is not None:
+            raise PortfolioError("caller binding requires a strategic execution lease")
         return None
+    if caller_binding is not None and type(caller_binding) is not dict:
+        raise PortfolioError("invalid strategic model caller binding")
+    frozen_binding = dict(caller_binding) if caller_binding is not None else None
+    if frozen_binding is not None and (
+        scope is None
+        or not frozen_binding
+        or set(frozen_binding)
+        - {
+            "grant_id",
+            "event_id",
+            "task_id",
+            "subtask_id",
+            "attempt",
+            "phase",
+            "github_run_id",
+            "run_attempt",
+        }
+        or any(
+            not (
+                (type(value) is int and 0 <= value < 2**63)
+                or (
+                    type(value) is str
+                    and 0 < len(value) <= 256
+                    and all(character.isalnum() or character in "_.:/-" for character in value)
+                )
+            )
+            for value in frozen_binding.values()
+        )
+    ):
+        raise PortfolioError("invalid strategic model caller binding")
     if any(not isinstance(item.get("content", ""), str) for item in messages):
         raise PortfolioError("strategic budget requires text-only model input")
     # Text chat only. This bounds tokenization and protocol framing without
@@ -687,6 +775,10 @@ def prepare_platform_call(
             "tariff": tariff,
             "created_at": datetime.now(UTC).isoformat(),
         }
+        if frozen_binding is not None:
+            calls[request_id].update(
+                caller_binding=frozen_binding, caller_binding_sha256=digest(frozen_binding)
+            )
         return {
             "provider": provider,
             "model": model,
@@ -748,6 +840,11 @@ def complete_platform_call(
         )
         verified = verified and ((result or {}).get("provider") in (None, "", call["provider"]))
         verified = verified and ((result or {}).get("model") in (None, "", call["model"]))
+        if call["provider"] == "litellm":
+            call["gateway_attempts_verified"] = (result or {}).get(
+                "gateway_attempts_verified"
+            ) is True
+            verified = verified and call["gateway_attempts_verified"]
         if not verified:
             call["status"] = "unknown"
             state.update(halted=True, stop_reason="upstream_usage_unknown")
@@ -762,6 +859,9 @@ def complete_platform_call(
                 accrued_cost_cents=cost,
                 cost_basis="approved_tariff_accrual",
             )
+            for key in ("response_id", "upstream_model"):
+                if isinstance(value := (result or {}).get(key), str) and value:
+                    call[key] = value[:256]
             if prompt + completion > call["reserved_tokens"] or cost > call["reserved_cost_cents"]:
                 state.update(halted=True, stop_reason="upstream_usage_exceeded_reservation")
         call["completed_at"] = datetime.now(UTC).isoformat()

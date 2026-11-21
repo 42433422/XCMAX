@@ -18,7 +18,8 @@ from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_value_classification import parse_datetime
 from modstore_server.models import RetortEvolutionRun, User, get_session_factory
 from modstore_server.retort_experiment_surfaces import (
-    WORKFLOW_NL_MEASUREMENT,
+    WORKFLOW_CUSTOMER_MEASUREMENT,
+    WORKFLOW_EXECUTION_MEASUREMENT,
     surface_identity,
 )
 from modstore_server.retort_feedback_experiments import (
@@ -95,6 +96,26 @@ def select_variant(*, surface, resource_id, subject_id, default_value, workflow_
                 and progress.get("decision") == "promote"
                 and progress.get("rollout_verified") is True
             ):
+                if life.get("measurement_scope") == WORKFLOW_CUSTOMER_MEASUREMENT:
+                    value = life["treatment_prompt"]
+                    return value, {
+                        "request_id": row.id,
+                        "experiment_id": progress["experiment_id"],
+                        "tracking_key": f"xcagi-retort-{row.id}",
+                        "variation_id": "1",
+                        "subject_id": str(subject_id),
+                        "user_id": subject_id,
+                        "surface": surface,
+                        "resource_id": resource_id,
+                        "workflow_id": workflow_id,
+                        "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+                        "release_sha": progress["release_sha"],
+                        "policy_digest": progress["policy_digest"],
+                        "value_sha256": hashlib.sha256(value.encode()).hexdigest(),
+                        "assigned_at": datetime.now(UTC).isoformat(),
+                        "observation_id": str(uuid4()),
+                        "assignment_stage": "approved_rollout",
+                    }
                 return life["treatment_prompt"], None
             end, lease = parse_datetime(progress.get("exposure_ends_at")), parse_datetime(
                 progress.get("lease_until")
@@ -145,7 +166,7 @@ def select_variant(*, surface, resource_id, subject_id, default_value, workflow_
             }
             if surface == "workflow_nl_prompt":
                 assignment.update(
-                    workflow_id=workflow_id, measurement_scope=WORKFLOW_NL_MEASUREMENT
+                    workflow_id=workflow_id, measurement_scope=life["measurement_scope"]
                 )
             return result.value, assignment
     return default_value, None
@@ -168,7 +189,10 @@ def _enqueue_exposure(db, assignment):
 
 def begin_observation(assignment):
     """Persist the assigned exposure before dispatch; unavailable tracking blocks treatment."""
-    if assignment is not None:
+    if assignment is not None and assignment.get("measurement_scope") not in {
+        WORKFLOW_EXECUTION_MEASUREMENT,
+        WORKFLOW_CUSTOMER_MEASUREMENT,
+    }:
         with get_session_factory()() as db:
             _enqueue_exposure(db, assignment)
             db.commit()
@@ -183,27 +207,38 @@ def record_observation(assignment, *, result, duration_ms, session=None):
     """
     if assignment is None:
         return
+    with get_session_factory()() if session is None else nullcontext(session) as db:
+        enqueue_observation(db, assignment, result=result, duration_ms=duration_ms)
+        if session is None:
+            db.commit()
+
+
+def enqueue_observation(db, assignment, *, result, duration_ms):
+    """An execution terminal and its measurement share the caller's SQL transaction."""
     from modstore_server.eventing.db_outbox import enqueue
     from modstore_server.llm_failure_classifier import classify_failure_kind
 
-    with get_session_factory()() if session is None else nullcontext(session) as db:
+    generation_only = assignment.get("measurement_scope") in {
+        WORKFLOW_EXECUTION_MEASUREMENT,
+        WORKFLOW_CUSTOMER_MEASUREMENT,
+    } and not assignment.get("execution_id")
+    event_name = "experiment.generation_observed" if generation_only else "experiment.observed"
+    if not generation_only:
         _enqueue_exposure(db, assignment)
-        enqueue(
-            db,
-            "experiment.observed",
-            assignment["request_id"],
-            {
-                **assignment,
-                "success": isinstance(result, dict) and result.get("ok") is True,
-                "failure_kind": (
-                    classify_failure_kind(str(result.get("error") or ""), result.get("status"))
-                    if isinstance(result, dict) and result.get("ok") is not True
-                    else ""
-                ),
-                "duration_ms": duration_ms,
-                "completed_at": datetime.now(UTC).isoformat(),
-            },
-            event_id=f"experiment.observed:{assignment['observation_id']}",
-        )
-        if session is None:
-            db.commit()
+    enqueue(
+        db,
+        event_name,
+        assignment["request_id"],
+        {
+            **assignment,
+            "success": isinstance(result, dict) and result.get("ok") is True,
+            "failure_kind": (
+                classify_failure_kind(str(result.get("error") or ""), result.get("status"))
+                if isinstance(result, dict) and result.get("ok") is not True
+                else ""
+            ),
+            "duration_ms": duration_ms,
+            "completed_at": datetime.now(UTC).isoformat(),
+        },
+        event_id=f"{event_name}:{assignment['observation_id']}",
+    )

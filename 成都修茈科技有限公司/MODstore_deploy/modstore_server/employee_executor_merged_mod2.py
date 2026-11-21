@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 from copy import deepcopy
+from pathlib import Path
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -805,6 +806,7 @@ def _execute_employee_phase_02(state):
             config=state["config"],
             result=state["result"] if isinstance(state["result"], dict) else {},
             employee_id=state["employee_id"],
+            project_root=Path(state["_project_root"]) if state["_project_root"] else None,
         )
         if isinstance(state["result"], dict):
             state["result"]["path_guard"] = _path_guard

@@ -31,6 +31,7 @@ router = APIRouter(prefix="/api/service/mac-control", tags=["mac-control-dispatc
 SERVICE_ACTOR = "service:para-dispatch"
 TOKEN_DIGESTS_ENV = "MODSTORE_PARA_DISPATCH_TOKEN_SHA256"
 _MIN_TOKEN_LENGTH = 32
+_DB_SESSION = Depends(get_db)
 
 
 def _configured_digests() -> list[str]:
@@ -80,7 +81,7 @@ def release_train_state(actor: str = Depends(require_dispatch_service)):
 def github_run_status(
     request_id: uuid.UUID,
     actor: str = Depends(require_dispatch_service),
-    db: Session = Depends(get_db),
+    db: Session = _DB_SESSION,
 ):
     from modstore_server.para_github_runner import run_status
 
@@ -107,6 +108,10 @@ def training_failures(
         ledger_path(), days=max(1, min(90, days)), min_count=max(1, min(50, min_count))
     )[:20]
     for cluster in clusters:
+        if cluster.get("surface") == "workflow_nl_prompt":
+            # Authenticated private training transport must preserve exact
+            # reproduction bytes; public evidence contains only their hashes.
+            continue
         cluster["failure_reason"] = redact_ticket_text(cluster["failure_reason"], ())[:300]
         for sample in cluster["samples"]:
             sample["task"] = redact_ticket_text(sample.get("task", ""), ())[:2000]
@@ -117,7 +122,11 @@ def training_failures(
 class TrainingCandidateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_key: str = Field(min_length=8, max_length=128)
-    employee_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    surface: str = Field(
+        default="employee_prompt", pattern=r"^(employee_prompt|workflow_nl_prompt)$"
+    )
+    employee_id: str = Field(default="", pattern=r"^(?:[A-Za-z0-9_-]{1,128})?$")
+    resource_id: str = Field(default="", pattern=r"^(?:workflow_nl_generator)?$")
     source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     failure_run_ids: list[str] = Field(min_length=1, max_length=20)
     workflow_run_id: int = Field(gt=0)
@@ -136,7 +145,7 @@ def training_candidate(
     from modstore_server.retort_training_candidates import create_training_candidate
 
     try:
-        request_id = create_training_candidate(body.model_dump())
+        request_id = create_training_candidate(body.model_dump(exclude_unset=True))
     except TimeoutError:
         raise HTTPException(409, "training_candidate_busy") from None
     except (ValueError, KeyError, TypeError) as exc:
@@ -198,7 +207,7 @@ def _accept_task(db, *, actor, key, request):
 def create_github_pr_task(
     body: PullRequestDispatchRequest,
     _actor: str = Depends(require_dispatch_service),
-    db: Session = Depends(get_db),
+    db: Session = _DB_SESSION,
 ):
     from modstore_server.customer_ticket_github import configuration
 
@@ -221,7 +230,7 @@ def create_github_pr_task(
 def create_code_task(
     body: DispatchRequest,
     actor: str = Depends(require_dispatch_service),
-    db: Session = Depends(get_db),
+    db: Session = _DB_SESSION,
 ):
     _require_control_enabled()
     request: dict = {
@@ -243,7 +252,7 @@ def create_code_task(
 def get_code_task(
     task_id: str,
     actor: str = Depends(require_dispatch_service),
-    db: Session = Depends(get_db),
+    db: Session = _DB_SESSION,
 ):
     task = db.get(MacControlTask, task_id)
     # Tasks created by admins or other identities are invisible to this token.
@@ -268,3 +277,9 @@ def get_code_task(
             if client:
                 client.close()
     return {"success": True, "task": _service_view(task), "checked_at": time.time()}
+
+
+# Keep the task-bound gateway on the same deployed service surface as its worker.
+from modstore_server.strategic_remote_api import router as strategic_remote_router
+
+router.include_router(strategic_remote_router)

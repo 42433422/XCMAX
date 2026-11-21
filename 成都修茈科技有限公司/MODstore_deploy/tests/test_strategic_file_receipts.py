@@ -166,6 +166,7 @@ def test_actual_file_support_resolver_keeps_frozen_templates_and_rejects_escape(
     "case",
     [
         "valid",
+        "aliases",
         "missing",
         "outside",
         "symlink",
@@ -206,6 +207,8 @@ def test_legacy_receipt_needs_real_stable_in_scope_bytes(database, tmp_path, mon
         "items": [{"output_path": str(artifact)}],
         "error": "",
     }
+    if case == "aliases":
+        output["items"].append({"output_path": "docs/result.csv"})
     if case == "no_summary":
         output["summary"] = ""
     elif case == "pending":
@@ -229,7 +232,7 @@ def test_legacy_receipt_needs_real_stable_in_scope_bytes(database, tmp_path, mon
     with usage.portfolio_usage_scope(decision, "a", task["lease_token"]):
         bind_file_receipts(result, payload, config, 7)
     result["path_guard"] = check_path_guard(
-        config=config, result=result, employee_id=task["employee_id"]
+        config=config, result=result, employee_id=task["employee_id"], project_root=workspace
     )
     result["verification"] = run_verification(
         employee_id=task["employee_id"],
@@ -240,8 +243,9 @@ def test_legacy_receipt_needs_real_stable_in_scope_bytes(database, tmp_path, mon
         project_root=workspace,
     )
     receipt = evaluate_execution_receipt(result)
-    if case == "valid":
+    if case in {"valid", "aliases"}:
         assert receipt.status == "completed"
+        assert output["items"][0]["output_path"] == str(artifact)
         assert result["path_guard"]["all_changed_files"] == ["docs/result.csv"]
         assert result["verification"]["files_declared"] == ["docs/result.csv"]
         assert output["artifacts"] == [

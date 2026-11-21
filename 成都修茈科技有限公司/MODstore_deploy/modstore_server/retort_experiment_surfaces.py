@@ -6,6 +6,11 @@ import re
 
 WORKFLOW_NL_RESOURCE = "workflow_nl_generator"
 WORKFLOW_NL_MEASUREMENT = "workflow_generation_static_validation"
+WORKFLOW_EXECUTION_MEASUREMENT = "workflow_execution_terminal"
+WORKFLOW_CUSTOMER_MEASUREMENT = "workflow_customer_accepted_outcome"
+WORKFLOW_NL_PROMPT_PATH = (
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_nl_graph.py"
+)
 
 
 def surface_identity(lifecycle):
@@ -19,7 +24,8 @@ def surface_identity(lifecycle):
         surface == "workflow_nl_prompt"
         and lifecycle.get("resource_id") == WORKFLOW_NL_RESOURCE
         and not lifecycle.get("employee_id")
-        and lifecycle.get("measurement_scope") == WORKFLOW_NL_MEASUREMENT
+        and lifecycle.get("measurement_scope")
+        in {WORKFLOW_NL_MEASUREMENT, WORKFLOW_EXECUTION_MEASUREMENT, WORKFLOW_CUSTOMER_MEASUREMENT}
     ):
         # This shared generator serves many owners. The runtime separately binds
         # each observation to that authenticated owner's actual workflow ID.

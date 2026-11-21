@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -24,6 +23,8 @@ from modstore_server.workflow_api.schemas import WorkflowExecuteBody
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_DB_SESSION = Depends(get_db)
+_CURRENT_USER = Depends(_get_current_user)
 
 
 @router.post("/{workflow_id}/execute", summary="执行工作流")
@@ -31,8 +32,8 @@ async def execute_workflow(
     workflow_id: int,
     body: WorkflowExecuteBody,
     request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
+    db: Session = _DB_SESSION,
+    user: User = _CURRENT_USER,
 ):
     from modstore_server.workflow_engine import execute_workflow as engine_execute
 
@@ -49,6 +50,9 @@ async def execute_workflow(
     if not workflow.is_active:
         raise HTTPException(400, "工作流未激活")
 
+    sf = get_session_factory()
+    with sf() as qdb:
+        require_llm_credit(qdb, user.id, 1)
     execution = WorkflowExecution(
         workflow_id=workflow_id,
         user_id=user.id,
@@ -59,12 +63,24 @@ async def execute_workflow(
     db.commit()
     db.refresh(execution)
 
-    sf = get_session_factory()
-    with sf() as qdb:
-        require_llm_credit(qdb, user.id, 1)
-    failure_message: Optional[str] = None
+    from modstore_server.workflow_execution_feedback import (
+        begin_execution_feedback,
+        complete_execution_feedback,
+    )
+
+    failure_message: str | None = None
     try:
-        output_data = engine_execute(workflow_id, body.input_data or {}, user_id=user.id)
+        binding = begin_execution_feedback(db, execution) or {}
+        db.commit()
+        if binding.get("blocked"):
+            raise ValueError(binding["blocked"])
+        output_data = engine_execute(
+            workflow_id,
+            body.input_data or {},
+            user_id=user.id,
+            **({"expected_graph_fingerprint": binding["graph_fingerprint"]} if binding else {}),
+            **({"execution_id": execution.id} if binding.get("customer_delivery") else {}),
+        )
         execution.status = "completed"
         execution.output_data = json.dumps(output_data)
         execution.completed_at = datetime.now(UTC)
@@ -81,7 +97,7 @@ async def execute_workflow(
                 user_id=user.id,
                 label=f"workflow:{workflow_id}",
             )
-        except BOUNDARY_ERRORS as bill_err:  # noqa: BLE001 — 计费失败不阻断执行，但记日志可见
+        except BOUNDARY_ERRORS as bill_err:
             logger.warning(
                 "workflow execute billing failed (user=%s wf=%s): %s",
                 user.id,
@@ -94,6 +110,7 @@ async def execute_workflow(
         execution.error_message = failure_message
         execution.output_data = json.dumps(getattr(e, "evidence", {}), ensure_ascii=False)
         execution.completed_at = datetime.now(UTC)
+    complete_execution_feedback(db, execution)
     db.commit()
 
     try:
@@ -142,8 +159,8 @@ async def get_workflow_executions(
     workflow_id: int,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
+    db: Session = _DB_SESSION,
+    user: User = _CURRENT_USER,
 ):
     workflow = (
         db.query(Workflow)
@@ -182,8 +199,8 @@ async def get_workflow_executions(
 @router.get("/executions/{execution_id}", summary="获取执行详情")
 async def get_execution_detail(
     execution_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
+    db: Session = _DB_SESSION,
+    user: User = _CURRENT_USER,
 ):
     execution = (
         db.query(WorkflowExecution)

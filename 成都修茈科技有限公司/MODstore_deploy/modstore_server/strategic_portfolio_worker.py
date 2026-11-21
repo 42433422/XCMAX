@@ -105,6 +105,10 @@ def restore_life_worker_scope(binding: dict[str, Any], *, owner_user_id: int) ->
     from modstore_server.xiaoc_life_policy import MINIMUM_LEVEL, LifePolicyError
     from modstore_server.xiaoc_life_store import life_execution_scope
 
+    if binding.get("adapter") in {"github_opencode_report", "github_opencode_workspace"}:
+        raise PortfolioError(
+            "remote work requires its native adapter, never local queue cancellation"
+        )
     claim = binding.get("life_scope")
     if claim is None:
         yield

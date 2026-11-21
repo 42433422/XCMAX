@@ -110,13 +110,24 @@ def _ensure_issue(request_id, protocol, effects):
 
 def _ensure_runner(request_id, protocol, effects):
     repo = protocol["repository"]
+    from modstore_server import strategic_workspace_bridge as strategic
+
+    budgeted = strategic.attached(request_id)
     if not effects.get("run_id"):
+        if (feedback_execution_kind(effects) or budgeted) and not strategic.ready(request_id):
+            return {
+                **effects,
+                "model_allocation": {
+                    "status": "waiting",
+                    "reason": "strategic_company_budget_binding_required",
+                },
+            }
         if not effects.get("runner_intent"):
             from modstore_server.para_github_runner import _claim_worker_slot
             from modstore_server.para_model_admission import platform_model_admission
 
             allocation = platform_model_admission("benchmark")
-            if feedback_execution_kind(effects):
+            if feedback_execution_kind(effects) or budgeted:
                 if not feedback_executor_configured() or not allocation:
                     return {
                         **effects,
@@ -125,6 +136,9 @@ def _ensure_runner(request_id, protocol, effects):
                 allocation = {**allocation, "execution_isolation": HEADER_ONLY_PLATFORM_PROFILE}
             if allocation and allocation["status"] != "admitted":
                 return {**effects, "model_allocation": allocation}
+            if budgeted:
+                request, _, _ = strategic.remote.read_request(request_id)
+                strategic.verify_allocation(request, {"model_allocation": allocation})
             with get_session_factory()() as db:
                 row = db.get(RetortEvolutionRun, request_id)
                 if not _claim_worker_slot(db, row, owner_key=f"retort:{request_id}"):
@@ -231,7 +245,12 @@ def collect_execution(request_id):
             "pull_request_number": matching[0]["number"],
         }
     if customer_feedback:
-        return blocked
+        from modstore_server.strategic_workspace_bridge import ready
+
+        if not feedback_allocation_isolated(effects.get("model_allocation")) or not ready(
+            request_id
+        ):
+            return blocked
     workspace = {
         "request_id": request_id,
         "run_id": run["id"],
@@ -337,8 +356,11 @@ def worker_status(request_id):
     target = next(iter(commits)) if len(commits) == 1 else ""
     if target and not re.fullmatch(r"[0-9a-f]{40}", target):
         raise ValueError("员工代码回执缺少确切提交")
+    from modstore_server.strategic_workspace_bridge import descriptor
+
     return {
         **({"kind": feedback_execution_kind(effects)} if feedback_execution_kind(effects) else {}),
+        "strategic_budget": descriptor(request_id),
         "request_id": request_id,
         "run_id": effects.get("run_id"),
         "repository": protocol["repository"],

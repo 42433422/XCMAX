@@ -15,6 +15,8 @@ from tests import test_strategic_stream_usage as stream_tests
 from tests.test_strategic_stream_usage import _calls, _stream
 
 mandate = stream_tests.mandate
+real_router_runtime = stream_tests.real_router_runtime
+pytestmark = pytest.mark.usefixtures("real_router_runtime")
 
 
 def _router_sse(monkeypatch, mandate):

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import math
-import re
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -54,7 +53,9 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
     def apply(
         row: Any, proposal: dict[str, Any], state: dict[str, Any], session: Any
     ) -> dict[str, Any] | None:
-        require_authorization(row, proposal, state)
+        from modstore_server.strategic_company_planner import claim_candidates
+
+        require_authorization(row, proposal, state, session=session)
         tasks = state["tasks"]
         now = datetime.now(UTC)
         running = [task for task in tasks.values() if task["status"] in {"running", "waiting"}]
@@ -64,7 +65,20 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
         if len(running) >= proposal["limits"]["max_parallel"]:
             return None
         opportunities = {item["opportunity_id"]: item for item in proposal["opportunities"]}
-        for key in state["plan"]["selected"]:
+        selected = state["plan"]["selected"]
+        company_selected = claim_candidates(session, decision_id, proposal, state)
+        if company_selected is not None:
+            selected = company_selected
+            planned = list(dict.fromkeys([*tasks, *selected]))
+            state["plan"].update(
+                selected=planned,
+                deferred=[key for key in opportunities if key not in planned],
+                allocation={
+                    field: sum(opportunities[key][field] for key in selected) for field in RESOURCES
+                },
+                company_selection_sha256=state["company_selection"].get("selection_sha256"),
+            )
+        for key in selected:
             opportunity = opportunities[key]
             if key in tasks or any(
                 tasks.get(dep, {}).get("status") != "completed" for dep in opportunity["depends_on"]
@@ -96,7 +110,22 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 select(StrategicActionItem).where(
                     StrategicActionItem.action_id == _action_id(decision_id, key)
                 )
-            ).scalar_one()
+            ).scalar_one_or_none()
+            if action is None:
+                if company_selected is None:
+                    raise PortfolioError("approved portfolio action is missing")
+                # The approval covers every frozen opportunity, including one
+                # deferred by the original local optimizer. Admit its action in
+                # the same transaction as the task and company reservation.
+                action = StrategicActionItem(
+                    action_id=_action_id(decision_id, key),
+                    decision_id=decision_id,
+                    description=opportunity["task"],
+                    assigned_to=opportunity["employee_id"],
+                    due_at=_date(proposal["limits"]["expires_at"]),
+                    created_at=now,
+                )
+                session.add(action)
             action.status, action.updated_at = "in_progress", now
             action.result_json = _json(
                 {"schema": SCHEMA, "opportunity_id": key, "lease_token": token}
@@ -120,6 +149,7 @@ async def discover_portfolio_opportunities(
     limits: dict[str, Any],
     use_llm: bool = True,
     input_data: dict[str, Any] | None = None,
+    market_research: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Reuse the existing strategic planner with account-scoped live inputs."""
     from sqlalchemy import func
@@ -144,6 +174,7 @@ async def discover_portfolio_opportunities(
         freeze_execution,
         validate_input,
     )
+    from modstore_server.strategic_market_research import bind_market_candidate, discover_market
     from modstore_server.strategic_portfolio import Opportunity, PortfolioLimits
     from modstore_server.strategic_portfolio_usage import (
         planning_admission,
@@ -153,7 +184,11 @@ async def discover_portfolio_opportunities(
 
     if type(owner_user_id) is not int or owner_user_id <= 0:
         raise PortfolioError("owner is required for planning context")
-    cap = PortfolioLimits.model_validate(limits)
+    from modstore_server.strategic_company_resources import bind_limits
+
+    cap = PortfolioLimits.model_validate(
+        bind_limits(owner_user_id, PortfolioLimits.model_validate(limits).model_dump())
+    )
     approved_input = validate_input(input_data or {})
     now = datetime.now(UTC)
     with get_session_factory()() as session:
@@ -246,6 +281,9 @@ async def discover_portfolio_opportunities(
             "reason": "no_registered_executor",
         }
     company_context = await asyncio.to_thread(strategy_planner.collect_context)
+    market = await discover_market(
+        market_research, owner_user_id=owner_user_id, employees=employees
+    )
 
     planning_calls: list[dict[str, Any]] = []
 
@@ -260,7 +298,7 @@ async def discover_portfolio_opportunities(
             provider, model = resolve_platform_bench_llm()
             if not provider or not model:
                 return None
-            admission = await planning_admission(provider, model)
+            admission = await planning_admission(provider, model, owner_user_id=owner_user_id)
             if admission is None:
                 planning_calls.append(
                     {
@@ -288,6 +326,7 @@ async def discover_portfolio_opportunities(
         "source_refs": source_refs,
         "employees": employees,
         "customer_goal_ids": customer_goals,
+        "market": market,
     }
     plan = await strategy_planner.generate_candidates(
         context, chat=PlatformPlanner() if use_llm else None
@@ -296,9 +335,16 @@ async def discover_portfolio_opportunities(
     count = max(1, len(plan["candidates"]))
     opportunities, rejected = [], []
     for feature in plan["candidates"]:
+        try:
+            market_binding = bind_market_candidate(feature, market)
+        except PortfolioError as exc:
+            rejected.append({"title": feature["title"], "reason": str(exc)})
+            continue
+        bindings = market_binding.get("customer_goal_bindings", [])
+        observed_goals = {*customer_goals, *[row["customer_goal_id"] for row in bindings]}
         goals = feature.get("customer_goal_ids") or []
         if not isinstance(goals, list) or not all(
-            isinstance(goal_id, str) and goal_id in customer_goals for goal_id in goals
+            isinstance(goal_id, str) and goal_id in observed_goals for goal_id in goals
         ):
             rejected.append(
                 {
@@ -307,16 +353,24 @@ async def discover_portfolio_opportunities(
                 }
             )
             continue
-        if feature["metric_id"] == strategy_planner.strategy_bets.REVENUE_METRIC and not goals:
+        if (
+            feature["metric_id"]
+            in {
+                strategy_planner.strategy_bets.REVENUE_METRIC,
+                strategy_planner.strategy_bets.CUSTOMER_ACCEPTANCE_METRIC,
+            }
+            and not goals
+        ):
             rejected.append(
                 {
                     "title": feature["title"],
-                    "reason": "revenue_hypothesis_requires_customer_goal_binding",
+                    "reason": "business_hypothesis_requires_customer_goal_binding",
                 }
             )
             continue
         candidate = Opportunity(
-            opportunity_id="op-" + digest([goal, feature["title"], source_refs])[:20],
+            opportunity_id="op-"
+            + digest([goal, feature["title"], source_refs, market_binding])[:20],
             title=feature["title"][:200],
             task=f"{feature['title']}\n目的：{feature['hypothesis']}\n验收：{feature['metric_id']} {feature['direction']} {feature['threshold']}\n只在现有审批范围内执行；对外通信、支付和新增资源仍需其原有授权。"[
                 :4000
@@ -332,9 +386,15 @@ async def discover_portfolio_opportunities(
             tokens=cap.tokens // count,
             compute_seconds=max(1, cap.compute_seconds // count),
             risk="medium",
-            source_refs=source_refs,
+            source_refs=[*source_refs, *market_binding.get("source_refs", [])],
             customer_goal_ids=goals,
-            input_data=approved_input,
+            customer_goal_bindings=bindings,
+            input_data={
+                **approved_input,
+                **(
+                    {"market_evidence": market_binding["market_evidence"]} if market_binding else {}
+                ),
+            },
             hypothesis=BetHypothesis.model_validate(
                 {
                     key: feature[key]
@@ -360,7 +420,10 @@ async def discover_portfolio_opportunities(
         "opportunities": opportunities,
         "rejected_candidates": rejected,
         "planning_calls": planning_calls,
-        "company_evidence": {key: company_context[key] for key in ("assets", "repo", "domains")},
+        "company_evidence": {
+            **{key: company_context[key] for key in ("assets", "repo", "domains")},
+            "market": market,
+        },
         "prior_review_count": len(history),
         "estimate_basis": "reviewable_equal_resource_slices_not_observed_costs",
     }
@@ -376,6 +439,13 @@ def _execute(task: dict[str, Any]) -> dict[str, Any]:
         platform_llm_scope(),
         portfolio_usage_scope(task["decision_id"], task["opportunity_id"], task["lease_token"]),
     ):
+        if (task.get("input_data") or {}).get("remote_execution"):
+            from modstore_server.strategic_remote_bridge import dispatch_report
+            from modstore_server.strategic_workspace_bridge import KIND, attach_workspace
+
+            if task["input_data"]["remote_execution"].get("kind") == KIND:
+                return attach_workspace(task)
+            return dispatch_report(task)
         return dict(
             execute_employee_task(
                 task["employee_id"],
@@ -386,10 +456,43 @@ def _execute(task: dict[str, Any]) -> dict[str, Any]:
         )
 
 
-def _finish(task: dict[str, Any], result: dict[str, Any], elapsed: int) -> None:
+def _finish(
+    task: dict[str, Any],
+    result: dict[str, Any],
+    elapsed: int,
+    *,
+    remote_receipt: tuple[str, str] | None = None,
+) -> None:
+    from modstore_server.strategic_customer_outcomes import attach_local_delivery_artifacts
+
+    result = attach_local_delivery_artifacts(task, result)
+
     def apply(_row: Any, proposal: dict[str, Any], state: dict[str, Any], session: Any) -> None:
         saved = state["tasks"][task["opportunity_id"]]
-        if saved["lease_token"] != task["lease_token"] or saved["status"] != "running":
+        prior_stop = (state.get("halted"), state.get("stop_reason"))
+        remote_record = None
+        allowed_statuses = {"running"}
+        if remote_receipt is not None:
+            from modstore_server.strategic_remote_bridge import KIND, _row
+            from modstore_server.strategic_workspace_bridge import KIND as WORKSPACE_KIND
+
+            remote_record = _row(session, remote_receipt[0])
+            binding = saved.get("worker_binding") or {}
+            if (
+                binding.get("adapter") not in {KIND, WORKSPACE_KIND}
+                or binding.get("receipt_id") != remote_receipt[0]
+            ):
+                raise PortfolioError("remote completion does not own its worker binding")
+            if remote_record.state in {"execution_completed", "failed"}:
+                return
+            if digest(json.loads(remote_record.snapshot_json)) != remote_receipt[1]:
+                raise PortfolioError("remote completion changed during artifact readback")
+            if binding.get("adapter") == WORKSPACE_KIND:
+                from modstore_server.strategic_workspace_receipts import validate_terminal
+
+                validate_terminal(session, json.loads(remote_record.request_json), result)
+            allowed_statuses.add("waiting")
+        if saved["lease_token"] != task["lease_token"] or saved["status"] not in allowed_statuses:
             raise PortfolioError("execution completion does not own its lease")
         from modstore_server.cred_vault import redact
         from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
@@ -460,6 +563,15 @@ def _finish(task: dict[str, Any], result: dict[str, Any], elapsed: int) -> None:
         )
         action.updated_at = datetime.now(UTC)
         action.result_json, action.block_reason = _json(saved), "" if ok else reason[:500]
+        if remote_record is not None:
+            # The original task and its native transport acknowledgement commit
+            # together, so a restart cannot replay or overwrite a terminal report.
+            remote_record.state = (
+                "execution_completed" if saved["status"] == "completed" else "failed"
+            )
+            remote_record.updated_at = time.time()
+            if prior_stop[0]:
+                state.update(halted=True, stop_reason=prior_stop[1])
 
     mutate_portfolio(task["decision_id"], apply)
 
@@ -488,6 +600,9 @@ def run_portfolio_cycle(
     """Dispatch only durable, unexecuted approved tasks; never replay uncertain work."""
     if type(max_tasks) is not int or not 1 <= max_tasks <= 16:
         raise PortfolioError("max_tasks must be 1..16")
+    from modstore_server.strategic_remote_receipts import reconcile_portfolio
+
+    reconcile_portfolio(decision_id, owner_user_id=owner_user_id)
     plan_portfolio(decision_id, owner_user_id=owner_user_id)
     processed = 0
     for _ in range(max_tasks):
@@ -508,53 +623,22 @@ def run_portfolio_cycle(
     return {"processed": processed, **portfolio_status(decision_id, owner_user_id=owner_user_id)}
 
 
-def _execution_artifacts(value: Any, depth: int = 0) -> set[tuple[str, str]]:
-    """Read structured delivery identities from the persisted executor receipt."""
-    if depth > 6:
-        return set()
-    found: set[tuple[str, str]] = set()
-    if isinstance(value, dict):
-        artifact = value.get("artifact_id")
-        evidence = value.get("evidence")
-        sha = value.get("artifact_sha256") or (
-            evidence.get("artifact_sha256") if isinstance(evidence, dict) else None
-        )
-        if (
-            isinstance(artifact, str)
-            and artifact
-            and isinstance(sha, str)
-            and re.fullmatch(r"[0-9a-fA-F]{64}", sha)
-        ):
-            found.add((artifact, sha.lower()))
-        for item in value.values():
-            found.update(_execution_artifacts(item, depth + 1))
-    elif isinstance(value, list):
-        for item in value[:100]:
-            found.update(_execution_artifacts(item, depth + 1))
-    return found
-
-
 def _business_outcome(
     status: dict[str, Any],
     *,
     window_start: datetime | None = None,
     window_end: datetime | None = None,
 ) -> dict[str, Any]:
-    """Never attribute an unrelated platform payment or an unverified receipt."""
+    """Attribute payments only to the exact approved customer and completed artifact."""
     from modstore_server.customer_value_classification import (
         amount_cents,
         classify_payment_order,
         parse_datetime,
     )
-    from modstore_server.customer_value_payment_source import (
-        load_authoritative_payment_orders,
-    )
-    from modstore_server.db.customer_value import CustomerValueReceipt
+    from modstore_server.customer_value_payment_source import load_authoritative_payment_orders
+    from modstore_server.strategic_customer_outcomes import customer_delivery_evidence
 
-    start, now = (
-        window_start or _date(status["started_at"]),
-        window_end or datetime.now(UTC),
-    )
+    start, now = window_start or _date(status["started_at"]), window_end or datetime.now(UTC)
     source = load_authoritative_payment_orders(max(1, (datetime.now(UTC) - start).days + 1))
     if not (source.get("source_available") is True and source.get("source_authoritative") is True):
         return {
@@ -562,127 +646,45 @@ def _business_outcome(
             "reason": "authoritative_payment_source_unavailable",
             "revenue_cents": None,
         }
-    delivered: dict[str, set[tuple[str, str]]] = {}
-    executed_since: dict[tuple[str, str, str], datetime] = {}
-    missing_attribution = False
-    for item in status["opportunities"]:
-        task = status.get("tasks", {}).get(item["opportunity_id"], {})
-        if task.get("status") != "completed":
-            continue
-        artifacts = _execution_artifacts(task.get("execution_receipt"))
-        if item["customer_goal_ids"] and (not artifacts or not task.get("completed_at")):
-            missing_attribution = True
-            continue
-        for goal in item["customer_goal_ids"]:
-            if artifacts:
-                delivered.setdefault(goal, set()).update(artifacts)
-                completed = _date(task["completed_at"])
-                for artifact in artifacts:
-                    key = (goal, *artifact)
-                    executed_since[key] = min(executed_since.get(key, completed), completed)
-    goal_ids = set(delivered)
-    goals: dict[tuple[str, str, str, str, str], set[str]] = {}
-    refunded: set[str] = set()
-    with get_session_factory()() as session:
-        receipts = (
-            session.execute(
-                select(CustomerValueReceipt).where(
-                    CustomerValueReceipt.verification_status == "verified",
-                    CustomerValueReceipt.customer_ref == f"paid-user:{status['owner_user_id']}",
-                    CustomerValueReceipt.customer_goal_id.in_(goal_ids),
-                    CustomerValueReceipt.receipt_kind.in_(("outcome", "acceptance")),
-                    CustomerValueReceipt.occurred_at >= start,
-                    CustomerValueReceipt.occurred_at <= now,
-                )
-            )
-            .scalars()
-            .all()
-        )
-        for receipt in receipts:
-            if (
-                receipt.customer_goal_id in goal_ids
-                and receipt.environment in {"production", "prod"}
-                and receipt.currency == "CNY"
-                and receipt.receipt_kind in {"outcome", "acceptance"}
-            ):
-                try:
-                    evidence = json.loads(str(receipt.evidence_json) or "{}")
-                except (ValueError, TypeError):
-                    continue
-                if not isinstance(evidence, dict):
-                    continue
-                artifact = (
-                    str(receipt.artifact_id),
-                    str(evidence.get("artifact_sha256", "")).lower(),
-                )
-                if artifact not in delivered[str(receipt.customer_goal_id)]:
-                    continue
-                if receipt.occurred_at.replace(tzinfo=UTC) < max(
-                    start, executed_since[(str(receipt.customer_goal_id), *artifact)]
-                ):
-                    continue
-                goals.setdefault(
-                    (
-                        str(receipt.order_no),
-                        str(receipt.customer_goal_id),
-                        str(receipt.customer_ref),
-                        *artifact,
-                    ),
-                    set(),
-                ).add(str(receipt.receipt_kind))
-        matched_orders = {key[0] for key in goals}
-        refunded = set(
-            session.execute(
-                select(CustomerValueReceipt.order_no).where(
-                    CustomerValueReceipt.order_no.in_(matched_orders),
-                    CustomerValueReceipt.receipt_kind == "refund",
-                    CustomerValueReceipt.customer_ref == f"paid-user:{status['owner_user_id']}",
-                    CustomerValueReceipt.environment.in_(("production", "prod")),
-                    CustomerValueReceipt.currency == "CNY",
-                    CustomerValueReceipt.verification_status == "verified",
-                    CustomerValueReceipt.occurred_at <= now,
-                )
-            )
-            .scalars()
-            .all()
-        )
+    evidence = customer_delivery_evidence(status, start=start, end=now)
     orders: dict[str, int] = {}
     for order in source.get("orders") or []:
         valid, _ = classify_payment_order(order, cutoff=start)
         order_no = str(order.get("out_trade_no") or order.get("order_no") or "")
         paid_at = parse_datetime(order.get("paid_at"))
+        customer_ref = f"paid-user:{order.get('user_id')}"
         if (
-            not valid
-            or str(order.get("user_id")) != str(status["owner_user_id"])
-            or order_no in refunded
-            or not paid_at
-            or paid_at > now
-            or str(order.get("currency") or "CNY") != "CNY"
-        ):
-            continue
-        if any(
-            number == order_no
-            and customer == f"paid-user:{order.get('user_id')}"
-            and kinds == {"outcome", "acceptance"}
-            for (number, _goal, customer, _artifact, _sha), kinds in goals.items()
+            valid
+            and paid_at
+            and paid_at <= now
+            and str(order.get("currency") or "CNY") == "CNY"
+            and (customer_ref, order_no) in evidence["accepted_orders"]
         ):
             orders[order_no] = amount_cents(order)
+    missing = evidence["missing_attribution"]
     return {
-        "status": "unknown" if missing_attribution else "verified",
-        "reason": "executed_delivery_attribution_missing" if missing_attribution else "",
+        "status": "unknown" if missing else "verified",
+        "reason": "executed_delivery_attribution_missing" if missing else "",
         "source": source.get("source_owner"),
-        "revenue_cents": None if missing_attribution else sum(orders.values()),
+        "revenue_cents": None if missing else sum(orders.values()),
         "verified_attributed_cents": sum(orders.values()),
         "paid_order_count": len(orders),
-        "order_refs_sha256": digest(sorted(orders)),
+        "order_refs_sha256": digest(
+            {"orders": orders, "customer_evidence": evidence["evidence_sha256"]}
+        ),
         "window_start": start.isoformat(),
         "window_end": now.isoformat(),
-        "attribution": "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
+        "attribution": "approved_customer_goal_order_completed_artifact_and_verified_acceptance_not_incremental_causality",
     }
 
 
 def review_portfolio(decision_id: str, *, owner_user_id: int | None = None) -> dict[str, Any]:
-    from modstore_server.strategy_bets import REVENUE_METRIC, review_hypotheses
+    from modstore_server.strategic_customer_outcomes import customer_acceptance_outcome
+    from modstore_server.strategy_bets import (
+        CUSTOMER_ACCEPTANCE_METRIC,
+        REVENUE_METRIC,
+        review_hypotheses,
+    )
 
     status = portfolio_status(decision_id, owner_user_id=owner_user_id)
     if not status.get("started_at"):
@@ -694,13 +696,18 @@ def review_portfolio(decision_id: str, *, owner_user_id: int | None = None) -> d
         if (
             target
             and task
-            and target["metric_id"] == REVENUE_METRIC
+            and target["metric_id"] in {REVENUE_METRIC, CUSTOMER_ACCEPTANCE_METRIC}
             and item["opportunity_id"] not in status.get("hypothesis_outcomes", {})
         ):
             start = _date(task["started_at"])
             end = start + timedelta(days=target["window_days"])
             if datetime.now(UTC) >= end:
-                hypothesis_business[item["opportunity_id"]] = _business_outcome(
+                observe = (
+                    customer_acceptance_outcome
+                    if target["metric_id"] == CUSTOMER_ACCEPTANCE_METRIC
+                    else _business_outcome
+                )
+                hypothesis_business[item["opportunity_id"]] = observe(
                     {**status, "opportunities": [item]}, window_start=start, window_end=end
                 )
 

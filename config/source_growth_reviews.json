@@ -639,14 +639,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_tools.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_tools.py",
-      "base_blob": "7aaac7e71c94171d1d84f2e444ccfa7c329b2a7b",
-      "head_blob": "bb13518c32f64d55afd45305c303f0e5c0c5aa66",
-      "before_lines": 728,
-      "after_lines": 905,
-      "reason": "Sensitive ticket changes claim an approval once and commit that claim before a business executor runs. Completed and executed=true require a verified executor result.",
-      "boundary": "Only the gated-change helpers in customer_service_tools.py. No new public HTTP routes.",
-      "validation": "Ticket gate tests cover reject-after-approve, duplicate decisions, concurrent approvals, and verified versus missing executors.",
-      "follow_up": "Move gated-change settlement out of customer_service_tools once the approval contract stays stable.",
+      "base_blob": "bb13518c32f64d55afd45305c303f0e5c0c5aa66",
+      "head_blob": "60f0272f16e27e7da6bf0d523ea1c0ea6f9eb7a8",
+      "before_lines": 905,
+      "after_lines": 906,
+      "reason": "评审请求：原客服工作流工具改调用已有持久执行核心，使真实工作流终态、原实验审批与撤回检查覆盖客服消费者。",
+      "boundary": "仅替换原工具的执行调用；沿用原账号和权限，不增加配额扣减或通用工具授权。",
+      "validation": "包括真实消费者成功、失败、撤回和无重复配额的120项工作流回归通过；全包normal mypy、Black、isort、flake8已通过，最终精确head CI仍待运行。",
+      "follow_up": "由维护者复核此最窄接线与现有客服权限边界；本记录仅提出审查请求，不代表架构批准。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_pipeline_merged.py": {
@@ -676,12 +676,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py",
       "base_blob": "ca417b7d810eb99e9dc2c8e58be185ff102a89b7",
-      "head_blob": "4aeb7c9fa0b36d313d5964aa89871f62aa4949d0",
+      "head_blob": "67908f056fea606b781a93d4927044736e4d2906",
       "before_lines": 1110,
-      "after_lines": 1121,
-      "reason": "Review request only: validate the frozen strategic employee package and effective runtime configuration before perception or model calls and preserve approved business inputs after cognition.；管理端真实文件员工贯通发现感知富化污染批准输入与旧产物回执缺字段，本次仅深复制感知输入并调用原合同薄适配。",
-      "boundary": "Only calls into the shared strategic_execution_contract helper at existing execution boundaries; ordinary employee and reviewed duty execution remain on the existing route.；原冻结输入、目录范围、严格终态和验证器均保留，产物摘要读取真实文件，普通非组合执行保持原协议。",
-      "validation": "Integrated strategy, real employee, archive and cognition regressions are included in the 744-pass run. Changed production modules pass normal-import mypy. Required remote CI and human review are not implied by this record.；真实管理端JWT/API/审批/CSV字节与SQL回执贯通，以及文件路径、符号链接、模板优先级和重复执行回归通过。",
+      "after_lines": 1123,
+      "reason": "评审请求：在原执行阶段核验冻结的战略输入/包/配置，保护认知前原输入，给原生文件回执适配传入可信工作区；不改变原生输出路径协议。",
+      "boundary": "只有已有战略作用域进入合同薄适配；真实文件仍经过原tenant路径、scope、稳定字节和verification检查，普通员工协议保持原语义。",
+      "validation": "真实管理端CSV、绝对/相对路径别名、越权/符号链接/文件漂移、客户下载与原工作流消费者回归通过；全包正常mypy及原格式门通过。",
       "follow_up": "Keep contract logic in the focused helper and review extraction of phase orchestration before further growth of the mechanical executor module.",
       "review_owner": "@42433422"
     },
@@ -729,7 +729,7 @@
       "after_lines": 1705,
       "reason": "评审请求：在原Para派发入口增加5行统一预算准入调用，使直接调用该入口也不能绕过战略作用域的未计量远程执行阻断。",
       "boundary": "只有携带战略预算上下文的未计量派发被拒绝；原工单/隔离/平台模型分配仍由既有入口核验，消费协议复用strategic_portfolio_usage，不在此新增第二套预算。",
-      "validation": "原Para派发、租户和平台准入回归已纳入本地432项统一验证；新撤权/异常传播专项已通过。真实远程逐调用usage适配器尚未实现，保持出站前阻断；当前PR最终CI待完成。",
+      "validation": "原Para权限及原隔离入口回归通过；原GitHub报告和已批准Retort工程另以精确budget/grant桥接真实SDK，未计量的外部Para/Cursor继续出站前拒绝。最终head CI与人审未由本记录代替。",
       "follow_up": "由 @42433422 复核直接入口与actions入口一致拒绝。后续只有接入可信持久usage回执并完成同作用域验收后才允许战略远程执行；本记录仅提出审查请求。",
       "review_owner": "@42433422"
     },
@@ -772,13 +772,37 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_runtime.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "03610140f21b42ee9798a660d7188032d3110e55",
+      "head_blob": "e7d9c460afbcbba37a9f41529b819fcc9726cc84",
       "before_lines": 0,
-      "after_lines": 851,
-      "reason": "Review request only: extend the new approved-portfolio runtime with actual tenant business inputs and strict payment attribution to one completed artifact and observation window.；管理端小 C 的原组合领取前接入每日生命周期额度校验，防止已批任务超出本轮实际预留。",
-      "boundary": "Reuse StrategicDecision SQL state, existing employee dispatch and authoritative payment/customer receipts. Keep solver and execution-contract code in their existing separate modules; no remote unmetered delegate or new financial ledger.",
-      "validation": "744 integrated regressions passed with explicit optional promptfoo CLI and PostgreSQL skips; normal-import mypy passes the changed production files. Cases include future inputs, different artifact receipts, pre-completion confirmations and same-owner refunds. CI and architecture approval remain pending.；小 C SQL 预算、队列恢复和真实模型用量回归覆盖本次六行接线。",
-      "follow_up": "Extract discovery-source collection and business-outcome attribution into focused adapters in a separately reviewed change before adding further market or asset providers.",
+      "after_lines": 858,
+      "reason": "评审请求：原批准组合承担实际业务输入、客户/市场依据、真实任务终态和经营复盘，并在原认领事务接公司全部已批准就绪候选的联合CP-SAT选择。",
+      "boundary": "复用StrategicDecision/ActionItem与原员工消费者；市场、客户归因、公司选择和远程授权分别由专用薄适配承接，原提案hash、额度与未知责任保持。",
+      "validation": "真实公司全候选调度/SQL/并发87项、长期原工程65项、原生文件及客户链44项等定向组通过；这些组有重叠不累加。全包normal mypy及原静态门通过，精确head CI和人审待完成。",
+      "follow_up": "维护者须审核该新运行编排模块的职责与858行增长；未来市场/资产扩展应继续使用已抽取适配边界，本请求不代表架构批准。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py",
+      "base_blob": "b2be0908fb47e0522f94627c258b5af3c2b03095",
+      "head_blob": "cbdc32ac23f7708e152cfbd00010ce0d2b5c82a6",
+      "before_lines": 634,
+      "after_lines": 842,
+      "reason": "评审请求：原Router预算调用使用请求专属SDK client，保留真实流首块、终态用量、原网关HTTP attempts及实际模型回执；语义整合并行网关默认路由与回退传播。",
+      "boundary": "只在原预算调用接入受信原始传输观测；官方LiteLLM/OpenAI负责协议解析，worker不能提供控制字段，未知用量保留原占用。",
+      "validation": "整合网关真实HTTP/SDK、平台及小C双账本定向149项通过，正常mypy6个生产源码通过；原始双零attempt正例、缺失/异常unknown与取消反例保留。",
+      "follow_up": "维护者需复核当前主分支网关兼容与原始回执信任边界；真实网关配置和供应商账单验收仍独立，不将本记录当批准。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_usage.py": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "1494f39d3a631dd28834204d324fe1aebff3f973",
+      "before_lines": 0,
+      "after_lines": 869,
+      "reason": "评审请求：已有平台调用、公司封套、原组合任务与小C规划接回同一持久消费身份；保留公司优先、原始attempt限制，接已验证网关额度及其非供应商账单标记。",
+      "boundary": "保留原SQL事务CAS与journal，已批准费率仅计提；未知、重试、撤权与中断不会变成零消费，调用者绑定仅由受信服务端生成。",
+      "validation": "整合网关、公司/规划预算和原始usage定向149项通过；正常mypy6个生产源码通过。未知用量保留占用，额度观测不能代替单次调用回执，真实供应商账单仍未验收。",
+      "follow_up": "请维护者复核三个已有资源责任的生命周期关联；未来扩张按实际职责抽取，不能通过新增宽泛回执或自动退款绕过本合同。",
       "review_owner": "@42433422"
     }
   }

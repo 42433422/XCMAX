@@ -309,9 +309,8 @@ def test_python_hashes_bytes_read_after_archive_path_validation(archived_python,
     assert result["ok"] is False and "archive bytes changed" in result["error"]
 
 
-def test_real_csv_employee_retains_tenant_artifact_after_snapshot_cleanup(
-    database, monkeypatch, tmp_path
-):
+@pytest.fixture
+def csv_employee(database, monkeypatch, tmp_path):
     from modstore_server import catalog_store, employee_executor, employee_runtime
     from modstore_server.db.catalog import CatalogItem
 
@@ -362,12 +361,6 @@ def test_real_csv_employee_retains_tenant_artifact_after_snapshot_cleanup(
     caller = tmp_path / "caller-cwd"
     caller.mkdir()
     monkeypatch.chdir(caller)
-    decision, task = claim_proposal(
-        database,
-        rows=[opportunity(employee_id=employee, input_data={"file_path": "inputs/orders.json"})],
-    )
-    payload = execution_payload(task)
-    assert payload["project_root"] == payload["workspace_root"] == str(workspace)
     extracted = []
     extractor = employee_executor._employee_pack_extract_root
 
@@ -380,27 +373,47 @@ def test_real_csv_employee_retains_tenant_artifact_after_snapshot_cleanup(
     monkeypatch.setattr(sys, "path", list(sys.path))
     vendor_names = {name for name in sys.modules if name.startswith("csv_generate")}
     try:
-        with usage.portfolio_usage_scope(decision, "a", task["lease_token"]):
-            result = employee_executor._actions_real(
-                manifest["employee_config_v2"]["actions"],
-                {"input": payload},
-                task["task"],
-                employee,
-                7,
-            )["outputs"][0]
-        assert result["ok"] is True, result
-        assert extracted and all(not path.exists() for path in extracted)
-        output = workspace / "outputs" / "output.csv"
-        assert result["output"]["items"][0]["output_path"] == str(output)
-        with output.open(encoding="utf-8-sig", newline="") as generated:
-            assert list(csv.DictReader(generated)) == [{"order": "A-7", "quantity": "3"}]
-        assert not (caller / "outputs").exists()
-        vendor = sys.modules["csv_generate.convert"]
-        assert str(extracted[0]) in str(vendor.__file__)
+        yield {
+            "employee": employee,
+            "manifest": manifest,
+            "workspace": workspace,
+            "caller": caller,
+            "extracted": extracted,
+            "executor": employee_executor,
+        }
     finally:
         for name in set(sys.modules) - vendor_names:
             if name.startswith("csv_generate"):
                 sys.modules.pop(name, None)
+
+
+def test_real_csv_employee_retains_tenant_artifact_after_snapshot_cleanup(database, csv_employee):
+    env = csv_employee
+    decision, task = claim_proposal(
+        database,
+        rows=[
+            opportunity(employee_id=env["employee"], input_data={"file_path": "inputs/orders.json"})
+        ],
+    )
+    payload = execution_payload(task)
+    assert payload["project_root"] == payload["workspace_root"] == str(env["workspace"])
+    with usage.portfolio_usage_scope(decision, "a", task["lease_token"]):
+        result = env["executor"]._actions_real(
+            env["manifest"]["employee_config_v2"]["actions"],
+            {"input": payload},
+            task["task"],
+            env["employee"],
+            7,
+        )["outputs"][0]
+    assert result["ok"] is True, result
+    assert env["extracted"] and all(not path.exists() for path in env["extracted"])
+    output = env["workspace"] / "outputs" / "output.csv"
+    assert result["output"]["items"][0]["output_path"] == str(output)
+    with output.open(encoding="utf-8-sig", newline="") as generated:
+        assert list(csv.DictReader(generated)) == [{"order": "A-7", "quantity": "3"}]
+    assert not (env["caller"] / "outputs").exists()
+    vendor = sys.modules["csv_generate.convert"]
+    assert str(env["extracted"][0]) in str(vendor.__file__)
 
 
 def test_same_idempotency_key_cannot_reuse_approval_for_changed_inputs(database):

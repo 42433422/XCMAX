@@ -241,9 +241,12 @@ class ComponentPorts:
     def impact(self, state):
         from modstore_server.retort_customer_feedback import read_impact
         from modstore_server.retort_training_candidates import read_training_impact
+        from modstore_server.workflow_customer_feedback import customer_refund_impact
 
-        return read_training_impact(self.request_id, state) or read_impact(
-            self.request_id, state["delivery"], state=state
+        return (
+            customer_refund_impact(self.request_id, state)
+            or read_training_impact(self.request_id, state)
+            or read_impact(self.request_id, state["delivery"], state=state)
         )
 
     def recover(self, state):
@@ -416,6 +419,11 @@ def reflect(messages, *, max_tokens=4096):
 def tick():
     if not os.environ.get("MODSTORE_RETORT_CHECKPOINT_DSN"):
         return {"processed": 0, "reason": "not_configured"}
+    from modstore_server.workflow_customer_feedback import (
+        request_customer_refund_rechecks,
+    )
+
+    request_customer_refund_rechecks()
     with get_session_factory()() as db:
         ids = [
             r.id

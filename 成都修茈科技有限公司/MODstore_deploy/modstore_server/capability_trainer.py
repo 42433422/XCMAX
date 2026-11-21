@@ -7,15 +7,17 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
 import re
 import sys
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 DEFAULT_MIN_COUNT = 2
 DEFAULT_DAYS = 14
@@ -26,44 +28,96 @@ _RUBRIC = (
 )
 
 
-def _parse_time(value: Any) -> Optional[datetime]:
+def training_identity(record):
+    surface = record.get("surface", "employee_prompt")
+    resource = (
+        record.get("employee_id") if surface == "employee_prompt" else record.get("resource_id")
+    )
+    if surface == "workflow_nl_prompt" and resource == "workflow_nl_generator":
+        return surface, resource
+    if surface == "employee_prompt" and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", str(resource or "")):
+        return surface, resource
+    raise ValueError("invalid_training_surface")
+
+
+def prompt_from_source(source, *, surface):
+    if surface == "employee_prompt":
+        return source
+    if surface != "workflow_nl_prompt":
+        raise ValueError("invalid_training_surface")
+    values = [
+        node.value.value
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "SYSTEM_PROMPT" for target in node.targets
+        )
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    ]
+    if len(values) != 1:
+        raise ValueError("training_prompt_symbol_unbound")
+    return values[0]
+
+
+def _parse_time(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     return parsed
 
 
-def _failure_of(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _failure_of(record: dict[str, Any]) -> dict[str, Any] | None:
     if str(record.get("status") or "").lower() != "failed":
         return None
-    employee_id = str(record.get("employee_id") or "").strip()
+    try:
+        surface, resource = training_identity(record)
+    except ValueError:
+        return None
     error = str(record.get("error") or record.get("failure_reason") or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", employee_id) or not error:
+    if not error:
         return None
     return {
-        "employee_id": employee_id,
+        "surface": surface,
+        "resource_id": resource,
+        **(
+            {"employee_id": resource}
+            if surface == "employee_prompt"
+            else {
+                key: record[key]
+                for key in (
+                    "generation_context",
+                    "prompt_sha256",
+                    "workflow_id",
+                    "user_id",
+                    "validation_errors",
+                )
+            }
+        ),
         "failure_reason": error,
         "step": record.get("step") or "",
-        "task": str(record.get("task_excerpt") or record.get("report_excerpt") or "")[:2000],
+        "task": str(record.get("task_excerpt") or record.get("report_excerpt") or "")[
+            : 20000 if surface == "workflow_nl_prompt" else 2000
+        ],
         "timestamp": record.get("timestamp") or "",
         "run_id": record.get("run_id") or "",
     }
 
 
 def cluster_failures(
-    records: Iterable[Dict[str, Any]],
+    records: Iterable[dict[str, Any]],
     *,
     days: int = DEFAULT_DAYS,
     min_count: int = DEFAULT_MIN_COUNT,
-    now: Optional[datetime] = None,
-) -> List[Dict[str, Any]]:
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=max(1, days))
-    groups: Dict[tuple, List[Dict[str, Any]]] = defaultdict(list)
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=max(1, days))
+    groups: dict[tuple, list[dict[str, Any]]] = defaultdict(list)
     for record in records:
         item = _failure_of(record)
         if not item:
@@ -71,27 +125,31 @@ def cluster_failures(
         seen_at = _parse_time(item["timestamp"])
         if seen_at is not None and seen_at < cutoff:
             continue
-        groups[(item["employee_id"], item["failure_reason"][:160])].append(item)
+        groups[(*training_identity(item), item["failure_reason"][:160])].append(item)
     clusters = []
-    for (employee_id, reason), items in groups.items():
+    for (surface, resource, reason), items in groups.items():
         if len(items) < max(1, min_count):
             continue
         clusters.append(
             {
-                "employee_id": employee_id,
+                "surface": surface,
+                "resource_id": resource,
+                **({"employee_id": resource} if surface == "employee_prompt" else {}),
                 "failure_reason": reason,
                 "count": len(items),
                 "samples": items[:20],
             }
         )
-    clusters.sort(key=lambda row: (-row["count"], row["employee_id"]))
+    clusters.sort(key=lambda row: (-row["count"], *training_identity(row)))
     return clusters
 
 
 def mine(
     ledger_path: Path, *, days: int = DEFAULT_DAYS, min_count: int = DEFAULT_MIN_COUNT
-) -> List[Dict[str, Any]]:
-    records = outbox_failures(days=days)
+) -> list[dict[str, Any]]:
+    from modstore_server.workflow_nl_training import failure_records
+
+    records = outbox_failures(days=days) + failure_records(days=days)
     for line in (
         ledger_path.read_bytes().decode("utf-8").splitlines() if ledger_path.is_file() else []
     ):
@@ -122,7 +180,7 @@ def outbox_failures(*, days=DEFAULT_DAYS):
             select(OutboxEvent)
             .where(
                 OutboxEvent.event_name == "experiment.observed",
-                OutboxEvent.created_at >= datetime.now(timezone.utc) - timedelta(days=max(1, days)),
+                OutboxEvent.created_at >= datetime.now(UTC) - timedelta(days=max(1, days)),
             )
             .order_by(OutboxEvent.id.desc())
             .limit(10000)
@@ -148,24 +206,27 @@ def outbox_failures(*, days=DEFAULT_DAYS):
     return records
 
 
-def _case_id(cluster: Dict[str, Any], sample: Dict[str, Any]) -> str:
-    raw = f"{cluster['employee_id']}|{cluster['failure_reason']}|{sample.get('task', '')}"
+def _case_id(cluster: dict[str, Any], sample: dict[str, Any]) -> str:
+    surface, resource = training_identity(cluster)
+    raw = f"{resource}|{cluster['failure_reason']}|{sample.get('task', '')}"
+    if surface != "employee_prompt":
+        raw += f"|{surface}|{json.dumps(sample.get('generation_context'), sort_keys=True)}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def append_cases(
     corpus_dir: Path,
-    clusters: List[Dict[str, Any]],
+    clusters: list[dict[str, Any]],
     *,
     max_per_cluster: int = 3,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """只追加新用例，重复失败不会反复写同一条。"""
     corpus_dir.mkdir(parents=True, exist_ok=True)
-    written: List[Dict[str, Any]] = []
+    written: list[dict[str, Any]] = []
     for cluster in clusters:
-        if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", str(cluster["employee_id"])):
-            raise ValueError("invalid_training_employee")
-        path = corpus_dir / f"{cluster['employee_id']}.jsonl"
+        surface, resource = training_identity(cluster)
+        key = resource if surface == "employee_prompt" else f"{surface}-{resource}"
+        path = corpus_dir / f"{key}.jsonl"
         existing = set()
         if path.is_file():
             for line in path.read_bytes().decode("utf-8").splitlines():
@@ -182,11 +243,19 @@ def append_cases(
                     continue
                 row = {
                     "case_id": case_id,
-                    "employee_id": cluster["employee_id"],
+                    "surface": surface,
+                    "resource_id": resource,
+                    **(
+                        {"employee_id": resource}
+                        if surface == "employee_prompt"
+                        else {
+                            "generation_context": sample["generation_context"],
+                        }
+                    ),
                     "failure_reason": cluster["failure_reason"],
                     "task": sample.get("task") or cluster["failure_reason"],
                     "source_run": sample.get("run_id") or "",
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": datetime.now(UTC).isoformat(),
                 }
                 fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
                 existing.add(case_id)
@@ -194,7 +263,7 @@ def append_cases(
     return written
 
 
-def select_pack(packs_dir: Path, employee_id: str) -> Optional[Path]:
+def select_pack(packs_dir: Path, employee_id: str) -> Path | None:
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", employee_id):
         raise ValueError("invalid_training_employee")
     candidates = sorted(packs_dir.glob(f"{employee_id}@*"))
@@ -208,15 +277,58 @@ def _yaml_str(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _prompt_document(prompt, surface):
+    if surface == "employee_prompt":
+        return "{{task}}\n\n" + prompt
+    if surface != "workflow_nl_prompt" or "{% endraw" in prompt:
+        raise ValueError("invalid_training_prompt_template")
+    return (
+        "{% raw %}"
+        + json.dumps([{"role": "system", "content": prompt}], ensure_ascii=False)[:-1]
+        + '{% endraw %},{"role":"user","content":{{ task | dump }}}]'
+    )
+
+
+def _prompt_value(document, surface):
+    if surface == "employee_prompt":
+        if not document.startswith("{{task}}\n\n"):
+            raise ValueError("training_prompt_hash_mismatch")
+        return document.removeprefix("{{task}}\n\n")
+    suffix = '{% endraw %},{"role":"user","content":{{ task | dump }}}]'
+    if not document.startswith("{% raw %}") or not document.endswith(suffix):
+        raise ValueError("training_prompt_hash_mismatch")
+    value = json.loads(document[len("{% raw %}") : -len(suffix)] + "]")[0]["content"]
+    if document != _prompt_document(value, surface):
+        raise ValueError("training_prompt_hash_mismatch")
+    return value
+
+
+def _workflow_validation_hashes():
+    names = (
+        "workflow_nl_training.py",
+        "workflow_nl_apply.py",
+        "workflow_nl_operations.py",
+        "workflow_engine.py",
+        "workflow_engine_workflowengine_mixin01__workflowenginepart01mixin_mixin01.py",
+    )
+    return {name: _file_hash(Path(__file__).with_name(name)) for name in names}
+
+
 def build_config(
     *,
     out_dir: Path,
     baseline_prompt: str,
     candidate_prompt: str,
-    cases: List[Dict[str, Any]],
-) -> Dict[str, str]:
+    cases: list[dict[str, Any]],
+    surface: str = "employee_prompt",
+) -> dict[str, str]:
+    workflow = surface == "workflow_nl_prompt"
+    if surface not in {"employee_prompt", "workflow_nl_prompt"}:
+        raise ValueError("invalid_training_surface")
     if not 1 <= len(cases) <= 20 or any(
-        not isinstance(case.get("task"), str) or not 1 <= len(case["task"].strip()) <= 2000
+        not isinstance(case.get("task"), str)
+        or not 1 <= len(case["task"].strip()) <= (20000 if workflow else 2000)
+        or (workflow and not isinstance(case.get("generation_context"), dict))
         for case in cases
     ):
         raise ValueError("training_reproduction_cases_required")
@@ -229,30 +341,45 @@ def build_config(
     # splits on '---', which changes real prompts and their arm cardinality.
     baseline = out_dir / "baseline_prompt.md"
     candidate = out_dir / "candidate_prompt.md"
-    baseline.write_text("{{task}}\n\n" + baseline_prompt, encoding="utf-8")
-    candidate.write_text("{{task}}\n\n" + candidate_prompt, encoding="utf-8")
-    tests: List[Dict[str, Any]] = [
+    baseline.write_text(_prompt_document(baseline_prompt, surface), encoding="utf-8")
+    candidate.write_text(_prompt_document(candidate_prompt, surface), encoding="utf-8")
+    tests: list[dict[str, Any]] = [
         {
             "vars": {
                 "task": case["task"],
                 "case_id": f"case-{index}",
+                **({"generation_context": case["generation_context"]} if workflow else {}),
             },
-            "assert": [{"type": "llm-rubric", "value": _RUBRIC}],
+            "assert": [
+                (
+                    {
+                        "type": "python",
+                        "value": f"file://{Path(__file__).with_name('workflow_nl_training.py')}:get_assert",
+                    }
+                    if workflow
+                    else {"type": "llm-rubric", "value": _RUBRIC}
+                )
+            ],
         }
         for index, case in enumerate(cases)
     ]
     tests_path = out_dir / "tests.json"
     tests_path.write_text(json.dumps(tests, ensure_ascii=False), encoding="utf-8")
-    provider: Dict[str, Any] = {
+    provider: dict[str, Any] = {
         "id": f"openai:chat:{model}",
-        "config": {"apiBaseUrl": endpoint, "max_tokens": 1024, "maxRetries": 0},
+        "config": {
+            "apiBaseUrl": endpoint,
+            "max_tokens": 4096 if workflow else 1024,
+            "maxRetries": 0,
+        },
     }
     config = {
-        "description": "employee on-the-job training regression",
+        "description": f"{surface} failure regression",
         "prompts": [f"file://{baseline}", f"file://{candidate}"],
         "providers": [provider],
         "defaultTest": {"options": {"provider": provider}},
         "tests": f"file://{tests_path}",
+        "sharing": False,
         "writeLatestResults": False,
     }
     config_path = out_dir / "promptfooconfig.yaml"
@@ -276,6 +403,26 @@ def build_config(
         "case_sha256": [_hash(case["task"]) for case in cases],
         "evaluation_scope": "failure_regression",
         "holdout_verified": False,
+        **(
+            {
+                "surface": surface,
+                "measurement_scope": "workflow_generation_static_validation",
+                "validation_sha256": _workflow_validation_hashes(),
+                "case_context_sha256": [
+                    _hash(
+                        json.dumps(
+                            case["generation_context"],
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                    )
+                    for case in cases
+                ],
+            }
+            if workflow
+            else {}
+        ),
     }
     bundle_path = out_dir / "training-bundle.json"
     bundle_path.write_text(json.dumps(bundle, ensure_ascii=False, sort_keys=True), encoding="utf-8")
@@ -290,7 +437,7 @@ def _file_hash(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def decide(result: Dict[str, Any], *, bundle=None) -> Dict[str, Any]:
+def decide(result: dict[str, Any], *, bundle=None) -> dict[str, Any]:
     """Compare the same case/provider pairs; offline success only proposes approval."""
     blocked = {
         "improved": False,
@@ -298,7 +445,7 @@ def decide(result: Dict[str, Any], *, bundle=None) -> Dict[str, Any]:
         "evaluation_scope": "failure_regression",
         "holdout_verified": False,
     }
-    arms: Dict[int, Dict[tuple[int, str, str], tuple[bool, Dict[str, Any]]]] = {0: {}, 1: {}}
+    arms: dict[int, dict[tuple[int, str, str], tuple[bool, dict[str, Any]]]] = {0: {}, 1: {}}
     for row in result.get("results", {}).get("results", []) or []:
         index, test_index = row.get("promptIdx"), row.get("testIdx")
         provider = row.get("provider") or {}
@@ -349,13 +496,19 @@ def decide(result: Dict[str, Any], *, bundle=None) -> Dict[str, Any]:
         for index in (0, 1)
     ]
     improved = candidate["pass"] > baseline["pass"] and candidate["pass"] == candidate["total"]
+    from modstore_server.workflow_nl_training import offline_execution_feedback
+
+    runtime_candidate = offline_execution_feedback(
+        bundle, [value[1] for value in arms[0].values()], candidate["pass"] == candidate["total"]
+    )
     return {
         **blocked,
         "baseline": baseline,
         "candidate": candidate,
         "total": len(arms[0]),
         "improved": improved,
-        "verdict": "candidate_for_approval" if improved else "keep_baseline",
+        "verdict": "candidate_for_approval" if improved or runtime_candidate else "keep_baseline",
+        **runtime_candidate,
     }
 
 
@@ -367,6 +520,7 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
         or bundle.get("engine") != f"promptfoo@{PROMPTFOO_VERSION}"
     ):
         raise ValueError("training_bundle_schema_mismatch")
+    surface = bundle.get("surface", "employee_prompt")
     for entry in bundle["files"].values():
         path = bundle_path.parent / entry["name"]
         if (
@@ -382,10 +536,8 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
         (bundle_path.parent / bundle["files"][name]["name"]).read_bytes().decode("utf-8")
         for name in ("baseline", "candidate")
     ]
-    if any(not prompt.startswith("{{task}}\n\n") for prompt in expected) or bundle.get(
-        "prompt_sha256"
-    ) != {
-        key: _hash(prompt.removeprefix("{{task}}\n\n"))
+    if bundle.get("prompt_sha256") != {
+        key: _hash(_prompt_value(prompt, surface))
         for key, prompt in zip(("control", "candidate"), expected)
     }:
         raise ValueError("training_prompt_hash_mismatch")
@@ -396,6 +548,28 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
         raise ValueError("training_case_hash_mismatch")
     if [prompt.get("raw") for prompt in prompts] != expected:
         raise ValueError("training_result_prompts_unbound")
+    if surface == "workflow_nl_prompt":
+        from modstore_server.workflow_nl_training import _digest, get_assert
+
+        if (
+            bundle.get("measurement_scope") != "workflow_generation_static_validation"
+            or bundle.get("validation_sha256") != _workflow_validation_hashes()
+            or bundle.get("case_context_sha256")
+            != [_digest(test["vars"].get("generation_context")) for test in tests]
+        ):
+            raise ValueError("training_workflow_validation_unbound")
+        for row in result.get("results", {}).get("results", []):
+            variables = row.get("vars") or (row.get("testCase") or {}).get("vars") or {}
+            index = row.get("testIdx")
+            output = (row.get("response") or {}).get("output")
+            if (
+                type(index) is not int
+                or not 0 <= index < len(tests)
+                or variables != tests[index]["vars"]
+                or not isinstance(output, str)
+                or get_assert(output, {"vars": variables})["pass"] is not row.get("success")
+            ):
+                raise ValueError("training_workflow_result_unverified")
     verdict = decide(result, bundle=bundle)
     return {
         **verdict,
@@ -404,6 +578,14 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
         "files": {key: entry["sha256"] for key, entry in bundle["files"].items()},
         "bundle_sha256": _file_hash(bundle_path),
         "results_sha256": _file_hash(result_path),
+        **(
+            {
+                "measurement_scope": bundle["measurement_scope"],
+                "validation_sha256": bundle["validation_sha256"],
+            }
+            if surface == "workflow_nl_prompt"
+            else {}
+        ),
     }
 
 
@@ -414,33 +596,47 @@ def candidate_for_experiment(bundle_path: Path, result_path: Path):
         raise ValueError("training_candidate_not_improved")
     bundle = json.loads(bundle_path.read_bytes().decode("utf-8"))
     prompts = [
-        (bundle_path.parent / bundle["files"][name]["name"])
-        .read_bytes()
-        .decode("utf-8")
-        .removeprefix("{{task}}\n\n")
+        (bundle_path.parent / bundle["files"][name]["name"]).read_bytes().decode("utf-8")
         for name in ("baseline", "candidate")
     ]
     return {
-        "control_prompt": prompts[0],
-        "treatment_prompt": prompts[1],
+        "control_prompt": _prompt_value(prompts[0], bundle.get("surface", "employee_prompt")),
+        "treatment_prompt": _prompt_value(prompts[1], bundle.get("surface", "employee_prompt")),
         "offline_evidence": evidence,
     }
 
 
-def build_patch_prompt(baseline_prompt: str, clusters: List[Dict[str, Any]]) -> str:
+def build_patch_prompt(baseline_prompt: str, clusters: list[dict[str, Any]]) -> str:
     reasons = "\n".join(
-        f"- {cluster['employee_id']}: {cluster['failure_reason']} ({cluster['count']} 次)"
+        f"- {training_identity(cluster)}: {cluster['failure_reason']} ({cluster['count']} 次)"
+        + (
+            "\n"
+            + json.dumps(
+                [
+                    {
+                        "task": sample["task"],
+                        "errors": sample.get("validation_errors", []),
+                        "execution": sample.get("generation_context", {}).get("execution_feedback"),
+                    }
+                    for sample in cluster["samples"][:3]
+                ],
+                ensure_ascii=False,
+            )
+            if cluster.get("surface") == "workflow_nl_prompt"
+            else ""
+        )
         for cluster in clusters
     )
     return (
         "你是员工能力训练器。下面是该员工当前的 system prompt 与最近的真实失败原因。\n"
         "只做最小必要修改，让失败原因不再发生；不要新增工具、不要改变输出协议、"
-        "不要声称任何未经回执验证的完成。只输出修改后的完整 prompt 正文。\n\n"
+        "不要声称任何未经回执验证的完成。只归纳通用规则，不复制客户原输入。"
+        "只输出修改后的完整 prompt 正文。\n\n"
         f"=== 当前 prompt ===\n{baseline_prompt}\n\n=== 真实失败 ===\n{reasons}\n"
     )
 
 
-def suggest_prompt(baseline_prompt: str, clusters: List[Dict[str, Any]]) -> str:
+def suggest_prompt(baseline_prompt: str, clusters: list[dict[str, Any]]) -> str:
     from modstore_server.employee_pack_proposal import _call_llm
 
     raw = _call_llm(build_patch_prompt(baseline_prompt, clusters))
@@ -466,7 +662,7 @@ def _default_ledger() -> Path:
         )
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -482,6 +678,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     prep.add_argument("--out-dir", required=True)
     prep.add_argument("--employee-id", required=True)
     prep.add_argument("--candidate-prompt", required=True)
+    prep.add_argument(
+        "--surface", choices=("employee_prompt", "workflow_nl_prompt"), default="employee_prompt"
+    )
+    prep.add_argument("--baseline", default="")
+
+    baseline_parser = sub.add_parser("baseline", help="从固定执行面的源码读取当前提示词")
+    baseline_parser.add_argument(
+        "--surface", choices=("employee_prompt", "workflow_nl_prompt"), required=True
+    )
+    baseline_parser.add_argument("--source", required=True)
+    baseline_parser.add_argument("--out", required=True)
 
     dec = sub.add_parser("decide", help="判定候选是否晋级")
     dec.add_argument("--result", required=True)
@@ -493,6 +700,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     sug.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
+    if args.command == "baseline":
+        text = prompt_from_source(
+            Path(args.source).read_bytes().decode("utf-8"), surface=args.surface
+        )
+        Path(args.out).write_text(text, encoding="utf-8")
+        return 0
     if args.command == "mine":
         ledger = Path(args.ledger) if args.ledger else _default_ledger()
         clusters = mine(ledger, days=args.days, min_count=args.min_count)
@@ -504,12 +717,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         clusters = json.loads(Path(args.clusters).read_bytes().decode("utf-8"))
         if not isinstance(clusters, list):
             raise SystemExit("clusters 必须是数组")
+        clusters = [
+            cluster
+            for cluster in clusters
+            if training_identity(cluster) == (args.surface, args.employee_id)
+        ]
         cases = append_cases(Path(args.corpus_dir), clusters)
-        pack = select_pack(Path(args.packs_dir), args.employee_id)
-        if pack is None:
+        pack = (
+            select_pack(Path(args.packs_dir), args.employee_id)
+            if args.surface == "employee_prompt"
+            else None
+        )
+        if args.surface == "employee_prompt" and pack is None:
             print(json.dumps({"ok": False, "reason": "pack_prompt_not_found"}))
             return 0
-        corpus_path = Path(args.corpus_dir) / f"{args.employee_id}.jsonl"
+        key = (
+            args.employee_id
+            if args.surface == "employee_prompt"
+            else f"{args.surface}-{args.employee_id}"
+        )
+        corpus_path = Path(args.corpus_dir) / f"{key}.jsonl"
         persisted = (
             [
                 json.loads(line)
@@ -524,9 +751,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 0
         built = build_config(
             out_dir=Path(args.out_dir),
-            baseline_prompt=(pack / "prompt.txt").read_bytes().decode("utf-8"),
+            baseline_prompt=(pack / "prompt.txt" if pack else Path(args.baseline))
+            .read_bytes()
+            .decode("utf-8"),
             candidate_prompt=Path(args.candidate_prompt).read_bytes().decode("utf-8"),
             cases=persisted[-20:],
+            surface=args.surface,
         )
         print(json.dumps({"ok": True, "cases": len(cases), **built}, ensure_ascii=False))
         return 0

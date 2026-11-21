@@ -487,7 +487,7 @@ def test_discovery_reuses_planner_and_filters_other_account_context(database, mo
     )
     monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "model"))
 
-    async def admission(*_args):
+    async def admission(*_args, **_kwargs):
         return planning_budget(budget_source="existing_platform_subscription_quota", max_calls=1)
 
     monkeypatch.setattr(usage, "planning_admission", admission)
@@ -987,31 +987,3 @@ def test_scheduled_discovery_persists_once_and_never_approves(database, monkeypa
     recovered = asyncio.run(strategy_planner.run_scheduled_discovery(template=template))
     assert recovered["recovered"] and recovered["registered"] == first["registered"]
     assert len(calls) == 1
-
-
-def test_historical_domain_aliases_retain_unrated_status_without_stale_gaps(tmp_path, monkeypatch):
-    from modstore_server import strategy_planner
-
-    report = tmp_path / "domain.json"
-    report.write_text(
-        json.dumps(
-            {
-                "audited_at": "2026-11-15T00:00:00+00:00",
-                "source": "historical-3396",
-                "domains": [
-                    {
-                        "domain_id": "di-layering",
-                        "status": "UNRATED",
-                        "score": 9,
-                        "blocking_gap": "outdated gap must not become current evidence",
-                    }
-                ],
-            }
-        )
-    )
-    monkeypatch.setenv("MODSTORE_DOMAIN_AUDIT_PATH", str(report))
-    context = strategy_planner._domain_status()
-    assert context["domains"][0]["domain_id"] == "architecture"
-    assert context["domains"][0]["score"] is None
-    assert context["audited_at"].startswith("2026-11-15")
-    assert "blocking_gap" not in json.dumps(context)

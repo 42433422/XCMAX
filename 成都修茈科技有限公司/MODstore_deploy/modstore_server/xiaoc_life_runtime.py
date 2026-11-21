@@ -104,13 +104,51 @@ def _domain_order(state: dict[str, Any]) -> list[str]:
     return domains
 
 
+def _ready_portfolio_tasks(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Bound a life reservation; the real claim still verifies and admits work."""
+    from modstore_server.strategic_portfolio import RESOURCES, _date, optimize_portfolio
+    from modstore_server.strategic_portfolio_runtime import _consumed
+
+    tasks, limits = record.get("tasks", {}), record.get("limits", {})
+    opportunities = {row["opportunity_id"]: row for row in record["opportunities"]}
+    company = bool(limits.get("company_budget_id"))
+    remaining = {}
+    if company:
+        running = [task for task in tasks.values() if task["status"] in {"running", "waiting"}]
+        if (
+            record.get("halted")
+            or record["status"] not in {"approved", "executing"}
+            or _date(limits["expires_at"]) <= datetime.now(UTC)
+            or len(running) >= limits["max_parallel"]
+            or any(_date(task["deadline"]) <= datetime.now(UTC) for task in running)
+            or any(task["status"] == "unknown" for task in tasks.values())
+        ):
+            return []
+        remaining = {
+            key: max(0, limits[key] - sum(_consumed(task, key) for task in tasks.values()))
+            for key in RESOURCES
+        }
+        selected = list(opportunities)
+    else:
+        plan = record.get("plan") or optimize_portfolio(record["opportunities"], limits)
+        selected = plan["selected"]
+    return [
+        row
+        for key in selected
+        if key not in tasks
+        and (row := opportunities[key])
+        and all(tasks.get(dep, {}).get("status") == "completed" for dep in row["depends_on"])
+        and (
+            not company
+            or row["risk"] != "high"
+            and all(row[resource] <= remaining[resource] for resource in RESOURCES)
+        )
+    ]
+
+
 def _cycle_reservation(state: dict[str, Any], domain: str) -> int:
-    """Request the next frozen task's allowance; the store still clamps it."""
-    from modstore_server.strategic_portfolio import (
-        PortfolioError,
-        optimize_portfolio,
-        portfolio_status,
-    )
+    """Cover any ready company choice; the store still clamps each approved lane."""
+    from modstore_server.strategic_portfolio import PortfolioError, portfolio_status
 
     owner = state.get("owner_user_id")
     if type(owner) is not int or owner <= 0:
@@ -120,25 +158,25 @@ def _cycle_reservation(state: dict[str, Any], domain: str) -> int:
             continue
         if goal.get("status") in {"completed", "failed", "stopped"}:
             continue
-        if goal.get("next_review_at") and datetime.fromisoformat(
-            goal["next_review_at"]
-        ) > datetime.now(UTC):
-            continue
         try:
             record = portfolio_status(goal["decision_id"], owner_user_id=owner)
         except PortfolioError:
             continue
         if record["status"] not in {"approved", "executing"} or record.get("halted"):
             continue
-        plan = record.get("plan") or optimize_portfolio(record["opportunities"], record["limits"])
-        tasks = record.get("tasks", {})
-        opportunities = {row["opportunity_id"]: row for row in record["opportunities"]}
-        for key in plan["selected"]:
-            opportunity = opportunities[key]
-            if key not in tasks and all(
-                tasks.get(dep, {}).get("status") == "completed" for dep in opportunity["depends_on"]
-            ):
-                return min(1_000_000, int(opportunity["tokens"]))
+        ready = _ready_portfolio_tasks(record)
+        company = bool(record.get("limits", {}).get("company_budget_id"))
+        if (
+            goal.get("next_review_at")
+            and datetime.fromisoformat(goal["next_review_at"]) > datetime.now(UTC)
+            and not (company and ready)
+        ):
+            continue
+        if ready:
+            requested = (
+                max(int(item["tokens"]) for item in ready) if company else int(ready[0]["tokens"])
+            )
+            return min(1_000_000, requested)
         return 0  # An existing completed execution needs only receipt/outcome reads.
     return 32768
 
@@ -167,15 +205,20 @@ class CyclePorts:
                 continue
             if goal.get("status") in {"completed", "failed", "stopped"}:
                 continue
-            if goal.get("next_review_at") and datetime.fromisoformat(
-                goal["next_review_at"]
-            ) > datetime.now(UTC):
-                continue
             try:
                 status = portfolio_status(
                     goal["decision_id"], owner_user_id=self.claim["owner_user_id"]
                 )
             except PortfolioError:
+                continue
+            if (
+                goal.get("next_review_at")
+                and datetime.fromisoformat(goal["next_review_at"]) > datetime.now(UTC)
+                and not (
+                    status.get("limits", {}).get("company_budget_id")
+                    and _ready_portfolio_tasks(status)
+                )
+            ):
                 continue
             if status["status"] in {"approved", "executing"} and not status.get("halted"):
                 return {"goal": goal, "snapshot": status}
@@ -285,7 +328,9 @@ class CyclePorts:
         provider, model = resolve_platform_bench_llm()
         if not provider or not model:
             raise LifeBlocked("platform_model_not_configured")
-        admission = await planning_admission(provider, model)
+        admission = await planning_admission(
+            provider, model, owner_user_id=self.claim["owner_user_id"]
+        )
         if admission is None:
             raise LifeBlocked("platform_quota_unknown_or_exhausted")
         admission = dict(admission)
@@ -466,20 +511,15 @@ class CyclePorts:
         before = binding["snapshot"]
         decision_id = before["decision_id"]
         owner = self.claim["owner_user_id"]
-        plan = plan_portfolio(decision_id, owner_user_id=owner)
+        plan_portfolio(decision_id, owner_user_id=owner)
         current = portfolio_status(decision_id, owner_user_id=owner)
-        tasks = current.get("tasks", {})
-        opportunities = {row["opportunity_id"]: row for row in current["opportunities"]}
-        pending = [
-            opportunities[key]
-            for key in plan["selected"]
-            if key not in tasks
-            and all(
-                tasks.get(dep, {}).get("status") == "completed"
-                for dep in opportunities[key]["depends_on"]
-            )
-        ]
-        if pending and pending[0]["tokens"] > self.claim["reserved_tokens"]:
+        pending = _ready_portfolio_tasks(current)
+        company = bool(current.get("limits", {}).get("company_budget_id"))
+        if pending and (
+            all(item["tokens"] > self.claim["reserved_tokens"] for item in pending)
+            if company
+            else pending[0]["tokens"] > self.claim["reserved_tokens"]
+        ):
             raise LifeBlocked("portfolio_task_exceeds_life_cycle_budget")
 
         def usage(snapshot):
@@ -538,13 +578,20 @@ class CyclePorts:
         }
         selected = after.get("plan", {}).get("selected", [])
         selected_tasks = [after.get("tasks", {}).get(key, {}) for key in selected]
+        remaining_ready = company and bool(_ready_portfolio_tasks(after))
         goal_status = "active"
         if after.get("halted"):
             goal_status = "stopped"
-        elif selected_tasks and all(task.get("status") == "completed" for task in selected_tasks):
+        elif (
+            not remaining_ready
+            and selected_tasks
+            and all(task.get("status") == "completed" for task in selected_tasks)
+        ):
             goal_status = "execution_verified"
-        elif selected_tasks and all(
-            task.get("status") in {"completed", "failed"} for task in selected_tasks
+        elif (
+            not remaining_ready
+            and selected_tasks
+            and all(task.get("status") in {"completed", "failed"} for task in selected_tasks)
         ):
             goal_status = "failed"
         goal = {
@@ -559,6 +606,8 @@ class CyclePorts:
         }
         if goal_status == "execution_verified":
             goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+        elif remaining_ready:
+            goal.pop("next_review_at", None)
         queued = self.bound_worker_receipts(before, after)
         if queued:
             self.details["awaiting_worker"] = queued
