@@ -189,7 +189,10 @@ def _current_goal(db, contract):
 
 def _measured(db, execution, binding, due):
     from modstore_server.strategy_bets import _number, judge
-    from modstore_server.workflow_customer_delivery import load_completed_delivery
+    from modstore_server.workflow_customer_delivery import (
+        load_completed_delivery,
+        required_delivery_artifacts,
+    )
 
     contract = binding["customer_delivery"]
     agreed = _current_goal(db, contract)
@@ -206,7 +209,10 @@ def _measured(db, execution, binding, due):
         parse_datetime(execution.completed_at), parse_datetime(produced["completed_at"])
     )
     goal = contract["goal"]
-    artifacts = {(item["artifact_id"], item["artifact_sha256"]) for item in produced["artifacts"]}
+    artifacts = {
+        (item["artifact_id"], item["artifact_sha256"])
+        for item in required_delivery_artifacts(contract, produced)
+    }
     receipts = list(
         db.scalars(
             select(CustomerValueReceipt).where(
@@ -257,9 +263,15 @@ def _measured(db, execution, binding, due):
         for row in _refunds(db, goal)
         if parse_datetime(row.occurred_at) <= due and parse_datetime(row.recorded_at) <= due
     ]
-    successful = not refunds and any(
-        artifact in acceptances and occurred <= acceptances[artifact]
-        for artifact, occurred in outcomes.items()
+    successful = (
+        not refunds
+        and bool(artifacts)
+        and all(
+            artifact in outcomes
+            and artifact in acceptances
+            and outcomes[artifact] <= acceptances[artifact]
+            for artifact in artifacts
+        )
     )
     evidence.extend([row.receipt_id, row.evidence_digest] for row in refunds)
     return (
@@ -268,6 +280,7 @@ def _measured(db, execution, binding, due):
             {
                 "contract_sha256": contract["contract_sha256"],
                 "produced": produced,
+                "required_artifacts": sorted(artifacts),
                 "receipts": sorted(evidence),
                 "due_at": due.isoformat(),
             }

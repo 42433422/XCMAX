@@ -7,6 +7,7 @@ from __future__ import annotations
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.customer_issue_delivery_contract import execution_succeeded
 import importlib
+from copy import deepcopy
 
 
 def _facade():
@@ -18,6 +19,7 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         self._step_results: _facade().Dict[str, _facade().StepResult] = {}
         self._callbacks: _facade().Dict[str, _facade().Callable] = {}
         self._running = False
+        self._step_contexts = {}
 
     def register_callback(self, event: str, callback: _facade().Callable) -> None:
         self._callbacks[event] = callback
@@ -39,59 +41,41 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         return r.status if r else _facade().StepStatus.PENDING
 
     def get_pipeline_status(self) -> _facade().Dict[str, _facade().Any]:
-        production_steps = []
-        for s in _facade().PRODUCTION_LINE_STEPS:
-            r = self._step_results.get(s.step_id)
-            production_steps.append(
-                {
-                    "step_id": s.step_id,
-                    "name": s.name,
-                    "status": r.status.value if r else "pending",
-                    "executor": s.executor,
-                    "approval_gate": s.approval_gate.value,
-                    "sub_steps": s.sub_steps,
-                    "cross_line_trigger": s.cross_line_trigger,
-                }
-            )
-        operations_steps = []
-        for s in _facade().OPERATIONS_LINE_STEPS:
-            r = self._step_results.get(s.step_id)
-            operations_steps.append(
-                {
-                    "step_id": s.step_id,
-                    "name": s.name,
-                    "status": r.status.value if r else "pending",
-                    "executor": s.executor,
-                    "approval_gate": s.approval_gate.value,
-                    "sub_steps": s.sub_steps,
-                    "cross_line_trigger": s.cross_line_trigger,
-                }
-            )
-        p_completed = sum((1 for s in production_steps if s["status"] == "completed"))
-        o_completed = sum((1 for s in operations_steps if s["status"] == "completed"))
+        lines = {}
+        for name, steps in (
+            ("production_line", _facade().PRODUCTION_LINE_STEPS),
+            ("operations_line", _facade().OPERATIONS_LINE_STEPS),
+        ):
+            rows = []
+            for step in steps:
+                result = self._step_results.get(step.step_id)
+                rows.append(
+                    {
+                        "step_id": step.step_id,
+                        "name": step.name,
+                        "status": result.status.value if result else "pending",
+                        "executor": step.executor,
+                        "approval_gate": step.approval_gate.value,
+                        "sub_steps": step.sub_steps,
+                        "cross_line_trigger": step.cross_line_trigger,
+                        "error": result.error if result else None,
+                        "evidence": (
+                            (result.data.get("result") or {}).get("evidence") if result else None
+                        ),
+                    }
+                )
+            completed = sum(row["status"] == "completed" for row in rows)
+            lines[name] = {
+                "total": len(rows),
+                "completed": completed,
+                "steps": rows,
+                "automation_rate": round(completed / len(rows) * 100, 1) if rows else 0,
+            }
+        total = sum(line["total"] for line in lines.values())
+        completed = sum(line["completed"] for line in lines.values())
         return {
-            "production_line": {
-                "total": len(_facade().PRODUCTION_LINE_STEPS),
-                "completed": p_completed,
-                "automation_rate": round(
-                    p_completed / len(_facade().PRODUCTION_LINE_STEPS) * 100, 1
-                ),
-                "steps": production_steps,
-            },
-            "operations_line": {
-                "total": len(_facade().OPERATIONS_LINE_STEPS),
-                "completed": o_completed,
-                "automation_rate": round(
-                    o_completed / len(_facade().OPERATIONS_LINE_STEPS) * 100, 1
-                ),
-                "steps": operations_steps,
-            },
-            "overall_automation_rate": round(
-                (p_completed + o_completed)
-                / (len(_facade().PRODUCTION_LINE_STEPS) + len(_facade().OPERATIONS_LINE_STEPS))
-                * 100,
-                1,
-            ),
+            **lines,
+            "overall_automation_rate": round(completed / total * 100, 1) if total else 0,
         }
 
     async def run_step(
@@ -110,75 +94,103 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             step_id=step_id, status=_facade().StepStatus.RUNNING
         )
         self._fire("step_started", step_id=step_id, step_name=step.name, line=step.line.value)
-        try:
-            result_data = await self._execute_step(step, context or {})
-            if step_id == "O7" and not execution_succeeded(result_data.get("result")):
-                failed = result_data.get("result") or {}
-                error = str(failed.get("error") or "反馈员工未明确完成执行")
+        self._step_contexts[step_id] = deepcopy(context or {})
+        attempts = step.max_retries + 1 if step.retry_on_failure else 1
+        for attempt in range(attempts):
+            try:
+                output = await self._execute_step(step, deepcopy(context or {}))
+                return await self._finish_step(step, {**(context or {}), **output}, context or {})
+            except RECOVERABLE_ERRORS as exc:
+                if attempt + 1 < attempts and step_id != "O7":
+                    continue
+                error = str(exc)
                 self._step_results[step_id] = _facade().StepResult(
-                    step_id=step_id,
-                    status=_facade().StepStatus.FAILED,
-                    data={**result_data, "context": dict(context or {})},
-                    error=error,
+                    step_id=step_id, status=_facade().StepStatus.FAILED, error=error
                 )
                 self._fire("step_failed", step_id=step_id, step_name=step.name, error=error)
-                from modstore_server.customer_issue_intake import (
-                    record_dispatch_failure,
-                )
+                if step_id == "O7":
+                    from modstore_server.customer_issue_intake import record_dispatch_failure
 
-                record_dispatch_failure(dict(context or {}), error)
+                    record_dispatch_failure(dict(context or {}), error)
                 return self._step_results[step_id]
-            if step.approval_gate != _facade().ApprovalGate.NONE:
-                self._step_results[step_id] = _facade().StepResult(
-                    step_id=step_id,
-                    status=_facade().StepStatus.AWAITING_APPROVAL,
-                    data=result_data,
-                )
-                self._fire(
-                    "step_awaiting_approval",
-                    step_id=step_id,
-                    step_name=step.name,
-                    gate=step.approval_gate.value,
-                )
-                return self._step_results[step_id]
-            self._step_results[step_id] = _facade().StepResult(
-                step_id=step_id, status=_facade().StepStatus.COMPLETED, data=result_data
-            )
-            self._fire("step_completed", step_id=step_id, step_name=step.name)
-            if step.cross_line_trigger:
-                cross_context = {
-                    key: value
-                    for key, value in (context or {}).items()
-                    if key not in {"from_step", "to_step", "result_data"}
-                }
-                self._fire(
-                    "cross_line_trigger",
-                    from_step=step_id,
-                    to_step=step.cross_line_trigger,
-                    **cross_context,
-                    result_data=result_data,
-                )
-            if step.auto_trigger_next and (not getattr(self, "_release_train_subset", False)):
-                next_step = self._get_next_step(step)
-                if next_step:
-                    return await self.run_step(next_step.step_id, context=result_data)
-            return self._step_results[step_id]
-        except RECOVERABLE_ERRORS as exc:
-            _facade().logger.exception("pipeline step %s failed: %s", step_id, exc)
-            self._step_results[step_id] = _facade().StepResult(
-                step_id=step_id, status=_facade().StepStatus.FAILED, error=str(exc)
-            )
-            self._fire("step_failed", step_id=step_id, step_name=step.name, error=str(exc))
-            if step_id == "O7":
-                from modstore_server.customer_issue_intake import (
-                    record_dispatch_failure,
-                )
+        raise AssertionError("unreachable step attempt")
 
-                record_dispatch_failure(dict(context or {}), str(exc))
-                return self._step_results[step_id]
-            if step.retry_on_failure and step.max_retries > 0:
-                return await self._retry_step(step, context, remaining=step.max_retries)
-            return self._step_results[step_id]
+    async def _finish_step(self, step, data, context):
+        result = data.get("result") or {}
+        if not isinstance(result, dict):
+            result = {}
+        waiting = result.get("skipped") is True or result.get("status") in {
+            "waiting_evidence",
+            "pending",
+            "unknown",
+            "accepted",
+            "dispatched",
+        }
+        failed = result.get("ok") is False and not waiting
+        if step.step_id == "O7" and not context.get("business"):
+            failed = not execution_succeeded(result)
+        if waiting or failed:
+            state = (
+                _facade().StepStatus.WAITING_EVIDENCE if waiting else _facade().StepStatus.FAILED
+            )
+            error = str(
+                result.get("reason") or result.get("error") or "business evidence unavailable"
+            )
+            self._step_results[step.step_id] = _facade().StepResult(
+                step_id=step.step_id,
+                status=state,
+                data={**data, "context": dict(context)},
+                error=error,
+            )
+            self._fire(
+                "step_waiting_evidence" if waiting else "step_failed",
+                step_id=step.step_id,
+                step_name=step.name,
+                error=error,
+            )
+            if failed and step.step_id == "O7" and not context.get("business"):
+                from modstore_server.customer_issue_intake import record_dispatch_failure
+
+                record_dispatch_failure(dict(context), error)
+            return self._step_results[step.step_id]
+        if step.approval_gate != _facade().ApprovalGate.NONE:
+            state = _facade().StepStatus.AWAITING_APPROVAL
+            self._fire(
+                "step_awaiting_approval",
+                step_id=step.step_id,
+                step_name=step.name,
+                gate=step.approval_gate.value,
+            )
+        else:
+            state = _facade().StepStatus.COMPLETED
+        self._step_results[step.step_id] = _facade().StepResult(
+            step_id=step.step_id, status=state, data=data
+        )
+        if state != _facade().StepStatus.COMPLETED:
+            return self._step_results[step.step_id]
+        return await self._continue_step(step, data)
+
+    async def _continue_step(self, step, data):
+        self._fire("step_completed", step_id=step.step_id, step_name=step.name)
+        if step.cross_line_trigger and not data.get("business"):
+            # The evidence observer never turns a read into a new coding dispatch.
+            cross_context = {
+                key: value
+                for key, value in data.items()
+                if key not in {"from_step", "to_step", "result_data"}
+            }
+            self._fire(
+                "cross_line_trigger",
+                from_step=step.step_id,
+                to_step=step.cross_line_trigger,
+                **cross_context,
+                result_data=data,
+            )
+        if step.auto_trigger_next and not getattr(self, "_release_train_subset", False):
+            next_step = self._get_next_step(step)
+            if next_step:
+                return await self.run_step(next_step.step_id, context=data)
+        return self._step_results[step.step_id]
 
     def _get_next_step(self, step: _facade().FlowStep) -> _facade().Optional[_facade().FlowStep]:
         if step.line == _facade().LineType.PRODUCTION:
@@ -190,36 +202,13 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             return steps[idx + 1]
         return None
 
-    async def _retry_step(
-        self,
-        step: _facade().FlowStep,
-        context: _facade().Optional[_facade().Dict],
-        remaining: int,
-    ) -> _facade().StepResult:
-        _facade().logger.info(
-            "retrying step %s (%s), remaining=%d", step.step_id, step.name, remaining
-        )
-        try:
-            result_data = await self._execute_step(step, context or {})
-            self._step_results[step.step_id] = _facade().StepResult(
-                step_id=step.step_id,
-                status=_facade().StepStatus.COMPLETED,
-                data=result_data,
-            )
-            self._fire("step_completed", step_id=step.step_id, step_name=step.name)
-            return self._step_results[step.step_id]
-        except RECOVERABLE_ERRORS as exc:
-            if remaining > 1:
-                return await self._retry_step(step, context, remaining - 1)
-            self._step_results[step.step_id] = _facade().StepResult(
-                step_id=step.step_id, status=_facade().StepStatus.FAILED, error=str(exc)
-            )
-            self._fire("step_failed", step_id=step.step_id, step_name=step.name, error=str(exc))
-            return self._step_results[step.step_id]
-
     async def _execute_step(
         self, step: _facade().FlowStep, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
+        from modstore_server.production_line_business import BUSINESS_STEPS, observe_business_step
+
+        if step.step_id in BUSINESS_STEPS or (step.step_id == "O7" and context.get("business")):
+            return observe_business_step(step.step_id, context)
         executor_map = {
             "P1": self._step_site_and_seo,
             "P2": self._step_ai_coding,
@@ -231,23 +220,18 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             "P8": self._step_auto_purify,
             "P9": self._step_version_evolution,
             "P10": self._step_ai_self_driven,
-            "O1": self._step_acquisition,
-            "O2": self._step_crm,
-            "O3": self._step_quotation,
-            "O4": self._step_payment,
-            "O5": self._step_delivery,
-            "O6": self._step_usage,
             "O7": self._step_feedback,
-            "O8": self._step_acceptance,
-            "O9": self._step_documents,
-            "O10": self._step_reconciliation,
         }
         fn = executor_map.get(step.step_id)
         if fn:
             return await fn(context)
         return {
             "step": step.step_id,
-            "result": {"ok": True, "message": f"{step.name} executed"},
+            "result": {
+                "ok": False,
+                "status": "waiting_evidence",
+                "reason": "executor_not_integrated",
+            },
         }
 
     async def approve_step(self, step_id: str, admin_user_id: int = 0) -> _facade().StepResult:
@@ -265,29 +249,24 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
                 status=_facade().StepStatus.FAILED,
                 error="step not awaiting approval",
             )
+        if step_id.startswith("O"):
+            # Approval authorizes progression; it cannot stand in for a source receipt.
+            context = deepcopy(self._step_contexts.get(step_id) or {})
+            output = await self._execute_step(step, context)
+            if (output.get("result") or {}).get("status") != "completed":
+                return await self._finish_step(step, {**context, **output}, context)
+            if output.get("result") != current.data.get("result"):
+                return await self._finish_step(step, {**context, **output}, context)
         self._step_results[step_id] = _facade().StepResult(
             step_id=step_id,
-            status=_facade().StepStatus.APPROVED,
+            status=_facade().StepStatus.COMPLETED,
             data=current.data,
             approval_id=admin_user_id or None,
         )
         self._fire(
-            "step_approved",
-            step_id=step_id,
-            step_name=step.name,
-            admin_user_id=admin_user_id,
+            "step_approved", step_id=step_id, step_name=step.name, admin_user_id=admin_user_id
         )
-        self._step_results[step_id] = _facade().StepResult(
-            step_id=step_id, status=_facade().StepStatus.COMPLETED, data=current.data
-        )
-        self._fire("step_completed", step_id=step_id, step_name=step.name)
-        if step.cross_line_trigger:
-            self._fire("cross_line_trigger", from_step=step_id, to_step=step.cross_line_trigger)
-        if step.auto_trigger_next and (not getattr(self, "_release_train_subset", False)):
-            next_step = self._get_next_step(step)
-            if next_step:
-                return await self.run_step(next_step.step_id, context=current.data)
-        return self._step_results[step_id]
+        return await self._continue_step(step, current.data)
 
     async def reject_step(
         self, step_id: str, admin_user_id: int = 0, reason: str = ""
@@ -308,118 +287,68 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         self._fire("step_rejected", step_id=step_id, admin_user_id=admin_user_id, reason=reason)
         return self._step_results[step_id]
 
-    async def run_full_pipeline(
-        self,
-        line=None,
-        start_from: _facade().Optional[str] = None,
-        context: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
-    ) -> _facade().Dict[str, _facade().Any]:
-        if line is None:
-            line = _facade().LineType.PRODUCTION
-        self._running = True
+    async def run_full_pipeline(self, line=None, start_from=None, context=None):
+        line = line or _facade().LineType.PRODUCTION
         steps = (
             _facade().PRODUCTION_LINE_STEPS
             if line == _facade().LineType.PRODUCTION
             else _facade().OPERATIONS_LINE_STEPS
         )
-        self._fire("pipeline_started", line=line.value, start_from=start_from)
-        current_context = context or {}
-        if current_context.get("release_train_subset"):
-            self._release_train_subset = True
-        started = start_from is None
-        for step in steps:
-            if not started:
-                if step.step_id == start_from:
-                    started = True
-                else:
-                    continue
-            if not self._running:
-                break
-            result = await self.run_step(step.step_id, context=current_context)
-            if result.status == _facade().StepStatus.AWAITING_APPROVAL:
-                self._fire("pipeline_paused", step_id=step.step_id, reason="awaiting approval")
-                return {
-                    "ok": True,
-                    "paused": True,
-                    "paused_at_step": step.step_id,
-                    "paused_at_name": step.name,
-                    "line": line.value,
-                    "message": f"步骤 {step.step_id}({step.name}) 等待审批后继续",
-                    "pipeline_status": self.get_pipeline_status(),
-                }
-            if result.status == _facade().StepStatus.FAILED:
-                self._fire("pipeline_failed", step_id=step.step_id, error=result.error)
-                return {
-                    "ok": False,
-                    "failed_at_step": step.step_id,
-                    "failed_at_name": step.name,
-                    "line": line.value,
-                    "error": result.error,
-                    "pipeline_status": self.get_pipeline_status(),
-                }
-            current_context = result.data
-        self._running = False
-        self._fire("pipeline_completed", line=line.value)
-        return {
-            "ok": True,
-            "paused": False,
-            "line": line.value,
-            "message": f"{('制作线' if line == _facade().LineType.PRODUCTION else '运营线')}全流程完成",
-            "pipeline_status": self.get_pipeline_status(),
-        }
+        ids = [step.step_id for step in steps]
+        if start_from is not None:
+            if start_from not in ids:
+                return {"ok": False, "error": "start step not found"}
+            ids = ids[ids.index(start_from) :]
+        return {**await self.run_pipeline_steps(ids, context=context), "line": line.value}
 
-    async def run_pipeline_steps(
-        self,
-        step_ids: _facade().Sequence[str],
-        *,
-        context: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
-    ) -> _facade().Dict[str, _facade().Any]:
-        """按给定 step_id 列表顺序执行（用于 digest release_train Phase C 子集）。"""
+    async def run_pipeline_steps(self, step_ids, *, context=None):
+        """One owner for iteration; run_step's direct-call chaining is suspended."""
         wanted = [str(s).strip().upper() for s in step_ids if str(s).strip()]
         if not wanted:
             return {"ok": True, "skipped": True, "reason": "empty step_ids"}
+        if self._running:
+            return {"ok": False, "error": "pipeline already running"}
         self._running = True
-        self._fire(
-            "pipeline_started",
-            line=_facade().LineType.PRODUCTION.value,
-            start_from=wanted[0],
-        )
-        current_context = context or {}
-        if current_context.get("release_train_subset"):
-            self._release_train_subset = True
-        executed: _facade().List[str] = []
-        for step_id in wanted:
-            if not self._running:
-                break
-            result = await self.run_step(step_id, context=current_context)
-            executed.append(step_id)
-            if result.status == _facade().StepStatus.AWAITING_APPROVAL:
-                self._fire("pipeline_paused", step_id=step_id, reason="awaiting approval")
-                return {
-                    "ok": True,
-                    "paused": True,
-                    "paused_at_step": step_id,
-                    "executed_steps": executed,
-                    "pipeline_status": self.get_pipeline_status(),
-                }
-            if result.status == _facade().StepStatus.FAILED:
-                self._fire("pipeline_failed", step_id=step_id, error=result.error)
-                return {
-                    "ok": False,
-                    "failed_at_step": step_id,
-                    "executed_steps": executed,
-                    "error": result.error,
-                    "pipeline_status": self.get_pipeline_status(),
-                }
-            current_context = result.data
-        self._running = False
-        self._fire("pipeline_completed", line=_facade().LineType.PRODUCTION.value)
-        return {
-            "ok": True,
-            "paused": False,
-            "executed_steps": executed,
-            "pipeline_status": self.get_pipeline_status(),
-        }
+        previous_subset = getattr(self, "_release_train_subset", False)
+        self._release_train_subset = True
+        current_context, executed = dict(context or {}), []
+        self._fire("pipeline_started", start_from=wanted[0])
+        try:
+            for step_id in wanted:
+                if not self._running:
+                    return {"ok": False, "stopped": True, "executed_steps": executed}
+                result = await self.run_step(step_id, context=current_context)
+                executed.append(step_id)
+                if result.status != _facade().StepStatus.COMPLETED:
+                    paused = result.status in {
+                        _facade().StepStatus.AWAITING_APPROVAL,
+                        _facade().StepStatus.WAITING_EVIDENCE,
+                    }
+                    self._fire(
+                        "pipeline_paused" if paused else "pipeline_failed",
+                        step_id=step_id,
+                        reason=result.status.value,
+                    )
+                    return {
+                        "ok": paused,
+                        "paused": paused,
+                        "paused_at_step" if paused else "failed_at_step": step_id,
+                        "status": result.status.value,
+                        "error": result.error,
+                        "executed_steps": executed,
+                        "pipeline_status": self.get_pipeline_status(),
+                    }
+                current_context = result.data
+            self._fire("pipeline_completed")
+            return {
+                "ok": True,
+                "paused": False,
+                "executed_steps": executed,
+                "pipeline_status": self.get_pipeline_status(),
+            }
+        finally:
+            self._running = False
+            self._release_train_subset = previous_subset
 
     def stop_pipeline(self) -> None:
         self._running = False
@@ -432,7 +361,8 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         return {
             "step": step.step_id,
             "result": {
-                "ok": True,
+                "ok": False,
+                "status": "waiting_evidence",
                 "skipped": True,
                 "executor": step.executor,
                 "message": message,

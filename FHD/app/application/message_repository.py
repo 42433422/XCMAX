@@ -82,7 +82,9 @@ class MessageRepository:
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", request_id):
             raise ValueError("request_id 格式无效")
         key = hashlib.sha256(f"{int(user_id)}:{request_id}".encode()).hexdigest()
-        return FileLock(self._outbox_dir / f"{key}.lock", timeout=30)
+        # Dispatch can project messages before returning; that readback uses
+        # the same per-request lock. Reuse FileLock's native reentrancy.
+        return FileLock(self._outbox_dir / f"{key}.lock", timeout=30, is_singleton=True)
 
     def read_dispatch_request(self, user_id: int, request_id: str) -> dict[str, Any] | None:
         for path in self._outbox_dir.glob(f"*-{request_id}.json"):

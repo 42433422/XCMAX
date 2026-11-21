@@ -1,20 +1,17 @@
-"""Promote an isolated, budgeted candidate to its original PR using an exact-tip CAS."""
+"""Promote only original PR candidates with verified isolated publication authority."""
 
 from __future__ import annotations
 
 import json
 import os
 import re
+import subprocess
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
-from scripts.autonomy.publish_para_candidate import (
-    HEADER_ONLY_PLATFORM_PROFILE,
-    REPAIR_CREDENTIAL_BLOCK,
-    clean_git_env,
-    run_command,
-)
+from scripts.autonomy import publish_para_candidate as publication
 from scripts.ci import self_heal_freshness as freshness
 from scripts.ci.ai_self_heal_sla import (
     AUTO_MERGE_RISK_LEVELS,
@@ -43,6 +40,7 @@ class Target:
     run_id: int
     workflow_id: int
     workflow_path: str
+    run_attempt: int = 0  # Legacy intents remain readable; only a fresh exact attempt can write.
 
 
 def _bot(item: dict) -> bool:
@@ -150,6 +148,7 @@ def select_target(repo: str, issue: dict, branch: str, get) -> Target | None:
         source.run_id,
         source.workflow_id,
         source.workflow_path,
+        source.run_attempt,
     )
     open_pr(repo, target, target.old_sha, get)
     return target
@@ -178,6 +177,8 @@ def prior_intent(repo: str, number: int, branch: str, comments: list[dict]):
                 or head == target.old_sha
                 or target.workflow_path not in freshness.CODE_CI_PATHS
                 or min(target.number, target.run_id, target.workflow_id) < 1
+                or type(target.run_attempt) is not int
+                or target.run_attempt < 0
                 or type(github_run_id) is not int
                 or github_run_id < 0
                 or any(
@@ -266,66 +267,163 @@ def _check_diff(git, old: str, new: str) -> int:
     return len(lines)
 
 
-def verified_publication(repo, issue_number, target, task, state, candidate):
-    """Bind the current management authorization to its original native publisher."""
-    request_id = str(uuid.UUID(hex=task["id"]))
-    execution = task.get("execution") or {}
-    manifest = state.get("publication_candidate") or {}
-    reports = [
-        row.get("report")
-        for row in execution.get("reports", [])
-        if isinstance(row, dict)
-        and isinstance(row.get("report"), dict)
-        and row["report"].get("source") == "github_isolated_publisher"
-    ]
-    budget = state.get("strategic_budget") or {}
+def _bound_publication(proof, target, candidate):
+    gate = publication.require_live_publication(proof)
     if (
-        len(reports) != 1
-        or task.get("state") != "execution_completed"
-        or task.get("executor") != "original_pr_repair"
-        or state.get("kind") != "original_pr_repair"
-        or state.get("publication_authorized") is not True
-        or state.get("request_id") != request_id
+        gate.get("pull_request") != target.number
+        or gate.get("source_sha") != target.old_sha
+        or gate.get("source_run_id") != target.run_id
+        or gate.get("source_run_attempt") != target.run_attempt
+        or target.run_attempt < 1
+        or gate.get("candidate_commit_sha") != candidate
+        or proof.manifest.get("commit_sha") != candidate
+        or proof.manifest.get("base_sha") != target.old_sha
+        or proof.manifest.get("branch") == target.branch
+        or not proof.isolation_artifact_id
+    ):
+        raise ValueError("original_pr_publication_target_mismatch")
+    return gate
+
+
+def verify_publication(
+    state, target, candidate, *, repo, control_task_id, para_task_id, github_run_id, token
+):
+    request_id = str(uuid.UUID(control_task_id))
+    env = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_REF": "refs/heads/main",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_REPOSITORY": repo,
+        "GITHUB_RUN_ID": str(github_run_id),
+        "GITHUB_SHA": state.get("controller_sha", ""),
+        "PARA_GITHUB_REQUEST_ID": request_id,
+    }
+    process_env = publication.clean_git_env(
+        {"PATH": os.environ.get("PATH", os.defpath), "GH_TOKEN": token}
+    )
+
+    def gh(path, binary=False):
+        return publication.run_command(["gh", "api", path], env=process_env, binary=binary)
+
+    proof = publication.verify_original_publication(
+        state,
+        env,
+        lambda path: json.loads(gh(path)),
+        lambda artifact_id: gh(f"/repos/{repo}/actions/artifacts/{artifact_id}/zip", binary=True),
+        allow_finished=True,
+    )
+    gate = _bound_publication(proof, target, candidate)
+    if gate["repository"] != repo or gate["task_id"] != para_task_id:
+        raise ValueError("original_pr_publication_task_mismatch")
+    return proof
+
+
+def worker_resume(repo, event, get, read_status, read_task, *, token):
+    """Bind a completed native worker to its original approved PR; names only locate evidence."""
+    notice = event.get("workflow_run") or {}
+    if (
+        event.get("action") != "completed"
+        or (event.get("repository") or {}).get("full_name") != repo
+        or type(notice.get("id")) is not int
+        or notice["id"] < 1
+        or type(notice.get("run_attempt")) is not int
+        or notice["run_attempt"] != 1
+    ):
+        raise ValueError("worker_completion_event_mismatch")
+    worker = _get(get, f"/repos/{repo}/actions/runs/{notice['id']}")
+    if (
+        any(
+            worker.get(key) != notice.get(key)
+            for key in (
+                "id",
+                "run_attempt",
+                "workflow_id",
+                "head_sha",
+                "head_branch",
+                "event",
+                "status",
+                "conclusion",
+            )
+        )
+        or type(worker.get("workflow_id")) is not int
+        or worker["workflow_id"] < 1
+        or worker.get("status") != "completed"
+        or worker.get("conclusion") != "success"
+        or worker.get("head_branch") != "main"
+        or worker.get("event") != "workflow_dispatch"
+        or worker.get("path") != ".github/workflows/fhd-para-github-worker.yml"
+        or not re.fullmatch(r"[0-9a-f]{40}", str(worker.get("head_sha") or ""))
+        or (worker.get("repository") or {}).get("full_name") != repo
+    ):
+        raise ValueError("worker_completion_native_run_mismatch")
+    title = str(worker.get("display_title") or "")
+    request = str(uuid.UUID(title.removeprefix("para-workspace-")))
+    if title != f"para-workspace-{request}":
+        raise ValueError("worker_completion_request_mismatch")
+    control_id = uuid.UUID(request).hex
+    state = read_status(control_id)
+    if (
+        state.get("request_id") != request
         or state.get("repository") != repo
-        or state.get("issue_number") != issue_number
-        or state.get("pull_request") != target.number
-        or state.get("source_sha") != target.old_sha
-        or state.get("source_run_id") != target.run_id
-        or state.get("run_id") != task.get("github_run_id")
-        or type(task.get("github_run_id")) is not int
-        or task["github_run_id"] < 1
-        or state.get("finished") is not True
-        or state.get("conclusion") != "success"
-        or execution.get("candidate") != manifest
-        or manifest.get("commit_sha") != candidate
-        or manifest.get("base_sha") != target.old_sha
-        or manifest.get("request_id") != request_id
-        or manifest.get("run_id") != str(task["github_run_id"])
-        or manifest.get("repository") != repo
-        or manifest.get("task_id") != task.get("para_task_id")
-        or budget.get("original_request_kind") != "original_pr_repair"
-        or budget.get("original_request_id") != request_id
-        or budget.get("request_id")
-        != str(uuid.uuid5(uuid.NAMESPACE_URL, f"xcmax:original-pr-budget:{request_id}"))
+        or state.get("run_id") != worker["id"]
     ):
-        raise ValueError(REPAIR_CREDENTIAL_BLOCK)
-    proof = reports[0]
+        raise ValueError("worker_completion_original_request_mismatch")
+    if state.get("kind") != publication.ORIGINAL_PR_REPAIR:
+        return None  # Other existing worker kinds keep their own completion path.
+    if state.get("controller_sha") != worker["head_sha"] or any(
+        type(state.get(key)) is not int or state[key] < 1
+        for key in ("issue_number", "pull_request", "source_run_id", "source_run_attempt")
+    ):
+        raise ValueError("worker_completion_original_source_mismatch")
+    task = read_task(control_id)
+    candidate = state.get("publication_candidate") or {}
     if (
-        proof.get("pushed") is not True
-        or proof.get("request_id") != request_id
-        or proof.get("execution_isolation") != HEADER_ONLY_PLATFORM_PROFILE
-        or proof.get("source_sha") != target.old_sha
-        or proof.get("commit_sha") != candidate
-        or proof.get("branch") != manifest.get("branch")
-        or proof.get("github_run_id") != task.get("github_run_id")
-        or proof.get("budget_request_id") != budget.get("request_id")
-        or proof.get("controller_sha") != budget.get("source_sha")
-        or type(proof.get("publication_job_id")) is not int
-        or proof["publication_job_id"] < 1
-        or not candidate_belongs_to_task(proof.get("branch", ""), execution, target)
+        task.get("id") != control_id
+        or task.get("executor") != publication.ORIGINAL_PR_REPAIR
+        or task.get("github_run_id") != worker["id"]
+        or not task.get("para_task_id")
+        or task["para_task_id"] != candidate.get("task_id")
     ):
-        raise ValueError(REPAIR_CREDENTIAL_BLOCK)
-    return {**proof, "repository": repo, "original_pr": asdict(target)}
+        raise ValueError("worker_completion_original_task_mismatch")
+    pr = _get(get, f"/repos/{repo}/pulls/{state['pull_request']}")
+    branch = str((pr.get("head") or {}).get("ref") or "")
+    comments = list(freshness.pages(get, f"/repos/{repo}/issues/{state['issue_number']}/comments"))
+    intent = prior_intent(repo, state["issue_number"], branch, comments)
+    applied = False
+    if intent:
+        target, head, original_id, para_id, run_id = intent
+        applied = (
+            (original_id, para_id, run_id) == (control_id, task["para_task_id"], worker["id"])
+            and (target.number, target.old_sha, target.run_id, target.run_attempt)
+            == (
+                state["pull_request"],
+                state["source_sha"],
+                state["source_run_id"],
+                state["source_run_attempt"],
+            )
+            and head == candidate.get("commit_sha") == (pr.get("head") or {}).get("sha")
+        )
+        if applied:
+            open_pr(repo, target, head, get, authorize=False)
+    proof = None
+    if not applied:
+        target = publication.authorized_original_pr(state, repo, get)
+        proof = verify_publication(
+            state,
+            target,
+            candidate.get("commit_sha"),
+            repo=repo,
+            control_task_id=control_id,
+            para_task_id=task["para_task_id"],
+            github_run_id=worker["id"],
+            token=token,
+        )
+    return {
+        "issue_number": state["issue_number"],
+        "base_branch": branch,
+        "control_task_id": control_id,
+        "_worker_resume_proof": proof,
+    }
 
 
 def advance(
@@ -335,70 +433,82 @@ def advance(
     token: str,
     *,
     before_write,
-    publication=None,
-    command=run_command,
+    authorization=None,
+    command=publication.run_command,
 ) -> int:
-    """Import inert objects, prove fast-forward ancestry, then compare-and-swap.
-
-    The expected-tip lease only supplies the CAS; the mandatory ancestry check
-    prevents history replacement. Candidate trees, hooks and config never execute.
-    """
+    """Use an inert bare repository and ordinary fast-forward; unknown ACKs are read back once."""
+    gate = _bound_publication(authorization, target, candidate)
     if (
-        not publication
-        or publication.get("execution_isolation") != HEADER_ONLY_PLATFORM_PROFILE
-        or publication.get("source_sha") != target.old_sha
-        or publication.get("commit_sha") != candidate
-        or publication.get("original_pr") != asdict(target)
-        or remote != f"https://github.com/{publication.get('repository')}.git"
-    ):
-        raise ValueError(REPAIR_CREDENTIAL_BLOCK)
-    if (
-        not re.fullmatch(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git", remote)
-        or target.branch == "main"
+        remote != f"https://github.com/{gate['repository']}.git"
         or not BRANCH.fullmatch(target.branch)
+        or target.branch == "main"
         or ".." in target.branch
-        or not SHA.fullmatch(target.old_sha)
-        or not SHA.fullmatch(candidate)
         or not token
-        or candidate == target.old_sha
     ):
-        raise ValueError("invalid original PR update identity")
-    with tempfile.TemporaryDirectory(prefix="para-pr-update-") as directory:
-        env = clean_git_env({"PATH": os.environ.get("PATH", os.defpath), "HOME": directory})
-        env.update(
-            GH_TOKEN=token,
-            GIT_CONFIG_COUNT="3",
-            GIT_CONFIG_KEY_0="credential.helper",
-            GIT_CONFIG_VALUE_0="!gh auth git-credential",
-            GIT_CONFIG_KEY_1="core.hooksPath",
-            GIT_CONFIG_VALUE_1=os.devnull,
-            GIT_CONFIG_KEY_2="protocol.ext.allow",
-            GIT_CONFIG_VALUE_2="never",
-        )
-        command(["git", "init", "--bare", directory], env=env)
+        raise ValueError("original_pr_write_identity_mismatch")
+    env = publication.clean_git_env({"PATH": os.environ.get("PATH", os.defpath), "GH_TOKEN": token})
+    with tempfile.TemporaryDirectory(prefix="para-original-pr-") as temporary:
+        root = Path(temporary)
+        prefix = [
+            "git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "protocol.ext.allow=never",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!gh auth git-credential",
+        ]
 
         def git(*args):
-            return command(["git", "-C", directory, *args], env=env)
+            return command(prefix + list(args), cwd=root, env=env)
 
-        git("fetch", "--no-tags", remote, target.old_sha, candidate)
-        git("merge-base", "--is-ancestor", target.old_sha, candidate)
-        changed = _check_diff(git, target.old_sha, candidate)
-        reference = f"refs/heads/{target.branch}"
-        if (
-            git("ls-remote", "--heads", remote, reference).strip()
-            != f"{target.old_sha}\t{reference}"
-        ):
-            raise ValueError("original PR changed before its update")
-        if before_write() != publication:
-            raise ValueError("original PR publication authorization changed")
+        git("init", "--bare")
         git(
-            "push",
-            "--porcelain",
-            f"--force-with-lease={reference}:{target.old_sha}",
+            "fetch",
+            "--no-tags",
             remote,
-            f"{candidate}:{reference}",
+            f"refs/heads/{target.branch}:refs/heads/original",
+            f"refs/heads/{authorization.manifest['branch']}:refs/heads/candidate",
         )
-        return changed
+        if (
+            git("rev-parse", "refs/heads/original^{commit}").strip() != target.old_sha
+            or git("rev-parse", "refs/heads/candidate^{commit}").strip() != candidate
+        ):
+            raise ValueError("original_pr_or_candidate_head_changed")
+        git("merge-base", "--is-ancestor", target.old_sha, candidate)
+        git("fsck", "--strict", "--no-reflogs", candidate)
+        count = _check_diff(git, target.old_sha, candidate)
+        # Persist original intent, then independently re-read authorization.
+        renewed = before_write()
+        fresh = _bound_publication(renewed, target, candidate)
+        if (
+            any(fresh[key] != gate[key] for key in gate if key not in {"expires_at"})
+            or renewed.artifact_id != authorization.artifact_id
+            or renewed.artifact_digest != authorization.artifact_digest
+            or renewed.isolation_artifact_id != authorization.isolation_artifact_id
+            or renewed.isolation_artifact_digest != authorization.isolation_artifact_digest
+        ):
+            raise ValueError("original_pr_publication_authority_changed")
+        expected = f"{candidate}\trefs/heads/{target.branch}"
+        current = git("ls-remote", "--heads", remote, f"refs/heads/{target.branch}").strip()
+        if current == expected:
+            return count
+        if current != f"{target.old_sha}\trefs/heads/{target.branch}":
+            raise ValueError("original_pr_head_changed_before_write")
+        publication.require_live_publication(renewed)
+        try:
+            git("push", remote, f"{candidate}:refs/heads/{target.branch}")
+        except (OSError, subprocess.SubprocessError):
+            if (
+                git("ls-remote", "--heads", remote, f"refs/heads/{target.branch}").strip()
+                != expected
+            ):
+                raise ValueError("original_pr_update_unconfirmed") from None
+        if git("ls-remote", "--heads", remote, f"refs/heads/{target.branch}").strip() != expected:
+            raise ValueError("original_pr_update_unconfirmed")
+        return count
 
 
 def new_ci_run(repo: str, target: Target, head: str, get) -> int:

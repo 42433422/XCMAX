@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import contextvars
 import hmac
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any, AsyncGenerator, Awaitable, Callable, Iterator, cast
@@ -53,7 +54,10 @@ def platform_call_reservation(reservation: dict[str, Any] | None) -> Iterator[No
 
 
 def require_call_reservation(
-    *, provider: str | None = None, model: str | None = None, start_transport: bool = False
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    start_transport: bool = False,
 ) -> None:
     from modstore_server.xiaoc_life_chat import require_manual_life_capability
     from modstore_server.xiaoc_life_store import require_current_life_call
@@ -72,7 +76,19 @@ def require_call_reservation(
     if start_transport:
         if active["_transport_state"]["started"]:
             raise PortfolioError("model reservation transport already started")
+        if active["provider"] == "litellm":
+            from modstore_server.strategic_usage_reconciliation import bind_transport
+
+            active["_transport_state"]["binding"] = bind_transport(active)
         active["_transport_state"]["started"] = True
+
+
+def transport_headers(provider: str) -> dict[str, str]:
+    active = _CALL.get()
+    binding = (active or {}).get("_transport_state", {}).get("binding")
+    if provider != "litellm" or not isinstance(binding, dict):
+        return {}
+    return {"x-litellm-call-id": binding["request_id"]}
 
 
 def _authorize_platform_route(provider: str, kwargs: dict[str, Any]) -> None:
@@ -109,7 +125,9 @@ def _authorize_platform_route(provider: str, kwargs: dict[str, Any]) -> None:
 
 
 async def dispatch_budgeted(
-    invoke: Callable[..., Awaitable[dict[str, Any]]], provider: str, kwargs: dict[str, Any]
+    invoke: Callable[..., Awaitable[dict[str, Any]]],
+    provider: str,
+    kwargs: dict[str, Any],
 ) -> dict[str, Any]:
     """One admission point covers direct pipelines as well as the platform facade."""
     from modstore_server.xiaoc_life_store import require_current_life_call
@@ -120,7 +138,10 @@ async def dispatch_budgeted(
     _authorize_platform_route(provider, kwargs)
     active = _CALL.get()
     if active is not None:
-        if active["used"] or (active["provider"], active["model"]) != (provider, kwargs["model"]):
+        if active["used"] or (active["provider"], active["model"]) != (
+            provider,
+            kwargs["model"],
+        ):
             raise PortfolioError("model reservation already consumed or route mismatch")
         active["used"] = True
         return await invoke(provider, **kwargs)
@@ -219,7 +240,8 @@ async def dispatch_budgeted_stream(
         finally:
             # Cancellation, missing finish/usage, and failed close keep the hold.
             complete_platform_call(
-                reservation, measured if exhausted and finished and closed and not failed else None
+                reservation,
+                measured if exhausted and finished and closed and not failed else None,
             )
 
 
@@ -357,7 +379,9 @@ def portfolio_worker_scope(
         with (
             platform_llm_scope(),
             portfolio_usage_scope(
-                binding["decision_id"], binding["opportunity_id"], binding["lease_token"]
+                binding["decision_id"],
+                binding["opportunity_id"],
+                binding["lease_token"],
             ),
         ):
             yield task
@@ -440,7 +464,11 @@ def planning_usage_scope(owner_user_id: int, admission: dict[str, Any]) -> Itera
 
 
 def _reserve_planning(
-    context: dict[str, Any], provider: str, model: str, prompt_bound: int, output_bound: int
+    context: dict[str, Any],
+    provider: str,
+    model: str,
+    prompt_bound: int,
+    output_bound: int,
 ) -> dict[str, Any]:
     from modstore_server.db.llm_chat import LlmClientRequest
     from modstore_server.strategic_company_accounting import reserve_planning
@@ -506,7 +534,11 @@ def _reserve_planning(
                         LlmClientRequest.id == slot.id,
                         LlmClientRequest.state == "completed",
                     )
-                    .values(state="processing", request_sha256=record_sha, done_json=_json(record))
+                    .values(
+                        state="processing",
+                        request_sha256=record_sha,
+                        done_json=_json(record),
+                    )
                 ),
             ).rowcount
             if changed != 1:
@@ -532,7 +564,12 @@ def _reserve_planning(
     }
 
 
-def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None) -> None:
+def _settle_planning(
+    reservation: dict[str, Any],
+    result: dict[str, Any] | None,
+    *,
+    reconciliation: dict[str, Any] | None = None,
+) -> bool:
     from modstore_server.db.llm_chat import LlmCallLog, LlmClientRequest
     from modstore_server.strategic_company_accounting import settle_planning
     from modstore_server.strategic_company_resources import transaction
@@ -561,12 +598,16 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
     admission = reservation["admission"]
     if admission["provider"] == "litellm":
         known = known and (result or {}).get("gateway_attempts_verified") is True
-    known = known and (result or {}).get("provider") in (None, "", admission["provider"])
+    known = known and (result or {}).get("provider") in (
+        None,
+        "",
+        admission["provider"],
+    )
     known = known and (result or {}).get("model") in (None, "", admission["model"])
     total = cast(int, prompt) + cast(int, completion) if known else None
     exceeded = total is not None and total > reservation["reserved_tokens"]
     report = {
-        **reservation,
+        **{key: value for key, value in reservation.items() if not key.startswith("_")},
         "status": "exceeded" if exceeded else "settled" if known else "unknown",
         "actual_tokens": total,
         "supplier_cost_cents": None,
@@ -575,7 +616,11 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
             if admission.get("budget_source") == "existing_platform_gateway_budget"
             else "existing_subscription_usage_not_supplier_invoice"
         ),
-        "completed_at": datetime.now(UTC).isoformat(),
+        "completed_at": (
+            result["readback"]["completed_at"]
+            if reconciliation is not None and result is not None
+            else datetime.now(UTC).isoformat()
+        ),
         **(
             {"gateway_attempts_verified": (result or {}).get("gateway_attempts_verified") is True}
             if admission["provider"] == "litellm"
@@ -583,15 +628,33 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
         ),
     }
 
-    def persist(session: Any) -> None:
+    def persist(session: Any) -> bool:
         row = session.execute(
             select(LlmClientRequest).where(
                 LlmClientRequest.client_request_id == reservation["request_id"],
                 LlmClientRequest.user_id == reservation["owner_user_id"],
             )
         ).scalar_one()
-        if row.state != "processing":
-            return
+        prior = json.loads(row.done_json or "{}")
+        expected = row.state
+        if reconciliation is None:
+            if expected != "processing":
+                return False
+        elif (
+            expected not in {"processing", "unknown"}
+            or prior.get("status") == "exceeded"
+            or prior.get("transport_binding") != reconciliation
+            or prior.get("transport_binding_sha256") != digest(reconciliation)
+            or reconciliation.get("request_id") != reservation["request_id"]
+            or reconciliation.get("owner_user_id") != reservation["owner_user_id"]
+            or not known
+        ):
+            return False
+        if prior.get("transport_binding"):
+            report["transport_binding"] = prior["transport_binding"]
+            report["transport_binding_sha256"] = prior["transport_binding_sha256"]
+        if reconciliation is not None and result is not None:
+            report["readback"] = result["readback"]
         settle_planning(
             session,
             report,
@@ -605,21 +668,22 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
                 update(LlmClientRequest)
                 .where(
                     LlmClientRequest.id == row.id,
-                    LlmClientRequest.state == "processing",
+                    LlmClientRequest.state == expected,
+                    LlmClientRequest.done_json == row.done_json,
                 )
                 .values(state=final_state, done_json=_json(report))
             ),
         ).rowcount
         if changed != 1:
             session.rollback()
-            return
+            return False
         session.execute(
             update(LlmClientRequest)
             .where(
                 LlmClientRequest.user_id == reservation["owner_user_id"],
                 LlmClientRequest.client_request_id == "strategy-planning-slot",
                 LlmClientRequest.request_sha256 == row.request_sha256,
-                LlmClientRequest.state == "processing",
+                LlmClientRequest.state == expected,
             )
             .values(state=final_state, done_json=_json(report))
         )
@@ -637,11 +701,13 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
                 hold_no=reservation["request_id"][-64:],
             )
         )
+        return True
 
-    transaction(persist)
+    settled = transaction(persist)
     context = _PLANNING.get()
     if context is not None:
         context["receipts"][:] = [report]
+    return settled
 
 
 def _cost(prompt: int, completion: int, tariff: dict[str, Any]) -> int:
@@ -659,7 +725,10 @@ def prepare_platform_call(
     *,
     caller_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    from modstore_server.xiaoc_life_store import record_life_reservation, require_current_life_call
+    from modstore_server.xiaoc_life_store import (
+        record_life_reservation,
+        require_current_life_call,
+    )
 
     require_current_life_call()
     scope = _SCOPE.get()
@@ -678,7 +747,6 @@ def prepare_platform_call(
         - {
             "grant_id",
             "event_id",
-            "control_task_id",
             "task_id",
             "subtask_id",
             "attempt",
@@ -778,7 +846,8 @@ def prepare_platform_call(
         }
         if frozen_binding is not None:
             calls[request_id].update(
-                caller_binding=frozen_binding, caller_binding_sha256=digest(frozen_binding)
+                caller_binding=frozen_binding,
+                caller_binding_sha256=digest(frozen_binding),
             )
         return {
             "provider": provider,
@@ -817,54 +886,54 @@ def complete_platform_call(
             raise PortfolioError("strategic usage reservation missing")
         if call["status"] != "pending":
             return
-        usage = (result or {}).get("usage") or {}
-        prompt = (
-            usage.get("prompt_tokens", usage.get("input_tokens"))
-            if isinstance(usage, dict)
-            else None
-        )
-        completion = (
-            usage.get("completion_tokens", usage.get("output_tokens"))
-            if isinstance(usage, dict)
-            else None
-        )
-        verified = (
-            type(prompt) is int and type(completion) is int and prompt >= 0 and completion >= 0
-        )
-        verified = verified and not (
-            (result or {}).get("_fallback_used") or (result or {}).get("fallback_used")
-        )
-        verified = (
-            verified
-            and usage.get("estimated") is not True
-            and (result or {}).get("usage_estimated") is not True
-        )
-        verified = verified and ((result or {}).get("provider") in (None, "", call["provider"]))
-        verified = verified and ((result or {}).get("model") in (None, "", call["model"]))
-        if call["provider"] == "litellm":
-            call["gateway_attempts_verified"] = (result or {}).get(
-                "gateway_attempts_verified"
-            ) is True
-            verified = verified and call["gateway_attempts_verified"]
-        if not verified:
-            call["status"] = "unknown"
-            state.update(halted=True, stop_reason="upstream_usage_unknown")
-        else:
-            prompt, completion = cast(int, prompt), cast(int, completion)
-            cost = _cost(prompt, completion, call["tariff"])
-            call.update(
-                status="settled",
-                actual_tokens=prompt + completion,
-                prompt_tokens=prompt,
-                completion_tokens=completion,
-                accrued_cost_cents=cost,
-                cost_basis="approved_tariff_accrual",
-            )
-            for key in ("response_id", "upstream_model"):
-                if isinstance(value := (result or {}).get(key), str) and value:
-                    call[key] = value[:256]
-            if prompt + completion > call["reserved_tokens"] or cost > call["reserved_cost_cents"]:
-                state.update(halted=True, stop_reason="upstream_usage_exceeded_reservation")
-        call["completed_at"] = datetime.now(UTC).isoformat()
+        _settle_call(call, state, result)
 
     mutate_portfolio(reservation["decision_id"], settle)
+
+
+def _settle_call(
+    call: dict[str, Any], state: dict[str, Any], result: dict[str, Any] | None
+) -> None:
+    usage = (result or {}).get("usage") or {}
+    prompt = (
+        usage.get("prompt_tokens", usage.get("input_tokens")) if isinstance(usage, dict) else None
+    )
+    completion = (
+        usage.get("completion_tokens", usage.get("output_tokens"))
+        if isinstance(usage, dict)
+        else None
+    )
+    verified = type(prompt) is int and type(completion) is int and prompt >= 0 and completion >= 0
+    verified = verified and not (
+        (result or {}).get("_fallback_used") or (result or {}).get("fallback_used")
+    )
+    verified = (
+        verified
+        and usage.get("estimated") is not True
+        and (result or {}).get("usage_estimated") is not True
+    )
+    verified = verified and ((result or {}).get("provider") in (None, "", call["provider"]))
+    verified = verified and ((result or {}).get("model") in (None, "", call["model"]))
+    if call["provider"] == "litellm":
+        call["gateway_attempts_verified"] = (result or {}).get("gateway_attempts_verified") is True
+        verified = verified and call["gateway_attempts_verified"]
+    if not verified:
+        call["status"] = "unknown"
+        state.update(halted=True, stop_reason="upstream_usage_unknown")
+    else:
+        prompt, completion = cast(int, prompt), cast(int, completion)
+        cost = _cost(prompt, completion, call["tariff"])
+        call.update(
+            status="settled",
+            actual_tokens=prompt + completion,
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            accrued_cost_cents=cost,
+            cost_basis="approved_tariff_accrual",
+        )
+        for key in ("response_id", "upstream_model"):
+            if isinstance(value := (result or {}).get(key), str) and value:
+                call[key] = value[:256]
+        if prompt + completion > call["reserved_tokens"] or cost > call["reserved_cost_cents"]:
+            state.update(halted=True, stop_reason="upstream_usage_exceeded_reservation")
+    call["completed_at"] = datetime.now(UTC).isoformat()

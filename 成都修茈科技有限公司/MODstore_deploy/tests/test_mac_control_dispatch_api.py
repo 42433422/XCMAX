@@ -3,10 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import UTC, datetime
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -159,17 +158,18 @@ def test_service_token_is_not_an_admin_credential(setup):
 
 
 @pytest.mark.parametrize("pool,tool", [(False, "codex"), (True, "codex"), (True, "opencode")])
-def test_original_pr_waits_for_its_approved_isolated_budget(setup, monkeypatch, pool, tool):
-    from modstore_server import customer_ticket_github as github
+def test_original_pr_waits_for_explicit_budget_even_with_shared_capacity(
+    setup, monkeypatch, pool, tool
+):
+    from modstore_server import customer_ticket_github as bridge
     from modstore_server import para_github_repair as repair
-    from modstore_server import strategic_remote_bridge as remote
+    from modstore_server import para_model_admission as admission
 
     client, factory = setup
-    monkeypatch.setattr(remote, "get_session_factory", lambda: factory)
     monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1" if tool == "opencode" else "0")
     monkeypatch.setenv("MODSTORE_PARA_PLATFORM_POOL", "1" if pool else "0")
     monkeypatch.setattr(
-        github,
+        bridge,
         "configuration",
         lambda: {
             "repository": "owner/repo",
@@ -177,21 +177,139 @@ def test_original_pr_waits_for_its_approved_isolated_budget(setup, monkeypatch, 
             "para_configured": True,
         },
     )
-    monkeypatch.setattr(repair, "_current_source", lambda *_: True)
-    monkeypatch.setattr(github, "github", lambda *_: pytest.fail("no unbudgeted workflow dispatch"))
-    monkeypatch.setattr(repair, "ParaClient", lambda **_: pytest.fail("no unbudgeted model task"))
-    payload = body(source_sha="a" * 40, github_issue=5, pull_request=7, source_run_id=99)
+    monkeypatch.setattr(
+        bridge, "github", lambda *_: pytest.fail("unapproved work cannot leave the service")
+    )
+    monkeypatch.setattr(
+        repair, "ParaClient", lambda **_: pytest.fail("unapproved work cannot create a worker")
+    )
+    monkeypatch.setattr(
+        admission,
+        "platform_model_admission",
+        lambda: pytest.fail("shared capacity grants no original budget"),
+    )
     route = "/api/service/mac-control/github-pr-tasks"
-    response = client.post(route, json=payload, headers=auth())
-    assert response.status_code == 202
-    task_id = response.json()["task"]["id"]
-    assert client.post(route, json=payload, headers=auth()).json()["task"]["id"] == task_id
+    payload = body(
+        source_sha="a" * 40, github_issue=5, pull_request=7, source_run_id=99, source_run_attempt=2
+    )
+    assert client.post(route, json=payload).status_code == 401
+    result = client.post(route, headers=auth(), json=payload)
+    assert result.status_code == 202, result.text
+    task = result.json()["task"]
+    assert task["executor"] == repair.REPAIR_KIND and task["state"] == "awaiting_approval"
+    with factory() as db:
+        original = db.get(MacControlTask, task["id"])
+        frozen = original.request_json, original.request_digest
+    repair.sync(factory)
+    assert client.post(route, headers=auth(), json=payload).json()["task"]["id"] == task["id"]
+    assert (
+        client.post(route, headers=auth(), json={**payload, "source_run_attempt": 3}).status_code
+        == 409
+    )
+    request_id = str(uuid.UUID(hex=task["id"]))
+    status = client.get(f"/api/service/mac-control/github-runs/{request_id}", headers=auth()).json()
+    assert status["status"] == "awaiting_approval" and status["source_run_attempt"] == 2
+    assert status["strategic_budget"] == status["publication_authorization"] == {}
+    with factory() as db:
+        original = db.get(MacControlTask, task["id"])
+        assert (original.request_json, original.request_digest) == frozen
+    for change in (
+        {"source_run_attempt": 0},
+        {"source_run_attempt": -1},
+        {"strategic_budget": {"approved": True}},
+    ):
+        assert client.post(route, headers=auth(), json={**payload, **change}).status_code == 422
+    del payload["source_run_attempt"]
+    assert client.post(route, headers=auth(), json=payload).status_code == 422
+
+
+def test_legacy_published_original_pr_remains_readback_only(setup, monkeypatch):
+    from modstore_server import customer_ticket_github as bridge
+    from modstore_server import para_github_repair as repair
+
+    client, factory = setup
+    branch, commit = "devfleet/original-legacy", "b" * 40
+    with factory() as db:
+        row = accept(
+            db,
+            actor=repair.REPAIR_ACTOR,
+            key="original-legacy",
+            request={
+                "source": repair.REPAIR_KIND,
+                "repository": "owner/repo",
+                "message": "old repair",
+                "github_issue": 5,
+                "pull_request": 7,
+                "source_run_id": 99,
+                "source_sha": "a" * 40,
+            },
+        )
+        task_id, request_id = row.id, str(uuid.UUID(hex=row.id))
+        row.state, row.para_task_id, row.attempt_id = "running", "para-old", "a" * 32
+        row.snapshot_json = json.dumps(
+            {
+                "runner_intent": True,
+                "run_id": 33,
+                "candidate": {
+                    "branch": branch,
+                    "commit_sha": commit,
+                    "request_id": request_id,
+                    "run_id": "33",
+                    "repository": "owner/repo",
+                    "base_sha": "a" * 40,
+                    "task_id": "para-old",
+                    "attempt_id": "a" * 32,
+                },
+            }
+        )
+        db.commit()
+    native = {
+        "id": 33,
+        "display_title": f"para-workspace-{request_id}",
+        "event": "workflow_dispatch",
+        "path": f".github/workflows/{repair.WORKFLOW}",
+        "head_branch": "main",
+        "head_sha": "c" * 40,
+        "run_attempt": 1,
+        "repository": {"full_name": "owner/repo"},
+        "status": "completed",
+        "conclusion": "success",
+    }
+    reads = []
+
+    def github(method, path, _body=None):
+        assert method == "GET"
+        reads.append(path)
+        if path.endswith("/runs/33"):
+            return native
+        if path.endswith("/runs/33/attempts/1/jobs?per_page=100"):
+            return {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 102,
+                        "run_id": 33,
+                        "run_attempt": 1,
+                        "head_sha": native["head_sha"],
+                        "name": "publish-candidate",
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ],
+            }
+        if path.endswith(f"/git/ref/heads/{branch}"):
+            return {"object": {"sha": commit}}
+        pytest.fail(f"unexpected legacy observation {path}")
+
+    monkeypatch.setattr(bridge, "github", github)
+    monkeypatch.setattr(
+        repair, "ParaClient", lambda **_: pytest.fail("legacy publication cannot dispatch again")
+    )
     repair.sync(factory)
     repair.sync(factory)
-    state = client.get(f"/api/service/mac-control/tasks/{task_id}", headers=auth()).json()["task"]
-    assert state["state"] == "waiting_device" and not state["terminal"]
-    assert state["reason"] == "original_pr_isolated_budget_required"
-    with factory() as session:
-        original = session.get(MacControlTask, task_id)
-        assert not original.attempt_id and not original.para_task_id
-        assert json.loads(original.snapshot_json) == {}
+    final = client.get(f"/api/service/mac-control/tasks/{task_id}", headers=auth()).json()["task"]
+    assert final["state"] == "execution_completed" and final["github_run_id"] == 33
+    assert final["execution"]["reports"][0]["report"]["commit_sha"] == commit
+    assert len(reads) == 3
+    with factory() as db:
+        assert "strategic_request" not in json.loads(db.get(MacControlTask, task_id).snapshot_json)

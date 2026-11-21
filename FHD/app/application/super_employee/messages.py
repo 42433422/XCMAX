@@ -26,7 +26,99 @@ class MessageSynchronizer:
     ) -> None:
         self._p, self._repository, self._ports = profile, repository, ports
 
+    def read_dispatch_receipt(
+        self, *, user_id: int, request_id: str, task_id: str
+    ) -> dict[str, Any] | None:
+        """Read one owned original dispatch without message backfills or execution."""
+        if not request_id:
+            return None
+        rows = [
+            row
+            for row in self._ports.read_rows()
+            if int(row.get("user_id") or 0) == int(user_id)
+            and row.get("dispatch_request_id") == request_id
+            and row.get("kind") == DISPATCHER_MESSAGE_KIND
+            and (not task_id or row.get("task_id") == task_id)
+        ]
+        if len(rows) > 1:
+            return None
+        original_id = str(rows[0].get("task_id") or "") if rows else ""
+        with self._repository.dispatch_lock(user_id, request_id):
+            request = self._repository.read_dispatch_request(user_id, request_id)
+            receipt = request.get("dispatch_receipt") if request else None
+            if request and isinstance(receipt, dict) and receipt.get("dispatcher") == "para_api":
+                if request.get("employee_id") != self._p.employee_id:
+                    return None
+                if receipt.get("pending_request_id") or receipt.get("status") in {
+                    "dispatching",
+                    "dispatch_unknown",
+                    "dispatch_pending",
+                }:
+                    receipt = self._ports.reconcile_dispatch(request)
+                original_id = str(receipt.get("task_id") or original_id)
+                if task_id and task_id != original_id:
+                    return None
+                if receipt.get("accepted") is not True:
+                    return {
+                        "dispatch": {
+                            "request_id": request_id,
+                            "task_id": original_id,
+                            "status": receipt.get("status", "dispatch_unknown"),
+                        },
+                        "assistant_message": {"body": self._ports.dispatch_reply(receipt)},
+                    }
+        if not original_id:
+            return None
+        task = self._ports.fetch_task(original_id)
+        if not task or str(task.get("id") or task.get("task_id") or "") != original_id:
+            return None
+        state = str(task.get("status") or "unknown")
+        state = {"merged": "completed", "merge_conflict": "blocked"}.get(state, state)
+        return {
+            "dispatch": {
+                "request_id": request_id,
+                "task_id": original_id,
+                "status": state,
+            },
+            "assistant_message": {"body": self._ports.task_reply(task)},
+        }
+
+    def _reconcile_pending_dispatches(self, *, user_id: int, rows: list[dict[str, Any]]) -> None:
+        changed = False
+        pending = [
+            row
+            for row in rows
+            if int(row.get("user_id") or 0) == int(user_id)
+            and row.get("kind") == DISPATCHER_MESSAGE_KIND
+            and row.get("dispatcher") == "para_api"
+            and row.get("status") in {"dispatching", "dispatch_unknown", "dispatch_pending"}
+        ]
+        for row in pending[-8:]:
+            recovered = self.read_dispatch_receipt(
+                user_id=user_id,
+                request_id=str(row.get("dispatch_request_id") or ""),
+                task_id=str(row.get("task_id") or ""),
+            )
+            if recovered is None:
+                continue
+            dispatch = recovered["dispatch"]
+            uncertain = dispatch["status"] in {
+                "dispatching",
+                "dispatch_unknown",
+                "dispatch_pending",
+            }
+            row.update(
+                task_id=dispatch["task_id"],
+                status=dispatch["status"],
+                reconciliation_required=uncertain,
+                body=recovered["assistant_message"]["body"],
+            )
+            changed = True
+        if changed:
+            self._ports.write_rows(rows)
+
     def sync_para_task_updates(self, *, user_id: int, rows: list[dict[str, Any]]) -> None:
+        self._reconcile_pending_dispatches(user_id=user_id, rows=rows)
         changed = False
         synced = 0
         direct_request_ids = {

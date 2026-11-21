@@ -147,6 +147,20 @@ def _ready_portfolio_tasks(record: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _goals_in_turn(state: dict[str, Any], domain: str) -> list[dict[str, Any]]:
+    """Rotate original bindings using SQL state, including zero-progress visits."""
+    goals = [
+        goal
+        for goal in state.get("goals", [])
+        if isinstance(goal, dict)
+        and goal.get("decision_id")
+        and goal.get("domain", "enterprise") == domain
+    ]
+    cursor = state.get("goal_cursors", {}).get(domain)
+    index = next((i + 1 for i, goal in enumerate(goals) if goal.get("id") == cursor), 0)
+    return goals[index:] + goals[:index]
+
+
 def _cycle_reservation(state: dict[str, Any], domain: str) -> int:
     """Cover any ready company choice; the store still clamps each approved lane."""
     from modstore_server.strategic_portfolio import PortfolioError, portfolio_status
@@ -154,9 +168,7 @@ def _cycle_reservation(state: dict[str, Any], domain: str) -> int:
     owner = state.get("owner_user_id")
     if type(owner) is not int or owner <= 0:
         return 32768
-    for goal in state.get("goals", []):
-        if not goal.get("decision_id") or goal.get("domain", "enterprise") != domain:
-            continue
+    for goal in _goals_in_turn(state, domain):
         if goal.get("status") in {"completed", "failed", "stopped"}:
             continue
         try:
@@ -206,11 +218,7 @@ class CyclePorts:
     def approved_portfolio(self) -> dict[str, Any] | None:
         from modstore_server.strategic_portfolio import PortfolioError, portfolio_status
 
-        for goal in self.state.get("goals", []):
-            if not isinstance(goal, dict) or not goal.get("decision_id"):
-                continue
-            if goal.get("domain", "enterprise") != self.domain:
-                continue
+        for goal in _goals_in_turn(self.state, self.domain):
             if goal.get("status") in {"completed", "failed", "stopped"}:
                 continue
             try:
@@ -236,6 +244,10 @@ class CyclePorts:
         self.active()
         portfolio = self.approved_portfolio()
         if portfolio is not None:
+            self.details["portfolio_selection"] = {
+                "goal_id": portfolio["goal"]["id"],
+                "decision_id": portfolio["goal"]["decision_id"],
+            }
             return {"portfolio": portfolio, "facts": []}
         from modstore_server import xiaoc_life_evolution as evolution
 

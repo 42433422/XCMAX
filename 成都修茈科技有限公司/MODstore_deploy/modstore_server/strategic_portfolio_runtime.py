@@ -443,6 +443,12 @@ def _execute(task: dict[str, Any]) -> dict[str, Any]:
             from modstore_server.strategic_remote_bridge import dispatch_report
             from modstore_server.strategic_workspace_bridge import KIND, attach_workspace
 
+            if task["input_data"]["remote_execution"].get("kind") == "original_pr_repair":
+                from modstore_server.para_github_repair import (
+                    attach_workspace as attach_original_pr,
+                )
+
+                return attach_original_pr(task)
             if task["input_data"]["remote_execution"].get("kind") == KIND:
                 return attach_workspace(task)
             return dispatch_report(task)
@@ -473,27 +479,56 @@ def _finish(
         remote_record = None
         allowed_statuses = {"running"}
         if remote_receipt is not None:
-            from modstore_server.strategic_remote_bridge import KIND, _row
+            from modstore_server.strategic_remote_bridge import KIND, _row, _snapshot
             from modstore_server.strategic_workspace_bridge import KIND as WORKSPACE_KIND
 
             remote_record = _row(session, remote_receipt[0])
             binding = saved.get("worker_binding") or {}
             if (
-                binding.get("adapter") not in {KIND, WORKSPACE_KIND}
+                binding.get("adapter") not in {KIND, WORKSPACE_KIND, "original_pr_repair"}
                 or binding.get("receipt_id") != remote_receipt[0]
             ):
                 raise PortfolioError("remote completion does not own its worker binding")
-            if remote_record.state in {"execution_completed", "failed"}:
+            original_pr = binding.get("adapter") == "original_pr_repair"
+            if remote_record.state in {"execution_completed", "failed"} and not (
+                original_pr
+                and remote_record.state == "execution_completed"
+                and saved["status"] == "waiting"
+            ):
                 return
-            if digest(json.loads(remote_record.snapshot_json)) != remote_receipt[1]:
+            if digest(_snapshot(remote_record, saved)) != remote_receipt[1]:
                 raise PortfolioError("remote completion changed during artifact readback")
             if binding.get("adapter") == WORKSPACE_KIND:
                 from modstore_server.strategic_workspace_receipts import validate_terminal
 
                 validate_terminal(session, json.loads(remote_record.request_json), result)
+            elif binding.get("adapter") == "original_pr_repair":
+                from modstore_server.strategic_remote_bridge import _request
+                from modstore_server.strategic_workspace_receipts import validate_terminal
+
+                if result.get("remote_receipt", {}).get("stage") == "not_dispatched" and (
+                    saved["calls"]
+                    or any(
+                        saved.get("remote_state", {}).get(key)
+                        for key in ("phases", "phase", "model_grant", "task_grants")
+                    )
+                ):
+                    raise PortfolioError(
+                        "original PR has admitted model work pending reconciliation"
+                    )
+                validate_terminal(session, _request(remote_record), result)
             allowed_statuses.add("waiting")
         if saved["lease_token"] != task["lease_token"] or saved["status"] not in allowed_statuses:
             raise PortfolioError("execution completion does not own its lease")
+        calls = list(saved["calls"].values())
+        unknown_usage = any(call["status"] != "settled" for call in calls)
+        if remote_record is not None and unknown_usage:
+            # The model reader and native receipt reader can race. Check inside
+            # this CAS, before changing the original worker or remote terminal,
+            # so accounting can later finish this same execution without replay.
+            if not state.get("halted"):
+                state.update(halted=True, stop_reason="upstream_usage_unknown")
+            return
         from modstore_server.cred_vault import redact
         from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
 
@@ -512,8 +547,6 @@ def _finish(
             ok, reason = False, "downstream_execution_receipt_pending"
             if not bound_worker:
                 state.update(halted=True, stop_reason=reason)
-        calls = list(saved["calls"].values())
-        unknown_usage = any(call["status"] != "settled" for call in calls)
         if unknown_usage:
             state.update(halted=True, stop_reason="upstream_usage_unknown")
         if elapsed > saved["reservation"]["compute_seconds"]:
@@ -562,16 +595,21 @@ def _finish(
             None if saved["status"] in {"waiting", "unknown"} else datetime.now(UTC)
         )
         action.updated_at = datetime.now(UTC)
-        action.result_json, action.block_reason = _json(saved), "" if ok else reason[:500]
         if remote_record is not None:
             # The original task and its native transport acknowledgement commit
             # together, so a restart cannot replay or overwrite a terminal report.
-            remote_record.state = (
-                "execution_completed" if saved["status"] == "completed" else "failed"
-            )
+            if binding.get("adapter") == "original_pr_repair":
+                from modstore_server.strategic_workspace_receipts import project_pr_receipt
+
+                project_pr_receipt(remote_record, saved, result)
+            else:
+                remote_record.state = (
+                    "execution_completed" if saved["status"] == "completed" else "failed"
+                )
             remote_record.updated_at = time.time()
-            if prior_stop[0]:
+            if prior_stop[0] and prior_stop[1] != "upstream_usage_unknown":
                 state.update(halted=True, stop_reason=prior_stop[1])
+        action.result_json, action.block_reason = _json(saved), "" if ok else reason[:500]
 
     mutate_portfolio(task["decision_id"], apply)
 

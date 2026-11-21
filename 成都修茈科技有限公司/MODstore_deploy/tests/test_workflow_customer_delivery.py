@@ -23,7 +23,6 @@ from modstore_server import customer_value_lifecycle_api as customer_api
 from modstore_server import retort_feedback_experiments as lifecycle
 from modstore_server import workflow_customer_delivery as delivery
 from modstore_server.api.deps import get_current_user
-from modstore_server.customer_service_tools import json_loads
 from modstore_server.models import (
     CatalogItem,
     CustomerValueReceipt,
@@ -31,6 +30,7 @@ from modstore_server.models import (
     User,
     Workflow,
     WorkflowExecution,
+    WorkflowNode,
     get_session_factory,
 )
 from modstore_server.retort_experiment_surfaces import WORKFLOW_CUSTOMER_MEASUREMENT
@@ -298,6 +298,41 @@ def _accept(env, **overrides):
     )
 
 
+def test_customer_generation_prompt_and_existing_graph_schema_preserve_delivery_scope(
+    customer_workflow, monkeypatch
+):
+    from modstore_server import workflow_nl_graph as generator
+
+    env, messages = customer_workflow, []
+    dispatch = generator.chat_dispatch_via_session
+
+    async def capture(*args, **kwargs):
+        messages.append(deepcopy(args[4]))
+        return await dispatch(*args, **kwargs)
+
+    monkeypatch.setattr(generator, "chat_dispatch_via_session", capture)
+    env["run"]["graph"]["nodes"][1]["config"]["customer_deliverables"] = ["outputs/output.csv"]
+    for owner in (env["customer_id"], env["run"]["outsider"]):
+        with get_session_factory()() as db:
+            workflow = Workflow(user_id=owner, name="Explicit required customer file")
+            db.add(workflow)
+            db.flush()
+            workflow_id = workflow.id
+            db.commit()
+        generated = asyncio.run(env["run"]["generate"](owner, workflow_id=workflow_id))
+        assert generated["ok"] and generated["sandbox_ok"], generated
+        assert (generator.CUSTOMER_DELIVERY_REQUIREMENTS in messages[-1][1]["content"]) is (
+            owner == env["customer_id"]
+        )
+        with get_session_factory()() as db:
+            node = db.scalar(
+                select(WorkflowNode).where(
+                    WorkflowNode.workflow_id == workflow_id, WorkflowNode.node_type == "employee"
+                )
+            )
+            assert json.loads(node.config)["customer_deliverables"] == ["outputs/output.csv"]
+
+
 def test_native_workflow_original_customer_downloads_then_explicitly_accepts(customer_workflow):
     env = customer_workflow
     result = env["execute"]()
@@ -347,7 +382,7 @@ def test_existing_customer_receipt_api_rejects_unrelated_or_changed_workflow_art
     env = customer_workflow
     response = env["execute"]()
     assert response.status_code == 200, response.text
-    path = env["workspace"] / env["artifact"]["output_path"]
+    path = delivery._artifact_snapshot_path(env["binding"]["customer_delivery"], env["artifact"])
     overrides = {}
     if change == "bytes":
         path.write_bytes(b"later overwritten CSV")
@@ -421,6 +456,51 @@ def test_completed_native_node_cannot_be_replayed(customer_workflow):
             )
             == 1
         )
+
+
+def test_next_execution_cannot_replace_original_download_or_customer_outcome(customer_workflow):
+    from tests.test_retort_workflow_customer import business_receipts, mature
+
+    env = customer_workflow
+    assert env["execute"]().status_code == 200
+    first_artifact = deepcopy(env["artifact"])
+    first_execution = env["execution_id"]
+    first_bytes = (env["workspace"] / first_artifact["output_path"]).read_bytes()
+    business_receipts(env)
+    source = env["workspace"] / "inputs/orders.json"
+    data = json.loads(source.read_text())
+    data["rows"][0]["quantity"] = 17
+    source.write_text(json.dumps(data))
+    assert env["execute"]().status_code == 200
+    second_bytes = (env["workspace"] / first_artifact["output_path"]).read_bytes()
+    assert first_bytes != second_bytes
+    # Removing the mutable workspace output also cannot remove either sealed file.
+    (env["workspace"] / first_artifact["output_path"]).unlink()
+    listing = env["http"].get("/api/customer-value/workflow-deliveries", params=_query(env))
+    assert listing.status_code == 200 and len(listing.json()["items"]) == 2, listing.text
+    downloads = {
+        row["artifact_id"]: env["http"].get(row["download_url"]) for row in listing.json()["items"]
+    }
+    assert downloads[first_artifact["artifact_id"]].status_code == 200
+    assert downloads[first_artifact["artifact_id"]].content == first_bytes
+    assert downloads[env["artifact"]["artifact_id"]].content == second_bytes
+    observed = {row["execution_id"]: row["success"] for row in mature(env)}
+    assert observed == {first_execution: True, env["execution_id"]: False}
+
+
+def test_private_snapshot_retry_checks_existing_bytes_without_replacing_them(customer_workflow):
+    env = customer_workflow
+    assert env["execute"]().status_code == 200
+    contract, artifact = env["binding"]["customer_delivery"], env["artifact"]
+    original = {key: value for key, value in artifact.items() if key != "storage"}
+    assert delivery._snapshot_artifact(contract, original) == artifact
+    (env["workspace"] / artifact["output_path"]).write_bytes(b"later mutable output")
+    assert delivery._snapshot_artifact(contract, original) == artifact
+    path = delivery._artifact_snapshot_path(contract, artifact)
+    path.write_bytes(b"corrupted previously published snapshot")
+    with pytest.raises(ValueError, match="bytes changed"):
+        delivery._snapshot_artifact(contract, original)
+    assert path.read_bytes() == b"corrupted previously published snapshot"
 
 
 def test_real_native_bytes_with_pending_receipt_are_not_customer_delivery(

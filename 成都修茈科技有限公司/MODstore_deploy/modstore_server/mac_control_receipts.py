@@ -50,6 +50,7 @@ def cancellation_intent(db, task):
 
 def _bound_subtask(task, body):
     snapshot = json.loads(task.snapshot_json)
+    target = snapshot.get("cancellation_target")
     matches = [
         sub
         for sub in snapshot.get("subtasks", [])
@@ -62,6 +63,18 @@ def _bound_subtask(task, body):
         and len(matches) == 1
         and matches[0].get("device_id") == body.device_id
         and matches[0].get("tool_name") == "codex"
+        and type(matches[0].get("attempt_count")) is int
+        and matches[0]["attempt_count"] == 0
+        and (
+            not target
+            or (
+                isinstance(target, dict)
+                and target.get("subtask_id") == body.subtask_id
+                and target.get("device_id") == body.device_id
+                and type(target.get("attempt")) is int
+                and target["attempt"] == 1
+            )
+        )
     )
 
 
@@ -160,6 +173,9 @@ def confirmed_cancellation(db, task, raw):
         if (
             sub.get("status") != "failed"
             or sub.get("device_id") != task.device_id
+            or sub.get("tool_name") != "codex"
+            or type(sub.get("attempt_count")) is not int
+            or sub["attempt_count"] != 0
             or sub["id"] not in evidence
         ):
             return None

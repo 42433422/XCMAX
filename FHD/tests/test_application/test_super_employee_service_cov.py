@@ -351,7 +351,7 @@ class TestDispatchToPara:
             health_resp = MagicMock()
             health_resp.status_code = 200
             health_resp.content = b"ok"
-            health_resp.json.return_value = {}
+            health_resp.json.return_value = {"task_request_recovery_version": 1}
             devices_resp = MagicMock()
             devices_resp.status_code = 200
             devices_resp.content = b"x"
@@ -366,6 +366,8 @@ class TestDispatchToPara:
         )
         assert result is not None
         assert result["queued"] is True
+        assert result["status"] == "queued"
+        assert reason == "para_no_online_codex_device"
 
     def test_general_exception_goes_to_outbox(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")

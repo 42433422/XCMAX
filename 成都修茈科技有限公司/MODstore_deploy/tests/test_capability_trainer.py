@@ -45,7 +45,7 @@ def test_append_cases_is_idempotent(tmp_path):
     persisted = json.loads(rows[0])
     assert "employee_id" not in persisted
     assert persisted["surface"] == "employee_prompt"
-    assert persisted["resource_id"] == "daily-orchestrator"
+    assert "resource_id" not in persisted
     assert persisted["task"] == "任务正文"
     assert persisted["case_id"] == first[0]["case_id"]
     # Existing corpora keep their original identity/hash and are not rewritten.

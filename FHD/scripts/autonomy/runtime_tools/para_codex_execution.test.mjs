@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,10 +24,12 @@ async function waitFor(check, diagnostics, timeout = 10000) {
 /** The device transport and model are local test doubles; the actual agent, CLI subprocess,
  * workspace clone, git publication, claim file and report outbox all run unmodified. */
 async function worker(t, { mode, entry = 'para_e2e_agent.mjs', reportOnly = false, managed = false,
-  control = false, cancelBeforeStart = false, env = {} }) {
+  loseCancellationAck = false, control = false, cancelBeforeStart = false, env = {} }) {
   const root = mkdtempSync(join(tmpdir(), 'para-codex-contract-'));
   const source = join(root, 'source'), remote = join(root, 'remote.git'), workspaceRoot = join(root, 'workspaces');
   const callsFile = join(root, 'calls.jsonl'), transport = join(root, 'transport.jsonl'), taskFile = join(root, 'task.json');
+  const controlFile = join(root, 'control.jsonl');
+  writeFileSync(controlFile, '');
   const modules = join(root, 'modules'), home = join(root, 'home'), codex = join(root, 'codex');
   for (const path of [source, home, join(modules, 'ws')]) mkdirSync(path, { recursive: true });
   git(source, 'init', '-q', '-b', 'main');
@@ -48,8 +50,16 @@ async function worker(t, { mode, entry = 'para_e2e_agent.mjs', reportOnly = fals
       static OPEN=1;
       constructor() { super(); this.readyState=1; let previous=fs.readFileSync(process.env.FIXTURE_TASK_FILE,'utf8');
         setImmediate(()=>{ this.emit('open'); setImmediate(()=>this.emit('message',previous)); });
-        setInterval(()=>{ const next=fs.readFileSync(process.env.FIXTURE_TASK_FILE,'utf8');
-          if(next!==previous) { previous=next; this.emit('message',next); } },25);
+        let seen=0; setInterval(()=>{
+          const next=fs.readFileSync(process.env.FIXTURE_TASK_FILE,'utf8');
+          if(next!==previous) { previous=next; this.emit('message',next); }
+          const messages=fs.readFileSync(process.env.FIXTURE_CONTROL_FILE,'utf8').split('\\n').filter(Boolean);
+          for(const row of messages.slice(seen)) {
+            this.emit('message',row);
+            fs.writeFileSync(process.env.FIXTURE_CONTROL_OBSERVED,'received');
+          }
+          seen=messages.length;
+        },20);
       }
       send(value) { fs.appendFileSync(process.env.FIXTURE_TRANSPORT,value+'\\n'); }
     };`);
@@ -58,7 +68,11 @@ async function worker(t, { mode, entry = 'para_e2e_agent.mjs', reportOnly = fals
     if(process.argv.includes('--version')) {
       if(${JSON.stringify(mode)}==='shutdown-before-start') {
         fs.writeFileSync(${JSON.stringify(join(root, 'version-wait'))},'waiting');
-        setTimeout(()=>{ console.log('codex-cli 0.153.4'); process.exit(0); },1000);
+        // Hold the launch probe until the WebSocket handler consumed the stop.
+        // A process shutdown instead lets the real probe deadline release it.
+        setInterval(()=>{ if(fs.existsSync(${JSON.stringify(join(root, 'control-observed'))})) {
+          console.log('codex-cli 0.153.4'); process.exit(0);
+        } },10);
       } else { console.log('codex-cli 0.153.4'); process.exit(0); }
       return;
     }
@@ -95,6 +109,7 @@ async function worker(t, { mode, entry = 'para_e2e_agent.mjs', reportOnly = fals
     else process.exit(1);`, { mode: 0o700 });
   const reports = [];
   const controlReports = [];
+  const controlCommands = [];
   let cancelRequested = cancelBeforeStart, loseCancelAck = false;
   const server = createServer(async (request, response) => {
     if (request.url.includes('/pending-task')) { response.setHeader('content-type', 'application/json'); response.end('{"task":null}'); return; }
@@ -108,17 +123,22 @@ async function worker(t, { mode, entry = 'para_e2e_agent.mjs', reportOnly = fals
           .map(field => [field, receipt[field]])),
       } : null;
       if (command && loseCancelAck) { loseCancelAck = false; response.destroy(); return; }
+      if (command) controlCommands.push(command);
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ accepted: true, control: command })); return;
     }
     assert.equal(request.headers.authorization, 'Bearer fixture-device-token');
     reports.push(JSON.parse(body));
+    if (loseCancellationAck && reports.at(-1).status === 'cancelled') {
+      loseCancellationAck = false; request.socket.destroy(); return;
+    }
     response.setHeader('content-type', 'application/json'); response.end('{"accepted":true}');
   });
   await once(server.listen(0, '127.0.0.1'), 'listening');
   let output = '', child;
   const childEnv = { PATH: process.env.PATH, HOME: home, SystemRoot: process.env.SystemRoot,
-    NODE_PATH: modules, FIXTURE_TASK_FILE: taskFile, FIXTURE_TRANSPORT: transport,
+    NODE_PATH: modules, FIXTURE_TASK_FILE: taskFile, FIXTURE_TRANSPORT: transport, FIXTURE_CONTROL_FILE: controlFile,
+    FIXTURE_CONTROL_OBSERVED: join(root, 'control-observed'),
     DEVFLEET_DEVICE_TOKEN: 'fixture-device-token', DEVFLEET_API_URL: `http://127.0.0.1:${server.address().port}`,
     DEVFLEET_WORKSPACE_ROOT: workspaceRoot, DEVFLEET_BARE_REPO: join(root, 'fallback.git'),
     DEVFLEET_CODEX_AGENT: codex, DEVFLEET_TRAE_AGENT: alternative,
@@ -140,11 +160,12 @@ async function worker(t, { mode, entry = 'para_e2e_agent.mjs', reportOnly = fals
     const forced = setTimeout(() => child.kill('SIGKILL'), 8000);
     try { await ended; } finally { clearTimeout(forced); }
   };
-  t.after(async () => { await stop(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await stop(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); });
   start();
   const workspace = join(managed ? join(home, 'XCMAX-runtime', 'control-workspaces') : workspaceRoot, id + '-subtask-1');
   const terminal = async (timeout = 10000) => {
-    if (managed || reportOnly) return waitFor(() => reports.find(row => ['completed', 'failed'].includes(row.status)), () => output, timeout);
+    if (managed || reportOnly) return waitFor(() => reports.find(row => ['completed', 'failed', 'cancelled'].includes(row.status)), () => output, timeout);
     const result = await waitFor(() => rows(transport).find(row => row.type === 'task_progress'
       && ['completed', 'failed'].includes(row.status)), () => output, timeout);
     if (result.status === 'failed') await waitFor(() => reports.some(row => row.status === 'failed'), () => output);
@@ -160,8 +181,13 @@ async function worker(t, { mode, entry = 'para_e2e_agent.mjs', reportOnly = fals
     writeFileSync(taskFile, JSON.stringify(next)); return next;
   };
   return { root, task, base, remote, workspace, reports, receipt, terminal, stop, start, submitNext,
-    controlReports, cancel: (loseAck = false) => { cancelRequested = true; loseCancelAck = loseAck; },
+    controlReports, controlCommands,
+    requestControlStop: (loseAck = false) => { cancelRequested = true; loseCancelAck = loseAck; },
     calls: () => rows(callsFile), messages: () => rows(transport), diagnostics: () => output,
+    cancel: overrides => appendFileSync(controlFile, JSON.stringify({ type: 'cancel_task',
+      cancellation_id: 'c'.repeat(64), device_id: 'fixture-device', task_id: task.task_id,
+      subtask_id: task.subtask_id, attempt: task.attempt, ...overrides }) + '\n'),
+    clearControl: () => writeFileSync(controlFile, ''),
     signal: value => child.kill(value) };
 }
 
@@ -243,11 +269,81 @@ test('shutdown during the version probe cannot fall through to an alternate exec
     DEVFLEET_TOOL_FALLBACK_ORDER: 'codex,trae', DEVFLEET_TOOL_FALLBACK_ON: 'any',
   } });
   await waitFor(() => existsSync(join(current.root, 'version-wait'))
-    && current.messages().some(row => row.type === 'task_progress' && row.progress === 40), current.diagnostics);
+    && current.messages().some(row => row.type === 'task_log' && row.content.includes('model attempt:')), current.diagnostics);
   current.signal('SIGTERM');
   assert.equal((await current.terminal()).status, 'failed');
   assert.equal(current.calls().length, 0);
   assert.equal(existsSync(join(current.root, 'replayed')), false);
+});
+
+test('remote cancellation fences the original attempt, stops its native process and replays only a lost receipt ACK', native, async t => {
+  const current = await worker(t, { mode: 'shutdown', managed: true, loseCancellationAck: true });
+  const heartbeatPath = join(current.workspace, 'heartbeat');
+  await waitFor(() => existsSync(heartbeatPath), current.diagnostics);
+  current.cancel({ ...current.task, attempt: 2 });
+  current.cancel({ attempt: 2 });
+  await delay(100);
+  const heartbeat = readFileSync(heartbeatPath, 'utf8');
+  await delay(60);
+  assert.ok(readFileSync(heartbeatPath, 'utf8').length > heartbeat.length, 'another attempt cannot stop this process');
+  assert.equal(current.reports.some(row => row.status === 'cancelled'), false);
+  current.cancel();
+  const stopped = await current.terminal();
+  assert.equal(stopped.status, 'cancelled');
+  assert.equal(stopped.attempt, 1, 'a duplicate execute frame cannot rebind the original receipt stream');
+  assert.equal(JSON.parse(stopped.report).process_stopped, true);
+  assert.equal(JSON.parse(stopped.report).execution_started, true);
+  assert.equal(current.receipt().reason, 'codex_cancelled');
+  assert.equal(current.receipt().status, 'unknown', 'stopped execution does not prove its effects were undone');
+  const pid = current.calls().find(row => !row.probe).pid;
+  assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+  const frozen = readFileSync(heartbeatPath, 'utf8');
+  await waitFor(() => current.reports.filter(row => row.event_id === stopped.event_id).length === 2, current.diagnostics);
+  assert.equal(readFileSync(heartbeatPath, 'utf8'), frozen);
+  assert.equal(current.calls().filter(row => !row.probe).length, 1);
+  assert.equal(git(current.remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/devfleet'), '');
+  await current.stop();
+  current.clearControl(); // A new connection recovers the original task, not stale synthetic frames.
+  current.start();
+  await waitFor(() => current.reports.some(row => row.status === 'running'
+    && row.report.includes('executor_restart_requires_reconciliation')), current.diagnostics);
+  assert.equal(current.calls().filter(row => !row.probe).length, 1, 'restart cannot replay the cancelled attempt');
+});
+
+test('remote cancellation while probing never launches the real executor or a fallback', native, async t => {
+  const current = await worker(t, { mode: 'shutdown-before-start', managed: true, env: {
+    DEVFLEET_TOOL_FALLBACK_ORDER: 'codex,trae', DEVFLEET_TOOL_FALLBACK_ON: 'any',
+  } });
+  await waitFor(() => existsSync(join(current.root, 'version-wait'))
+    && current.messages().some(row => row.type === 'task_log' && row.content.includes('model attempt:')), current.diagnostics);
+  current.cancel();
+  const result = await current.terminal();
+  assert.equal(result.status, 'cancelled');
+  assert.equal(JSON.parse(result.report).status, 'not_started');
+  assert.equal(current.calls().length, 0);
+  assert.equal(existsSync(join(current.root, 'replayed')), false);
+});
+
+test('both original cancellation channels stop one attempt and retain both durable proofs', { ...native, timeout: 30000 }, async t => {
+  const current = await worker(t, { mode: 'remote-cancel', managed: true, control: true,
+    env: { DEVFLEET_AI_AGENT_TIMEOUT_MS: '30000' } });
+  await waitFor(() => existsSync(join(current.workspace, 'heartbeat')), current.diagnostics);
+  current.requestControlStop();
+  await waitFor(() => current.controlCommands.length, current.diagnostics);
+  current.cancel({ device_id: 'mac' });
+  const report = await current.terminal(18000);
+  assert.equal(report.status, 'cancelled');
+  assert.equal(JSON.parse(report.report).source, 'para_task_cancellation');
+  assert.equal(JSON.parse(report.report).execution_started, true);
+  const proof = current.controlReports.find(row => row.cancellation);
+  assert.equal(proof.cancellation.intent_id, 'd'.repeat(64));
+  assert.equal(proof.cancellation.outcome, 'process_exited');
+  assert.equal(proof.cancellation.usage_status, 'unknown');
+  assert.equal(current.receipt().reason, 'codex_cancelled');
+  assert.equal(current.reports.filter(row => ['failed', 'completed', 'cancelled'].includes(row.status)).length, 1);
+  assert.equal(current.calls().filter(row => !row.probe).length, 1);
+  assert.throws(() => process.kill(current.calls().find(row => !row.probe).pid, 0), { code: 'ESRCH' });
+  assert.equal(git(current.remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/devfleet'), '');
 });
 
 test('remote original stop waits for native process exit, keeps unknown usage, and allows independent task B', { ...native, timeout: 30000 }, async t => {
@@ -257,7 +353,7 @@ test('remote original stop waits for native process exit, keeps unknown usage, a
     env: { DEVFLEET_AI_AGENT_TIMEOUT_MS: '30000' } });
   const heartbeatPath = join(current.workspace, 'heartbeat');
   await waitFor(() => existsSync(heartbeatPath), current.diagnostics);
-  current.cancel(true); // One authenticated command response is lost.
+  current.requestControlStop(true); // One authenticated command response is lost.
   assert.equal((await current.terminal(18000)).status, 'failed');
   const proof = await waitFor(() => current.controlReports.find(row => row.cancellation), current.diagnostics);
   assert.equal(proof.task_id, current.task.task_id);
@@ -294,7 +390,7 @@ test('a non-Codex override cannot claim not_started or a native cancellation rec
   const current = await worker(t, { mode: 'override-cancel', managed: true, control: true,
     env: { DEVFLEET_FORCE_TRAE: '1' } });
   await waitFor(() => existsSync(join(current.root, 'replayed')), current.diagnostics);
-  current.cancel();
+  current.requestControlStop();
   const report = await current.terminal();
   assert.equal(report.status, 'failed');
   const evidence = JSON.parse(report.report);

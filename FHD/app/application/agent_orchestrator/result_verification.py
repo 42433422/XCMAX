@@ -87,7 +87,7 @@ def freeze_verification_contract(
         "output_schema": copy.deepcopy(spec.output_schema) if spec else {},
     }
     if step.tool_id == "sales":
-        from app.application.agent_orchestrator.verification_sales import (
+        from app.application.agent_orchestrator.verification_transactions import (
             SALES_ACTIONS,
             capture_sales_baseline,
         )
@@ -98,6 +98,14 @@ def freeze_verification_contract(
         from app.application.kellai_binding_app_service import connection_identity_sha256
 
         contract["kellai_connection_sha256"] = connection_identity_sha256()
+    if step.tool_id == "purchase":
+        from app.application.agent_orchestrator.verification_transactions import (
+            PURCHASE_ACTIONS,
+            capture_purchase_baseline,
+        )
+
+        if step.action in PURCHASE_ACTIONS:
+            contract["authority_baseline"] = capture_purchase_baseline(run, step, context)
     from app.application.agent_orchestrator.verification_surface import (
         capture_surface_acceptance,
         supports_surface_verification,

@@ -140,7 +140,7 @@ def transition(
 
 def request_cancellation(db: Session, task: MacControlTask, *, commit: bool = True) -> str:
     if task.state not in TERMINAL and task.state != "cancel_requested":
-        # Without an exact executor stop command, started work requires readback.
+        # The worker sends an exact attempt stop command; acceptance is not stop confirmation.
         started = bool(task.attempt_id or task.para_task_id)
         transition(
             db,

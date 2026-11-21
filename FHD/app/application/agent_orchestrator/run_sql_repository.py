@@ -174,7 +174,10 @@ def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
         return {
             key: item
             for key, item in (value.metadata.get("runtime_context") or {}).items()
-            if key not in {"run_id", "agent_run_id"}
+            # Tool observations are appended while registered child runs write
+            # their original parent links. They do not create a new authority
+            # generation or authorize discarding those concurrent receipts.
+            if key not in {"run_id", "agent_run_id", "untrusted_sources", "context_summary"}
         }
 
     return (run.run_id, run.user_id, run.created_at, context(run)) == (

@@ -14,7 +14,11 @@ from . import config
 
 
 def _employee_result_ok(result: Dict[str, Any]) -> bool:
-    if not execution_succeeded(result) or result.get("handler_failed") or execution_requires_reconciliation(result):
+    if (
+        not execution_succeeded(result)
+        or result.get("handler_failed")
+        or execution_requires_reconciliation(result)
+    ):
         return False
     report_text = _extract_report_excerpt(result).lower()
     if "blocked by risk middleware" in report_text:

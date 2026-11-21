@@ -18,6 +18,7 @@ from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_value_classification import parse_datetime
 from modstore_server.models import RetortEvolutionRun, User, get_session_factory
 from modstore_server.retort_experiment_surfaces import (
+    RAG_MEASUREMENT,
     WORKFLOW_CUSTOMER_MEASUREMENT,
     WORKFLOW_EXECUTION_MEASUREMENT,
     surface_identity,
@@ -37,8 +38,8 @@ def _identity():
 def select_variant(*, surface, resource_id, subject_id, default_value, workflow_id=None):
     """Reusable surface contract: return an actual value plus a private observation handle.
 
-    Only employee cognition and the owned-workflow generator have consumers.
-    The latter's static-validation observation is distinct from business execution.
+    Employee cognition, owned-workflow generation and RAG context have consumers.
+    Static validation and RAG citation integrity are distinct from business execution.
     """
     if not resource_id:
         return default_value, None
@@ -96,7 +97,10 @@ def select_variant(*, surface, resource_id, subject_id, default_value, workflow_
                 and progress.get("decision") == "promote"
                 and progress.get("rollout_verified") is True
             ):
-                if life.get("measurement_scope") == WORKFLOW_CUSTOMER_MEASUREMENT:
+                if life.get("measurement_scope") in {
+                    WORKFLOW_CUSTOMER_MEASUREMENT,
+                    RAG_MEASUREMENT,
+                }:
                     value = life["treatment_prompt"]
                     return value, {
                         "request_id": row.id,
@@ -108,7 +112,7 @@ def select_variant(*, surface, resource_id, subject_id, default_value, workflow_
                         "surface": surface,
                         "resource_id": resource_id,
                         "workflow_id": workflow_id,
-                        "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+                        "measurement_scope": life["measurement_scope"],
                         "release_sha": progress["release_sha"],
                         "policy_digest": progress["policy_digest"],
                         "value_sha256": hashlib.sha256(value.encode()).hexdigest(),
@@ -168,8 +172,67 @@ def select_variant(*, surface, resource_id, subject_id, default_value, workflow_
                 assignment.update(
                     workflow_id=workflow_id, measurement_scope=life["measurement_scope"]
                 )
+            elif surface == "rag_context_prompt":
+                assignment["measurement_scope"] = RAG_MEASUREMENT
             return result.value, assignment
     return default_value, None
+
+
+def require_live_assignment(db, assignment):
+    """Recheck original authority and lease at the consumer's actual outbound boundary."""
+    row = db.get(RetortEvolutionRun, assignment["request_id"], populate_existing=True)
+    if row is None:
+        raise ValueError("experiment_assignment_unavailable")
+    policy, effects = approved_policy(row)
+    life, progress = policy["lifecycle"], effects.get("experiment") or {}
+    current, expected = _identity(), progress.get("identity") or {}
+    subject = assignment["user_id"]
+    user = db.get(User, subject, populate_existing=True)
+    end, lease = parse_datetime(progress.get("exposure_ends_at")), parse_datetime(
+        progress.get("lease_until")
+    )
+    rollout = assignment.get("assignment_stage") == "approved_rollout"
+    current_traffic = (
+        progress.get("traffic") == "candidate"
+        and progress.get("decision") == "promote"
+        and progress.get("rollout_verified") is True
+        and assignment.get("variation_id") == "1"
+        if rollout
+        else (
+            progress.get("traffic") == "experiment"
+            and end
+            and lease
+            and datetime.now(UTC) < min(end, lease)
+        )
+    )
+    if (
+        traffic_block_reason(db, row, effects)
+        or not os.getenv("MODSTORE_RETORT_GROWTHBOOK_URL")
+        or user is None
+        or user.deleted_at is not None
+        or getattr(user, "is_active", True) is False
+        or user.account_state in {"disabled", "suspended", "blocked", "deleted"}
+        or subject not in life["cohort_user_ids"]
+        or str(subject) != assignment["subject_id"]
+        or surface_identity(life) != (assignment["surface"], assignment["resource_id"])
+        or progress.get("experiment_id") != assignment["experiment_id"]
+        or progress.get("policy_digest") != assignment["policy_digest"]
+        or progress.get("release_sha") != assignment["release_sha"]
+        or not expected.get("git_sha")
+        or any(
+            current.get(k, "") != expected.get(k, "")
+            for k in ("git_sha", "artifact_sha256", "image_digest", "release_id")
+        )
+        or not current_traffic
+        or assignment.get("variation_id") not in {"0", "1"}
+        or assignment.get("value_sha256")
+        != hashlib.sha256(
+            life[
+                "treatment_prompt" if assignment.get("variation_id") == "1" else "control_prompt"
+            ].encode()
+        ).hexdigest()
+    ):
+        raise ValueError("experiment_assignment_no_longer_admitted")
 
 
 def _enqueue_exposure(db, assignment):

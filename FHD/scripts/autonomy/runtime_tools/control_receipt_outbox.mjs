@@ -115,7 +115,7 @@ export function createParaReportOutbox({ directory, url, token, enabled, fetcher
     } catch (error) { if (error.code === 'EEXIST') return false; throw error; }
   }
   function record(task, { status, progress, content = '' }) {
-    if (!handles(task) || !['running', 'completed', 'failed'].includes(status)) return false;
+    if (!handles(task) || !['running', 'completed', 'failed', 'cancelled'].includes(status)) return false;
     sequence = Math.max(sequence + 1, Date.now() * 1000);
     const report = String(content).replace(/(bearer\s+|(?:api[_-]?key|password|token|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[redacted]').slice(0, 12000);
     const row = { task_id: task.task_id, subtask_id: task.subtask_id,

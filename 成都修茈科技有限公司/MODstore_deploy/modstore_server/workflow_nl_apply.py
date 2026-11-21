@@ -275,7 +275,14 @@ async def _generate_graph(
             for (i, p) in enumerate(preset_nodes)
         )
         preset_requirements = f'\n\n【重要约束】本次员工工作流已预先生成了以下真实可执行 ESkill（Python 脚本），你必须在画布中按顺序串接它们：\n{lines}\n规则：\n- 对每个预置 Skill，在 workflow.nodes 中生成一个 node_type="eskill" 节点，config.skill_id 填写对应数字，config.output_var 填写对应 output_var。\n- 这些节点已在数据库中，不需要在 skill_blueprints 中重复定义。\n- 可在这些节点前后增加 condition / variable_set / start / end，但不得删除任何预置节点。\n- 推荐链路：start -> eskill(1) -> eskill(2) -> … -> end。\n'
-    user_msg = f"工作流名称: {wf.name}\n\n工作流说明与需求:\n{brief.strip()}\n\n{_facade()._eskill_catalog_lines(db, user)}\n\n{_facade()._catalog_lines(db, user)}\n\n{employee_node_requirements}{preset_requirements}请先生成 skill_blueprints（仅新增不在上面「重要约束」中的 Skill），再生成 workflow.nodes 与 workflow.edges JSON。"
+    from modstore_server.retort_experiment_surfaces import WORKFLOW_CUSTOMER_MEASUREMENT
+
+    customer_requirements = (
+        _facade().CUSTOMER_DELIVERY_REQUIREMENTS
+        if (assignment or {}).get("measurement_scope") == WORKFLOW_CUSTOMER_MEASUREMENT
+        else ""
+    )
+    user_msg = f"工作流名称: {wf.name}\n\n工作流说明与需求:\n{brief.strip()}\n\n{_facade()._eskill_catalog_lines(db, user)}\n\n{_facade()._catalog_lines(db, user)}\n\n{employee_node_requirements}{preset_requirements}{customer_requirements}请先生成 skill_blueprints（仅新增不在上面「重要约束」中的 Skill），再生成 workflow.nodes 与 workflow.edges JSON。"
     msgs = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_msg},

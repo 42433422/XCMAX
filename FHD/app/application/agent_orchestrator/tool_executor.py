@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from app.application.agent_orchestrator.param_references import (
     UNRESOLVED_CODE,
+    host_reference_params,
     unresolved_placeholders,
 )
 from app.application.agent_orchestrator.run_models import AgentStep
@@ -384,7 +385,9 @@ class AgentToolExecutor:
             params["user_id"] = str(context["user_id"])
         if "tenant_id" in required and context.get("tenant_id") not in (None, ""):
             params["tenant_id"] = context["tenant_id"]
-        leftover = unresolved_placeholders(params)
+        leftover = unresolved_placeholders(
+            host_reference_params(step.tool_id, step.action, params)[0]
+        )
         if leftover:
             return {
                 "success": False,

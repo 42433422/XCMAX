@@ -6,9 +6,10 @@ import json
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 
 from modstore_server.db.llm_chat import LlmClientRequest
-from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
+from modstore_server.db.xiaoc_life import XiaoCLifeEvent
 from modstore_server.strategic_portfolio import PortfolioError, digest, portfolio_status
 from modstore_server.xiaoc_life_policy import IDENTITY_ID, parse_time, utcnow
 from modstore_server.xiaoc_life_store import _event, _mutate, get_session_factory, read_state
@@ -62,11 +63,11 @@ def _verified_usage(steps: list[dict[str, Any]], owner: int) -> int | None:
 
 def reconcile_usage() -> dict[str, int]:
     """Resolve only the original persisted receipt, never replay an uncertain call."""
-    read_state()
-    with get_session_factory()() as session:
-        row = session.get(XiaoCLifeState, IDENTITY_ID)
-        assert row is not None
-        data = json.loads(row.state_json)
+    from modstore_server.strategic_usage_reconciliation import reconcile_pending_usage
+
+    reconcile_pending_usage()
+
+    def collect(data: dict[str, Any], session: Any) -> list[dict[str, Any]]:
         active = data.get("active_cycle")
         pending = []
         if active and (active.get("awaiting_worker") or parse_time(active["deadline"]) <= utcnow()):
@@ -81,24 +82,42 @@ def reconcile_usage() -> dict[str, int]:
                     "active": True,
                 }
             )
-        for event in session.scalars(
+        reconciled = aliased(XiaoCLifeEvent)
+        query = (
             select(XiaoCLifeEvent)
             .where(
                 XiaoCLifeEvent.identity_id == IDENTITY_ID,
                 XiaoCLifeEvent.actual_tokens.is_(None),
                 XiaoCLifeEvent.id.startswith("cycle:"),
-            )
-            .limit(100)
-        ):
-            if session.get(XiaoCLifeEvent, "reconciled:" + event.id) is None:
-                pending.append(
-                    {
-                        **json.loads(event.details_json),
-                        "cycle_id": event.id.removeprefix("cycle:"),
-                        "domain": event.kind,
-                        "active": False,
-                    }
+                ~select(reconciled.id)
+                .where(
+                    reconciled.identity_id == XiaoCLifeEvent.identity_id,
+                    reconciled.id == "reconciled:" + XiaoCLifeEvent.id,
                 )
+                .exists(),
+            )
+            .order_by(XiaoCLifeEvent.id)
+            .limit(100)
+        )
+        cursor = data.get("usage_reconciliation_cursor", "")
+        events = list(session.scalars(query.where(XiaoCLifeEvent.id > cursor)))
+        if not events and cursor:
+            events = list(session.scalars(query))
+        # Persist progress before receipt I/O. Immutable reconciled facts never
+        # consume the limit; unresolved facts rotate back into a later pass.
+        data["usage_reconciliation_cursor"] = events[-1].id if events else ""
+        for event in events:
+            pending.append(
+                {
+                    **json.loads(event.details_json),
+                    "cycle_id": event.id.removeprefix("cycle:"),
+                    "domain": event.kind,
+                    "active": False,
+                }
+            )
+        return pending
+
+    pending = _mutate(collect)
     resolved = 0
     for item in pending:
         steps = item.get("steps", [])
@@ -107,7 +126,7 @@ def reconcile_usage() -> dict[str, int]:
             if not steps and item.get("outbound_journal_version") == 1
             else _verified_usage(steps, item["owner_user_id"])
         )
-        if actual is None or actual > item["reservation"]:
+        if actual is None or not 0 <= actual <= item["reservation"]:
             continue
 
         def settle(

@@ -376,6 +376,45 @@ def ingest_suggestion_event_payload(
     return {"ok": True, "suggestion_id": sid}
 
 
+def _suggestion_dispatch_receipt(row):
+    if row is None:
+        return None
+    if row.status == "done":
+        return {"ok": True, "suggestion_id": int(row.id), "status": "done"}
+    if row.status == "dispatched":
+        return {
+            "ok": False,
+            "suggestion_id": int(row.id),
+            "status": "dispatched",
+            "error": "suggestion already dispatched; original execution requires readback",
+        }
+    return None
+
+
+def _transition_suggestion(session, row, **values) -> bool:
+    from modstore_server.models import EmployeeSuggestion
+
+    return (
+        session.query(EmployeeSuggestion)
+        .filter_by(id=row.id, status=row.status, kind=row.kind)
+        .update(values, synchronize_session=False)
+        == 1
+    )
+
+
+def _suggestion_changed(session, sid: int):
+    from modstore_server.models import EmployeeSuggestion
+
+    session.rollback()
+    current = session.get(EmployeeSuggestion, sid)
+    return _suggestion_dispatch_receipt(current) or {
+        "ok": False,
+        "suggestion_id": sid,
+        "status": str(current.status if current is not None else "missing"),
+        "error": "suggestion state changed before update",
+    }
+
+
 def approve_suggestion(
     suggestion_id: int, *, approved_by_user_id: int, dispatch_now: bool = True
 ) -> _facade().Dict[str, _facade().Any]:
@@ -391,13 +430,17 @@ def approve_suggestion(
             return {"ok": False, "error": "not found"}
         if (row.status or "") == "rejected":
             return {"ok": False, "error": "already rejected"}
+        if row.kind != "employee_evolution" and (receipt := _suggestion_dispatch_receipt(row)):
+            return receipt
         already_approved = False
         if row.kind == "employee_evolution":
             reviewer = session.get(User, int(approved_by_user_id or 0))
             if reviewer is None or not reviewer.is_admin or reviewer.deleted_at is not None:
                 return {"ok": False, "error": "curator_approval_required"}
             if row.status == "done":
-                from modstore_server.employee_evolution_dispatch import completed_curator_receipt
+                from modstore_server.employee_evolution_dispatch import (
+                    completed_curator_receipt,
+                )
 
                 return completed_curator_receipt(session, row)
             already_approved = (
@@ -406,14 +449,27 @@ def approve_suggestion(
                 and row.approved_at is not None
             )
         if not already_approved:
-            row.status = "approved"
-            row.approved_by_user_id = int(approved_by_user_id or 0) or None
-            row.approved_at = _facade().datetime.now(_facade().timezone.utc)
+            if row.kind != "employee_evolution" and row.status not in {
+                "pending",
+                "approved",
+            }:
+                return {"ok": False, "error": "suggestion is not awaiting approval"}
+            if not _transition_suggestion(
+                session,
+                row,
+                status="approved",
+                approved_by_user_id=int(approved_by_user_id or 0) or None,
+                approved_at=_facade().datetime.now(_facade().timezone.utc),
+            ):
+                return _suggestion_changed(session, sid)
             session.commit()
     if not already_approved:
         _facade()._publish_event(
             "employee.suggestion.approved",
-            {"suggestion_id": sid, "approved_by_user_id": int(approved_by_user_id or 0)},
+            {
+                "suggestion_id": sid,
+                "approved_by_user_id": int(approved_by_user_id or 0),
+            },
             source="admin",
         )
     if dispatch_now:
@@ -432,10 +488,28 @@ def reject_suggestion(
         row = session.get(_facade().EmployeeSuggestion, sid)
         if not row:
             return {"ok": False, "error": "not found"}
-        row.status = "rejected"
-        row.rejected_reason = (rejected_reason or "")[:4000]
-        row.approved_by_user_id = int(rejected_by_user_id or 0) or None
-        row.approved_at = _facade().datetime.now(_facade().timezone.utc)
+        if receipt := _suggestion_dispatch_receipt(row):
+            return {
+                **receipt,
+                "ok": False,
+                "error": "original execution cannot be rejected after dispatch",
+            }
+        if row.status not in {"pending", "approved", "rejected"}:
+            return {"ok": False, "error": "suggestion is not awaiting review"}
+        if not _transition_suggestion(
+            session,
+            row,
+            status="rejected",
+            rejected_reason=(rejected_reason or "")[:4000],
+            approved_by_user_id=int(rejected_by_user_id or 0) or None,
+            approved_at=_facade().datetime.now(_facade().timezone.utc),
+        ):
+            changed = _suggestion_changed(session, sid)
+            return {
+                **changed,
+                "ok": False,
+                "error": "suggestion changed before rejection",
+            }
         session.commit()
     _facade()._publish_event(
         "employee.suggestion.rejected",
@@ -534,26 +608,28 @@ def _dispatch_suggestion(
         if not row:
             return {"ok": False, "error": "not found"}
         if row.kind == "employee_evolution":
-            from modstore_server.employee_evolution_dispatch import execute_approved_evolution
+            from modstore_server.employee_evolution_dispatch import (
+                execute_approved_evolution,
+            )
 
             session.close()
             return execute_approved_evolution(sid)
         status = str(row.status or "")
         if status == "rejected":
             return {"ok": False, "error": "suggestion rejected"}
-        if status == "done":
-            return {"ok": True, "suggestion_id": sid, "status": "done"}
-        if status == "pending":
-            if force_approve_if_needed:
-                row.status = "approved"
-                row.approved_by_user_id = int(approved_by_user_id or 0) or None
-                row.approved_at = _facade().datetime.now(_facade().timezone.utc)
-                session.commit()
-            elif str(row.risk_level or "medium") != "low":
-                return {
-                    "ok": False,
-                    "error": "pending medium/high risk suggestion requires approval",
-                }
+        if receipt := _suggestion_dispatch_receipt(row):
+            return receipt
+        if status not in {"pending", "approved"}:
+            return {"ok": False, "error": "suggestion is not awaiting dispatch"}
+        if (
+            status == "pending"
+            and not force_approve_if_needed
+            and str(row.risk_level or "medium") != "low"
+        ):
+            return {
+                "ok": False,
+                "error": "pending medium/high risk suggestion requires approval",
+            }
         payload = _facade()._jloads(row.payload_json or "{}", {})
         if not isinstance(payload, dict):
             payload = {}
@@ -569,6 +645,21 @@ def _dispatch_suggestion(
         )
         summary = str(row.summary or "")
         detail = str(row.detail or "")
+        claim = {
+            "status": "dispatched",
+            "created_task_ids_json": _facade()._jdumps(targets),
+        }
+        if status == "pending" and force_approve_if_needed:
+            claim.update(
+                approved_by_user_id=int(approved_by_user_id or 0) or None,
+                approved_at=_facade().datetime.now(_facade().timezone.utc),
+            )
+        require_manual_life_capability()
+        if not _transition_suggestion(session, row, **claim):
+            return _suggestion_changed(session, sid)
+        # Commit the single winner before employee IO. Lost/unknown receipts stay
+        # dispatched across restarts; neither review nor the scheduler requeues them.
+        session.commit()
     from modstore_server.employee_orchestrator import dispatch_subtasks
     from modstore_server.task_router import SubTask
 
@@ -604,9 +695,11 @@ def _dispatch_suggestion(
         row = session.get(_facade().EmployeeSuggestion, sid)
         if not row:
             return {"ok": False, "error": "suggestion disappeared"}
-        row.created_task_ids_json = _facade()._jdumps(targets)
         ok = bool(result.get("ok"))
-        row.status = "done" if ok else "dispatched"
+        if row.status != "dispatched" or not _transition_suggestion(
+            session, row, status="done" if ok else "dispatched"
+        ):
+            return _suggestion_changed(session, sid)
         session.commit()
     _facade()._publish_event(
         "employee.suggestion.dispatched",

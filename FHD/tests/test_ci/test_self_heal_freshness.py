@@ -853,9 +853,12 @@ def test_verified_recovery_and_supersession_close_with_different_meaning(
         (True, "success", True, True),
     ],
 )
-def test_para_update_closes_incident_only_after_ci_and_main_receipt(merged, ci, on_main, closed):
+@pytest.mark.parametrize("target_attempt", [0, 1, 2])
+def test_para_update_closes_incident_only_after_ci_and_main_receipt(
+    merged, ci, on_main, closed, target_attempt
+):
     repair = heal.recovery.para.repair
-    target = repair.Target(5, "feat/x", OLD, 7, 99, WF_PATH)
+    target = repair.Target(5, "feat/x", OLD, 7, 99, WF_PATH, target_attempt)
     merge_sha = "c" * 40
     intent = repair.intent_body(
         REPO,
@@ -895,6 +898,10 @@ def test_para_update_closes_incident_only_after_ci_and_main_receipt(merged, ci, 
 
     result, writes, dispatches = _recover(GitHub(comments=[{"user": BOT, "body": intent}]))
     assert not dispatches
+    if target_attempt == 2:
+        assert not writes
+        assert result["reason"] == "original_pr_source_receipt_mismatch"
+        return
     assert bool(writes) is closed
     if closed:
         assert result["state"] == "recovered"

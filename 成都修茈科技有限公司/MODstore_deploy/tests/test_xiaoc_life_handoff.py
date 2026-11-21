@@ -7,9 +7,13 @@ import json
 import pytest
 
 from modstore_server import employee_autonomy_service as autonomy
-from modstore_server import employee_handoff, xiaoc_life_chat, xiaoc_life_store
+from modstore_server import employee_handoff
+from modstore_server import employee_orchestrator as _claim_orchestrator
+from modstore_server import xiaoc_life_chat, xiaoc_life_store
 from modstore_server.xiaoc_life_policy import LifePolicyError
 from tests.test_workflow_nl_graph_skill_generation import _bootstrap
+
+_REAL_DISPATCH_SUBTASKS = _claim_orchestrator.dispatch_subtasks
 
 
 @pytest.fixture
@@ -264,3 +268,221 @@ def test_private_employee_handoff_records_real_source_user_without_management_sc
         assert payload["_xiaoc_manual_scope"] == {"minimum_level": 0, "owner_user_id": owner.id}
     assert autonomy.dispatch_pending_suggestions()["ok_count"] == 1
     assert output.exists() and calls == [{"owner": owner.id, "scope_active": False}]
+
+
+@pytest.fixture
+def suggestion_claim_case(handoff_case, monkeypatch):
+    models, factory, owner, _state, _calls, _output = handoff_case
+    with xiaoc_life_chat.manual_life_scope(owner, 3):
+        sid = handoff()["suggestion_id"]
+    monkeypatch.setattr(_claim_orchestrator, "dispatch_subtasks", _REAL_DISPATCH_SUBTASKS)
+    return models, factory, owner, sid
+
+
+def test_suggestion_claim_scheduler_and_approval_dispatch_original_only_once(
+    suggestion_claim_case, monkeypatch
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, Lock
+
+    from modstore_server import employee_executor
+
+    models, factory, owner, sid = suggestion_claim_case
+    assert autonomy.approve_suggestion(sid, approved_by_user_id=owner.id, dispatch_now=False)["ok"]
+    entered, release, lock = Event(), Event(), Lock()
+    calls = []
+
+    def execute(_employee, _task, payload, *, user_id, **_kwargs):
+        with lock:
+            calls.append((payload["source_suggestion_id"], user_id))
+            first = len(calls) == 1
+        if first:
+            entered.set()
+            assert release.wait(5), "test release did not arrive"
+        return {"ok": True, "status": "completed"}
+
+    monkeypatch.setattr(employee_executor, "execute_employee_task", execute)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        scheduler = pool.submit(autonomy.dispatch_pending_suggestions)
+        try:
+            assert entered.wait(5)
+            with factory() as session:
+                while_running = session.get(models.EmployeeSuggestion, sid).status
+            approval = pool.submit(
+                autonomy.approve_suggestion,
+                sid,
+                approved_by_user_id=owner.id,
+                dispatch_now=True,
+            ).result(timeout=5)
+        finally:
+            release.set()
+        assert scheduler.result(timeout=5)["ok_count"] == 1
+    assert while_running == "dispatched"
+    assert approval["ok"] is False and approval["status"] == "dispatched"
+    assert calls == [(sid, owner.id)]
+    assert autonomy.approve_suggestion(sid, approved_by_user_id=owner.id)["status"] == "done"
+    assert calls == [(sid, owner.id)]
+
+
+@pytest.mark.parametrize("action", ["approve", "reject"])
+def test_suggestion_claim_stale_review_cannot_reset_a_completed_dispatch(
+    suggestion_claim_case, monkeypatch, action
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, current_thread
+
+    from sqlalchemy import event
+
+    from modstore_server import employee_executor
+
+    models, factory, owner, sid = suggestion_claim_case
+    approval_read, release = Event(), Event()
+    calls = []
+
+    def execute(_employee, _task, payload, *, user_id, **_kwargs):
+        calls.append((payload["source_suggestion_id"], user_id))
+        return {"ok": True, "status": "completed"}
+
+    monkeypatch.setattr(employee_executor, "execute_employee_task", execute)
+    with factory() as session:
+        engine = session.get_bind()
+
+    def pause_approval(_conn, _cursor, statement, _params, _context, _many):
+        if (
+            current_thread().name.startswith("stale-approver")
+            and statement.startswith("UPDATE employee_suggestions")
+            and not approval_read.is_set()
+        ):
+            approval_read.set()
+            assert release.wait(5), "test release did not arrive"
+
+    event.listen(engine, "before_cursor_execute", pause_approval)
+    try:
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="stale-approver") as pool:
+            if action == "approve":
+                stale = pool.submit(
+                    autonomy.approve_suggestion,
+                    sid,
+                    approved_by_user_id=owner.id,
+                    dispatch_now=True,
+                )
+            else:
+                stale = pool.submit(
+                    autonomy.reject_suggestion,
+                    sid,
+                    rejected_by_user_id=owner.id,
+                    rejected_reason="concurrent review",
+                )
+            try:
+                assert approval_read.wait(5)
+                first = autonomy.dispatch_suggestion(sid, force_approve_if_needed=True)
+                assert first["dispatch_result"]["ok"] is True
+            finally:
+                release.set()
+            result = stale.result(timeout=5)
+            assert result["status"] == "done"
+            if action == "reject":
+                assert result["ok"] is False
+    finally:
+        event.remove(engine, "before_cursor_execute", pause_approval)
+    with factory() as session:
+        assert session.get(models.EmployeeSuggestion, sid).status == "done"
+    assert calls == [(sid, owner.id)]
+
+
+def test_suggestion_claim_unknown_receipt_is_parked_without_redispatch(
+    suggestion_claim_case, monkeypatch
+):
+    from modstore_server import employee_executor
+
+    models, factory, owner, sid = suggestion_claim_case
+    calls = []
+
+    def execute(_employee, _task, payload, *, user_id, **_kwargs):
+        calls.append((payload["source_suggestion_id"], user_id))
+        return {
+            "ok": False,
+            "status": "unknown",
+            "error": "original receipt unavailable",
+        }
+
+    monkeypatch.setattr(employee_executor, "execute_employee_task", execute)
+    assert (
+        autonomy.dispatch_suggestion(sid, force_approve_if_needed=True)["dispatch_result"]["ok"]
+        is False
+    )
+    assert autonomy.dispatch_suggestion(sid)["status"] == "dispatched"
+    assert autonomy.approve_suggestion(sid, approved_by_user_id=owner.id)["status"] == "dispatched"
+    assert autonomy.dispatch_pending_suggestions()["processed"] == 0
+    with factory() as session:
+        row = session.get(models.EmployeeSuggestion, sid)
+        assert row.status == "dispatched"
+        assert json.loads(row.created_task_ids_json) == ["target"]
+    assert calls == [(sid, owner.id)]
+
+
+def test_suggestion_claim_preserves_specialized_evolution_recovery(
+    suggestion_claim_case, monkeypatch
+):
+    from datetime import UTC, datetime
+
+    from modstore_server import employee_evolution_dispatch
+
+    models, factory, owner, sid = suggestion_claim_case
+    with factory() as session:
+        row = session.get(models.EmployeeSuggestion, sid)
+        row.kind = "employee_evolution"
+        row.status = "dispatched"
+        row.approved_by_user_id = owner.id
+        row.approved_at = datetime.now(UTC)
+        row.created_task_ids_json = '["employee-pack-curator"]'
+        session.commit()
+    calls = []
+
+    def recover(original_id):
+        calls.append(original_id)
+        return {"ok": True, "specialized_receipt": original_id}
+
+    monkeypatch.setattr(employee_evolution_dispatch, "execute_approved_evolution", recover)
+    assert autonomy.approve_suggestion(sid, approved_by_user_id=owner.id) == {
+        "ok": True,
+        "specialized_receipt": sid,
+    }
+    assert calls == [sid]
+
+
+@pytest.mark.parametrize("status", ["dispatched", "done"])
+@pytest.mark.parametrize("action", ["approve", "reject"])
+def test_suggestion_claim_batch_review_cannot_reopen_original_execution(
+    suggestion_claim_case, monkeypatch, status, action
+):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from modstore_server import admin_employee_autonomy_api as api
+    from modstore_server import employee_executor
+
+    models, factory, owner, sid = suggestion_claim_case
+    with factory() as session:
+        session.get(models.EmployeeSuggestion, sid).status = status
+        session.commit()
+    calls = []
+
+    def execute(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"ok": True, "status": "completed"}
+
+    monkeypatch.setattr(employee_executor, "execute_employee_task", execute)
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[api.require_admin] = lambda: owner
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/admin/employee-autonomy/suggestions/batch-review",
+            json={"ids": [sid], "action": action, "dispatch_now": True},
+        )
+    assert response.status_code == 200
+    with factory() as session:
+        assert session.get(models.EmployeeSuggestion, sid).status == status
+    assert calls == []
+    assert response.json()["success"] == int(status == "done" and action == "approve")

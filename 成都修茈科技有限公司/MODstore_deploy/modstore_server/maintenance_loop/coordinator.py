@@ -251,6 +251,8 @@ class MaintenanceRuntime:
     def _recover_final_outcome(self, memory: dict, candidate: Optional[dict]) -> Optional[dict]:
         if candidate and candidate.get("final_outcome"):
             final = candidate["final_outcome"]
+            if not isinstance(final, dict):
+                raise ValueError("pending_finalization_requires_reconciliation")
             if candidate["outcome_recorded"]:
                 self._clear_execution_checkpoint(memory)
                 return final

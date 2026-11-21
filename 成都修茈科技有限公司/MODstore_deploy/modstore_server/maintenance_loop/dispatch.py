@@ -12,8 +12,8 @@ from modstore_server import (
     self_maintenance_remediation_prompts,
     self_maintenance_retry,
 )
-from modstore_server.employee_executor_policies import execution_blocks_redispatch
 from modstore_server.customer_issue_delivery_contract import execution_requires_reconciliation
+from modstore_server.employee_executor_policies import execution_blocks_redispatch
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config, para_client, results, review, store

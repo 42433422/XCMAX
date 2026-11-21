@@ -437,6 +437,28 @@ def _merge(
     return list(values.values())
 
 
+def _advance_goal_cursor(
+    data: dict[str, Any], claim: dict[str, Any], details: dict[str, Any] | None
+) -> None:
+    """Remember the runtime's original selection without changing its authority."""
+    selection = (details or {}).get("portfolio_selection")
+    if (
+        not isinstance(selection, dict)
+        or data["revision"] != claim["policy_revision"]
+        or data.get("owner_user_id") != claim["owner_user_id"]
+        or data["paused"]
+    ):
+        return
+    if any(
+        goal.get("id") == selection.get("goal_id")
+        and goal.get("decision_id")
+        and goal["decision_id"] == selection.get("decision_id")
+        and goal.get("domain", "enterprise") == claim["domain"]
+        for goal in data["goals"]
+    ):
+        data.setdefault("goal_cursors", {})[claim["domain"]] = selection["goal_id"]
+
+
 def finish_cycle(
     claim: dict[str, Any],
     *,
@@ -476,6 +498,7 @@ def finish_cycle(
             if actual_tokens > reserved:
                 data["unknown_usage"] = True
         safe = fresh and actual_tokens is not None and actual_tokens <= reserved
+        _advance_goal_cursor(data, claim, details)
         if safe:
             data["goals"] = _merge(data["goals"], goals or [], "id", 100)
             data["interests"] = _merge(data["interests"], interests or [], "topic", 20)
@@ -562,6 +585,7 @@ def defer_cycle(
             raise LifePolicyError("队列回执不属于当前运行")
         if not any(step.get("kind") == "portfolio" for step in active.get("steps", [])):
             raise LifePolicyError("没有原企业任务账本，不能延后结算")
+        _advance_goal_cursor(data, claim, details)
         active["awaiting_worker"] = True
         data["last_status"] = "waiting"
         event_id = "waiting:" + claim["cycle_id"]

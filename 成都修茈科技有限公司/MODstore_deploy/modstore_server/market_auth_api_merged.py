@@ -175,6 +175,11 @@ def api_public_contact_submit(
     try:
         with sf() as session:
             session.add(row)
+            session.flush()
+            if row.message:
+                from modstore_server.production_line_business import create_prospect_requirement
+
+                create_prospect_requirement(session, int(row.id))
             session.commit()
             new_id = row.id
     except _facade().SQLAlchemyError as exc:

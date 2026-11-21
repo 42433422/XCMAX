@@ -25,6 +25,10 @@ def _sha(token: str) -> str:
 def _phase_identity(request: dict[str, Any], identity: dict[str, Any]) -> dict[str, Any]:
     from modstore_server.customer_ticket_github import github
 
+    if request["kind"] == "original_pr_repair":
+        from modstore_server.para_github_repair import require_current_source
+
+        require_current_source(request)
     run = remote.native_run(request, identity.get("run_id"))
     phase = identity.get("phase")
     expected = {
@@ -32,12 +36,12 @@ def _phase_identity(request: dict[str, Any], identity: dict[str, Any]) -> dict[s
         "run_attempt": 1,
         "phase": phase,
         "repository": request["repository"],
-        "source_sha": request["source_sha"],
+        "source_sha": request.get("controller_sha", request["source_sha"]),
         "execution_isolation": HEADER_ONLY_PLATFORM_PROFILE,
     }
     if (
         phase not in {"execute", "resume"}
-        or (request.get("original_request_kind") == "original_pr_repair" and phase != "execute")
+        or (request["kind"] == "original_pr_repair" and phase != "execute")
         or identity != expected
         or run.get("status") != "in_progress"
     ):
@@ -87,7 +91,7 @@ def _phase_identity(request: dict[str, Any], identity: dict[str, Any]) -> dict[s
 
 def claim_phase(request_id: str, identity: dict[str, Any]) -> dict[str, Any]:
     request, _, _ = remote.read_request(request_id)
-    if request["kind"] != bridge.KIND:
+    if request["kind"] not in {bridge.KIND, "original_pr_repair"}:
         raise PortfolioError("not an approved engineering work order")
     jobs = _phase_identity(request, identity)
     token = secrets.token_urlsafe(40)
@@ -148,8 +152,8 @@ def claim_phase(request_id: str, identity: dict[str, Any]) -> dict[str, Any]:
         snapshot.update(phase=phase, run_id=identity["run_id"])
         saved["status"], record.state = "running", "bootstrapped"
         return {
-            "schema": bridge.SCHEMA,
-            "kind": bridge.KIND,
+            "schema": request["schema"],
+            "kind": request["kind"],
             "request_id": request_id,
             "binding_id": request["binding"]["binding_id"],
             **identity,
@@ -175,12 +179,11 @@ def _bootstrap(snapshot, token, phase):
 
 def current_attempt(session, request, effects, event_id, identity):
     """The original incident claim remains the authority, not a worker payload."""
+    if request["kind"] == "original_pr_repair":
+        from modstore_server.para_github_repair import current_attempt as original_pr_attempt
+
+        return original_pr_attempt(session, request, effects, event_id, identity)
     from modstore_server.retort_github_workspace import authorized_incident
-
-    if request.get("original_request_kind") == "original_pr_repair":
-        from modstore_server.para_github_repair import budget_attempt
-
-        return budget_attempt(session, request, effects, identity)
 
     event = session.get(IncidentEvent, event_id) if event_id else None
     payload = json.loads(event.payload_json) if event else {}
@@ -273,7 +276,7 @@ def _native_task(request, identity):
 
 def bind_task(request_id: str, token: str, identity: dict[str, Any]) -> dict[str, Any]:
     request, snapshot, _ = remote.read_request(request_id)
-    if request["kind"] != bridge.KIND:
+    if request["kind"] not in {bridge.KIND, "original_pr_repair"}:
         raise PortfolioError("not an approved engineering work order")
     fields = {
         "phase",
@@ -292,24 +295,27 @@ def bind_task(request_id: str, token: str, identity: dict[str, Any]) -> dict[str
     if identity.keys() != fields:
         raise PortfolioError("workspace task requires its complete native binding")
     _bootstrap(snapshot, token, identity["phase"])
+    if request["kind"] == "original_pr_repair":
+        from modstore_server.para_github_repair import require_current_source
+
+        require_current_source(request)
     _native_task(request, identity)
     model_token = secrets.token_urlsafe(40)
 
     def bind(row, proposal, state, saved, record, current, session):
         bridge.authorized(row, proposal, state, saved, request, session)
         _bootstrap(current, token, identity["phase"])
-        original_row, _, effects = bridge.original(session, request, active=True)
+        original_row, original_request, effects = bridge.original(session, request, active=True)
+        if request["kind"] == "original_pr_repair" and identity[
+            "description"
+        ] != original_request.get("message"):
+            raise PortfolioError("workspace task prompt differs from its approved original request")
         bridge.verify_allocation(request, effects)
         if identity["run_id"] != effects.get("run_id") or current.get("model_grant"):
             raise PortfolioError("workspace has another active model task")
         event_id = getattr(original_row, "event_id", None)
         member = current_attempt(session, request, effects, event_id, identity)
         source_sha = request["source_sha"]
-        if request.get("original_request_kind") == "original_pr_repair":
-            _, source, _ = bridge.original(session, request, active=True)
-            source_sha = source["source_sha"]
-            if identity["description"] != source["message"]:
-                raise PortfolioError("workspace original PR prompt changed")
         if member["role"] == "verify":
             event = session.get(IncidentEvent, original_row.event_id)
             team = json.loads(event.payload_json).get("_team_claim", {}).get("team", [])
@@ -333,28 +339,29 @@ def bind_task(request_id: str, token: str, identity: dict[str, Any]) -> dict[str
             for item in grants
         ):
             raise PortfolioError("workspace task grant cannot be replayed")
-        origin = (
-            {"control_task_id": original_row.id} if event_id is None else {"event_id": event_id}
-        )
-        if any(current.get(key, value) != value for key, value in origin.items()):
+        bound_event = current.get("event_id", event_id)
+        if request["kind"] != "original_pr_repair" and (not bound_event or bound_event != event_id):
             raise PortfolioError("workspace original event changed")
         grant = {
             **{
                 k: identity[k]
                 for k in ("phase", "run_id", "task_id", "subtask_id", "attempt_id", "device_id")
             },
-            **origin,
+            **({"event_id": bound_event} if bound_event is not None else {}),
             "role": member["role"],
             "task_sha256": digest(identity),
             "source_sha": source_sha,
             "grant_id": secrets.token_hex(16),
         }
-        current.update(**origin, model_grant={**grant, "token_sha256": _sha(model_token)})
+        current["model_grant"] = {**grant, "token_sha256": _sha(model_token)}
+        if bound_event is not None:
+            current["event_id"] = bound_event
         grants.append({**grant, "status": "active"})
         record.state = "claimed"
         return {
             **grant,
-            "schema": bridge.SCHEMA,
+            "schema": request["schema"],
+            "kind": request["kind"],
             "request_id": request_id,
             "model_token": model_token,
             "model": request["model"],

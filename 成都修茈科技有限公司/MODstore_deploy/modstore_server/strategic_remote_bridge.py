@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import secrets
@@ -22,6 +23,7 @@ from typing import Any, cast
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from modstore_server.db.mac_control import MacControlTask
@@ -106,17 +108,53 @@ def _row(session: Session, request_id: str) -> MacControlTask:
     except ValueError as exc:
         raise PortfolioError("invalid remote request identity") from exc
     row = session.get(MacControlTask, key)
-    if row is None or row.actor not in {ACTOR, "service:strategy-workspace"}:
+    if row is None or row.actor not in {
+        ACTOR,
+        "service:strategy-workspace",
+        "service:para-github-repair",
+    }:
         raise PortfolioError("remote request not found")
     if digest(json.loads(row.request_json)) != row.request_digest:
         raise PortfolioError("remote request integrity changed")
     return row
 
 
+def _request(row: MacControlTask) -> dict[str, Any]:
+    if row.actor == "service:para-github-repair":
+        request = json.loads(row.snapshot_json).get("strategic_request")
+        if not isinstance(request, dict):
+            raise PortfolioError("original PR requires its approved company budget")
+        return request
+    request = json.loads(row.request_json)
+    if not isinstance(request, dict):
+        raise PortfolioError("remote request is not an object")
+    return request
+
+
+def _snapshot(row: MacControlTask, saved: dict[str, Any]) -> dict[str, Any]:
+    snapshot = json.loads(row.snapshot_json)
+    if not isinstance(snapshot, dict):
+        raise PortfolioError("remote snapshot is not an object")
+    if row.actor == "service:para-github-repair":
+        # The original Mac scheduler owns dispatch/publication observations.
+        # Phase capabilities live in the original portfolio CAS so its ordinary
+        # snapshot projection cannot overwrite grants admitted concurrently.
+        snapshot.update(saved.get("remote_state", {}))
+    return snapshot
+
+
 def read_request(request_id: str) -> tuple[dict[str, Any], dict[str, Any], str]:
     with get_session_factory()() as session:
         row = _row(session, request_id)
-        return json.loads(row.request_json), json.loads(row.snapshot_json), row.state
+        request = _request(row)
+        saved = {}
+        if row.actor == "service:para-github-repair":
+            from modstore_server.strategic_portfolio import _row as portfolio_row
+
+            binding = request["binding"]
+            _, _, state = portfolio_row(session, binding["decision_id"], binding["owner_user_id"])
+            saved = state.get("tasks", {}).get(binding["opportunity_id"], {})
+        return request, _snapshot(row, saved), row.state
 
 
 def _mutate(request_id: str, apply: Any) -> Any:
@@ -125,7 +163,7 @@ def _mutate(request_id: str, apply: Any) -> Any:
 
     def update(row: Any, proposal: dict[str, Any], state: dict[str, Any], session: Any):
         remote = _row(session, request_id)
-        if json.loads(remote.request_json) != request:
+        if _request(remote) != request:
             raise PortfolioError("remote request changed")
         saved = state["tasks"].get(binding["opportunity_id"], {})
         if (
@@ -133,9 +171,17 @@ def _mutate(request_id: str, apply: Any) -> Any:
             or saved.get("lease_token") != binding["lease_token"]
         ):
             raise PortfolioError("remote execution no longer owns its original lease")
-        snapshot = json.loads(remote.snapshot_json)
+        snapshot = _snapshot(remote, saved)
         result = apply(row, proposal, state, saved, remote, snapshot, session)
-        remote.snapshot_json, remote.updated_at = _json(snapshot), time.time()
+        if remote.actor == "service:para-github-repair":
+            saved["remote_state"] = {
+                key: snapshot[key]
+                for key in ("phases", "phase", "model_grant", "task_grants")
+                if key in snapshot
+            }
+        else:
+            remote.snapshot_json = _json(snapshot)
+        remote.updated_at = max(time.time(), math.nextafter(remote.updated_at, math.inf))
         return result
 
     return mutate_portfolio(binding["decision_id"], update, owner_user_id=binding["owner_user_id"])
@@ -192,6 +238,7 @@ def prepare_request(
     *,
     actor: str = ACTOR,
     validate: Any = None,
+    reuse_original: bool = False,
 ) -> dict[str, Any]:
     """Create one durable worker binding under the original portfolio CAS."""
     from modstore_server.strategic_portfolio_worker import capture_life_worker_scope
@@ -220,8 +267,17 @@ def prepare_request(
             raise PortfolioError("remote model lacks the approved tariff")
         if validate is not None:
             validate(session, proposal)
-        if session.get(MacControlTask, uuid.UUID(request_id).hex) is not None:
+        existing = session.get(MacControlTask, uuid.UUID(request_id).hex)
+        if existing is not None and not reuse_original:
             raise PortfolioError("original request already owns a strategic budget")
+        if reuse_original and (
+            existing is None
+            or actor != "service:para-github-repair"
+            or existing.actor != actor
+            or remote.get("kind") != "original_pr_repair"
+            or json.loads(existing.snapshot_json).get("strategic_request")
+        ):
+            raise PortfolioError("original PR budget binding is missing or already owned")
         binding = {
             "decision_id": task["decision_id"],
             "opportunity_id": task["opportunity_id"],
@@ -242,7 +298,11 @@ def prepare_request(
             deadline = min(deadline, _date(life_scope["deadline"]))
             saved["deadline"] = min(_date(saved["deadline"]), deadline).isoformat()
         request = {
-            "schema": SCHEMA if actor == ACTOR else "strategic-workspace/v1",
+            "schema": (
+                SCHEMA
+                if actor == ACTOR
+                else "strategic-pr-repair/v1" if reuse_original else "strategic-workspace/v1"
+            ),
             **remote,
             "gateway_base": gateway_base,
             "binding": binding,
@@ -253,24 +313,47 @@ def prepare_request(
         }
         register(session, row, proposal, state, request)
         now = time.time()
-        session.add(
-            MacControlTask(
-                id=uuid.UUID(request_id).hex,
-                actor=actor,
-                request_key=binding_id,
-                request_digest=digest(request),
-                request_json=_json(request),
-                state="dispatching",
-                reason="",
-                para_task_id="",
-                device_id="",
-                attempt_id="",
-                lease_until=0,
-                snapshot_json="{}",
-                created_at=now,
-                updated_at=now,
+        if reuse_original:
+            snapshot = json.loads(existing.snapshot_json)
+            snapshot["strategic_request"] = request
+            changed = session.execute(
+                update(MacControlTask)
+                .where(
+                    MacControlTask.id == existing.id,
+                    MacControlTask.request_digest == remote["original_request_sha256"],
+                    MacControlTask.snapshot_json == existing.snapshot_json,
+                    MacControlTask.state == existing.state,
+                    MacControlTask.lease_until <= now,
+                )
+                .values(
+                    snapshot_json=_json(snapshot),
+                    state="queued",
+                    reason="approved_original_company_budget",
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
             )
-        )
+            if changed.rowcount != 1:
+                raise PortfolioError("original PR request changed or its scheduler is busy")
+        else:
+            session.add(
+                MacControlTask(
+                    id=uuid.UUID(request_id).hex,
+                    actor=actor,
+                    request_key=binding_id,
+                    request_digest=digest(request),
+                    request_json=_json(request),
+                    state="dispatching",
+                    reason="",
+                    para_task_id="",
+                    device_id="",
+                    attempt_id="",
+                    lease_until=0,
+                    snapshot_json="{}",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
         saved["worker_binding"] = binding
         return request
 
@@ -329,19 +412,16 @@ def native_run(request: dict[str, Any], run_id: Any) -> dict[str, Any]:
 
     if type(run_id) is not int or run_id < 1:
         raise PortfolioError("remote report requires its native GitHub run")
-    dispatch_id = (
-        request["original_request_id"]
-        if request.get("kind") == "github_opencode_workspace"
-        else request["binding"]["receipt_id"]
-    )
-    run = _worker_run(github, request["repository"], run_id, dispatch_id)
-    if run.get("head_sha") != request["source_sha"]:
+    run = _worker_run(github, request["repository"], run_id, request["binding"]["receipt_id"])
+    if run.get("head_sha") != request.get("controller_sha", request["source_sha"]):
         raise PortfolioError("remote controller differs from the approved source SHA")
     return dict(run)
 
 
 def claim_report(request_id: str, identity: dict[str, Any]) -> dict[str, Any]:
     request, _, _ = read_request(request_id)
+    if request["kind"] != KIND:
+        raise PortfolioError("not an approved report execution")
     run = native_run(request, identity.get("run_id"))
     if (
         digest(identity)
@@ -398,7 +478,7 @@ def claim_report(request_id: str, identity: dict[str, Any]) -> dict[str, Any]:
 
 def authenticate_model(request_id: str, token: str) -> dict[str, Any]:
     request, _, _ = read_request(request_id)
-    if request["kind"] == "github_opencode_workspace":
+    if request["kind"] in {"github_opencode_workspace", "original_pr_repair"}:
         from modstore_server.strategic_workspace_bridge import authenticate_model as workspace_model
 
         return workspace_model(request_id, token)
@@ -418,7 +498,9 @@ def authenticate_model(request_id: str, token: str) -> dict[str, Any]:
 
 
 @contextmanager
-def model_scope(request_id: str, token: str) -> Iterator[dict[str, Any]]:
+def model_scope(
+    request_id: str, token: str, *, verify_source: bool = True
+) -> Iterator[dict[str, Any]]:
     from modstore_server.platform_llm_scope import platform_llm_scope
     from modstore_server.strategic_portfolio_usage import (
         portfolio_usage_scope,
@@ -435,12 +517,18 @@ def model_scope(request_id: str, token: str) -> Iterator[dict[str, Any]]:
         ),
     ):
         request = authenticate_model(request_id, token)
+        if verify_source and request["kind"] == "original_pr_repair":
+            from modstore_server.para_github_repair import require_current_source
+
+            require_current_source(request)
         remaining_execution_seconds()
         yield request
 
 
 def report_result(request_id: str, receipt: dict[str, Any]) -> dict[str, Any]:
     request, snapshot, _ = read_request(request_id)
+    if request["kind"] != KIND:
+        raise PortfolioError("not an approved report execution")
     identity = {
         "schema": SCHEMA,
         "kind": KIND,

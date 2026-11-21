@@ -9,6 +9,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,6 +28,7 @@ spec = importlib.util.spec_from_file_location(
     "publish_para_candidate", ROOT / "FHD/scripts/autonomy/publish_para_candidate.py"
 )
 publisher = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = publisher
 spec.loader.exec_module(publisher)
 REQUEST = "11111111-2222-4333-8444-555555555555"
 ATTEMPT = "a" * 32
@@ -313,6 +315,7 @@ def test_publication_binds_run_attempt_workflow_and_authoritative_receipt():
     state = {**WORKSPACE, "publication_candidate": value, "finished": False}
     run = {
         "id": 123,
+        "workflow_id": 55,
         "head_sha": "b" * 40,
         "head_branch": "main",
         "run_attempt": 1,
@@ -609,7 +612,6 @@ def test_staged_receipt_waits_for_exact_remote_branch_and_pr(monkeypatch):
     [
         None,
         "original_pr_repair",
-        "isolated_original_pr_repair",
         "customer_feedback_repair",
         "training_candidate_repair",
         "life_reflection_repair",
@@ -623,7 +625,7 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     monkeypatch,
     kind,
 ):
-    original_pr = kind in {"original_pr_repair", "isolated_original_pr_repair"}
+    original_pr = kind == "original_pr_repair"
     customer_repair = kind in {
         "customer_feedback_repair",
         "training_candidate_repair",
@@ -658,16 +660,6 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     execution_data, execution_metadata = isolation_artifact()
     if original_pr:
         state.update(kind="original_pr_repair", source_sha=value["base_sha"], pull_request=42)
-        if isolated:
-            state["model_allocation"].update(model="approved-model", provider="openai")
-            state["strategic_budget"] = {
-                "kind": "github_opencode_workspace",
-                "original_request_kind": "original_pr_repair",
-                "original_request_id": REQUEST,
-                "source_sha": "b" * 40,
-                "model": "approved-model",
-                "provider": "openai",
-            }
     run = {
         "id": 123,
         "head_sha": "b" * 40,
@@ -756,17 +748,12 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     def opener(*args, **kwargs):
         return io.BytesIO(json.dumps(state).encode())
 
-    if (original_pr and not isolated) or customer_repair:
+    if original_pr or customer_repair:
         with pytest.raises(ValueError, match="requires_non_exportable_model_credentials"):
             publisher.publish(env, command=command, opener=opener)
         assert not any(c[0] in {"push", "node"} for c in calls)
         # Already-published results can still be read back without another write.
         remote["exists"] = True
-    if original_pr and not isolated:
-        with pytest.raises(ValueError, match="requires_non_exportable_model_credentials"):
-            publisher.publish(env, command=command, opener=opener)
-        assert not any(c[0] in {"push", "node"} for c in calls)
-        return
     if customer_repair:
         with pytest.raises(
             ValueError, match="customer_feedback_requires_non_exportable_model_credentials"
@@ -791,9 +778,7 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
         "awaiting_original_pr_update" if original_pr else "published_for_review"
     )
     assert first["pull_request_url"] == "https://github.com/owner/repo/pull/42"
-    assert sum(c[0] == "push" for c in calls) == (
-        0 if (original_pr and not isolated) or customer_repair else 1
-    )
+    assert sum(c[0] == "push" for c in calls) == (0 if original_pr or customer_repair else 1)
     assert sum(c[0] == "node" for c in calls) == (0 if original_pr or customer_repair else 1)
     assert not any("--force" in c or "merge" in c for c in calls)
     with pytest.raises(ValueError, match="redirect_rejected"):

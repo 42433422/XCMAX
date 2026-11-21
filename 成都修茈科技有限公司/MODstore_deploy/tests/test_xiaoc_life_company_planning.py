@@ -54,14 +54,14 @@ def company_life(configured, monkeypatch):
     return configured, identity, dispatched
 
 
-def approve_work(rows):
+def approve_work(rows, *, key="company-ready"):
     made = portfolio.create_portfolio_proposal(
         owner_user_id=7,
         goal="Complete the original company work",
-        period="xiaoc-life:company-ready",
+        period="xiaoc-life:" + key,
         limits=limits(tokens=200000),
         opportunities=rows,
-        idempotency_key="life-company-ready",
+        idempotency_key="life-" + key,
     )["decision"]
     identity = made["decision_id"]
     portfolio.authorize_portfolio(
@@ -70,6 +70,7 @@ def approve_work(rows):
         actor="admin:7",
         expected_proposal_sha256=made["decision_payload"]["proposal_sha256"],
     )
+    life.wake(actor_user_id=7, expected_revision=life.read_state()["revision"])
     seed = life.claim_cycle(domain="enterprise", reserve_tokens=0)
     life.finish_cycle(
         seed,
@@ -79,7 +80,7 @@ def approve_work(rows):
         actual_tokens=0,
         goals=[
             {
-                "id": "company-ready",
+                "id": key,
                 "title": "Original company work",
                 "domain": "enterprise",
                 "status": "approved",
@@ -176,3 +177,40 @@ def test_daily_life_cap_can_run_smaller_global_candidate_without_enlarging_it(co
     assert "large" not in portfolio.portfolio_status(identity)["tasks"]
     assert result["budget"]["used_tokens"] == 25 and result["budget"]["reserved_tokens"] == 0
     assert not result["unknown_usage"] and company.totals(company_id)["slots"] == 0
+
+
+@pytest.mark.parametrize(
+    ("first", "daily_tokens", "next_tokens"),
+    [
+        (opportunity("risk", risk="high"), 1_000_000, 50000),
+        (opportunity("too-large", tokens=40000), 30000, 20000),
+    ],
+)
+def test_deferred_first_goal_does_not_starve_next_approved_goal_after_restart(
+    company_life, first, daily_tokens, next_tokens
+):
+    _, company_id, dispatched = company_life
+    life.update_settings(
+        LifeUpdate(
+            expected_revision=life.read_state()["revision"],
+            policy={"daily_token_limit": daily_tokens},
+        ),
+        actor_user_id=7,
+    )
+    blocked = approve_work([first], key="first")
+    ready = approve_work([opportunity("ready", tokens=next_tokens)], key="second")
+    frozen = portfolio.portfolio_status(ready)["proposal_sha256"]
+    advance()
+    assert dispatched == []
+    assert portfolio.portfolio_status(blocked)["tasks"] == {}
+
+    # A new runtime reads only SQL state. Its reservation and execution must
+    # choose the same next goal without granting the deferred task permission.
+    assert runtime._cycle_reservation(life.read_state(), "enterprise") == next_tokens
+    result = advance()
+    assert dispatched == [(ready, "ready")]
+    assert portfolio.portfolio_status(blocked)["tasks"] == {}
+    assert portfolio.portfolio_status(ready)["proposal_sha256"] == frozen
+    assert result["budget"]["used_tokens"] == 25
+    assert result["budget"]["reserved_tokens"] == company.totals(company_id)["slots"] == 0
+    assert not result["unknown_usage"]

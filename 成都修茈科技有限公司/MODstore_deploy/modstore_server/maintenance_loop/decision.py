@@ -182,12 +182,13 @@ def _complete_merge_policy(
     policy = {**policy, "deployment_receipt": receipt}
     if checkpoint is not None:
         checkpoint({"stage": "merge_observed", "policy": policy})
+        production = receipt.get("production")
         if receipt.get("enabled") is True and not (
             receipt.get("ok") is True
             and receipt.get("staging_verified") is True
             and (
                 receipt.get("production_enabled") is False
-                or (receipt.get("production") or {}).get("verified") is True
+                or (isinstance(production, dict) and production.get("verified") is True)
             )
         ):
             raise RuntimeError("original_deployment_requires_reconciliation")

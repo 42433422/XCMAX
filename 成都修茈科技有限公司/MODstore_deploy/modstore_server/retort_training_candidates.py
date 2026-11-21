@@ -49,6 +49,8 @@ def create_training_candidate(body):
     from modstore_server.maintenance_loop.store import ledger_path
     from modstore_server.retort_evolution_api import _templates
     from modstore_server.retort_experiment_surfaces import (
+        RAG_MEASUREMENT,
+        RAG_PROMPT_PATH,
         WORKFLOW_NL_PROMPT_PATH,
         surface_identity,
     )
@@ -114,7 +116,7 @@ def create_training_candidate(body):
         cases = bundle["case_sha256"]
         if not cases or not set(cases).issubset(source_hashes):
             raise ValueError("training_reproduction_source_unbound")
-        if surface == "workflow_nl_prompt":
+        if surface in {"workflow_nl_prompt", "rag_context_prompt"}:
             from modstore_server.workflow_nl_training import _digest
 
             pairs = {
@@ -145,7 +147,8 @@ def create_training_candidate(body):
             or (
                 path.name != "prompt.txt"
                 if surface == "employee_prompt"
-                else prompt_path != WORKFLOW_NL_PROMPT_PATH
+                else prompt_path
+                != (RAG_PROMPT_PATH if surface == "rag_context_prompt" else WORKFLOW_NL_PROMPT_PATH)
             )
         ):
             raise ValueError("training_prompt_path_unbound")
@@ -163,6 +166,11 @@ def create_training_candidate(body):
         ):
             raise ValueError("training_baseline_prompt_changed")
         growthbook = dict(policy.get("growthbook") or {})
+        if surface == "rag_context_prompt" and (
+            proposal["offline_evidence"].get("measurement_scope") != RAG_MEASUREMENT
+            or (growthbook.get("lifecycle") or {}).get("measurement_scope") != RAG_MEASUREMENT
+        ):
+            raise ValueError("training_rag_experiment_required")
         if (
             proposal["offline_evidence"].get("feedback_scope") == "workflow_execution_terminal"
             and (growthbook.get("lifecycle") or {}).get("measurement_scope")
@@ -190,7 +198,14 @@ def create_training_candidate(body):
                 **(
                     {"employee_id": resource}
                     if surface == "employee_prompt"
-                    else {"resource_id": resource, "prompt_symbol": "SYSTEM_PROMPT"}
+                    else {
+                        "resource_id": resource,
+                        "prompt_symbol": (
+                            "RAG_SYSTEM_PROMPT"
+                            if surface == "rag_context_prompt"
+                            else "SYSTEM_PROMPT"
+                        ),
+                    }
                 ),
                 "submission_digest": source_digest,
                 "failure_run_ids": body["failure_run_ids"],

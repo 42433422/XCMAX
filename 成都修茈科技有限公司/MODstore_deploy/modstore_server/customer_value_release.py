@@ -11,8 +11,8 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _platform(value: Any) -> str:
-    value = str(value or "").strip().lower()
-    return {"darwin": "macos", "win32": "windows"}.get(value, value)
+    platform = str(value or "").strip().lower()
+    return {"darwin": "macos", "win32": "windows"}.get(platform, platform)
 
 
 def desktop_publications() -> dict[str, Any]:

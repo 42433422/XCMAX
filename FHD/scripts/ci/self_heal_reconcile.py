@@ -103,11 +103,20 @@ def recovery_plan(
                 body,
                 re.M,
             )
+            workers = re.findall(
+                r"^- Para 云端："
+                + re.escape(f"https://github.com/{repo}/actions/runs/")
+                + r"(\d+)\s*$",
+                body,
+                re.M,
+            )
             plan = {
                 "state": "unresolved",
                 "reason": status_value,
                 "control_task_id": task_id,
                 "dispatch_run_id": int(run.group(1)) if run else 0,
+                "para_receipt": record,
+                "github_worker_run_id": int(workers[0]) if len(workers) == 1 else 0,
             }
     plan["dispatch_count"] = dispatch_count
     plan["rerun_from_attempt"] = pending_reruns.get(int(plan.get("dispatch_run_id") or 0), 0)
@@ -193,6 +202,51 @@ def recover_dispatch(plan, *, repo, number, get, write, dry_run):
     }
 
 
+def _original_worker_resume_matches(run, plan, source, repo, get):
+    """A trusted producer receipt binds the source and task; the title only locates its worker."""
+    control = plan.get("control_task_id", "")
+    receipt = plan.get("para_receipt") or {}
+    worker_id = plan.get("github_worker_run_id")
+    if (
+        source.workflow_path not in freshness.CODE_CI_PATHS
+        or source.head_branch == "main"
+        or not re.fullmatch(r"[0-9a-f]{32}", control)
+        or type(worker_id) is not int
+        or worker_id < 1
+        or worker_id == run["id"]
+        or receipt.get("control_task_id") != control
+        or receipt.get("source_sha") != source.source_sha
+        or any(
+            type(receipt.get(key)) is not int or receipt[key] != expected
+            for key, expected in (
+                ("source_run_id", source.run_id),
+                ("source_run_attempt", source.run_attempt),
+            )
+        )
+        or not re.fullmatch(r"[0-9a-f]{40}", str(run.get("head_sha") or ""))
+        or (run.get("repository") or {}).get("full_name", "").casefold() != repo.casefold()
+        or type(run.get("run_attempt")) is not int
+        or run["run_attempt"] < 1
+    ):
+        return False
+    worker = freshness._get(get, f"/repos/{repo}/actions/runs/{worker_id}")
+    return (
+        worker.get("id") == worker_id
+        and type(worker.get("workflow_id")) is int
+        and worker["workflow_id"] > 0
+        and worker.get("path") == ".github/workflows/fhd-para-github-worker.yml"
+        and worker.get("event") == "workflow_dispatch"
+        and worker.get("head_branch") == "main"
+        and re.fullmatch(r"[0-9a-f]{40}", str(worker.get("head_sha") or "")) is not None
+        and (worker.get("repository") or {}).get("full_name", "").casefold() == repo.casefold()
+        and type(worker.get("run_attempt")) is int
+        and worker["run_attempt"] == 1
+        and worker.get("status") == "completed"
+        and worker.get("conclusion") == "success"
+        and worker.get("display_title") == f"para-workspace-{uuid.UUID(control)}"
+    )
+
+
 def original_repair_result(source, repo, number, get):
     if source.workflow_path not in freshness.CODE_CI_PATHS or source.head_branch == "main":
         return None
@@ -212,11 +266,12 @@ def original_repair_result(source, repo, number, get):
     }
     if worker_run < 1:
         return {**result, "state": "unresolved", "reason": "original_pr_cloud_receipt_missing"}
-    if (target.run_id, target.old_sha, target.workflow_id, target.workflow_path) != (
-        source.run_id,
-        source.source_sha,
-        source.workflow_id,
-        source.workflow_path,
+    if (
+        (target.run_id, target.old_sha, target.workflow_id, target.workflow_path)
+        != (source.run_id, source.source_sha, source.workflow_id, source.workflow_path)
+        # Legacy already-applied intents remain read-only. A recorded attempt
+        # must match this incident and can never grant a new execution.
+        or target.run_attempt not in {0, source.run_attempt}
     ):
         return {**result, "state": "unresolved", "reason": "original_pr_source_receipt_mismatch"}
     pr = para.repair.open_pr(repo, target, None, get, authorize=False)
@@ -367,8 +422,13 @@ def reconcile_one(issue: dict[str, Any], *, repo: str, get, write, dispatch, dry
         if (
             run.get("id") != run_id
             or freshness.workflow_identity(run)[1] != IMPLEMENT_PATH
-            or run.get("event") not in {"workflow_dispatch", "issues", "issue_comment"}
+            or run.get("event")
+            not in {"workflow_dispatch", "issues", "issue_comment", "workflow_run"}
             or run.get("head_branch") != "main"
+            or (
+                run.get("event") == "workflow_run"
+                and not _original_worker_resume_matches(run, plan, source, repo, get)
+            )
             or (
                 (plan.get("dispatch_receipt") or {}).get("dispatch_request_id")
                 and not _dispatch_run_matches(
