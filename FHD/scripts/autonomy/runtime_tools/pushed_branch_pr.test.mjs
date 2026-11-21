@@ -72,6 +72,8 @@ test('PR 创建失败时，受管回执和 WebSocket 都只能报告 failed；�
   for (const prUrl of ['', 'https://github.com/42433422/XCMAX/pull/1']) {
     const reports = [], messages = [];
     const context = vm.createContext({ requirePrUrlAfterPush, console,
+      taskSignal: () => new AbortController().signal,
+      taskRuns: new Map(), executionKey: () => 'isolated-test',
       openPullRequestAfterPush: async () => prUrl, paraReports: { handles: () => true },
       sourceIdentity: async () => ({ head_sha: 'a'.repeat(40) }),
       postTaskReport: async (_, report) => reports.push(report),
