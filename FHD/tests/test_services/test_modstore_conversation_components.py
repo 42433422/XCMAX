@@ -51,6 +51,241 @@ def mock_async_transport(monkeypatch, handler):
 
 
 @pytest.mark.asyncio
+async def test_selected_route_carries_only_public_model_limits(monkeypatch):
+    from app.application.market_llm import routing
+
+    current = adapter()
+    current._use_account_default = True
+    payload = {
+        "ok": True,
+        "provider": "litellm",
+        "model": "xcmax-doubao-code",
+        "route_source": "platform_gateway",
+        "key_source": "platform",
+        "config_revision": "capability-fixture-v1",
+        "route_token": "opaque-fixture-route",
+        "model_capabilities": {
+            "context_window": 65536,
+            "max_input_tokens": 61440,
+            "max_output_tokens": 4096,
+            "resolved_model": "doubao/verified-test-deployment",
+            "source": "litellm_model_info",
+            "api_key": "must-not-be-projected",
+            "api_base": "https://private-upstream.invalid",
+        },
+    }
+
+    @contextmanager
+    def client(**kwargs):
+        with httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+        ) as value:
+            yield value
+
+    monkeypatch.setattr(facade, "_httpx_sync_client", client)
+    resolved = routing.resolve_account_route(current._connection(), client)
+    assert set(resolved["model_capabilities"]) == {
+        "context_window",
+        "max_input_tokens",
+        "max_output_tokens",
+        "resolved_model",
+        "source",
+    }
+    assert await current.resolve_chat_route(None, None) == ("litellm", "xcmax-doubao-code")
+    capabilities = await current.resolve_model_capabilities("litellm", "xcmax-doubao-code")
+    assert capabilities == resolved["model_capabilities"]
+    assert (
+        current._pinned_snapshot(current._connection(), ("litellm", "xcmax-doubao-code"))[
+            "route_token"
+        ]
+        == "opaque-fixture-route"
+    )
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_prepared_vision_snapshot_survives_text_cache_changes(request_market, asynchronous):
+    requests = []
+    route = ("openrouter", "vendor/visual-model")
+    messages = [
+        {
+            "role": "user",
+            "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}],
+        }
+    ]
+
+    def respond(request):
+        requests.append(request)
+        if request.method == "GET":
+            assert dict(request.url.params) == {"operation": "vision"}
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "provider": route[0],
+                    "model": route[1],
+                    "operation": "vision",
+                    "route_token": "private-vision-snapshot",
+                    "model_capabilities": {"context_window": 32768},
+                },
+            )
+        payload = json.loads(request.content)
+        assert (payload["provider"], payload["model"]) == route
+        assert payload["route_token"] == "private-vision-snapshot"
+        assert payload["messages"] == messages
+        assert payload["allow_failover"] is False
+        assert "_prepared_chat_route" not in payload
+        return httpx.Response(200, json={"content": "received", "model": route[1]})
+
+    current = request_market(respond).adapter
+    prepared = await current.prepare_chat_route(messages, fallback_model="text/default")
+    assert prepared.native_vision and prepared.route == route
+    assert "private-vision-snapshot" not in repr(prepared)
+    assert "synthetic-account" not in repr(prepared)
+    connection = current._connection()
+    current._account_default = (connection, ("text", "unchanged"))
+    current._route_snapshots[(connection, route)] = {
+        "provider": route[0],
+        "model": route[1],
+        "route_token": "unselected-new-snapshot",
+        "model_capabilities": {"context_window": 1024},
+    }
+    assert await current.resolve_model_capabilities(*route, prepared_route=prepared) == {
+        "context_window": 32768,
+        "source": "platform_catalog",
+    }
+    assert current._account_default == (connection, ("text", "unchanged"))
+    try:
+        kwargs = {"model": "/".join(route), "_prepared_chat_route": prepared}
+        result = (
+            await current.chat_completion(messages, **kwargs)
+            if asynchronous
+            else current.chat_completion_sync(messages, **kwargs)
+        )
+        assert result["choices"][0]["message"]["content"] == "received"
+        assert [request.method for request in requests] == ["GET", "POST"]
+    finally:
+        await current.close()
+
+
+@pytest.mark.parametrize("failure", ["credential", "route", "snapshot", "type", "requested_model"])
+@pytest.mark.asyncio
+async def test_prepared_route_rejects_identity_changes_before_transport(request_market, failure):
+    from dataclasses import replace
+
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    requests = []
+
+    def respond(request):
+        requests.append(request.method)
+        assert request.method == "GET"
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "provider": "litellm",
+                "model": "selected",
+                "route_token": "private-selected-snapshot",
+                "model_capabilities": {"context_window": 32768},
+            },
+        )
+
+    current = request_market(respond).adapter
+    prepared = await current.prepare_chat_route([])
+    model = "litellm/selected"
+    if failure == "credential":
+        current.auth_token = "different-account"
+    elif failure == "route":
+        prepared = replace(prepared, route=("litellm", "other"))
+    elif failure == "snapshot":
+        prepared = replace(prepared, snapshot={"provider": "litellm", "model": "other"})
+    elif failure == "type":
+        prepared = {"route": ["litellm", "selected"]}
+    else:
+        model = "litellm/other"
+    try:
+        with pytest.raises(MarketModelError) as error:
+            await current.chat_completion([], model=model, _prepared_chat_route=prepared)
+        assert error.value.status_code == 409
+        assert requests == ["GET"]
+    finally:
+        await current.close()
+
+
+@pytest.mark.asyncio
+async def test_model_capabilities_never_cross_credentials_during_catalog_await(monkeypatch):
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    entered, resume = asyncio.Event(), asyncio.Event()
+
+    async def respond(request):
+        assert request.headers["Authorization"] == "Bearer synthetic-old"
+        entered.set()
+        await resume.wait()
+        return httpx.Response(
+            200,
+            json={
+                "providers": [
+                    {
+                        "provider": "litellm",
+                        "models_detailed": [
+                            {
+                                "id": "account-alias",
+                                "model_capabilities": {"max_input_tokens": 100000},
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+
+    mock_async_transport(monkeypatch, respond)
+    current = adapter()
+    query = asyncio.create_task(current.resolve_model_capabilities("litellm", "account-alias"))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        current.auth_token = "synthetic-new"
+        resume.set()
+        with pytest.raises(MarketModelError) as error:
+            await query
+        assert error.value.status_code == 409
+        assert current._cached_catalog() is None
+    finally:
+        resume.set()
+        await current.close()
+
+
+def test_catalog_limits_require_exact_provider_model_and_valid_positive_integers():
+    from app.application.market_llm.catalog import model_capabilities
+
+    value = {
+        "providers": [
+            {
+                "provider": "litellm",
+                "models_detailed": [
+                    {
+                        "id": "account-alias",
+                        "model_capabilities": {
+                            "context_window": True,
+                            "max_input_tokens": 100000.5,
+                            "max_output_tokens": -1,
+                            "source": {"invalid": "shape"},
+                            "api_key": "must-not-leak",
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+    assert model_capabilities(value, "litellm", "account-alias") == {}
+    value["providers"][0]["models_detailed"][0]["model_capabilities"] = {"max_input_tokens": 32000}
+    assert model_capabilities(value, "other-provider", "account-alias") == {}
+    assert model_capabilities(value, "litellm", "account-alias-other") == {}
+    assert model_capabilities(value, "litellm", "account-alias")["max_input_tokens"] == 32000
+
+
+@pytest.mark.asyncio
 async def test_refresh_credential_reaches_existing_async_connection(monkeypatch):
     sent = []
 
