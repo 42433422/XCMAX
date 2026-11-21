@@ -243,7 +243,7 @@ def test_knowledge_query_reply_answers_from_retrieval_not_plan_dump():
     assert "计划ID: internal-plan" not in reply["response"]
 
 
-def test_knowledge_query_answer_uses_model_synthesis_when_available():
+def test_raw_knowledge_query_uses_model_synthesis_when_available():
     from types import SimpleNamespace
 
     from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
@@ -260,7 +260,7 @@ def test_knowledge_query_answer_uses_model_synthesis_when_available():
     builder.workflow_planner = Planner()
     step = SimpleNamespace(
         output={
-            "answer": "730浆加工费 | 1 | 1176 | 0.8 | 940.8",
+            "query": "白浆加工费多少",
             "chunks": [{"text": "R335 | 730浆加工费 | 1 | 1176", "source_url": "邻居贾总.xlsx"}],
         }
     )
