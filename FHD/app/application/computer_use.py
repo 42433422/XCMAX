@@ -13,13 +13,16 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from filelock import FileLock, Timeout
 
 from app.domain.autonomy.computer_use_policy import normalize_computer_effect
 from app.utils.deployment import env_flag, is_desktop_mode
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
+if TYPE_CHECKING:
+    from app.desktop_automation.computer_desktop import PyAutoGuiComputer
 
 COMPUTER_ACTIONS = frozenset(
     {"computer_status", "computer_observe", "computer_execute", "computer_stop", "computer_result"}
@@ -172,7 +175,7 @@ class ComputerUseService:
         )
 
     @staticmethod
-    def _desktop():
+    def _desktop() -> PyAutoGuiComputer:
         from app.desktop_automation.computer_desktop import PyAutoGuiComputer
 
         if not is_desktop_mode():

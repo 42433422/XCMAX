@@ -308,6 +308,7 @@ def test_stop_signal_does_not_wait_for_execution_lock(setup, monkeypatch):
     thread.start()
     try:
         assert entered.wait(5)
+        monkeypatch.setenv("XCAGI_COMPUTER_USE_ENABLED", "0")
         result = service.invoke("computer_stop", {"request_id": params["request_id"]}, context)
         assert result["status"] == "stop_requested" and not result["stopped"]
     finally:

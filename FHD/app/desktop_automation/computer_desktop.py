@@ -241,7 +241,7 @@ class PyAutoGuiComputer:
             "data_url": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
         }, image
 
-    def observe(self) -> dict:
+    def observe(self) -> dict[str, Any]:
         try:
             return self._capture(self._load())[0]
         except _DesktopError as exc:

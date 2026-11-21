@@ -14,6 +14,30 @@ from app.application.computer_use import ComputerUseService
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
+@pytest.mark.parametrize("enabled", [False, True])
+def test_planner_only_advertises_physical_actions_on_enabled_host(monkeypatch, enabled):
+    from app.application.workflow.llm_plan_generation import _tool_specs
+    from app.application.workflow.planning_graph_policy import filter_registry_for_profile
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    monkeypatch.setenv("XCAGI_COMPUTER_USE_ENABLED", str(int(enabled)))
+    registry = get_workflow_tool_registry()
+    original = registry["desktop_automation"]["actions"]
+    planner_registry = filter_registry_for_profile(registry, "pro_default")
+    filtered = planner_registry["desktop_automation"]["actions"]
+    schema = _tool_specs({"desktop_automation": planner_registry["desktop_automation"]})[0]
+    offered = {action["action"]: action for action in schema["actions"]}
+    physical = {"computer_observe", "computer_execute"}
+    retained = {"list", "open_app", "computer_status", "computer_stop", "computer_result"}
+    assert physical <= original.keys()
+    assert retained <= offered.keys()
+    assert physical.intersection(offered) == (physical if enabled else set())
+    if enabled:
+        assert offered["computer_execute"]["risk"] == "high"
+        assert offered["computer_execute"]["idempotent"] is False
+    assert all(filtered[action] == original[action] for action in filtered)
+
+
 class FakeBrowser:
     def __init__(self, *, verified: bool, repository: InMemoryAgentRunRepository):
         self.verified = verified
