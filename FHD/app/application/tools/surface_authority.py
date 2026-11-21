@@ -64,11 +64,16 @@ def require_surface_authority(
         raise PermissionError("browser task does not match the stored step")
     plan = plan_from_dict(run.metadata.get("plan"))
     node = next((n for n in plan.nodes if n.node_id == step.node_id), None) if plan else None
-    if node is None or (node.tool_id, node.action, node.params, node.depends_on) != (
-        step.tool_id,
-        step.action,
-        step.params,
-        step.depends_on,
+    if (
+        plan is None
+        or node is None
+        or (node.tool_id, node.action, node.params, node.depends_on)
+        != (
+            step.tool_id,
+            step.action,
+            step.params,
+            step.depends_on,
+        )
     ):
         raise PermissionError("browser task does not match the authorized plan")
     if approval_required:
