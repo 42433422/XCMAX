@@ -355,6 +355,14 @@ class StepExecution:
         else:
             execution_status = "failed"
         step.status = tool_call.status = "completed" if success else "failed"
+        if (
+            success
+            and step.output.get("requires_user_decision") is True
+            and step.output.get("question")
+        ):
+            # The call finished, but this step still needs a new user decision.
+            # Persist that distinction before completed-step retention can freeze it.
+            step.status = run.status = "waiting_user"
         tool_call.metadata["execution_status"] = execution_status
         observe_tool_call(
             tool=step.tool_id,

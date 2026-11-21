@@ -247,7 +247,7 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
         "backend-quality",
         "backend-test-shard",
     }
-    assert gate["if"] == "always()"
+    assert gate["if"] == "${{ !cancelled() }}"
     assert gate["outputs"]["skip"] == "${{ needs.classify.outputs.backend_skip }}"
     preflight = gate["steps"][0]
     assert preflight["working-directory"] == "."
@@ -539,7 +539,7 @@ def test_dynamic_production_configuration_keeps_full_and_behavior():
     )
     assert shard["env"]["BACKEND_TIMINGS_FILE"] == gate["env"]["BACKEND_TIMINGS_FILE"]
     assert shard["env"]["BACKEND_TIMINGS_FILE"] == "metrics/backend_test_timings.json"
-    assert gate["if"] == "always()"
+    assert gate["if"] == "${{ !cancelled() }}"
     command = next(
         step["run"] for step in shard["steps"] if "Run complete suite" in step.get("name", "")
     )

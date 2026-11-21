@@ -1380,17 +1380,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 stopped_for_interaction = True
                 return {"success": True, "requires_confirmation": True}
             original_params = copy.deepcopy(step.params)
-            if (
-                step.status == "waiting_user"
-                and isinstance(step.output, dict)
-                and isinstance(step.output.get("resume_params"), dict)
-                and approved in {step.step_id, step.node_id}
-            ):
-                # 用户确认后重跑暂停步骤时带上工具要求的续跑参数（如「仅写入正确行」）。
-                step.params.update(
-                    {str(key): value for key, value in step.output["resume_params"].items()}
-                )
-                step.output.pop("resume_params", None)
             if refuse_unresolved_step(run, step, outputs):
                 stopped_for_interaction = True
                 return dict(
@@ -1528,6 +1517,15 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                             "requires_confirmation": True,
                         }
                     }
+                    resume_params = step.output.get("resume_params")
+                    if isinstance(resume_params, dict):
+                        # Persist the proposed continuation before issuing the
+                        # next grant. Approval must bind the parameters it will
+                        # execute, while the original ToolCall keeps its inputs.
+                        step.params.update(copy.deepcopy(resume_params))
+                        if not sync_step_plan(step, "续跑参数已写入待确认的完整计划"):
+                            stopped_for_interaction = True
+                            return {"success": False, "error_code": "plan_node_binding_invalid"}
                     run.add_event(
                         "step.waiting_user",
                         str(decision),
@@ -1614,8 +1612,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     max_retries=0,
                     parallel=parallel,
                 )
-        except (ValueError, RuntimeError) as exc:
-            run.status, run.error = "blocked", f"计划图校验或执行失败：{exc}"
+        except (ValueError, RuntimeError):
+            logger.exception("agent workflow graph rejected run_id=%s", run.run_id)
+            run.status, run.error = "blocked", "计划图校验或执行失败"
             run.add_event("workflow.graph_rejected", run.error, {"run_id": run.run_id})
             self._repo.save(run)
             return

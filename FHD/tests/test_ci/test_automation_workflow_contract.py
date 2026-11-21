@@ -224,7 +224,10 @@ def test_required_image_context_requires_real_success(tmp_path, candidate, publi
     jobs = workflow(".github/workflows/fhd-ci-cd.yml")["jobs"]
     gate = jobs["docker-build-fhd-api-check"]
     assert gate["name"] == "docker-build-fhd-api"
-    assert "always()" in gate["if"]
+    assert gate["if"] == (
+        "${{ !cancelled() && github.event_name != 'schedule' "
+        "&& needs.backend-test.outputs.skip != 'true' }}"
+    )
     assert gate["permissions"] == {}
     assert jobs["docker-build-fhd-api"]["name"] != gate["name"]
     assert jobs["docker-build-fhd-api-pr"]["name"] != gate["name"]

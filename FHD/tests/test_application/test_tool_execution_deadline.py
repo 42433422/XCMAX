@@ -58,6 +58,50 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
     assert result["retryable"] is False and result["reconciliation_required"] is True
 
 
+@pytest.mark.parametrize(
+    "pending",
+    [
+        {"execution_state": "queued"},
+        {"execution_accepted": True},
+        {"result": {"status": "blocked"}},
+    ],
+)
+@pytest.mark.parametrize("uncertainty", ["none", "receipt", "truthy_receipt", "io"])
+def test_timely_pending_receipt_keeps_state_without_hiding_unknown_effect(
+    monkeypatch, pending, uncertainty
+):
+    from app.application.tool_execution_deadline import _DEADLINE
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    raw = {"success": True, "agent_run_id": "original-child", **pending}
+    if uncertainty in {"receipt", "truthy_receipt"}:
+        raw["output"] = {"requires_reconciliation": True if uncertainty == "receipt" else "yes"}
+    calls = []
+
+    def execute(*_args, **_kwargs):
+        calls.append(True)
+        if uncertainty == "io":
+            _DEADLINE.get().uncertain.append({"kind": "http_timeout", "method": "POST"})
+        return raw
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=30,
+    )
+    assert result["success"] is False and result["retryable"] is False
+    evidence = result["reconciliation_evidence"] if uncertainty == "io" else result
+    assert evidence["agent_run_id"] == "original-child" and calls == [True]
+    if uncertainty == "none":
+        assert execution_result_pending_state(result) == execution_result_pending_state(raw)
+        assert not result.get("reconciliation_required") and result.get("outcome") != "unknown"
+    else:
+        assert result["outcome"] == "unknown" and result["reconciliation_required"] is True
+    assert raw["success"] is True
+
+
 @pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
 def test_invalid_timeout_never_dispatches(timeout):
     result = execute_with_tool_deadline(

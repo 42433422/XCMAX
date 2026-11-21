@@ -154,13 +154,33 @@ class MaintenanceRuntime:
             pending_candidate = resume._pending_execution_candidate(memory, user_id)
         except ValueError as exc:
             # A lost POST response or unreadable journal cannot authorize another POST.
+            public_reason = next(
+                (
+                    code
+                    for code in (
+                        "execution_state_unavailable",
+                        "pending_execution_actor_mismatch",
+                        "pending_execution_identity_unavailable",
+                        "pending_execution_scope_mismatch",
+                        "pending_execution_predecessor_mismatch",
+                        "pending_execution_task_unavailable",
+                        "pending_execution_code_identity_mismatch",
+                        "pending_execution_code_identity_unavailable",
+                        "pending_execution_terminal_mismatch",
+                        "pending_finalization_requires_reconciliation",
+                        "pending_outcome_requires_reconciliation",
+                    )
+                    if code == str(exc)
+                ),
+                "pending_execution_identity_unavailable",
+            )
             record = {
                 "created_at": config._iso(started_at),
                 "phase": "skip",
                 "run_id": run_id,
                 "status": "waiting_reconciliation",
                 "reason": "pending_execution_identity_unavailable",
-                "reconciliation_reason": str(exc),
+                "reconciliation_reason": public_reason,
                 "triggered_by": triggered_by,
                 "requires_reconciliation": True,
             }

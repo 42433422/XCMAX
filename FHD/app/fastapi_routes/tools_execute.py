@@ -179,11 +179,11 @@ def run_tools_execute_agent(
     trusted = request_runtime_context(request)
     try:
         tool_id, action, params = _resolve_tool_request(body)
-    except ValueError as exc:
+    except ValueError:
         return {
             "success": False,
             "error_code": "invalid_tool_arguments",
-            "message": str(exc),
+            "message": "工具请求格式无效，请检查工具名称与参数。",
         }, 400
     params = without_runtime_identity(params)
     params.pop("_runtime_context", None)

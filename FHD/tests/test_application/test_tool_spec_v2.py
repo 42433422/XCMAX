@@ -711,9 +711,15 @@ def test_schema_failure_only_releases_a_certain_read_claim(
         result = execute_with_tool_deadline(
             executor, step, runtime_context=context, timeout_seconds=60
         )
-        evidence = result["reconciliation_evidence"] if unknown else result
+        evidence = result["reconciliation_evidence"] if unknown_io else result
         assert evidence["error_code"] == "output_schema_validation_failed"
+        assert evidence["raw_error_code"] == raw_output.get("error_code")
         assert result["success"] is False
+        if unknown_io:
+            assert result["error_code"] == "tool_timeout_unknown"
+            assert result["io_reconciliation"] == [{"kind": "http_timeout", "method": "GET"}]
+        else:
+            assert "reconciliation_evidence" not in result
         if unknown:
             assert result["outcome"] == "unknown" and result["retryable"] is False
             assert result["reconciliation_required"] is True
@@ -723,6 +729,9 @@ def test_schema_failure_only_releases_a_certain_read_claim(
             )
             assert replay["outcome"] == "unknown" and replay["retryable"] is False
             assert replay["reconciliation_required"] is True
+            assert replay["error_code"] == "output_schema_validation_failed"
+            assert replay["raw_error_code"] == evidence["raw_error_code"]
+            assert "reconciliation_evidence" not in replay
         else:
             assert result["message"] == "工具输出 缺少字段：data"
             assert not result.get("reconciliation_required") and result.get("outcome") != "unknown"

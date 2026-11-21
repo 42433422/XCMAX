@@ -1,4 +1,4 @@
-import { webcrypto } from 'node:crypto'
+import { createHash, webcrypto } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { adminEmployeeState, executeAdminEmployee, readPendingAdminEmployeeReceipts } from './adminEmployeeRequest'
 import { setRuntimeTenantStorageScopeInput } from './tenantStorageScopeRuntime'
@@ -9,6 +9,12 @@ vi.mock('@/utils/apiBase', () => ({ getApiBase: () => config.base }))
 const body = { task: 'write once', input_data: { value: 1 } }
 const completed = (key: string) => ({ success: true, execution_state: 'completed', idempotency_key: key, run_id: 'original-run', data: { summary: 'confirmed' } })
 
+function requestRecord() {
+  const storageKey = Object.keys(localStorage)[0] || ''
+  expect(storageKey).toBeTruthy()
+  return { storageKey, record: JSON.parse(localStorage.getItem(storageKey) || '{}') as Record<string, unknown> }
+}
+
 beforeEach(() => {
   localStorage.clear()
   vi.stubGlobal('crypto', webcrypto)
@@ -18,6 +24,59 @@ beforeEach(() => {
 })
 
 describe('admin employee request ownership', () => {
+  it.each(['initial', 'acknowledged', 'conflict'])('persists an entry digest through the %s write', async mode => {
+    const entryId = 'excel-full-read-employee'
+    const post = vi.fn().mockRejectedValue(mode === 'conflict' ? { status: 409 } : new Error('lost'))
+    if (mode === 'acknowledged') post.mockImplementation(async (_path, payload) => ({ ...completed(payload.idempotency_key), success: false, execution_state: 'queued' }))
+    const get = vi.fn().mockRejectedValue(new Error('offline'))
+    const pending = executeAdminEmployee(entryId, body, { post, get })
+    if (mode === 'conflict') await expect(pending).rejects.toMatchObject({ status: 409 })
+    else await pending
+    const { storageKey, record } = requestRecord()
+    expect(record.entryDigest).toBe(createHash('sha256').update(entryId).digest('hex'))
+    expect(record).not.toHaveProperty('employeeId')
+    expect(localStorage.getItem(storageKey)).not.toContain(entryId)
+    expect(localStorage.getItem(storageKey)).not.toContain(body.task)
+    if (mode === 'acknowledged') expect(record.runId).toBe('original-run')
+    if (mode === 'conflict') expect(record.conflicted).toBe(true)
+  })
+
+  it.each(['repeat', 'reload'])('migrates an old plain-entry record during %s without another POST', async mode => {
+    const post = vi.fn(async (_path, payload) => ({ ...completed(payload.idempotency_key), success: false, execution_state: 'queued' }))
+    const get = vi.fn()
+    const original = await executeAdminEmployee('clerk', body, { post, get })
+    const { storageKey, record } = requestRecord()
+    record.employeeId = 'clerk'
+    delete record.entryDigest
+    localStorage.setItem(storageKey, JSON.stringify(record))
+    get.mockResolvedValue(original)
+    const receipts = mode === 'repeat'
+      ? [await executeAdminEmployee('clerk', body, { post, get })]
+      : await readPendingAdminEmployeeReceipts('clerk', { post, get })
+    expect(receipts).toEqual([original])
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(get).toHaveBeenCalledExactlyOnceWith(`/api/xcmax/local/employees/clerk/runs?idempotency_key=${original.idempotency_key}`)
+    expect(Object.keys(localStorage)).toEqual([storageKey])
+    delete record.employeeId
+    expect(requestRecord().record).toEqual({ ...record, entryDigest: createHash('sha256').update('clerk').digest('hex') })
+    expect(requestRecord().record).not.toHaveProperty('employeeId')
+  })
+
+  it.each(['digest', 'legacy'])('refuses a mismatched %s identity without reading or replaying', async mode => {
+    const post = vi.fn(async (_path, payload) => ({ ...completed(payload.idempotency_key), success: false, execution_state: 'queued' }))
+    const get = vi.fn()
+    await executeAdminEmployee('clerk', body, { post, get })
+    const { storageKey, record } = requestRecord()
+    if (mode === 'digest') record.entryDigest = '0'.repeat(64)
+    else { delete record.entryDigest; record.employeeId = 'another-entry' }
+    localStorage.setItem(storageKey, JSON.stringify(record))
+    await expect(executeAdminEmployee('clerk', body, { post, get })).rejects.toThrow('原员工请求身份缺失')
+    expect(await readPendingAdminEmployeeReceipts('clerk', { post, get })).toEqual([])
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(get).not.toHaveBeenCalled()
+    expect(JSON.parse(localStorage.getItem(storageKey) || '{}')).toEqual(record)
+  })
+
   it('concurrent calls share one stable POST and one original receipt', async () => {
     const post = vi.fn(async (_path, payload) => completed(payload.idempotency_key))
     const get = vi.fn()
@@ -78,10 +137,15 @@ describe('admin employee request ownership', () => {
     expect(post).toHaveBeenCalledTimes(1)
   })
 
-  it('does not mask an explicit idempotency conflict by reading an unrelated old result', async () => {
+  it.each(['digest', 'legacy'])('does not mask a %s idempotency conflict by reading an unrelated old result', async mode => {
     const post = vi.fn().mockRejectedValue({ status: 409 })
     const get = vi.fn()
     await expect(executeAdminEmployee('clerk', body, { post, get })).rejects.toMatchObject({ status: 409 })
+    if (mode === 'legacy') {
+      const { storageKey, record } = requestRecord()
+      delete record.entryDigest
+      localStorage.setItem(storageKey, JSON.stringify({ ...record, employeeId: 'clerk' }))
+    }
     await expect(executeAdminEmployee('clerk', body, { post, get })).rejects.toMatchObject({ status: 409 })
     expect(await readPendingAdminEmployeeReceipts('clerk', { post, get })).toEqual([])
     expect(post).toHaveBeenCalledTimes(1)
@@ -101,6 +165,24 @@ describe('admin employee request ownership', () => {
     await expect(pending).rejects.toThrow('账号或服务器已切换')
     expect(post).not.toHaveBeenCalled(); expect(get).not.toHaveBeenCalled()
     expect(localStorage.length).toBe(0)
+  })
+
+  it.each(['account', 'server', 'epoch'])('does not recover receipts after %s changes while the entry digest is awaiting', async mode => {
+    const post = vi.fn(async (_path, payload) => ({ ...completed(payload.idempotency_key), success: false, execution_state: 'queued' }))
+    const get = vi.fn()
+    await executeAdminEmployee('clerk', body, { post, get })
+    let release!: (value: ArrayBuffer) => void
+    const digest = new Promise<ArrayBuffer>(resolve => { release = resolve })
+    vi.stubGlobal('crypto', { subtle: { digest: () => digest } })
+    const pending = readPendingAdminEmployeeReceipts('clerk', { post, get })
+    if (mode === 'account') setRuntimeTenantStorageScopeInput({ tenantId: 8, localUserId: 18 })
+    else if (mode === 'server') config.base = 'http://other.test'
+    else productReadAccountEpoch.value++
+    release(new ArrayBuffer(32))
+    expect(await pending).toEqual([])
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(get).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(1)
   })
 
   it.each(['account', 'server'])('does not read across a %s change after a lost POST', async mode => {
@@ -126,14 +208,15 @@ describe('admin employee request ownership', () => {
     expect(post).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['account', 'server'])('checks %s again between original receipt reads', async mode => {
+  it.each(['account', 'server', 'epoch'])('checks %s again between original receipt reads', async mode => {
     const post = vi.fn(async (_path, payload) => ({ ...completed(payload.idempotency_key), success: false, execution_state: 'queued' }))
     const get = vi.fn()
     await executeAdminEmployee('clerk', body, { post, get })
     await executeAdminEmployee('clerk', { ...body, task: 'another original' }, { post, get })
     get.mockImplementation(async path => {
       if (mode === 'account') setRuntimeTenantStorageScopeInput({ tenantId: 8, localUserId: 18 })
-      else config.base = 'http://other.test'
+      else if (mode === 'server') config.base = 'http://other.test'
+      else productReadAccountEpoch.value++
       return completed(new URL(path, 'http://original.test').searchParams.get('idempotency_key') || '')
     })
     const receipts = await readPendingAdminEmployeeReceipts('clerk', { post, get })

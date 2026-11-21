@@ -25,7 +25,7 @@ def pipeline(request):
 def test_compatibility_contexts_follow_the_verified_gate(pipeline, name, result):
     job = pipeline[name]
     assert job["needs"] == "frontend-test"
-    assert job["if"] == "always()"
+    assert job["if"] == "${{ !cancelled() }}"
     assert job.get("name", name) == (
         "Vitest (173 文件 · jsdom)" if name == "vitest" else "frontend-smoke"
     )

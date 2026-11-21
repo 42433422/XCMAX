@@ -18,8 +18,8 @@ from app.db.db_base import Base
 
 
 @pytest.mark.parametrize("failed_sink", [None, "artifacts", "observation"])
-@pytest.mark.parametrize("unknown", [False, True])
-def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_sink, unknown):
+@pytest.mark.parametrize("result_state", ["completed", "unknown", "waiting_user"])
+def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_sink, result_state):
     def no_network(*args, **kwargs):
         raise AssertionError("synthetic receipt tests prohibit network/model access")
 
@@ -33,9 +33,12 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
         db.exec_driver_sql("CREATE TABLE synthetic_effects(id INTEGER PRIMARY KEY, receipt TEXT)")
     step = AgentStep("write", "synthetic", "write")
     run = AgentRun(user_id="synthetic", message="persist original receipt", steps=[step])
+    unknown = result_state == "unknown"
     receipt = {"success": not unknown, "receipt_id": "original-committed-effect"}
     if unknown:
         receipt.update(outcome="unknown", retryable=False, reconciliation_required=True)
+    elif result_state == "waiting_user":
+        receipt.update(requires_user_decision=True, question="Continue with the proposed rows?")
     observed = []
 
     def readback():
@@ -48,14 +51,16 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
             effects = reopened.execute("SELECT receipt FROM synthetic_effects").fetchall()
         assert effects == [(receipt["receipt_id"],)]
         stored_step, stored_call = payload["steps"][0], payload["tool_calls"][0]
-        assert (
-            stored_step["status"] == stored_call["status"] == ("failed" if unknown else "completed")
-        )
+        assert stored_call["status"] == ("failed" if unknown else "completed")
+        assert stored_step["status"] == ("failed" if unknown else result_state)
+        if result_state == "waiting_user":
+            assert payload["status"] == "waiting_user"
         assert stored_step["output"] == stored_call["output"]
         assert stored_step["finished_at"] == stored_call["finished_at"] != ""
         assert stored_step["attempt_count"] == stored_call["metadata"]["attempt_count"] == 1
         if unknown:
-            assert stored_step["output"]["reconciliation_evidence"] == receipt
+            assert {key: stored_step["output"][key] for key in receipt} == receipt
+            assert stored_step["output"].get("error_code") != "tool_timeout_unknown"
             assert payload["metadata"]["non_retryable"] is True
             assert payload["metadata"]["recovery"]["state"] == "manual_reconciliation_required"
         else:

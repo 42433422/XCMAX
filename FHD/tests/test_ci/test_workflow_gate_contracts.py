@@ -22,7 +22,7 @@ def gate(request):
     path, name = request.param
     jobs = yaml.safe_load((ROOT / path).read_text())["jobs"]
     job = jobs[name]
-    assert job["if"] == "always()"
+    assert job["if"] == "${{ !cancelled() }}"
     return job["steps"][0]["run"]
 
 

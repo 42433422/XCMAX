@@ -7,6 +7,7 @@ ordinary permission, approval, billing, lease and checkpoint boundaries.
 from __future__ import annotations
 
 import copy
+import logging
 import time
 from typing import Any
 
@@ -37,7 +38,17 @@ from app.domain.autonomy.browser_policy import (
 from app.domain.shared_services.conversation_service import ConversationRevisionError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+logger = logging.getLogger(__name__)
+
 _OBSERVATIONS = frozenset({"browser_snapshot", "browser_wait_for", "browser_take_screenshot"})
+_INTERNAL_REJECTION_CODES = (
+    "browser_step_limit",
+    "browser_action_not_allowed",
+    "browser_parameters_not_allowed",
+    "browser_action_schema_invalid",
+    "browser_graph_invalid",
+    "browser_model_budget_exceeded",
+)
 
 
 def initialize_browser_run(run: AgentRun, plan: PlanGraph) -> str:
@@ -305,5 +316,9 @@ def advance_browser_run(run: AgentRun, context: dict[str, Any], usage: RunUsageL
             "对话已更新，原浏览器决策已停止，请按最新任务核对",
         )
     except RECOVERABLE_ERRORS as exc:
-        code = str(exc) if str(exc).startswith("browser_") else "browser_decision_invalid"
+        logger.exception("browser decision rejected run_id=%s", run.run_id)
+        code = next(
+            (known for known in _INTERNAL_REJECTION_CODES if known == str(exc)),
+            "browser_decision_invalid",
+        )
         return _block(run, code, "浏览器决策或参数未通过校验，未执行新动作")

@@ -16,12 +16,12 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "01e7a819be5a25100ee8d47ca03c9f8ea0c2da1c",
-      "head_blob": "ba4dd3a9e73ab5b0e03e2cee164e7bd132de54f7",
+      "head_blob": "9bdccb5c021cd1337f7139894e5119230a4d3bf7",
       "before_lines": 1776,
-      "after_lines": 1871,
+      "after_lines": 1870,
       "reason": "原任务准入、澄清恢复、统一工具身份和浏览器逐步观察在同一编排器接通；原计划CAS胜出者执行，恢复只读旧回执，模型调用保留原会话与路由预算守卫。",
       "boundary": "保留原计划run ID、task attempt与父子投影；只有准入赢家执行，败选者只读，不增加执行引擎。",
-      "validation": "独立SQLite并发副作用计数证明唯一准入；50个后台相关文件组合2145项通过、9项因本地缺少PostgreSQL条件跳过，包含旧入口、续接、子任务及澄清往返；最终提交完整CI及部署验收仍待完成。 本轮整合验收：按主线 ce5a491e183 合并原候选，保留100轮澄清、原进程重启、幂等双进程、撤权、超时和迟到回执回归；上述历史候选证据不替代最终集成提交的完整CI，最终必需检查仍须全部通过。",
+      "validation": "独立SQLite并发副作用计数证明唯一准入；50个后台相关文件组合2145项通过、9项因本地缺少PostgreSQL条件跳过，包含旧入口、续接、子任务及澄清往返；最终提交完整CI及部署验收仍待完成。 本轮整合验收：按主线 ce5a491e183 合并原候选，保留100轮澄清、原进程重启、幂等双进程、撤权、超时和迟到回执回归；上述历史候选证据不替代最终集成提交的完整CI，最终必需检查仍须全部通过。 当前组合136项覆盖真实审批、待决定步骤先落库、完整续跑参数绑定和SQL回读；未放宽审批缺失、篡参或已完成回执保护。 38项浏览器及编排异常回归保留模型预算和版本守卫，公开回执不包含异常原文；内部诊断仅留服务端日志。",
       "follow_up": "后续入口继续调用统一发布接口；生产PostgreSQL并发与实机验收需独立取得证据。",
       "review_owner": "@42433422"
     },
@@ -748,12 +748,12 @@
     "FHD/app/application/agent_orchestrator/tool_executor.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_executor.py",
       "base_blob": "d60b63bcf6913d5e9afaa582e36846319ebee45f",
-      "head_blob": "17a733fcf4dd07f48c180ab48c290376e6ac7fe6",
+      "head_blob": "0bb033a19db20880bc0a6a580234661505ba9b20",
       "before_lines": 759,
-      "after_lines": 876,
+      "after_lines": 896,
       "reason": "修复已派发写操作被普通失败或假成功覆盖后释放原声明的问题，并对没有适配器的AIOPEN通用入口明确返回未执行；现有出货规格与客户 ID 纯验证提前在工具 claim 和派发前闭合。",
       "boundary": "复用原结果分类、截止时间和幂等账本；未知写声明保留，只有可信未执行或已审计只读失败可继续原重试流程；不接受 handler 自述未执行。",
-      "validation": "最终组合回归覆盖真实spawn撤权、父deadline、原请求未知回执和已有effect；父进程在slot与effect前核验Mod权限，子进程再次核验。撤权竞态和handler异常保留未知写入，租约失效直接透传，旧effect不会被blocked清除。远端最终提交的完整CI仍为必要合并条件。",
+      "validation": "最终组合回归覆盖真实spawn撤权、父deadline、原请求未知回执和已有effect；父进程在slot与effect前核验Mod权限，子进程再次核验。撤权竞态和handler异常保留未知写入，租约失效直接透传，旧effect不会被blocked清除。远端最终提交的完整CI仍为必要合并条件。 当前组合136项验证及时排队回执只读回收原子任务、真实I/O未知仍不重放；9项schema错误回归区分原始未知回执与实际超时包装。",
       "follow_up": "继续用原结果契约扩充独立业务回读证据；没有供应商回执时保持待核对，不以模型布尔值结算。",
       "review_owner": "@42433422"
     },

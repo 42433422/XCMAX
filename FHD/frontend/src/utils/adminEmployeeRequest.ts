@@ -12,7 +12,7 @@ export type EmployeeRequestTransport = {
 }
 const inFlight = new Map<string, Promise<Body>>()
 const requestPrefix = 'xcagi_admin_employee_request:'
-type StoredRequest = { key: string; server: string; ownerScope: string; employeeId: string; runId?: string; conflicted?: boolean }
+type StoredRequest = { key: string; server: string; ownerScope: string; entryDigest: string; runId?: string; conflicted?: boolean }
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical)
@@ -56,12 +56,34 @@ function unknown(saved: StoredRequest): Body {
 }
 function conflict(): Error { return Object.assign(new Error('原请求标识与已有任务冲突，请核对原任务。'), { status: 409 }) }
 
+async function digestText(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function restoreRequest(raw: string, scope: string, employeeId: string, entryDigest: string): StoredRequest {
+  const previous = asRecord(JSON.parse(raw))
+  if (!asString(previous.key) || !asString(previous.server) || previous.ownerScope !== scope
+    || ('entryDigest' in previous ? previous.entryDigest !== entryDigest : previous.employeeId !== employeeId)
+    || (previous.runId != null && typeof previous.runId !== 'string')) throw new Error('原员工请求身份缺失，请核对原任务。')
+  // Rebuild the legacy record: only the current entry's digest is persisted.
+  return { key: asString(previous.key), server: asString(previous.server), ownerScope: scope, entryDigest,
+    ...(previous.runId ? { runId: asString(previous.runId) } : {}),
+    ...(previous.conflicted ? { conflicted: true } : {}) }
+}
+
+function persistRequest(storageKey: string, saved: StoredRequest): void {
+  const encoded = JSON.stringify(saved)
+  if (localStorage.getItem(storageKey) !== encoded) localStorage.setItem(storageKey, encoded)
+  if (localStorage.getItem(storageKey) !== encoded) throw new Error('无法保存员工请求身份，未提交任务。')
+}
+
 function acceptReceipt(storageKey: string, saved: StoredRequest, result: Body): Body {
   if (asString(result.idempotency_key || result.turn_id) !== saved.key || !asString(result.run_id)
     || (saved.runId && saved.runId !== asString(result.run_id))) return unknown(saved)
   if (!saved.runId) {
     saved.runId = asString(result.run_id)
-    try { localStorage.setItem(storageKey, JSON.stringify(saved)) } catch { return unknown(saved) }
+    try { persistRequest(storageKey, saved) } catch { return unknown(saved) }
   }
   const state = adminEmployeeState(result)
   if (['completed', 'failed', 'cancelled', 'rejected'].includes(state)) {
@@ -71,13 +93,15 @@ function acceptReceipt(storageKey: string, saved: StoredRequest, result: Body): 
 }
 
 async function readReceipt(
-  storageKey: string, saved: StoredRequest, transport: EmployeeRequestTransport, ownerId?: number | null,
+  storageKey: string, saved: StoredRequest, employeeId: string, transport: EmployeeRequestTransport, ownerId?: number | null,
 ): Promise<Body> {
   const epoch = productReadAccountEpoch.value
   if (saved.conflicted || !unchanged(saved, ownerId)) return unknown(saved)
   let result: Body
   try {
-    result = asRecord(await transport.get(`/api/xcmax/local/employees/${encodeURIComponent(saved.employeeId)}/runs?idempotency_key=${encodeURIComponent(saved.key)}`))
+    persistRequest(storageKey, saved)
+    if (epoch !== productReadAccountEpoch.value || !unchanged(saved, ownerId)) return unknown(saved)
+    result = asRecord(await transport.get(`/api/xcmax/local/employees/${encodeURIComponent(employeeId)}/runs?idempotency_key=${encodeURIComponent(saved.key)}`))
   } catch { return unknown(saved) }
   if (epoch !== productReadAccountEpoch.value || !unchanged(saved, ownerId)) return unknown(saved)
   return acceptReceipt(storageKey, saved, result)
@@ -89,15 +113,19 @@ export async function readPendingAdminEmployeeReceipts(
 ): Promise<Body[]> {
   const scope = ownerScope(ownerId)
   if (!scope) return []
+  const server = currentServer(), epoch = productReadAccountEpoch.value
+  const entryDigest = await digestText(employeeId)
+  if (scope !== ownerScope(ownerId) || server !== currentServer() || epoch !== productReadAccountEpoch.value) return []
   const keys = Object.keys(localStorage).filter(key => key.startsWith(requestPrefix))
   const receipts: Body[] = []
   for (const storageKey of keys) {
+    if (scope !== ownerScope(ownerId) || server !== currentServer() || epoch !== productReadAccountEpoch.value) break
     let saved: StoredRequest
-    try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}') } catch { continue }
-    if (!saved.key || saved.ownerScope !== scope || saved.employeeId !== employeeId || saved.conflicted) continue
-    receipts.push(await readReceipt(storageKey, saved, transport, ownerId))
+    try { saved = restoreRequest(localStorage.getItem(storageKey) || '{}', scope, employeeId, entryDigest) } catch { continue }
+    if (saved.conflicted) continue
+    receipts.push(await readReceipt(storageKey, saved, employeeId, transport, ownerId))
   }
-  return ownerScope(ownerId) === scope ? receipts : []
+  return ownerScope(ownerId) === scope && server === currentServer() && epoch === productReadAccountEpoch.value ? receipts : []
 }
 
 /** Persist only identity/digests. A sent operation can only GET its original receipt. */
@@ -111,25 +139,23 @@ export async function executeAdminEmployee(
   const active = inFlight.get(identity)
   if (active) return active
   const operation = (async () => {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity))
+    const [identityDigest, entryDigest] = await Promise.all([digestText(identity), digestText(employeeId)])
     if (scope !== ownerScope(ownerId) || server !== currentServer() || epoch !== productReadAccountEpoch.value) {
       throw new Error('账号或服务器已切换，未提交员工任务。')
     }
-    const storageKey = requestPrefix + Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+    const storageKey = requestPrefix + identityDigest
     const prior = localStorage.getItem(storageKey)
     let saved: StoredRequest
     if (prior) {
-      try { saved = JSON.parse(prior) } catch { throw new Error('原员工请求记录异常，请核对原任务。') }
-      if (!saved.key || !saved.server || saved.ownerScope !== scope || saved.employeeId !== employeeId) throw new Error('原员工请求身份缺失，请核对原任务。')
+      saved = restoreRequest(prior, scope, employeeId, entryDigest)
       if (saved.conflicted) throw conflict()
     } else {
-      saved = { key: asString(body.idempotency_key || body.turn_id) || crypto.randomUUID(), server, ownerScope: scope, employeeId }
-      localStorage.setItem(storageKey, JSON.stringify(saved))
-      if (localStorage.getItem(storageKey) !== JSON.stringify(saved)) throw new Error('无法保存员工请求身份，未提交任务。')
+      saved = { key: asString(body.idempotency_key || body.turn_id) || crypto.randomUUID(), server, ownerScope: scope, entryDigest }
+      persistRequest(storageKey, saved)
     }
     if (!unchanged(saved, ownerId) || epoch !== productReadAccountEpoch.value) return unknown(saved)
     const path = `/api/xcmax/local/employees/${encodeURIComponent(employeeId)}`
-    if (prior) return readReceipt(storageKey, saved, transport, ownerId)
+    if (prior) return readReceipt(storageKey, saved, employeeId, transport, ownerId)
     try {
       const result = asRecord(await transport.post(`${path}/execute`, { ...body, idempotency_key: saved.key, turn_id: saved.key }))
       if (epoch !== productReadAccountEpoch.value || !unchanged(saved, ownerId)) return unknown(saved)
@@ -137,11 +163,11 @@ export async function executeAdminEmployee(
     } catch (error) {
       if (asRecord(error).status === 409) {
         saved.conflicted = true
-        localStorage.setItem(storageKey, JSON.stringify(saved))
+        persistRequest(storageKey, saved)
         throw conflict()
       }
       if (epoch !== productReadAccountEpoch.value || !unchanged(saved, ownerId)) return unknown(saved)
-      return readReceipt(storageKey, saved, transport, ownerId)
+      return readReceipt(storageKey, saved, employeeId, transport, ownerId)
     }
   })()
   inFlight.set(identity, operation)

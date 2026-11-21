@@ -27,7 +27,11 @@ from app.application.tool_execution_deadline import (
     invocation_requires_reconciliation,
 )
 from app.application.workflow.retry_policy import is_transport_error
-from app.domain.task_lifecycle.results import normalize_execution_result
+from app.domain.task_lifecycle.results import (
+    execution_result_envelopes,
+    execution_result_pending_state,
+    normalize_execution_result,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -841,7 +845,23 @@ def execute_with_tool_deadline(
             # An on-time unknown receipt is still a receipt. Preserve its original
             # error and task identity while forbidding replay; only a missed
             # deadline or observed uncertain I/O warrants the timeout envelope.
-            result = normalize_execution_result(result)
+            # A timely pending receipt belongs to its owning workflow. Preserve
+            # that state so it can read the original child instead of making a
+            # permanent manual-reconciliation claim merely because it is queued.
+            known_pending = execution_result_pending_state(result) not in {
+                "",
+                "unknown",
+            } and not any(
+                row.get("outcome_unknown")
+                or row.get("reconciliation_required")
+                or row.get("requires_reconciliation")
+                for row in execution_result_envelopes(result)
+            )
+            result = (
+                {**result, "success": False, "retryable": False}
+                if known_pending
+                else normalize_execution_result(result)
+            )
             if (
                 step.tool_id == "business_db"
                 and step.action == "write"

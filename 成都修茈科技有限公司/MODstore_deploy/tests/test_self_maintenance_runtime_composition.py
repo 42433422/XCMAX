@@ -430,6 +430,33 @@ def test_unbound_pending_execution_blocks_even_forced_remediation(pending):
     assert harness.memory["pending_execution"] == pending
 
 
+@pytest.mark.parametrize("known_reason", [False, True])
+def test_pending_identity_error_exposes_only_known_codes(monkeypatch, known_reason):
+    from modstore_server.maintenance_loop import resume
+
+    harness = RuntimeHarness("durable")
+    pending = {"task_id": "original-task"}
+    harness.memory["pending_execution"] = pending
+    private_detail = "internal journal configuration at /private/runtime/settings.json"
+
+    def unavailable(*_args):
+        raise ValueError("pending_execution_actor_mismatch" if known_reason else private_detail)
+
+    monkeypatch.setattr(resume, "_pending_execution_candidate", unavailable)
+    result = harness.runtime.run(force=True)
+    assert result["status"] == "waiting_reconciliation"
+    assert result["requires_reconciliation"] is True
+    assert result["reconciliation_reason"] == (
+        "pending_execution_actor_mismatch"
+        if known_reason
+        else "pending_execution_identity_unavailable"
+    )
+    assert private_detail not in repr(result)
+    assert harness.ledger[-1] == result
+    assert harness.calls == harness.outcomes == []
+    assert harness.memory["pending_execution"] == pending
+
+
 def test_dispatch_exception_preserves_durable_intent_and_prevents_restart_replay():
     harness = RuntimeHarness("lost")
     attempts = []

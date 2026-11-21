@@ -111,3 +111,20 @@ def test_browser_rejects_revision_changed_across_gateway_await(monkeypatch, duri
     assert run.status == "blocked" and run.error == "browser_conversation_revision_changed"
     assert len(requests) == (during == "completion")
     assert len(run.steps) == 1 and run.steps[0].action == "browser_snapshot"
+
+
+@pytest.mark.parametrize("prefix", ["browser_driver_failure", "browser_model_budget_exceeded"])
+def test_browser_exception_details_never_become_public_error_codes(monkeypatch, caplog, prefix):
+    run, usage, requests, _ = _browser(monkeypatch)
+    detail = f"{prefix}: private-credential in /internal/browser/session"
+
+    def fail(*args, **kwargs):
+        raise RuntimeError(detail)
+
+    monkeypatch.setattr(browser_loop, "request_browser_decision", fail)
+    assert browser_loop.advance_browser_run(run, {}, usage) is True
+    assert run.status == "blocked" and run.error == "browser_decision_invalid"
+    assert run.final_output["error_code"] == "browser_decision_invalid"
+    assert detail not in str(run.to_dict())
+    assert detail in caplog.text
+    assert requests == [] and len(run.steps) == 1

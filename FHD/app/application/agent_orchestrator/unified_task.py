@@ -95,6 +95,20 @@ def publish_task_run(
     runtime_context: dict[str, Any] | None = None,
 ) -> UnifiedTaskResult:
     """Atomically publish the complete existing task/run before any tool executes."""
+    from app.application.agent_orchestrator.approval_grant import authorization_scope_hash
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+    from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
+    scope = dict(runtime_context or {})
+    if "execution_authorization_scope" not in run.metadata:
+        if (
+            run.user_id != str(scope.get("user_id") or "")
+            or tenant_id_of_run(run) != str(scope.get("tenant_id") or "")
+            or validate_actor_context(scope) is not None
+            or actor_tool_denial(tool_id, action, scope, params) is not None
+        ):
+            raise UnifiedTaskConflictError("首次任务登记缺少匹配的可信执行授权")
+        run.metadata.setdefault("execution_authorization_scope", authorization_scope_hash(scope))
     fingerprint = _request_fingerprint(tool_id, action, params)
     run.metadata["task_request_fingerprint"] = fingerprint
     run.metadata["task_request"] = {

@@ -1,5 +1,6 @@
 """Admin employee admission reuses canonical SQL task/run identity across requests."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from threading import Barrier, Event
@@ -198,7 +199,104 @@ def test_admin_marker_collision_rejects_generic_task_without_mutation(admin_empl
         )
 
 
-@pytest.mark.parametrize("change", ["employee", "task", "input", "approval"])
+@pytest.mark.parametrize("binding", ["current", "upstream", "legacy_missing"])
+def test_atomic_publication_cannot_rebind_an_existing_authorization(admin_employee, binding):
+    from app.application.agent_orchestrator import AgentOrchestrator, AgentRun
+    from app.application.agent_orchestrator.approval_grant import authorization_scope_hash
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.task_context import apply_task_context
+    from app.application.agent_orchestrator.unified_task import UnifiedTaskConflictError
+
+    entry = admin_employee
+    service = AgentOrchestrator(repository=entry.repository)
+    context = {**entry.actor.context, "task_id": "scope-publication"}
+    params = {"employee_id": "clerk", "task": "observe effect"}
+
+    def candidate():
+        run = AgentRun(user_id="17", message="publish without dispatch", status="running")
+        run.metadata["runtime_context"] = dict(context)
+        apply_task_context(run, context)
+        run.steps = [AgentStep("employee", "employee", "execute", params=params)]
+        return run
+
+    def publish(run):
+        return employee_run.publish_task_run(
+            orchestrator=service,
+            run=run,
+            tool_id="employee",
+            action="execute",
+            params=params,
+            risk="high",
+            idempotent=False,
+            runtime_context=context,
+        )
+
+    original = candidate()
+    scope = authorization_scope_hash(
+        {**context, "employee_tool_allowlist": ["other"]} if binding == "upstream" else context
+    )
+    original.metadata["execution_authorization_scope"] = scope
+    assert not publish(original).deduplicated
+    if binding == "legacy_missing":
+        with entry.factory.begin() as db:
+            record = db.get(AgentRunRecord, original.run_id)
+            stored = json.loads(record.payload_json)
+            stored["metadata"].pop("execution_authorization_scope")
+            record.payload_json = json.dumps(stored)
+        scope = None
+    if binding == "current":
+        replay = publish(candidate())
+        assert replay.deduplicated and replay.run.run_id == original.run_id
+    else:
+        with pytest.raises(UnifiedTaskConflictError):
+            publish(candidate())
+    assert (
+        entry.repository.get(original.run_id).metadata.get("execution_authorization_scope") == scope
+    )
+    with entry.factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
+    assert entry.invocation.call_count == 0
+
+
+@pytest.mark.parametrize("source", ["none", "empty", "unsealed", "forged"])
+@pytest.mark.parametrize(
+    "tool_id,action", [("employee", "execute"), ("catalog_products_v1", "append_price")]
+)
+def test_atomic_publication_requires_explicit_trusted_authorization(
+    admin_employee, source, tool_id, action
+):
+    from app.application.agent_orchestrator import AgentOrchestrator, AgentRun
+    from app.application.agent_orchestrator.task_context import apply_task_context
+    from app.application.agent_orchestrator.unified_task import UnifiedTaskConflictError
+
+    entry = admin_employee
+    context = {**entry.actor.context, "task_id": "unbound-publication"}
+    run = AgentRun(user_id="17", message="untrusted publication", status="running")
+    run.metadata["runtime_context"] = dict(context)
+    apply_task_context(run, context)
+    supplied = None if source == "none" else {} if source == "empty" else dict(context)
+    if source == "unsealed":
+        supplied.pop("_actor_authorization")
+    elif source == "forged":
+        supplied["_actor_authorization"] = {"user_id": 17, "tenant_id": 7}
+    with pytest.raises(UnifiedTaskConflictError):
+        employee_run.publish_task_run(
+            orchestrator=AgentOrchestrator(repository=entry.repository),
+            run=run,
+            tool_id=tool_id,
+            action=action,
+            params={"employee_id": "clerk", "task": "observe effect"},
+            risk="high",
+            idempotent=False,
+            runtime_context=supplied,
+        )
+    assert "execution_authorization_scope" not in run.metadata
+    with entry.factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
+    assert entry.invocation.call_count == 0
+
+
+@pytest.mark.parametrize("change", ["employee", "task", "input", "approval", "tier"])
 def test_admin_request_key_rejects_changed_execution(admin_employee, change):
     entry = admin_employee
     with entry.client() as client:
@@ -210,10 +308,17 @@ def test_admin_request_key_rejects_changed_execution(admin_employee, change):
             body["task"] = "different action"
         elif change == "input":
             body["input_data"] = {"value": 2}
+        elif change == "tier":
+            from app.db.models.user import User
+
+            with entry.factory.begin() as db:
+                db.get(User, entry.actor.user_id).tier = "free"
         else:
             body["approval_token"] = "different-token"
         response = client.post(f"/employees/{employee}/execute", json=body)
-    assert response.status_code == 409, response.text
+    assert response.status_code == (403 if change == "tier" else 409), response.text
+    if change == "tier":
+        assert response.json()["detail"] == "employee_invoke_denied"
     assert entry.invocation.call_count == 1
 
 

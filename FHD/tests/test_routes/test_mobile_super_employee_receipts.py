@@ -115,6 +115,41 @@ async def test_json_original_turn_is_replayed_without_execution(bound_super, sta
 
 
 @pytest.mark.asyncio
+async def test_mobile_active_pointer_does_not_store_execution_credentials(bound_super, tmp_path):
+    from app.application.ai_chat.active_conversation import active_conversation_for
+
+    component, actor, service = bound_super
+    service.invoke.return_value = {"response": "finished original turn"}
+    body = _body()
+    canaries = ["pointer-secret-canary", "pointer-token-canary", "forged-proof-canary"]
+    body["context"].update(
+        secret=canaries[0],
+        access_token=canaries[1],
+        session_id=actor.session_id,
+        _actor_authorization={"proof": canaries[2]},
+    )
+    response = await component._invoke(
+        actor.request, "codex", CodexSuperEmployeeMobileMessageBody(**body), None
+    )
+    assert response["data"]["history_persistence"]["status"] == "saved"
+    service.invoke.assert_called_once()
+    execution_context = service.invoke.call_args.kwargs["context"]
+    assert execution_context["_actor_authorization"] == actor.context["_actor_authorization"]
+    assert execution_context["conversation_id"] == execution_context["session_id"] == "pinned:codex"
+    pointers = list((tmp_path / "dialogue").glob("*-active.json"))
+    assert len(pointers) == 1
+    stored = pointers[0].read_text(encoding="utf-8")
+    for value in [*canaries, actor.session_id, actor.context["_actor_authorization"]["proof"]]:
+        assert value not in stored
+    with tenant_scope(actor.tenant_id):
+        assert (
+            active_conversation_for(actor.user_id, tenant_id=str(actor.tenant_id)) == "pinned:codex"
+        )
+        assert active_conversation_for(actor.user_id + 1, tenant_id=str(actor.tenant_id)) == ""
+        assert active_conversation_for(actor.user_id, tenant_id="other") == ""
+
+
+@pytest.mark.asyncio
 async def test_json_lost_delivery_and_concurrent_duplicate_keep_one_intent(bound_super):
     component, actor, service = bound_super
     started, finish = threading.Event(), threading.Event()
