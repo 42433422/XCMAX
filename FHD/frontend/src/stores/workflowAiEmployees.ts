@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { ModWithWorkflowEmployees } from '@/utils/modWorkflowEmployees'
 import type { WorkflowEmployeeRegistryEntry } from '@/types/workflow-employee'
 import { filterWorkflowRegistrySourceMods, isNonWorkflowDeskEmployeeId } from '@/utils/modWorkflowEmployees'
+import { productReadScopeKey } from '@/utils/productReadAccountScope'
 import {
   loadWorkflowEmployeeRegistry,
   mergeModManifestEntries,
@@ -82,6 +83,8 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
   const enabled = ref<Record<string, boolean>>(defaultWorkflowBuiltinEnabled())
   const registryEntries = ref<WorkflowEmployeeRegistryEntry[]>([])
   const registryLoaded = ref(false)
+  let registryLoadGeneration = 0
+  let registryOwner = ''
 
   const registeredIds = computed(() => new Set(registryEntries.value.map((e) => e.id)))
 
@@ -103,9 +106,11 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     )
   }
 
-  async function loadRegistry(mods?: ModWithWorkflowEmployees[]) {
+  async function loadRegistry(mods?: ModWithWorkflowEmployees[], isCurrent: () => boolean = () => true) {
+    const generation = ++registryLoadGeneration
     try {
       const registry = await loadWorkflowEmployeeRegistry()
+      if (generation !== registryLoadGeneration || !isCurrent()) return
       const merged = mods ? mergeModManifestEntries(registry, mods) : registry.employees
       registryEntries.value = merged
       registryLoaded.value = true
@@ -196,8 +201,14 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
 
   function reloadForTenantScope(scope?: string) {
     activeTenantScope = scope || resolveTenantStorageScopeFromRuntime(true)
+    const owner = `${productReadScopeKey('')}:${activeTenantScope}`
+    if (owner !== registryOwner) {
+      registryOwner = owner
+      registryLoadGeneration++
+      registryEntries.value = []
+      registryLoaded.value = false
+    }
     enabled.value = readWorkflowEnabledFromLocalStorage(activeTenantScope)
-    registryLoaded.value = false
   }
 
   reloadForTenantScope(resolveTenantStorageScopeFromRuntime(true))

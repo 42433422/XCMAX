@@ -1,4 +1,5 @@
 import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS } from '@/utils/apiBase'
+import { productReadScopeKey } from '@/utils/productReadAccountScope'
 import type {
   DeliverableStatus,
   EmployeePlannerStatus,
@@ -139,18 +140,15 @@ export async function fetchEmployeePlannerStatus(_force = false): Promise<Employ
   return (body?.data || body) as EmployeePlannerStatus
 }
 
-export async function fetchEmployeeSsot(force = false): Promise<Record<string, unknown>> {
-  const cacheKey = '__employee_ssot_cache__'
-  const w = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : null
-  if (!force && w?.[cacheKey]) {
-    return w[cacheKey] as Record<string, unknown>
-  }
+export async function fetchEmployeeSsot(_force = false): Promise<Record<string, unknown>> {
+  const scope = productReadScopeKey('')
   const r = await apiFetch('/api/platform-shell/employee-ssot', {
     timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
+    cache: 'no-store',
   })
   if (!r.ok) throw new Error(`employee-ssot HTTP ${r.status}`)
   const body = await r.json()
-  const data = (body?.data || body) as Record<string, unknown>
-  if (w) w[cacheKey] = data
-  return data
+  if (scope !== productReadScopeKey('')) throw new Error('账号已切换，请重新读取员工目录')
+  if (body?.success === false) throw new Error(body.message || '员工目录读取失败')
+  return (body?.data || body) as Record<string, unknown>
 }

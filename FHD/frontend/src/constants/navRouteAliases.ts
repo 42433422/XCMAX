@@ -5,7 +5,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 export const SIDEBAR_ROUTE_ALIASES: Record<string, string> = {
   'approval-hub': 'approval-workspace',
   'mod-approval-hub': 'approval-workspace',
-  'employee-workflow': 'workflow-employee-space',
+  'employee-workflow': 'employee-workbench',
   'mod-attendance-industry-home': 'attendance-industry-home',
   'mod-attendance-industry-settings': 'attendance-industry-settings',
   'mod-taiyangniao-pro-home': 'taiyangniao-pro-home',

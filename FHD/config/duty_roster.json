@@ -2,7 +2,7 @@
   "schema_version": 3,
   "departments": {
     "ops_acquisition": {
-      "label": "O-A 获客部",
+      "label": "市场营销部",
       "five_line_id": "ops_acquisition",
       "subzones": {
         "public-acquisition": {
@@ -40,7 +40,7 @@
       }
     },
     "ops_partner": {
-      "label": "O-B 伙伴部",
+      "label": "商务合作部",
       "five_line_id": "ops_partner",
       "subzones": {
         "partner-onboard": {
@@ -76,7 +76,7 @@
       }
     },
     "prod_web": {
-      "label": "P-W 网站部",
+      "label": "数字平台部",
       "five_line_id": "prod_web",
       "subzones": {
         "static-site": {
@@ -128,7 +128,7 @@
       }
     },
     "prod_mod": {
-      "label": "P-M Mod 部",
+      "label": "智能应用研发部",
       "five_line_id": "prod_mod",
       "subzones": {
         "craft-pipeline": {
@@ -176,7 +176,7 @@
       }
     },
     "prod_software": {
-      "label": "P-S 软件部",
+      "label": "软件研发部",
       "five_line_id": "prod_software",
       "subzones": {
         "core-coding": {
@@ -229,7 +229,7 @@
       }
     },
     "shared_retention": {
-      "label": "S-R 归档部",
+      "label": "安全治理部",
       "five_line_id": "shared_retention",
       "subzones": {
         "ttl-janitor": {
@@ -363,28 +363,28 @@
     {
       "id": "tools",
       "code": "L1",
-      "label": "工具层",
+      "label": "信息技术部",
       "desc": "连接、授权、技能与通用工具 Mod",
       "color": "#4f46e5"
     },
     {
       "id": "execution",
       "code": "L2",
-      "label": "执行层",
+      "label": "业务运营部",
       "desc": "出货、打单、单据与履约执行",
       "color": "#d97706"
     },
     {
       "id": "service",
       "code": "L3",
-      "label": "服务层",
+      "label": "综合服务部",
       "desc": "客服沟通与人事服务",
       "color": "#059669"
     },
     {
       "id": "management",
       "code": "L4",
-      "label": "管理层",
+      "label": "运营管理部",
       "desc": "流程编排、路由协同与自治监控",
       "color": "#7c3aed"
     }

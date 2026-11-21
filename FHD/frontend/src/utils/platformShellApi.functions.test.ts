@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 const { mockApiFetch, mockInvalidateHostPackCompletionCache } = vi.hoisted(() => ({
   mockApiFetch: vi.fn(),
@@ -26,6 +27,7 @@ import {
   fetchOnboardingIndustryCatalog,
   fetchIndustryBaseline,
   fetchEmployeePlannerStatus,
+  fetchEmployeeSsot,
 } from './platformShellApi'
 
 function makeResponse(body: unknown, ok = true, status = 200): Response {
@@ -41,10 +43,29 @@ describe('platformShellApi', () => {
     mockApiFetch.mockReset()
     mockInvalidateHostPackCompletionCache.mockReset()
     clearDeliverableStatusCache()
+    setRuntimeTenantStorageScopeInput(null)
   })
 
   afterEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('reads the current employee directory instead of reusing another account cache', async () => {
+    mockApiFetch.mockResolvedValueOnce(makeResponse({ data: { contacts: [{ employee_id: 'a' }] } }))
+    expect(await fetchEmployeeSsot()).toEqual({ contacts: [{ employee_id: 'a' }] })
+    setRuntimeTenantStorageScopeInput({ localUserId: 'b' })
+    mockApiFetch.mockResolvedValueOnce(makeResponse({ data: { contacts: [{ employee_id: 'b' }] } }))
+    expect(await fetchEmployeeSsot()).toEqual({ contacts: [{ employee_id: 'b' }] })
+    expect(mockApiFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects a late employee directory response from an earlier account', async () => {
+    let resolve!: (response: Response) => void
+    mockApiFetch.mockImplementationOnce(() => new Promise(r => { resolve = r }))
+    const request = fetchEmployeeSsot()
+    setRuntimeTenantStorageScopeInput({ localUserId: 'b' })
+    resolve(makeResponse({ data: { contacts: [{ employee_id: 'a' }] } }))
+    await expect(request).rejects.toThrow('账号已切换')
   })
 
   describe('fetchPlatformShellCapabilities', () => {
