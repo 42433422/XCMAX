@@ -38,6 +38,10 @@ class _RunContext:
     steps: List[Dict[str, Any]] = field(default_factory=list)
 
 
+class _DotMailboxConfigurationError(ValueError):
+    """Cloud routing is enabled but no cloud device can be addressed."""
+
+
 def _dot_mailbox_code_extra(
     extra: Dict[str, Any], *, run_id: str, employee_id: str
 ) -> Dict[str, Any]:
@@ -48,16 +52,18 @@ def _dot_mailbox_code_extra(
     """
     if not config._env_bool("MODSTORE_SELF_MAINTENANCE_DOT_MAILBOX", False):
         return extra
+    device_id = os.environ.get("MODSTORE_SELF_MAINTENANCE_DEVICE_ID", "").strip()
+    if not device_id:
+        raise _DotMailboxConfigurationError(
+            "MODSTORE_SELF_MAINTENANCE_DEVICE_ID is required for dot mailbox routing"
+        )
     run_hex = re.sub(r"[^0-9a-f]", "", str(run_id).lower())[:32].ljust(32, "0")
-    routed = {
+    return {
         **extra,
+        "device_id": device_id,
         "title": f"[xcmax:{run_hex}:{uuid.uuid4().hex}] {employee_id}",
         "tool_name": os.environ.get("MODSTORE_SELF_MAINTENANCE_TOOL") or "dolt",
     }
-    device_id = os.environ.get("MODSTORE_SELF_MAINTENANCE_DEVICE_ID", "").strip()
-    if device_id:
-        routed["device_id"] = device_id
-    return routed
 
 
 class MaintenanceRuntime:
@@ -192,9 +198,12 @@ class MaintenanceRuntime:
             para_task_id=task_id,
             branch=branch,
         )
-        plan = self._plan(context, steps_to_run)
         try:
-            return self._execute(context, plan)
+            return self._execute(context, self._plan(context, steps_to_run))
+        except _DotMailboxConfigurationError as exc:
+            return self._finish(
+                context, status="failed", extra={"error": str(exc), "failed_step": "code"}
+            )
         except RECOVERABLE_ERRORS as exc:
             config.logger.exception("self-maintenance loop failed")
             return self._finish(context, status="failed", extra={"error": str(exc)})
