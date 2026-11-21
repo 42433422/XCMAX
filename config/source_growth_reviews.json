@@ -777,7 +777,7 @@
       "after_lines": 2299,
       "reason": "修复MODstore员工执行器将未知、已接收或不可重试的派单结果降为普通失败并触发本地执行的消费断点。",
       "boundary": "仅在原fallback前复用employee_executor_policies结果契约；保留原task_id，不引入FHD跨服务运行时或第二个执行器。",
-      "validation": "最终MODstore22模块580项通过，覆盖员工fallback、维护重试、原发送前安全回退及红线事件；1项原可选依赖跳过。",
+      "validation": "最终MODstore22模块640项通过，覆盖员工fallback、维护重试、发送前安全回退、红线事件及V1/V2/Vibe/快速脚本的真实沙箱和RPC副作用。Vibe控制流通过现有adapter seam验证，未宣称安装或验证可选第三方引擎。",
       "follow_up": "继续让各消费端遵守已有核对与回执语义，真实设备的业务完成仍需要原任务回读证据。",
       "review_owner": "@42433422"
     }

@@ -316,9 +316,11 @@ def test_run_script_agent_job_adapts_agent_loop_success(tmp_path, monkeypatch):
                         "stderr_tail": "",
                         "outputs": [{"filename": "r.txt"}],
                         "errors": [],
+                        "timed_out": False,
                         "sdk_calls": [],
                         "work_dir": str(tmp_path),
                     },
+                    "last_verdict": {"ok": True, "reason": "ok", "suggestions": []},
                     "trace": [],
                 },
             },
@@ -355,7 +357,7 @@ def test_run_script_agent_job_adapts_agent_loop_success(tmp_path, monkeypatch):
     assert any("生成脚本计划" in m for m in messages)
 
 
-def test_run_script_agent_job_salvages_timeout_with_summary(tmp_path, monkeypatch):
+def test_run_script_agent_job_preserves_timeout_without_summary_success(tmp_path, monkeypatch):
     import modstore_server.workbench_script_runner as runner
 
     async def fake_loop(*args, **kwargs):
@@ -407,10 +409,11 @@ def test_run_script_agent_job_salvages_timeout_with_summary(tmp_path, monkeypatc
         )
     )
 
-    assert result["ok"] is True
-    assert result["errors"] == []
-    assert result["outputs"]
-    assert (tmp_path / "outputs" / "summary.md").exists()
+    assert result["ok"] is False
+    assert result["errors"] and result["outputs"] == []
+    assert result["timed_out"] is True and result["returncode"] == -1
+    assert result["outcome"] == "unverified" and result["retryable"] is False
+    assert not (tmp_path / "outputs" / "summary.md").exists()
 
 
 def test_run_script_agent_job_default_iterations_is_strong_agent():
@@ -483,10 +486,12 @@ def test_run_script_agent_job_failure_message_includes_verdict_and_stderr(tmp_pa
         )
     )
 
-    assert result["ok"] is True
-    assert result["errors"] == []
-    assert result["outputs"]
-    assert any(o["filename"] == "summary.md" for o in result["outputs"])
+    assert result["ok"] is False
+    assert result["outputs"] == []
+    assert "outputs 缺少 summary.md" in result["errors"][0]
+    assert "Traceback boom" in result["errors"][0]
+    assert "写入 outputs/summary.md" in result["errors"][0]
+    assert not (tmp_path / "outputs" / "summary.md").exists()
 
 
 def test_run_script_agent_job_adapts_agent_loop_failure(tmp_path, monkeypatch):
@@ -559,9 +564,17 @@ def test_run_script_agent_job_adapts_agent_loop_failure(tmp_path, monkeypatch):
         "boolean_returncode",
         "missing_code",
         "zero_rc_failed",
+        "missing_sdk_calls",
+        "unknown_sdk",
+        "employee_transport_only",
+        "employee_accepted",
+        "employee_completed",
     ],
 )
-def test_v2_workbench_requires_receipts_and_never_salvages_unverified(tmp_path, monkeypatch, case):
+@pytest.mark.parametrize("engine", ["v1", "v2"])
+def test_workbench_requires_receipts_and_never_salvages_unverified(
+    tmp_path, monkeypatch, case, engine
+):
     import modstore_server.workbench_script_runner as runner
     from modstore_server.script_agent.brief import AgentEvent
 
@@ -603,6 +616,25 @@ def test_v2_workbench_requires_receipts_and_never_salvages_unverified(tmp_path, 
         outcome["final_code"] = ""
     elif case == "zero_rc_failed":
         outcome["ok"], receipt["ok"] = False, False
+    elif case == "missing_sdk_calls":
+        receipt.pop("sdk_calls")
+    elif case == "unknown_sdk":
+        receipt["sdk_calls"] = [{"method": "ai", "ok": True, "result": {"outcome": "unknown"}}]
+    elif case.startswith("employee"):
+        receipt["sdk_calls"] = [{"method": "employee_run", "ok": True}]
+        if case == "employee_accepted":
+            receipt["sdk_calls"][0]["result"] = {
+                "ok": True,
+                "accepted": True,
+                "task_id": "original-task",
+            }
+        elif case == "employee_completed":
+            receipt["sdk_calls"][0]["result"] = {
+                "ok": True,
+                "completed": True,
+                "status": "completed",
+                "task_id": "original-task",
+            }
     if case.startswith("unverified"):
         outcome.update(outcome="unverified", retryable=False)
 
@@ -618,8 +650,10 @@ def test_v2_workbench_requires_receipts_and_never_salvages_unverified(tmp_path, 
     async def notify(message):
         messages.append(message)
 
-    monkeypatch.setattr(runner, "_AGENT_V2", True)
-    monkeypatch.setattr(runner, "run_agent_loop_v2", fake_loop)
+    monkeypatch.setattr(runner, "_AGENT_V2", engine == "v2")
+    monkeypatch.setattr(
+        runner, "run_agent_loop_v2" if engine == "v2" else "run_agent_loop", fake_loop
+    )
     monkeypatch.setattr(runner, "SCRIPT_ROOT", tmp_path)
     monkeypatch.setattr(runner, "resolve_api_key", lambda *args, **kwargs: ("key", "test"))
     monkeypatch.setattr(
@@ -630,7 +664,7 @@ def test_v2_workbench_requires_receipts_and_never_salvages_unverified(tmp_path, 
         run_script_agent_job(
             db=object(),
             user_id=1,
-            session_id="v2-receipt",
+            session_id=f"{engine}-receipt",
             brief="write result",
             files=[],
             provider="deepseek",
@@ -638,10 +672,11 @@ def test_v2_workbench_requires_receipts_and_never_salvages_unverified(tmp_path, 
             status_hook=notify,
         )
     )
-    assert result["ok"] is (case == "verified")
+    verified = case in {"verified", "employee_completed"}
+    assert result["ok"] is verified
     assert not fallback_calls
-    assert any("通过验收" in message for message in messages) is (case == "verified")
-    if case != "verified":
+    assert any("通过验收" in message for message in messages) is verified
+    if not verified:
         assert result["outcome"] == "unverified" and result["retryable"] is False
         assert result["agent_outcome"]["ok"] is False and result["errors"]
     if case in {"unverified_timeout", "legacy_timeout"}:

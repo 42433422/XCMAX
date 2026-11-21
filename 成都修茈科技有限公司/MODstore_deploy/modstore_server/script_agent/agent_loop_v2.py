@@ -6,11 +6,6 @@ from __future__ import annotations
 import importlib
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from modstore_server.customer_issue_delivery_contract import (
-    execution_requires_reconciliation,
-    execution_succeeded,
-)
-from modstore_server.employee_executor_policies import execution_blocks_redispatch
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.script_agent.agent_loop import AgentLoopOutcome, _outcome_dict
 from modstore_server.script_agent.brief import AgentEvent, Brief, PlanResult, Verdict
@@ -19,7 +14,11 @@ from modstore_server.script_agent.llm_client import (
     LlmClient,
 )
 from modstore_server.script_agent.observer import judge
-from modstore_server.script_agent.sandbox_runner import run_in_sandbox
+from modstore_server.script_agent.sandbox_runner import (
+    run_in_sandbox,
+    sandbox_replay_block_reason,
+    sandbox_verification_error,
+)
 
 DEFAULT_MAX_ITERATIONS = 4
 SandboxRunner = object
@@ -150,31 +149,17 @@ async def run_agent_loop_v2(
                 **sandbox_kwargs,
             )
             outcome.last_result = res
-            calls = res.sdk_calls
-            employee_calls = [call for call in calls if call.get("method") == "employee_run"]
-            if (
-                res.timed_out
-                or employee_calls
-                or any(execution_blocks_redispatch(call) for call in calls)
-            ):
-                # SDK calls may outlive a timed-out subprocess, and the legacy
-                # RPC log lacks their business receipts. Never start them again.
-                replay_blocked = "sandbox execution requires reconciliation before another run"
-            if any(execution_requires_reconciliation(call) for call in calls) or any(
-                not execution_succeeded(call.get("result")) for call in employee_calls
-            ):
-                outcome.last_verdict = Verdict(
-                    ok=False, reason="employee execution has no confirmed business receipt"
-                )
+            replay_blocked = sandbox_replay_block_reason(res)
+            verification_error = sandbox_verification_error(res)
+            if verification_error:
+                outcome.last_verdict = Verdict(ok=False, reason=verification_error)
             else:
                 outcome.last_verdict = await judge(
                     brief, PlanResult(plan_md=outcome.plan_md), res, llm=llm
                 )
         except RECOVERABLE_ERRORS as exc:
             if outcome.last_result is None:
-                replay_blocked = (
-                    "sandbox execution outcome is unknown; reconcile before another run"
-                )
+                replay_blocked = sandbox_replay_block_reason(None)
             outcome.error = f"sandbox validation: {exc}"
             outcome.last_verdict = Verdict(ok=False, reason=outcome.error)
             return {"ok": False, "errors": [outcome.error], "retryable": False}
@@ -216,11 +201,7 @@ async def run_agent_loop_v2(
     def finish(*, ok: bool = False, error: str = "") -> Dict[str, Any]:
         outcome.ok, outcome.error = ok, error
         outcome.iterations, outcome.final_code = last_iteration + 1, final_code
-        return {
-            **_outcome_dict(outcome),
-            "outcome": "success" if ok else "unverified",
-            "retryable": False,
-        }
+        return _outcome_dict(outcome)
 
     async for v2ev in agent_loop.arun(goal, run_id=run_id):
         evtype = v2ev.type if isinstance(v2ev.type, str) else v2ev.type.value
@@ -275,12 +256,7 @@ async def run_agent_loop_v2(
                 final_code
                 and final_code == executed_code
                 and result is not None
-                and result.ok is True
-                and type(result.returncode) is int
-                and result.returncode == 0
-                and result.timed_out is False
-                and isinstance(result.outputs, list)
-                and result.outputs
+                and not sandbox_verification_error(result)
                 and verdict is not None
                 and verdict.ok is True
             )

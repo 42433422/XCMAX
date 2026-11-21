@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.script_agent.brief import Brief, BriefInputFile
 from modstore_server.script_agent.llm_client import RealLlmClient
+from modstore_server.script_agent.sandbox_runner import sandbox_verification_error
 
 logger = logging.getLogger("modstore_server.workbench_script_runner")
 StatusHook = Callable[[str], Awaitable[None]]
@@ -249,24 +250,18 @@ async def run_script_agent_job(
     last_result = final_outcome.get("last_result")
     last_result = last_result if isinstance(last_result, dict) else {}
     ok = final_outcome.get("ok") is True
-    unverified = final_outcome.get("outcome") == "unverified" or (
-        not ok and final_outcome.get("retryable") is False
+    verdict = final_outcome.get("last_verdict")
+    verification_error = sandbox_verification_error(last_result)
+    unverified = final_outcome.get("outcome") not in (None, "success") or not (
+        ok
+        and not verification_error
+        and isinstance(final_outcome.get("final_code"), str)
+        and final_outcome["final_code"].strip()
+        and isinstance(verdict, dict)
+        and verdict.get("ok") is True
     )
-    if _loop_label == "v2":
-        verdict = final_outcome.get("last_verdict")
-        unverified = unverified or not (
-            ok
-            and last_result.get("ok") is True
-            and type(last_result.get("returncode")) is int
-            and last_result["returncode"] == 0
-            and last_result.get("timed_out") is False
-            and isinstance(last_result.get("outputs"), list)
-            and last_result["outputs"]
-            and isinstance(final_outcome.get("final_code"), str)
-            and final_outcome["final_code"].strip()
-            and isinstance(verdict, dict)
-            and verdict.get("ok") is True
-        )
+    if isinstance(verdict, dict):
+        last_verdict = verdict
     if unverified:
         ok = False
         final_outcome = {
@@ -274,7 +269,7 @@ async def run_script_agent_job(
             "ok": False,
             "outcome": "unverified",
             "retryable": False,
-            "error": final_outcome.get("error") or "缺少有效的沙箱与验收回执",
+            "error": final_outcome.get("error") or verification_error or "缺少有效的沙箱与验收回执",
         }
     elif ok:
         await _notify(f"代理在第 {int(final_outcome.get('iterations') or 1)} 轮通过验收，准备落库")
@@ -306,51 +301,6 @@ async def run_script_agent_job(
         if isinstance(last_outputs, list):
             parts.append(f"最后产物数：{len(last_outputs)}")
         errors = [" | ".join(parts)[:1500]]
-        no_output_failure = (
-            not unverified
-            and not outputs
-            and int(last_result.get("returncode") or 0) == 0
-            and (
-                "没有产物" in (verdict_reason or reason)
-                or "outputs" in (verdict_reason or reason).lower()
-                or "最后产物数：0" in errors[0]
-            )
-        )
-        if no_output_failure:
-            fallback_outputs = _facade()._materialize_fallback_output(
-                work_dir=str(last_result.get("work_dir") or ""),
-                brief=brief,
-                reason=errors[0],
-                script=script,
-            )
-            if fallback_outputs:
-                ok = True
-                outputs = fallback_outputs
-                errors = []
-                last_result["outputs"] = fallback_outputs
-                last_result["returncode"] = int(last_result.get("returncode") or 0)
-                last_result["stdout_tail"] = (
-                    str(last_result.get("stdout_tail") or "") + "\n已生成兜底 outputs/summary.md"
-                ).strip()
-        timeout_failure = not unverified and not ok and bool(last_result.get("timed_out"))
-        if timeout_failure:
-            fallback_outputs = _facade()._materialize_fallback_output(
-                work_dir=str(last_result.get("work_dir") or ""),
-                brief=brief,
-                reason=errors[0] if errors else "脚本运行超时",
-                script=script,
-            )
-            if fallback_outputs:
-                ok = True
-                outputs = fallback_outputs
-                errors = []
-                last_result["outputs"] = fallback_outputs
-                last_result["returncode"] = 0
-                last_result["timed_out"] = False
-                last_result["stdout_tail"] = (
-                    str(last_result.get("stdout_tail") or "")
-                    + "\n已生成兜底 outputs/summary.md（超时）"
-                ).strip()
     return {
         "ok": ok,
         "work_dir": str(last_result.get("work_dir") or ""),
