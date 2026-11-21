@@ -20,7 +20,9 @@ from app.application.agent_orchestrator.run_models import (
     agent_run_from_dict,
     utc_now_iso,
 )
-from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.run_sql_repository import (
+    SQLAlchemyAgentRunRepository,
+)
 from app.application.agent_orchestrator.session_renewal import renew_approval_session
 from app.application.agent_orchestrator.task_background import apply_approved_step
 from app.application.agent_orchestrator.task_execution_sql_repository import (
@@ -98,7 +100,10 @@ def enqueue_claimed_workspace_approval(
     from app.db.models.agent import AgentTaskExecutionRecord
     from app.db.models.approval import ApprovalRequest
     from app.db.session import get_db
-    from app.domain.task_lifecycle.adapters import LEASED_STATES, execution_requeue_allowed
+    from app.domain.task_lifecycle.adapters import (
+        LEASED_STATES,
+        execution_requeue_allowed,
+    )
 
     receipt = run.metadata["approval_receipt"]
     if not approved_by:
@@ -112,7 +117,11 @@ def enqueue_claimed_workspace_approval(
             .filter_by(request_no=receipt["approval_request_id"], tenant_id=int(tenant))
             .one_or_none()
         )
-        if approval is None or str(approval.status) not in {"pending", "in_progress", "approved"}:
+        if approval is None or str(approval.status) not in {
+            "pending",
+            "in_progress",
+            "approved",
+        }:
             return False
         try:
             body = json.loads(approval.business_data or "{}")
@@ -131,7 +140,9 @@ def enqueue_claimed_workspace_approval(
         return False
     receipt.update(queue_approval="workspace_claim", params_sha256=_params_hash(step))
     apply_approved_step(run, step, approved_by=approved_by, runtime_context=runtime_context)
-    from app.application.agent_orchestrator.elt_checkpoint_recovery import ELT_CHECKPOINT_PROTOCOL
+    from app.application.agent_orchestrator.elt_checkpoint_recovery import (
+        ELT_CHECKPOINT_PROTOCOL,
+    )
 
     run.metadata["dispatch"]["elt_checkpoint_protocol"] = ELT_CHECKPOINT_PROTOCOL
     with runs.transaction() as db:
@@ -144,10 +155,13 @@ def enqueue_claimed_workspace_approval(
             or not execution_requeue_allowed(current.state)
             or db.query(AgentTaskExecutionRecord)
             .filter_by(
-                run_id=run.run_id, state=current.state, execution_count=current.execution_count
+                run_id=run.run_id,
+                state=current.state,
+                execution_count=current.execution_count,
             )
             .update(
-                {AgentTaskExecutionRecord.updated_at: current.updated_at}, synchronize_session=False
+                {AgentTaskExecutionRecord.updated_at: current.updated_at},
+                synchronize_session=False,
             )
             != 1
         ):
@@ -167,6 +181,7 @@ def approve_and_enqueue(
     principal_id: str,
     runtime_context: dict[str, Any],
     authenticated_binding: dict[str, Any] | None = None,
+    authenticated_actor_binding: dict[str, Any] | None = None,
 ) -> AgentRun:
     jti = ""
     try:
@@ -191,7 +206,10 @@ def approve_and_enqueue(
                 "timed_out",
             }:
                 raise ApprovalGrantError("任务已结束，不能审批通过后执行")
-            from app.domain.task_lifecycle.control import SessionBook, approval_actor_allowed
+            from app.domain.task_lifecycle.control import (
+                SessionBook,
+                approval_actor_allowed,
+            )
 
             book = SessionBook(db)
             tenant = str(execution.tenant_id or "") if execution is not None else ""
@@ -219,7 +237,10 @@ def approve_and_enqueue(
                 raise ApprovalGrantError("原导入续接需在审批工作台重新核对附件回执")
             claims = validate_approval_grant(token, run=run, principal_id=principal_id)
             renew_approval_session(
-                run, principal_id=principal_id, authenticated_binding=authenticated_binding
+                run,
+                principal_id=principal_id,
+                authenticated_binding=authenticated_binding,
+                authenticated_actor_binding=authenticated_actor_binding,
             )
             jti = str(claims["jti"])
             db.add(
@@ -250,9 +271,14 @@ def approve_and_enqueue(
                 evidence[step_id] = token
                 run.metadata[_EVIDENCE_KEY] = evidence
             apply_approved_step(
-                run, waiting_step(run), approved_by=principal_id, runtime_context=runtime_context
+                run,
+                waiting_step(run),
+                approved_by=principal_id,
+                runtime_context=runtime_context,
+                approval_claims=claims,
             )
             run.metadata["approval_receipt"] = {
+                **run.metadata["approval_receipt"],
                 "grant_id": jti,
                 "step_id": str(claims["step_id"]),
                 "tool_id": str(claims["tool_id"]),

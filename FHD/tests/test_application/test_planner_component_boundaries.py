@@ -487,6 +487,56 @@ def test_auto_approval_mode_skips_plan_confirmation_and_starts_run():
     assert "owner" not in dispatch.pending
 
 
+def test_waiting_run_overrides_stale_completed_interaction():
+    """A callback's stale completed projection must not close a waiting run."""
+    from app.domain.autonomy.risk_types import RiskDecision, RiskLevel
+
+    plan = PlanGraph(
+        plan_id="stale-interaction-plan",
+        intent="write",
+        nodes=[WorkflowNode("n1", "catalog", "write", params={})],
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    callbacks._merge_tool_runtime_context.return_value = {
+        "tenant_id": "1",
+        "chat_approval_mode": "auto",
+    }
+    callbacks._build_workflow_thinking_steps.return_value = "checked plan"
+    callbacks._capture_agent_run_interaction.return_value = {
+        "success": True,
+        "status": "completed",
+        "execution_state": "completed",
+        "data": {"action": "workflow_done"},
+    }
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    risk_gate.evaluate.return_value = RiskDecision(
+        requires_confirmation=True,
+        reason="write needs approval",
+        blocking_nodes=["n1"],
+        allowed=False,
+        risk_level=RiskLevel.MEDIUM,
+        decision="require_human",
+    )
+    approval = Mock()
+    approval.get_approval_required_nodes.return_value = [plan.nodes[0]]
+    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, approval)
+
+    run = AgentRun(user_id="owner", message="创建记录", plan_id=plan.plan_id, status="waiting_user")
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        orchestrator.return_value.start_run_from_plan.return_value = run
+        orchestrator.return_value.get_run.return_value = run
+        result = dispatch.handle("owner", "创建记录", "pro", {}, "创建记录")
+
+    assert result["run_id"] == result["agent_run_id"] == run.run_id
+    assert result["status"] == result["execution_state"] == "waiting_user"
+    assert result["needs_user_input"] is True
+    assert result["data"]["action"] == "workflow_waiting"
+    orchestrator.return_value.get_run.assert_called_once_with(run.run_id)
+
+
 def test_write_intent_requires_natural_key_instead_of_query_first():
     from app.application.workflow.planner_prompt_profile import (
         detect_intents,

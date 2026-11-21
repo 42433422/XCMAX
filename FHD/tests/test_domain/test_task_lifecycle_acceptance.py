@@ -70,7 +70,9 @@ def test_completed_execution_cannot_be_reopened_or_rewritten() -> None:
     repo.enqueue(run)
     claimed = repo.claim("worker", lease_seconds=30)
     assert claimed is not None
+    assert repo.mark_open_effect(run.run_id, "confirmed-write", owner_id="worker")
     assert repo.finish(run.run_id, "worker", "completed") is not None
+    assert repo.lifecycle(run.run_id)["effects"] == []
     assert repo.transition(run.run_id, "queued") is None
     assert repo.transition(run.run_id, "failed") is None
     assert repo.finish(run.run_id, "worker", "failed") is None
@@ -245,7 +247,7 @@ def test_open_effect_is_verified_instead_of_replayed() -> None:
         is None
     )
     stored = repo.get(run.run_id)
-    assert stored.state == "failed" and stored.last_error_code == "needs_verification"
+    assert stored.state == "unknown" and stored.last_error_code == "needs_verification"
 
 
 def test_approval_resumes_the_same_task_and_timeout_rejects() -> None:

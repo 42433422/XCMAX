@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
-from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS, is_read_only
+from app.application.employee_runtime.tool_scope import is_read_only
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,6 @@ _OUTPUT_PATH_KEYS = (
     "target",
 )
 _LIST_PATH_KEYS = ("file_paths", "paths", "files", "inputs", "targets")
-
-# 输出类工具：scope_globs 对其强制（含代码修改工具）
-_WRITE_LIKE_TOOLS = WRITE_TOOLS | {"generate_office_document"} | CODE_WRITE_TOOLS
 
 
 def _glob_to_regex(pattern: str) -> str:
@@ -117,9 +114,10 @@ def _normalize_rel(path: str, workspace_root: str | None) -> str:
             rel = cand.relative_to(root)
             return rel.as_posix()
         except (ValueError, OSError):
-            # 不在 workspace 内：返回带哨兵前缀，便于 scope 判定为「越界」
-            return p.as_posix()
-    return p.as_posix().lstrip("./")
+            # An absolute marker also covers a relative symlink escaping root.
+            # A broad glob such as ** must never turn this into an allowed path.
+            return p.absolute().as_posix()
+    return p.as_posix()
 
 
 def _extract_paths(args: dict[str, Any]) -> list[tuple[str, bool]]:
@@ -160,18 +158,29 @@ def build_employee_gate(
         return None
 
     def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+        from resources.config.risk_actions_loader import list_write_tools
+
         name = str(tool_name or "").strip()
-        if read_only and name in WRITE_TOOLS:
+        writes = list_write_tools()
+        if read_only and name in writes:
             return {"ok": False, "reason": f"员工 {employee_id} 为只读，禁止写库工具 {name}"}
 
-        enforce_scope = bool(scope) and name in _WRITE_LIKE_TOOLS
+        enforce_scope = bool(scope) and name in (writes | {"generate_office_document"})
         for raw_path, is_output in _extract_paths(args):
             rel = _normalize_rel(raw_path, workspace_root)
             if not rel:
                 continue
             if forbidden and _matches_any(rel, forbidden):
                 return {"ok": False, "reason": f"路径 {raw_path} 命中 forbidden_globs（禁止访问）"}
-            if (enforce_scope or is_output) and scope and not _matches_any(rel, scope):
+            if (
+                (enforce_scope or is_output)
+                and scope
+                and (
+                    Path(rel).is_absolute()
+                    or ".." in Path(rel).parts
+                    or not _matches_any(rel, scope)
+                )
+            ):
                 return {
                     "ok": False,
                     "reason": f"写入路径 {raw_path} 不在 scope_globs 允许范围内",

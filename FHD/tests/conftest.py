@@ -56,6 +56,22 @@ ASSETS_ROOT = os.path.join(PROJECT_ROOT, "assets")
 if ASSETS_ROOT not in sys.path:
     sys.path.insert(0, ASSETS_ROOT)
 
+
+@pytest.fixture
+def spawn_context(monkeypatch):
+    """Resolve this suite's worker modules in a fresh spawn interpreter.
+
+    Imported CLI tests can prepend MODstore's directory, which contains another
+    ``tests`` package. The parent retains pytest's already imported modules, but
+    spawn resolves the pickled target from sys.path again. Pin the owning suite
+    before starting children, and restore the caller's path after the test.
+    """
+    import multiprocessing
+
+    monkeypatch.syspath_prepend(PROJECT_ROOT)
+    return multiprocessing.get_context("spawn")
+
+
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # A few legacy coverage modules install minimal ``sys.modules`` stubs during

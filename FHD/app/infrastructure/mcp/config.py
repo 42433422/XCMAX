@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -51,6 +52,13 @@ class McpServerConfig:
     # Local operator trust, never inferred from a remote name/readOnlyHint.
     # Keep empty unless exact action names have been reviewed as side-effect free.
     read_only_tools: tuple[str, ...] = ()
+    # Stateful tools keep one official SDK connection per authenticated run.
+    session_mode: str = "stateless"
+    session_idle_seconds: float = 300.0
+    max_sessions: int = 8
+    # Only these operator-reviewed actions may open a fresh stateful session.
+    session_start_tools: tuple[str, ...] = ()
+    browser: bool = False
 
 
 def mcp_enabled() -> bool:
@@ -103,6 +111,19 @@ def _server_config(name: str, raw: object) -> McpServerConfig | None:
         timeout = float(raw.get("timeout_seconds") or _DEFAULT_TIMEOUT)
     except (TypeError, ValueError):
         timeout = _DEFAULT_TIMEOUT
+    session_mode = str(raw.get("session_mode") or "stateless").strip().lower()
+    if session_mode not in {"stateless", "persistent"}:
+        logger.warning("MCP 服务器 %s 的会话模式不支持：%s", name, session_mode)
+        return None
+    try:
+        idle = float(raw.get("session_idle_seconds", 300.0))
+        max_sessions = int(raw.get("max_sessions", 8))
+    except (TypeError, ValueError, OverflowError):
+        logger.warning("MCP 服务器 %s 的会话限制无效", name)
+        return None
+    if not math.isfinite(timeout) or not math.isfinite(idle):
+        logger.warning("MCP 服务器 %s 的超时必须为有限值", name)
+        return None
     return McpServerConfig(
         name=name,
         transport=transport,
@@ -113,11 +134,24 @@ def _server_config(name: str, raw: object) -> McpServerConfig | None:
         headers=headers,
         auth=auth,
         timeout_seconds=max(1.0, min(120.0, timeout)),
-        read_only_tools=tuple(
-            item for item in raw.get("read_only_tools", []) if isinstance(item, str) and item
-        )
-        if isinstance(raw.get("read_only_tools"), list)
-        else (),
+        read_only_tools=(
+            tuple(item for item in raw.get("read_only_tools", []) if isinstance(item, str) and item)
+            if isinstance(raw.get("read_only_tools"), list)
+            else ()
+        ),
+        session_mode=session_mode,
+        session_idle_seconds=max(1.0, min(3600.0, idle)),
+        max_sessions=max(1, min(32, max_sessions)),
+        session_start_tools=(
+            tuple(
+                item
+                for item in raw.get("session_start_tools", [])
+                if isinstance(item, str) and item
+            )
+            if isinstance(raw.get("session_start_tools"), list)
+            else ()
+        ),
+        browser=raw.get("browser") is True,
     )
 
 

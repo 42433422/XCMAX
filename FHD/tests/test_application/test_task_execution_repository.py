@@ -2,13 +2,99 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_execution_repository import (
+    InMemoryTaskExecutionRepository,
     SQLAlchemyTaskExecutionRepository,
 )
+
+
+@pytest.fixture(params=["memory", "sql"])
+def lifecycle_queue(request, tmp_path):
+    if request.param == "memory":
+        yield InMemoryTaskExecutionRepository(approval_timeout_seconds=1)
+        return
+    engine = create_engine(f"sqlite:///{tmp_path / 'lifecycle.db'}")
+    repository = SQLAlchemyTaskExecutionRepository(
+        session_factory=sessionmaker(bind=engine), approval_timeout_seconds=1
+    )
+    yield repository
+    engine.dispose()
+
+
+@pytest.mark.parametrize("state", ["paused", "blocked", "waiting_input", "waiting_auth"])
+def test_nonapproval_wait_keeps_identity_and_never_expires_as_rejection(lifecycle_queue, state):
+    repo = lifecycle_queue
+    run = AgentRun(user_id="owner", message="original task", status="queued")
+    repo.enqueue(run)
+    claimed = repo.claim("worker", lease_seconds=30)
+    assert claimed is not None
+    waiting = repo.finish(run.run_id, "worker", state)
+    assert waiting is not None and waiting.state == state
+    assert not waiting.finished_at
+    assert repo.resolve_approval(run.run_id, "approve", "owner") is None
+    future = (datetime.fromisoformat(waiting.updated_at) + timedelta(days=2)).isoformat()
+    assert repo.claim("another-worker", lease_seconds=30, now=future) is None
+    assert repo.get(run.run_id).state == state
+    assert not repo.lifecycle(run.run_id)["approval_requested_at"]
+
+
+@pytest.mark.parametrize("run_state", ["failed", "blocked"])
+def test_lost_completion_is_unknown_and_cannot_be_approved_or_requeued(lifecycle_queue, run_state):
+    from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+
+    repo = lifecycle_queue
+    run = AgentRun(user_id="owner", message="write once", status="queued")
+    repo.enqueue(run)
+    assert repo.claim("worker", lease_seconds=30) is not None
+    repo.mark_open_effect(run.run_id, "original-write")
+    run.status = run_state
+    state, code = dispatched_run_state(run)
+    uncertain = repo.finish(run.run_id, "worker", state, error_code=code or "timeout")
+    assert uncertain is not None and uncertain.state == "unknown"
+    assert uncertain.last_error_code == "needs_verification"
+    assert not uncertain.finished_at
+    assert repo.lifecycle(run.run_id)["effects"] == ["original-write"]
+    assert repo.enqueue(run).state == "unknown"
+    assert repo.resolve_approval(run.run_id, "approve", "owner") is None
+    assert repo.transition(run.run_id, "completed") is None
+    assert repo.claim("another-worker", lease_seconds=30) is None
+
+
+def test_stale_worker_cannot_clear_effects_or_append_lifecycle_history(lifecycle_queue):
+    repo = lifecycle_queue
+    run = AgentRun(user_id="owner", message="late receipt", status="queued")
+    repo.enqueue(run)
+    assert repo.claim("current-worker", lease_seconds=30) is not None
+    repo.mark_open_effect(run.run_id, "original-write")
+    before = repo.lifecycle(run.run_id)
+    assert repo.finish(run.run_id, "stale-worker", "completed") is None
+    assert repo.lifecycle(run.run_id) == before
+    assert repo.get(run.run_id).lease_owner == "current-worker"
+
+
+def test_stale_worker_cannot_open_effect_or_poison_current_claim(lifecycle_queue):
+    from app.application.agent_orchestrator import task_dispatcher
+    from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+
+    repo = lifecycle_queue
+    run = AgentRun(user_id="owner", message="late dispatch", status="queued")
+    repo.enqueue(run)
+    assert repo.claim("current-worker", lease_seconds=30) is not None
+    before = repo.lifecycle(run.run_id)
+    token = task_dispatcher._open_effect.set((repo, run.run_id, "stale-worker"))
+    try:
+        with pytest.raises(WorkerLeaseLost):
+            task_dispatcher.note_open_effect(run.run_id, "must-not-write")
+    finally:
+        task_dispatcher._open_effect.reset(token)
+    assert repo.lifecycle(run.run_id) == before
+    assert repo.mark_open_effect(run.run_id, "owned-write", owner_id="current-worker") is True
+    assert repo.lifecycle(run.run_id)["effects"] == ["owned-write"]
 
 
 def test_sql_queue_claim_is_atomic_renewable_and_recoverable(tmp_path) -> None:
@@ -119,6 +205,40 @@ def test_expired_owner_cannot_renew_or_finish_before_replacement(tmp_path, monke
     assert repository.finish(run.run_id, "old", "failed") is None
     assert repository.get(run.run_id).lease_owner == "new"
     assert repository.finish(run.run_id, "new", "completed").state == "succeeded"
+    engine.dispose()
+
+
+def test_rejected_worker_finish_preserves_recovery_evidence(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator import task_execution_sql_repository as sql_repo
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'receipt-fence.db'}")
+    factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    run = AgentRun(user_id="owner", message="receipt fence", status="queued")
+    SQLAlchemyAgentRunRepository(session_factory=factory).save(run)
+    queued = repository.enqueue(run)
+    now = datetime.fromisoformat(queued.available_at.replace("Z", "+00:00"))
+    assert repository.claim("old", lease_seconds=10, now=now.isoformat()) is not None
+    expired = (now + timedelta(seconds=10)).isoformat()
+    monkeypatch.setattr(sql_repo, "utc_now_iso", lambda: expired)
+
+    # An expired callback must not publish a transition even before replacement.
+    before = repository.lifecycle(run.run_id)
+    assert repository.finish(run.run_id, "old", "completed") is None
+    assert repository.lifecycle(run.run_id) == before
+
+    assert repository.claim("replacement", lease_seconds=60) is not None
+    repository.mark_open_effect(run.run_id, "unconfirmed-business-write")
+    before = repository.lifecycle(run.run_id)
+    assert repository.finish(run.run_id, "old", "completed") is None
+    assert repository.lifecycle(run.run_id) == before
+    assert repository.get(run.run_id).lease_owner == "replacement"
+    # Losing the new worker must still require reconciliation, never a new call.
+    monkeypatch.setattr(sql_repo, "utc_now_iso", lambda: (now + timedelta(seconds=70)).isoformat())
+    assert repository.claim("third", lease_seconds=60) is None
+    assert repository.get(run.run_id).last_error_code == "needs_verification"
+    assert repository.lifecycle(run.run_id)["effects"] == ["unconfirmed-business-write"]
     engine.dispose()
 
 

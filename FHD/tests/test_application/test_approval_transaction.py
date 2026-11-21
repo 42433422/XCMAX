@@ -208,7 +208,7 @@ def test_rejected_queue_cannot_be_approved_into_execution(tmp_path, monkeypatch)
     runs.save(run)
     queue.enqueue(run)
     assert queue.claim("worker", lease_seconds=30) is not None
-    assert queue.transition(run.run_id, "paused") is not None
+    assert queue.transition(run.run_id, "waiting_approval") is not None
     assert queue.transition(run.run_id, "rejected") is not None
     AgentApprovalConsumption.__table__.create(engine, checkfirst=True)
     token = issue_approval_grant(run, principal_id="owner")["grant"]

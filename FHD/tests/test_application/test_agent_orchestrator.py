@@ -1471,3 +1471,54 @@ def test_in_memory_approval_snapshot_cannot_resume_protected_plan():
         assert run.status == "waiting_user"
         assert run.tool_calls == []
         assert "审批" in first_result.get("message", "") or first_result.get("success") is False
+
+
+def test_unknown_nested_tool_receipt_blocks_repair_followups_and_refund(monkeypatch):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.infrastructure.billing.model_usage import get_model_wallet, set_model_wallet_balance
+
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
+    set_model_wallet_balance("u1", 3, reason="uncertain-tool-test")
+    repo = InMemoryAgentRunRepository()
+    plan = PlanGraph(
+        plan_id="p-uncertain-tool",
+        intent="business_db_read",
+        metadata={"repair_overrides": {"read": {"retry": True, "max_attempts": 2}}},
+        nodes=[
+            WorkflowNode(
+                node_id=node,
+                tool_id="business_db",
+                action="read",
+                params={"entity": "products", "keyword": "5003"},
+                risk="low",
+                idempotent=True,
+                depends_on=[] if node == "read" else ["read"],
+            )
+            for node in ("read", "followup")
+        ],
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={
+            "success": True,
+            "data": [{"model_number": "5003"}],
+            "request_id": "original-request",
+            "result": {"outputs": [{"outcome_unknown": True, "action_id": "original-action"}]},
+        },
+    ) as dispatch:
+        run = AgentOrchestrator(repository=repo).start_run_from_plan(
+            user_id="u1", message="查产品后继续核对", plan=plan
+        )
+        assert run.status == "blocked" and run.metadata["non_retryable"] is True
+        assert run.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        assert len(run.tool_calls) == 1 and run.steps[0].status == "failed"
+        assert run.steps[0].repair_history == [] and run.steps[1].status == "pending"
+        assert run.tool_calls[0].output["outcome"] == "unknown"
+        assert not run.tool_calls[0].metadata.get("wallet_refund")
+        assert get_model_wallet("u1")["balance_units"] == 2
+        reopened = AgentOrchestrator(repository=repo).continue_run(run.run_id, approved_by="u1")
+        assert reopened is not None and reopened.status == "blocked"
+        assert reopened.tool_calls[0].output["outcome"] == "unknown"
+        dispatch.assert_called_once()

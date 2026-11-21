@@ -139,7 +139,10 @@ class _ReplyApi extends MobileApiClient {
 
   @override
   Future<String> streamChat(String message,
-      {String? sessionId,
+      {
+    String idempotencyKey = '',
+    bool resumeOnly = false,
+      String? sessionId,
       int userId = 0,
       List<Map<String, String>> recentMessages = const [],
       void Function(String)? onToken}) async {
@@ -150,7 +153,9 @@ class _ReplyApi extends MobileApiClient {
 
   @override
   Future<String> streamAttachmentChat(String message,
-          {required String conversationId,
+          {
+    bool resumeOnly = false,
+          required String conversationId,
           required List<MobileChatAttachment> attachments,
           required String idempotencyKey,
           List<Map<String, String>> recentMessages = const [],

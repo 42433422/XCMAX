@@ -7,10 +7,15 @@ import json
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import asdict
 from typing import cast
 
 from sqlalchemy import JSON, String, Table, and_, case, func, literal, or_
 from sqlalchemy import cast as sql_cast
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator import run_terminal_metrics
@@ -181,11 +186,69 @@ def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
     )
 
 
+def _planning_generation(run: AgentRun) -> str:
+    context = run.metadata.get("runtime_context") or {}
+    return str(context.get("_planning_clarification_snapshot") or "") or next(
+        (
+            event.event_id
+            for event in reversed(run.events)
+            if event.event_type == "run.clarification_resumed"
+            and event.data.get("kind") == "planning_scope"
+        ),
+        "",
+    )
+
+
+def _valid_planning_replacement(run: AgentRun, previous: AgentRun) -> bool:
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.clarification import (
+        find_waiting_step,
+        is_planning_clarification,
+    )
+
+    waiting = find_waiting_step(previous)
+    event = run.events[-1] if run.events else None
+    return bool(
+        waiting is not None
+        and is_planning_clarification(previous, waiting)
+        and run.plan_id == previous.plan_id
+        and not run.tool_calls
+        and (run.metadata.get("runtime_context") or {}).get("_planning_clarification_snapshot")
+        == canonical_hash(previous.to_dict())
+        and event is not None
+        and event.event_type == "run.clarification_resumed"
+        and event.data.get("kind") == "planning_scope"
+        and event.data.get("step_id") == waiting.step_id
+    )
+
+
 def preserve_run_evidence(
-    run: AgentRun, previous: AgentRun | None, *, allow_safe_retry: bool = False
+    run: AgentRun,
+    previous: AgentRun | None,
+    *,
+    allow_safe_retry: bool = False,
+    allow_planning_replacement: bool = False,
 ) -> None:
-    """Same-generation saves cannot erase an unknown outcome or returned receipt."""
-    if previous is None or not same_run_generation(run, previous):
+    """Keep receipts across mutable context updates; only a verified CAS replaces a plan."""
+    if previous is None:
+        return
+    generation, prior_generation = _planning_generation(run), _planning_generation(previous)
+    if generation or prior_generation:
+        if (run.run_id, run.user_id, run.created_at, tenant_id_of_run(run), mod_id_of_run(run)) != (
+            previous.run_id,
+            previous.user_id,
+            previous.created_at,
+            tenant_id_of_run(previous),
+            mod_id_of_run(previous),
+        ):
+            raise ValueError("planning generation identity cannot change")
+        if generation != prior_generation:
+            if not allow_planning_replacement or not _valid_planning_replacement(run, previous):
+                raise ValueError(
+                    "planning generation replacement requires the original snapshot CAS"
+                )
+            return
+    elif not same_run_generation(run, previous):
         return
     old = previous.metadata
     if old.get("non_retryable"):
@@ -283,20 +346,28 @@ def preserve_run_evidence(
     for event in run.events:
         events.setdefault(event.event_id, event)
     run.events = list(events.values())
-    if (
-        not allow_safe_retry
-        and previous.status in {"completed", "failed", "cancelled", "paused", "blocked"}
-        and (
-            run.status in {"queued", "planning", "running", "retrying"}
+    if not allow_safe_retry and (
+        (previous.status in terminal and run.status != previous.status)
+        or (
+            previous.status == "unknown"
+            and run.status != previous.status
             and (
-                previous.status in {"completed", "failed"}
-                or old.get("stream_interruption")
+                old.get("non_retryable")
+                or (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+            )
+        )
+        or (
+            previous.status in {"paused", "blocked"}
+            and run.status in {"queued", "planning", "running", "retrying"}
+            and (
+                old.get("stream_interruption")
                 or old.get("non_retryable")
                 or (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
             )
         )
     ):
         run.status, run.error = previous.status, previous.error
+        run.final_output = {**run.final_output, **copy.deepcopy(previous.final_output)}
     if run.status == "cancelled" and (
         run.metadata.get("non_retryable")
         or recovery.get("state") == "manual_reconciliation_required"
@@ -439,6 +510,54 @@ class SQLAlchemyAgentRunRepository:
             self.save_in_session(db, run)
         return self.get(run.run_id) or copy.deepcopy(run)
 
+    def create_task_run(self, run: AgentRun, *, initial_only: bool = True) -> tuple[AgentRun, bool]:
+        """Publish once; False admits an exact attempt/child under its existing task."""
+        if not initial_only:
+            from app.db.models.agent import AgentRunRecord
+
+            try:
+                with self.transaction() as db:
+                    self._lock_task_record(db, task_from_run(run))
+                    record = db.get(AgentRunRecord, run.run_id)
+                    if record is not None:
+                        current = self._record_to_run(record)
+                        # The run may already belong to another task. Do not leave
+                        # an admission-only task row or save a losing snapshot.
+                        db.rollback()
+                        if current is None:
+                            raise ValueError("任务账本缺少执行记录")
+                        return current, False
+                    self.save_in_session(db, run)
+            except IntegrityError:
+                # Distinct task scopes can race on the same deterministic run ID.
+                # The unique run row wins; the losing transaction creates nothing.
+                current = self.get(run.run_id)
+                if current is None:
+                    raise
+                return current, False
+            return copy.deepcopy(run), True
+        with self.transaction() as db:
+            created = self._insert_task_record(db, task_from_run(run))
+            if not created:
+                from app.db.models.agent import AgentRunRecord, AgentTaskRecord
+
+                task = (
+                    db.query(AgentTaskRecord)
+                    .filter_by(
+                        tenant_id=tenant_id_of_run(run),
+                        user_id=run.user_id,
+                        task_id=self._run_task_id(run),
+                    )
+                    .one()
+                )
+                record = db.get(AgentRunRecord, task.active_run_id) if task.active_run_id else None
+                current = self._record_to_run(record) if record is not None else None
+                if current is None:
+                    raise ValueError("任务账本缺少执行记录")
+                return current, False
+            self.save_in_session(db, run)
+        return copy.deepcopy(run), True
+
     def save_stream_interruption_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
         """CAS the complete snapshot, retaining the row lock through task persistence."""
 
@@ -482,7 +601,7 @@ class SQLAlchemyAgentRunRepository:
         )
         if matched != 1:
             return False
-        self.save_in_session(db, run)
+        self.save_in_session(db, run, allow_planning_replacement=True)
         return True
 
     def save_claimed(self, run: AgentRun, *, owner_id: str, execution_count: int) -> AgentRun:
@@ -511,13 +630,18 @@ class SQLAlchemyAgentRunRepository:
         return copy.deepcopy(run)
 
     def save_in_session(
-        self, db: Session, run: AgentRun, *, allow_safe_retry: bool = False
+        self,
+        db: Session,
+        run: AgentRun,
+        *,
+        allow_safe_retry: bool = False,
+        allow_planning_replacement: bool = False,
     ) -> None:
         """Lock then persist in the caller's transaction, preserving concurrent receipts."""
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
         )
-        from app.db.models.agent import AgentRunRecord, AgentTaskRecord
+        from app.db.models.agent import AgentRunRecord
 
         db.query(AgentRunRecord).filter(AgentRunRecord.run_id == run.run_id).update(
             {AgentRunRecord.status: AgentRunRecord.status}, synchronize_session=False
@@ -534,8 +658,17 @@ class SQLAlchemyAgentRunRepository:
             preserve_catalog_run_authority,
         )
 
-        preserve_catalog_run_authority(db, run, previous)
-        preserve_run_evidence(run, previous, allow_safe_retry=allow_safe_retry)
+        catalog_fenced = preserve_catalog_run_authority(db, run, previous)
+        preserve_run_evidence(
+            run,
+            previous,
+            allow_safe_retry=allow_safe_retry,
+            allow_planning_replacement=allow_planning_replacement,
+        )
+        if catalog_fenced:
+            # A validated no-effect reconciliation closes the original action.
+            # Preserve its failed receipts without reviving the pre-fence status.
+            run.status = "cancelled"
         ensure_terminal_business_result(run)
         run_terminal_metrics.record_terminal_transition(run, previous, db)
         run.touch()
@@ -562,20 +695,9 @@ class SQLAlchemyAgentRunRepository:
             record.payload_json = payload
             record.created_at = run.created_at
             record.updated_at = run.updated_at
-        existing_task_record = (
-            db.query(AgentTaskRecord)
-            .filter(
-                AgentTaskRecord.tenant_id == tenant_id_of_run(run),
-                AgentTaskRecord.user_id == run.user_id,
-                AgentTaskRecord.task_id == self._run_task_id(run),
-            )
-            .one_or_none()
-        )
-        existing_task = (
-            self._task_record_to_model(existing_task_record)
-            if existing_task_record is not None
-            else None
-        )
+        # Different run rows can belong to one task. Serialize the shared
+        # projection as well as the run so an older attempt cannot win last.
+        existing_task = self._task_record_to_model(self._lock_task_record(db, task_from_run(run)))
         self._save_task_record(db, task_from_run(run, existing=existing_task))
 
     def get(self, run_id: str) -> AgentRun | None:
@@ -595,6 +717,7 @@ class SQLAlchemyAgentRunRepository:
         mod_id: str | None = None,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
@@ -603,6 +726,8 @@ class SQLAlchemyAgentRunRepository:
             query = db.query(AgentRunRecord)
             if user_id is not None:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
+            if status is not None:
+                query = query.filter(AgentRunRecord.status == status)
             if runtime_scope is not None:
                 query = query.filter(
                     _runtime_scope_candidates(
@@ -798,6 +923,13 @@ class SQLAlchemyAgentRunRepository:
     def save_task(self, task: AgentTask) -> AgentTask:
         self._ensure_schema()
         with self._session_scope() as db:
+            current = self._task_record_to_model(self._lock_task_record(db, task))
+            if (current.active_run_id, current.attempt, current.updated_at) != (
+                task.active_run_id,
+                task.attempt,
+                task.updated_at,
+            ):
+                return current
             self._save_task_record(db, task)
         return self.get_task(
             user_id=task.user_id,
@@ -1074,7 +1206,50 @@ class SQLAlchemyAgentRunRepository:
         return run.run_id
 
     @staticmethod
-    def _save_task_record(db: Session, task: AgentTask) -> None:
+    def _task_record_values(task: AgentTask) -> dict:
+        values = asdict(task)
+        values["metadata_json"] = json.dumps(
+            values.pop("metadata"), ensure_ascii=False, default=str
+        )
+        for key in (
+            "active_run_id",
+            "root_run_id",
+            "conversation_id",
+            "workspace_id",
+            "workspace_path",
+            "archived_at",
+        ):
+            values[key] = values[key] or None
+        return values
+
+    @classmethod
+    def _insert_task_record(cls, db: Session, task: AgentTask) -> bool:
+        from app.db.models.agent import AgentTaskRecord
+
+        values = cls._task_record_values(task)
+        insert = sqlite_insert if db.get_bind().dialect.name == "sqlite" else postgresql_insert
+        statement = (
+            insert(AgentTaskRecord)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=["tenant_id", "user_id", "task_id"])
+        )
+        return cast(CursorResult, db.execute(statement)).rowcount == 1
+
+    @classmethod
+    def _lock_task_record(cls, db: Session, task: AgentTask):
+        from app.db.models.agent import AgentTaskRecord
+
+        cls._insert_task_record(db, task)
+        query = db.query(AgentTaskRecord).filter_by(
+            tenant_id=task.tenant_id, user_id=task.user_id, task_id=task.task_id
+        )
+        query.update(
+            {AgentTaskRecord.updated_at: AgentTaskRecord.updated_at}, synchronize_session=False
+        )
+        return query.populate_existing().one()
+
+    @classmethod
+    def _save_task_record(cls, db: Session, task: AgentTask) -> None:
         from app.db.models.agent import AgentTaskRecord
 
         record = (
@@ -1086,35 +1261,12 @@ class SQLAlchemyAgentRunRepository:
             )
             .one_or_none()
         )
-        values = task.to_dict()
+        values = cls._task_record_values(task)
         if record is None:
-            record = AgentTaskRecord(
-                task_id=task.task_id,
-                user_id=task.user_id,
-                title=task.title,
-                status=task.status,
-                created_at=task.created_at,
-                updated_at=task.updated_at,
-            )
-            db.add(record)
-        record.tenant_id = task.tenant_id
-        record.title = task.title
-        record.source = task.source
-        record.task_type = task.task_type
-        record.status = task.status
-        record.attention_state = task.attention_state
-        record.active_run_id = task.active_run_id or None
-        record.root_run_id = task.root_run_id or None
-        record.conversation_id = task.conversation_id or None
-        record.workspace_id = task.workspace_id or None
-        record.workspace_path = task.workspace_path or None
-        record.workspace_isolation = task.workspace_isolation
-        record.attempt = task.attempt
-        record.run_count = task.run_count
-        record.archived_at = task.archived_at or None
-        record.metadata_json = json.dumps(values["metadata"], ensure_ascii=False, default=str)
-        record.created_at = task.created_at
-        record.updated_at = task.updated_at
+            db.add(AgentTaskRecord(**values))
+        else:
+            for key, value in values.items():
+                setattr(record, key, value)
 
     _task_record_to_model = staticmethod(_task_record_to_model)
     _command_record_to_model = staticmethod(_command_record_to_model)

@@ -49,7 +49,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   let scopeVersion = 0
   let detailRequestVersion = 0
 
-  const attentionCount = computed(() => tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed'].includes(task.status)).length)
+  const attentionCount = computed(() => tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed', 'unknown'].includes(task.status)).length)
   const unreadCount = computed(() =>
     tasks.value.reduce(
       (total, task) => total + Math.max(0, Number(task.unread_count ?? (task.attention_state === 'result_unread' ? 1 : 0)) || 0),

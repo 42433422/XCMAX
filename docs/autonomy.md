@@ -31,6 +31,44 @@
 MODstore 维护循环另见 `modstore_server/maintenance_loop/`，包含代码任务、审核、QA 和恢复。
 Rundeck 候选不替换这些代码修复及发布流程。
 
+## 自主编程与工具执行
+
+2026-11-21 本轮审计基线为 `main@48f8f40d14dfc373afd4ca43790c560f78b44481`，随后同步 `main@171418352d24667a7123b6556c55bad445ef3440`（#3424 的规划澄清已合入）；另核对 #3398、#3418、#3428，避免重复实现候选中的预算与交付工作。下面是本次范围内已定位的断点与改造；源码与受控回归是 E1/E2，不等于原生部署、真实模型或客户验收。
+
+| 缺口 | 原执行链中的修复与复用 |
+|---|---|
+| Codex 退出码 0 或文本被当成成功 | 依据固定 0.153.4 协议消费原生 JSONL，并记录实际 CLI 版本；同时要求完整 `turn.completed` 和退出 0，保留 thread、usage 与工具回执。 |
+| 失败轮次只因产生 diff 就提交、发布 | 同一工具链在 finalize 前核对结构化结果；失败或未知保留工作区与回执。 |
+| 执行后的配额错误触发换模型或换工具重做 | 模型选择限定于只读准入/探活；真实执行开始后禁止盲目降级重放。 |
+| 超时升级终止未覆盖仍存活进程树 | 不把 `child.killed` 当退出证明，等待原生 close，必要时终止进程树；取消与超时回执继续沿原 outbox。 |
+| 两个安装入口运行不同 Codex 实现 | 旧 e2e 入口转发 canonical Para 执行器，安装脚本复用原实现及依赖。 |
+| 同一 unknown 回执首次 completed、幂等回读 unknown | 原 task lifecycle 分类器统一归一化，再由工具 deadline、StepExecution 和幂等账本消费。 |
+| LangGraph unknown 后仍执行下游 | 原图执行器与结果验证使用同一分类；未知副作用保留 blocked/待核对，禁止自动修复重放。 |
+| 已观察工具记录与历史恢复仍用另一套成功条件 | observed trace 与 safe continuation 复用同一结果合同；业务数据状态不当执行终态。 |
+| 服务器把 Para accepted 当 completed | 维护循环复用已有 customer issue 执行合同，要求真实完成与原任务身份。 |
+| 丢回执被作为瞬态代码故障再次派单 | 外层派发与内层代码重试均识别待核对；原 `para_task_id` 路径只读回。 |
+| 修复重试换提示词却复用旧幂等键 | 持久 request ID 的步骤只执行或回读一次；明确失败由原外层修复生成新身份，审查和 QA 保留原代码目标。 |
+| 派发或步骤间重启丢失进度 | 原 loop memory 在派发前持久化 request/actor/步骤；已确认步骤保留到整轮结果落盘，恢复只核对原任务及原代码分支。 |
+| 原 review 未核对就被新知识拒绝分支清除 | 回读原 review 前不再执行会清检查点的知识/Retort 分支；新 review 派发仍需原门禁。 |
+| 最终合并或记账后重启，再执行最终策略 | 最终策略前保存意图；有原最终回执时只续记账，已确认记账只清检查点，未知合并或投影保持待核对。 |
+| 整理记忆覆盖正在执行的记录 | 公开清理/关闭/对账入口共用原 loop lease；忙时明确返回，保留原待处理项。 |
+| 验证命令没有退出码仍算通过 | 提供了 delivery validation 时，要求非空命令回执及真实整数退出码 0；缺失、超时和非法回执拒绝。 |
+
+本轮复用 Codex 0.153.4（Apache-2.0）、仓库内 LangGraph 1.2.10 及其检查点回补（MIT）、MCP 2.3.0（MIT）、现有 SQL/CAS、Para 任务/outbox 和维护账本。选择依据与固定来源见 FHD README。官方 [LangGraph 重试与副作用规则](https://docs.langchain.com/oss/python/langgraph/fault-tolerance#retry-boundaries-and-idempotency)要求持久化幂等身份并核对丢失的确认；检查点本身不能保证外部副作用恰好一次。没有引入 OpenHands、Temporal 或第二套总控；本次薄适配承担本产品身份与回执规则。
+
+| 尚未闭合的范围 | 具体条件 |
+|---|---|
+| 原 PR 自动修复 | 原 `MacControlTask` 来源与 Retort 的公司预算/attempt 合同不同。须把原 PR/source SHA/run/attempt 与已批准额度、原生隔离及 publisher 回执接通；保留 `original_pr_repair` 阻断，不能冒用 Retort 身份。 |
+| 候选中的客户反馈修复 | #3398 的受信 SRT/OpenCode、逐调用预算和隔离发布已经有消费者；属于未合入候选覆盖，不能当作主线已运行，也不重新写一套。 |
+| 原生线程续跑与远程取消 | 本轮保留 Codex thread ID 并修复工作进程信号退出；自动 `codex exec resume`、远程 task cancel 到 thread interrupt 的身份/批准适配仍需独立接线。任务状态回读不等于恢复原生线程。 |
+| 请求已发送但无远端任务号 | 持久执行意图保持待核对，禁止新派单；须由远端提供同一 request ID 的可信查找/对账，不能按相似文本推断完成。 |
+| 最终副作用丢确认 | 合并/部署已开始而最终回执缺失、或记账已开始但持久投影无法确认时保持待核对；自动恢复仍须按原 task/source/head/merge SHA 接通可信回读，不能重放策略。 |
+| 模型硬预算和其他执行器 | Codex 原生 usage 已记录；设备 CLI 的输出 token 上限仍标明 `output_limit_enforced=false`，真实费用/公司额度硬停未闭合。Cursor/Claude 沿用原退出码/stream 合同，尚未统一到同等级原生终态。 |
+| 真实环境与长期质量 | 原生 Windows/macOS 进程树、Ubuntu 22.04 SRT、实际模型账单、真实多文件编程留出任务及客户验收分别验证；固定 CLI 的受控进程测试不代表付费模型质量。 |
+| 正式交付 | exact head CI、正式审查/合入、同 main SHA 安全扫描和发布、运行版本回读仍走原门禁；受控回归不提升 L1–L6 等级或对标分数。 |
+
+定向验证沿用 `runtime_tools` 的 Node 测试、FHD 的工具/幂等/AgentRun/LangGraph 测试，以及 MODstore 的维护循环、持久恢复和记忆并发测试。按层使用受控替身，另以真实文件锁、进程、Git 和持久化回归验证边界；检查未知后无下游、无重派、无发布，成功正例仍能完成。测试结果以对应提交的 CI/PR 回执为准。
+
 ## Retort 改进闭环
 
 本配置的角色约定：**终极员工**与**超级员工**均定位为管理员层级；小X的预期角色为管理员。这里描述角色设计，不是账户授权或已启用权限的证明。

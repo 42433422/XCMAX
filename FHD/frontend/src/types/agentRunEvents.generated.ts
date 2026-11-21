@@ -7,6 +7,7 @@ export type AgentRunEventType =
   | 'approval.rejected'
   | 'approval.resume_plan_rejected'
   | 'approval.resume_proof_missing'
+  | 'approval.scope_changed'
   | 'approval.timed_out'
   | 'artifact.attached'
   | 'billing.debit_failed'

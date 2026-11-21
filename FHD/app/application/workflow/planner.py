@@ -16,7 +16,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .llm_plan_generation import LlmPlanGeneration, PlannerCompletion, PlannerConversation
 from .model_response_metrics import model_response_scope, record_response_error
-from .planner_llm_gateway import planner_max_tokens, request_planner_completion
+from .planner_llm_gateway import request_planner_completion
 from .planner_prompt_profile import attachment_import_manifest
 from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
@@ -481,7 +481,7 @@ class LLMWorkflowPlanner:
             messages=messages,
             http_client_factory=self._http_client_factory or _get_planner_http_client,
             temperature=temperature,
-            max_tokens=max_tokens or planner_max_tokens(),
+            max_tokens=max_tokens,
             **extra,
         )
 

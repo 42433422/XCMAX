@@ -11,6 +11,9 @@
  * - 分支：happy path / 空值 / 边界值 / 异常路径 / 回退逻辑 / 缓存
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { webcrypto } from 'node:crypto'
+
+vi.mock('@/utils/tenantStorageScopeRuntime', () => ({ getRuntimeTenantStorageScopeInput: () => ({ tenantId: 7, localUserId: 17 }) }))
 
 // ── mock 函数（hoisted-safe，vi.mock 工厂在 resetModules 后仍引用同一实例）──
 const mocks = vi.hoisted(() => ({
@@ -22,7 +25,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/core', () => ({ primeCsrfCookie: mocks.primeCsrfCookie }))
-vi.mock('@/utils/apiBase', () => ({ apiFetch: mocks.apiFetch }))
+vi.mock('@/utils/apiBase', () => ({ apiFetch: mocks.apiFetch, getApiBase: () => '' }))
 vi.mock('@/utils/csrfCookie', () => ({ readCsrfTokenFromCookie: mocks.readCsrfTokenFromCookie }))
 vi.mock('@/utils/platformShellApi', () => ({
   fetchEmployeePlannerStatus: mocks.fetchEmployeePlannerStatus,
@@ -39,7 +42,18 @@ function jsonRes(body: unknown, opts: { ok?: boolean; status?: number } = {}): R
   return {
     ok,
     status,
-    json: async () => body,
+    json: async () => {
+      const [path, init] = mocks.apiFetch.mock.calls.at(-1) || []
+      if (ok && /\/local\/employees\/.*\/execute$/.test(String(path)) && init?.method === 'POST') {
+        const request = JSON.parse(init.body)
+        const data = body as Record<string, unknown>
+        return { ...data, data: data.data ?? data, success: data.success !== false,
+          message: data.message || data.error,
+          execution_state: data.success === false ? 'failed' : 'completed',
+          run_id: 'original-office-run', idempotency_key: request.idempotency_key }
+      }
+      return body
+    },
   } as unknown as Response
 }
 
@@ -65,6 +79,7 @@ function makeFile(name = 'test.xlsx'): File {
 let mod: typeof import('./officeEmployeeReadApi')
 
 beforeEach(async () => {
+  localStorage.clear(); vi.stubGlobal('crypto', webcrypto)
   // 重置模块缓存以清除模块级状态（cachedWorkspaceRoot）
   vi.resetModules()
   mod = await import('./officeEmployeeReadApi')
@@ -385,18 +400,13 @@ describe('runOfficeEmployeeRead', () => {
       '/api/xcmax/local/employees/excel-full-read-employee/execute',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({
-          task: 'convert',
-          input_data: {
-            file_path: '/path',
-            workspace_root: '/root',
-            action: 'convert',
-          },
-          workspace_root: '/root',
-          retry_max: 1,
-        }),
+        body: expect.any(String),
       }),
     )
+    expect(JSON.parse(mocks.apiFetch.mock.calls[0][1].body)).toMatchObject({
+      task: 'convert', input_data: { file_path: '/path', workspace_root: '/root', action: 'convert' },
+      idempotency_key: expect.any(String), turn_id: expect.any(String),
+    })
   })
 
   it('解包本地员工运行时的 direct_python 输出', async () => {
@@ -426,16 +436,15 @@ describe('runOfficeEmployeeRead', () => {
     })
   })
 
-  it('本地员工执行路由缺失时回退旧 Mod 路由', async () => {
+  it('本地执行回执缺失只读原请求，不再 POST 旧 Mod 路由', async () => {
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: 'Method Not Allowed' }, { ok: false, status: 405 }))
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({ success: true, data: { ok: true, summary: 'legacy ok' } }))
 
-    const result = await mod.runOfficeEmployeeRead('word-full-read-employee', '/path', '/root')
-    expect(result.summary).toBe('legacy ok')
+    await expect(mod.runOfficeEmployeeRead('word-full-read-employee', '/path', '/root')).rejects.toThrow('待核对')
     expect(mocks.apiFetch).toHaveBeenNthCalledWith(
       2,
-      '/api/mod/word-full-read-employee/employees/word-full-read-employee/run',
-      expect.objectContaining({ method: 'POST' }),
+      expect.stringContaining('/local/employees/word-full-read-employee/runs?idempotency_key='),
+      expect.objectContaining({ method: 'GET' }),
     )
   })
 
@@ -457,10 +466,10 @@ describe('runOfficeEmployeeRead', () => {
     expect(mocks.apiFetch).not.toHaveBeenCalled()
   })
 
-  it('HTTP 错误时抛出（使用 body.message）', async () => {
+  it('HTTP 错误且无法读回原结果时保留待核对', async () => {
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: '执行失败' }, { ok: false, status: 500 }))
 
-    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root')).rejects.toThrow('执行失败')
+    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root')).rejects.toThrow('待核对')
   })
 
   it('success=false 时抛出（使用 body.error）', async () => {
@@ -469,10 +478,10 @@ describe('runOfficeEmployeeRead', () => {
     await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root')).rejects.toThrow('员工错误')
   })
 
-  it('res.json() 抛错时使用 HTTP 状态码', async () => {
+  it('res.json() 抛错后无法确认原结果时保留待核对', async () => {
     mocks.apiFetch.mockResolvedValueOnce(throwingJsonRes({ ok: false, status: 502 }))
 
-    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root')).rejects.toThrow('员工执行失败 HTTP 502')
+    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root')).rejects.toThrow('待核对')
   })
 
   it('返回 body.data 为空时回退到 body', async () => {
@@ -1195,18 +1204,23 @@ describe('local employee result envelopes and route fallback', () => {
     mocks.apiFetch.mockResolvedValueOnce(jsonRes(body))
     expect(await mod.runOfficeEmployeeRead('excel-full-read-employee', 'input.xlsx', '/work', { outputRelpath: 'out.json' })).toEqual(expected)
     expect(mocks.apiFetch).toHaveBeenCalledWith('/api/xcmax/local/employees/excel-full-read-employee/execute', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ task: 'convert', input_data: { file_path: 'input.xlsx', workspace_root: '/work', action: 'convert', output_relpath: 'out.json' }, workspace_root: '/work', retry_max: 1 }),
+      method: 'POST', body: expect.any(String),
     }))
+    expect(JSON.parse(mocks.apiFetch.mock.calls[0][1].body)).toMatchObject({
+      task: 'convert', input_data: { file_path: 'input.xlsx', workspace_root: '/work', action: 'convert', output_relpath: 'out.json' },
+      idempotency_key: expect.any(String), turn_id: expect.any(String),
+    })
   })
-  it.each([404, 405, 500])('falls back to the legacy employee route on missing-route status %s', async (status) => {
+  it.each([404, 405, 500])('only reads the original key after POST status %s', async (status) => {
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({ error: 'Method Not Allowed' }, { ok: false, status }))
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({ data: { summary: 'legacy' } }))
-    expect(await mod.runOfficeEmployeeRead('word-full-read-employee', 'input.docx', '/work')).toEqual({ summary: 'legacy' })
-    expect(mocks.apiFetch).toHaveBeenLastCalledWith('/api/mod/word-full-read-employee/employees/word-full-read-employee/run', expect.objectContaining({ body: JSON.stringify({ file_path: 'input.docx', workspace_root: '/work', action: 'convert' }) }))
+    await expect(mod.runOfficeEmployeeRead('word-full-read-employee', 'input.docx', '/work')).rejects.toThrow('待核对')
+    expect(mocks.apiFetch).toHaveBeenLastCalledWith(expect.stringContaining('/local/employees/word-full-read-employee/runs?idempotency_key='), { method: 'GET' })
+    expect(mocks.apiFetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   })
-  it('reports the final legacy failure if both routes return non-JSON errors', async () => {
+  it('retains unknown when both POST and original receipt GET return non-JSON errors', async () => {
     mocks.apiFetch.mockResolvedValueOnce(throwingJsonRes({ status: 404 })).mockResolvedValueOnce(throwingJsonRes({ status: 502 }))
-    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', 'input.xlsx', '/work')).rejects.toThrow('员工执行失败 HTTP 502')
+    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', 'input.xlsx', '/work')).rejects.toThrow('待核对')
     expect(mocks.apiFetch).toHaveBeenCalledTimes(2)
   })
 })

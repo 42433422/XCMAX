@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { probeTools } from './tool_preflight.mjs';
 import {
@@ -25,7 +26,6 @@ import {
   modelCandidatesFromPrompt,
   modelGatewayEnabled,
   probeAgentPlan,
-  probeModels,
   resolveCodexAuth,
   runCodexBudgetedAttempt,
   runWithModelFallback,
@@ -36,13 +36,10 @@ import { sourceIdentity } from './control_git_handoff.mjs';
 import { candidateBaseSha, candidateMode, exportCandidate, githubReadEnv } from './github_para_candidate.mjs';
 import { isOpenCodeReady, openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
 import { reportOnlyPatchInstruction, writeReportOnlyPatch, writeTaskMetadata } from './report_only_patch.mjs';
-import { cliResult, streamCliOutput } from './cli_output_stream.mjs';
+import { cliResult, runCodexCli, streamCliOutput } from './cli_output_stream.mjs';
 import {
   describeCodexFailure,
   describeTraeFailure,
-  formatCodexNonZeroOutput,
-  isCodexProviderFailoverEligible,
-  isTraeProviderFailoverEligible,
   parseTraeStream,
 } from './trae_failover.mjs';
 import {
@@ -51,6 +48,7 @@ import {
 } from './para_queue_policy.mjs';
 import {
   effectiveToolName,
+  forcedToolName,
   pausedByOpenCodePolicy,
   isToolFallbackEligible,
   removeOwnWorkspace,
@@ -297,68 +295,30 @@ const codexModelAvailability = createModelAvailability({
 });
 // taskDir -> 最近一次模型尝试摘要（codex_models_tried=...），用于失败回写工单。
 const codexModelAttemptsByTaskDir = new Map();
+const taskExecutionReceipts = new WeakMap();
+const taskExecutionReceiptsRecorded = new WeakSet();
+const codexBinaryVersions = new Map();
+const agentShutdown = new AbortController();
 
 function positiveIntEnv(name, fallback) {
   const parsed = Number.parseInt(process.env[name]?.trim() || '', 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function spawnCodexOnce(cwd, prompt, { args, env, log, timeoutMs = toolCommandTimeoutMs }) {
-  const codexBin = resolveCodexAgentBin();
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      codexBin,
-      log ? [...args.slice(0, 1), '--json', ...args.slice(1)] : args,
-      {
-        cwd,
-        env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    );
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-      setTimeout(() => {
-        if (!child.killed) child.kill('SIGKILL');
-      }, 3000).unref();
-    }, timeoutMs);
-
-    child.stdout.setEncoding('utf8').on('data', (chunk) => {
-      stdout = (stdout + chunk).slice(-10 * 1024 * 1024);
-    });
-    child.stderr.setEncoding('utf8').on('data', (chunk) => {
-      stderr = (stderr + chunk).slice(-10 * 1024 * 1024);
-    });
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on('close', (code, signal) => {
-      clearTimeout(timer);
-      const output = (stdout || stderr || '').trim();
-      if (timedOut) {
-        reject(new Error(`Codex CLI timeout after ${timeoutMs}ms${output ? `: ${output.slice(-1000)}` : ''}`));
-        return;
-      }
-      // Codex 经常以非零退出码结束（例如 sandbox 限制、patch 应用失败），
-      // 但文件改动可能已经落盘。我们 resolve 并把退出码包含在输出里，
-      // 由调用方在 catch 块检查 git status 决定是否 finalizeTask。
-      if (code !== 0) {
-        resolve(formatCodexNonZeroOutput({ code, signal, stdout, stderr }));
-        return;
-      }
-      resolve(log ? cliResult(stdout) || stderr.trim() : output);
-    });
-    streamCliOutput(child, 'codex', log);
-    child.stdin.end(prompt);
-  });
+async function spawnCodexOnce(cwd, prompt, { args, env, log, timeoutMs = toolCommandTimeoutMs }) {
+  const executable = resolveCodexAgentBin();
+  const identity = JSON.stringify([executable, env.PATH || '']);
+  if (!codexBinaryVersions.has(identity)) {
+    codexBinaryVersions.set(identity, probeTools({ codex: executable }).then(result => result.codex));
+  }
+  const observed = await codexBinaryVersions.get(identity);
+  return runCodexCli({ executable, cwd, prompt, args, env, log, timeoutMs,
+    signal: agentShutdown.signal, cliVersion: observed?.ok ? observed.version || null : null,
+    versionCheckedAt: observed?.checked_at || null });
 }
 
 async function probeCodexModel(model, env, providerArgs = []) {
-  const output = await spawnCodexOnce(
+  const result = await spawnCodexOnce(
     tmpdir(),
     'Health check. Reply with exactly: OK',
     {
@@ -367,7 +327,7 @@ async function probeCodexModel(model, env, providerArgs = []) {
       timeoutMs: positiveIntEnv('DEVFLEET_CODEX_MODEL_PROBE_TIMEOUT_MS', 90_000),
     },
   );
-  return { ok: !String(output || '').startsWith('[codex exit='), output };
+  return { ...result, executionStarted: false, receipt: { ...result.receipt, purpose: 'read_only_probe' } };
 }
 
 async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false) {
@@ -389,7 +349,7 @@ async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false
     // Only retry a read-only probe. Once the real task starts, preserve its effects for reconciliation.
     const preflight = await runWithModelFallback({
       candidates,
-      availability: codexModelAvailability,
+      availability: codexModelAvailability, readOnlyProbe: true,
       runAttempt: model => isAgentPlan(model)
         ? probeAgentPlan({
           key: modelEnv(model).CODEX_API_KEY,
@@ -402,7 +362,7 @@ async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false
       log,
     });
     codexModelAttemptsByTaskDir.set(taskDir, formatModelsTried(preflight.attempts));
-    if (!preflight.ok) return preflight.output;
+    if (!preflight.ok) return preflight;
     return invoke(preflight.model, modelEnv(preflight.model), providerArgs(preflight.model));
   }
   if (!modelGatewayEnabled()) {
@@ -415,22 +375,20 @@ async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false
   const auth = resolveCodexAuth(codexEnv);
   const candidates = codexModelCandidates({ env: process.env, prompt, reportOnly: isReportOnly });
   log(`codex model gateway: ${auth.label} candidates=${candidates.join('>')}`, auth.mode === 'api_key' ? 'info' : 'warn');
+  let selected = candidates;
   if (process.env.DEVFLEET_CODEX_MODEL_PROBE !== '0') {
-    await probeModels({
-      candidates,
-      availability: codexModelAvailability,
-      runProbe: (model) => probeCodexModel(model, auth.childEnv),
-      log,
+    const probe = await runWithModelFallback({
+      candidates, availability: codexModelAvailability, readOnlyProbe: true,
+      runAttempt: model => probeCodexModel(model, auth.childEnv), log,
     });
+    codexModelAttemptsByTaskDir.set(taskDir, formatModelsTried(probe.attempts));
+    if (!probe.ok) return probe;
+    selected = [probe.model];
   }
+  // Real work is invoked at most once, even when a provider fails after applying a patch.
   const result = await runWithModelFallback({
-    candidates,
-    availability: codexModelAvailability,
-    runAttempt: async (model) => {
-      const output = await invoke(model, auth.childEnv);
-      return { ok: !String(output || '').startsWith('[codex exit='), output };
-    },
-    log,
+    candidates: selected, availability: codexModelAvailability,
+    runAttempt: model => invoke(model, auth.childEnv), log,
   });
   const tried = formatModelsTried(result.attempts);
   codexModelAttemptsByTaskDir.set(taskDir, tried);
@@ -440,7 +398,7 @@ async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false
     })}`, 'warn');
   }
   log(`codex model gateway result: model=${result.model || 'none'} ${tried}${result.exhausted ? ' (候选耗尽)' : ''}`, result.ok ? 'info' : 'warn');
-  return result.output;
+  return result;
 }
 
 function taskOutputLog(ws, task) {
@@ -497,7 +455,7 @@ async function runClaudeAgent(taskDir, prompt, log) {
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
-      setTimeout(() => { if (!child.killed) child.kill('SIGKILL'); }, 3000).unref();
+      setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }, 3000).unref();
     }, toolCommandTimeoutMs);
     child.stdout.setEncoding('utf8').on('data', (chunk) => {
       stdout = (stdout + chunk).slice(-10 * 1024 * 1024);
@@ -574,6 +532,7 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
   log(`tool fallback chain: requested=${requested} plan=${plan.join('>') || '(none installed)'} on=${mode}`);
   if (!plan.length) return { toolError: 'tool fallback chain: no installed tool', toolOutput: '', toolUsed: '' };
   for (let i = 0; i < plan.length; i += 1) {
+    if (agentShutdown.signal.aborted) { toolError = 'agent_shutdown'; break; }
     const tool = plan[i];
     if (i > 0 && !reportOnly) {
       try {
@@ -586,15 +545,21 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
     }
     log(`tool attempt ${i + 1}/${plan.length}: requested=${requested} used=${tool}`);
     let failure = null;
+    let safeToFallback = false;
     let output = '';
     try {
-      output = String(await runToolOnce(tool, taskDir, prompt, log, reportOnly) || '');
-      if (tool === 'codex' && output.startsWith('[codex exit=')) {
-        const dirty = await gitMaybe(taskDir, ['status', '--porcelain', '--', '.']);
-        if (!dirty && !(await headMovedFromBase(taskDir, baseHead))) failure = describeCodexFailure(output);
+      const result = await runToolOnce(tool, taskDir, prompt, log, reportOnly);
+      if (tool === 'codex') {
+        output = String(result?.output || '');
+        safeToFallback = result?.executionStarted === false;
+        if (result?.receipt) taskExecutionReceipts.set(task, result.receipt);
+        if (result?.ok !== true || result?.receipt?.status !== 'completed') failure = describeCodexFailure(output);
+      } else {
+        output = String(result || '');
       }
     } catch (err) {
       failure = describeToolError(tool, err);
+      safeToFallback = err?.executionStarted === false || err?.code === 'ENOENT';
     }
     if (!failure) {
       attempts.push(`${tool}:ok`);
@@ -603,7 +568,8 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
       log(`tool chain result: requested=${requested} used=${tool} attempts=${attempts.join(',')}`);
       return { toolError: '', toolOutput: output.trim(), toolUsed: tool };
     }
-    const fallBack = i < plan.length - 1 && isToolFallbackEligible(failure.raw || failure.summary, mode);
+    // Once any real executor started, effects may exist outside git. Never replay it.
+    const fallBack = !agentShutdown.signal.aborted && safeToFallback && i < plan.length - 1 && isToolFallbackEligible(failure.raw || failure.summary, mode);
     attempts.push(`${tool}:failed`);
     toolError = `${tool === 'codex' ? codexModelsTriedPrefix(taskDir) : ''}${tool} 失败: ${failure.summary}`;
     log(`tool attempt ${i + 1}/${plan.length} failed: used=${tool} next=${fallBack ? plan[i + 1] : 'stop'} reason=${failure.summary}`, 'warn');
@@ -652,29 +618,34 @@ async function gitMaybe(cwd, args) {
 }
 
 async function postTaskReport(task, { progress = 0, status = 'running', content: rawContent, level = 'info' }) {
-  const content = credentialVault.redact(rawContent || '');
-  if (paraReports.record(task, { progress, status, content })) {
-    await paraReports.drain();
-    return; // A disconnected ACK is pending delivery, never an execution failure.
+  const receipt = taskExecutionReceipts.get(task);
+  const reports = [];
+  if (receipt && status !== 'running' && !taskExecutionReceiptsRecorded.has(task)) {
+    // Preserve the original candidate/code-identity JSON contract. Native execution
+    // evidence is a separate record on the same authenticated, durable task stream.
+    reports.push({ status: 'running', progress: Math.min(progress, 99), level,
+      content: JSON.stringify({ source: 'codex_exec_jsonl', codex_execution_receipt: receipt }), native: true });
   }
-  const response = await fetch(`${apiBase}/api/devices/me/task-report`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      task_id: task.task_id,
-      subtask_id: task.subtask_id,
-      progress,
-      status,
-      content: String(content || '').slice(0, 4000) || 'E2E agent 状态更新',
-      level,
-    }),
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`task-report failed: ${response.status} ${text.slice(0, 500)}`);
+  reports.push({ status, progress, level, content: rawContent || '' });
+  for (const report of reports) {
+    const content = credentialVault.redact(report.content);
+    if (paraReports.record(task, { ...report, content })) {
+      await paraReports.drain(); // A missing ACK stays in the outbox; it is not a new execution.
+    } else {
+      const response = await fetch(`${apiBase}/api/devices/me/task-report`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000),
+        body: JSON.stringify({ task_id: task.task_id, subtask_id: task.subtask_id,
+          progress: report.progress, status: report.status, level: report.level,
+          content: content.slice(0, 4000) || 'E2E agent 状态更新' }),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`task-report failed: ${response.status} ${text.slice(0, 500)}`);
+      }
+    }
+    if (report.native) taskExecutionReceiptsRecorded.add(task);
   }
 }
 
@@ -1015,7 +986,7 @@ async function prepareWorkspace(task) {
   const root = paraReports.handles(task) ? join(homedir(), 'XCMAX-runtime', 'control-workspaces') : workspaceRoot;
   const taskDir = join(root, safeTaskDirName(task));
   mkdirSync(root, { recursive: true });
-  cleanupWorkspace(taskDir);
+  if (existsSync(taskDir)) throw new Error('workspace_reconciliation_required: ' + taskDir);
   return withFailureCleanup(taskDir, async () => {
     if (/^[0-9a-f]{40}$/.test(task.base_branch || '')) {
       await git(process.cwd(), ['clone', '--no-checkout', '--filter=blob:none', repoUrl, taskDir]);
@@ -1075,7 +1046,8 @@ function gcStaleWorkspaces() {
       const dir = join(workspaceRoot, name);
       try {
         const st = statSync(dir);
-        if (st.isDirectory() && now - st.mtimeMs > WORKSPACE_RETENTION_MS) {
+        if (st.isDirectory() && !existsSync(join(dir, '.devfleet'))
+            && now - st.mtimeMs > WORKSPACE_RETENTION_MS) {
           rmSync(dir, { recursive: true, force: true });
           console.log(`[e2e-agent] GC 清理陈旧工作区 ${dir}`);
         }
@@ -1239,6 +1211,10 @@ async function settleCandidate(ws, task, taskDir, baseHead) {
 // 交付管道硬门：push 后由设备代理（系统侧）开 hold-merge PR，不依赖 Codex/Cursor 自觉。
 // 该开却开不出 → fail-closed（任务 failed，分支保留），禁止静默 completed。
 async function settleAfterPush(ws, task, taskDir, baseHead, pushed, okLog) {
+  if (!pushed) {
+    await failTask(ws, task, 'publication_not_verified: 原提交仍保留在工作区，未报告完成。');
+    return false;
+  }
   const prUrl = pushed ? await openPullRequestAfterPush(ws, task, taskDir) : '';
   const gate = requirePrUrlAfterPush(task, prUrl);
   if (!gate.ok) {
@@ -1287,7 +1263,6 @@ async function openPullRequestAfterPush(ws, task, taskDir) {
 }
 
 async function reportCodeIdentity(task, taskDir, baseHead, pushed, prUrl = '') {
-  if (!paraReports.handles(task)) return;
   await postTaskReport(task, { status: 'completed', progress: 100,
     content: JSON.stringify({ ...await sourceIdentity(taskDir), base_sha: baseHead,
       branch: task.work_branch, pr_url: prUrl || null,
@@ -1303,13 +1278,6 @@ async function failTask(ws, task, content) {
     content: message,
     level: 'error',
   });
-  send(ws, {
-    type: 'task_progress',
-    task_id: task.task_id,
-    subtask_id: task.subtask_id,
-    progress: 0,
-    status: 'failed',
-  });
   try {
     await postTaskReport(task, {
       progress: 0,
@@ -1320,10 +1288,19 @@ async function failTask(ws, task, content) {
   } catch (err) {
     console.error('[e2e-agent] task-report failed', err);
   }
+  send(ws, {
+    type: 'task_progress',
+    task_id: task.task_id,
+    subtask_id: task.subtask_id,
+    progress: 0,
+    status: 'failed',
+  });
+
 }
 
 async function handleTask(ws, task) {
   let taskDir = null;
+  let completed = false;
   try {
   // Budget refusal precedes workspace fetches, credential grants and model probes.
   const reportOnly = isReportOnlyTask(task);
@@ -1397,310 +1374,34 @@ async function handleTask(ws, task) {
   const agentConfig = resolveAgentConfig();
   const requestedTool = requestedToolName(task, agentConfig);
   const devTool = effectiveToolName({ task, agentConfig });
+  let plan = toolAttemptPlan({ task, agentConfig, isAvailable: toolAvailable });
+  if (!plan) {
+    plan = toolAvailable(devTool) ? [devTool] : [];
+    if (!forcedToolName() && plan.length) {
+      if (devTool === 'codex' && process.env.DEVFLEET_CODEX_TRAE_FAILOVER !== '0' && traeAgentAvailable()) plan.push('trae');
+      if (devTool === 'trae' && process.env.DEVFLEET_TRAE_CODEX_FAILOVER !== '0' && codexAgentAvailable()) plan.push('codex');
+    }
+  }
+  if (requestedTool && requestedTool !== devTool) {
+    taskOutputLog(ws, task)(`tool override: requested=${requestedTool} effective=${devTool}`);
+  }
   let toolError = '';
   let toolOutput = '';
-  // DEVFLEET_TOOL_FALLBACK_ORDER 已配置且无 FORCE 覆盖时走回退链，否则下面旧路径原样不变。
-  const fallbackPlan = toolAttemptPlan({ task, agentConfig, isAvailable: toolAvailable })
-    ?? (devTool === 'opencode' ? ['opencode'] : null);
-  const useChain = Array.isArray(fallbackPlan);
-  const useTrae = !useChain && devTool === 'trae' && traeAgentAvailable();
-  const useClaude =
-    !useChain
-    && !useTrae
-    && devTool === 'claude_code'
-    && claudeAgentAvailable();
-  const useCursor =
-    !useChain
-    && !useTrae
-    && !useClaude
-    && devTool === 'cursor'
-    && process.env.DEVFLEET_E2E_CURSOR !== '0'
-    && cursorAgentAvailable();
-  const useCodex =
-    !useChain
-    && !useTrae
-    && !useClaude
-    && !useCursor
-    && devTool === 'codex'
-    && codexAgentAvailable();
-  if (requestedTool && requestedTool !== devTool) {
-    send(ws, {
-      type: 'task_log',
-      task_id: task.task_id,
-      subtask_id: task.subtask_id,
-      content: `[e2e-agent] tool override: requested=${requestedTool} effective=${devTool}`,
-      level: 'info',
-    });
-  }
-
-  if (useChain) {
+  const hasExecutor = plan.length > 0;
+  if (hasExecutor) {
     ({ toolError, toolOutput } = await runToolFallbackChain({
-      ws,
-      task,
-      taskDir,
-      prompt: executionPrompt,
-      plan: fallbackPlan,
-      requestedTool,
-      baseHead,
-      reportOnly,
+      ws, task, taskDir, prompt: executionPrompt, plan, requestedTool, baseHead, reportOnly,
     }));
-    if (toolError && (devTool === 'opencode' || fallbackPlan.includes('opencode'))) {
-      await failTask(ws, task, toolError);
-      return;
-    }
+  } else if (requestedTool || devTool || reportOnly) {
+    toolError = 'requested_executor_unavailable';
   }
-
-  if (useTrae) {
-    send(ws, {
-      type: 'task_log',
-      task_id: task.task_id,
-      subtask_id: task.subtask_id,
-      content: '[e2e-agent] 调用 Trae CLI 修改代码',
-      level: 'info',
-    });
-    try {
-      const output = await runTraeAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
-      if (output) toolOutput = `${toolOutput}\n${output}`.trim();
-      if (output) {
-        send(ws, {
-          type: 'task_log',
-          task_id: task.task_id,
-          subtask_id: task.subtask_id,
-          content: output.slice(0, 4000),
-          level: 'info',
-        });
-      }
-      // trae-cli 写完代码后自动格式化 .py 文件，避免 Black formatter CI 失败
-      await autoFormatPythonFiles(taskDir, ws, task);
-    } catch (err) {
-      const failure = describeTraeFailure(err);
-      toolError = `Trae CLI 失败: ${failure.summary}`;
-      send(ws, {
-        type: 'task_log',
-        task_id: task.task_id,
-        subtask_id: task.subtask_id,
-        content: `[e2e-agent] ${toolError}`,
-        level: 'warn',
-      });
-      const failoverEnabled = process.env.DEVFLEET_TRAE_CODEX_FAILOVER !== '0';
-      if (
-        failoverEnabled
-        && isTraeProviderFailoverEligible(failure)
-        && codexAgentAvailable()
-      ) {
-        send(ws, {
-          type: 'task_log',
-          task_id: task.task_id,
-          subtask_id: task.subtask_id,
-          content: '[e2e-agent] Trae provider unavailable; fail over to Codex CLI',
-          level: 'warn',
-        });
-        try {
-          const output = await runCodexAgent(taskDir, executionPrompt, taskOutputLog(ws, task), reportOnly);
-          const codexNonZero = String(output || '').startsWith('[codex exit=');
-          if (output) toolOutput = `${toolOutput}\n${output}`.trim();
-          if (output) {
-            send(ws, {
-              type: 'task_log',
-              task_id: task.task_id,
-              subtask_id: task.subtask_id,
-              content: output.slice(0, 4000),
-              level: codexNonZero ? 'warn' : 'info',
-            });
-          }
-          toolError = codexNonZero
-            ? `${codexModelsTriedPrefix(taskDir)}Codex failover returned non-zero: ${String(output || '').slice(0, 500)}`
-            : '';
-          await autoFormatPythonFiles(taskDir, ws, task);
-        } catch (codexErr) {
-          toolError = `Trae provider unavailable; Codex failover failed: ${codexErr instanceof Error ? codexErr.message : String(codexErr)}`;
-          send(ws, {
-            type: 'task_log',
-            task_id: task.task_id,
-            subtask_id: task.subtask_id,
-            content: `[e2e-agent] ${toolError.slice(0, 1200)}`,
-            level: 'warn',
-          });
-        }
-      }
-    }
-  }
-
-  if (useClaude) {
-    send(ws, {
-      type: 'task_log',
-      task_id: task.task_id,
-      subtask_id: task.subtask_id,
-      content: '[e2e-agent] 调用 Claude CLI 修改代码',
-      level: 'info',
-    });
-    try {
-      const output = await runClaudeAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
-      if (output) toolOutput = `${toolOutput}\n${output}`.trim();
-      if (output) {
-        send(ws, {
-          type: 'task_log',
-          task_id: task.task_id,
-          subtask_id: task.subtask_id,
-          content: output.slice(0, 4000),
-          level: 'info',
-        });
-      }
-    } catch (err) {
-      toolError = `Claude CLI 失败: ${err instanceof Error ? err.message : String(err)}`;
-      send(ws, {
-        type: 'task_log',
-        task_id: task.task_id,
-        subtask_id: task.subtask_id,
-        content: `[e2e-agent] ${toolError}`,
-        level: 'warn',
-      });
-    }
-  }
-
-  if (useCursor) {
-    send(ws, {
-      type: 'task_log',
-      task_id: task.task_id,
-      subtask_id: task.subtask_id,
-      content: `[e2e-agent] 调用 Cursor Agent CLI 修改代码`,
-      level: 'info',
-    });
-    try {
-      const output = await runCursorAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
-      if (output) toolOutput = `${toolOutput}\n${output}`.trim();
-      if (output) {
-        send(ws, {
-          type: 'task_log',
-          task_id: task.task_id,
-          subtask_id: task.subtask_id,
-          content: output.slice(0, 4000),
-          level: 'info',
-        });
-      }
-    } catch (err) {
-      toolError = `Cursor Agent 失败: ${err instanceof Error ? err.message : String(err)}`;
-      send(ws, {
-        type: 'task_log',
-        task_id: task.task_id,
-        subtask_id: task.subtask_id,
-        content: `[e2e-agent] ${toolError}`,
-        level: 'warn',
-      });
-    }
-  }
-
-  if (useCodex) {
-    send(ws, {
-      type: 'task_log',
-      task_id: task.task_id,
-      subtask_id: task.subtask_id,
-      content: '[e2e-agent] 调用 Codex CLI 修改代码',
-      level: 'info',
-    });
-    try {
-      let output = await runCodexAgent(taskDir, executionPrompt, taskOutputLog(ws, task), reportOnly);
-      let codexNonZero = String(output || '').startsWith('[codex exit=');
-      if (output) {
-        send(ws, {
-          type: 'task_log',
-          task_id: task.task_id,
-          subtask_id: task.subtask_id,
-          content: output.slice(0, 4000),
-          level: codexNonZero ? 'warn' : 'info',
-        });
-      }
-      if (codexNonZero) {
-        const failure = describeCodexFailure(output);
-        const failoverEnabled = process.env.DEVFLEET_CODEX_TRAE_FAILOVER !== '0';
-        if (
-          failoverEnabled
-          && isCodexProviderFailoverEligible(failure)
-          && traeAgentAvailable()
-        ) {
-          send(ws, {
-            type: 'task_log',
-            task_id: task.task_id,
-            subtask_id: task.subtask_id,
-            content: `[e2e-agent] Codex provider unavailable (${failure.summary}); fail over to Trae CLI`,
-            level: 'warn',
-          });
-          try {
-            output = await runTraeAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
-            codexNonZero = false;
-            toolError = '';
-            if (output) {
-              send(ws, {
-                type: 'task_log',
-                task_id: task.task_id,
-                subtask_id: task.subtask_id,
-                content: output.slice(0, 4000),
-                level: 'info',
-              });
-            }
-            if (!reportOnly) await autoFormatPythonFiles(taskDir, ws, task);
-          } catch (traeErr) {
-            const traeFailure = describeTraeFailure(traeErr);
-            toolError = `Codex provider unavailable; Trae failover failed: ${traeFailure.summary}`;
-            send(ws, {
-              type: 'task_log',
-              task_id: task.task_id,
-              subtask_id: task.subtask_id,
-              content: `[e2e-agent] ${toolError}`,
-              level: 'warn',
-            });
-          }
-        }
-      }
-      if (output && !codexNonZero && !toolError) {
-        toolOutput = `${toolOutput}\n${output}`.trim();
-      }
-      // codex 完成后（无论退出码 0 或非 0）直接进入 finalizeTask（commit + push）。
-      // codex 的 --ephemeral sandbox 可能导致 git status 检测不到修改，但文件可能已落盘。
-      // finalizeTask 内部会检查 git status，无改动时不会空 commit。
-      if (!reportOnly) {
-        send(ws, {
-          type: 'task_progress',
-          task_id: task.task_id,
-          subtask_id: task.subtask_id,
-          progress: 80,
-          status: 'running',
-        });
-        const finalized = await finalizeTask(ws, task, taskDir, baseHead);
-        if (finalized) {
-          return;
-        }
-        // finalizeTask 返回 false（无改动可提交）。
-        if (codexNonZero) {
-          toolError = `${codexModelsTriedPrefix(taskDir)}Codex CLI 非零退出且无文件改动: ${describeCodexFailure(output).summary}`;
-          send(ws, {
-            type: 'task_log',
-            task_id: task.task_id,
-            subtask_id: task.subtask_id,
-            content: `[e2e-agent] ${toolError}`,
-            level: 'warn',
-          });
-        }
-      } else if (codexNonZero && !toolError) {
-        toolError = `${codexModelsTriedPrefix(taskDir)}Codex CLI 非零退出: ${describeCodexFailure(output).summary}`;
-      }
-    } catch (err) {
-      toolError = `${codexModelsTriedPrefix(taskDir)}Codex CLI 失败: ${err instanceof Error ? err.message : String(err)}`;
-      send(ws, {
-        type: 'task_log',
-        task_id: task.task_id,
-        subtask_id: task.subtask_id,
-        content: `[e2e-agent] ${toolError}`,
-        level: 'warn',
-      });
-    }
+  // A dirty workspace or a model's answer never overrides an executor failure.
+  if (toolError) {
+    await failTask(ws, task, `[e2e-agent] ${toolError}; workspace_preserved=${taskDir}`);
+    return;
   }
 
   if (reportOnly) {
-    if (toolError) {
-      await failTask(ws, task, `[e2e-agent] report-only 执行器失败: ${toolError}`);
-      return;
-    }
     const content = buildReportOnlyContent(task, toolOutput);
     send(ws, {
       type: 'task_log',
@@ -1709,13 +1410,6 @@ async function handleTask(ws, task) {
       content,
       level: 'info',
     });
-    send(ws, {
-      type: 'task_progress',
-      task_id: task.task_id,
-      subtask_id: task.subtask_id,
-      progress: 100,
-      status: 'completed',
-    });
     try {
       await postTaskReport(task, {
         progress: 100,
@@ -1723,6 +1417,9 @@ async function handleTask(ws, task) {
         content,
         level: 'info',
       });
+      completed = true;
+      send(ws, { type: 'task_progress', task_id: task.task_id, subtask_id: task.subtask_id,
+        progress: 100, status: 'completed' });
     } catch (err) {
       await failTask(
         ws,
@@ -1733,7 +1430,7 @@ async function handleTask(ws, task) {
     return;
   }
 
-  const waitMs = useChain || useTrae || useClaude || useCursor || useCodex ? 120_000 : 900_000;
+  const waitMs = hasExecutor ? 120_000 : 900_000;
   if (!(await waitForMeaningfulChanges(taskDir, waitMs, baseHead))) {
     await failTask(
       ws,
@@ -1752,16 +1449,17 @@ async function handleTask(ws, task) {
     progress: 80,
     status: 'running',
   });
-  await finalizeTask(ws, task, taskDir, baseHead);
+  completed = await finalizeTask(ws, task, taskDir, baseHead);
   } finally {
-    // 无论成功/失败/未变更，任务结束即回收 per-task 克隆，避免 workspace 撑爆磁盘。
+    // Failed/unknown work remains available for reconciliation; only delivered work is disposable.
     codexModelAttemptsByTaskDir.delete(taskDir);
-    if (!paraReports.handles(task)) cleanupWorkspace(taskDir);
+    if (completed && !paraReports.handles(task)) cleanupWorkspace(taskDir);
   }
 }
 
 const taskQueuesByTool = new Map(supportedToolNames.map((tool) => [tool, []]));
 const runningTools = new Set();
+const runningTaskPromises = new Set();
 const runningTaskIdsByTool = new Map();
 const knownSubtasks = new Set();
 
@@ -1770,6 +1468,7 @@ function taskToolName(task) {
 }
 
 function enqueueTask(ws, task) {
+  if (agentShutdown.signal.aborted) return false;
   if (process.env.GITHUB_ACTIONS === 'true') {
     const request = process.env.PARA_GITHUB_REQUEST_ID;
     const marker = request && `[xcmax:${createHash('sha256').update(request).digest('hex').slice(0, 32)}:`;
@@ -1798,6 +1497,7 @@ function enqueueTask(ws, task) {
 }
 
 async function recoverPendingTask(ws) {
+  if (agentShutdown.signal.aborted) return;
   if (ws.readyState !== WebSocket.OPEN) return;
   try {
     await paraReports.drain();
@@ -1830,6 +1530,7 @@ async function recoverPendingTask(ws) {
 }
 
 function drainToolQueue(tool) {
+  if (agentShutdown.signal.aborted) return;
   if (runningTools.has(tool)) return;
   const queue = taskQueuesByTool.get(tool) || [];
   const next = queue.shift();
@@ -1844,7 +1545,7 @@ function drainToolQueue(tool) {
   runningTools.add(tool);
   runningTaskIdsByTool.set(tool, String(next.task?.task_id || ''));
   publishToolStatus(next.ws);
-  handleTask(next.ws, next.task)
+  const pending = handleTask(next.ws, next.task)
     .catch((err) => {
       console.error('[e2e-agent] task error', err);
       return failTask(
@@ -1854,6 +1555,9 @@ function drainToolQueue(tool) {
       );
     })
     .finally(() => {
+      runningTaskPromises.delete(pending);
+      taskExecutionReceipts.delete(next.task);
+      taskExecutionReceiptsRecorded.delete(next.task);
       const subtaskId = String(next.task?.subtask_id || '').trim();
       if (subtaskId) knownSubtasks.delete(subtaskId);
       credentialVault.revokeTask(String(next.task?.task_id || ''), 'task_finished');
@@ -1863,6 +1567,7 @@ function drainToolQueue(tool) {
       setImmediate(() => drainToolQueue(tool));
       setTimeout(() => recoverPendingTask(next.ws), 500);
     });
+  runningTaskPromises.add(pending);
 }
 
 function toolExecutionStatus(tool, installed) {
@@ -1875,6 +1580,7 @@ function toolExecutionStatus(tool, installed) {
 let preflight = {};
 let preflightPending = false;
 function publishToolStatus(ws, refresh = true) {
+  if (agentShutdown.signal.aborted) return;
   void controlReceipts.drain();
   void paraReports.drain();
   const openCodeBin = openCodeExecutable();
@@ -1921,6 +1627,7 @@ function publishToolStatus(ws, refresh = true) {
 }
 
 function connect() {
+  if (agentShutdown.signal.aborted) return;
   const ws = new WebSocket(wsUrl);
   ws.on('open', () => {
     activeSocket = ws;
@@ -1956,6 +1663,7 @@ function connect() {
   }, 30_000);
 }
 
+export function startParaAgent() {
 if (process.argv.includes('--spawn')) {
   const child = spawn(process.execPath, [new URL(import.meta.url).pathname], {
     detached: true,
@@ -1965,6 +1673,15 @@ if (process.argv.includes('--spawn')) {
   child.unref();
   console.log(`[e2e-agent] spawned pid ${child.pid}`);
 } else {
+  for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
+    if (agentShutdown.signal.aborted) return;
+    agentShutdown.abort(new Error('agent_shutdown'));
+    Promise.allSettled([...runningTaskPromises]).then(() => process.exit(signal === 'SIGINT' ? 130 : 143));
+  });
   gcStaleWorkspaces();
   connect();
 }
+
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) startParaAgent();

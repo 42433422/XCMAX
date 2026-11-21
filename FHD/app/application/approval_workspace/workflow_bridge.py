@@ -16,10 +16,13 @@ from app.application.workflow.approval_persistence import (
     closed_loop_setup_failure_code,
 )
 
+from .outcomes import run_execution_receipt, run_outcome_unknown
 from .protocols import JsonObject, PendingApprovals, WorkflowBackends
 
 if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentRun
+
+_unknown_tool_outcome = run_outcome_unknown
 
 
 def _cross_module_run_id(workflow: JsonObject) -> str:
@@ -60,17 +63,6 @@ def _batch_absent(node: object, tenant_id: object) -> bool:
             )
     except (ValueError, TypeError):
         return False
-
-
-def _unknown_tool_outcome(run: object) -> bool:
-    """有步骤以「结果未知」失败时，不能判定为确定失败。"""
-    for step in getattr(run, "steps", []) or []:
-        output = getattr(step, "output", None)
-        if not isinstance(output, dict):
-            continue
-        if output.get("outcome") == "unknown" or output.get("reconciliation_required") is True:
-            return True
-    return False
 
 
 class WorkflowApprovalBridge:
@@ -203,9 +195,15 @@ class WorkflowApprovalBridge:
                 batch_id=batch_id, tenant_id=int(tenant)
             )
         except self.errors:
-            return {**self.failure(request_id, "outcome_unknown"), "code": "outcome_unknown"}
+            return {
+                **self.failure(request_id, "outcome_unknown"),
+                "code": "outcome_unknown",
+            }
         if not result.get("success"):
-            return {**self.failure(request_id, "outcome_unknown"), "code": "outcome_unknown"}
+            return {
+                **self.failure(request_id, "outcome_unknown"),
+                "code": "outcome_unknown",
+            }
         approvals.remove_pending_workflow(request_id)
         return {
             "success": False,
@@ -376,38 +374,25 @@ class WorkflowApprovalBridge:
                     "nodes_total": len(run.steps),
                 }
             return self._request_next_approval(request_id, workflow, run, approvals, approved)
-        if run.status in {"running", "queued", "pending"}:
-            # 执行仍在进行：审批已放行，不能把「还在跑」当成失败并取消审批。
+        receipt = run_execution_receipt(run)
+        if (
+            receipt["execution_accepted"]
+            or receipt["code"] == "outcome_unknown"
+            or receipt.get("execution_started") is False
+        ):
             return {
-                "success": False,
-                "workflow_executed": False,
-                "execution_accepted": True,
+                **receipt,
                 "approval_request_id": request_id,
-                "agent_run_id": run.run_id,
-                "message": "审批已通过，任务仍在执行中，结果以任务回执为准。",
+                "approved_in_memory": approved,
             }
         success = run.status == "completed"
-        if not success and _unknown_tool_outcome(run):
-            # 工具超时但结果未知：既不能判成功，也不能当成确定失败取消审批。
-            return {
-                "workflow_executed": False,
-                "approval_request_id": request_id,
-                "agent_run_id": run.run_id,
-                "approved_in_memory": approved,
-                "success": False,
-                "code": "outcome_unknown",
-                "plan_id": str(run.plan_id or ""),
-                "intent": str(run.intent or ""),
-                "message": "工具执行超时，业务结果尚未确认；请先核对原任务，不要重复提交。",
-                "nodes_executed": len([step for step in run.steps if step.status == "completed"]),
-                "nodes_total": len(run.steps),
-                "tool_call_ids": [call.call_id for call in run.tool_calls],
-            }
         code, message = canonical_workflow_outcome(
             success=success,
-            code=WORKFLOW_EXECUTION_SUCCESS_CODE
-            if success
-            else (closed_loop_setup_failure_code(run) or WORKFLOW_EXECUTION_FAILED_CODE),
+            code=(
+                WORKFLOW_EXECUTION_SUCCESS_CODE
+                if success
+                else (closed_loop_setup_failure_code(run) or WORKFLOW_EXECUTION_FAILED_CODE)
+            ),
         )
         if not success:
             # 把失败步骤的真实原因带给用户，避免只显示“AI 工作流执行失败”而无法判断是否写入。
@@ -426,6 +411,7 @@ class WorkflowApprovalBridge:
                 message = detail
         return {
             "workflow_executed": True,
+            "execution_state": run.status,
             "approval_request_id": request_id,
             "agent_run_id": run.run_id,
             "approved_in_memory": approved,
@@ -482,7 +468,10 @@ class WorkflowApprovalBridge:
         if node is None or node.tool_id != waiting.tool_id or node.action != waiting.action:
             return self.failure(request_id, WORKFLOW_PLAN_UNAVAILABLE_CODE, agent_run_id=run.run_id)
         node.params = copy.deepcopy(waiting.params)
-        context = {**(workflow.get("runtime_context") or {}), "_approval_agent_run_required": True}
+        context = {
+            **(workflow.get("runtime_context") or {}),
+            "_approval_agent_run_required": True,
+        }
         request = approvals.create_approval_request(
             plan_id=next_plan.plan_id,
             node=node,

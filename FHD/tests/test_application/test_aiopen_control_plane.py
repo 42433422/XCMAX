@@ -78,9 +78,7 @@ def test_client_revocation_is_visible_to_other_workers_and_not_resurrected(tmp_p
     assert second.resolve_principal(key) is None
 
 
-def test_revocation_is_visible_in_a_running_separate_process(tmp_path):
-    from multiprocessing import get_context
-
+def test_revocation_is_visible_in_a_running_separate_process(tmp_path, spawn_context):
     from app.domain.aiopen.principal import ScreenPrincipal
 
     registry = _registry(tmp_path)
@@ -88,7 +86,7 @@ def test_revocation_is_visible_in_a_running_separate_process(tmp_path):
     key = registry.generate(
         principal=owner, scopes=["ui_click"], expires_at=2000.0, client_key=True
     )["key"]
-    context = get_context("spawn")
+    context = spawn_context
     ready, proceed = context.Queue(), context.Queue()
     worker = context.Process(
         target=_authorization_worker, args=(tmp_path / "keys.json", key, ready, proceed)

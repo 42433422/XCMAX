@@ -265,6 +265,9 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
             timeout_seconds=30,
             retry=dict(DEFAULT_RETRY),
             idempotent=idempotent,
+            # RoutePolicy.catalog only reads the local whitelist. Other low-risk
+            # AIOPEN actions still need their own explicit side-effect review.
+            read_only=action == "api_catalog",
             required_params=required_params,
             availability="aiopen",
             contract_samples=deepcopy(fixture),
@@ -299,10 +302,14 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             required = action_meta.get("required_params")
             required_params = [str(x) for x in required] if isinstance(required, list) else []
             risk = _risk_value(action_meta.get("risk"))
-            input_schema = _SPECIAL_INPUT_SCHEMAS.get(
-                (str(tool_id), normalized_action),
-                _schema_from_required(required_params),
-            )
+            input_schema = _SPECIAL_INPUT_SCHEMAS.get((str(tool_id), normalized_action))
+            if input_schema is None:
+                configured_schema = action_meta.get("input_schema")
+                input_schema = (
+                    configured_schema
+                    if isinstance(configured_schema, dict)
+                    else _schema_from_required(required_params)
+                )
             output_schema = _SPECIAL_OUTPUT_SCHEMAS.get(
                 (str(tool_id), normalized_action),
                 _DEFAULT_OUTPUT_SCHEMA,
@@ -314,7 +321,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             spec = ToolActionSpecV2(
                 tool_id=str(tool_id),
                 action=normalized_action,
-                description=tool_description,
+                description=str(action_meta.get("description") or tool_description),
                 input_schema=deepcopy(input_schema),
                 output_schema=deepcopy(output_schema),
                 risk=risk,
@@ -603,9 +610,9 @@ def _validate_schema_payload(
                         subject=f"{subject}.{key}[{index}]",
                         allow_references_from=allow_references_from,
                         allow_missing_fields=allow_missing_fields,
-                        path_prefix=f"{path_prefix}.{key}[{index}]"
-                        if path_prefix
-                        else f"{key}[{index}]",
+                        path_prefix=(
+                            f"{path_prefix}.{key}[{index}]" if path_prefix else f"{key}[{index}]"
+                        ),
                     )
                     if not nested_ok:
                         return False, nested_message

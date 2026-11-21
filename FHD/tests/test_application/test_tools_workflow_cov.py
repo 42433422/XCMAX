@@ -326,7 +326,7 @@ class TestExecuteWorkflowTool:
         data = json.loads(result)
         assert "suggestions" in data
 
-    def test_employee_tool_registry_error_swallowed(self):
+    def test_employee_tool_registry_error_blocks_fallback(self):
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -337,16 +337,20 @@ class TestExecuteWorkflowTool:
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 return_value=(None, None),
                 create=True,
-            ),
+            ) as native,
             patch(
                 "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
-            ),
+            ) as legacy,
         ):
             result = self._call("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["outcome"] == "unknown"
+        assert data["retryable"] is False
+        assert data["reconciliation_required"] is True
+        native.assert_not_called()
+        legacy.assert_not_called()
 
     def test_template_preview_dispatched(self):
         with (
@@ -361,12 +365,16 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
-                return_value={"result": "ok"},
+                "app.application.tools.registered_capabilities.execute_registered_capability",
+                return_value=json.dumps({"result": "ok"}),
             ) as dispatch,
         ):
             result = self._call("template_preview", {"action": "view"})
-            dispatch.assert_called_once_with("template_preview", "view", {"action": "view"})
+            dispatch.assert_called_once_with(
+                {"tool_id": "template_preview", "action": "view", "params": {"action": "view"}},
+                workspace_root=None,
+                runtime_context=None,
+            )
         data = json.loads(result)
         assert "result" in data
 

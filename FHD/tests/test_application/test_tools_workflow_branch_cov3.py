@@ -927,8 +927,8 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
-                return_value={"result": "ok"},
+                "app.application.tools.registered_capabilities.execute_registered_capability",
+                return_value=json.dumps({"result": "ok"}),
                 create=True,
             ),
         ):
@@ -957,7 +957,7 @@ class TestExecuteWorkflowToolMisc:
             result = execute_workflow_tool("some_tool", {})
         assert "emp" in result
 
-    def test_planner_native_tool_error_swallowed(self) -> None:
+    def test_planner_native_tool_error_blocks_fallback(self) -> None:
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -977,9 +977,11 @@ class TestExecuteWorkflowToolMisc:
         ):
             result = execute_workflow_tool("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["outcome"] == "unknown"
+        assert data["retryable"] is False
+        assert data["reconciliation_required"] is True
 
-    def test_employee_planner_tool_error_swallowed(self) -> None:
+    def test_employee_planner_tool_error_blocks_fallback(self) -> None:
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -999,7 +1001,9 @@ class TestExecuteWorkflowToolMisc:
         ):
             result = execute_workflow_tool("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["outcome"] == "unknown"
+        assert data["retryable"] is False
+        assert data["reconciliation_required"] is True
 
 
 # ---------------------------------------------------------------------------

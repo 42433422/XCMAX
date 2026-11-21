@@ -112,6 +112,98 @@ def test_binding_rejects_wrong_owner_or_unentitled_mod(mod_session, user_id, mod
         bind_agent_mod_scope(session_id="secret-session", user_id=user_id, mod_id=mod_id)
 
 
+@pytest.mark.parametrize(
+    "failure",
+    ["revoked", "revoked_with_prior_effect", "handler_not_started", "handler_auth_error"],
+)
+def test_dispatch_effect_requires_host_admission_and_never_trusts_tool_refusal(
+    mod_session, monkeypatch, failure
+):
+    from app.application.agent_orchestrator import task_dispatcher
+    from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+    from app.application.agent_orchestrator.task_execution_repository import (
+        InMemoryTaskExecutionRepository,
+    )
+    from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
+
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    binding = bind_agent_mod_scope(
+        session_id="secret-session", user_id="1", mod_id="test-private-mod"
+    )
+    run = AgentRun(user_id="1", message="inbound", status="queued")
+    step = AgentStep(
+        node_id="stock",
+        tool_id="inventory",
+        action="stock_in",
+        idempotent=False,
+        params={"model_number": "A100", "warehouse_name": "main", "quantity": 50},
+    )
+    queue = InMemoryTaskExecutionRepository()
+    queue.enqueue(run)
+    assert queue.claim("worker", lease_seconds=30) is not None
+    prior = ["other-write"] if failure == "revoked_with_prior_effect" else []
+    for effect in prior:
+        assert queue.mark_open_effect(run.run_id, effect, owner_id="worker")
+    if failure.startswith("revoked"):
+        with mod_session.begin() as db:
+            db.query(UserSession).one().entitled_mod_ids_json = "[]"
+        monkeypatch.setattr(
+            "app.utils.resilience.rate_limiter.tool_execution_slot",
+            lambda *a, **kw: pytest.fail("host refusal must not reserve a circuit probe"),
+        )
+    calls = []
+
+    def handler(*args):
+        calls.append(args)
+        assert queue.lifecycle(run.run_id)["effects"] == [step.step_id]
+        if failure == "handler_auth_error":
+            raise AgentModAuthorizationError("handler failed after starting")
+        # Tool-controlled status is not evidence that dispatch never happened.
+        return {
+            "success": False,
+            "error_code": "mod_authorization_invalid",
+            "execution_status": "not_started",
+        }
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", handler
+    )
+    token = task_dispatcher._open_effect.set((queue, run.run_id, "worker"))
+    try:
+        result = execute_with_tool_deadline(
+            SimpleNamespace(execute=AgentToolExecutor().execute),
+            step,
+            runtime_context={
+                "run_id": run.run_id,
+                "tenant_id": "1",
+                "_mod_authorization": binding,
+            },
+            timeout_seconds=10,
+        )
+    finally:
+        task_dispatcher._open_effect.reset(token)
+    assert get_request_active_mod_id() == ""
+    assert result["success"] is False
+    if failure.startswith("revoked"):
+        assert calls == []
+        assert result["execution_status"] == "not_started"
+        assert result["error_code"] == "mod_authorization_invalid"
+        assert queue.lifecycle(run.run_id)["effects"] == prior
+    else:
+        assert len(calls) == 1
+        assert queue.lifecycle(run.run_id)["effects"] == [step.step_id]
+    run.status = "blocked"
+    step.status, step.output = "failed", result
+    run.steps = [step]
+    state, error_code = dispatched_run_state(run)
+    stopped = queue.finish(run.run_id, "worker", state, error_code=error_code)
+    assert stopped.state == ("blocked" if failure == "revoked" else "unknown")
+    assert queue.lifecycle(run.run_id)["effects"] == (
+        prior if failure.startswith("revoked") else [step.step_id]
+    )
+    assert queue.claim("next-worker", lease_seconds=30) is None
+
+
 def test_client_cannot_supply_or_replace_mod_authorization():
     forged = {"session_row_id": 5, "user_id": "other", "mod_id": "private"}
     assert "_mod_authorization" not in authenticated_runtime_context(

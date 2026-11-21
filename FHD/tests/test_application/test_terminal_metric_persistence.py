@@ -32,7 +32,8 @@ def test_terminal_transitions_count_once_at_persistence(tmp_path, monkeypatch, s
     repo.save(run)
     run.status = "completed"
     repo.save(run)
-    assert seen == ([terminal] if terminal == "completed" else [terminal, "completed"])
+    assert repo.get(run.run_id).status == terminal
+    assert seen == [terminal]
     engine.dispose()
 
 

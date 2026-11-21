@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { webcrypto } from 'node:crypto'
+
+vi.mock('@/utils/tenantStorageScopeRuntime', () => ({ getRuntimeTenantStorageScopeInput: () => ({ tenantId: 7, localUserId: 17 }) }))
+beforeEach(() => { localStorage.clear(); vi.stubGlobal('crypto', webcrypto) })
 
 const { mockApi } = vi.hoisted(() => ({
   mockApi: {
