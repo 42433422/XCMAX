@@ -864,7 +864,6 @@
           "risk": "low",
           "read_only": true,
           "idempotent": true,
-          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
