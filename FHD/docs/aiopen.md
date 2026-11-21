@@ -209,6 +209,44 @@ MCP 只读资源：
 `action ∈ snapshot | navigate | click | type | select | upload | wait | verify | screenshot | scroll`；
 普通操作回执超时 10s，`wait`/`upload` 20s，`screenshot` 30s。
 
+## Computer Use：桌面与浏览器执行器
+
+智能聊天的既有 `desktop_automation` 工具增加 `computer_status`、`computer_observe`、`computer_execute`、`computer_stop`、`computer_result` 动作。执行沿用统一 Agent 的身份、审批和 `run_id`；本节不为外部 AIOPEN Key 增加直接桌面控制权限。先观察、再执行、再读回检查，回执区分动作执行与结果核验。写动作结果未知时不自动重放。
+
+在 `FHD/` 的运行环境安装锁定的可选执行器：
+
+```bash
+uv sync --frozen --extra server-api --extra computer-use
+uv run --frozen --extra server-api --extra computer-use python -m playwright install chromium
+```
+
+| 服务端配置 | 作用 |
+|---|---|
+| `XCAGI_COMPUTER_USE_ENABLED=1` | 显式开启 Computer Use；默认关闭 |
+| `XCAGI_COMPUTER_USE_USER_ID`、`XCAGI_COMPUTER_USE_TENANT_ID` | 将桌面与浏览器执行器绑定到一个用户和租户；桌面操作还必须处于 `desktop_mode` |
+| `XCAGI_COMPUTER_USE_ALLOWED_ORIGINS` | 浏览器允许访问的 origin JSON 数组，例如 `["https://example.com"]`；按实际目标配置 |
+| `XCAGI_COMPUTER_USE_BROWSER_EXECUTABLE` | 可选：受控、已安装 Chromium 的可执行文件路径；不读取已有用户 profile |
+| `XCAGI_COMPUTER_USE_HEADFUL=1` | 可选：浏览器显示窗口；默认无界面，需要浏览器沙箱可用 |
+
+例如，提交 `desktop_automation.computer_execute` 的参数如下；必须由既有 Agent 审批后执行，不能把 `approved` 或身份字段加进参数自行放行。服务端允许的 origin 需包含示例站点。
+
+```json
+{
+  "request_id": "browser-check-001",
+  "target": "browser",
+  "steps": [{"action": "navigate", "url": "https://example.com/"}],
+  "verification": {"kind": "url", "expected": "https://example.com/"}
+}
+```
+
+浏览器每次调用使用新的隔离 Context，首步必须为 `navigate`，不接管已有登录浏览器。支持按角色、标签、测试 ID 或 CSS 定位后点击、填值、按键、选择和勾选；使用 Playwright 的可操作性等待与后置断言。当前拦截全部 HTTP 重定向、WebSocket、Service Worker、弹窗和下载，因此依赖登录跳转或流式长连接的网站不在本版已验证范围内。单次最多 20 步、浏览器总时限 60 秒，执行后返回截图与标记为不可信外部内容的 ARIA 快照。
+
+桌面通过 PyAutoGUI 操作主显示器，保留四角 FailSafe 与任务停止；当前不提供多显示器、操作系统控件树或锁屏控制。先执行 `computer_observe`，将返回的 `snapshot_id` 传入桌面执行参数；快照 120 秒有效、只使用一次，执行前画面或尺寸变化会拒绝原坐标动作，需重新观察和审批。输入坐标使用 `input_width/input_height`，像素核验使用截图的物理尺寸。macOS 需要本机录屏和辅助功能授权；Linux 需要可用的 X11 会话与截图、剪贴板系统依赖。Unicode 输入借助剪贴板并尽量恢复原文本，不保证恢复富文本或图片格式。
+
+`verification` 缺失或不成立时，动作即使已发出也不返回成功；桌面像素条件仅证明视觉状态，不能代替业务结果核验。发生中断或回执未知时保留原 `request_id`，用 `computer_result {"request_id":"..."}` 读取回执并核对实际效果，不生成新请求重放原输入。`computer_stop` 记录停止请求，在执行检查点生效，返回 `stop_requested` 不代表操作系统已经停止。额外防重放回执只保存摘要和效果元数据；完整工具输出仍遵循既有 Agent 任务审计存储规则，可能包含截图和页面内容。
+
+可选包缺失、权限未满足或没有活动桌面时应报告能力不可用。桌面构建前设置 `XCAGI_BUNDLE_COMPUTER_USE=1`，既有 `build-backend.sh` / `.ps1` 才会安装 `computer-use` extra，并由 PyInstaller 收集 Playwright driver 和桌面依赖；默认构建保持原有依赖。此开关不下载或内嵌 Chromium：运行时使用已部署的匹配浏览器，或通过上述可执行文件路径配置受控 Chromium。源码回归和打包配置检查不代表 Windows/macOS 安装包真机验收通过。组件来源、固定版本和许可见 [README 开源组件选型](../README.md#开源组件选型)。
+
 ## 安全模型
 
 - 对外三端点（manifest/invoke/mcp）越过 LAN 门禁与订阅门禁，**安全完全由

@@ -18,6 +18,8 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+Computer Use 在现有 `desktop_automation` 工具内复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0）、[PyAutoGUI 0.9.54](https://pypi.org/project/PyAutoGUI/0.9.54/)（[BSD-3-Clause 源码](https://github.com/asweigart/pyautogui)）及 [Pyperclip 1.9.0](https://pypi.org/project/pyperclip/1.9.0/)（[BSD-3-Clause 源码](https://github.com/asweigart/pyperclip)），版本与传递依赖锁于 `pyproject.toml` 的 `computer-use` extra 和 `uv.lock`。浏览器使用独立 Context，桌面使用主屏截图、鼠标键盘与剪贴板；沿用 Agent 审批、租户归属与 `run_id`，不另建 Agent。启用条件、安装及核验边界见 [AIOPEN 的 Computer Use 说明](docs/aiopen.md#computer-use桌面与浏览器执行器)；源码回归不代表安装包或 Windows/macOS 真机验收通过。
+
 小 C 桌面浮窗复用已锁定的 [Electron 45.3.2](https://github.com/electron/electron/tree/v45.3.2)（MIT）`BrowserWindow` 和 `Tray`，沿用现有小 C 对话组件和同一登录会话。
 
 开发自动化继续使用 [LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT；checkpoint 4.3.0、SQLite 3.1.2 与已吸收的 PostgreSQL 适配版本见 `packages/retort_engine/pyproject.toml`）保存审批、中断和交付等待，不增加另一套任务引擎。GitHub 执行迁移到官方 Actions 独立 job：执行候选、受信发布、恢复原验证、独立验收；[checkout 4.4.0](https://github.com/actions/checkout/tree/11d5960a326750d5838078e36cf38b85af677262)、[upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)、[setup-node 4.4.0](https://github.com/actions/setup-node/tree/49933ea5288caeca8642d1e84afbd3f7d6820020)、[setup-python 7.1.0](https://github.com/actions/setup-python/tree/6d4fd22b20465ccc0f7354476588e8df7c9ca0e0) 均为 MIT，并在相关源 workflow 固定完整提交。候选用 Git 原生 bundle 传递，发布任务只导入对象，不执行候选代码；原共享身份发布入口保持禁用。

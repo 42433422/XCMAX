@@ -21,6 +21,12 @@ dependencies = [
 xcagi-brain = "app.cli.brain:main"
 
 [project.optional-dependencies]
+# Computer Use 执行器；沿用 desktop_automation、Agent 审批和 run_id。
+computer-use = [
+    "playwright==1.65.1",
+    "PyAutoGUI==0.9.54",
+    "pyperclip==1.9.0",
+]
 # 可选：Docling 文档解析后端（PDF/DOCX/PPTX 的版面、表格与扫描件 OCR）。
 # 默认不安装；安装后由 XCAGI_DOC_PARSER=auto 自动启用。
 doc-parsing = [
@@ -289,6 +295,12 @@ ignore_missing_imports = true
 # APScheduler 3.x has no py.typed marker. The support worker has runtime tests.
 [[tool.mypy.overrides]]
 module = "apscheduler.schedulers.asyncio"
+ignore_missing_imports = true
+
+# Playwright is installed only by the computer-use extra, not core server CI.
+# When present, its published types still validate the adapter's SDK calls.
+[[tool.mypy.overrides]]
+module = "playwright.*"
 ignore_missing_imports = true
 
 # Optional heavyweight/platform adapters are imported behind runtime feature
