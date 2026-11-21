@@ -440,8 +440,8 @@ def _build_runtime_status_result(
     return {
         "ok": True,
         "cron": {
-            "hour": config._env_int("MODSTORE_SELF_MAINTENANCE_HOUR", 3),
-            "minute": config._env_int("MODSTORE_SELF_MAINTENANCE_MINUTE", 0),
+            "hour": config._env_int("MODSTORE_SELF_MAINTENANCE_HOUR", 5),
+            "minute": config._env_int("MODSTORE_SELF_MAINTENANCE_MINUTE", 15),
             "timezone": os.environ.get("MODSTORE_SELF_MAINTENANCE_TZ", "Asia/Shanghai"),
             "trigger": str(state["trigger"]),
         },

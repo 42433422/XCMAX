@@ -3,7 +3,7 @@ name: pr-hygiene
 # 自治循环产出治理（P1-3）：PR / 分支卫生闭环
 # ----------------------------------------------------------------------------
 # AI 员工与自动化会持续产出 PR 与分支，若无人认领/合并/回收，垃圾分支会污染
-# 主线。本 workflow 每 6 小时执行一次：
+# 主线。本 workflow 每天 21:45 执行一次：
 #   1. PR TTL：open 且 21 天无活动 → 评论提示后自动关闭（可再打开）
 #   2. 并发上限：同一 author 超过 5 个 open PR → 打 `blocked-pr-limit` 标签
 #   3. 无人认领：无 assignee 的 open PR → 打 `unclaimed` 标签
@@ -22,7 +22,7 @@ name: pr-hygiene
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # 每 6 小时
+    - cron: "45 13 * * *"  # 每天 21:45（北京时间）
   workflow_dispatch:
 
 permissions:

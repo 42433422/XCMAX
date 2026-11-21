@@ -66,6 +66,16 @@ def require_dispatch_service(authorization: str = Header(default="")) -> str:
     return SERVICE_ACTOR
 
 
+@router.get("/release-train/state")
+def release_train_state(actor: str = Depends(require_dispatch_service)):
+    """只读版本状态，供 CI 的 version-ssot-sync 对齐 VERSION.md 与锚点。"""
+    from modstore_server.release_train import snapshot_public
+
+    state = dict(snapshot_public())
+    state.pop("ssot_path", None)
+    return {"success": True, "state": state}
+
+
 @router.get("/github-runs/{request_id}")
 def github_run_status(
     request_id: uuid.UUID,
@@ -75,6 +85,24 @@ def github_run_status(
     from modstore_server.para_github_runner import run_status
 
     return run_status(db, request_id)
+
+
+@router.get("/training/failures")
+def training_failures(
+    days: int = 14,
+    min_count: int = 2,
+    actor: str = Depends(require_dispatch_service),
+):
+    """只返回聚簇后的失败原因，不回传任务正文或客户事实。"""
+    from modstore_server.capability_trainer import mine
+    from modstore_server.maintenance_loop.store import ledger_path
+
+    clusters = mine(
+        ledger_path(),
+        days=max(1, min(90, days)),
+        min_count=max(1, min(50, min_count)),
+    )
+    return {"success": True, "clusters": clusters}
 
 
 class DispatchRequest(BaseModel):

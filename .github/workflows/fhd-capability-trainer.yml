@@ -1,0 +1,147 @@
+# CI SSOT: generated from FHD/.github/workflows/capability-trainer.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Capability Trainer
+
+# 在职训练：拉取真实失败簇 → 沉淀回归用例 → LLM 改 prompt → promptfoo 对比
+# → 只有通过率严格提升且无回退才开 PR（仍需人审合并）。
+
+on:
+  schedule:
+    - cron: '5 14 * * *'   # 每天 14:05 UTC = 22:05 北京时间
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}
+      DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+      API_BASE: ${{ secrets.MODSTORE_PARA_GITHUB_API_BASE }}
+      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+      XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+      OPENAI_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      PYTHONPATH: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy
+      PACKS_DIR: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files
+      CORPUS_DIR: ${{ github.workspace }}/FHD/evals/employee
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch failure clusters
+        id: fetch
+        run: |
+          set -euo pipefail
+          if [ -z "${DISPATCH_TOKEN:-}" ] || [ -z "${API_BASE:-}" ]; then
+            echo "::notice::training secrets 未配置，跳过本轮"
+            echo "clusters=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          curl -fsS -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
+            "${API_BASE%/}/api/service/mac-control/training/failures?days=14&min_count=2" \
+            -o /tmp/clusters.json
+          count="$(jq '.clusters | length' /tmp/clusters.json)"
+          echo "clusters=$count" >> "$GITHUB_OUTPUT"
+          jq -c '.clusters[0] // empty' /tmp/clusters.json > /tmp/top-cluster.json || true
+          if [ "$count" = "0" ]; then
+            echo "::notice::近 14 天没有可训练的失败簇"
+          fi
+
+      - name: Suggest candidate prompt
+        if: steps.fetch.outputs.clusters != '0'
+        run: |
+          set -euo pipefail
+          employee="$(jq -r '.employee_id // empty' /tmp/top-cluster.json)"
+          echo "employee=$employee" >> "$GITHUB_ENV"
+          pack="$(ls -d "$PACKS_DIR/${employee}@"* 2>/dev/null | sort -V | tail -1 || true)"
+          if [ -z "$pack" ] || [ ! -f "$pack/prompt.txt" ]; then
+            echo "::warning::找不到 $employee 的员工包 prompt，跳过"
+            echo "skip=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "pack=$pack" >> "$GITHUB_ENV"
+          python -m modstore_server.capability_trainer suggest \
+            --baseline "$pack/prompt.txt" \
+            --clusters /tmp/top-cluster.json \
+            --out /tmp/candidate-prompt.txt
+
+      - name: Prepare regression cases and promptfoo config
+        if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
+        run: |
+          set -euo pipefail
+          python -m modstore_server.capability_trainer prepare \
+            --clusters /tmp/top-cluster.json \
+            --packs-dir "$PACKS_DIR" \
+            --corpus-dir "$CORPUS_DIR" \
+            --out-dir /tmp/eval \
+            --employee-id "$employee" \
+            --candidate-prompt /tmp/candidate-prompt.txt > /tmp/prepare.json
+          cat /tmp/prepare.json
+          jq -e '.ok == true' /tmp/prepare.json > /dev/null
+
+      - name: Run promptfoo regression
+        if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
+        run: |
+          set -euo pipefail
+          npx -y promptfoo@latest eval \
+            -c /tmp/eval/promptfooconfig.yaml \
+            -o /tmp/eval/result.json \
+            --no-cache --max-concurrency 2
+
+      - name: Decide and open PR
+        if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
+        run: |
+          set -euo pipefail
+          verdict="$(python -m modstore_server.capability_trainer decide --result /tmp/eval/result.json)"
+          echo "$verdict"
+          if [ "$(jq -r '.verdict' <<< "$verdict")" != "promote" ]; then
+            echo "::notice::候选未严格优于基线，保留原 prompt"
+            exit 0
+          fi
+          cp /tmp/candidate-prompt.txt "$pack/prompt.txt"
+          branch="automation/capability-trainer-${GITHUB_RUN_ID}"
+          git checkout -b "$branch"
+          git config user.name "xcmax-trainer-bot"
+          git config user.email "xcmax-trainer-bot@users.noreply.github.com"
+          git add -- "$pack/prompt.txt" "$CORPUS_DIR"
+          git commit -m "feat(employee): train ${employee} from real failures"
+          git push --set-upstream origin "$branch"
+          pr_url="$(gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "feat(employee): train ${employee} from real failures" \
+            --body "自动生成：基于近 14 天真实失败簇修改 prompt，并用 promptfoo 在回归集上验证通过率严格提升、无回退。基线 $(jq -c '.baseline' <<< "$verdict")，候选 $(jq -c '.candidate' <<< "$verdict")。合并仍需人审。")"
+          gh pr merge "$pr_url" --auto --squash
+
+      - name: Upload eval evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capability-trainer-evidence
+          path: |
+            /tmp/eval
+            /tmp/clusters.json
+            FHD/evals/employee
+          if-no-files-found: ignore

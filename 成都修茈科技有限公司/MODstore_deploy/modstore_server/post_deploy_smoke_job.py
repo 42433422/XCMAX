@@ -6,6 +6,8 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 if TYPE_CHECKING:
     pass
 
@@ -32,13 +34,40 @@ def interval_trigger_for_post_deploy_smoke():
 
 
 def run_post_deploy_smoke_job() -> Dict[str, Any]:
-    """Run smoke probes; log failures for SLO / on-call."""
+    """Run smoke probes; publish an incident when probes fail."""
     from modstore_server.post_deploy_smoke import run_post_deploy_smoke
 
     out = run_post_deploy_smoke()
-    if not out.get("ok") and not out.get("skipped"):
-        logger.warning("post_deploy_smoke failed: %s", out.get("probes"))
+    if out.get("ok") or out.get("skipped"):
+        return out
+
+    # 部署后探活失败是发布链的第一道信号，只写 warning 等于没人知道。
+    # 复用统一 incident 入口，让自维护循环能消费到这条失败。
+    logger.warning("post_deploy_smoke failed: %s", out.get("probes"))
+    try:
+        from modstore_server.incident_bus import publish_unified_incident
+
+        publish_unified_incident(
+            scope="post_deploy_smoke",
+            summary="部署后探活失败: " + ", ".join(_failed_probe_names(out)),
+            source="post_deploy_smoke",
+            event_type="on_error",
+            fingerprint="post_deploy_smoke:failed",
+            priority=80,
+            payload={"probes": out.get("probes"), "result": out},
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("post_deploy_smoke incident publish failed: %s", exc)
     return out
+
+
+def _failed_probe_names(out: Dict[str, Any]) -> list[str]:
+    probes = out.get("probes")
+    if isinstance(probes, list):
+        failed = [str(item.get("name") or "unknown") for item in probes if isinstance(item, dict) and not item.get("ok")]
+        if failed:
+            return failed
+    return ["unknown"]
 
 
 def register_post_deploy_smoke_scheduler(scheduler: Any) -> None:

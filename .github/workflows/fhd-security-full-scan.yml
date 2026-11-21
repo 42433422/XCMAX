@@ -3,17 +3,20 @@
 name: Security full release scan
 
 on:
+  schedule:
+    - cron: "20 14 * * *"   # 每日 14:20 UTC = 22:20 北京时间，夜间窗口内全仓安全检查
   workflow_dispatch:
     inputs:
       release_sha:
-        description: "Exact 40-character release SHA; scan its complete ancestor history"
-        required: true
+        description: "Exact 40-character release SHA; 留空则扫描 main 当前 HEAD"
+        required: false
         type: string
 
 permissions:
   contents: read
   security-events: read
   actions: read
+  issues: write
 
 jobs:
   scan-and-gate:
@@ -24,22 +27,28 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.release_sha }}
+          ref: ${{ inputs.release_sha || 'main' }}
           fetch-depth: 0
           persist-credentials: false
       - name: Lock scan checkout to exact SHA
         id: scan-source
         env:
-          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_SHA: ${{ inputs.release_sha || '' }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
-          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Invalid release SHA'; exit 1; }
-          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          if [ -n "$RELEASE_SHA" ]; then
+            [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Invalid release SHA'; exit 1; }
+            sha="$RELEASE_SHA"
+          else
+            sha="$(git rev-parse HEAD)"
+          fi
+          test "$(git rev-parse HEAD)" = "$sha"
           test "$(git rev-parse --is-shallow-repository)" = false
           origin="$(git remote get-url origin)"
           test "${origin%.git}" = "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
-          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main
+          git merge-base --is-ancestor "$sha" refs/remotes/origin/main
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           mkdir -p "${RUNNER_TEMP}/security-native" "${RUNNER_TEMP}/security-reports"
       - uses: actions/setup-python@v7
         with:
@@ -104,17 +113,17 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --prefix FHD/frontend
-          VITE_XCAGI_GIT_SHA="${{ inputs.release_sha }}" npm --prefix FHD/admin-console run build
+          VITE_XCAGI_GIT_SHA="${{ steps.scan-source.outputs.sha }}" npm --prefix FHD/admin-console run build
 
       - name: Build and scan final FHD production image
         continue-on-error: true
         working-directory: .
-        run: docker build --target production -f FHD/ops/docker/Dockerfile.fhd-api -t xcagi-release-scan:${{ inputs.release_sha }} FHD
+        run: docker build --target production -f FHD/ops/docker/Dockerfile.fhd-api -t xcagi-release-scan:${{ steps.scan-source.outputs.sha }} FHD
       - name: Scan final FHD production image
         continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: xcagi-release-scan:${{ inputs.release_sha }}
+          image-ref: xcagi-release-scan:${{ steps.scan-source.outputs.sha }}
           format: json
           output: ${{ runner.temp }}/security-native/trivy-image.json
           severity: CRITICAL,HIGH
@@ -202,7 +211,7 @@ jobs:
           normalize() {
             python FHD/scripts/security/normalize_security_report.py \
               --scanner "$1" --kind "$2" --input "$3" \
-              --release-sha "${{ inputs.release_sha }}" \
+              --release-sha "${{ steps.scan-source.outputs.sha }}" \
               --output "${RUNNER_TEMP}/security-reports/$1.json"
           }
           python FHD/scripts/security/normalize_security_report.py \
@@ -211,7 +220,8 @@ jobs:
             --provenance-input "${RUNNER_TEMP}/security-native/codeql-analyses.json" \
             --required-codeql-category /language:python \
             --required-codeql-category /language:javascript-typescript \
-            --release-sha "${{ inputs.release_sha }}" \
+            ${{ github.event_name == 'schedule' && '--allow-ancestor-codeql' || '' }} \
+            --release-sha "${{ steps.scan-source.outputs.sha }}" \
             --output "${RUNNER_TEMP}/security-reports/codeql.json"
           normalize dependabot dependabot "${RUNNER_TEMP}/security-native/dependabot.json"
           normalize trivy-filesystem trivy "${RUNNER_TEMP}/security-native/trivy-filesystem.json"
@@ -230,7 +240,8 @@ jobs:
         run: >-
           python FHD/scripts/security/security_release_gate.py
           --reports-dir "${RUNNER_TEMP}/security-reports"
-          --release-sha "${{ inputs.release_sha }}"
+          --release-sha "${{ steps.scan-source.outputs.sha }}"
+          --baseline FHD/config/security_baseline.json
           --output "${RUNNER_TEMP}/security-release-gate.json"
 
       - name: Upload auditable security evidence even when gate fails
@@ -252,6 +263,32 @@ jobs:
             ${{ runner.temp }}/security-release-gate.json
           retention-days: 120
           if-no-files-found: error
+
+      - name: Open or update the security follow-up issue
+        if: always() && steps.scan-source.outcome == 'success' && steps.release-gate.outcome != 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ steps.scan-source.outputs.sha }}
+        run: |
+          set +e
+          title="[security] 全量安全检查未通过"
+          body="$(printf '安全检查门禁未通过。\n\n- SHA: `%s`\n- 运行记录: %s\n- 证据: artifact `xcagi-security-release-reports` / `xcagi-security-release-native`\n\n处置方式：修复代码，或按 expires 规则登记误报抑制，然后手动重跑本 workflow（release_sha 留空即扫 main 当前 HEAD）。\n' "$SHA" "$RUN_URL")"
+          number="$(gh issue list --repo "$REPO" --state open --limit 100 \
+            --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)"
+          assignee="${{ vars.SECURITY_ISSUE_ASSIGNEE }}"
+          if [ -z "$assignee" ] && [ -f .github/CODEOWNERS ]; then
+            assignee="$(grep -m1 '^/.github/' .github/CODEOWNERS | awk '{print $1}' | tr -d '@')"
+          fi
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body "$body"
+          elif [ -n "$assignee" ]; then
+            gh issue create --repo "$REPO" --title "$title" --body "$body" --assignee "$assignee"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi
 
       - name: Keep security-release-gate fail closed
         if: ${{ always() && steps.release-gate.outcome != 'success' }}

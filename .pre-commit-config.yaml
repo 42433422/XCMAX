@@ -5,12 +5,12 @@
 # 安装方式：pip install pre-commit && pre-commit install
 # 手动跑：  pre-commit run --all-files
 # ----------------------------------------------------------------------------
-# v9.0.0 整改：archive-hygiene 钩子保证"零裸 .env / 零裸 db 提交"——任何
-# 在 _archive/ 下新增的真实 .env、login_out.json、客户数据库等敏感文件
-# 都会被 commit 阶段拦截，提示用户先跑 scripts/cleanup_archive_secrets.py。
+# 敏感文件拦截交给两套成熟组件：gitleaks（CI required check，全量密钥扫描）
+# 与下方 customer-runtime-data 钩子（裸 .env、客户库、私有 blob 一律拒绝提交）。
+# _archive/ 已在 .gitignore 中，目录级检查不再单独维护。
 # ============================================================================
 repos:
-  # ----- 自定义钩子：XCAGI archive 卫生检查 -----
+  # ----- 自定义钩子：仓库卫生与提交拦截 -----
   - repo: local
     hooks:
       - id: customer-runtime-data
@@ -50,16 +50,6 @@ repos:
         files: '.*'
         pass_filenames: true
         stages: [pre-commit]
-      - id: xcagi-archive-hygiene
-        name: XCAGI archive hygiene (--check 模式)
-        # 仅当 _archive/ 或清理脚本本身变化时才触发，避免无谓开销
-        files: '^_archive/.*$|^scripts/cleanup_archive_secrets\.py$'
-        entry: python3 scripts/cleanup_archive_secrets.py --check
-        language: system
-        pass_filenames: false
-        stages: [pre-commit]
-        # pre-commit 框架的退出码语义：非零即视为失败
-        # 我们的 --check 模式在发现未脱敏文件时已正确返回 1
       - id: ssot-registry-sanity
         name: SSOT registry sanity (list domains)
         # 仅当 ssot.yaml 或 ssot_cli/插件变化时才触发，验证注册表可解析
