@@ -8,16 +8,15 @@ import os
 import signal
 import subprocess
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import IO, Any
 
 # Windows durable ledgers reject writes before POSIX flock is required.
 # Do not import fcntl on Windows: even read-only runtime imports must work.
 if os.name != "nt":
     import fcntl
-
-from collections.abc import Iterator
-from contextlib import contextmanager
-from dataclasses import dataclass, field
-from typing import IO, Any
 
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 
