@@ -17,6 +17,7 @@ from app.application.workflow.planner_prompt_profile import (
     attachment_import_manifest,
     select_rules_for_prompt,
     select_tools_for_prompt,
+    _slim_schema,
 )
 from app.application.workflow.planner_prompt_profile import (
     memory_digest as _memory_digest,
@@ -268,38 +269,6 @@ async def _consume_reply_stream(stream, on_prefix: Callable[[str], None]) -> tup
         record_response_error()
         logger.warning("planner reply stream interrupted", exc_info=True)
     return "".join(chunks), emitted_text
-
-
-def _slim_schema(schema: Any) -> Any:
-    """只保留规划所需结构：字段名、类型、枚举、必填与简短说明。
-
-    输出 schema、执行元数据与长描述不进入规划 prompt，避免工具目录挤占上下文。
-    """
-    if not isinstance(schema, dict):
-        return {}
-    slim: dict[str, Any] = {}
-    for key in ("type", "required", "enum"):
-        if key in schema:
-            slim[key] = schema[key]
-    properties = schema.get("properties")
-    if isinstance(properties, dict):
-        slim_props: dict[str, Any] = {}
-        for name, prop in properties.items():
-            if not isinstance(prop, dict):
-                slim_props[name] = prop
-                continue
-            item: dict[str, Any] = {}
-            for key in ("type", "enum", "items"):
-                if key in prop:
-                    item[key] = prop[key]
-            description = str(prop.get("description") or "").strip()
-            if description:
-                item["description"] = description[:80]
-            slim_props[name] = item
-        slim["properties"] = slim_props
-    if isinstance(schema.get("items"), dict):
-        slim["items"] = _slim_schema(schema["items"])
-    return slim
 
 
 def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
