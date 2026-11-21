@@ -1,0 +1,46 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-postgres-daily",
+      "Filter": {"Prefix": "postgres/daily/"},
+      "Status": "Enabled",
+      "Expiration": {"Days": 7}
+    },
+    {
+      "ID": "expire-postgres-weekly",
+      "Filter": {"Prefix": "postgres/weekly/"},
+      "Status": "Enabled",
+      "Expiration": {"Days": 28}
+    },
+    {
+      "ID": "expire-postgres-monthly",
+      "Filter": {"Prefix": "postgres/monthly/"},
+      "Status": "Enabled",
+      "Expiration": {"Days": 365}
+    },
+    {
+      "ID": "expire-config-daily",
+      "Filter": {"Prefix": "config/daily/"},
+      "Status": "Enabled",
+      "Expiration": {"Days": 30}
+    },
+    {
+      "ID": "expire-uploads-daily",
+      "Filter": {"Prefix": "uploads/daily/"},
+      "Status": "Enabled",
+      "Expiration": {"Days": 30}
+    },
+    {
+      "ID": "expire-mods-daily",
+      "Filter": {"Prefix": "mods/daily/"},
+      "Status": "Enabled",
+      "Expiration": {"Days": 30}
+    },
+    {
+      "ID": "expire-manifests",
+      "Filter": {"Prefix": "manifests/"},
+      "Status": "Enabled",
+      "Expiration": {"Days": 365}
+    }
+  ]
+}

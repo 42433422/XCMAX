@@ -22,7 +22,7 @@ import { stripPlannerDisplayMarkers } from '@/utils/chatBubbleDisplay'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
 import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useChatSessionActivity'
-import { asPlannerPayload, errorMessage, requiresTurnReconciliation } from './chatOrchestrationShared'
+import { asPlannerPayload, errorMessage, requiresTurnReconciliation, plannerExecutionState, isUnfinishedPlannerResponse } from './chatOrchestrationShared'
 import { classifyRawError } from '@/utils/networkStability'
 import { activeChatTurnMessage, droppedRoundFromHistory, readActiveChatTurn, readDroppedRoundOutcome, type ActiveChatTurn } from '@/utils/droppedRoundPresentation'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
@@ -133,7 +133,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const receiptIds = asArray(receipt.message_ids)
     const extras: UiChatMessageExtras = {
       ...(routeMetadata ? { routeMetadata } : {}),
-      ...(requiresTurnReconciliation(payload) ? { workflowAction: 'unknown' } : failed ? { workflowAction: 'failed' } : {}),
+      ...(plannerExecutionState(payload) ? { workflowAction: plannerExecutionState(payload) } : failed ? { workflowAction: 'failed' } : {}),
       ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}),
       ...(execution ? { execution } : {}),
       ...(businessResult ? { businessResult } : {}),
@@ -163,10 +163,14 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     if (activeTurn) return ['waiting_approval', 'paused'].includes(activeTurn.status) ? 'waiting' : 'review'
     if (requiresTurnReconciliation(payload)) return 'review'
     if (payload.requires_token || parseApprovalCardFromPayload(payload)?.status === 'pending') return 'waiting'
+    if (['waiting_user', 'waiting_approval', 'waiting_input', 'waiting_auth', 'paused'].includes(plannerExecutionState(payload))) return 'waiting'
+    if (isUnfinishedPlannerResponse(payload)) return 'review'
+    if (['cancelled', 'interrupted'].includes(plannerExecutionState(payload))) return 'stopped'
     return payload.success === false ? 'error' : 'ready'
   }
 
   function observeModelOutcome(text: string, payload?: ChatPlannerPayload) {
+    if (isUnfinishedPlannerResponse(payload)) return
     const execution = readChatExecution(payload)
     if (execution?.effect === 'preview') return
     const outcome = modelOutcomeFromText(text)
@@ -532,7 +536,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           streamMessage.workflowAction = String(wrap.execution_state || asRecord(data.data).status || data.status
             || data.action || (wrap.success === false ? 'failed' : 'completed'))
         }
-        if (requiresTurnReconciliation(wrap)) return
+        if (isUnfinishedPlannerResponse(wrap)) return
         if (wrap.task) {
           showTaskConfirm(wrap.task)
           emitAssistantPush({
@@ -855,6 +859,17 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         message: errorMessage(err, '请求失败'),
         ...(route ? { route_metadata: route } : {}),
       }
+      const status = Number(asRecord(err).status)
+      if (requestScope.turnId && isOwnerCurrent() && (!Number.isFinite(status) || status === 0 || status === 408 || status >= 500)) {
+        const original = await readDroppedRoundOutcome(String(requestScope.sessionId || ''), requestScope.turnId, '', isOwnerCurrent)
+        if (!isOwnerCurrent()) return
+        data = { ...data, success: original.status === 'completed', execution_state: original.status,
+          response: original.text, message: original.text,
+          ...(original.activeTurn ? { active_turn: {
+            turn_id: original.activeTurn.turnId, run_id: original.activeTurn.runId,
+            task_id: original.activeTurn.taskId, status: original.activeTurn.status, message: original.activeTurn.message,
+          } } : {}) }
+      }
     } finally {
       round.setStreaming(false)
       round.setLoading(false)
@@ -864,15 +879,29 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     if (!isOwnerCurrent()) return
     const results = data.batch && Array.isArray(data.results) ? data.results.map(asPlannerPayload) : [data]
     const statuses = results.map(conversationStatus)
-    round.setStatus(statuses.includes('review') ? 'review' : statuses.includes('error') || data.success === false ? 'error'
-      : statuses.includes('waiting') ? 'waiting' : 'ready')
+    round.setStatus(statuses.includes('review') ? 'review' : statuses.includes('error') ? 'error'
+      : statuses.includes('waiting') ? 'waiting' : statuses.includes('stopped') ? 'stopped' : data.success === false ? 'error' : 'ready')
     if (!round.isActive()) return persistDetachedPlannerResult(data, requestScope.sessionId, saveMessage)
     const receipt = data.batch && Array.isArray(data.results) ? data.results[data.results.length - 1] : data
     recordChatModelRoute(requestScope.sessionId, receipt?.route_metadata, identity)
+    const showUnfinished = async (part: ChatPlannerPayload) => {
+      await addRoundMessage(String(part.response || part.message || '原任务尚未完成，请在任务工作区核对进度。'), responseExtras(part))
+      if (!round.isActive()) return
+      syncTaskFromChatResponse(part, primaryText)
+      await syncAgentRunFromPayload(part, primaryText, isOwnerCurrent)
+      if (!round.isActive()) return
+      attachAgentRunTraceToLastAiMessage(extractAgentRunId(part))
+      attachApprovalCardToLastAiMessage(part)
+      attachBusinessResultToLastAiMessage(part)
+      const activeTurn = readActiveChatTurn(part)
+      if (activeTurn) deps.observeActiveTurn?.(activeTurn)
+    }
     if (data.batch && Array.isArray(data.results)) {
-      if (data.success) {
+      if (data.success || results.some(isUnfinishedPlannerResponse)) {
         for (const part of results) {
-          if (part && part.success) {
+          if (isUnfinishedPlannerResponse(part)) {
+            await showUnfinished(part)
+          } else if (part && part.success) {
             if (part.requires_token) {
               handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
             }
@@ -902,7 +931,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           attachWorkflowTraceToLastAiMessage(lastOk)
           attachApprovalCardToLastAiMessage(lastOk)
         }
-        if (results.some(requiresTurnReconciliation)) return
+        if (results.some(isUnfinishedPlannerResponse)) return
         const lastTask = [...results].reverse().find((p) => p.task)
         if (lastTask?.task) {
           showTaskConfirm(lastTask.task)
@@ -929,6 +958,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         await addRoundMessage('处理失败: ' + (data.message || '批量请求失败'), responseExtras(data, true))
         attachBusinessResultToLastAiMessage(data)
       }
+      return
+    }
+
+    if (isUnfinishedPlannerResponse(data)) {
+      await showUnfinished(data)
       return
     }
 

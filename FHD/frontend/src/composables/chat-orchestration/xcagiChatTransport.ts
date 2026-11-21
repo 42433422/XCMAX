@@ -3,6 +3,8 @@ import chatApi, { parseChatStreamErrorResponse } from '@/api/chat'
 import type { ChatRequest } from '@/types/chat'
 import { readPlannerSseResponse, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { normalizeChatTraceItems, type ChatTraceItem } from './chatOrchestrationShared'
+import type { ExecutionObservation } from '@/api/agentRuns'
+import { readExecutionObservation } from '@/utils/agentRunTraceModel'
 
 export interface XcagiChatMetadata {
   turnId?: string
@@ -65,7 +67,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
     return new ReadableStream<UIMessageChunk>({
       async start(controller) {
         let seq = 0
-        const toolCalls = new Set<string>()
+        const toolCalls = new Map<string, ExecutionObservation>()
         controller.enqueue({ type: 'start' })
         controller.enqueue({ type: 'start-step' })
         controller.enqueue({ type: 'text-start', id: TEXT_ID })
@@ -102,7 +104,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
     controller: ReadableStreamDefaultController<UIMessageChunk>,
     event: PlannerSseEvent,
     seq: number,
-    toolCalls: Set<string>,
+    toolCalls: Map<string, ExecutionObservation>,
   ): void {
     options.onEvent?.(event, seq)
     if (event.type === 'token') {
@@ -118,6 +120,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
     if (event.type === 'tool_call') {
       const id = String(event.node_id || '').trim()
       if (!id) return
+      const observation = { ...(event.phase === 'started' ? {} : toolCalls.get(id)), ...readExecutionObservation({ ...event }) }
       // Compatibility ends here: the SDK owns each tool's input/output state.
       // A reconnect can begin with progress or a receipt, so seed its input once.
       if (event.phase === 'started' || !toolCalls.has(id)) {
@@ -126,9 +129,9 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
           toolName: [event.tool_id || 'tool', event.action].filter(Boolean).join('.'),
           input: event.params || {}, dynamic: true,
         })
-        toolCalls.add(id)
       }
-      controller.enqueue({ type: 'data-tool-progress', id, data: event })
+      toolCalls.set(id, observation)
+      controller.enqueue({ type: 'data-tool-progress', id, data: { ...observation, ...event } })
       if (event.phase === 'finished') {
         const deferred = event.deferred === true && event.requires_reconciliation !== true
         controller.enqueue(event.success || deferred

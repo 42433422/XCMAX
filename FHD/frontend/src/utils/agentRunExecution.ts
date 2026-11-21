@@ -27,14 +27,15 @@ export function runHasUncertainReceipt(run: AgentRun): boolean {
     run.status === 'unknown' ||
     recovery?.state === 'manual_reconciliation_required' ||
     outputs.some((output) => {
-      const signals = [output?.outcome, output?.execution_state, output?.status].map((value) =>
+      const signals = [output?.outcome, output?.execution_outcome, output?.execution_state, output?.status,
+        output?.agent_status, output?.run_status, asRecord(output?.data).agent_status, asRecord(output?.data).run_status].map((value) =>
         String(value || '')
           .trim()
           .toLowerCase(),
       )
       return (
-        output?.reconciliation_required === true ||
-        signals.some((value) => ['unknown', 'pending', 'accepted', 'inflight', 'in_progress'].includes(value)) ||
+        output?.reconciliation_required === true || output?.requires_reconciliation === true || output?.outcome_unknown === true ||
+        signals.some((value) => ['unknown', 'outcome_unknown'].includes(value)) ||
         (completed &&
           (output?.success === false ||
             output?.pending_approval === true ||
@@ -42,8 +43,14 @@ export function runHasUncertainReceipt(run: AgentRun): boolean {
             signals.some((value) =>
               [
                 'waiting',
+                'pending',
+                'accepted',
+                'inflight',
+                'in_progress',
                 'waiting_approval',
                 'waiting_user',
+                'waiting_input',
+                'waiting_auth',
                 'pending_approval',
                 'approval_required',
                 'failed',
@@ -56,6 +63,7 @@ export function runHasUncertainReceipt(run: AgentRun): boolean {
                 'running',
                 'queued',
                 'retrying',
+                'paused',
               ].includes(value),
             )))
       )

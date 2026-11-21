@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Iterable, Optional
 
+from modstore_server.employee_executor_policies import execution_blocks_redispatch
+
 _FAILURE_TEXT_KEYS = frozenset(
     {
         "content",
@@ -55,6 +57,8 @@ def is_transient_dispatch_failure(result: Any) -> bool:
     root cause without scanning arbitrary successful report text.
     """
 
+    if execution_blocks_redispatch(result):
+        return False
     for raw_text in _failure_texts(result):
         text = raw_text[-8000:].lower()
         if any(term in text for term in _TRANSIENT_TERMS):

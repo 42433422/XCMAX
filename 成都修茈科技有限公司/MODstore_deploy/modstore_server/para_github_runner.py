@@ -533,6 +533,11 @@ def run_status(db, request_id):
     repair = db.get(MacControlTask, UUID(str(request_id)).hex)
     if repair and repair.actor == REPAIR_ACTOR:
         return repair_status(repair)
+    if repair:
+        from modstore_server.strategic_remote_bridge import ACTOR, worker_status
+
+        if repair.actor == ACTOR:
+            return worker_status(str(request_id))
 
     # The service sees only the opaque dispatch and execution state, never customer facts.
     rows = (

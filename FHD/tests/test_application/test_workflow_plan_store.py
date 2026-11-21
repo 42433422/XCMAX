@@ -20,6 +20,7 @@ from app.db.db_base import Base
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
 from tests.fixtures.backend_ci_isolation import provision_native_checkpoint_schema
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_planning_clarification_roundtrip import roundtrip as roundtrip
 
 
 @pytest.fixture()
@@ -108,7 +109,10 @@ class TestWorkflowPlanStore:
         store = WorkflowPlanStore(session_factory=session_factory)
         plan = _plan()
         store.save(
-            plan=plan, runtime_context={"user_id": "u1"}, status="pending_awaiting", user_id="u1"
+            plan=plan,
+            runtime_context={"user_id": "u1"},
+            status="pending_awaiting",
+            user_id="u1",
         )
         store.save(
             plan=plan_from_dict({**plan_to_dict(plan), "plan_id": "wp-other-1"}),
@@ -152,7 +156,9 @@ class TestWorkflowPlanStore:
                     "approval_nodes": [{"node_id": "n2"}] if session == "B" else [],
                 }
                 svc._persist_plan_state(
-                    plan, svc._pending_workflows["u1"]["runtime_context"], "pending_awaiting"
+                    plan,
+                    svc._pending_workflows["u1"]["runtime_context"],
+                    "pending_awaiting",
                 )
             assert svc._pending_workflows["u1"]["agent_run_id"] == "run-B"
             orchestrator = Mock()
@@ -188,14 +194,17 @@ class TestWorkflowPlanStore:
             )
             svc._format_agent_run_response = Mock(return_value={"run_id": "run-A"})
             with patch(
-                "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
+                "app.application.agent_orchestrator.AgentOrchestrator",
+                return_value=orchestrator,
             ):
                 handled, response = svc._resume_pending_dynamic_workflow(
                     "u1", "确认", "确认", {"session_id": "A"}
                 )
             assert handled and response["run_id"] == "run-A"
             orchestrator.continue_run.assert_called_once_with(
-                "run-A", approved_by="u1", runtime_context={"user_id": "u1", "session_id": "A"}
+                "run-A",
+                approved_by="u1",
+                runtime_context={"user_id": "u1", "session_id": "A"},
             )
             orchestrator.start_run_from_plan.assert_not_called()
             assert (
@@ -204,7 +213,8 @@ class TestWorkflowPlanStore:
             )
 
             with patch(
-                "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
+                "app.application.agent_orchestrator.AgentOrchestrator",
+                return_value=orchestrator,
             ):
                 assert svc._hydrate_pending_workflow("u1", "B")
             assert svc._pending_workflows["u1"]["approval_required"] is True
@@ -230,7 +240,9 @@ class TestCrossSessionResume:
         first_calls: list[str] = []
         engine = _engine_with_recording(first_calls, fail_on="t3.tool")
         first = engine.run(
-            plan, runtime_context={"user_id": "u1", "session_id": "sess"}, checkpointer=cp
+            plan,
+            runtime_context={"user_id": "u1", "session_id": "sess"},
+            checkpointer=cp,
         )
         assert first.success is False
         store.save(
@@ -316,7 +328,173 @@ def test_normal_cancel_is_durable_and_save_failure_preserves_pending(
     reopened._pending_workflows = {}
     assert reopened._hydrate_pending_workflow("u1", "sess") is failed_save
     if not failed_save:
-        assert result["data"]["data"] == {"plan_id": plan.plan_id, "task_id": "original-task"}
+        assert result["data"]["data"] == {
+            "plan_id": plan.plan_id,
+            "task_id": "original-task",
+        }
+
+
+@pytest.mark.parametrize("projection", ["missing", "running", "shadowed"])
+def test_waiting_run_survives_missing_or_lagging_plan_projection(
+    roundtrip, monkeypatch, projection
+):
+    from app.db.models.workflow import WorkflowPlan
+    from tests.test_application.test_planning_clarification_roundtrip import ANSWER, ORIGINAL
+
+    service = roundtrip.service()
+    persist = service._persist_plan_state
+    monkeypatch.setattr(
+        service,
+        "_persist_plan_state",
+        lambda plan, context, status, **kw: (
+            False if status == "pending_awaiting" else persist(plan, context, status, **kw)
+        ),
+    )
+    first = roundtrip.send(service, ORIGINAL)
+    assert first["data"]["action"] == "workflow_persistence_failed"
+    waiting = roundtrip.repository.get(first["run_id"])
+    assert waiting.status == "waiting_user" and not waiting.tool_calls
+    plan = plan_from_dict(waiting.metadata["plan"])
+    with roundtrip.actor.factory.begin() as db:
+        db.query(WorkflowPlan).filter_by(plan_id=plan.plan_id).delete()
+    if projection != "missing":
+        roundtrip.store.save(
+            plan=plan,
+            runtime_context=waiting.metadata["runtime_context"],
+            status="running" if projection == "running" else "pending_awaiting",
+            user_id=roundtrip.chat_user,
+            session_id="purchase-query",
+        )
+    if projection == "shadowed":
+        newer = plan_from_dict({**plan_to_dict(plan), "plan_id": "newer-running-plan"})
+        roundtrip.store.save(
+            plan=newer,
+            status="running",
+            user_id=roundtrip.chat_user,
+            session_id="purchase-query",
+        )
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["run_id"] == waiting.run_id
+    assert result["success"] and ANSWER in result["response"]
+    assert roundtrip.repository.get(waiting.run_id).status == "completed"
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+def test_run_recovery_ignores_other_owners_tenants_mods_sessions_and_revisions(roundtrip):
+    from copy import deepcopy
+
+    from app.db.models.workflow import WorkflowPlan
+    from tests.test_application.test_planning_clarification_roundtrip import ORIGINAL
+
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    with roundtrip.actor.factory.begin() as db:
+        db.query(WorkflowPlan).filter_by(plan_id=waiting.plan_id).delete()
+    for key, value in (
+        ("tenant_id", "another-tenant"),
+        ("mod_id", "another-mod"),
+        ("session_id", "another-conversation"),
+        ("_conversation_revision", 1),
+        ("user_id", "another-owner"),
+    ):
+        other = deepcopy(waiting)
+        other.run_id = f"unrelated-{key}"
+        other.events = []
+        other.metadata["task_context"] = {"task_id": other.run_id}
+        other.metadata["runtime_context"][key] = value
+        if key == "user_id":
+            other.user_id = value
+        roundtrip.repository.save(other)
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["success"] and result["run_id"] == waiting.run_id
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+def test_ambiguous_authoritative_wait_requires_an_explicit_plan_card(roundtrip):
+    from copy import deepcopy
+
+    from tests.test_application.test_planning_clarification_roundtrip import ORIGINAL
+
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    other = deepcopy(waiting)
+    other.run_id = "another-waiting-run"
+    other.plan_id = "another-waiting-plan"
+    other.metadata["plan"]["plan_id"] = other.plan_id
+    other.metadata["task_context"] = {"task_id": other.run_id}
+    other.events = []
+    roundtrip.repository.save(other)
+    reopened = roundtrip.service()
+    reply = roundtrip.send(reopened, "A")
+    assert reply["data"]["action"] == "workflow_resume_ambiguous"
+    assert roundtrip.repository.get(waiting.run_id).status == "waiting_user"
+    assert roundtrip.repository.get(other.run_id).status == "waiting_user"
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+    assert len(roundtrip.requests) == 1
+    selected = roundtrip.send(reopened, "A", extra={"expected_workflow_plan_id": waiting.plan_id})
+    assert selected["success"] and selected["run_id"] == waiting.run_id
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+    assert roundtrip.repository.get(other.run_id).status == "waiting_user"
+
+
+def test_recovery_query_failure_does_not_dispatch_a_new_task(roundtrip, monkeypatch):
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from tests.test_application.test_planning_clarification_roundtrip import ORIGINAL
+
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+
+    def unavailable(*args, **kwargs):
+        raise OSError("controlled recovery read failure")
+
+    monkeypatch.setattr(SQLAlchemyAgentRunRepository, "list_recent", unavailable)
+    reply = roundtrip.send(roundtrip.service(), "A")
+    assert reply["data"]["action"] == "workflow_resume_failed"
+    assert roundtrip.repository.get(first["run_id"]).status == "waiting_user"
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+    assert len(roundtrip.requests) == 1
+
+
+@pytest.mark.parametrize("invalid_plan", [None, {"plan_id": "broken", "nodes": []}])
+def test_authoritative_wait_with_missing_or_invalid_plan_cannot_start_over(roundtrip, invalid_plan):
+    import json
+
+    from app.db.models.agent import AgentRunRecord
+    from tests.test_application.test_planning_clarification_roundtrip import ORIGINAL
+
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    waiting.metadata["plan"] = invalid_plan
+    with roundtrip.actor.factory.begin() as db:
+        db.get(AgentRunRecord, waiting.run_id).payload_json = json.dumps(waiting.to_dict())
+    reply = roundtrip.send(roundtrip.service(), "A")
+    assert reply["data"]["action"] == "workflow_resume_failed"
+    assert roundtrip.repository.get(waiting.run_id).status == "waiting_user"
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+    assert len(roundtrip.requests) == 1
+
+
+def test_recovering_without_plan_projection_does_not_extend_clarification_ttl(roundtrip):
+    import json
+    from datetime import UTC, datetime, timedelta
+
+    from app.db.models.agent import AgentRunRecord
+    from app.db.models.workflow import WorkflowPlan
+    from tests.test_application.test_planning_clarification_roundtrip import ORIGINAL
+
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    for event in waiting.events:
+        if event.event_type == "step.clarification_required":
+            event.created_at = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    with roundtrip.actor.factory.begin() as db:
+        # Age the persisted fixture; ordinary saves deliberately preserve audit events.
+        db.get(AgentRunRecord, waiting.run_id).payload_json = json.dumps(waiting.to_dict())
+        db.query(WorkflowPlan).filter_by(plan_id=waiting.plan_id).delete()
+    reply = roundtrip.send(roundtrip.service(), "A")
+    assert reply["data"]["action"] == "workflow_clarification_expired"
+    assert roundtrip.repository.get(waiting.run_id).status == "cancelled"
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+    assert len(roundtrip.requests) == 1
 
 
 @pytest.mark.parametrize("required", [False, True])
@@ -454,7 +632,11 @@ def test_restarted_confirmation_resumes_signed_durable_agent_run(
     if scoped:
         original = object.__new__(AIChatApplicationService)
         original._pending_workflows = {
-            chat_user: {"plan": plan, "runtime_context": context, "agent_run_id": run.run_id}
+            chat_user: {
+                "plan": plan,
+                "runtime_context": context,
+                "agent_run_id": run.run_id,
+            }
         }
         assert original._persist_plan_state(plan, context, "pending_awaiting")
         saved = store.load(plan.plan_id)
@@ -464,7 +646,10 @@ def test_restarted_confirmation_resumes_signed_durable_agent_run(
     else:
         store.save(
             plan=plan,
-            runtime_context={**context, "pending_confirmation": {"agent_run_id": run.run_id}},
+            runtime_context={
+                **context,
+                "pending_confirmation": {"agent_run_id": run.run_id},
+            },
             status="pending_awaiting",
             user_id="17",
             session_id="sess",
@@ -510,3 +695,25 @@ def test_session_persistence_reports_real_commit_failure(session_factory, monkey
     session = WorkflowSession({}, Mock(), store=store)
     assert not session.persist_plan_state(_plan(), {"user_id": "u1"}, status)
     assert store.load(_plan().plan_id) is None
+
+
+@pytest.mark.parametrize("status", ["queued", "retrying", "paused", "blocked", "unknown"])
+def test_unfinished_plan_remains_observable_without_resuming(session_factory, status):
+    from unittest.mock import Mock
+
+    from app.application.ai_chat.workflow_session import WorkflowSession
+
+    store = WorkflowPlanStore(session_factory=session_factory)
+    store.save(
+        plan=_plan(),
+        runtime_context={"agent_run_id": "original"},
+        status=status,
+        user_id="owner",
+        session_id="same",
+    )
+    assert store.list_active("owner", session_id="same")[0]["status"] == status
+    pending = {}
+    assert not WorkflowSession(pending, Mock(), store=store).hydrate_pending_workflow(
+        "owner", "same"
+    )
+    assert pending == {}

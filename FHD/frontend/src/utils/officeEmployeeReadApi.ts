@@ -13,6 +13,7 @@ import { resolveOfficeInstalledPackIds } from '@/utils/officeToolDeskRows'
 import { fetchEmployeePlannerStatus } from '@/utils/platformShellApi'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { isDocumentIntakeAllowed } from '@/utils/documentIntake'
+import { adminEmployeeMessage, executeAdminEmployee } from '@/utils/adminEmployeeRequest'
 
 const CHAT_OFFICE_UPLOAD = '/api/platform-shell/chat-office-file-upload'
 const TUTORIAL_OFFICE_UPLOAD = '/api/platform-shell/office-sample-upload'
@@ -123,16 +124,6 @@ const EMPLOYEE_LEGACY_RUN_PATHS: Record<string, string> = {
   [WORD_FULL_READ_EMPLOYEE_ID]: `/api/mod/${WORD_FULL_READ_EMPLOYEE_ID}/employees/${WORD_FULL_READ_EMPLOYEE_ID}/run`,
 }
 
-function localEmployeeRunPath(employeeId: string): string {
-  return `/api/xcmax/local/employees/${encodeURIComponent(employeeId)}/execute`
-}
-
-function isMissingEmployeeRoute(response: Response, body: Record<string, unknown>): boolean {
-  if (response.status === 404 || response.status === 405) return true
-  const message = asString(body.message || body.error).trim()
-  return /404|405|Not Found|Method Not Allowed/i.test(message)
-}
-
 function unwrapLocalEmployeeData(body: Record<string, unknown>): Record<string, unknown> {
   const outerData = asRecord(body.data)
   const runtimeResult = asRecord(outerData.result)
@@ -225,29 +216,22 @@ export async function runOfficeEmployeeRead(
     action: 'convert',
   }
   if (options?.outputRelpath) payload.output_relpath = options.outputRelpath
-  let res = await apiFetch(localEmployeeRunPath(employeeId), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const request = async (path: string, init: RequestInit) => {
+    const response = await apiFetch(path, init)
+    const receipt = asRecord(await response.json().catch(() => ({})))
+    if (!response.ok) throw Object.assign(new Error(String(receipt.message || receipt.error || `员工回执读取失败 HTTP ${response.status}`)), { status: response.status })
+    return receipt
+  }
+  const body = await executeAdminEmployee(employeeId, {
       task: 'convert',
       input_data: payload,
       workspace_root: workspaceRoot,
       retry_max: 1,
-    }),
+  }, {
+    post: (path, data) => request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+    get: (path) => request(path, { method: 'GET' }),
   })
-  let body = asRecord(await res.json().catch(() => ({})))
-  if (isMissingEmployeeRoute(res, body)) {
-    await ensureCsrf()
-    res = await apiFetch(legacyPath, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    body = asRecord(await res.json().catch(() => ({})))
-  }
-  if (!res.ok || body?.success === false) {
-    throw new Error(String(body?.message || body?.error || `员工执行失败 HTTP ${res.status}`))
-  }
+  if (body.success !== true) throw new Error(adminEmployeeMessage(body))
   return unwrapLocalEmployeeData(body)
 }
 

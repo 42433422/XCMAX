@@ -17,8 +17,8 @@ import os
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_db
@@ -31,6 +31,7 @@ router = APIRouter(prefix="/api/service/mac-control", tags=["mac-control-dispatc
 SERVICE_ACTOR = "service:para-dispatch"
 TOKEN_DIGESTS_ENV = "MODSTORE_PARA_DISPATCH_TOKEN_SHA256"
 _MIN_TOKEN_LENGTH = 32
+_DB_SESSION = Depends(get_db)
 
 
 def _configured_digests() -> list[str]:
@@ -66,11 +67,21 @@ def require_dispatch_service(authorization: str = Header(default="")) -> str:
     return SERVICE_ACTOR
 
 
+@router.get("/release-train/state")
+def release_train_state(actor: str = Depends(require_dispatch_service)):
+    """只读版本状态，供 CI 的 version-ssot-sync 对齐 VERSION.md 与锚点。"""
+    from modstore_server.release_train import snapshot_public
+
+    state = dict(snapshot_public())
+    state.pop("ssot_path", None)
+    return {"success": True, "state": state}
+
+
 @router.get("/github-runs/{request_id}")
 def github_run_status(
     request_id: uuid.UUID,
     actor: str = Depends(require_dispatch_service),
-    db: Session = Depends(get_db),
+    db: Session = _DB_SESSION,
 ):
     from modstore_server.para_github_runner import run_status
 
@@ -83,6 +94,69 @@ class DispatchRequest(BaseModel):
     tool: str = Field(default="cursor", pattern=r"^(cursor|codex|claude_code|trae|opencode)$")
     source_sha: str = Field(default="", pattern=r"^(?:[0-9a-f]{40})?$")
     github_issue: int | None = Field(default=None, gt=0)
+
+
+@router.get("/training/failures")
+def training_failures(
+    days: int = 14, min_count: int = 2, actor: str = Depends(require_dispatch_service)
+):
+    from modstore_server.capability_trainer import mine
+    from modstore_server.dot_ticket_dispatch import redact_ticket_text
+    from modstore_server.maintenance_loop.store import ledger_path
+
+    clusters = mine(
+        ledger_path(), days=max(1, min(90, days)), min_count=max(1, min(50, min_count))
+    )[:20]
+    for cluster in clusters:
+        if cluster.get("surface") == "workflow_nl_prompt":
+            # Authenticated private training transport must preserve exact
+            # reproduction bytes; public evidence contains only their hashes.
+            continue
+        cluster["failure_reason"] = redact_ticket_text(cluster["failure_reason"], ())[:300]
+        for sample in cluster["samples"]:
+            sample["task"] = redact_ticket_text(sample.get("task", ""), ())[:2000]
+            sample["failure_reason"] = redact_ticket_text(sample["failure_reason"], ())[:300]
+    return {"success": True, "clusters": clusters}
+
+
+class TrainingCandidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_key: str = Field(min_length=8, max_length=128)
+    surface: str = Field(
+        default="employee_prompt", pattern=r"^(employee_prompt|workflow_nl_prompt)$"
+    )
+    employee_id: str = Field(default="", pattern=r"^(?:[A-Za-z0-9_-]{1,128})?$")
+    resource_id: str = Field(default="", pattern=r"^(?:workflow_nl_generator)?$")
+    source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    failure_run_ids: list[str] = Field(min_length=1, max_length=20)
+    workflow_run_id: int = Field(gt=0)
+    bundle_json: str = Field(min_length=2, max_length=100000)
+    files: dict[str, str]
+    result_json: str = Field(min_length=2, max_length=1500000)
+
+
+@router.post("/training/candidates", status_code=202)
+def training_candidate(
+    body: TrainingCandidateRequest,
+    background: BackgroundTasks,
+    actor: str = Depends(require_dispatch_service),
+):
+    from modstore_server.retort_evolution_api import _advance
+    from modstore_server.retort_training_candidates import create_training_candidate
+
+    try:
+        request_id = create_training_candidate(body.model_dump(exclude_unset=True))
+    except TimeoutError:
+        raise HTTPException(409, "training_candidate_busy") from None
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(409, str(exc)) from None
+    background.add_task(_advance, request_id)
+    return {
+        "success": True,
+        "request_id": request_id,
+        "status": "proposed",
+        "approval_required": True,
+    }
 
 
 class PullRequestDispatchRequest(BaseModel):
@@ -133,7 +207,7 @@ def _accept_task(db, *, actor, key, request):
 def create_github_pr_task(
     body: PullRequestDispatchRequest,
     _actor: str = Depends(require_dispatch_service),
-    db: Session = Depends(get_db),
+    db: Session = _DB_SESSION,
 ):
     from modstore_server.customer_ticket_github import configuration
 
@@ -156,7 +230,7 @@ def create_github_pr_task(
 def create_code_task(
     body: DispatchRequest,
     actor: str = Depends(require_dispatch_service),
-    db: Session = Depends(get_db),
+    db: Session = _DB_SESSION,
 ):
     _require_control_enabled()
     request: dict = {
@@ -178,7 +252,7 @@ def create_code_task(
 def get_code_task(
     task_id: str,
     actor: str = Depends(require_dispatch_service),
-    db: Session = Depends(get_db),
+    db: Session = _DB_SESSION,
 ):
     task = db.get(MacControlTask, task_id)
     # Tasks created by admins or other identities are invisible to this token.
@@ -203,3 +277,9 @@ def get_code_task(
             if client:
                 client.close()
     return {"success": True, "task": _service_view(task), "checked_at": time.time()}
+
+
+# Keep the task-bound gateway on the same deployed service surface as its worker.
+from modstore_server.strategic_remote_api import router as strategic_remote_router
+
+router.include_router(strategic_remote_router)

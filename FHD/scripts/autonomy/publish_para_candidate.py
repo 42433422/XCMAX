@@ -23,8 +23,19 @@ MAX_BUNDLE = 64 * 1024 * 1024
 ORIGINAL_PR_REPAIR = "original_pr_repair"
 REPAIR_CREDENTIAL_BLOCK = "original_pr_repair_requires_non_exportable_model_credentials"
 CUSTOMER_FEEDBACK_REPAIR = "customer_feedback_repair"
+TRAINING_CANDIDATE_REPAIR = "training_candidate_repair"
+LIFE_REFLECTION_REPAIR = "life_reflection_repair"
 CUSTOMER_CREDENTIAL_BLOCK = "customer_feedback_requires_non_exportable_model_credentials"
+HEADER_ONLY_PLATFORM_PROFILE = "srt-0.0.83-header-only-platform-v1"
 GITLEAKS_VERSION = "8.18.4"
+VERSION_SSOT_PATHS = {
+    "VERSION.md",
+    "FHD/VERSION.md",
+    "FHD/release/VERSION",
+    "release/VERSION",
+    "FHD/config/download_release.json",
+    "FHD/config/release_train.json",
+}
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -110,6 +121,40 @@ def validate_binding(manifest, state, run, env):
         or run.get("repository", {}).get("full_name") != repo
     ):
         raise ValueError("publication_dispatch_binding_mismatch")
+
+
+def validate_feedback_isolation(artifacts, state, manifest, env, download):
+    """Require the trusted execute job's immutable receipt, not candidate claims."""
+    allocation = state.get("model_allocation") or {}
+    rows = [row for row in artifacts.get("artifacts", [])
+            if row.get("name") == f"para-execution-{env['PARA_GITHUB_REQUEST_ID']}"]
+    if (allocation.get("status") != "admitted"
+            or allocation.get("execution_isolation") != HEADER_ONLY_PLATFORM_PROFILE
+            or allocation.get("agent_plan_first") or len(rows) != 1):
+        raise ValueError(CUSTOMER_CREDENTIAL_BLOCK)
+    artifact = rows[0]
+    if (artifact.get("expired") or type(artifact.get("id")) is not int
+            or artifact.get("size_in_bytes", 65537) > 65536
+            or str(artifact.get("workflow_run", {}).get("id")) != env["GITHUB_RUN_ID"]):
+        raise ValueError("feedback_isolation_artifact_binding_mismatch")
+    data = download(artifact["id"])
+    if len(data) > 65536 or artifact.get("digest") != "sha256:" + hashlib.sha256(data).hexdigest():
+        raise ValueError("feedback_isolation_artifact_digest_mismatch")
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        members = archive.infolist()
+        if (len(members) != 1 or members[0].filename != "execution.json"
+                or members[0].file_size > 65536 or members[0].flag_bits & 1
+                or stat.S_IFMT(members[0].external_attr >> 16) not in {0, stat.S_IFREG}):
+            raise ValueError("feedback_isolation_artifact_invalid")
+        receipt = json.loads(archive.read("execution.json"))
+    expected = {
+        "request_id": env["PARA_GITHUB_REQUEST_ID"], "run_id": env["GITHUB_RUN_ID"],
+        "status": "awaiting_publication", "finished": False,
+        "execution_isolation": HEADER_ONLY_PLATFORM_PROFILE, "source_sha": env["GITHUB_SHA"],
+        "candidate_sha": manifest["commit_sha"],
+    }
+    if receipt != expected:
+        raise ValueError("feedback_isolation_receipt_mismatch")
 
 
 def clean_git_env(env):
@@ -226,11 +271,19 @@ def import_candidate(directory, manifest, bundle, *, env, command=run_command):
     # change product code, but may not replace the workflow/controller boundary
     # that keeps that code away from repository secrets and write-capable tokens.
     # Use raw NUL-delimited paths and include both sides of renames/deletions.
-    changed = call(
-        "diff", "--no-renames", "--name-only", "-z", manifest["base_sha"], actual, binary=True
-    )
-    if any(b".github" in path.split(b"/") for path in changed.split(b"\0") if path):
+    changed = [
+        path.decode("utf-8", "replace")
+        for path in call(
+            "diff", "--no-renames", "--name-only", "-z", manifest["base_sha"], actual, binary=True
+        ).split(b"\0")
+        if path
+    ]
+    if any(".github" in path.split("/") for path in changed):
         raise ValueError("candidate_actions_control_change_requires_review")
+    # 版本 SSOT 只由 release_train 在 main 上递增；候选分支不得自带版本变更，
+    # 否则公开版本号会绕过「时间线闭环 → 升版本」这条唯一链路。
+    if any(path in VERSION_SSOT_PATHS for path in changed):
+        raise ValueError("candidate_version_ssot_change_requires_release_train")
     source = call("archive", "--format=tar", actual, binary=True)
     if hashlib.sha256(source).hexdigest() != manifest["archive_sha256"]:
         raise ValueError("candidate_archive_digest_mismatch")
@@ -327,7 +380,21 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
     manifest, bundle = safe_artifact(data, artifact.get("digest"))
     validate_binding(manifest, state, run, env)
     branch, target = manifest["branch"], manifest["commit_sha"]
-    customer_repair = state.get("kind") == CUSTOMER_FEEDBACK_REPAIR
+    customer_repair = state.get("kind") in {
+        CUSTOMER_FEEDBACK_REPAIR,
+        TRAINING_CANDIDATE_REPAIR,
+        LIFE_REFLECTION_REPAIR,
+    }
+    def require_feedback_isolation():
+        if not customer_repair:
+            return
+        with opener(state_request, timeout=30) as response:
+            latest = json.load(response)
+        validate_binding(manifest, latest, run, env)
+        validate_feedback_isolation(
+            artifacts, latest, manifest, env,
+            lambda artifact_id: gh("api", f"/repos/{repo}/actions/artifacts/{artifact_id}/zip", binary=True),
+        )
     original = None
     if state.get("kind") == ORIGINAL_PR_REPAIR:
         original = authorized_original_pr(state, repo, get)
@@ -350,10 +417,9 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
         if existing and existing != f"{target}\trefs/heads/{branch}":
             raise ValueError("publication_branch_already_diverged")
         if not existing:
-            if original or customer_repair:
-                raise ValueError(
-                    CUSTOMER_CREDENTIAL_BLOCK if customer_repair else REPAIR_CREDENTIAL_BLOCK
-                )
+            if original:
+                raise ValueError(REPAIR_CREDENTIAL_BLOCK)
+            require_feedback_isolation()
             # No force update, no main branch writes. Ambiguous responses are reconciled by exact ref.
             git("push", remote, f"{target}:refs/heads/{branch}")
         if (
@@ -397,8 +463,7 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
                 raise ValueError("publication_existing_pr_mismatch")
             pr = pulls[0]
         else:
-            if customer_repair:
-                raise ValueError(CUSTOMER_CREDENTIAL_BLOCK)
+            require_feedback_isolation()
             # Import only the helper checked out at the trusted workflow SHA; never artifact code.
             helper = Path(__file__).resolve().parent / "runtime_tools" / "pushed_branch_pr.mjs"
             script = """import {execFileSync} from 'node:child_process';

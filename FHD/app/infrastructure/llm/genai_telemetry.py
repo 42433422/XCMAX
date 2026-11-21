@@ -61,8 +61,15 @@ class GenAISpan:
     status: str = "ok"  # "ok" | "error"
     attributes: dict[str, Any] = field(default_factory=dict)
     events: list[dict[str, Any]] = field(default_factory=list)
+    trace_flags: str = "01"
+    trace_state: str = ""
+    _started_ns: int = field(default_factory=time.perf_counter_ns, init=False, repr=False)
+    _duration_ms: float | None = field(default=None, init=False, repr=False)
 
     def finish(self, status: str = "ok") -> None:
+        if self.end_time is not None:
+            return
+        self._duration_ms = round(max(0, time.perf_counter_ns() - self._started_ns) / 1_000_000, 3)
         self.end_time = time.time()
         self.status = status
 
@@ -70,11 +77,15 @@ class GenAISpan:
         self.events.append({"name": name, "timestamp": time.time(), "attributes": attributes or {}})
 
     def to_dict(self) -> dict[str, Any]:
-        duration_ms = round((self.end_time - self.start_time) * 1000, 3) if self.end_time else None
+        duration_ms = self._duration_ms
+        if duration_ms is None and self.end_time is not None:
+            duration_ms = round(max(0, self.end_time - self.start_time) * 1000, 3)
         return {
             "span_id": self.span_id,
             "trace_id": self.trace_id,
             "parent_span_id": self.parent_span_id,
+            "trace_flags": self.trace_flags,
+            "trace_state": self.trace_state,
             "name": self.name,
             "start_time": self.start_time,
             "end_time": self.end_time,
@@ -88,9 +99,10 @@ class GenAISpan:
 def _current_business_trace() -> tuple[str | None, str | None]:
     """桥接 neuro_bus 业务链路（不可用时静默返回 None）。"""
     try:
-        from app.neuro_bus.tracer import current_span, current_trace
+        from app.neuro_bus.tracer import get_trace_context
 
-        return current_trace.get(), current_span.get()
+        context = get_trace_context()
+        return context.get("trace_id"), context.get("span_id")
     except RECOVERABLE_ERRORS:
         return None, None
 
@@ -114,6 +126,12 @@ def start_genai_span(
         name="chat",
         start_time=time.time(),
     )
+    from app.neuro_bus.tracer import get_trace_context
+
+    propagation = get_trace_context()
+    if propagation.get("trace_id") == span.trace_id:
+        span.trace_flags = propagation.get("trace_flags", "01")
+        span.trace_state = propagation.get("trace_state", "")
     attrs = span.attributes
     attrs["gen_ai.operation.name"] = "chat"
     attrs["gen_ai.system"] = provider_id
@@ -181,8 +199,10 @@ def estimate_cost_usd(
 
 
 def record_error(span: GenAISpan, exc: BaseException) -> None:
+    from app.security.log_redaction import redact_log_text
+
     span.attributes["error.type"] = type(exc).__name__
-    span.attributes["error.message"] = str(exc)[:500]
+    span.attributes["error.message"] = redact_log_text(str(exc))[:500]
     span.finish("error")
 
 

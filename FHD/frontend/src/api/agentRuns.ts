@@ -1,7 +1,25 @@
 import { api } from './core'
 import type { ApiResponse } from '@/types/api'
+import { getActiveExtensionModHeaders } from '@/utils/apiBase'
 
-export interface AgentRunEvent {
+/** Shared observation fields; identifiers are diagnostic, never authorization. */
+export interface ExecutionObservation {
+  trace_id?: string
+  span_id?: string
+  parent_span_id?: string
+  request_id?: string
+  task_id?: string
+  run_id?: string
+  step_id?: string
+  node_id?: string
+  call_id?: string
+  attempt?: number
+  duration_ms?: number
+  error_code?: string
+  error_type?: string
+}
+
+export interface AgentRunEvent extends ExecutionObservation {
   event_id: string
   run_id: string
   event_type: string
@@ -127,11 +145,23 @@ export interface AgentApprovalGrant {
   expires_at: number
 }
 
+export type AgentVerificationStatus = 'verified' | 'failed' | 'inconclusive' | 'pending' | 'not_required' | 'not_verified'
+
+export interface AgentVerificationReport {
+  protocol?: string
+  status: AgentVerificationStatus
+  accepted: boolean
+  independently_verified_steps?: number
+  contract_only_steps?: number
+  steps: Array<Record<string, unknown>>
+}
+
 export interface AgentRunResponse extends ApiResponse<AgentRun> {
   approval?: AgentApprovalGrant
   capabilities?: AgentTaskCapabilities
   control_command?: AgentTaskControlCommand
   execution?: AgentTaskExecution
+  verification?: AgentVerificationReport
   deduplicated?: boolean
 }
 
@@ -313,6 +343,11 @@ export const agentRunsApi = {
 
   retryRun(runId: string): Promise<ApiResponse<AgentRunReference>> {
     return api.post<ApiResponse<AgentRunReference>>(`/api/agent/runs/${encodeURIComponent(runId)}/retry`, {}, { timeoutMs: 15000 })
+  },
+
+  verifyRun(runId: string): Promise<AgentRunResponse> {
+    const url = `/api/agent/runs/${encodeURIComponent(runId)}/verify`
+    return api.post<AgentRunResponse>(url, {}, { timeoutMs: 30_000, quiet: true, headers: getActiveExtensionModHeaders(url) })
   },
 
   getRun(runId: string): Promise<AgentRunResponse> {

@@ -76,6 +76,103 @@ def _message_suffix(db: Any, session_id: str, user_id: int, message_id: int):
     )
 
 
+def _stored_turn_view(context: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
+    """Read the original durable receipt and refresh only its bound execution."""
+    from app.application.agent_orchestrator.trace_payloads import _payload_status
+    from app.application.ai_chat import dialogue_memory
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+
+    if not context["tenant_id"]:
+        return None
+    view: dict[str, Any] = {
+        "turn_id": turn_id,
+        "run_id": "",
+        "receipt_kind": "turn",
+        "durable": True,
+        "status": "unknown",
+        "message": "原任务结果尚待核对，请勿重复提交。",
+        "requires_reconciliation": True,
+        "retryable": False,
+    }
+    try:
+        stored = dialogue_memory.stored_turn_receipt(context, turn_id)
+        status = (
+            dialogue_memory.turn_status(dialogue_memory.conversation_key(context), turn_id)
+            if stored is None
+            else ""
+        )
+    except ConversationRevisionError:
+        return view
+    if stored is None:
+        if status == "processing":
+            return {**view, "status": "running", "message": "原任务仍在执行，请继续查看回执。"}
+        return view if status in {"interrupted", "unknown"} else None
+    payload = stored["payload"]
+    run_id = str(payload.get("run_id") or payload.get("agent_run_id") or "")
+    if run_id:
+        from app.application.agent_orchestrator.business_harness import (
+            _iter_result_payloads,
+            _result_summary,
+            harness_event_context,
+        )
+        from app.application.agent_orchestrator.run_models import RunContextScope
+        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+        from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+
+        view.update(run_id=run_id, receipt_kind="run")
+        run = get_agent_run_repository().get(run_id)
+        if (
+            run is None
+            or run.user_id != str(context["local_user_id"])
+            or not RunContextScope(
+                context["tenant_id"], context["mod_id"], context["session_id"], stored["revision"]
+            ).matches(run)
+            or (run.metadata.get("runtime_context") or {}).get("turn_id") != turn_id
+        ):
+            return view
+        outputs = _iter_result_payloads(run)
+        business_result = run.final_output.get("business_result")
+        if isinstance(business_result, dict):
+            outputs.append(business_result)
+        payload = {
+            "execution_state": run.status
+            if run.status in {"queued", "planning", "running", "retrying"}
+            else dispatched_run_state(run)[0],
+            "final_output": run.final_output,
+            "outputs": outputs,
+        }
+        if (run.metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required":
+            payload["requires_reconciliation"] = True
+        if run.status == "completed" and any(
+            step.status not in {"completed", "skipped"} for step in run.steps
+        ):
+            payload["requires_reconciliation"] = True
+        view["task_id"] = harness_event_context(run)["task_id"]
+        message = _result_summary(run, outputs)
+    else:
+        message = str(payload.get("response") or payload.get("message") or "")
+    state = execution_result_pending_state(payload) or _payload_status(payload)
+    state = {"accepted": "queued", "pending": "queued", "processing": "running"}.get(state, state)
+    return {
+        **view,
+        "status": state,
+        "requires_reconciliation": state == "unknown",
+        "message": _plain_text(message)
+        if state == "completed"
+        else {
+            "failed": "原任务执行失败，请查看任务回执。",
+            "cancelled": "原任务已取消。",
+            "rejected": "原任务已被拒绝。",
+            "waiting_approval": "原任务正在等待审批。",
+            "waiting_auth": "原任务正在等待授权。",
+            "waiting_input": "原任务正在等待补充信息。",
+            "paused": "原任务已暂停。",
+            "blocked": "原任务已阻断，请核对任务状态。",
+            "unknown": view["message"],
+        }.get(state, "原任务尚未完成，请继续查看回执。"),
+    }
+
+
 class TaskConversationStore:
     """Persist task chat turns without allowing cross-user session access."""
 
@@ -273,30 +370,46 @@ class TaskConversationStore:
     ) -> dict[str, Any]:
         page = self.get_conversation(session_id=session_id, user_id=user_id, **pagination)
         session = page.pop("session")
-        active_turn = None
-        turn_receipt = None
-        if isinstance(session, dict) and type(session.get("revision")) is int:
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        revision = session.get("revision") if isinstance(session, dict) else None
+        tenant = str(current_tenant_id() or "")
+        turn_id = str(pagination.get("turn_id") or "")
+        selected_turn = (
+            _stored_turn_view(
+                {
+                    "local_user_id": user_id,
+                    "tenant_id": tenant,
+                    "mod_id": mod_id,
+                    "session_id": session_id,
+                    "conversation_id": session_id,
+                    **({"_conversation_revision": revision} if type(revision) is int else {}),
+                },
+                turn_id,
+            )
+            if turn_id
+            else None
+        )
+        if selected_turn is None and type(revision) is int:
             from app.application.elt.batch_continuation import active_batch_turn
-            from app.infrastructure.tenant_scope import current_tenant_id
 
             selected_turn = active_batch_turn(
                 owner=str(user_id),
-                tenant=str(current_tenant_id() or ""),
+                tenant=tenant,
                 mod=mod_id,
                 session=session_id,
                 revision=session["revision"],
                 turn_id=pagination.get("turn_id"),
                 include_terminal=bool(pagination.get("turn_id")),
             )
-            if selected_turn and selected_turn["status"] in {
-                "completed",
-                "failed",
-                "interrupted",
-                "unknown",
-            }:
-                turn_receipt = selected_turn
-            else:
-                active_turn = selected_turn
+        terminal = selected_turn and selected_turn["status"] in {
+            "completed",
+            "failed",
+            "cancelled",
+            "rejected",
+            "interrupted",
+            "unknown",
+        }
         return {
             "success": True,
             "id": session_id,
@@ -304,8 +417,11 @@ class TaskConversationStore:
             "revision": session.get("revision") if isinstance(session, dict) else None,
             "mod_id": mod_id,
             **page,
-            **({"active_turn": active_turn} if active_turn else {}),
-            **({"turn_receipt": turn_receipt} if turn_receipt else {}),
+            **(
+                {"turn_receipt" if terminal else "active_turn": selected_turn}
+                if selected_turn
+                else {}
+            ),
             "metadata": {},
             "durable": True,
         }
@@ -388,7 +504,10 @@ class TaskConversationStore:
             messages = (
                 (
                     db.query(AIConversation)
-                    .filter(AIConversation.session_id == session_id)
+                    .filter(
+                        AIConversation.session_id == session_id,
+                        AIConversation.user_id == str(user_id),
+                    )
                     .order_by(AIConversation.id.desc())
                     .limit(400)
                     .all()

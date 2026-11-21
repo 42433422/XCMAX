@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import threading
 import time
 from concurrent.futures import Future, wait
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Callable, Generic, TypeVar, cast
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import ValidationError
 
 from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_repository
 from app.application.agent_orchestrator.run_control import run_operation_lock
@@ -33,20 +35,25 @@ from app.application.agent_orchestrator.unified_task import (
     create_unified_task,
     task_capabilities,
 )
+from app.application.enterprise_cognition.service import get_cognition_service
+from app.domain.enterprise_cognition.contracts import CognitionRequest
 from app.fastapi_routes.domains.agent.route_support import (
     authenticated_runtime_context,
     internal_error_response,
+    project_execution_failure,
     public_run_dict,
     run_response,
     scoped_tasks,
     success,
     task_scope_matches,
 )
+from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from app.infrastructure.auth.agent_stream import StreamAuthorizer, require_stream_authorizer
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["agent"])
 
 # 运行写入时会同步建任务记录，这里只需要为历史运行补建一次。
@@ -177,21 +184,32 @@ def _task_envelope(
         ):
             active = None
         runs = []
-    payload = task.to_dict()
+    if executions is None:
+        executions = get_task_execution_repository().list_for_run_ids(
+            [run.run_id for run in runs] or ([active.run_id] if active is not None else [])
+        )
+    execution = None
     if active is not None:
-        payload["progress"] = task_progress_snapshot(active, viewer=viewer)
-    payload["runs"] = [public_run_dict(run) for run in runs]
-    payload["active_run"] = public_run_dict(active) if active is not None else None
+        execution = executions.get(active.run_id)
+        task = replace(
+            task,
+            metadata={**task.metadata, "progress": task_progress_snapshot(active, viewer=viewer)},
+        )
+        active = project_execution_failure(active, execution)
+    payload = project_execution_failure(task, execution).to_dict()
+    payload["runs"] = [
+        public_run_dict(
+            project_execution_failure(run, executions.get(run.run_id)),
+            read_run=orchestrator.get_run,
+        )
+        for run in runs
+    ]
+    payload["active_run"] = (
+        public_run_dict(active, read_run=orchestrator.get_run) if active is not None else None
+    )
     payload["capabilities"] = task_capabilities(active) if active is not None else {}
     command = orchestrator.latest_task_control(active.run_id) if active is not None else None
     payload["control_command"] = command.to_dict() if command is not None else None
-    execution = None
-    if active is not None:
-        execution = (
-            executions.get(active.run_id)
-            if executions is not None
-            else get_task_execution_repository().get(active.run_id)
-        )
     payload["execution"] = execution.to_dict() if execution is not None else None
     return cast("dict[str, Any]", payload)
 
@@ -202,8 +220,8 @@ def _execution_map(tasks: list[Any]) -> dict[str, Any]:
 
 
 def _task_stream_envelope(task: Any, executions: dict[str, Any]) -> dict[str, Any]:
-    payload = task.to_dict()
     execution = executions.get(str(task.active_run_id or ""))
+    payload = project_execution_failure(task, execution).to_dict()
     payload.update(
         {
             "runs": [],
@@ -217,7 +235,8 @@ def _task_stream_envelope(task: Any, executions: dict[str, Any]) -> dict[str, An
 
 
 def _task_progress_overview(tasks: list[Any]) -> dict[str, int]:
-    snapshots = [task.to_dict() for task in tasks]
+    executions = _execution_map(tasks)
+    snapshots = [_task_stream_envelope(task, executions) for task in tasks]
     percents: list[int] = []
     for item in snapshots:
         try:
@@ -586,3 +605,32 @@ def archive_agent_task(
 
 
 __all__ = ["router"]
+
+
+@router.post("/api/enterprise/cognition", tags=["enterprise-cognition"])
+def cognition(
+    body: CognitionRequest,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any]:
+    context = authenticated_runtime_context({"source": "enterprise_cognition_api"}, principal)
+    try:
+        result = get_cognition_service().invoke(body.action, body.params, context=context)
+        if body.action == "plan":
+            return run_response(result, principal=principal)
+        verified = (
+            result.get("observation_verified") is True
+            if body.action == "evaluate"
+            else result.get("current_state_verified") is True
+            if body.action == "query"
+            else True
+        )
+        return {"success": verified, "data": result}
+    except (AgentModAuthorizationError, PermissionError) as exc:
+        raise HTTPException(403, "当前账号无权访问该企业状态或任务") from exc
+    except ValidationError as exc:
+        raise HTTPException(422, "企业认知请求参数无效") from exc
+    except ValueError as exc:
+        raise HTTPException(409, "实体、目标、指标或原任务请求不一致") from exc
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("enterprise cognition request unavailable")
+        raise HTTPException(503, "企业状态或原任务回执暂不可用，请保留原请求编号核对") from exc

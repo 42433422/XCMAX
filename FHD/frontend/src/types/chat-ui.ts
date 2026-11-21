@@ -1,6 +1,6 @@
 /** 聊天 UI 层消息（localStorage / 组件展示；role 用 ai 而非 API 的 assistant） */
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
-import type { AgentStepView } from '@/utils/agentStepChain'
+import type { AgentStepView, ChatNodeResultLike } from '@/utils/agentStepChain'
 import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
 import type { ChatModelRoute } from '@/utils/chatModelRoute'
 import type { ChatStatus } from 'ai'
@@ -55,19 +55,7 @@ export interface UiChatMessage {
   thinkingSteps?: string
   todoSteps?: string[]
   workflowAction?: string
-  nodeResults?: Array<{
-    node_id: string
-    success: boolean
-    tool_id: string
-    action: string
-    error?: string
-    message?: string
-    output_preview?: string
-    retries?: number
-    retryable?: boolean
-    recovery_hint?: string
-    duration_ms?: number
-  }>
+  nodeResults?: Array<ChatNodeResultLike & { retryable?: boolean }>
   contextSummary?: string
   streamingShell?: boolean
   /** 请求生命周期独立于正文是否已经开始输出；仅当前会话使用，不落库。 */

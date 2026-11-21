@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import re
 import threading
@@ -25,7 +26,19 @@ def _facade() -> Any:
 
 
 def _sse_event_line(payload: dict) -> bytes:
-    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+    from app.neuro_bus.tracer import get_trace_context
+
+    # The producer's original IDs survive persistence/replay. Never turn a
+    # transport "done" into an execution success or assign a replay a new span.
+    result = payload.get("result")
+    original = payload if payload.get("trace_id") else result if isinstance(result, dict) else {}
+    context = (
+        {key: original[key] for key in ("trace_id", "span_id", "request_id") if original.get(key)}
+        if original.get("trace_id")
+        else get_trace_context()
+    )
+    data = {**context, **payload}
+    return ("data: " + json.dumps(data, ensure_ascii=False) + "\n\n").encode("utf-8")
 
 
 def _thinking_steps_from_planner_stream_text(merged: str) -> str | None:
@@ -90,7 +103,12 @@ async def _xcagi_planner_stream_bytes_async(
         finally:
             asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
 
-    thread = threading.Thread(target=_feed_queue, daemon=True, name="xcagi-stream-async-bridge")
+    thread = threading.Thread(
+        target=contextvars.copy_context().run,
+        args=(_feed_queue,),
+        daemon=True,
+        name="xcagi-stream-async-bridge",
+    )
     thread.start()
     started = time.perf_counter()
     first_chunk = True

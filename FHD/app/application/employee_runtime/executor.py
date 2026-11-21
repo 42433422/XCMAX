@@ -367,6 +367,7 @@ def _actions_fhd(
     agent_tools: list[dict[str, Any]] | None = None,
     agent_gate: Any = None,
     agent_max_iterations: int | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     actions_cfg = _normalize_actions_cfg(config)
     handlers = _handler_list(actions_cfg)
@@ -423,6 +424,7 @@ def _actions_fhd(
                     tools=agent_tools,
                     gate=agent_gate,
                     max_iterations=agent_max_iterations,
+                    runtime_context=runtime_context,
                 )
             )
         elif handler == "llm_md":

@@ -36,8 +36,9 @@ ChatMessage? _chatMessageFromCache(Map<String, Object?> json) {
   final statusText = _stringField(json, 'status').toLowerCase();
   final status = statusText == 'failed'
       ? ChatDeliveryStatus.failed
-      : statusText == 'sending'
-          ? ChatDeliveryStatus.sending
+      : statusText == 'sending' || statusText == 'pending'
+          ? ChatDeliveryStatus.pending
+          : statusText == 'queued' ? ChatDeliveryStatus.queued
           : ChatDeliveryStatus.sent;
   final conversationId = _stringField(json, 'conversation_id');
   return ChatMessage(
@@ -60,6 +61,7 @@ ChatMessage? _chatMessageFromCache(Map<String, Object?> json) {
     status: status,
     quote: _stringField(json, 'quote'),
     cacheTimestampMs: _cachedChatTimestampMs(json),
+    turnId: _stringField(json, 'turn_id'),
   );
 }
 

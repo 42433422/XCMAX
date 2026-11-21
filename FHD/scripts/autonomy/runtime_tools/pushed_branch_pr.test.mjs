@@ -62,7 +62,13 @@ test('系统侧硬门：该开 PR 却没有 URL 必须 fail-closed', () => {
 
 test('PR 创建失败时，受管回执和 WebSocket 都只能报告 failed；成功后才可完成', async () => {
   const source = readFileSync(new URL('./para_e2e_agent.mjs', import.meta.url), 'utf8');
-  const section = (start, end) => source.slice(source.indexOf(`async function ${start}(`), source.indexOf(`async function ${end}(`));
+  const section = (start, end) => {
+    const declaration = name => source.match(new RegExp(`^(?:export )?async function ${name}\\(`, 'm'))?.index;
+    const begin = declaration(start), finish = declaration(end);
+    assert.ok(Number.isInteger(begin) && Number.isInteger(finish) && finish > begin,
+      `missing or unordered runtime declarations: ${start}, ${end}`);
+    return source.slice(begin, finish);
+  };
   for (const prUrl of ['', 'https://github.com/42433422/XCMAX/pull/1']) {
     const reports = [], messages = [];
     const context = vm.createContext({ requirePrUrlAfterPush, console,

@@ -19,6 +19,89 @@ from .test_employee_handoff_e25 import _card, _start
 from .test_employee_handoff_e25 import customers_db as customers_db
 
 
+@pytest.mark.parametrize("drift", [None, "owner", "tenant", "mod"])
+def test_child_attachment_requires_same_owner_tenant_and_mod(drift):
+    from app.application.agent_orchestrator import AgentRun
+    from app.application.agent_orchestrator.run_audit_scope import attach_child_result
+
+    context = {"tenant_id": "1", "mod_id": "mod-a", "_mod_authorization": {"mod_id": "mod-a"}}
+    parent = AgentRun(
+        user_id="owner", message="parent", metadata={"runtime_context": copy.deepcopy(context)}
+    )
+    child = AgentRun(
+        user_id="owner", message="child", metadata={"runtime_context": copy.deepcopy(context)}
+    )
+    if drift == "owner":
+        child.user_id = "other"
+    elif drift == "tenant":
+        child.metadata["runtime_context"]["tenant_id"] = "2"
+    elif drift == "mod":
+        child.metadata["runtime_context"].update(
+            mod_id="mod-b", _mod_authorization={"mod_id": "mod-b"}
+        )
+    assert attach_child_result(parent, child) is (drift is None)
+    if drift:
+        assert not parent.metadata.get("child_results")
+
+
+@pytest.mark.parametrize(
+    "drift", [None, "owner", "tenant", "mod", "parent", "missing", "read_error"]
+)
+def test_parent_public_view_refreshes_bound_child_without_writing_or_replaying(drift):
+    from unittest.mock import Mock
+
+    from app.application.agent_orchestrator import AgentRun
+    from app.fastapi_routes.domains.agent.route_support import public_run_dict
+
+    context = {"tenant_id": "1", "mod_id": "mod-a", "_mod_authorization": {"mod_id": "mod-a"}}
+    parent = AgentRun(
+        user_id="owner",
+        message="parent",
+        status="completed",
+        metadata={"runtime_context": copy.deepcopy(context)},
+    )
+    child = AgentRun(
+        user_id="owner",
+        message="child",
+        status="running",
+        metadata={"runtime_context": {**copy.deepcopy(context), "parent_run_id": parent.run_id}},
+    )
+    parent.metadata["child_results"] = {
+        child.run_id: {"status": "completed", "final_output": {"secret": "stale-result"}}
+    }
+    original = copy.deepcopy(parent.to_dict())
+    if drift == "owner":
+        child.user_id = "other"
+    elif drift == "tenant":
+        child.metadata["runtime_context"]["tenant_id"] = "2"
+    elif drift == "mod":
+        child.metadata["runtime_context"].update(
+            mod_id="mod-b", _mod_authorization={"mod_id": "mod-b"}
+        )
+    elif drift == "parent":
+        child.metadata["runtime_context"]["parent_run_id"] = "other-parent"
+    read = Mock(return_value=None if drift == "missing" else child)
+    if drift == "read_error":
+        read.side_effect = RuntimeError("storage unavailable")
+    view = public_run_dict(parent, read_run=read)
+    result = view["metadata"]["child_results"][child.run_id]
+    assert result["execution_state"] == ("unknown" if drift else "running")
+    assert result["success"] is False
+    assert "stale-result" not in str(result)
+    assert view["status"] == "completed"
+    assert parent.to_dict() == original
+    read.assert_called_once_with(child.run_id)
+    if drift:
+        assert result["requires_reconciliation"] is True
+        return
+    child.status = "completed"
+    child.final_output = {"message": "current-result"}
+    fresh = public_run_dict(parent, read_run=read)["metadata"]["child_results"][child.run_id]
+    assert fresh["success"] is True
+    assert fresh["final_output"] == {"message": "current-result"}
+    assert parent.to_dict() == original
+
+
 @pytest.fixture
 def handoff_env(customers_db, tmp_path, monkeypatch, trusted_actor):
     # Keep the real registered read and SQL repositories; isolate the tool deadline
@@ -398,7 +481,12 @@ def test_process_exit_recovers_only_persisted_receipts_without_reexecution(
 
     from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 
-    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            filter(None, (str(Path(__file__).resolve().parents[2]), os.environ.get("PYTHONPATH")))
+        ),
+    }
     crashed = subprocess.run(
         [
             sys.executable,

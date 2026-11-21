@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import httpx
@@ -134,3 +134,130 @@ def payment_evidence_marker(*, provider: str, verification: str, trade_no: str) 
         "provider_test_mode": test_mode,
         "payment_environment": deploy_tier,
     }
+
+
+def load_authoritative_wallet_refunds(window_days: int) -> dict[str, Any]:
+    """Read a complete fixed native ledger snapshot before any receipt is appended."""
+    from modstore_server.customer_value_refunds import (
+        REFUND_SOURCE,
+        RefundNotCustomer,
+        _from_authenticated_row,
+        _instant,
+    )
+
+    unavailable = {
+        "refunds": [],
+        "source_owner": REFUND_SOURCE,
+        "source_available": False,
+        "source_authoritative": False,
+    }
+    if payment_orders.is_local_source_of_truth() or not (key := _internal_api_key()):
+        return unavailable
+    base_url = _text(
+        os.environ.get("JAVA_PAYMENT_SERVICE_URL") or "http://127.0.0.1:8080", 2048
+    ).rstrip("/")
+    after, through, total, snapshot = 0, 0, None, ""
+    seen: set[int] = set()
+    native_refunds: set[str] = set()
+    native_credits: set[int] = set()
+    proofs, unknown, excluded = [], 0, 0
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            for _ in range(_JAVA_MAX_ORDERS // _JAVA_PAGE_SIZE + 1):
+                response = client.get(
+                    f"{base_url}/api/internal/payment/refund-evidence",
+                    params={
+                        "window_days": max(1, min(int(window_days), 3650)),
+                        "limit": _JAVA_PAGE_SIZE,
+                        "after": after,
+                        "through_id": through,
+                        "as_of": snapshot,
+                    },
+                    headers={"X-Internal-Api-Key": key},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                if (
+                    not isinstance(payload, dict)
+                    or payload.get("ok") is not True
+                    or payload.get("source") != REFUND_SOURCE
+                ):
+                    raise ValueError("wallet refund source untrusted")
+                count, bound, at = (
+                    payload.get("total"),
+                    payload.get("through_id"),
+                    payload.get("as_of"),
+                )
+                if (
+                    type(count) is not int
+                    or not 0 <= count <= _JAVA_MAX_ORDERS
+                    or type(bound) is not int
+                    or bound < 0
+                    or not isinstance(at, str)
+                ):
+                    raise ValueError("wallet refund snapshot incomplete")
+                if total is None:
+                    total, through, snapshot = count, bound, at
+                    if (
+                        not datetime.now(UTC) - timedelta(hours=1)
+                        <= _instant(snapshot)
+                        <= datetime.now(UTC)
+                    ):
+                        raise ValueError("wallet refund snapshot is not current")
+                elif (total, through, snapshot) != (count, bound, at):
+                    raise ValueError("wallet refund snapshot changed during pagination")
+                page = payload.get("refunds")
+                if not isinstance(page, list) or len(page) > _JAVA_PAGE_SIZE:
+                    raise ValueError("wallet refund page invalid")
+                for row in page:
+                    identity = row.get("refund_id") if isinstance(row, dict) else None
+                    if (
+                        type(identity) is not int
+                        or not after < identity <= through
+                        or identity in seen
+                    ):
+                        raise ValueError("wallet refund page duplicated or reordered")
+                    seen.add(identity)
+                    after = identity
+                    if row.get("verified") is False:
+                        unknown += 1
+                    else:
+                        try:
+                            proof = _from_authenticated_row(row, snapshot)
+                        except RefundNotCustomer:
+                            excluded += 1
+                            continue
+                        if (
+                            row["refund_no"] in native_refunds
+                            or row["wallet_transaction_id"] in native_credits
+                        ):
+                            raise ValueError("wallet refund native credit duplicated")
+                        native_refunds.add(row["refund_no"])
+                        native_credits.add(row["wallet_transaction_id"])
+                        proofs.append(proof)
+                next_after = payload.get("next_after")
+                if next_after is None:
+                    if (
+                        len(seen) != total
+                        or (seen and after != through)
+                        or (not seen and through != 0)
+                    ):
+                        raise ValueError("wallet refund pagination incomplete")
+                    return {
+                        "refunds": proofs,
+                        "unknown": unknown,
+                        "excluded": excluded,
+                        "source_owner": REFUND_SOURCE,
+                        "source_available": True,
+                        "source_authoritative": True,
+                    }
+                if (
+                    type(next_after) is not int
+                    or next_after != after
+                    or not page
+                    or len(seen) >= total
+                ):
+                    raise ValueError("wallet refund cursor did not advance")
+    except (httpx.HTTPError, RuntimeError, TypeError, ValueError, KeyError):
+        return unavailable
+    return unavailable

@@ -1,6 +1,8 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAgentStore } from '../../stores/agent'
+import { useAuthStore } from '../../stores/auth'
+import { xiaocLifeApi, type XiaoCLifeState } from '../../application/xiaocLifeApi'
 import type { AgentSkill, LLMToolCall, SkillResult } from '../../types/agent'
 import { useAgentEngine } from './useAgentEngine'
 
@@ -78,6 +80,25 @@ describe('useAgentEngine behavior', () => {
       kind: 'image',
       dataUrl: 'data:image/png;base64,capture',
     })
+  })
+
+  it('管理端 L2 拒绝多工具批次，L1 也不能经离线技能绕过限制', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
+    mocks.agentButlerChat.mockResolvedValue({ tool_calls: [tool('navigate', { name: 'plans' }), tool('click', { selector: '#buy' })] })
+    const engine = useAgentEngine()
+    await engine.handleInput('执行两个操作')
+    expect(mocks.executor.navigate).not.toHaveBeenCalled()
+    expect(mocks.executor.click).not.toHaveBeenCalled()
+    expect(latestReply()).toContain('多步骤')
+    const execute = vi.fn(async () => ({ success: true, message: 'should not run' }))
+    mocks.matchByIntent.mockReturnValue({ id: 'builtin:navigate', execute } as unknown as AgentSkill)
+    read.mockResolvedValue({ scope: 'enterprise', level: 1 } as XiaoCLifeState)
+    await engine.handleInput('打开页面')
+    expect(execute).not.toHaveBeenCalled()
+    expect(latestReply()).toContain('页面工具未执行')
   })
 
   it('ignores empty input and executes an offline skill without calling the LLM', async () => {

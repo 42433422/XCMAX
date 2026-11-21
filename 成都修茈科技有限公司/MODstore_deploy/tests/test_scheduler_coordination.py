@@ -17,14 +17,16 @@ from modstore_server.workflow_scheduler import (
 )
 
 
-def test_daily_backup_defaults_to_0400(monkeypatch) -> None:
+def test_daily_backup_defaults_to_0115_shanghai(monkeypatch) -> None:
     monkeypatch.delenv("MODSTORE_DAILY_BACKUP_HOUR", raising=False)
     monkeypatch.delenv("MODSTORE_DAILY_BACKUP_MINUTE", raising=False)
+    monkeypatch.delenv("MODSTORE_DAILY_BACKUP_TZ", raising=False)
 
-    trigger = str(cron_trigger_for_backup())
+    trigger = cron_trigger_for_backup()
 
-    assert "hour='4'" in trigger
-    assert "minute='0'" in trigger
+    assert "hour='1'" in str(trigger)
+    assert "minute='15'" in str(trigger)
+    assert str(trigger.timezone) == "Asia/Shanghai"
 
 
 def test_scheduler_misfire_policy_defaults() -> None:

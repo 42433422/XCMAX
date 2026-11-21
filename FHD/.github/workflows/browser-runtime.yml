@@ -1,0 +1,216 @@
+name: Browser runtime contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/infrastructure/browser/**"
+      - "app/infrastructure/__init__.py"
+      - "app/application/tools/browser.py"
+      - "app/application/tools/surface_authority.py"
+      - "app/application/tool_execution_deadline.py"
+      - "app/application/agent_orchestrator/business_write_guard.py"
+      - "app/application/agent_orchestrator/tool_process.py"
+      - "app/application/agent_orchestrator/tool_executor.py"
+      - "app/application/agent_orchestrator/artifact_files.py"
+      - "app/application/agent_orchestrator/__init__.py"
+      - "app/application/__init__.py"
+      - "app/domain/browser_*.py"
+      - "tests/test_infrastructure/test_browser*.py"
+      - "tests/test_application/test_surface_worker.py"
+      - "tests/test_application/test_browser_agent_e2e.py"
+      - "tests/test_application/test_browser_tool.py"
+      - "tests/test_application/conftest.py"
+      - "tests/test_infrastructure/conftest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "requirements-server-api.txt"
+      - "ops/deploy/requirements-server-api.lock.txt"
+      - "FHD/.github/workflows/browser-runtime.*"
+      - ".github/workflows/fhd-browser-runtime.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
+  push:
+    branches: [main]
+    paths:
+      - "app/infrastructure/browser/**"
+      - "app/infrastructure/__init__.py"
+      - "app/application/tools/browser.py"
+      - "app/application/tools/surface_authority.py"
+      - "app/application/tool_execution_deadline.py"
+      - "app/application/agent_orchestrator/business_write_guard.py"
+      - "app/application/agent_orchestrator/tool_process.py"
+      - "app/application/agent_orchestrator/tool_executor.py"
+      - "app/application/agent_orchestrator/artifact_files.py"
+      - "app/application/agent_orchestrator/__init__.py"
+      - "app/application/__init__.py"
+      - "app/domain/browser_*.py"
+      - "tests/test_infrastructure/test_browser*.py"
+      - "tests/test_application/test_surface_worker.py"
+      - "tests/test_application/test_browser_agent_e2e.py"
+      - "tests/test_application/test_browser_tool.py"
+      - "tests/test_application/conftest.py"
+      - "tests/test_infrastructure/conftest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "requirements-server-api.txt"
+      - "ops/deploy/requirements-server-api.lock.txt"
+      - "FHD/.github/workflows/browser-runtime.*"
+      - ".github/workflows/fhd-browser-runtime.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  browser-runtime-e2e:
+    name: Browser runtime (real Chromium required)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: sqlite://
+      PYTHONPATH: ${{ github.workspace }}/FHD
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+      XCMAX_BROWSER_REQUIRE_REAL: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            FHD/pyproject.toml
+            FHD/uv.lock
+            FHD/requirements-server-api.txt
+            FHD/ops/deploy/requirements-server-api.lock.txt
+      - name: Install only the pinned browser contract dependencies
+        shell: python
+        run: |
+          import re, subprocess, sys, tomllib
+          from pathlib import Path
+          project = tomllib.loads(Path("pyproject.toml").read_text())
+          browser = project["project"]["optional-dependencies"]["browser"]
+          if len(browser) != 1 or not re.fullmatch(r"playwright==\d+\.\d+\.\d+", browser[0]):
+              raise SystemExit("browser extra must pin one Playwright release")
+          packages = tomllib.loads(Path("uv.lock").read_text())["package"]
+          requirements = list(browser)
+          # infrastructure/__init__.py imports SQLAlchemy; the parent test conftest
+          # is deliberately outside confcutdir and no application factory is needed.
+          for name in ("pytest", "pytest-asyncio", "sqlalchemy", "pyyaml", "psutil", "pillow"):
+              versions = [p["version"] for p in packages if p["name"] == name]
+              if len(versions) != 1:
+                  raise SystemExit(f"expected exactly one locked {name} version")
+              requirements.append(f"{name}=={versions[0]}")
+          subprocess.check_call([sys.executable, "-m", "pip", "install", *requirements])
+      - name: Install Chromium with its operating system dependencies
+        run: python -m playwright install --with-deps chromium
+      - name: Select the pinned binary and record source identity
+        id: browser_identity
+        shell: python
+        run: |
+          import json, os, platform, subprocess
+          from importlib.metadata import version
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as driver:
+              executable = driver.chromium.executable_path
+          if not Path(executable).is_file():
+              raise SystemExit("pinned Chromium binary missing")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as target:
+              target.write(f"XCMAX_BROWSER_TEST_EXECUTABLE={executable}\n")
+          evidence = Path(os.environ["RUNNER_TEMP"]) / "browser-runtime"
+          evidence.mkdir(parents=True, exist_ok=True)
+          (evidence / "identity.json").write_text(json.dumps({
+              "git_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "python": platform.python_version(), "playwright": version("playwright"),
+              "browser_executable": executable, "chromium_sandbox_required": True,
+          }, indent=2), encoding="utf-8")
+      - name: Run the real browser receipt, isolation and recovery contracts
+        run: |
+          python -m pytest -p pytest_asyncio.plugin \
+            --confcutdir=tests/test_infrastructure \
+            tests/test_infrastructure/test_browser_runtime.py \
+            tests/test_infrastructure/test_browser_snapshot.py \
+            --basetemp="$RUNNER_TEMP/browser-runtime/pytest" \
+            --junitxml="$RUNNER_TEMP/browser-runtime/results.xml" -q
+      - name: Reject missing, skipped or failing browser evidence
+        if: always()
+        shell: python
+        run: |
+          import os, xml.etree.ElementTree as ET
+          from pathlib import Path
+          report = Path(os.environ["RUNNER_TEMP"]) / "browser-runtime/results.xml"
+          cases = list(ET.parse(report).iter("testcase"))
+          required = {
+              "test_form_receipt_upload_and_durable_download", "test_context_isolation_between_runs",
+              "test_screenshot_masks_embedded_frame_rectangle",
+              "test_browser_executes_under_default_tool_worker_resource_limits",
+          }
+          if not required <= {case.get("name") for case in cases}:
+              raise SystemExit("mandatory real-browser scenarios are missing")
+          if any(case.find(tag) is not None for case in cases for tag in ("skipped", "failure", "error")):
+              raise SystemExit("real-browser evidence contains skips or failures")
+          print(f"Verified {len(cases)} executed browser contracts; zero skipped")
+      - name: Install the locked server API dependencies for the approved Agent contract
+        id: server_dependencies
+        if: ${{ !cancelled() && steps.browser_identity.outcome == 'success' }}
+        shell: python
+        run: |
+          import hashlib, json, os, subprocess, sys
+          from importlib.metadata import distributions, version
+          from pathlib import Path
+          lock = Path("ops/deploy/requirements-server-api.lock.txt")
+          subprocess.check_call([
+              sys.executable, "-m", "pip", "install",
+              "-r", "requirements-server-api.txt", "-c", str(lock),
+          ])
+          path = Path(os.environ["RUNNER_TEMP"]) / "browser-runtime/identity.json"
+          identity = json.loads(path.read_text(encoding="utf-8"))
+          if version("playwright") != identity["playwright"]:
+              raise SystemExit("server dependencies changed the pinned Playwright runtime")
+          identity["server_dependency_lock"] = {
+              "path": str(lock), "sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
+          }
+          identity["server_environment"] = dict(sorted(
+              (package.metadata["Name"], package.version) for package in distributions()
+          ))
+          path.write_text(json.dumps(identity, indent=2), encoding="utf-8")
+      - name: Run the real approved Agent browser and durable replay contract
+        if: ${{ !cancelled() && steps.server_dependencies.outcome == 'success' }}
+        run: |
+          python -m pytest -p pytest_asyncio.plugin \
+            --confcutdir=tests/test_application \
+            tests/test_application/test_browser_agent_e2e.py \
+            --basetemp="$RUNNER_TEMP/browser-runtime/agent-pytest" \
+            --junitxml="$RUNNER_TEMP/browser-runtime/agent-results.xml" -q
+      - name: Reject missing, skipped or failing Agent browser evidence
+        if: always()
+        shell: python
+        run: |
+          import os, xml.etree.ElementTree as ET
+          from pathlib import Path
+          report = Path(os.environ["RUNNER_TEMP"]) / "browser-runtime/agent-results.xml"
+          cases = list(ET.parse(report).iter("testcase"))
+          required = "test_approved_agent_spawns_real_browser_and_reuses_durable_receipt"
+          if required not in {case.get("name") for case in cases}:
+              raise SystemExit("mandatory approved-Agent browser scenario is missing")
+          if any(case.find(tag) is not None for case in cases for tag in ("skipped", "failure", "error")):
+              raise SystemExit("approved-Agent browser evidence contains skips or failures")
+          print(f"Verified {len(cases)} executed approved-Agent browser contracts; zero skipped")
+      - name: Upload exact-run browser evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-runtime-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/browser-runtime/
+          if-no-files-found: warn
+          retention-days: 14

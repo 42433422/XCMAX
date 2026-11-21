@@ -11,6 +11,7 @@ _finalize_session_done / _persist_workbench_session_unlocked，不另起新 dict
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -24,6 +25,7 @@ from modstore_server.agent_butler_models import (
 from modstore_server.agent_butler_targets import default_mod_focus as _default_mod_focus
 from modstore_server.agent_butler_targets import locate_employee_mod as _locate_employee_mod
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.xiaoc_life_chat import require_manual_life_capability
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,7 @@ async def _run_butler_orchestrate_pipeline(
             await _fail_session(sid, "snapshot", "用户不存在")
             return
 
+    require_manual_life_capability()
     if target_type == "mod":
         await _pipeline_mod(
             sid,
@@ -255,6 +258,7 @@ async def _pipeline_workflow(
         sf2 = get_session_factory()
         with sf2() as db2:
             user2 = db2.query(User).filter(User.id == user_id).first()
+            require_manual_life_capability()
             nl_result = await apply_nl_workflow_graph(
                 db2,
                 user2,
@@ -402,6 +406,7 @@ def _do_vibe_edit(
     try:
         with sf() as session:
             try:
+                require_manual_life_capability()
                 coder = get_vibe_coder(
                     session=session,
                     user_id=int(user_id or 0),
@@ -419,6 +424,7 @@ def _do_vibe_edit(
             except TypeError:
                 patch = coder.edit_project(brief, root=root)
 
+            require_manual_life_capability()
             apply_result = coder.apply_patch(patch, root=root, dry_run=False)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("_do_vibe_edit failed")
@@ -456,6 +462,7 @@ def _do_refine_system_prompt(
             from modstore_server.employee_ai_pipeline import refine_system_prompt  # type: ignore
             from modstore_server.script_agent.llm_client import RealLlmClient  # type: ignore
 
+            require_manual_life_capability()
             llm = RealLlmClient(provider, api_key="", model=model)
             result, err = await refine_system_prompt(
                 current_prompt="",
@@ -475,7 +482,7 @@ def _do_refine_system_prompt(
             import concurrent.futures
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(_asyncio.run, _inner())
+                future = pool.submit(contextvars.copy_context().run, _asyncio.run, _inner())
                 return future.result(timeout=120)
         return loop.run_until_complete(_inner())
     except RECOVERABLE_ERRORS as exc:

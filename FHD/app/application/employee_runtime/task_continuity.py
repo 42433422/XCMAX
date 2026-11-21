@@ -89,6 +89,19 @@ def _empty_state() -> dict[str, Any]:
     }
 
 
+def task_admission_origin(context: dict[str, Any], workspace: str | Path) -> dict[str, str]:
+    """Bind an original ledger admission to host execution identity, never request JSON."""
+    return {
+        "protocol": "employee.task-admission.v1",
+        **{
+            key: str(context.get(key) or "")
+            for key in ("run_id", "step_id", "node_id", "idempotency_key", "user_id", "tenant_id")
+        },
+        "mod_id": str(context.get("mod_id") or context.get("active_mod_id") or ""),
+        "workspace_sha256": hashlib.sha256(str(Path(workspace).resolve()).encode()).hexdigest(),
+    }
+
+
 class _SummaryCache:
     def __init__(self) -> None:
         self.conversation_history: list[dict[str, str]] = []
@@ -325,6 +338,8 @@ class TaskContinuityRuntime:
             "created_at": _now(),
             "updated_at": _now(),
         }
+        if isinstance(self._trusted_context.get("_actor_authorization"), dict):
+            task["agent_admission"] = task_admission_origin(self._trusted_context, self.workspace)
         if task["goal"]:
             task["confirmed_facts"]["goal"] = task["goal"]
         if payload.get("fact_params") is not None:

@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from app.application.super_employee.cli import CliExecutionError
 from app.application.super_employee_service import (
     _PARA_TOKEN_CACHE,
     CLAUDE_PROFILE,
@@ -227,13 +228,19 @@ class TestInvokeDirect:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
         svc = _make_svc(tmp_path)
         result = svc.invoke(user_id=1, message="你好", context={"mode": "code"})
-        assert result["dispatch"]["queued"] is True
+        assert result["dispatch"]["queued"] is False
+        assert result["dispatch"]["status"] == "completed"
+        assert result["dispatch"]["fallback"]
 
 
 # ─────────────── invoke — dispatch path ─────────────────────────
 
 
 class TestInvokeDispatch:
+    @pytest.fixture(autouse=True)
+    def _isolate_dispatch_from_local_cli(self, monkeypatch):
+        monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "0")
+
     def test_outbox_mode_writes_file(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
         svc = _make_svc(tmp_path)
@@ -269,7 +276,7 @@ class TestInvokeDispatch:
         assert result["dispatch"]["accepted"] is True
         assert result["dispatch"]["queued"] is False
 
-    def test_webhook_rejected_goes_to_outbox(self, tmp_path, monkeypatch):
+    def test_webhook_server_failure_keeps_unknown_receipt(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "webhook")
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://example.com/hook")
         svc = _make_svc(
@@ -277,9 +284,11 @@ class TestInvokeDispatch:
             http_client_factory=_fake_http_factory(500, {"error": "server error"}),
         )
         result = svc.invoke(user_id=1, message="修复 bug")
-        assert result["dispatch"]["queued"] is True
+        assert result["dispatch"]["queued"] is False
+        assert result["dispatch"]["status"] == "dispatch_unknown"
+        assert result["dispatch"]["safe_to_fallback"] is False
 
-    def test_webhook_exception_goes_to_outbox(self, tmp_path, monkeypatch):
+    def test_webhook_exception_keeps_unknown_receipt(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "webhook")
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://example.com/hook")
         svc = _make_svc(
@@ -287,7 +296,9 @@ class TestInvokeDispatch:
             http_client_factory=_fake_http_factory(exc=RuntimeError("boom")),
         )
         result = svc.invoke(user_id=1, message="修复 bug")
-        assert result["dispatch"]["queued"] is True
+        assert result["dispatch"]["queued"] is False
+        assert result["dispatch"]["status"] == "dispatch_unknown"
+        assert result["dispatch"]["safe_to_fallback"] is False
 
     def test_dispatch_reply_no_webhook_configured(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "webhook")
@@ -809,23 +820,33 @@ class TestCliReplyBody:
         with patch.object(svc, "_cli_path", return_value=""):
             assert svc._cli_reply_body("hi", {}) == ""
 
-    def test_timeout_returns_message(self, tmp_path):
+    def test_timeout_raises_explicit_failure(self, tmp_path):
+
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
         svc = _make_svc(tmp_path, cli_runner=_error_runner(subprocess.TimeoutExpired("cmd", 45)))
-        with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "超过" in result or "CLI" in result
+        with (
+            patch.object(svc, "_cli_path", return_value=str(cli)),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._cli_reply_body("hi", {})
+        assert error.value.receipt["error_code"] == "cli_timeout"
+        assert error.value.receipt["reconciliation_required"] is True
 
-    def test_os_error_returns_failure_message(self, tmp_path):
+    def test_os_error_raises_explicit_failure(self, tmp_path):
+
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
         svc = _make_svc(tmp_path, cli_runner=_error_runner(OSError("no such")))
-        with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "CLI" in result
+        with (
+            patch.object(svc, "_cli_path", return_value=str(cli)),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._cli_reply_body("hi", {})
+        assert error.value.receipt["error_code"] == "cli_launch_failed"
+        assert "no such" not in str(error.value)
 
     def test_reads_output_file_when_exists(self, tmp_path):
         cli = tmp_path / "codex"
@@ -853,7 +874,8 @@ class TestCliReplyBody:
             result = svc._cli_reply_body("hi", {})
         assert "stdout answer" in result
 
-    def test_returncode_nonzero_returns_error_body(self, tmp_path):
+    def test_returncode_nonzero_raises_explicit_failure(self, tmp_path):
+
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
@@ -862,9 +884,14 @@ class TestCliReplyBody:
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="something bad")
 
         svc = _make_svc(tmp_path, cli_runner=fail_runner)
-        with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "CLI" in result or "code" in result
+        with (
+            patch.object(svc, "_cli_path", return_value=str(cli)),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._cli_reply_body("hi", {})
+        assert error.value.receipt["error_code"] == "cli_nonzero_exit"
+        assert error.value.receipt["exit_code"] == 1
+        assert "something bad" not in str(error.value)
 
     def test_claude_profile_reads_stdout(self, tmp_path):
         import json as _json

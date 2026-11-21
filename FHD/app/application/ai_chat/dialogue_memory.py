@@ -107,9 +107,14 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
         data = _read(key, context)
         prior = _user_turn(data, turn_id)
         if prior is not None and not _same_input(prior, text, context):
-            return _payload(
-                "这一轮编号已经对应另一条消息，没有覆盖它，也没有再次执行。", "failed", replay=True
-            )
+            return {
+                **_payload(
+                    "这一轮编号已经对应另一条消息，没有覆盖它，也没有再次执行。",
+                    "failed",
+                    replay=True,
+                ),
+                "error_code": "TURN_INPUT_CONFLICT",
+            }
         if turn_id and _turn_is_live(key, turn_id):
             return _payload("这一轮正在处理，不会重复执行。", "processing", replay=True)
         _close_abandoned(key, data)
@@ -244,6 +249,8 @@ def stored_turn_receipt(
         assistant = _assistant_for(data, turn_id)
         if user is None or assistant is None or not isinstance(assistant.get("payload"), dict):
             return None
+        if assistant.get("scope_key", key) != key:
+            return None
         return {
             "message": user["content"],
             "input_fingerprint": user.get("input_fingerprint"),
@@ -274,10 +281,14 @@ def mark_history_persisted(
 
 def _request_messages(text: str, context: Mapping[str, Any] | None) -> list[dict[str, str]]:
     key = conversation_key(context)
+    if key and (context or {}).get("_chat_evidence_authorized") is True:
+        return [{"role": "system", "content": _SYSTEM}, *conversation_history_messages(context)]
     loaded = _read(key, context) if key else {"turns": []}
     if not key:
         _append_user(loaded, text, "", context)
-    return _model_messages(loaded, str((context or {}).get("turn_id") or ""))
+    return _model_messages(
+        loaded, str((context or {}).get("turn_id") or ""), exclude_current_user=True
+    )
 
 
 def conversation_history_messages(context: Mapping[str, Any] | None) -> list[dict[str, str]]:
@@ -286,6 +297,7 @@ def conversation_history_messages(context: Mapping[str, Any] | None) -> list[dic
     if not key:
         return []
     if (context or {}).get("_chat_evidence_authorized") is True:
+        conversation_summary(context)  # Reject a recalled/deleted SQL history snapshot.
         rows = (context or {}).get("_chat_history_messages")
         if rows is None:
             rows = (context or {}).get("chat_owned_history")
@@ -427,8 +439,6 @@ def enrich_model_messages(
             system_message += "\n\n" + "\n\n".join(evidence_blocks)
     # The current model message may contain images or tool protocol fields; preserve it.
     history = memory[1:]
-    if history and history[-1].get("content") == message.strip():
-        history = history[:-1]
     if not history:
         if not messages:
             return [{"role": "system", "content": system_message}]
@@ -725,13 +735,16 @@ def _input_fingerprint(text: str, context: Mapping[str, Any]) -> str:
         )
     if secret.startswith("process-local:"):
         raise RuntimeError("durable conversation identity key is unavailable")
+    identity_parts: list[Any] = [
+        "xcmax.turn-input.v1",
+        conversation_key(context),
+        str(context.get("turn_id") or "").strip()[:160],
+        text,
+    ]
+    if context.get("_execution_identity"):
+        identity_parts.append(["execution", str(context["_execution_identity"])])
     identity = json.dumps(
-        [
-            "xcmax.turn-input.v1",
-            conversation_key(context),
-            str(context.get("turn_id") or "").strip()[:160],
-            text,
-        ],
+        identity_parts,
         ensure_ascii=False,
     ).encode("utf-8")
     return hmac.new(secret.encode("utf-8"), identity, hashlib.sha256).hexdigest()
@@ -775,7 +788,7 @@ def _read(key: str, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
         snapshot = task_conversation_store.memory_snapshot(**scope, include_messages=True)
         if snapshot is None or snapshot["revision"] != revision:
             raise ConversationRevisionError("conversation changed while restoring history")
-        data = _restore_snapshot(snapshot)
+        data = _restore_snapshot(snapshot, key=key)
     turns = data.get("turns") or []
     receipts = data.get("receipts") or {}
     return {
@@ -790,7 +803,7 @@ def _read(key: str, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+def _restore_snapshot(snapshot: Mapping[str, Any], *, key: str) -> dict[str, Any]:
     from datetime import datetime
 
     turns: list[dict[str, Any]] = []
@@ -806,6 +819,13 @@ def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         harness = metadata.get("business_harness") or {}
         summary = summary if isinstance(summary, dict) else {}
         harness = harness if isinstance(harness, dict) else {}
+        scope_key = (
+            str(harness.get("conversation_key") or "")
+            if harness.get("recall_bound") is True
+            else ""
+        )
+        if scope_key and scope_key != key:
+            continue
         turn_id = str(harness.get("turn_id") or summary.get("turn_id") or "")
         role = "user" if row["role"] == "user" else "assistant"
         ui = metadata.get("ui")
@@ -824,6 +844,8 @@ def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             )
         )
         status = str(summary.get("status") or fallback)
+        if turn_id and not scope_key:
+            status = "unknown"
         content = _SECRET_TEXT.sub(
             lambda match: f"{match.group(1) or match.group(3)}[已隐藏]", str(row["content"] or "")
         )
@@ -833,6 +855,7 @@ def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             "input_fingerprint": metadata.get("input_fingerprint") if role == "user" else None,
             "turn_id": turn_id,
             "status": status,
+            "scope_key": scope_key,
             "at": datetime.fromisoformat(row["timestamp"]).timestamp()
             if row["timestamp"]
             else time.time(),
@@ -841,6 +864,17 @@ def _restore_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             payload = _payload(content, status)
             payload["execution_state"] = status
             payload["run_id"] = harness.get("run_id") or summary.get("run_id")
+            if scope_key and summary.get("execution_identity") and summary.get("execution_tool"):
+                payload["execution_identity"] = summary["execution_identity"]
+                payload["execution_tool"] = summary["execution_tool"]
+                dispatch = summary.get("dispatch")
+                if isinstance(dispatch, dict):
+                    payload["dispatch"] = {
+                        key: str(dispatch[key])
+                        for key in ("request_id", "task_id", "status")
+                        if dispatch.get(key) is not None
+                    }
+                    payload["task_id"] = dispatch.get("task_id")
             item["payload"] = payload
             prior = _user_turn({"turns": turns, "receipts": receipts}, turn_id)
             if turn_id:

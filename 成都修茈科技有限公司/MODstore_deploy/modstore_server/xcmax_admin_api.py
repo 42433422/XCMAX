@@ -397,6 +397,11 @@ async def xcmax_admin_loop_memory_evict(
             note=str(body.get("note") or ""),
             admin_user_id=getattr(admin_user, "id", None),
         )
+        if result.get("ok") is not True:
+            return JSONResponse(
+                {"success": False, "message": "循环记忆当前不可修改，请稍后重试", "data": result},
+                status_code=409,
+            )
         return {"success": True, "data": result}
     except RECOVERABLE_ERRORS:
         logger.exception("xcmax loop memory evict failed")

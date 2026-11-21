@@ -4,14 +4,18 @@ name: Performance Smoke Test
 
 on:
   schedule:
-    - cron: "0 17 * * *"
+    # 每周日 15:00 UTC（23:00 北京时间）；PR 触发保留
+    - cron: "0 15 * * 0"
   workflow_dispatch:
   pull_request:
     paths:
       - "FHD/scripts/loadtest/**"
       - "FHD/frontend/e2e/sla-perf.spec.ts"
+      - "FHD/frontend/e2e/helpers.ts"
       - "FHD/frontend/e2e/performance-budget.ts"
       - "FHD/frontend/playwright.config.ts"
+      - "FHD/frontend/src/components/chat/ChatMessageList.vue"
+      - "FHD/frontend/src/components/chat/ChatMessageList.teleport.test.ts"
       - "FHD/frontend/tests/performance-budget.test.ts"
       - "FHD/tests/test_ci/test_performance_evidence.py"
       - "FHD/tests/test_sla_health_probe.py"

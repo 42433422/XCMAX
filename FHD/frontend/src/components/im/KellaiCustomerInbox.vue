@@ -1,10 +1,10 @@
 <template>
   <section class="kellai-inbox" aria-labelledby="kellai-inbox-title">
-    <header class="kellai-inbox__head">
+    <header v-if="!embedded" class="kellai-inbox__head">
       <span class="kellai-inbox__avatar" aria-hidden="true">客</span>
       <div class="kellai-inbox__heading">
         <h2 id="kellai-inbox-title">客户消息 · 客来来</h2>
-        <p>客户档案和会话只在本机读取；当前阶段不会自动发送消息。</p>
+        <p>客户档案和会话从本机客来来读取；发送需单独授权并人工确认。</p>
       </div>
       <span :class="['kellai-inbox__status', `is-${binding.state}`]">{{ statusLabel }}</span>
       <button type="button" class="kellai-inbox__button is-quiet" :disabled="busy" @click="refreshAll">
@@ -21,14 +21,14 @@
           授权只包含客户档案和会话的只读范围。XCMAX 不接收企微服务商密钥，也不会把客户原始消息上传到平台管理端。
         </p>
         <ul v-if="binding.available_scopes?.length">
-          <li v-for="scope in binding.available_scopes" :key="scope.id">
+          <li v-for="scope in binding.available_scopes.filter(item => KELLAI_READ_SCOPES.includes(item.id))" :key="scope.id">
             <strong>{{ scope.label }}</strong>
             <span>{{ scope.description }}</span>
           </li>
         </ul>
       </div>
       <div class="kellai-inbox__connect-actions">
-        <button type="button" class="kellai-inbox__button is-primary" :disabled="busy" @click="startBinding">
+        <button type="button" class="kellai-inbox__button is-primary" :disabled="busy" @click="startBinding()">
           {{ busy ? '正在处理…' : binding.state === 'pending' ? '重新打开授权页' : '绑定客来来' }}
         </button>
         <button type="button" class="kellai-inbox__button" :disabled="busy" @click="handleOpenKellai">
@@ -41,7 +41,7 @@
       <div class="kellai-inbox__summary">
         <span>{{ dataStatus?.customer_count || customers.length }} 位客户</span>
         <span>{{ dataStatus?.unread_message_count || 0 }} 条未读</span>
-        <span>{{ binding.connection?.authorized_scopes?.length || 0 }} 项只读权限</span>
+        <span>{{ binding.connection?.authorized_scopes?.length || 0 }} 项授权权限</span>
         <span v-if="binding.connection?.authorized_by?.display_name">
           由 {{ binding.connection.authorized_by.display_name }} 授权
         </span>
@@ -85,7 +85,7 @@
                 </template>
               </p>
             </div>
-            <span class="kellai-inbox__readonly">只读</span>
+            <span class="kellai-inbox__readonly">{{ canSend ? '人工确认发送' : '只读' }}</span>
           </header>
 
           <div v-if="messagesLoading" class="kellai-inbox__empty is-center">正在读取会话…</div>
@@ -123,6 +123,8 @@
           <div v-else class="kellai-inbox__empty is-center">
             {{ activeCustomer ? '该客户暂无可读取的会话' : '从左侧选择客户查看会话' }}
           </div>
+
+          <KellaiMessageComposer v-if="activeCustomer && canSend" />
 
           <section v-if="activeCustomer" class="kellai-inbox__copilot" aria-label="客户沟通 AI 副驾驶">
             <header class="kellai-inbox__copilot-head">
@@ -242,17 +244,10 @@
 </template>
 
 <script setup lang="ts">
-/**
- * Facade：客来来客户收件箱装配入口（实现拆分至 kellaiInbox/ 子模块与独立 CSS，行为与拆分前一致）。
- */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import kellaiBindingApi, {
-  type KellaiBindingStatus,
-  type KellaiConversationMessage,
-  type KellaiCustomer,
-  type KellaiDataStatus,
-} from '@/api/kellaiBinding'
-import { useKellaiCopilot } from './kellaiInbox/useKellaiCopilot'
+import { onBeforeUnmount, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
+import { KELLAI_READ_SCOPES, useKellaiStore } from '@/stores/kellai'
+import KellaiMessageComposer from './kellaiInbox/KellaiMessageComposer.vue'
 import {
   avatarText,
   channelLabel,
@@ -267,179 +262,19 @@ import {
   taskStatusLabel,
 } from './kellaiInbox/kellaiInboxShared'
 
-const binding = ref<KellaiBindingStatus>({ state: 'not_connected' })
-const dataStatus = ref<KellaiDataStatus | null>(null)
-const customers = ref<KellaiCustomer[]>([])
-const messages = ref<KellaiConversationMessage[]>([])
-const activeCustomerId = ref<number | null>(null)
-const busy = ref(false)
-const customersLoading = ref(false)
-const messagesLoading = ref(false)
-const error = ref('')
-let statusTimer: ReturnType<typeof setInterval> | null = null
-
+defineProps<{ embedded?: boolean }>()
+const store = useKellaiStore()
 const {
-  copilotDraft,
-  followUpTasks,
-  followUpMetrics,
-  copilotBusy,
-  taskBusy,
-  copiedDraft,
-  currentDraftTask,
-  applyConversationData,
-  resetConversationState,
-  createFollowUpTask,
-  decideFollowUpTask,
-  generateCopilotDraft,
-  decideCopilotDraft,
-  copyApprovedDraft,
-} = useKellaiCopilot({ activeCustomerId, messages, error })
-
-const statusLabel = computed(() => {
-  if (binding.value.state === 'connected') return '已连接'
-  if (binding.value.state === 'pending') return '等待授权'
-  if (binding.value.state === 'offline') return '客来来未运行'
-  return '未连接'
-})
-
-const activeCustomer = computed(() =>
-  customers.value.find((customer) => customer.customer_id === activeCustomerId.value) || null,
-)
-
-const orderedMessages = computed(() =>
-  [...messages.value].sort((left, right) =>
-    String(left.created_at || '').localeCompare(String(right.created_at || '')),
-  ),
-)
-
-async function openKellai(): Promise<void> {
-  const desktop = (window as Window & {
-    xcagiDesktop?: { openKellaiDesktop?: () => Promise<{ ok?: boolean; reason?: string }> }
-  }).xcagiDesktop
-  if (desktop?.openKellaiDesktop) {
-    const result = await desktop.openKellaiDesktop()
-    if (!result?.ok) throw new Error(result?.reason || '无法打开客来来桌面端')
-    return
-  }
-  const opened = window.open('kellai://settings?tab=xcmax', '_blank', 'noopener,noreferrer')
-  if (!opened) throw new Error('请使用 XCMAX 桌面端打开客来来')
-}
-
-async function handleOpenKellai(): Promise<void> {
-  error.value = ''
-  try {
-    await openKellai()
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '无法打开客来来桌面端'
-  }
-}
-
-async function loadCustomers(): Promise<void> {
-  customersLoading.value = true
-  try {
-    customers.value = await kellaiBindingApi.customers(50)
-    const stillExists = customers.value.some((customer) => customer.customer_id === activeCustomerId.value)
-    if (!stillExists) activeCustomerId.value = customers.value[0]?.customer_id || null
-    if (activeCustomerId.value) await loadMessages(activeCustomerId.value)
-    else {
-      messages.value = []
-      resetConversationState()
-    }
-  } finally {
-    customersLoading.value = false
-  }
-}
-
-async function loadMessages(customerId: number): Promise<void> {
-  messagesLoading.value = true
-  try {
-    const [nextMessages, nextDraft, nextTaskOverview] = await Promise.all([
-      kellaiBindingApi.conversations(customerId, 100),
-      kellaiBindingApi.latestDraft(customerId),
-      kellaiBindingApi.followUpOverview(customerId),
-    ])
-    messages.value = nextMessages
-    applyConversationData(nextDraft, nextTaskOverview.tasks || [], nextTaskOverview.metrics)
-  } finally {
-    messagesLoading.value = false
-  }
-}
-
-async function refreshAll(): Promise<void> {
-  busy.value = true
-  error.value = ''
-  try {
-    binding.value = await kellaiBindingApi.status()
-    if (binding.value.state === 'connected') {
-      const [nextStatus] = await Promise.all([
-        kellaiBindingApi.dataStatus(),
-        loadCustomers(),
-      ])
-      dataStatus.value = nextStatus
-    } else {
-      dataStatus.value = null
-      customers.value = []
-      messages.value = []
-      resetConversationState()
-      activeCustomerId.value = null
-    }
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '无法读取客来来客户会话'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function selectCustomer(customer: KellaiCustomer): Promise<void> {
-  if (activeCustomerId.value === customer.customer_id && messages.value.length) return
-  activeCustomerId.value = customer.customer_id
-  error.value = ''
-  try {
-    await loadMessages(customer.customer_id)
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '无法读取客户会话'
-  }
-}
-
-async function startBinding(): Promise<void> {
-  busy.value = true
-  error.value = ''
-  try {
-    await kellaiBindingApi.start()
-    await openKellai()
-    binding.value = await kellaiBindingApi.status()
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '无法发起客来来授权'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function disconnect(): Promise<void> {
-  if (!window.confirm('解除后，XCMAX 将立即停止读取客来来，并清除本地生成的客户摘要与跟进任务。')) return
-  busy.value = true
-  error.value = ''
-  try {
-    await kellaiBindingApi.disconnect()
-    await refreshAll()
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '解除绑定失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-onMounted(() => {
-  void refreshAll()
-  statusTimer = setInterval(() => {
-    if (binding.value.state === 'pending') void refreshAll()
-  }, 4000)
-})
-
-onBeforeUnmount(() => {
-  if (statusTimer) clearInterval(statusTimer)
-  statusTimer = null
-})
+  binding, dataStatus, customers, activeCustomerId, busy, customersLoading, messagesLoading,
+  error, copilotDraft, followUpTasks, followUpMetrics, copilotBusy, taskBusy, copiedDraft,
+  currentDraftTask, statusLabel, activeCustomer, orderedMessages, canSend,
+} = storeToRefs(store)
+const {
+  refreshAll, selectCustomer, startBinding, disconnect, handleOpenKellai,
+  createFollowUpTask, decideFollowUpTask, generateCopilotDraft, decideCopilotDraft, copyApprovedDraft,
+} = store
+onMounted(store.attach)
+onBeforeUnmount(store.detach)
 </script>
 
 <style scoped src="./KellaiCustomerInbox.css"></style>

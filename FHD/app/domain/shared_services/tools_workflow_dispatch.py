@@ -79,6 +79,12 @@ def _registered_router_conversation_history(action, params, runtime_context, pro
     return read_conversation_history(action, params, runtime_context)
 
 
+def _registered_router_kellai(action, params, runtime_context, profile, user_message):
+    from app.application.tools.kellai import execute_kellai
+
+    return execute_kellai(action, params, runtime_context)
+
+
 class _WorkflowRouterMap(dict):
     _hidden_keys = {"employee", "business_db"}
 
@@ -91,7 +97,7 @@ class _WorkflowRouterMap(dict):
             from app.application.tools.mcp.registry import call_mcp_tool
 
             return lambda action, params, runtime_context, profile, user_message: call_mcp_tool(
-                str(key), action, params
+                str(key), action, params, runtime_context=runtime_context
             )
         return super().get(key, default)
 
@@ -128,6 +134,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "dataset_rag": _registered_router_dataset_rag,
         "memory_v2": _registered_router_memory_v2,
         "conversation_history": _registered_router_conversation_history,
+        "kellai": _registered_router_kellai,
         "excel_analysis": _registered_router_excel_analysis,
         "import_excel_to_database": _registered_router_import_excel_to_database,
         "elt_import": _registered_router_elt_import,

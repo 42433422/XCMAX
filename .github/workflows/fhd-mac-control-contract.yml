@@ -75,7 +75,7 @@ jobs:
         env:
           SECRET_KEY: isolated-elt-output-contract-not-production
           DATABASE_URL: sqlite://
-      - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs scripts/autonomy/runtime_tools/pushed_branch_pr.test.mjs scripts/autonomy/runtime_tools/codex_model_gateway.test.mjs
+      - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs scripts/autonomy/runtime_tools/pushed_branch_pr.test.mjs scripts/autonomy/runtime_tools/codex_model_gateway.test.mjs scripts/autonomy/runtime_tools/cli_output_stream.test.mjs scripts/autonomy/runtime_tools/para_codex_execution.test.mjs
       - name: Verify OpenCode host admission and native isolation
         if: matrix.os != 'windows-2022'
         env:
@@ -97,7 +97,17 @@ jobs:
             npm install --prefix "$sandbox_root" --no-audit --no-fund "@anthropic-ai/sandbox-runtime@0.0.83"
           fi
           PARA_TEST_SANDBOX_ENTRY="$sandbox_root/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" \
-            node --test scripts/autonomy/runtime_tools/opencode_agent.test.mjs scripts/autonomy/runtime_tools/report_only_target_branch.test.mjs
+            node --test scripts/autonomy/runtime_tools/opencode_agent.test.mjs scripts/autonomy/runtime_tools/opencode_sandbox_controller.test.mjs scripts/autonomy/runtime_tools/report_only_target_branch.test.mjs
+      - name: Verify private training with the real CLI and native sandbox
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          mkdir -p "$RUNNER_TEMP/promptfoo-contract"
+          cp scripts/autonomy/runtime_tools/capability_trainer_deps/{package.json,package-lock.json} "$RUNNER_TEMP/promptfoo-contract/"
+          bash scripts/ci/npm_ci_with_network_retry.sh --prefix "$RUNNER_TEMP/promptfoo-contract" --ignore-scripts --no-audit --no-fund
+          PROMPTFOO_CLI="$RUNNER_TEMP/promptfoo-contract/node_modules/.bin/promptfoo" \
+          PROMPTFOO_SANDBOX_ENTRY="$RUNNER_TEMP/para-worker/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" \
+          PROMPTFOO_PYTHON="$(command -v python)" PROMPTFOO_TEST_NATIVE_SANDBOX=1 \
+            node --test scripts/autonomy/runtime_tools/promptfoo_sandbox.test.mjs
       - uses: actions/checkout@v4
         if: matrix.os == 'ubuntu-26.04'
         with:

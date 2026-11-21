@@ -97,6 +97,81 @@ def artifact(value=None, entries=None):
     return data, "sha256:" + hashlib.sha256(data).hexdigest()
 
 
+def isolation_artifact(overrides=None):
+    value = {
+        "request_id": REQUEST,
+        "run_id": "123",
+        "status": "awaiting_publication",
+        "finished": False,
+        "execution_isolation": publisher.HEADER_ONLY_PLATFORM_PROFILE,
+        "source_sha": "b" * 40,
+        "candidate_sha": "c" * 40,
+        **(overrides or {}),
+    }
+    data, digest = artifact(entries=[("execution.json", json.dumps(value))])
+    return data, {
+        "id": 789,
+        "name": f"para-execution-{REQUEST}",
+        "digest": digest,
+        "size_in_bytes": len(data),
+        "workflow_run": {"id": 123},
+        "expired": False,
+    }
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("source_sha", "d" * 40),
+        ("candidate_sha", "d" * 40),
+        ("run_id", "124"),
+        ("request_id", "22222222-2222-4333-8444-555555555555"),
+        ("finished", True),
+        ("status", "completed"),
+        ("execution_isolation", "srt-0.0.83-masked-platform-v1"),
+    ],
+)
+def test_publisher_rejects_an_isolation_receipt_for_another_identity(field, value):
+    env = {"GITHUB_RUN_ID": "123", "GITHUB_SHA": "b" * 40, "PARA_GITHUB_REQUEST_ID": REQUEST}
+    state = {
+        "model_allocation": {
+            "status": "admitted",
+            "execution_isolation": publisher.HEADER_ONLY_PLATFORM_PROFILE,
+        }
+    }
+    data, metadata = isolation_artifact({field: value})
+    with pytest.raises(ValueError, match="receipt_mismatch"):
+        publisher.validate_feedback_isolation(
+            {"artifacts": [metadata]}, state, manifest(), env, lambda _id: data
+        )
+
+
+def test_publisher_requires_immutable_nonexpired_unique_execution_artifact():
+    env = {"GITHUB_RUN_ID": "123", "GITHUB_SHA": "b" * 40, "PARA_GITHUB_REQUEST_ID": REQUEST}
+    state = {
+        "model_allocation": {
+            "status": "admitted",
+            "execution_isolation": publisher.HEADER_ONLY_PLATFORM_PROFILE,
+        }
+    }
+    data, metadata = isolation_artifact()
+    for rows in (
+        [],
+        [metadata, metadata],
+        [{**metadata, "expired": True}],
+        [{**metadata, "workflow_run": {"id": 124}}],
+        [{**metadata, "digest": "sha256:" + "0" * 64}],
+        [{**metadata, "size_in_bytes": 65537}],
+    ):
+        with pytest.raises(ValueError):
+            publisher.validate_feedback_isolation(
+                {"artifacts": rows}, state, manifest(), env, lambda _id: data
+            )
+    publisher.validate_feedback_isolation(
+        {"artifacts": [metadata]}, state, manifest(), env, lambda _id: data
+    )
+
+
 def test_original_single_fix_receipt_is_required_without_advancing_team(monkeypatch):
     from modstore_server import customer_ticket_github
 
@@ -529,14 +604,31 @@ def test_staged_receipt_waits_for_exact_remote_branch_and_pr(monkeypatch):
         verified_code_identity(snapshot(), workspace=WORKSPACE, attempt_id=ATTEMPT)
 
 
-@pytest.mark.parametrize("kind", [None, "original_pr_repair", "customer_feedback_repair"])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        None,
+        "original_pr_repair",
+        "customer_feedback_repair",
+        "training_candidate_repair",
+        "life_reflection_repair",
+        "isolated_customer_feedback_repair",
+        "isolated_training_candidate_repair",
+        "isolated_life_reflection_repair",
+    ],
+)
 def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     tmp_path,
     monkeypatch,
     kind,
 ):
     original_pr = kind == "original_pr_repair"
-    customer_repair = kind == "customer_feedback_repair"
+    customer_repair = kind in {
+        "customer_feedback_repair",
+        "training_candidate_repair",
+        "life_reflection_repair",
+    }
+    isolated = bool(kind and kind.startswith("isolated_"))
     value = manifest()
     if original_pr:
         from types import SimpleNamespace
@@ -556,7 +648,13 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     data, digest = artifact(value)
     state = {**WORKSPACE, "publication_candidate": value, "finished": False}
     if kind:
-        state["kind"] = kind
+        state["kind"] = kind.removeprefix("isolated_")
+    if isolated:
+        state["model_allocation"] = {
+            "status": "admitted",
+            "execution_isolation": publisher.HEADER_ONLY_PLATFORM_PROFILE,
+        }
+    execution_data, execution_metadata = isolation_artifact()
     if original_pr:
         state.update(kind="original_pr_repair", source_sha=value["base_sha"], pull_request=42)
     run = {
@@ -620,12 +718,14 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
         if args[:3] == ["gh", "pr", "view"]:
             return json.dumps(pull[0])
         if args[:2] == ["gh", "api"]:
+            if args[2].endswith("/789/zip"):
+                return execution_data
             if args[2].endswith("/zip"):
                 return data
             if "/artifacts?" in args[2]:
                 return json.dumps(
                     {
-                        "total_count": 1,
+                        "total_count": 2 if isolated else 1,
                         "artifacts": [
                             {
                                 "id": 456,
@@ -635,7 +735,8 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
                                 "workflow_run": {"id": 123},
                                 "expired": False,
                             }
-                        ],
+                        ]
+                        + ([execution_metadata] if isolated else []),
                     }
                 )
             return json.dumps(run)
@@ -674,8 +775,8 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
         "awaiting_original_pr_update" if original_pr else "published_for_review"
     )
     assert first["pull_request_url"] == "https://github.com/owner/repo/pull/42"
-    assert sum(c[0] == "push" for c in calls) == (0 if kind else 1)
-    assert sum(c[0] == "node" for c in calls) == (0 if kind else 1)
+    assert sum(c[0] == "push" for c in calls) == (0 if original_pr or customer_repair else 1)
+    assert sum(c[0] == "node" for c in calls) == (0 if original_pr or customer_repair else 1)
     assert not any("--force" in c or "merge" in c for c in calls)
     with pytest.raises(ValueError, match="redirect_rejected"):
         publisher.NoRedirect().redirect_request(None, None, None, None, None, None)

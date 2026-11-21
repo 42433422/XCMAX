@@ -37,7 +37,10 @@ from app.application.tools.workflow_tools.contracts import (
     ToolCall,
     ToolHandler,
 )
-from app.application.tools.workflow_tools.dispatch import WorkflowToolDispatcher, parse_arguments
+from app.application.tools.workflow_tools.dispatch import (
+    WorkflowToolDispatcher,
+    parse_arguments,
+)
 from app.application.tools.workflow_tools.documents import generate_office_document
 from app.application.tools.workflow_tools.excel_analysis import (
     ExcelAnalysis,
@@ -72,7 +75,9 @@ from app.application.tools.workflow_tools.import_mapping import (
     infer_product_field_mapping as _infer_product_field_mapping,
 )
 from app.application.tools.workflow_tools.registry import compose_registry
-from app.infrastructure.auth.db_token import configured_db_write_token as configured_db_write_token
+from app.infrastructure.auth.db_token import (
+    configured_db_write_token as configured_db_write_token,
+)
 from app.infrastructure.excel.schema_service import ExcelSchemaUnderstandingService
 from app.infrastructure.excel.text_to_pandas import _safe_exec_pandas
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -116,7 +121,9 @@ def invalidate_workflow_tool_registry() -> None:
     _WORKFLOW_REG_VER += 1
     _workflow_tool_registry_cache = None
     try:
-        from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
+        from app.application.agent_orchestrator.tool_spec import (
+            invalidate_tool_specs_cache,
+        )
 
         invalidate_tool_specs_cache()
     except RECOVERABLE_ERRORS:
@@ -195,7 +202,8 @@ def _import_products_preview_or_execute(
         _looks_like_contract_or_footer_line,
     ).map(df, columns, unit_name, price_column_hint)
     return json.dumps(
-        _import_executor().products(rows, unit_name, confirm, read_meta), ensure_ascii=False
+        _import_executor().products(rows, unit_name, confirm, read_meta),
+        ensure_ascii=False,
     )
 
 
@@ -206,7 +214,8 @@ def _import_customers_preview_or_execute(
     row_count: int,
 ) -> str:
     return json.dumps(
-        _import_executor().customers(customer_records(df, columns), confirm), ensure_ascii=False
+        _import_executor().customers(customer_records(df, columns), confirm),
+        ensure_ascii=False,
     )
 
 
@@ -231,7 +240,9 @@ def _handle_import_excel_to_database(
     importer = ExcelImport(
         _excel_io(),
         ImportHints(
-            adapters.customer_hint, adapters.inline_customer_hints, adapters.detected_header
+            adapters.customer_hint,
+            adapters.inline_customer_hints,
+            adapters.detected_header,
         ),
         ImportHandlers(
             _import_products_preview_or_execute,
@@ -253,13 +264,24 @@ def _json_tool(
         except RECOVERABLE_ERRORS:
             if failure is None:
                 raise
-            return json.dumps(failure, ensure_ascii=False)
+            return json.dumps(
+                {
+                    **failure,
+                    "success": False,
+                    "outcome": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
+                },
+                ensure_ascii=False,
+            )
 
     return execute
 
 
 def _execute_registered_handoff(call: ToolCall) -> Payload:
-    from app.application.employee_runtime.handoff_commit import commit_registered_handoff
+    from app.application.employee_runtime.handoff_commit import (
+        commit_registered_handoff,
+    )
 
     return commit_registered_handoff(call.args, call.workspace_root, call.runtime_context)
 
@@ -277,8 +299,18 @@ def execute_workflow_tool(
 
         registered = execute_if_registered(name, args, runtime_context)
     except RECOVERABLE_ERRORS:
-        logger.debug("agent tool lifecycle dispatch skipped", exc_info=True)
-        registered = None
+        logger.exception("agent tool receipt unavailable; dispatch stopped")
+        return json.dumps(
+            {
+                "success": False,
+                "error": "tool_receipt_unavailable",
+                "execution_state": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
+                "tool": name,
+            },
+            ensure_ascii=False,
+        )
     if registered is not None:
         return registered
     workbooks = WorkbookOperations(
@@ -305,7 +337,11 @@ def execute_workflow_tool(
         ),
         "excel_prophet": _json_tool(
             lambda call: workbooks.forecast(call.args, call.workspace_root),
-            failure={"action": "forecast", "future_forecast": [], "error": "forecast_failed"},
+            failure={
+                "action": "forecast",
+                "future_forecast": [],
+                "error": "forecast_failed",
+            },
         ),
         "excel_schema_understand": _json_tool(
             lambda call: workbooks.schema(call.args, call.workspace_root),
@@ -320,7 +356,9 @@ def execute_workflow_tool(
             lambda call: workbooks.vector_index(call.args, call.workspace_root)
         ),
         "import_excel_to_database": lambda call: _handle_import_excel_to_database(
-            call.args, workspace_root=call.workspace_root, db_write_token=call.db_write_token
+            call.args,
+            workspace_root=call.workspace_root,
+            db_write_token=call.db_write_token,
         ),
         "generate_office_document": _json_tool(
             lambda call: generate_office_document(
@@ -336,7 +374,9 @@ def execute_workflow_tool(
     dispatcher = WorkflowToolDispatcher(
         ERP_CAPABILITY_TOOL_NAME,
         lambda call: execute_registered_capability(
-            call.args, workspace_root=call.workspace_root, runtime_context=call.runtime_context
+            call.args,
+            workspace_root=call.workspace_root,
+            runtime_context=call.runtime_context,
         ),
         adapters.employee,
         adapters.native,
