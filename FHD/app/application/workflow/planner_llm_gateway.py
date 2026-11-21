@@ -103,9 +103,12 @@ def _meter_planner_completion(payload: dict[str, Any] | None, *, model: str) -> 
         logger.debug("planner LLM metering skipped", exc_info=True)
 
 
-async def _prepare_model_messages(provider, context, messages, max_tokens, extra):
+async def _prepare_model_messages(
+    provider, context, messages, max_tokens, extra, *, model_limits=None
+):
     """One final budget boundary for sync, stream, repairs and native tools."""
     from app.application.agent_orchestrator.context_window_manager import (
+        ContextWindowExceeded,
         estimate_messages_tokens,
         get_context_window_manager,
         summary_fingerprint,
@@ -115,7 +118,7 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
         conversation_summary,
         save_conversation_summary,
     )
-    from app.infrastructure.llm.model_context_windows import model_for_budget
+    from app.infrastructure.llm.model_context_windows import resolve_model_limits
 
     history, state = [], None
     outbound = list(messages)
@@ -160,7 +163,11 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
                 **outbound[-1],
                 "content": json.dumps(prompt, ensure_ascii=False, separators=(",", ":")),
             }
-    schemas = {key: extra[key] for key in ("tools", "functions", "response_format") if key in extra}
+    schemas = {
+        key: extra[key]
+        for key in ("tools", "functions", "response_format", "tool_choice", "function_call")
+        if key in extra
+    }
     schema_tokens = (
         estimate_messages_tokens(
             [{"role": "system", "content": json.dumps(schemas, ensure_ascii=False)}]
@@ -168,14 +175,40 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
         if schemas
         else 0
     )
-    result = await get_context_window_manager().compress(
-        outbound,
-        provider=provider,
-        context=state,
-        user_id=str((context or {}).get("local_user_id") or ""),
-        reserved_tokens=max_tokens + schema_tokens,
-        model=await model_for_budget(provider, extra.get("model"), extra.get("provider")),
+    limits = model_limits or await resolve_model_limits(
+        provider, extra.get("model"), extra.get("provider"), messages=messages
     )
+    diagnostics = {
+        "model": limits.model,
+        "capability_source": limits.source,
+        "context_window": limits.context_window,
+        "max_input_tokens": limits.max_input_tokens,
+        "max_output_tokens": limits.max_output_tokens,
+        "requested_output_tokens": max_tokens,
+        "external_schema_tokens": schema_tokens,
+        "message_tokens": estimate_messages_tokens(outbound),
+    }
+    if context is not None:
+        context["_context_budget"] = diagnostics
+    try:
+        result = await get_context_window_manager().compress(
+            outbound,
+            provider=provider,
+            context=state,
+            user_id=str((context or {}).get("local_user_id") or ""),
+            model=limits.model,
+            model_limits=limits,
+            output_tokens=max_tokens,
+            external_tokens=schema_tokens,
+        )
+    except ContextWindowExceeded as exc:
+        diagnostics.update(exc.diagnostics)
+        diagnostics["reason"] = exc.reason
+        logger.warning("planner context budget rejected: %s", diagnostics)
+        raise
+    diagnostics["post_message_tokens"] = result.post_estimated_tokens
+    diagnostics["compression_strategy"] = result.strategy
+    limits.assert_current()
     if context is not None and result.summary_llm_call is not None:
         save_conversation_summary(
             context, history, result.summary_covered_count, result.summary_text
@@ -203,13 +236,23 @@ def stream_planner_completion(
     output_limit = max_tokens or planner_max_tokens()
 
     async def generate():
+        from app.infrastructure.llm.model_context_windows import resolve_model_limits
+
         with model_rate_limit_scope(context):
-            outbound = await _prepare_model_messages(
-                provider, context, messages, output_limit, extra
+            limits = await resolve_model_limits(
+                provider, extra.get("model"), extra.get("provider"), messages=messages
             )
+            outbound = await _prepare_model_messages(
+                provider, context, messages, output_limit, extra, model_limits=limits
+            )
+            limits.assert_current()
             async for chunk in stream(
-                messages=outbound, temperature=temperature, max_tokens=output_limit, **extra
+                messages=outbound,
+                temperature=temperature,
+                max_tokens=output_limit,
+                **{**extra, **limits.request_options},
             ):
+                limits.assert_current()
                 yield chunk
 
     return generate()
@@ -234,20 +277,29 @@ def request_planner_completion(
         if provider is None:
             return None
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
+        from app.infrastructure.llm.model_context_windows import resolve_model_limits
 
         with model_rate_limit_scope(context):
             output_limit = max_tokens or planner_max_tokens()
-            outbound = _run_async(
-                _prepare_model_messages(provider, context, messages, output_limit, extra)
-            )
-            result = _run_async(
-                provider.chat_completion(
+
+            async def complete():
+                limits = await resolve_model_limits(
+                    provider, extra.get("model"), extra.get("provider"), messages=messages
+                )
+                outbound = await _prepare_model_messages(
+                    provider, context, messages, output_limit, extra, model_limits=limits
+                )
+                limits.assert_current()
+                result = await provider.chat_completion(
                     messages=outbound,
                     temperature=temperature,
                     max_tokens=output_limit,
-                    **extra,
+                    **{**extra, **limits.request_options},
                 )
-            )
+                limits.assert_current()
+                return result
+
+            result = _run_async(complete())
     except RECOVERABLE_ERRORS as exc:
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
 

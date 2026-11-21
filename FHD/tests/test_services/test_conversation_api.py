@@ -549,7 +549,7 @@ class TestContextWindowManagerIntegration:
         assert trace["pre_compression_message_count"] == 1
         assert trace["post_compression_message_count"] == 1
         assert trace["tokens_saved"] == 0
-        assert trace["context_window_manager_version"] == "2.0.0"
+        assert trace["context_window_manager_version"] == "2.1.0"
         assert trace["compression_latency_ms"] == 0.5
 
     @pytest.mark.asyncio
