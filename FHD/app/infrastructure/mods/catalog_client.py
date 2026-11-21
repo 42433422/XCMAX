@@ -94,10 +94,7 @@ async def _http_get_json(
             if attempt == max_attempts:
                 raise HTTPException(status_code=502, detail=f"远端 Catalog 不可达：{exc}") from exc
             logger.warning(
-                "catalog request failed (attempt %s/%s): %s; retrying",
-                attempt,
-                max_attempts,
-                exc,
+                "catalog request failed (attempt %s/%s): %s; retrying", attempt, max_attempts, exc
             )
             await asyncio.sleep(0.8 * attempt)
             continue
@@ -140,27 +137,20 @@ def _market_item_to_package_row(item: dict[str, Any]) -> dict[str, Any] | None:
         return None
     ver = str(item.get("version") or "1.0.0").strip() or "1.0.0"
     price = float(item.get("price") or 0)
-    artifact = str(item.get("artifact") or "employee_pack").strip().lower()
-    catalog_id = item.get("id")
-    if not isinstance(catalog_id, int) or isinstance(catalog_id, bool) or catalog_id <= 0:
-        catalog_id = None
     return {
         "id": pid,
         "pkg_id": pid,
-        "catalog_id": catalog_id,
         "name": item.get("name") or pid,
         "version": ver,
         "description": str(item.get("description") or "").strip(),
-        "artifact": artifact,
+        "artifact": item.get("artifact") or "employee_pack",
         "author": item.get("author") or item.get("publisher"),
         "download_url": (
-            ""
-            if artifact == "workflow_template"
-            else (
-                f"/api/market/catalog/{catalog_id}/download"
-                if catalog_id is not None
-                else f"/v1/packages/{pid}/{ver}/download"
-            )
+            f"/api/market/catalog/{item['id']}/download"
+            if isinstance(item.get("id"), int)
+            and not isinstance(item["id"], bool)
+            and item["id"] > 0
+            else f"/v1/packages/{pid}/{ver}/download"
         ),
         "public_listing": True,
         "download_count": int(item.get("download_count") or item.get("total_downloads") or 0),
@@ -176,10 +166,6 @@ def _market_item_to_package_row(item: dict[str, Any]) -> dict[str, Any] | None:
         "license": item.get("license"),
         "material_category": item.get("material_category"),
         "industry": item.get("industry"),
-        "price": price,
-        "template_category": item.get("template_category") or "",
-        "template_difficulty": item.get("template_difficulty") or "",
-        "install_count": int(item.get("install_count") or 0),
     }
 
 
@@ -302,8 +288,7 @@ async def iter_catalog_packages() -> AsyncIterator[dict[str, Any]]:
                 return
         except HTTPException:
             logger.warning(
-                "market catalog unavailable, falling back to /v1/index.json",
-                exc_info=True,
+                "market catalog unavailable, falling back to /v1/index.json", exc_info=True
             )
         except RECOVERABLE_ERRORS as exc:
             logger.warning("market catalog failed: %s; fallback to index.json", exc)

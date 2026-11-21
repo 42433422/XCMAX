@@ -16,7 +16,7 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
     createStep({
       id: 'office-pack-open-modstore',
       title: 'AI 市场',
-      description: '在智能生态首页点击「AI 市场」，在「员工」页浏览与安装办公员工；「模板」页可复用已有工作流。',
+      description: '在智能生态首页点击「AI 市场」，在「员工」页浏览与安装办公员工；「模块」页可浏览业务扩展。',
       routeName: 'ai-ecosystem',
       targetSelector: '[data-tour="ecosystem-launcher-modstore"]',
       highlightSelector: '[data-tour="ecosystem-launcher-modstore"]',

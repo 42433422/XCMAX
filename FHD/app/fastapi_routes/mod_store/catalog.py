@@ -90,7 +90,6 @@ class CatalogViews:
         self, data: dict[str, Any], *, collection_hint: str = ""
     ) -> tuple[list[dict[str, Any]], int]:
         from app.application.mod_store_catalog_app import (
-            is_internal_duty_catalog_id,
             is_public_catalog_row,
             market_item_to_package_row,
         )
@@ -106,19 +105,7 @@ class CatalogViews:
             if not isinstance(raw, dict):
                 continue
             row = market_item_to_package_row(raw)
-            if not row:
-                continue
-            if row.get("artifact") == "workflow_template":
-                # Templates have an approved graph, not a downloadable local Mod.
-                if (
-                    not row.get("catalog_id")
-                    or raw.get("compliance_status") != "approved"
-                    or raw.get("is_public") is not True
-                    or str(row.get("version") or "").startswith("draft-")
-                    or is_internal_duty_catalog_id(str(row.get("id") or ""))
-                ):
-                    continue
-            elif not is_public_catalog_row(row):
+            if not row or not is_public_catalog_row(row):
                 continue
             info = self._ports.remote_row(row, installed_ids)
             hint = (
@@ -205,8 +192,7 @@ class CatalogViews:
     async def popular(self, limit: int = 10) -> ModStoreListResponse:
         rows, _installed = await self._ports.combined()
         rows.sort(
-            key=lambda r: r.get("total_downloads") or r.get("download_count") or 0,
-            reverse=True,
+            key=lambda r: r.get("total_downloads") or r.get("download_count") or 0, reverse=True
         )
         return ModStoreListResponse(data=rows[:limit])
 

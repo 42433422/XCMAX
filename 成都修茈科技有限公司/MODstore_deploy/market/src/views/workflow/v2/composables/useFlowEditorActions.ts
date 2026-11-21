@@ -290,7 +290,7 @@ export function useFlowEditorActions(deps: FlowEditorActionsDeps) {
         price: 0,
       })) as { id?: number | string }
       m.open = false
-      showFlash('ok', `${m.is_public ? '已提交模板审核' : '已保存私有模板'}（id ${r?.id ?? '?'}）`)
+      showFlash('ok', `已发布为模板（id ${r?.id ?? '?'}）`)
     } catch (e) {
       showFlash('err', '发布模板失败：' + explainError(e))
     } finally {

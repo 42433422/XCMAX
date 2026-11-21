@@ -12,17 +12,13 @@ from app.infrastructure.mods.catalog_client import (
     iter_catalog_packages,
     market_item_to_package_row,
 )
-from app.infrastructure.mods.catalog_visibility import (
-    is_internal_duty_catalog_id,
-    is_public_catalog_row,
-)
+from app.infrastructure.mods.catalog_visibility import is_public_catalog_row
 
 __all__ = [
     "catalog_base_url",
     "catalog_download_to",
     "catalog_get_json",
     "fetch_market_catalog_page",
-    "is_internal_duty_catalog_id",
     "is_public_catalog_row",
     "iter_catalog_packages",
     "market_item_to_package_row",

@@ -78,7 +78,8 @@ vi.mock('@/constants/productFlow', () => ({
 }))
 
 vi.mock('@/constants/genericModPack', () => ({
-  catalogStoreCollection: () => '',
+  catalogStoreCollection: () => 'industry_mod',
+  isEmployeePackListingModId: () => false,
   HOST_FOUNDATION_EMPLOYEE_PACK_ID: 'xcagi-host-foundation-employee-pack',
   isHostFoundationEmployeePackId: () => false,
   readBuildEdition: () => 'generic',
@@ -492,7 +493,7 @@ describe('ModStore.vue – mod card display', () => {
       ok: true,
       json: async () => ({ success: true, data: { available: mods } }),
     })
-    const wrapper = await mountModStore({ tab: 'all' })
+    const wrapper = await mountModStore({ type: 'module', tab: 'all' })
     await flushPromises()
     const text = wrapper.text()
     expect(text).toContain('卸载')
@@ -517,7 +518,7 @@ describe('ModStore.vue – mod card display', () => {
       ok: true,
       json: async () => ({ success: true, data: { available: mods } }),
     })
-    const wrapper = await mountModStore({ tab: 'all' })
+    const wrapper = await mountModStore({ type: 'module', tab: 'all' })
     await flushPromises()
     const text = wrapper.text()
     expect(text).toContain('更新')
@@ -541,7 +542,7 @@ describe('ModStore.vue – mod card display', () => {
       ok: true,
       json: async () => ({ success: true, data: { available: mods } }),
     })
-    const wrapper = await mountModStore({ tab: 'all' })
+    const wrapper = await mountModStore({ type: 'module', tab: 'all' })
     await flushPromises()
     const text = wrapper.text()
     expect(text).toContain('详情')
@@ -606,7 +607,7 @@ describe('ModStore.vue – collection labels', () => {
   it('renders store nav with expected tab labels', async () => {
     const wrapper = await mountModStore()
     const navText = wrapper.find('.store-tabs').text()
-    expect(navText).toContain('全部商品')
+    expect(navText).toContain('全部员工')
     expect(navText).toContain('已安装')
     wrapper.unmount()
   })

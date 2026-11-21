@@ -35,7 +35,7 @@
             <ModStoreLauncherIcon />
           </span>
           <span class="app-launcher-name">AI 市场</span>
-          <span class="app-launcher-desc">发现工作流模板与 AI 员工，复用业务流程、安装员工与扩展</span>
+          <span class="app-launcher-desc">发现业务模块与 AI 员工，按需安装和管理企业能力</span>
         </button>
       </div>
     </div>

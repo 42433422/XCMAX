@@ -189,16 +189,6 @@ def _catalog_item_payload(
         "user_has_review": user_has_review,
         "complaint_count": complaint_count,
         "created_at": item.created_at.isoformat() if item.created_at else "",
-        **(
-            {
-                "is_public": bool(item.is_public),
-                "template_category": item.template_category or "通用",
-                "template_difficulty": item.template_difficulty or "intermediate",
-                "install_count": int(item.install_count or 0),
-            }
-            if item.artifact == "workflow_template"
-            else {}
-        ),
         **employee_partition,
     }
 

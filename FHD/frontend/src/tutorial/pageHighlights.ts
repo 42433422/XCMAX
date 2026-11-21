@@ -276,7 +276,7 @@ export const HOST_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]> = {
     {
       idSuffix: 'launcher',
       title: 'AI生态 · AI 市场',
-      description: '点击「AI 市场」浏览模板与员工；在「员工」页安装办公员工包，即可在对话中使用表格与文档能力。',
+      description: '点击「AI 市场」浏览模块与员工；在「员工」页安装办公员工包，即可在对话中使用表格与文档能力。',
       targetSelector: '[data-tour="ecosystem-launcher-modstore"]',
       highlightSelector: '[data-tour="ecosystem-launcher-modstore"]',
     },

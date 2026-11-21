@@ -22,7 +22,7 @@ import {
 } from '@/utils/marketCatalogCache'
 import { productErrorMessage } from '@/utils/productErrorMessage'
 import type { ModStoreState, StoreModRow } from './useModStoreState'
-import { isTemplateItem } from './useModStoreState'
+import { marketItemType } from './useModStoreState'
 
 export interface ModStoreCatalog {
   storeNavTabs: Array<{ id: string; label: string; icon: string }>
@@ -39,7 +39,7 @@ export interface ModStoreCatalog {
   switchTab: (tab: string) => Promise<void>
 }
 
-/** AI 市场分类查询、缓存与搜索；模板浏览与可安装员工目录分别加载。 */
+/** AI 市场复用现有可安装目录，按模块/员工分类并保护异步查询切换。 */
 export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   const {
     allMods,
@@ -47,6 +47,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     searchQuery,
     filterInstalled,
     sortBy,
+    marketType,
     currentTab,
     loading,
     refreshing,
@@ -56,7 +57,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   } = state
 
   const storeNavTabs = [
-    { id: 'all', label: '全部商品', icon: 'fa-th-large' },
+    { id: 'all', label: '全部员工', icon: 'fa-th-large' },
     { id: 'host_foundation', label: '宿主基础员工', icon: 'fa-cubes' },
     { id: 'office', label: '办公员工包', icon: 'fa-file-text-o' },
     { id: 'office_aux', label: '办公员工附属包1', icon: 'fa-bar-chart' },
@@ -68,7 +69,6 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
 
   // 宿主基础员工是随包预装的本地包，市场没有该分类；留在本地目录查询，否则该页永远为空。
   const MARKET_TAB_QUERY: Record<string, { collection?: string; artifact?: string; material_category?: string }> = {
-    templates: { artifact: 'workflow_template' },
     office: {
       collection: OFFICE_EMPLOYEE_COLLECTION,
       artifact: 'employee_pack',
@@ -91,7 +91,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   const isMarketCollectionTab = (tab: string): boolean => Boolean(MARKET_TAB_QUERY[tab])
 
   const mainListTitle = computed(() => {
-    if (currentTab.value === 'templates') return '工作流模板'
+    if (marketType.value === 'module') return currentTab.value === 'installed' ? '已安装模块' : '业务模块'
     if (currentTab.value === 'host_foundation') return '宿主基础能力（预装员工）'
     if (currentTab.value === 'office') return '办公员工包'
     if (currentTab.value === 'office_aux') return '办公员工附属包1'
@@ -99,11 +99,11 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     if (currentTab.value === 'ai_employee') return 'AI 员工'
     if (currentTab.value === 'industry_mod') return '行业扩展'
     if (currentTab.value === 'installed') return '已安装'
-    return '全部商品'
+    return '全部员工'
   })
 
   const refineMarketItems = (items: StoreModRow[], tab: string): StoreModRow[] => {
-    items = items.filter((item) => isTemplateItem(item) === (tab === 'templates'))
+    items = items.filter((item) => marketItemType(item) === marketType.value)
     if (tab === 'workflow') {
       return items.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_WORKFLOW_EMPLOYEE)
     }
@@ -117,7 +117,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   }
 
   const filterByCollectionTab = (mods: StoreModRow[]): StoreModRow[] => {
-    mods = mods.filter((item) => isTemplateItem(item) === (currentTab.value === 'templates'))
+    mods = mods.filter((item) => marketItemType(item) === marketType.value)
     if (currentTab.value === 'host_foundation') {
       return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_HOST_FOUNDATION)
     }
@@ -129,12 +129,6 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     }
     if (currentTab.value === 'workflow') {
       return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_WORKFLOW_EMPLOYEE)
-    }
-    if (currentTab.value === 'ai_employee') {
-      return mods.filter((m) => {
-        const sc = catalogStoreCollection(m)
-        return sc !== STORE_COLLECTION_INDUSTRY_MOD
-      })
     }
     if (currentTab.value === 'industry_mod') {
       return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_INDUSTRY_MOD)
@@ -179,7 +173,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     mods = filterByCollectionTab(mods)
 
     if (sortBy.value === 'downloads') {
-      mods.sort((a, b) => (b.install_count || b.total_downloads || b.download_count || 0) - (a.install_count || a.total_downloads || a.download_count || 0))
+      mods.sort((a, b) => (b.total_downloads || b.download_count || 0) - (a.total_downloads || a.download_count || 0))
     } else if (sortBy.value === 'rating') {
       mods.sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
     } else if (sortBy.value === 'created_at') {
@@ -197,14 +191,16 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   const loadMods = async (force = false): Promise<void> => {
     const version = ++requestVersion
     const tab = currentTab.value
+    const type = marketType.value
     const query = searchQuery.value.trim()
-    const current = () => version === requestVersion && tab === currentTab.value
-    const marketQuery = MARKET_TAB_QUERY[tab]
+    const current = () => version === requestVersion && tab === currentTab.value && type === marketType.value
+    const marketQuery = type === 'employee' ? MARKET_TAB_QUERY[tab] : undefined
     const cacheKey = buildMarketCatalogCacheKey(tab, query)
-    if (activeQueryKey !== cacheKey) {
+    const queryKey = `${type}:${cacheKey}`
+    if (activeQueryKey !== queryKey) {
       allMods.value = []
       filteredMods.value = []
-      activeQueryKey = cacheKey
+      activeQueryKey = queryKey
     }
     const cached = !force && marketQuery ? readMarketCatalogCache(cacheKey) : null
     loadError.value = ''
@@ -218,7 +214,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
         loading.value = refreshing.value = false
         return
       }
-    } else if (marketQuery && tab !== 'templates' && !query && catalogSnapshot.value.length) {
+    } else if (marketQuery && !query && catalogSnapshot.value.length) {
       allMods.value = refineMarketItems(filterByCollectionTab(catalogSnapshot.value), tab)
       applyFilters()
     }
@@ -232,7 +228,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
         allMods.value = refineMarketItems(result.items || [], tab)
         writeMarketCatalogCache(cacheKey, tab, allMods.value)
       } else {
-        const params = new URLSearchParams({ q: query, installed: String(filterInstalled.value), limit: '50' })
+        const params = new URLSearchParams({ q: query, limit: '50' })
         const response = await apiFetch(query ? `/api/mod-store/search?${params}` : '/api/mod-store/catalog', { timeoutMs: 90_000 })
         const data = await response.json()
         if (!current()) return
@@ -244,8 +240,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
       applyFilters()
     } catch (error) {
       if (!current()) return
-      // Templates have no local package catalog. Preserve a matching cache with an explicit warning.
-      if (marketQuery && tab !== 'templates') {
+      if (marketQuery) {
         try {
           const rows = await loadCatalogAvailable()
           if (!current()) return

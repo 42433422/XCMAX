@@ -10,7 +10,7 @@ import {
 } from '@/constants/genericModPack'
 import type { EnterpriseOrgLayer } from '@/constants/enterpriseWorkflowEstablishment'
 import type { ModStoreState, StoreModRow } from './useModStoreState'
-import { isTemplateItem } from './useModStoreState'
+import { marketItemType } from './useModStoreState'
 
 export interface ModStoreMeta {
   modIconClass: (mod: StoreModRow) => string
@@ -22,16 +22,12 @@ export interface ModStoreMeta {
   marketItemKindLabel: (mod: StoreModRow) => string
   installSuccessMessage: (mod: StoreModRow, onboardNote?: string) => string
   marketModUrl: (mod: StoreModRow) => string
-  templateMarketUrl: (mod: StoreModRow) => string
-  templateDifficultyLabel: (mod: StoreModRow) => string
-  templatePriceLabel: (mod: StoreModRow) => string
   resolveEnterpriseStack: () => Promise<void>
 }
 
 /** 标签/图标域（由 ModStore.vue 机械切出，行为不变）：卡片图标、企业层标签、跳转链接等纯派生逻辑 */
 export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marketBaseUrl: string }): ModStoreMeta {
   const modIconClass = (mod: StoreModRow): string => {
-    if (isTemplateItem(mod)) return 'fa fa-file-text-o'
     const sc = catalogStoreCollection(mod)
     if (sc === STORE_COLLECTION_HOST_FOUNDATION) return 'fa fa-cubes'
     if (sc === STORE_COLLECTION_OFFICE_EMPLOYEE) return 'fa fa-file-text-o'
@@ -42,7 +38,6 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
   }
 
   const collectionLabel = (mod: StoreModRow): string => {
-    if (isTemplateItem(mod)) return mod.template_category || '通用'
     const sc = catalogStoreCollection(mod)
     if (sc === STORE_COLLECTION_HOST_FOUNDATION) return '宿主基础员工'
     if (sc === STORE_COLLECTION_OFFICE_EMPLOYEE) return '办公员工包'
@@ -61,9 +56,7 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
   }
 
   const isEmployeePackItem = (mod?: StoreModRow | null): boolean =>
-    String(mod?.artifact || '')
-      .trim()
-      .toLowerCase() === 'employee_pack'
+    marketItemType(mod) === 'employee'
 
   const enterpriseModLabel = (mod: StoreModRow): string => {
     const art = String(mod?.artifact || '')
@@ -74,7 +67,7 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
     return label ? `企业 Mod：${label}` : ''
   }
 
-  const marketItemKindLabel = (mod: StoreModRow): string => (isEmployeePackItem(mod) ? '员工' : '扩展 Mod')
+  const marketItemKindLabel = (mod: StoreModRow): string => (isEmployeePackItem(mod) ? '员工' : '模块')
 
   const installSuccessMessage = (mod: StoreModRow, onboardNote = ''): string => {
     const kind = marketItemKindLabel(mod)
@@ -96,15 +89,6 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
     return `${marketBaseUrl}/mods/${id}`
   }
 
-  const templateMarketUrl = (mod: StoreModRow): string =>
-    isTemplateItem(mod) && Number.isSafeInteger(mod.catalog_id) && Number(mod.catalog_id) > 0
-      ? `${marketBaseUrl}/templates/${mod.catalog_id}` : ''
-  const templateDifficultyLabel = (mod: StoreModRow): string =>
-    ({ beginner: '新手', intermediate: '进阶', advanced: '专家' } as Record<string, string>)[mod.template_difficulty || ''] || ''
-  const templatePriceLabel = (mod: StoreModRow): string =>
-    typeof mod.price === 'number' && Number.isFinite(mod.price) && mod.price >= 0
-      ? mod.price === 0 ? '免费' : `¥ ${mod.price.toFixed(2)}` : '价格以市场为准'
-
   const resolveEnterpriseStack = async (): Promise<void> => {
     const stack = await resolveEnterpriseModStack()
     state.enterpriseStackLabel.value = stack.stackLabel
@@ -120,9 +104,6 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
     marketItemKindLabel,
     installSuccessMessage,
     marketModUrl,
-    templateMarketUrl,
-    templateDifficultyLabel,
-    templatePriceLabel,
     resolveEnterpriseStack,
   }
 }

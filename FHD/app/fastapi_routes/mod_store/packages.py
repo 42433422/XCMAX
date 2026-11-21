@@ -79,10 +79,7 @@ class PackageInstaller:
     def _install(
         self, path: str, *, verify_signature: bool, activate: bool
     ) -> ModStoreInstallResult:
-        artifact = self._artifact(path)
-        if artifact == "workflow_template":
-            raise HTTPException(400, "工作流模板请在 AI 市场中使用，不能作为本机员工包安装")
-        if artifact == ARTIFACT_EMPLOYEE_PACK:
+        if self._artifact(path) == ARTIFACT_EMPLOYEE_PACK:
             ok, message = self._employees().install_from_package(
                 path, verify_signature=verify_signature
             )

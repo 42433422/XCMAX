@@ -7,6 +7,7 @@ interface GraphNode {
   local_id: number
   node_type: string
   name: string
+  config: Record<string, unknown>
   position_x: number
   position_y: number
 }
@@ -14,7 +15,7 @@ interface GraphNode {
 interface GraphEdge {
   source_local_id: number
   target_local_id: number
-  condition?: string
+  condition: string
 }
 
 interface TemplateDetail {
@@ -106,10 +107,10 @@ function nodeKindLabel(kind: string): string {
     </header>
 
     <div v-if="loading" class="td__placeholder">加载中…</div>
-    <div v-else-if="!detail" class="td__placeholder">{{ errMsg || '模板不存在或已下架' }}</div>
+    <div v-else-if="errMsg" class="td__err">{{ errMsg }}</div>
+    <div v-else-if="!detail" class="td__placeholder">模板不存在或已下架</div>
 
     <article v-else class="td__main">
-      <p v-if="errMsg" class="td__err" role="alert">{{ errMsg }}</p>
       <header class="td__head">
         <div class="td__chips">
           <span class="td__chip td__chip--cat">{{ detail.template_category || '通用' }}</span>
@@ -127,9 +128,6 @@ function nodeKindLabel(kind: string): string {
             {{ detail.price > 0 ? `¥ ${detail.price.toFixed(2)}` : '免费' }}
           </span>
           <span class="td__spacer" />
-          <RouterLink v-if="detail.price > 0" class="td__btn" :to="{ name: 'catalog-detail', params: { id: String(detail.id) } }">
-            购买 / 查看购买状态
-          </RouterLink>
           <button class="td__btn td__btn--primary" type="button" :disabled="installing" @click="install">
             {{ installing ? '安装中…' : '一键安装到工作流' }}
           </button>

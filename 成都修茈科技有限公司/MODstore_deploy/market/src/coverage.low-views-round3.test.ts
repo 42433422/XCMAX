@@ -93,7 +93,7 @@ import AdminDatabaseView from './views/AdminDatabaseView.vue'
 const globalMount = {
   global: {
     stubs: {
-      RouterLink: { name: 'RouterLink', props: ['to'], template: '<a><slot /></a>' },
+      RouterLink: { props: ['to'], template: '<a><slot /></a>' },
       Teleport: true,
       Transition: false,
       TransitionGroup: false,
@@ -485,27 +485,6 @@ describe('low coverage public and template views, round 3', () => {
     const vm = wrapper.vm as UnsafeTestValue
     expect(vm.templateId).toBe(0)
     expect(apiMock.templateDetail).not.toHaveBeenCalled()
-  })
-
-  it('routes paid template use through its detail and retains checkout after denied installation', async () => {
-    const list = mount(TemplatesView, globalMount)
-    await flushPromises()
-    await (list.vm as UnsafeTestValue).quickInstall(templateItem({ price: 29 }))
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'template-detail', params: { id: '42' } })
-    expect(apiMock.templateInstall).not.toHaveBeenCalled()
-    list.unmount()
-
-    const wrapper = mount(TemplateDetailView, globalMount)
-    await flushPromises()
-    ;(wrapper.vm as UnsafeTestValue).detail.price = 29
-    apiMock.templateInstall.mockRejectedValueOnce(new Error('未购买此模板'))
-    await (wrapper.vm as UnsafeTestValue).install()
-    await flushPromises()
-    expect(wrapper.find('article').exists()).toBe(true)
-    expect(wrapper.find('[role="alert"]').text()).toContain('未购买此模板')
-    const purchase = wrapper.findAllComponents({ name: 'RouterLink' }).find((link) => link.text().includes('购买'))
-    expect(purchase?.props('to')).toEqual({ name: 'catalog-detail', params: { id: '42' } })
-    wrapper.unmount()
   })
 })
 
