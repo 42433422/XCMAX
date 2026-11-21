@@ -188,14 +188,7 @@
       "requires_desktop": false
     }
   ],
-  "admin_workflow_children": [
-    {
-      "key": "duty-roster-graph",
-      "name": "编制图谱",
-      "iconClass": "fa-sitemap",
-      "path": "/duty-roster-graph"
-    }
-  ],
+  "admin_workflow_children": [],
   "settings": {
     "key": "settings",
     "name": "系统设置",
