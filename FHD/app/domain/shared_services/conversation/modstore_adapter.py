@@ -24,6 +24,7 @@ from app.application.market_llm import (
     catalog,
     completions,
     multimodal,
+    responses,
     routing,
     streaming,
 )
@@ -41,17 +42,11 @@ from app.application.market_llm.protocols import (
     ResponsePorts,
     StreamPorts,
 )
-from app.application.market_llm.responses import _response_status_code as _status_code
 from app.application.market_llm.responses import (
     neuro_notify_ai_model_roundtrip as neuro_notify_ai_model_roundtrip,
 )
 from app.infrastructure import modstore_transport as _transport
 from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
-from app.infrastructure.llm.modstore_response_normalize import (
-    absorb_stream_payload,
-    normalize_collected_stream,
-    normalize_market_chat_response,
-)
 from app.legacy.market_llm import openai_compat
 from app.legacy.market_llm.openai_compat import (
     _market_sse_payload_has_content as _market_sse_payload_has_content,
@@ -76,7 +71,7 @@ _CATALOG_CACHE_LOCK = threading.Lock()
 
 
 def _response_status_code(response: Any, default: int = 200) -> int:
-    return _status_code(response, default)
+    return responses._response_status_code(response, default)
 
 
 def _iter_market_sse_data_payloads(response: Any) -> Iterator[str]:
@@ -323,7 +318,7 @@ class ModstorePlatformAdapter:
     def _normalize_response(
         self, raw_response: Dict[str, Any], provider: str, model: str
     ) -> Dict[str, Any]:
-        result = normalize_market_chat_response(raw_response, provider, model)
+        result = responses.normalize_market_chat_response(raw_response, provider, model)
         metadata = routing.route_metadata(result.get("route_metadata") or {})
         if metadata:
             self.last_route_metadata = metadata
@@ -480,9 +475,9 @@ class ModstorePlatformAdapter:
         model=None,
         *,
         fallback_model=None,
-        prepared=None,
+        prepared: PreparedChatRoute | None = None,
         connection=None,
-    ):
+    ) -> PreparedChatRoute:
         connection = connection or self._connection()
         authentication.validate_demo_destination(connection)
         if prepared is not None:
@@ -670,7 +665,7 @@ class ModstorePlatformAdapter:
         ending: dict | None = None,
         reasoning: list[str] | None = None,
     ) -> None:
-        absorb_stream_payload(
+        responses.absorb_stream_payload(
             data,
             status_cb,
             pieces,
@@ -688,7 +683,7 @@ class ModstorePlatformAdapter:
         max_tokens: int,
         reasoning: str = "",
     ) -> Dict[str, Any]:
-        return normalize_collected_stream(
+        return responses.normalize_collected_stream(
             pieces,
             provider,
             model,
