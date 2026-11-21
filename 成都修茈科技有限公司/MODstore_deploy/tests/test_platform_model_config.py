@@ -840,3 +840,101 @@ async def test_managed_gzip_response_is_decoded_once(upstream):
     )
     assert result["ok"] is True and result["content"] == "OK"
     assert len(upstream["requests"]) == 1
+
+
+def test_unified_gateway_is_read_only_in_admin_api(client):
+    response = client.put(
+        PATH + "/litellm",
+        json=payload(base_url="http://127.0.0.1:14000", model="xcmax-kimi-code"),
+    )
+    assert response.status_code == 400
+    assert "LITELLM_MASTER_KEY" in response.json()["detail"]
+    assert not config.config_path().exists()
+
+
+@pytest.mark.asyncio
+async def test_unified_gateway_catalog_uses_environment_key_and_full_pool(database, monkeypatch):
+    from modstore_server import llm_catalog
+
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "gateway-master-key")
+    monkeypatch.delenv("LITELLM_BASE_URL", raising=False)
+    llm_catalog.clear_all_catalog_cache()
+    seen = {}
+
+    async def gateway_models(base_url, api_key, **_kwargs):
+        seen["base_url"] = base_url
+        seen["api_key"] = api_key
+        return ([{"id": "xcmax-kimi-code"}, {"id": "xcmax-doubao-code"}], None)
+
+    monkeypatch.setattr(llm_catalog, "_fetch_openai_compatible_records", gateway_models)
+    api_key, base_url, source = keys.resolve_credentials(database, 1, "litellm")
+    assert source == "platform"
+    block = await llm_catalog.get_models_for_credentials(
+        1, "litellm", api_key=api_key, base_url=base_url, force_refresh=True
+    )
+    assert seen == {"base_url": "http://127.0.0.1:14000/v1", "api_key": api_key}
+    assert block["models"] == ["xcmax-doubao-code", "xcmax-kimi-code"]
+    assert block["source"] == "remote"
+
+
+@pytest.mark.asyncio
+async def test_platform_default_prefers_unified_gateway(database, monkeypatch):
+    from modstore_server import llm_api, llm_catalog
+
+    save("openai", model="legacy-pinned", display_name="旧默认")
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "gateway-master-key")
+
+    async def catalog(_user_id, provider, **_kwargs):
+        if provider == "litellm":
+            return {"models": ["xcmax-kimi-code"], "runtime_models": ["xcmax-kimi-code"]}
+        return {"models": ["legacy-pinned"], "runtime_models": ["legacy-pinned"]}
+
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog)
+    selected = await llm_api.resolve_default_llm_route(database, 1)
+    assert selected["provider"] == "litellm"
+    assert selected["model"] == "xcmax-kimi-code"
+    assert selected["source"] == "platform_gateway"
+
+
+@pytest.mark.asyncio
+async def test_gateway_route_returns_selected_deployment_capacity_for_default_and_explicit(
+    database, monkeypatch
+):
+    from modstore_server import llm_api, llm_catalog
+
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "gateway-master-key")
+    llm_catalog.clear_all_catalog_cache()
+    capabilities = {
+        "context_window": 131072,
+        "max_input_tokens": 126976,
+        "max_output_tokens": 16384,
+        "resolved_model": "doubao/seed-code",
+        "source": "litellm_model_info",
+    }
+
+    async def fetch(_base, _key, **_kwargs):
+        return (
+            [
+                {
+                    "id": "xcmax-doubao-code",
+                    "model_capabilities": {**capabilities, "api_key": "never-public"},
+                },
+                {"id": "xcmax-other-code", "max_input_tokens": 4096},
+            ],
+            None,
+        )
+
+    monkeypatch.setattr(llm_catalog, "_fetch_openai_compatible_records", fetch)
+    for kwargs in ({}, {"provider": "litellm", "model": "xcmax-doubao-code"}):
+        selected = await llm_api.resolve_default_llm_route(database, 1, **kwargs)
+        assert selected["provider"] == "litellm" and selected["model"] == "xcmax-doubao-code"
+        assert selected["model_capabilities"] == capabilities
+        assert "never-public" not in json.dumps(selected)
+        assert "gateway-master-key" not in json.dumps(selected)
+        assert selected["route_token"]
+    selected = await llm_api.resolve_default_llm_route(
+        database, 1, provider="litellm", model="xcmax-other-code"
+    )
+    assert selected["model_capabilities"]["max_input_tokens"] == 4096
+    assert "context_window" not in selected["model_capabilities"]
+    llm_catalog.clear_all_catalog_cache()

@@ -16,7 +16,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .llm_plan_generation import LlmPlanGeneration, PlannerCompletion, PlannerConversation
 from .model_response_metrics import model_response_scope, record_response_error
-from .planner_llm_gateway import planner_max_tokens, request_planner_completion
+from .planner_llm_gateway import request_planner_completion
 from .planner_prompt_profile import attachment_import_manifest
 from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
@@ -30,14 +30,15 @@ _planner_http_client: httpx.Client | None = None
 
 
 def _standalone_question(plan: PlanGraph) -> str | None:
-    """Display the model's question without parking an unbound execution plan."""
+    """Identify a planning question before any executable business graph exists."""
     if len(plan.nodes) != 1:
         return None
     node = plan.nodes[0]
     question = node.params.get("question")
     if (
         (node.tool_id, node.action) != ("clarify", "ask")
-        or set(node.params) - {"question", "answer_key", "target_node_id"}
+        or set(node.params) - {"question", "answer_key", "target_node_id", "clarification"}
+        or node.params.get("clarification") not in (None, {}, {"reason": "planning_scope"})
         or node.params.get("target_node_id") not in (None, "")
         or not isinstance(question, str)
         or not 0 < len(question.strip()) <= 12_000
@@ -49,20 +50,20 @@ def _standalone_question(plan: PlanGraph) -> str | None:
     return question.strip()
 
 
-def _clarification_reply(plan_id: str, question: str) -> PlanGraph:
+def _clarification_plan(plan_id: str, question: str) -> PlanGraph:
     return PlanGraph(
         plan_id=plan_id,
-        intent="conversation_reply",
+        intent="planning_clarification",
         nodes=[
             WorkflowNode(
-                node_id="model_reply",
-                tool_id="conversation",
-                action="reply",
-                params={"response": question},
+                node_id="planning_question",
+                tool_id="clarify",
+                action="ask",
+                params={"question": question, "clarification": {"reason": "planning_scope"}},
                 idempotent=True,
             )
         ],
-        metadata={"planner": "llm", "response_mode": "reply", "reply": question},
+        metadata={"planner": "llm", "planning_clarification": True},
     )
 
 
@@ -341,7 +342,7 @@ class LLMWorkflowPlanner:
             # One full replan is allowed before execution; the old graph is not resumed.
             for attempt in range(2):
                 if question := _standalone_question(planned):
-                    planned = _clarification_reply(plan_id, question)
+                    planned = _clarification_plan(plan_id, question)
                     break
                 with model_rate_limit_scope(context), model_response_scope():
                     try:
@@ -360,7 +361,7 @@ class LLMWorkflowPlanner:
                     context.pop("goal_coverage_rejected", None)
                     break
                 if review is not None and review.violations and review.clarification_question:
-                    planned = _clarification_reply(plan_id, review.clarification_question)
+                    planned = _clarification_plan(plan_id, review.clarification_question)
                     context.pop("goal_coverage_rejected", None)
                     context.pop("planning_failure_reason", None)
                     break
@@ -480,7 +481,7 @@ class LLMWorkflowPlanner:
             messages=messages,
             http_client_factory=self._http_client_factory or _get_planner_http_client,
             temperature=temperature,
-            max_tokens=max_tokens or planner_max_tokens(),
+            max_tokens=max_tokens,
             **extra,
         )
 

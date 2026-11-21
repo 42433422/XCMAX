@@ -6,6 +6,11 @@
 from __future__ import annotations
 
 import importlib
+import logging
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 # --- from llm_catalog_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -54,6 +59,74 @@ def clear_all_catalog_cache() -> None:
 """Implementation extracted from the public facade module."""
 
 
+async def _litellm_deployment_capabilities(client, base_url, api_key, items, timeout):
+    """Read capabilities with the same credential; never expose deployment credentials."""
+    import httpx
+    from modstore_server.llm_model_taxonomy import public_model_capabilities
+
+    target = httpx.URL(base_url)
+    path = target.path.rstrip("/")
+    if path.endswith("/v1"):
+        path = path[:-3]
+    target = target.copy_with(path=f"{path}/model/info", query=None, fragment=None)
+    try:
+        response = await client.get(
+            str(target), headers={"Authorization": f"Bearer {api_key}"}, timeout=min(timeout, 4.0)
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except RECOVERABLE_ERRORS as exc:
+        logger.debug("LiteLLM capability discovery unavailable: %s", type(exc).__name__)
+        return
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return
+    visible = {
+        item["id"] for item in items if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    groups = {}
+    for row in rows:
+        if (
+            not isinstance(row, dict)
+            or not isinstance(row.get("model_name"), str)
+            or row["model_name"] not in visible
+        ):
+            continue
+        info, params = row.get("model_info"), row.get("litellm_params")
+        info = info if isinstance(info, dict) else {}
+        params = params if isinstance(params, dict) else {}
+        capabilities = public_model_capabilities(
+            {**info, "resolved_model": params.get("model"), "source": "litellm_model_info"},
+        )
+        groups.setdefault(row["model_name"], []).append(capabilities)
+    for item in items:
+        name = item.get("id") if isinstance(item, dict) else None
+        deployments = groups.get(name) if isinstance(name, str) else None
+        if not deployments:
+            continue
+        # An alias can select any deployment. A missing limit must not become a
+        # verified capacity merely because another deployment advertises one.
+        merged = {
+            key: min(row[key] for row in deployments)
+            for key in ("context_window", "max_input_tokens", "max_output_tokens")
+            if all(key in row for row in deployments)
+        }
+        declared = public_model_capabilities(item)
+        for key in ("context_window", "max_input_tokens", "max_output_tokens"):
+            if key in declared:
+                merged[key] = min(merged.get(key, declared[key]), declared[key])
+        resolved = {row.get("resolved_model") for row in deployments}
+        if (
+            len(resolved) == 1
+            and None not in resolved
+            and (
+                len(deployments) == 1 or "context_window" in merged or "max_input_tokens" in merged
+            )
+        ):
+            merged["resolved_model"] = resolved.pop()
+        item["model_capabilities"] = {**merged, "source": "litellm_model_info"}
+
+
 async def _fetch_openai_compatible_records(
     base_url: str, api_key: str, *, provider: str = "", httpx_timeout: float = 30.0
 ) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
@@ -87,6 +160,8 @@ async def _fetch_openai_compatible_records(
         items = _facade()._openai_style_items(data)
         if items is None:
             return ([], "unexpected models response shape")
+        if provider == "litellm":
+            await _litellm_deployment_capabilities(client, base_url, api_key, items, httpx_timeout)
         if provider == "openrouter":
             try:
                 video_response = await client.get(
@@ -366,7 +441,7 @@ async def get_models_for_credentials(
             "error": "no_api_key",
             "from_cache": False,
         }
-    cache_token = f"{base_url or ''}\0{api_key}" if discover_operations else api_key
+    cache_token = f"{base_url or ''}\0{discover_operations}\0{api_key}"
     ck = _facade()._cache_key(user_id, provider, cache_token)
     now = _facade().time.monotonic()
     if force_refresh:

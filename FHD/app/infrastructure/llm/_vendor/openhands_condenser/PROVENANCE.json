@@ -1,0 +1,38 @@
+{
+  "upstream_repository": "https://github.com/OpenHands/software-agent-sdk",
+  "upstream_commit": "885242b563b1d2695d6c7b3d4bfe642f1c8838a3",
+  "license": "MIT",
+  "upstream_components": {
+    "openhands-sdk/openhands/sdk/context/view/manipulation_indices.py": {
+      "blob_sha": "f2352aabbc6d508b2b1536a5dd10562f40e608c6",
+      "symbols": [
+        "ManipulationIndices"
+      ]
+    },
+    "openhands-sdk/openhands/sdk/context/view/properties/tool_call_matching.py": {
+      "blob_sha": "03f08e10efe05cbbde129393552425ea942db01f",
+      "symbols": [
+        "ToolCallMatchingProperty.manipulation_indices"
+      ]
+    },
+    "openhands-sdk/openhands/sdk/context/condenser/utils.py": {
+      "blob_sha": "3882785b4c73158c17fb14167b51f6f50f5988ff",
+      "symbols": [
+        "get_shortest_prefix_above_token_count"
+      ]
+    },
+    "LICENSE": {
+      "blob_sha": "b0bd86a6335a564bd3766666bebbf014fd6a8013"
+    }
+  },
+  "adaptations": [
+    "Replace SDK event decoding with existing OpenAI message dictionaries; expand batched tool_calls into pending IDs and support legacy function messages.",
+    "Replace SDK LLM token counting with the existing request-size callback; preserve upstream binary search and manipulation-index algorithms.",
+    "Drop SDK imports and shorten docstrings for a dependency-free Python 3.11 module. Keep original MIT license.",
+    "XCMAX selects whole user turns at upstream-safe boundaries; existing LangChain summary provider, accounting and context storage remain authoritative."
+  ],
+  "local_sha256": {
+    "__init__.py": "fea3f4a8869fc10d4604a10f25bc0efb25fbffa6074cf54629477232184e27f8",
+    "LICENSE": "14a9b631c658eee682c6c2973525fbdf808c3457176bc47513052c559cc5ce86"
+  }
+}

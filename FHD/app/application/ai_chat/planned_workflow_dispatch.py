@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Protocol
@@ -159,6 +160,100 @@ class PlannedWorkflowDispatch:
             },
         }
 
+    def _run_admitted_plan(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        plan: PlanGraph,
+        runtime_context: dict[str, Any],
+        thinking_steps: str = "",
+        decision_reason: str = "",
+        approval_nodes: list[dict[str, Any]] | None = None,
+        continuation: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        from app.application.agent_orchestrator import AgentOrchestrator
+        from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
+        from app.infrastructure.chat_stream_lifetime import publish_stream_note
+
+        orchestrator = AgentOrchestrator()
+        if continuation:
+            from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+            original = continuation["run"]
+            original_plan = plan_from_dict(original.metadata.get("plan"))
+            if original_plan is None:
+                return self._risk_rejection(
+                    "workflow_confirmation_stale",
+                    "原澄清计划缺失，未执行本次操作。",
+                    runtime_context,
+                )
+            agent_run = orchestrator.continue_planning_clarification(
+                original.run_id,
+                answered_by=self.callbacks._task_owner_id(user_id, runtime_context),
+                clarification_step_id=continuation["step_id"],
+                expected_plan_sha256=plan_fingerprint(original_plan),
+                expected_snapshot_sha256=canonical_hash(original.to_dict()),
+                plan=plan,
+                answer=continuation["answer"],
+                runtime_context=runtime_context,
+            )
+            if agent_run is None:
+                return self._risk_rejection(
+                    "workflow_confirmation_stale",
+                    "原澄清已被处理或发生变化，本次未重复执行；请查看原任务。",
+                    runtime_context,
+                )
+            plan = plan_from_dict(agent_run.metadata.get("plan")) or plan
+        else:
+            agent_run = orchestrator.start_run_from_plan(
+                user_id=self.callbacks._task_owner_id(user_id, runtime_context),
+                message=message,
+                plan=plan,
+                runtime_context=runtime_context,
+                auto_execute=True,
+            )
+        publish_stream_note(workflow_run_note(agent_run.status))
+        if agent_run.status == "waiting_user":
+            interaction = self.callbacks._capture_agent_run_interaction(
+                user_id=user_id,
+                agent_run=agent_run,
+                runtime_context=runtime_context,
+                thinking_steps=thinking_steps,
+                decision_reason=decision_reason,
+                approval_nodes=approval_nodes or [],
+            )
+            if interaction is not None:
+                interaction.setdefault("run_id", agent_run.run_id)
+                interaction.setdefault("agent_run_id", agent_run.run_id)
+                current = orchestrator.get_run(agent_run.run_id)
+                if (
+                    current is not None
+                    and current.status == "waiting_user"
+                    and interaction.get("success")
+                ):
+                    interaction.setdefault("status", "waiting_user")
+                    interaction.setdefault("execution_state", "waiting_user")
+                    interaction["needs_user_input"] = True
+            return interaction
+        result = self.callbacks._format_agent_run_response(
+            plan, agent_run, thinking_steps=thinking_steps, user_message=message
+        )
+        if continuation:
+            saved = self.callbacks._persist_plan_state(
+                plan,
+                runtime_context,
+                status="succeeded" if agent_run.status == "completed" else agent_run.status,
+                message=str(agent_run.error or ""),
+            )
+            if saved:
+                self.pending.pop(user_id, None)
+            else:
+                warning = "任务回执已保存，但待办索引更新失败；请查看原任务，勿重复执行。"
+                result["response"] = f"{result.get('response') or ''}\n\n{warning}".strip()
+                result.setdefault("data", {})["workflow_state_persistence_failed"] = True
+        return result
+
     def handle(
         self,
         user_id: str,
@@ -186,6 +281,37 @@ class PlannedWorkflowDispatch:
         pending_handled, pending_result = self.callbacks._resume_pending_dynamic_workflow(
             user_id, message, text, context
         )
+        planning_continuation = (pending_result or {}).get("_planning_clarification")
+        if isinstance(planning_continuation, dict):
+            from app.application.agent_orchestrator.tool_permission import overlay_resume_context
+
+            original = planning_continuation["run"]
+            incoming = context
+            context = overlay_resume_context(original.metadata.get("runtime_context"), incoming)
+            # This answer is a new chat turn, never a replay of the question's turn.
+            for key in ("turn_id", "idempotency_key", "_conversation_input_fingerprint"):
+                if key in incoming:
+                    context[key] = incoming[key]
+                else:
+                    context.pop(key, None)
+            previous = (original.metadata.get("runtime_context") or {}).get(
+                "planning_clarification"
+            )
+            previous = previous if isinstance(previous, dict) else {}
+            exchanges = previous.get("exchanges")
+            exchanges = exchanges if isinstance(exchanges, list) else []
+            context["planning_clarification"] = {
+                "original_request": original.message,
+                "exchanges": [
+                    *exchanges[-11:],
+                    {
+                        "question": planning_continuation["question"],
+                        "answer": planning_continuation["answer"],
+                    },
+                ],
+            }
+            message = json.dumps(context["planning_clarification"], ensure_ascii=False)
+            pending_handled = False
         plan = None
         continuation_task: dict[str, Any] = {}
         if pending_handled:
@@ -391,11 +517,21 @@ class PlannedWorkflowDispatch:
                     ),
                 },
             }
-        if (plan.metadata or {}).get("response_mode") == "reply":
+        if (plan.metadata or {}).get("response_mode") == "reply" and not planning_continuation:
             result = self._execute_reply_plan(plan, context)
             if attachments and result.get("success"):
                 result["data"]["artifacts"] = attachments
             return result
+        if planning_continuation and (plan.metadata or {}).get("response_mode") == "reply":
+            runtime_ctx = self.callbacks._merge_tool_runtime_context(user_id, message, context)
+            runtime_ctx["planning_clarification"] = context["planning_clarification"]
+            return self._run_admitted_plan(
+                user_id=user_id,
+                message=message,
+                plan=plan,
+                runtime_context=runtime_ctx,
+                continuation=planning_continuation,
+            )
         from app.application.elt.batch_continuation import (
             BatchContinuationBlocked,
             bind_durable_batch,
@@ -442,6 +578,8 @@ class PlannedWorkflowDispatch:
         runtime_ctx["source"] = str(source or "").strip()
         runtime_ctx["workflow_trace_mode"] = "agent_orchestrator"
         runtime_ctx["dynamic_workflow"] = True
+        if planning_continuation:
+            runtime_ctx["planning_clarification"] = context["planning_clarification"]
         thinking_steps = self.callbacks._build_workflow_thinking_steps(
             plan=plan, decision_reason=decision.reason
         )
@@ -461,27 +599,14 @@ class PlannedWorkflowDispatch:
             or auto_approval
             or plan.metadata.get("durable_elt_batch") is True
             or any(node.tool_id == "clarify" and node.action == "ask" for node in plan.nodes)
+            or planning_continuation
         ):
-            from app.application.agent_orchestrator import AgentOrchestrator
-
             if has_approval_requirement:
                 plan.metadata["approval_required_node_ids"] = sorted(approval_ids)
             publish_stream_note(
                 "正在核对计划的审批要求…" if has_approval_requirement else "计划无需审批，开始执行…"
             )
 
-            agent_run = AgentOrchestrator().start_run_from_plan(
-                user_id=self.callbacks._task_owner_id(user_id, runtime_ctx),
-                message=message,
-                plan=plan,
-                runtime_context=runtime_ctx,
-                auto_execute=True,
-            )
-            publish_stream_note(workflow_run_note(agent_run.status))
-            if agent_run.status != "waiting_user":
-                return self.callbacks._format_agent_run_response(
-                    plan, agent_run, thinking_steps=thinking_steps, user_message=str(message or "")
-                )
             approval_metadata = [
                 {
                     "node_id": node.node_id,
@@ -491,13 +616,15 @@ class PlannedWorkflowDispatch:
                 }
                 for node in approval_required_nodes
             ]
-            return self.callbacks._capture_agent_run_interaction(
+            return self._run_admitted_plan(
                 user_id=user_id,
-                agent_run=agent_run,
+                message=message,
+                plan=plan,
                 runtime_context=runtime_ctx,
                 thinking_steps=thinking_steps,
                 decision_reason=decision.reason,
                 approval_nodes=approval_metadata,
+                continuation=planning_continuation,
             )
         approval_metadata = [
             {
