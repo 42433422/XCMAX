@@ -542,6 +542,7 @@ def record_loop_evolution_knowledge(
         "merge_commit_sha": merge_result.get("merge_commit_sha"),
         "para_task_id": final.get("para_task_id"),
         "run_id": final.get("run_id"),
+        "outcome_projection_id": final.get("outcome_projection_id"),
     }
     fix_doc = _facade().record_fix_knowledge(
         symptom=symptom,

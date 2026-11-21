@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "reviews": {
     "FHD/app/application/agent_orchestrator/catalog_product_edit.py": {
       "base_file": "FHD/app/application/agent_orchestrator/catalog_product_edit.py",
@@ -159,13 +160,13 @@
     "FHD/app/application/workflow/llm_plan_generation.py": {
       "base_file": "FHD/app/application/workflow/llm_plan_generation.py",
       "base_blob": "f37cad749d154240569bb7ebb14a4e06a30d85ad",
-      "head_blob": "5b7e45f0e3c599d526373aa84b0f456ce847779a",
+      "head_blob": "838897d6e3c300239bd02abe136e5f4872522747",
       "before_lines": 927,
-      "after_lines": 938,
-      "reason": "澄清完整问答由受保护的当前输入承载，省去重复截断副本；工具目录仅省去与完整 schema.required 完全相同的说明以节约上下文。",
-      "boundary": "保留全部 41 工具、204 动作、风险、幂等标志、输入输出 schema、引用与嵌套约束，继续用现有 LangChain/Pydantic 解析链。",
-      "validation": "native_tool_calling 与 tool_spec_v2 共 112 项通过；真实 registry 可无损还原，Draft 2020-12 引用/anyOf/嵌套 required 验证保持；估算减少 1727 token，实际模型延迟未测。",
-      "follow_up": "@42433422 核对目录无损语义及原任务目标覆盖；未引入新目录框架，不以删工具换取窗口容量，本请求不是批准。",
+      "after_lines": 942,
+      "reason": "原回复生成链须拒绝空流、半截JSON和异常终态，保留已发布内容并复用同一审核上下文；没有新增模型调用车道。",
+      "boundary": "原规划器保留计划/回复业务校验，通用JSON信封解析复用既有response_completion helper；文件降至39,786字节，不新增模块、不调整结构阈值。",
+      "validation": "FHD主链1316 passed/1既有skip；最后7文件435 passed，覆盖完成性、provider/adapter与plan_repair；共享SDK2.41兼容环境，锁版2.45与精确head CI仍待核对。",
+      "follow_up": "由仓库维护者按现有主线队列审阅精确blob及职责边界；本条只登记增长请求，不构成批准，正式合入仍须当前提交CI与原审核。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/elt/table_segmentation.py": {
@@ -194,14 +195,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py",
-      "base_blob": "947111a9c8ba15a23851c6896ce1ea2993f504a8",
-      "head_blob": "fd570167c207833a44be6da7eebd38dd7082c440",
-      "before_lines": 2159,
-      "after_lines": 2163,
-      "reason": "TTS/chat stream progress contract hardening needs a few extra lines in agent_butler_api_merged for decode/progress path.",
-      "boundary": "MODstore agent_butler_api_merged TTS/chat stream helpers only; no new public HTTP routes.",
-      "validation": "MODstore unit tests for mimo_tts decode/progress plus chat stream contract tests.",
-      "follow_up": "Split TTS helpers out of agent_butler_api_merged once stream contract stabilizes.",
+      "base_blob": "ac44211e7ce17fbe9702e46f058a0f7bdb42474c",
+      "head_blob": "d739f941a8f6321493a44605ad7c22f5ac5341e8",
+      "before_lines": 2156,
+      "after_lines": 2162,
+      "reason": "管理端原同步及SSE入口须在成功日志前核对正文与模型真实终态，正常L2工具调用保留；不能以空正文伪造完成。",
+      "boundary": "继续在原职责入口完成协议归一化、身份授权与事实回执；通用模型、队列和图运行时复用现有组件，不机械拆成part模块规避审查。",
+      "validation": "tests/test_agent_butler_api.py及5个聊天模型模块联合145 passed；L1管理员同步/SSE、L2真实工具及授权聊天联合96 passed。",
+      "follow_up": "由仓库维护者按现有主线队列审阅精确blob及职责边界；本条只登记增长请求，不构成批准，正式合入仍须当前提交CI与原审核。",
       "review_owner": "@42433422"
     },
     "FHD/mods/attendance-industry/backend/attendance_engine/convert.py": {
@@ -219,13 +220,13 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py",
       "base_blob": "ca417b7d810eb99e9dc2c8e58be185ff102a89b7",
-      "head_blob": "67908f056fea606b781a93d4927044736e4d2906",
+      "head_blob": "dcc2544dc69092b6a4d55dddf39634b7708911fe",
       "before_lines": 1110,
-      "after_lines": 1123,
-      "reason": "评审请求：在原执行阶段核验冻结的战略输入/包/配置，保护认知前原输入，给原生文件回执适配传入可信工作区；不改变原生输出路径协议。",
-      "boundary": "只有已有战略作用域进入合同薄适配；真实文件仍经过原tenant路径、scope、稳定字节和verification检查，普通员工协议保持原语义。",
-      "validation": "真实管理端CSV、绝对/相对路径别名、越权/符号链接/文件漂移、客户下载与原工作流消费者回归通过；全包正常mypy及原格式门通过。",
-      "follow_up": "Keep contract logic in the focused helper and review extraction of phase orchestration before further growth of the mechanical executor module.",
+      "after_lines": 1136,
+      "reason": "沿原员工阶段传递真实转交用户，并在降级阻断后进入原结果结算而不启动验证工具；保留真实token和unknown状态。",
+      "boundary": "沿原员工执行阶段保留可信owner、usage和unknown；来源用户直接依赖原db.identity.User，动态facade计数保持原115，不增加调度车道或放宽门禁。",
+      "validation": "最后execution/handoff完整20项通过；之前授权聊天联合96 passed、员工编排对照26 passed；原动作与unknown回执保留，模型usage为受控fixture。",
+      "follow_up": "由仓库维护者按现有主线队列审阅精确blob及职责边界；本条只登记增长请求，不构成批准，正式合入仍须当前提交CI与原审核。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/chat-orchestration/useChatOrchestrationRemoteRound.ts": {
@@ -374,14 +375,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service_merged.py",
-      "base_blob": "b381e33fa505357f7a4bd1b8b96eeb65ce74f289",
-      "head_blob": "44a260e1e24b31cd17e1a50d795ae0125666d822",
-      "before_lines": 1315,
-      "after_lines": 1347,
-      "reason": "Review request only: route approved employee-evolution suggestions to the existing curator execution adapter and preserve approval and retry state.",
-      "boundary": "The existing suggestion facade keeps approval authorization and event publication; execution and receipt handling remain in employee_evolution_dispatch.",
-      "validation": "Focused curator execution and receipt tests passed locally; final-head CI and architecture review remain outstanding. This request is not approval.",
-      "follow_up": "Review locking, idempotent dispatch and recovery of previously dispatched suggestions against the curator execution adapter.",
+      "base_blob": "44a260e1e24b31cd17e1a50d795ae0125666d822",
+      "head_blob": "3056737086086fc11e8c36ac46050e58f343453c",
+      "before_lines": 1347,
+      "after_lines": 1416,
+      "reason": "原建议单跨请求排队必须保留可信owner与最低等级，阻断未知来源历史转交；复用原表与队列，不创建新调度服务。",
+      "boundary": "继续在原职责入口完成协议归一化、身份授权与事实回执；通用模型、队列和图运行时复用现有组件，不机械拆成part模块规避审查。",
+      "validation": "L1授权/工作流/员工三组92 passed/1既有Promptfoo skip；新增13项handoff覆盖撤权、private、legacy、伪造scope与恢复同一记录。",
+      "follow_up": "由仓库维护者按现有主线队列审阅精确blob及职责边界；本条只登记增长请求，不构成批准，正式合入仍须当前提交CI与原审核。",
       "review_owner": "@42433422"
     },
     "FHD/app/fastapi_routes/ai_open.py": {
@@ -483,25 +484,25 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_usage.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "6ea75907d004761fdb6e07673d9d56739c558a14",
+      "head_blob": "675ad1ff4396eed94704ac853fd87d3707865256",
       "before_lines": 0,
-      "after_lines": 939,
-      "reason": "评审请求：原组合预留冻结上游传输身份，原生账本只能补结同一调用。",
+      "after_lines": 940,
+      "reason": "评审请求：原组合预留冻结上游传输身份，原生账本只能补结同一调用。 并行修复：评审请求：已有平台调用、公司封套、原组合任务与小C规划接回同一持久消费身份；保留公司优先、原始attempt限制，接已验证网关额度及其非供应商账单标记。 本轮只在既有调用身份白名单加入 control_task_id，以绑定原 PR 的 MacControlTask，不借用 Retort event_id。",
       "boundary": "仍使用原SQL公司/组合预算与请求账本，不新增记账引擎或释放未知责任。",
-      "validation": "同原调用并发恢复、错身份、额外attempt、估计usage与撤权反例通过；真实PG依赖现有CI。 测试不等于最终源码增长或发布批准。",
+      "validation": "同原调用并发恢复、错身份、额外attempt、估计usage与撤权反例通过；真实PG依赖现有CI。 测试不等于最终源码增长或发布批准。 并行修复：整合网关、公司/规划预算和原始usage定向149项通过；正常mypy6个生产源码通过。未知用量保留占用，额度观测不能代替单次调用回执，真实供应商账单仍未验收。 本轮原 PR 原任务预算、逐调用 grant、未知用量及原候选 CI 结算定向23项通过；新增身份沿原事务消费。",
       "follow_up": "请 @42433422 复核本条精确源码增长与最终CI；沿既有适配边界维护，此记录提出评审而不代替架构、安全或主序列批准。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py",
       "base_blob": "b9f538e97e17f60326c29821ad4d8d0d4225585f",
-      "head_blob": "5542f0f3761e1dca8fca11a23787f0a03b272dc2",
+      "head_blob": "646209955405e6192e16039b0ebf98ffcc5dc387",
       "before_lines": 2294,
-      "after_lines": 2398,
-      "reason": "评审请求：在原员工认知调用中接获批RAG上下文提示词及原引用结果观察。",
-      "boundary": "保留原资料权限、模型预算、调用链和真实消费者；引用有效不等于事实或业务正确。",
-      "validation": "原RAG消费者及训练/撤回/过期租约回归通过，MODstore完整原mypy通过。 测试不等于最终源码增长或发布批准。",
-      "follow_up": "请 @42433422 复核本条精确源码增长与最终CI；沿既有适配边界维护，此记录提出评审而不代替架构、安全或主序列批准。",
+      "after_lines": 2430,
+      "reason": "评审请求：在原员工认知调用中接获批RAG上下文提示词及原引用结果观察。 并行修复：原逐handler等级检查失败时须保留已完成或unknown原outputs，并将下一动作标为not_started；异常不能抹掉已消耗模型用量。",
+      "boundary": "保留原资料权限、模型预算、调用链和真实消费者；引用有效不等于事实或业务正确。 并行修复：继续在原职责入口完成协议归一化、身份授权与事实回执；通用模型、队列和图运行时复用现有组件，不机械拆成part模块规避审查。",
+      "validation": "原RAG消费者及训练/撤回/过期租约回归通过，MODstore完整原mypy通过。 测试不等于最终源码增长或发布批准。 并行修复：tests/test_xiaoc_life_execution.py的3种模型返回/首动作完成/原unknown对照通过；L1授权与聊天同进程96 passed，原员工对照26 passed。",
+      "follow_up": "请 @42433422 复核本条精确源码增长与最终CI；沿既有适配边界维护，此记录提出评审而不代替架构、安全或主序列批准。 并行修复：由仓库维护者按现有主线队列审阅精确blob及职责边界；本条只登记增长请求，不构成批准，正式合入仍须当前提交CI与原审核。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/reviewed_excel_structural_index.py": {
@@ -795,13 +796,13 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py",
       "base_blob": "b2be0908fb47e0522f94627c258b5af3c2b03095",
-      "head_blob": "6f6cfe193bbc751a360b291963659a60f2a8086e",
+      "head_blob": "fb339b6ab84c2a7926458200f1b5ffe361f57e6f",
       "before_lines": 634,
-      "after_lines": 894,
-      "reason": "评审请求：将发送前已冻结的原调用ID传给原LiteLLM请求，以便原生实测账本恢复。",
-      "boundary": "未知usage、原attempt和首次模型身份约束不变；禁止估计或重复模型请求结清责任。",
-      "validation": "SDK/流/Responses/账本/远端组合222项通过、7条件跳过，其中5项真实PG读回待现有CI。 测试不等于最终源码增长或发布批准。",
-      "follow_up": "请 @42433422 复核本条精确源码增长与最终CI；沿既有适配边界维护，此记录提出评审而不代替架构、安全或主序列批准。",
+      "after_lines": 895,
+      "reason": "评审请求：将发送前已冻结的原调用ID传给原LiteLLM请求，以便原生实测账本恢复。 并行修复：沿已集成LiteLLM规范化器新增原finish_reason透传，避免后续网关把length/filter/缺终态误当完整回答；保留现有路由和预算实现。",
+      "boundary": "未知usage、原attempt和首次模型身份约束不变；禁止估计或重复模型请求结清责任。 并行修复：继续在原职责入口完成协议归一化、身份授权与事实回执；通用模型、队列和图运行时复用现有组件，不机械拆成part模块规避审查。",
+      "validation": "SDK/流/Responses/账本/远端组合222项通过、7条件跳过，其中5项真实PG读回待现有CI。 测试不等于最终源码增长或发布批准。 并行修复：原LiteLLM、供应商、计费与OpenAI兼容网关6模块联合145 passed，含三种原生provider结束原因与reasoning-only拒绝；不改依赖锁。",
+      "follow_up": "请 @42433422 复核本条精确源码增长与最终CI；沿既有适配边界维护，此记录提出评审而不代替架构、安全或主序列批准。 并行修复：由仓库维护者按现有主线队列审阅精确blob及职责边界；本条只登记增长请求，不构成批准，正式合入仍须当前提交CI与原审核。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat/dialogue_memory.py": {
@@ -888,6 +889,5 @@
       "follow_up": "请 @42433422 复核精确源码增长和原执行来源边界；旧无绑定CR继续等待证据，本记录仅请求评审而不代替批准。",
       "review_owner": "@42433422"
     }
-  },
-  "schema_version": 1
+  }
 }

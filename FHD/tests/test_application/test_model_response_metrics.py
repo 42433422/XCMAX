@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from app.application.workflow import model_response_metrics as evidence
-from app.application.workflow.llm_plan_generation import LlmPlanGeneration
+from app.application.workflow.llm_plan_generation import LlmPlanGeneration, _LightReplyUnavailable
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.services.tools_execution.registry import get_workflow_tool_registry
 
@@ -17,6 +17,7 @@ from app.services.tools_execution.registry import get_workflow_tool_registry
 )
 def test_raw_completion_outcome_survives_invalid_plan(monkeypatch, message, response, outcome):
     observed = []
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "0")
     monkeypatch.setattr(evidence, "observe_plan_stage", lambda **kw: observed.append(kw))
     ai = Mock()
     ai.get_context.return_value = None
@@ -70,7 +71,7 @@ def test_retry_success_and_subsequent_request_do_not_duplicate_or_leak(monkeypat
 
 
 @pytest.mark.parametrize("partial", [True, False])
-def test_streamed_nonplan_response_is_still_a_model_return(monkeypatch, partial):
+def test_interrupted_stream_never_reports_a_complete_model_return(monkeypatch, partial):
     observed = []
     monkeypatch.setattr(evidence, "observe_plan_stage", lambda **kw: observed.append(kw))
     from app.infrastructure.chat_stream_lifetime import current_lifetime
@@ -87,11 +88,8 @@ def test_streamed_nonplan_response_is_still_a_model_return(monkeypatch, partial)
     generation = LlmPlanGeneration(Mock(), Mock(), Mock())
     token = current_lifetime.set(Mock())
     try:
-        with evidence.model_response_scope():
-            result = generation._stream_reply([], {})
-            assert result == (
-                {"choices": [{"message": {"content": "not a plan"}}]} if partial else None
-            )
+        with evidence.model_response_scope(), pytest.raises(_LightReplyUnavailable):
+            generation._stream_reply([], {})
     finally:
         current_lifetime.reset(token)
-    assert [item["outcome"] for item in observed] == ["returned" if partial else "error"]
+    assert [item["outcome"] for item in observed] == ["error"]

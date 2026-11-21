@@ -5,8 +5,16 @@ import json
 
 def goal_review_response(payload: dict, *, source: str, node_ids: list[str], outcome: str) -> dict:
     """Script one known review; never infer an approval from arbitrary plan content."""
-    assert payload["task"] == "audit_goal_coverage"
     assert payload["user_message"] == source
+    if payload["task"] == "audit_reply":
+        assert outcome == "reply"
+        assert len(node_ids) == 1
+        assert isinstance(payload["reply"], str) and payload["reply"].strip()
+        assert "plan" not in payload
+        return {
+            "choices": [{"message": {"content": '{"violations":[],"clarification_question":null}'}}]
+        }
+    assert payload["task"] == "audit_goal_coverage"
     assert set(node_ids) == {node["node_id"] for node in payload["plan"]["nodes"]}
     review = {
         "goals": [

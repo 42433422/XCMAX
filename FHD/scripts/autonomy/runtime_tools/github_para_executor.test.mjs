@@ -1,16 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runGithubExecutor } from './github_para_executor.mjs';
 import { modelChildEnv } from './credential_vault.mjs';
 import { openCodePlatformConfig, OPENCODE_CREDENTIAL_ISOLATION } from './opencode_agent.mjs';
+import { bindWorkspaceTask } from './strategic_workspace_controller.mjs';
 
 const identity = { request_id: '11111111-2222-4333-8444-555555555555', run_id: '123', repository: 'owner/repo', issue_number: 42, finished: false };
 
-for (const kind of ['customer_feedback_repair', 'training_candidate_repair']) {
+test('original PR uses its control task identity and a distinct task-bound budget grant', async () => {
+  const request = identity.request_id, budget = '22222222-3333-5444-8555-666666666666';
+  const env = { GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '1', GITHUB_RUN_ID: '123',
+    PARA_GITHUB_REQUEST_ID: request, PARA_GITHUB_STAGE: 'execute', DEVFLEET_FORCE_OPENCODE: '1',
+    PARA_STRATEGIC_REQUEST_ID: budget, PARA_STRATEGIC_ORIGINAL_REQUEST_ID: request,
+    PARA_STRATEGIC_ORIGINAL_KIND: 'original_pr_repair', PARA_STRATEGIC_DEVICE_ID: 'cloud',
+    PARA_STRATEGIC_BOOTSTRAP_TOKEN: 'fixture-bootstrap-token-32-characters', PARA_OPENCODE_MODEL: 'coding' };
+  const task = { task_id: 'task-fix', subtask_id: 'sub-fix',
+    title: `[xcmax:${createHash('sha256').update(request).digest('hex').slice(0,32)}:${'a'.repeat(32)}] fix`,
+    description: 'repair original PR', repo_url: 'https://github.com/owner/repo.git',
+    base_branch: 'b'.repeat(40), work_branch: 'devfleet/fix', auto_merge: false };
+  let owner = request.replaceAll('-', '');
+  const fetchControl = async (url, options) => {
+    assert.ok(url.includes(`/strategic-runs/${budget}/`));
+    return { ok: true, json: async () => ({ ...JSON.parse(options.body),
+      schema: 'strategic-workspace/v1', request_id: budget, control_task_id: owner,
+      grant_id: 'c'.repeat(32), model: 'coding', model_token: 'fixture-original-task-token-32-characters',
+      deadline: new Date(Date.now()+60_000).toISOString(),
+      gateway_url: `https://xiu-ci.com/api/service/mac-control/strategic-runs/${budget}/v1` }) };
+  };
+  assert.equal((await bindWorkspaceTask(task, { env, fetchControl })).control_task_id, owner);
+  owner = 'f'.repeat(32);
+  await assert.rejects(bindWorkspaceTask(task, { env, fetchControl }), /workspace_task_grant_mismatch/);
+});
+
+for (const kind of ['customer_feedback_repair', 'training_candidate_repair', 'original_pr_repair']) {
 test(`${kind} requires the admitted header-only native profile and bound candidate`, async t => {
   const root = mkdtempSync(join(tmpdir(), 'para-header-only-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -21,23 +48,33 @@ test(`${kind} requires the admitted header-only native profile and bound candida
   mkdirSync(env.PARA_GITHUB_CANDIDATE_DIR);
   writeFileSync(join(env.PARA_GITHUB_CANDIDATE_DIR, 'manifest.json'), JSON.stringify(manifest));
   const accepted = { ...identity, kind, publication_candidate: manifest,
+    ...(kind === 'original_pr_repair' ? { pull_request: 7, source_sha: 'b'.repeat(40) } : {}),
     model_allocation: { status: 'admitted', model: 'coding', approved_models: ['coding'],
       provider: 'openai', execution_isolation: OPENCODE_CREDENTIAL_ISOLATION },
-    strategic_budget: { kind: 'github_opencode_workspace', request_id: identity.request_id,
+    strategic_budget: { kind: 'github_opencode_workspace', request_id: kind === 'original_pr_repair'
+      ? '22222222-3333-5444-8555-666666666666' : identity.request_id,
+      original_request_id: identity.request_id, original_request_kind: kind,
       binding_id: 'd'.repeat(32), source_sha: env.GITHUB_SHA, model: 'coding', provider: 'openai' } };
   const fetchStatus = async (url, options) => ({ ok: true, json: async () => {
     if (url.endsWith('/claim')) return { ...JSON.parse(options.body), schema: 'strategic-workspace/v1',
-      kind: 'github_opencode_workspace', request_id: identity.request_id, binding_id: 'd'.repeat(32),
+      kind: 'github_opencode_workspace', request_id: accepted.strategic_budget.request_id, binding_id: 'd'.repeat(32),
       deadline: new Date(Date.now()+60000).toISOString(), model: 'coding', device_id: 'cloud',
       bootstrap_token: 'fixture-bootstrap-token-at-least-32-characters',
-      gateway_url: `https://xiu-ci.com/api/service/mac-control/strategic-runs/${identity.request_id}/v1` };
+      gateway_url: `https://xiu-ci.com/api/service/mac-control/strategic-runs/${accepted.strategic_budget.request_id}/v1` };
     if (url.endsWith('/close-grant')) return { accepted: true };
     return accepted;
   } });
   let verified = 0, launched = 0;
   const options = { env, fetchStatus,
     verifyFeedbackIsolation: () => { verified += 1; },
-    spawnWorker: () => { launched += 1; const child = new EventEmitter(); child.kill = () => {}; return child; } };
+    spawnWorker: (_bin, _args, options) => {
+      launched += 1;
+      assert.equal(options.env.PARA_STRATEGIC_REQUEST_ID, accepted.strategic_budget.request_id);
+      assert.equal(options.env.MODSTORE_PARA_DISPATCH_TOKEN, undefined);
+      assert.equal(options.env.PARA_PLATFORM_GATEWAY_KEYS_JSON, undefined);
+      if (kind === 'original_pr_repair') assert.equal(options.env.PARA_STRATEGIC_ORIGINAL_REQUEST_ID, identity.request_id);
+      const child = new EventEmitter(); child.kill = () => {}; return child;
+    } };
   assert.equal(await runGithubExecutor(options), 0);
   assert.equal(verified, 1); assert.equal(launched, 1);
   assert.deepEqual(JSON.parse(readFileSync(join(env.PARA_GITHUB_EVIDENCE_DIR, 'execution.json'))), {
@@ -46,6 +83,12 @@ test(`${kind} requires the admitted header-only native profile and bound candida
   });
   await assert.rejects(runGithubExecutor({ ...options, verifyFeedbackIsolation: () => { throw new Error('native_boundary_missing'); } }), /native_boundary_missing/);
   assert.equal(launched, 1);
+  if (kind === 'original_pr_repair') {
+    accepted.strategic_budget.original_request_id = 'foreign-request';
+    await assert.rejects(runGithubExecutor(options), /requires_original_isolated_budget_binding/);
+    accepted.strategic_budget.original_request_id = identity.request_id;
+    assert.equal(launched, 1);
+  }
   const binding = accepted.strategic_budget;
   delete accepted.strategic_budget;
   await assert.rejects(runGithubExecutor(options), /requires_original_isolated_budget_binding/);

@@ -7,7 +7,15 @@ from __future__ import annotations
 
 import importlib
 
+from fastapi import HTTPException
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.xiaoc_life_chat import (
+    current_manual_life_scope,
+    persisted_manual_life_scope,
+    require_manual_life_capability,
+)
+from modstore_server.xiaoc_life_policy import LifePolicyError
 
 # --- from employee_autonomy_service_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -149,6 +157,7 @@ def create_collab_thread(
             status="open",
             created_by_employee_id=(created_by_employee_id or "")[:128],
         )
+        require_manual_life_capability()
         session.add(row)
         session.commit()
         tid = int(row.id)
@@ -193,6 +202,7 @@ def post_collab_message(
             mentions_json=_facade()._jdumps(mention_ids),
             payload_json=_facade()._jdumps(payload or {}, max_chars=30000),
         )
+        require_manual_life_capability()
         session.add(row)
         thread.updated_at = _facade().datetime.now(_facade().timezone.utc)
         session.commit()
@@ -254,6 +264,12 @@ def create_employee_suggestion(
 ) -> _facade().Dict[str, _facade().Any]:
     src = str(source_employee_id or "").strip() or "system"
     pl = dict(payload or {})
+    pl.pop("_xiaoc_manual_scope", None)
+    if scope := current_manual_life_scope():
+        pl["_xiaoc_manual_scope"] = scope
+    encoded_payload = _facade()._jdumps(pl)
+    if len(encoded_payload) > 100000:
+        raise ValueError("suggestion payload exceeds the durable record limit")
     targets = _facade()._infer_suggestion_targets(src, pl, explicit_targets=target_employee_ids)
     targets = _facade()._dedupe_strs(targets)
     risk = str(risk_level or "medium").strip().lower()
@@ -268,11 +284,12 @@ def create_employee_suggestion(
             kind=knd,
             summary=(summary or "")[:8000],
             detail=(detail or "")[:30000],
-            payload_json=_facade()._jdumps(pl, max_chars=100000),
+            payload_json=encoded_payload,
             risk_level=risk,
             status="pending",
             thread_id=int(thread_id) if thread_id else None,
         )
+        require_manual_life_capability()
         session.add(row)
         session.commit()
         sid = int(row.id)
@@ -459,6 +476,55 @@ def dispatch_suggestion(
     approved_by_user_id: int = 0,
     force_approve_if_needed: bool = False,
 ) -> _facade().Dict[str, _facade().Any]:
+    """Pending follow-ups retain the originating management request's restrictions."""
+    sid = int(suggestion_id or 0)
+    with _facade().get_session_factory()() as session:
+        row = session.get(_facade().EmployeeSuggestion, sid)
+        if row is None:
+            return {"ok": False, "error": "not found"}
+        # Completed receipts stay readable after revocation; no new dispatch occurs.
+        if row.status == "done":
+            return {"ok": True, "suggestion_id": sid, "status": "done"}
+        try:
+            payload = _facade().json.loads(row.payload_json or "{}")
+            if not isinstance(payload, dict):
+                raise LifePolicyError("建议单内容无效，保留待核对")
+            scope = payload.get("_xiaoc_manual_scope")
+            if "_xiaoc_manual_scope" in payload and scope is None:
+                raise LifePolicyError("原手动任务授权记录无效，不能派发")
+            if scope is None and (
+                row.kind == "task_handoff" or payload.get("kind") == "task_handoff"
+            ):
+                if not row.approved_by_user_id or row.approved_at is None:
+                    raise LifePolicyError("历史转交任务缺少可信用户来源，保留待人工核对批准")
+                scope = {"minimum_level": 3, "owner_user_id": row.approved_by_user_id}
+        except ValueError as exc:
+            return {"ok": False, "suggestion_id": sid, "status": "blocked", "error": str(exc)}
+    try:
+        with persisted_manual_life_scope(scope) as owner_user_id:
+            require_manual_life_capability()
+            return _dispatch_suggestion(
+                sid,
+                approved_by_user_id=approved_by_user_id,
+                force_approve_if_needed=force_approve_if_needed,
+                execution_owner_user_id=owner_user_id,
+            )
+    except (LifePolicyError, HTTPException) as exc:
+        return {
+            "ok": False,
+            "suggestion_id": sid,
+            "status": "blocked",
+            "error": str(exc.detail) if isinstance(exc, HTTPException) else str(exc),
+        }
+
+
+def _dispatch_suggestion(
+    suggestion_id: int,
+    *,
+    approved_by_user_id: int,
+    force_approve_if_needed: bool,
+    execution_owner_user_id: int | None,
+) -> _facade().Dict[str, _facade().Any]:
     sid = int(suggestion_id or 0)
     if sid <= 0:
         return {"ok": False, "error": "invalid suggestion id"}
@@ -498,7 +564,7 @@ def dispatch_suggestion(
             targets = _facade()._infer_suggestion_targets(
                 str(row.source_employee_id or ""), payload
             )
-        actor_uid = _facade()._resolve_actor_user_id(
+        actor_uid = execution_owner_user_id or _facade()._resolve_actor_user_id(
             session, fallback_user_id=int(approved_by_user_id or 0)
         )
         summary = str(row.summary or "")
@@ -523,12 +589,15 @@ def dispatch_suggestion(
     ]
     result: _facade().Dict[str, _facade().Any]
     try:
+        require_manual_life_capability()
         result = dispatch_subtasks(
             subtasks,
             created_by_user_id=actor_uid,
             max_concurrency=min(max(1, len(subtasks)), 4),
             allow_high_risk_real_run=False,
         )
+    except LifePolicyError:
+        raise
     except RECOVERABLE_ERRORS as exc:
         result = {"ok": False, "error": str(exc)}
     with sf() as session:

@@ -40,7 +40,6 @@ def _execution_context():
         patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
         patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
         patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
         patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
         patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),

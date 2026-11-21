@@ -11,6 +11,7 @@ from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from ..reasoning_stream import publish_reasoning, reasoning_from_message
+from ..response_completion import normal_finish_reason
 
 
 class OpenAISdkProvider:
@@ -104,17 +105,35 @@ class OpenAISdkProvider:
         )
         iterator = iter(stream)
         reasoning: list[str] = []
+        finished = False
         try:
             while True:
                 chunk = await asyncio.to_thread(next, iterator, None)
                 if chunk is None:
                     break
+                choices = (
+                    chunk.get("choices")
+                    if isinstance(chunk, dict)
+                    else getattr(chunk, "choices", None)
+                )
+                first = choices[0] if isinstance(choices, (list, tuple)) and choices else None
+                finish = (
+                    first.get("finish_reason")
+                    if isinstance(first, dict)
+                    else getattr(first, "finish_reason", None)
+                )
+                if finish is not None and not normal_finish_reason(finish):
+                    raise ValueError("模型回复未完整结束")
+                if normal_finish_reason(finish):
+                    finished = True
                 reasoning_text = _chunk_delta_reasoning(chunk)
                 if reasoning_text:
                     reasoning.append(reasoning_text)
                 text = _chunk_delta_text(chunk)
                 if text:
                     yield text
+            if not finished:
+                raise ValueError("模型回复缺少结束状态")
         finally:
             publish_reasoning("".join(reasoning))
 

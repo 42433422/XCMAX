@@ -1091,6 +1091,18 @@ async def butler_corp_intake_fill(
     return {"success": True, "reply": reply, "draft": draft}
 
 
+def _require_complete_butler_reply(
+    text: Any, tool_calls: list[dict[str, Any]], finish_reason: Any
+) -> None:
+    completed = {"stop", "end_turn", "stop_sequence"}
+    if tool_calls:
+        completed.update({"tool_calls", "function_call"})
+    if str(finish_reason or "").lower() not in completed:
+        raise RuntimeError("模型回复未完整结束，本轮未完成")
+    if not tool_calls and (not isinstance(text, str) or not text.strip()):
+        raise RuntimeError("模型未返回有效正文，本轮未完成")
+
+
 @_facade().router.post("/chat")
 async def butler_chat(
     request: _facade().Request,
@@ -1170,6 +1182,7 @@ async def butler_chat(
                 for tc in tool_calls_raw
             ]
             usage = tool_resp.get("usage") or {}
+            finish_reason = choice0.get("finish_reason")
         else:
             raw_response = await _api.chat_dispatch(
                 provider,
@@ -1178,12 +1191,15 @@ async def butler_chat(
                 model=model,
                 messages=msgs,
                 max_tokens=body.max_tokens,
+                forbid_reasoning_fallback=True,
             )
             if not raw_response.get("ok"):
                 raise RuntimeError(raw_response.get("error") or "butler chat failed")
             text = raw_response.get("content", "")
             tool_calls = []
             usage = raw_response.get("usage") or {}
+            finish_reason = raw_response.get("finish_reason")
+        _require_complete_butler_reply(text, tool_calls, finish_reason)
         page_tool_calls, readonly_brief = _api._partition_butler_tool_calls(
             tool_calls, user=user, db=db
         )
@@ -1268,6 +1284,7 @@ async def butler_chat_stream(
     async def event_stream():
         collected = []
         usage = {}
+        finish_reason = None
         try:
             async for chunk in _api.chat_dispatch_stream(
                 provider,
@@ -1281,12 +1298,16 @@ async def butler_chat_stream(
                     raise RuntimeError(str(chunk.get("error") or "upstream error"))
                 if chunk.get("type") == "usage":
                     usage = chunk.get("usage") or {}
+                elif chunk.get("type") == "finish":
+                    finish_reason = chunk.get("finish_reason") or "missing"
+                    _require_complete_butler_reply("".join(collected), [], finish_reason)
                 elif chunk.get("type") == "delta":
                     text = str(chunk.get("delta") or "")
                     if text:
                         collected.append(text)
                         yield f"data: {_api.json.dumps({'text': text, 'done': False}, ensure_ascii=False)}\n\n"
             full_text = "".join(collected)
+            _require_complete_butler_reply(full_text, [], finish_reason or "missing")
             usage_obj = _api.usage_from_response(usage, msgs, full_text)
             charge = _api.Decimal("0")
             if not is_byok:

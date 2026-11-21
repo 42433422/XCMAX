@@ -747,6 +747,7 @@ def prepare_platform_call(
         - {
             "grant_id",
             "event_id",
+            "control_task_id",
             "task_id",
             "subtask_id",
             "attempt",

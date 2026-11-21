@@ -151,9 +151,11 @@ class PlannedWorkflowDispatch:
             "success": True,
             "message": "回复完成",
             "response": text,
+            "execution": PlannedWorkflowDispatch._no_write_execution(context),
             "data": {
                 "text": text,
                 "action": "model_reply",
+                "execution_started": False,
                 "workflow_runtime": "xcagi-langgraph",
                 "plan_audit": result.final_context.get("plan_audit") or {},
                 "workflow_trace": result.final_context.get("workflow_trace") or [],
@@ -464,6 +466,10 @@ class PlannedWorkflowDispatch:
             deterministic = (plan.metadata or {}).get("planning_source") == "deterministic_command"
             if deterministic and reason:
                 message_text = reason
+            elif failure_code == "model_response_incomplete":
+                warning = "模型回复未完整生成，请重试。"
+                prefix = str((plan.metadata or {}).get("partial_reply") or "")
+                message_text = f"{prefix}\n\n{warning}" if prefix else warning
             elif coverage_rejected:
                 message_text = (
                     "这次任务的目标、条件或先后顺序尚未核对完整，本次没有执行任何业务操作。"
@@ -505,6 +511,8 @@ class PlannedWorkflowDispatch:
                     "action": "workflow_planning_failed",
                     "error_code": "workflow_goal_coverage_rejected"
                     if coverage_rejected
+                    else "model_response_incomplete"
+                    if failure_code == "model_response_incomplete"
                     else "context_window_exceeded"
                     if failure_code == "context_window_exceeded"
                     else "workflow_plan_unavailable"

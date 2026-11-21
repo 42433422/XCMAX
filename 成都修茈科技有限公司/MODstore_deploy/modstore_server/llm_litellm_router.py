@@ -520,6 +520,7 @@ def _normalize_response(
     out: Dict[str, Any] = {
         "ok": True,
         "content": content or reasoning,
+        "finish_reason": getattr(choices[0], "finish_reason", None) if choices else None,
         "usage": usage,
         "provider": provider,
         "model": used_model,

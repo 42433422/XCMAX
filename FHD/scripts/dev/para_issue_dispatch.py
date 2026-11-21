@@ -23,11 +23,13 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -133,6 +135,11 @@ class DispatchClient:
     def get(self, task_id: str) -> dict:
         path = "/api/service/mac-control/tasks/" + urllib.parse.quote(task_id, safe="")
         return self._task(self._call("GET", path))
+
+    def github_run(self, request_id: str) -> dict:
+        return self._call(
+            "GET", "/api/service/mac-control/github-runs/" + urllib.parse.quote(request_id, safe="")
+        )
 
     @staticmethod
     def _task(response: dict) -> dict:
@@ -443,15 +450,10 @@ def run(args: argparse.Namespace) -> None:
                 raise ValueError("original PR source changed after the write intent")
             target = selected
             if target:
-                result.tool = "codex"
+                result.tool = "opencode"
                 result.original_sha = target.old_sha
                 result.pr_number = target.number
                 result.pr_url = f"https://github.com/{repo}/pull/{target.number}"
-                finish(
-                    "pr_repair_blocked",
-                    "原 PR 自动修复暂停：尚无不可导出的任务模型凭据；仅可回读已应用结果",
-                    6,
-                )
         except (
             OSError,
             ValueError,
@@ -590,7 +592,85 @@ def run(args: argparse.Namespace) -> None:
         if reported_head and reported_head != remote_head:
             finish("head_mismatch", "回报提交与远端分支不一致，拒绝创建 PR", 6)
         if target:
-            finish("pr_repair_blocked", repair.REPAIR_CREDENTIAL_BLOCK, 6)
+            pr_token = os.environ.get("PR_CREATE_TOKEN", "").strip()
+            if not pr_token:
+                finish("pr_repair_blocked", "原 PR 更新缺少独立发布令牌", 6)
+            request_id = str(uuid.UUID(hex=result.control_task_id))
+
+            def publication_now():
+                current_task = client.get(result.control_task_id)
+                return repair.verified_publication(
+                    repo, number, target, current_task, client.github_run(request_id), remote_head
+                )
+
+            publication = publication_now()
+
+            def before_write():
+                current_issue = impl._fetch_issue(repo, number, args.token)
+                if (
+                    current_issue.get("state") != "open"
+                    or not impl._has_aimplement_label(current_issue)
+                    or not repair.is_repair_incident(current_issue)
+                    or repair.select_target(repo, current_issue, args.base_branch, get) != target
+                ):
+                    raise ValueError("original PR authorization changed")
+                proof = publication_now()
+                if proof != publication:
+                    raise ValueError("original PR publication receipt changed")
+                expected = (
+                    target,
+                    remote_head,
+                    result.control_task_id,
+                    result.para_task_id,
+                    result.github_run_id,
+                )
+                previous = repair.prior_intent(
+                    repo,
+                    number,
+                    args.base_branch,
+                    list(freshness.pages(get, f"/repos/{repo}/issues/{number}/comments")),
+                )
+                if previous is None:
+                    response = impl._gh_post(
+                        f"https://api.github.com/repos/{repo}/issues/{number}/comments",
+                        args.token,
+                        {
+                            "body": repair.intent_body(
+                                repo,
+                                number,
+                                target,
+                                remote_head,
+                                control_task_id=result.control_task_id,
+                                para_task_id=result.para_task_id,
+                                github_run_id=result.github_run_id,
+                            )
+                        },
+                    )
+                    if type(response.get("id")) is not int or response["id"] < 1:
+                        raise ValueError("original PR write intent was not acknowledged")
+                    previous = repair.prior_intent(
+                        repo,
+                        number,
+                        args.base_branch,
+                        list(freshness.pages(get, f"/repos/{repo}/issues/{number}/comments")),
+                    )
+                if previous != expected:
+                    raise ValueError("original PR write intent differs from the frozen update")
+                return proof
+
+            try:
+                result.changed_files = repair.advance(
+                    f"https://github.com/{repo}.git",
+                    target,
+                    remote_head,
+                    pr_token,
+                    before_write=before_write,
+                    publication=publication,
+                )
+            except (OSError, subprocess.SubprocessError):
+                # The native ref may already have advanced. Read it, never re-dispatch.
+                _finish_update(result, target, remote_head, get)
+            _finish_update(result, target, remote_head, get)
         result.changed_files = _checked_diff(repo, args.base_branch, remote_head, args.token)
         if result.changed_files > impl.MAX_CHANGED_FILES:
             finish(

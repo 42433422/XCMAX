@@ -17,6 +17,8 @@ from modstore_server.employee_executor_policies import (
     _is_transient_llm_error as _is_transient_llm_error,
     execution_blocks_redispatch,
 )
+from modstore_server.xiaoc_life_chat import manual_life_scope_active
+from modstore_server.xiaoc_life_policy import LifePolicyError
 
 # --- from employee_executor_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -1950,7 +1952,35 @@ def _actions_real(
     for handler in handlers:
         from modstore_server.strategic_portfolio_usage import remaining_execution_seconds
 
-        remaining_seconds = remaining_execution_seconds()
+        try:
+            remaining_seconds = remaining_execution_seconds()
+        except LifePolicyError as exc:
+            if not manual_life_scope_active():
+                raise
+            from modstore_server.customer_issue_delivery_contract import (
+                execution_requires_reconciliation,
+            )
+
+            return {
+                "task": task,
+                "handlers": handlers,
+                "outputs": [
+                    *outputs,
+                    {
+                        "handler": str(handler),
+                        "ok": False,
+                        "status": "blocked",
+                        "outcome": "not_started",
+                        "executed": False,
+                        "error": str(exc),
+                    },
+                ],
+                "status": "blocked",
+                "blocked_by_life_policy": True,
+                "requires_reconciliation": execution_requires_reconciliation({"outputs": outputs}),
+                "error": str(exc),
+                "summary": f"已保留 {len(outputs)} 条原动作回执；授权变化后未启动后续动作。",
+            }
         if (skip_local_after_para_dispatch or para_only) and str(
             handler
         ) in _LOCAL_FALLBACK_HANDLERS:
@@ -2339,6 +2369,8 @@ def _handlers_execution_ok(result: _facade().Dict[str, _facade().Any]) -> bool:
     用于 Para 离线后的本地回退：``para_delegate`` 失败但 ``agent``/``vibe_edit``
     成功时不应整单 handler_failed。
     """
+    if result.get("blocked_by_life_policy"):
+        return False
     outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
     if not outputs:
         return True

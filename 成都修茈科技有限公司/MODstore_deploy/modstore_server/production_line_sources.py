@@ -79,6 +79,9 @@ def _inventory(payload: dict[str, Any], key: str) -> list[dict[str, Any]]:
 
 
 def _ci(repo: str, sha: str, context: dict[str, Any]) -> tuple[dict, list[dict]]:
+    from modstore_server.retort_delivery import _contains_commit, _source_contract
+    from modstore_server.retort_github_workspace import _download_artifact
+
     run_id = context.get("ci_run_id")
     if run_id is None:
         rows = _inventory(
@@ -94,7 +97,6 @@ def _ci(repo: str, sha: str, context: dict[str, Any]) -> tuple[dict, list[dict]]
     run = github("GET", f"/repos/{repo}/actions/runs/{run_id}")
     _require(
         run.get("id") == run_id
-        and run.get("head_sha") == sha
         and run.get("head_branch") == "main"
         and run.get("path") == _CI_PATH
         and (run.get("repository") or {}).get("full_name") == repo
@@ -108,6 +110,38 @@ def _ci(repo: str, sha: str, context: dict[str, Any]) -> tuple[dict, list[dict]]
     )
     attempt = run.get("run_attempt")
     _require(type(attempt) is int and attempt > 0, "native_ci_attempt_required")
+    contract = _source_contract()
+    source_evidence = None
+    if run.get("head_sha") != sha:
+        _require(run.get("event") == "workflow_dispatch", "ci_source_identity_mismatch")
+
+        def read_archive(artifact):
+            with TemporaryDirectory(prefix="production-source-") as temporary:
+                root = Path(temporary)
+                _download_artifact(repo, artifact["id"], root, artifact["digest"])
+                report = root / "business-contract-evidence.json"
+                _require(
+                    report.is_file() and 0 < report.stat().st_size <= 1024**2,
+                    "ci_source_report_missing_or_oversized",
+                )
+                return {report.name: report.read_bytes()}
+
+        source_evidence = contract.read_source_evidence(
+            repo,
+            "ci_run_id",
+            run,
+            sha,
+            api=lambda path: github("GET", path),
+            read_archive=read_archive,
+        )
+    contract.verify_run_source(
+        "ci_run_id",
+        run,
+        sha,
+        source_evidence=source_evidence,
+        contains=lambda ancestor, descendant: _contains_commit(repo, ancestor, descendant),
+    )
+    run = {**run, "verified_source_evidence": source_evidence}
     jobs = _inventory(
         github("GET", f"/repos/{repo}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100"),
         "jobs",
@@ -253,7 +287,7 @@ def _build(repo: str, sha: str, run: dict, jobs: list[dict]) -> dict[str, Any]:
     artifact = matches[0]
     native = artifact.get("workflow_run") or {}
     _require(
-        native.get("id") == run["id"] and native.get("head_sha") == sha,
+        native.get("id") == run["id"] and native.get("head_sha") == run["head_sha"],
         "build_artifact_execution_mismatch",
     )
     _require(
@@ -339,6 +373,8 @@ def _build(repo: str, sha: str, run: dict, jobs: list[dict]) -> dict[str, Any]:
         "source_sha": sha,
         "ci_run_id": run["id"],
         "ci_run_attempt": run["run_attempt"],
+        "ci_controller_sha": run["head_sha"],
+        "ci_source_evidence": run["verified_source_evidence"],
         "artifact_id": artifact["id"],
         "archive_digest": artifact["digest"],
         "artifact_sha256": package_sha,
@@ -401,6 +437,8 @@ def observe_source_step(step_id: str, context: dict[str, Any]) -> dict[str, Any]
                 "repository": repo,
                 "ci_run_id": run["id"],
                 "ci_run_attempt": run["run_attempt"],
+                "ci_controller_sha": run["head_sha"],
+                "ci_source_evidence": run["verified_source_evidence"],
                 "job_ids": [_job(jobs, name)["id"] for name in names],
             }
         else:

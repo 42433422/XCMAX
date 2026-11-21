@@ -3,26 +3,72 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const canonical = (row) => JSON.stringify(Object.fromEntries(Object.entries(row).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)));
+const canonical = (row) => JSON.stringify(row, (_key, value) => value && !Array.isArray(value) && typeof value === 'object'
+  ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : value);
 export function createReceiptOutbox({ directory, url, token, deviceId, fetcher = fetch }) {
   const links = new Map();
   let draining = false;
+  let polling = false;
   const active = Boolean(directory && url && token && deviceId);
   if (active) mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const key = task => JSON.stringify([task.task_id, task.subtask_id]);
+  const terminal = row => ['completed', 'failed', 'cancelled'].includes(row?.status);
   function bind(message) {
-    const match = String(message.title || '').match(/\[xcmax:([0-9a-f]{32}):([0-9a-f]{32})\]/);
-    if (match) links.set(message.task_id, { correlation_id: match[1], attempt_id: match[2] });
+    const match = String(message.title || '').match(/^\[xcmax:([0-9a-f]{32}):([0-9a-f]{32})\]/);
+    if (!active || !match || !message.task_id || !message.subtask_id) return;
+    const identity = { correlation_id: match[1], attempt_id: match[2], device_id: deviceId,
+      task_id: message.task_id, subtask_id: message.subtask_id };
+    const previous = links.get(key(message));
+    if (previous) {
+      if (canonical(previous.identity) !== canonical(identity)) throw new Error('control_task_identity_changed');
+      return;
+    }
+    links.set(key(message), { identity, controller: new AbortController(), closed: false });
+    record({ ...message, type: 'task_progress', status: 'queued', progress: 0 });
   }
   function record(payload) {
     if (!active || payload.type !== 'task_progress') return;
-    const link = links.get(payload.task_id);
+    const link = links.get(key(payload));
     if (!link || !payload.subtask_id || !payload.status) return;
-    const row = { ...link, device_id: deviceId, task_id: payload.task_id, subtask_id: payload.subtask_id,
-      status: String(payload.status), progress: Math.max(0, Math.min(100, Math.round(Number(payload.progress) || 0))) };
+    const row = { ...link.identity, status: String(payload.status),
+      progress: Math.max(0, Math.min(100, Math.round(Number(payload.progress) || 0))),
+      ...(payload.cancellation ? { cancellation: payload.cancellation } : {}) };
     const event_id = createHash('sha256').update(canonical(row)).digest('hex');
     const temporary = join(directory, `.${randomUUID()}.pending`);
     writeFileSync(temporary, JSON.stringify({ ...row, event_id }), { mode: 0o600, flush: true });
     renameSync(temporary, join(directory, `${event_id}.json`));
+    link.latest = { ...row, event_id };
+    if (terminal(row)) link.closed = true;
+  }
+  async function deliver(row) {
+    const response = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}` }, body: JSON.stringify(row), signal: AbortSignal.timeout(5000) });
+    const result = response.ok ? await response.json() : null;
+    if (result?.accepted !== true) throw new Error('control_receipt_unacknowledged');
+    const link = links.get(key(row));
+    const control = result.control;
+    if (link && !link.closed && control?.action === 'cancel' && /^[0-9a-f]{64}$/.test(control.intent_id || '')
+        && Object.entries(link.identity).every(([field, value]) => row[field] === value && control[field] === value)
+        && (!link.control || link.control.intent_id === control.intent_id)) {
+      link.control = Object.freeze({ ...control });
+      link.controller.abort(new Error('control_cancel_requested'));
+    }
+    return true;
+  }
+  async function check(task) {
+    const link = links.get(key(task));
+    if (!active || !link || link.closed) return;
+    // Repeat the same observed receipt to read current authority. Dedupe must
+    // never cache a pre-cancel response or replay the original executor.
+    await deliver(link.latest);
+  }
+  async function poll() {
+    if (!active || polling) return;
+    polling = true;
+    try {
+      await Promise.all([...links.values()].filter(link => !link.closed)
+        .map(link => deliver(link.latest).catch(() => {})));
+    } finally { polling = false; }
   }
   async function drain() {
     if (!active || draining) return;
@@ -31,14 +77,16 @@ export function createReceiptOutbox({ directory, url, token, deviceId, fetcher =
       for (const file of readdirSync(directory).filter((name) => /^[0-9a-f]{64}\.json$/.test(name)).slice(0, 20)) {
         const path = join(directory, file);
         try {
-          const response = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: readFileSync(path, 'utf8'), signal: AbortSignal.timeout(5000) });
-          if (response.ok && (await response.json()).accepted === true) unlinkSync(path);
-          else break;
+          await deliver(JSON.parse(readFileSync(path, 'utf8')));
+          unlinkSync(path);
         } catch { break; }
       }
     } finally { draining = false; }
   }
-  return { bind, record, drain };
+  return { bind, record, drain, check, poll,
+    signal: task => links.get(key(task))?.controller.signal,
+    cancellation: task => links.get(key(task))?.control,
+    finish: task => { const link = links.get(key(task)); if (link) link.closed = true; } };
 }
 
 /** Authoritative Para reports use a separate device-authenticated, idempotent endpoint. */

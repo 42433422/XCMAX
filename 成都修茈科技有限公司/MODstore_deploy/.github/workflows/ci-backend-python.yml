@@ -1,5 +1,5 @@
 name: CI - Backend Python
-run-name: CI - Backend Python ${{ inputs.release_sha || github.sha }}
+run-name: CI - Backend Python ${{ inputs.release_sha || github.sha }}${{ inputs.delivery_request_id && format(' [delivery:{0}]', inputs.delivery_request_id) || '' }}
 
 on:
   push:
@@ -20,6 +20,11 @@ on:
     inputs:
       release_sha:
         description: Exact main commit to validate after a protected merge
+        required: false
+        default: ""
+        type: string
+      delivery_request_id:
+        description: Original post-merge CI request identity
         required: false
         default: ""
         type: string

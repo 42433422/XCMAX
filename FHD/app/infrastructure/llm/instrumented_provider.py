@@ -68,6 +68,12 @@ class InstrumentedProvider:
     def is_configured(self) -> bool:
         return self._inner.is_configured
 
+    @property
+    def supports_streaming(self) -> bool:
+        from app.infrastructure.llm.response_completion import provider_supports_streaming
+
+        return provider_supports_streaming(self._inner)
+
     async def chat_completion(
         self,
         messages: list[dict[str, str]],

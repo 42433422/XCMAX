@@ -24,7 +24,7 @@ def native_build(tmp_path, monkeypatch):
     from sqlalchemy.orm import sessionmaker
 
     from modstore_server import production_line_sources as reader
-    from modstore_server import release_train
+    from modstore_server import release_train, retort_delivery
     from modstore_server import retort_github_workspace as transport
     from modstore_server.models import DailyDigestRecord
 
@@ -173,6 +173,13 @@ def native_build(tmp_path, monkeypatch):
         state["requests"].append(path)
         if path == f"/repos/{repo}/compare/main...{sha}":
             return {"status": "identical", "merge_base_commit": {"sha": sha}}
+        if "/compare/" in path:
+            ancestor, descendant = path.split("/compare/")[1].split("...")
+            assert (ancestor, descendant) in {(sha, "b" * 40), ("b" * 40, "main")}
+            return {
+                "status": "ahead" if state.get("source_ancestry", True) else "diverged",
+                "merge_base_commit": {"sha": ancestor},
+            }
         if "/contents/" in path:
             name = path.split("/contents/")[1].split("?")[0]
             assert path.endswith("?ref=" + sha)
@@ -186,26 +193,40 @@ def native_build(tmp_path, monkeypatch):
                 "sha": hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest(),
             }
         if path.endswith("/actions/runs/42"):
+            if state.get("changed_attempt") and state["requests"].count(path) > 1:
+                return {**state["run"], "run_attempt": state["changed_attempt"]}
+            return state["run"]
+        if path.endswith("/attempts/1"):
             return state["run"]
         if "/attempts/" in path:
             return {"total_count": len(state["jobs"]), "jobs": state["jobs"]}
         if "/artifacts?" in path:
-            return {"total_count": 1, "artifacts": [state["artifact"]]}
+            rows = [state["artifact"]]
+            if state.get("source_artifact"):
+                rows.append(state["source_artifact"])
+            return {"total_count": len(rows), "artifacts": rows}
         if "/workflows/" in path:
             return {"total_count": 1, "workflow_runs": [state["run"]]}
         raise AssertionError(path)
 
     monkeypatch.setattr(reader, "github", github)
+    monkeypatch.setattr(retort_delivery, "github", github)
     monkeypatch.setenv("MODSTORE_GITHUB_TOKEN", "test-only-native-artifact")
 
     def respond(request):
         assert request.method == "GET"
         if request.url.host == "api.github.com":
+            if request.url.path.endswith("/artifacts/82/zip"):
+                return httpx.Response(
+                    302, headers={"Location": "https://native.blob.core.windows.net/source"}
+                )
             assert request.url.path.endswith("/artifacts/81/zip")
             return httpx.Response(
                 302, headers={"Location": "https://native.blob.core.windows.net/artifact"}
             )
         assert "authorization" not in request.headers
+        if request.url.path == "/source":
+            return httpx.Response(200, content=state["source_archive"])
         return httpx.Response(200, content=state["archive"])
 
     client = httpx.Client
@@ -214,6 +235,125 @@ def native_build(tmp_path, monkeypatch):
     )
     yield state
     engine.dispose()
+
+
+def _manual_source(state):
+    sha, controller = state["context"]["source_sha"], "b" * 40
+    state["run"].update(
+        head_sha=controller,
+        event="workflow_dispatch",
+        display_title=f"CI/CD {sha} [delivery:749f8800-080f-5f7a-8c94-1c51db98f8b4]",
+        run_started_at="2026-11-22T00:00:00Z",
+        updated_at="2026-11-22T00:10:00Z",
+    )
+    state["artifact"]["workflow_run"]["head_sha"] = controller
+    state["source_report"] = {
+        "source_sha": sha,
+        "test_sha": sha,
+        "run_id": "42",
+        "run_attempt": "1",
+        "execution_environment": "github-actions",
+    }
+    state["source_artifact"] = {
+        "id": 82,
+        "name": "backend-combined-1",
+        "expired": False,
+        "workflow_run": {"id": 42, "head_sha": controller},
+        "created_at": "2026-11-22T00:05:00Z",
+    }
+
+    def package():
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("business-contract-evidence.json", json.dumps(state["source_report"]))
+        state["source_archive"] = stream.getvalue()
+        state["source_artifact"].update(
+            size_in_bytes=len(state["source_archive"]),
+            digest="sha256:" + hashlib.sha256(state["source_archive"]).hexdigest(),
+        )
+
+    package()
+    return package
+
+
+@pytest.mark.parametrize("step", ["P3", "P4"])
+@pytest.mark.parametrize(
+    "title",
+    ["CI/CD " + "b" * 40, "CI/CD " + "a" * 40 + " [delivery:invalid]"],
+)
+def test_manual_ci_cannot_substitute_controller_for_tested_checkout(native_build, step, title):
+    state = native_build
+    state["run"].update(event="workflow_dispatch", display_title=title)
+    result = state["reader"].observe_source_step(step, state["context"])["result"]
+    assert result["status"] == "waiting_evidence", result
+    assert "actual tested source must match" in result["reason"]
+
+
+@pytest.mark.parametrize("step", ["P3", "P4", "P9"])
+@pytest.mark.parametrize("suffix", ["", " [delivery:749f8800-080f-5f7a-8c94-1c51db98f8b4]"])
+def test_manual_ci_preserves_original_source_and_delivery_title(native_build, step, suffix):
+    state = native_build
+    state["run"].update(
+        event="workflow_dispatch", display_title=f"CI/CD {state['context']['source_sha']}{suffix}"
+    )
+    result = state["reader"].observe_source_step(step, state["context"])["result"]
+    assert result["status"] == "completed", result
+    assert result["evidence"]["ci_controller_sha"] == state["context"]["source_sha"]
+
+
+@pytest.mark.parametrize("step", ["P3", "P4", "P9"])
+def test_newer_controller_requires_original_ci_checkout_artifact(native_build, step):
+    state = native_build
+    _manual_source(state)
+    result = state["reader"].observe_source_step(step, state["context"])["result"]
+    assert result["status"] == "completed", result
+    evidence = result["evidence"]
+    assert evidence["source_sha"] == "a" * 40
+    assert evidence["ci_controller_sha"] == "b" * 40
+    assert evidence["ci_source_evidence"]["artifact_id"] == 82
+    assert evidence["ci_source_evidence"]["artifact_digest"] == state["source_artifact"]["digest"]
+    if step != "P3":
+        assert evidence["artifact_sha256"] == state["manifest"]["sha256"]
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "missing",
+        "checkout",
+        "run",
+        "attempt",
+        "digest",
+        "controller",
+        "ancestry",
+        "rerun",
+        "oversized",
+    ],
+)
+def test_manual_controller_needs_immutable_native_checkout_proof(native_build, corruption):
+    state = native_build
+    package = _manual_source(state)
+    if corruption == "missing":
+        state.pop("source_artifact")
+    elif corruption in {"checkout", "run", "attempt", "oversized"}:
+        field, value = {
+            "checkout": ("test_sha", "b" * 40),
+            "run": ("run_id", "43"),
+            "attempt": ("run_attempt", "2"),
+            "oversized": ("padding", "x" * 1024**2),
+        }[corruption]
+        state["source_report"][field] = value
+        package()
+    elif corruption == "digest":
+        state["source_artifact"]["digest"] = "sha256:" + "0" * 64
+    elif corruption == "controller":
+        state["source_artifact"]["workflow_run"]["head_sha"] = "a" * 40
+    elif corruption == "ancestry":
+        state["source_ancestry"] = False
+    else:
+        state["changed_attempt"] = 2
+    result = state["reader"].observe_source_step("P3", state["context"])["result"]
+    assert result["status"] == "waiting_evidence", result
 
 
 @pytest.mark.parametrize("step", ["P3", "P4", "P9"])

@@ -15,7 +15,6 @@ from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBody,
     _extract_excel_paths_from_context,
     _extract_excel_paths_from_message,
-    _looks_like_vector_request,
     _merge_runtime_context_with_message_paths,
     _sse_event_line,
     _thinking_steps_from_planner_stream_text,
@@ -86,11 +85,6 @@ def test_merge_runtime_context_with_message_paths() -> None:
     merged, found = _merge_runtime_context_with_message_paths({"foo": 1}, "打开 数据.xlsx")
     assert merged.get("foo") == 1
     assert isinstance(found, list)
-
-
-def test_looks_like_vector_request() -> None:
-    assert _looks_like_vector_request("向量检索产品") is True
-    assert _looks_like_vector_request("你好") is False
 
 
 def test_xcagi_timeout_helpers() -> None:
