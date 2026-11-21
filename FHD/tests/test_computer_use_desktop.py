@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from PIL import Image
@@ -14,7 +16,7 @@ from app.desktop_automation.computer_desktop import PyAutoGuiComputer
 
 class FakeGui:
     FAILSAFE = True
-    KEYBOARD_KEYS = ["ctrl", "command", "a", "v", "enter", "esc"]
+    KEYBOARD_KEYS = ["ctrl", "command", "a", "c", "v", "enter", "esc"]
 
     class FailSafeException(Exception):
         pass
@@ -72,8 +74,11 @@ class FakeClipboard:
     def __init__(self):
         self.text = "private original clipboard"
         self.copied = []
+        self.formats = {13}
+        self.reads = 0
 
     def paste(self):
+        self.reads += 1
         return self.text
 
     def copy(self, value):
@@ -86,6 +91,7 @@ def desktop(monkeypatch):
     monkeypatch.setattr(module.platform, "system", lambda: "Windows")
     monkeypatch.setattr(module.time, "sleep", lambda _duration: None)
     gui, clipboard = FakeGui(), FakeClipboard()
+    monkeypatch.setattr(module, "_clipboard_formats", lambda: set(clipboard.formats))
     computer = PyAutoGuiComputer(gui=gui, clipboard=clipboard)
     return computer, gui, clipboard, computer.observe()
 
@@ -211,6 +217,86 @@ def test_unicode_paste_restores_text_without_returning_clipboard(desktop):
     assert "中文输入" not in str(result)
 
 
+@pytest.mark.parametrize("formats", [{2}, {13, 8}, {13, 49153}, {15}, {13, "unknown"}, set(), {16}])
+def test_non_plain_clipboard_prevents_entire_batch_without_read_or_write(desktop, formats):
+    clipboard = desktop[2]
+    clipboard.formats = formats
+    result = run(desktop, [{"action": "click", "x": 1, "y": 1}, {"action": "type", "text": "中文"}])
+    assert result["code"] == "clipboard_format_unsupported"
+    assert result["steps_completed"] == 0 and result["executed"] is False
+    assert clipboard.formats == formats and clipboard.text == "private original clipboard"
+    assert clipboard.copied == [] and clipboard.reads == 0 and desktop[1].calls == []
+
+
+def test_unknown_clipboard_formats_fail_closed(desktop, monkeypatch):
+    def unavailable():
+        raise OSError("private format probe error")
+
+    monkeypatch.setattr(module, "_clipboard_formats", unavailable)
+    result = run(desktop, [{"action": "click", "x": 1, "y": 1}, {"action": "type", "text": "中文"}])
+    assert result["code"] == "clipboard_format_unsupported"
+    assert result["steps_completed"] == 0
+    assert desktop[1].calls == desktop[2].copied == [] and desktop[2].reads == 0
+    assert "private format probe error" not in str(result)
+
+
+def test_format_change_during_text_read_prevents_all_input(desktop, monkeypatch):
+    original = desktop[2].paste
+
+    def changed():
+        desktop[2].formats = {13, 49153}
+        return original()
+
+    monkeypatch.setattr(desktop[2], "paste", changed)
+    result = run(desktop, [{"action": "click", "x": 1, "y": 1}, {"action": "type", "text": "中文"}])
+    assert result["code"] == "clipboard_format_unsupported"
+    assert result["steps_completed"] == 0 and desktop[1].calls == desktop[2].copied == []
+    assert desktop[2].formats == {13, 49153}
+
+
+def test_copying_rich_data_earlier_in_batch_prevents_unicode_overwrite(desktop, monkeypatch):
+    original = desktop[1].hotkey
+
+    def copy_rich(*keys):
+        original(*keys)
+        desktop[2].formats = {13, 49153}
+
+    monkeypatch.setattr(desktop[1], "hotkey", copy_rich)
+    result = run(
+        desktop, [{"action": "press", "keys": ["ctrl", "c"]}, {"action": "type", "text": "中文"}]
+    )
+    assert result["code"] == "clipboard_format_unsupported"
+    assert result["steps_completed"] == 1
+    assert desktop[2].formats == {13, 49153} and desktop[2].copied == []
+    assert [call[0] for call in desktop[1].calls] == ["hotkey", "key_up", "key_up"]
+
+
+def test_restore_does_not_destroy_new_rich_clipboard_with_same_text(desktop, monkeypatch):
+    original = desktop[1].hotkey
+
+    def new_rich_clipboard(*keys):
+        original(*keys)
+        desktop[2].formats = {13, 49153}
+
+    monkeypatch.setattr(desktop[1], "hotkey", new_rich_clipboard)
+    result = run(desktop, [{"action": "type", "text": "中文"}])
+    assert result["clipboard_text_restored"] is False
+    assert desktop[2].copied == ["中文"] and desktop[2].text == "中文"
+    assert desktop[2].formats == {13, 49153}
+
+
+@pytest.mark.parametrize("failsafe", [False, True])
+def test_long_ascii_keeps_clipboard_untouched_and_failsafe_enabled(desktop, failsafe):
+    desktop[2].formats = {2}
+    if failsafe:
+        desktop[1].error = FakeGui.FailSafeException()
+    result = run(desktop, [{"action": "type", "text": "x" * 2000}])
+    assert result["status"] == ("cancelled" if failsafe else "needs_verification")
+    assert len(desktop[1].calls) == 1 and desktop[1].calls[0][0] == "write"
+    assert desktop[2].copied == [] and desktop[2].reads == 0
+    assert desktop[2].formats == {2} and desktop[1].FAILSAFE is True
+
+
 def test_unicode_does_not_overwrite_clipboard_changed_by_user(desktop, monkeypatch):
     original = desktop[1].hotkey
 
@@ -288,3 +374,115 @@ def test_mac_capture_permissions_block_observation(desktop, monkeypatch):
     monkeypatch.setattr(module.ctypes.util, "find_library", lambda _name: None)
     assert desktop[0].observe()["code"] == "screen_permission_required"
     assert desktop[1].calls == []
+
+
+@pytest.mark.parametrize("opened,error", [(True, 0), (True, 5), (False, 0)])
+def test_windows_native_format_enumeration_is_read_only_and_closes_on_error(
+    monkeypatch, opened, error
+):
+    state = {"last_error": 0}
+    formats = iter([13, 1, 7, 16, 0])
+
+    def enumerate_format(_previous):
+        value = next(formats)
+        if not value:
+            state["last_error"] = error
+        return value
+
+    api = SimpleNamespace(
+        OpenClipboard=Mock(return_value=int(opened)),
+        CloseClipboard=Mock(return_value=1),
+        EnumClipboardFormats=Mock(side_effect=enumerate_format),
+    )
+    monkeypatch.setattr(module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(module.ctypes, "WinDLL", lambda *_a, **_k: api, raising=False)
+    monkeypatch.setattr(
+        module.ctypes, "set_last_error", lambda value: state.update(last_error=value), raising=False
+    )
+    monkeypatch.setattr(module.ctypes, "get_last_error", lambda: state["last_error"], raising=False)
+    if error or not opened:
+        with pytest.raises(module._DesktopError, match="纯文本剪贴板"):
+            module._require_plain_text_clipboard()
+    else:
+        module._require_plain_text_clipboard()
+    api.OpenClipboard.assert_called_once_with(None)
+    assert api.CloseClipboard.call_count == (1 if opened else 0)
+    if not opened:
+        api.EnumClipboardFormats.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "types,items,allowed",
+    [
+        (["public.utf8-plain-text"], [object()], True),
+        (["public.utf8-plain-text", "public.rtf"], [object()], False),
+        (["public.tiff"], [object()], False),
+        (["public.file-url"], [object()], False),
+        (["private.unknown"], [object()], False),
+        (["public.utf8-plain-text"], [object(), object()], False),
+        (None, [object()], False),
+        (["public.utf8-plain-text"], None, False),
+    ],
+)
+def test_mac_native_types_require_one_plain_text_item(monkeypatch, types, items, allowed):
+    board = SimpleNamespace(
+        types=lambda: types, pasteboardItems=lambda: items, changeCount=lambda: 1
+    )
+    monkeypatch.setattr(module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(
+        module.importlib,
+        "import_module",
+        lambda _name: SimpleNamespace(
+            NSPasteboard=SimpleNamespace(generalPasteboard=lambda: board)
+        ),
+    )
+    if allowed:
+        module._require_plain_text_clipboard()
+    else:
+        with pytest.raises(module._DesktopError, match="纯文本剪贴板"):
+            module._require_plain_text_clipboard()
+
+
+@pytest.mark.parametrize(
+    "targets,allowed",
+    [
+        ("TARGETS\nTIMESTAMP\nMULTIPLE\nSAVE_TARGETS\nUTF8_STRING\ntext/plain\n", True),
+        ("TARGETS\nUTF8_STRING\ntext/html\n", False),
+        ("TARGETS\nimage/png\n", False),
+        ("TARGETS\nUTF8_STRING\ntext/uri-list\n", False),
+        ("TARGETS\nUTF8_STRING\nprivate.unknown\n", False),
+        ("TARGETS\nTIMESTAMP\n", False),
+        ("", False),
+    ],
+)
+def test_x11_native_target_inspection_only_requests_formats(monkeypatch, targets, allowed):
+    probe = Mock(return_value=SimpleNamespace(stdout=targets))
+    monkeypatch.setattr(module.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(module.shutil, "which", lambda _name: "/usr/bin/xclip")
+    monkeypatch.setattr(module.subprocess, "run", probe)
+    if allowed:
+        module._require_plain_text_clipboard()
+    else:
+        with pytest.raises(module._DesktopError, match="纯文本剪贴板"):
+            module._require_plain_text_clipboard()
+    args, kwargs = probe.call_args
+    assert args == (["/usr/bin/xclip", "-selection", "clipboard", "-out", "-target", "TARGETS"],)
+    assert kwargs["timeout"] == 1 and kwargs["check"] is True
+    assert not kwargs.get("shell")
+
+
+@pytest.mark.parametrize("failure", ["missing", "timeout", "failed"])
+def test_x11_missing_or_failed_format_probe_fails_closed(monkeypatch, failure):
+    monkeypatch.setattr(module.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        module.shutil, "which", lambda _name: None if failure == "missing" else "xclip"
+    )
+    probe = Mock(
+        side_effect=module.subprocess.TimeoutExpired("xclip", 1)
+        if failure == "timeout"
+        else module.subprocess.CalledProcessError(1, "xclip")
+    )
+    monkeypatch.setattr(module.subprocess, "run", probe)
+    with pytest.raises(module._DesktopError, match="纯文本剪贴板"):
+        module._require_plain_text_clipboard()
+    assert probe.call_count == (0 if failure == "missing" else 1)

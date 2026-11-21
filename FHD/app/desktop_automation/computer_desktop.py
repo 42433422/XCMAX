@@ -16,6 +16,8 @@ import math
 import os
 import platform
 import re
+import shutil
+import subprocess
 import time
 from collections.abc import Callable
 from typing import Any
@@ -84,7 +86,93 @@ def _capture_allowed() -> None:
 
 
 def _uses_clipboard(step: dict) -> bool:
-    return step["action"] == "type" and (not step["text"].isascii() or len(step["text"]) > 64)
+    return step["action"] == "type" and not step["text"].isascii()
+
+
+def _clipboard_formats() -> set[int | str]:
+    """Read advertised formats only; never convert, empty or claim the clipboard."""
+    system = platform.system()
+    if system == "Windows":
+        win_ctypes: Any = ctypes  # Windows-only symbols are absent from Linux type stubs.
+        api = win_ctypes.WinDLL("user32", use_last_error=True)
+        api.OpenClipboard.argtypes, api.OpenClipboard.restype = [ctypes.c_void_p], ctypes.c_int
+        api.CloseClipboard.argtypes, api.CloseClipboard.restype = [], ctypes.c_int
+        api.EnumClipboardFormats.argtypes = [ctypes.c_uint]
+        api.EnumClipboardFormats.restype = ctypes.c_uint
+        if not api.OpenClipboard(None):
+            raise OSError("clipboard format access unavailable")
+        formats: set[int | str] = set()
+        try:
+            current = 0
+            for _ in range(64):
+                win_ctypes.set_last_error(0)
+                current = api.EnumClipboardFormats(current)
+                if not current:
+                    if win_ctypes.get_last_error():
+                        raise OSError("clipboard format enumeration failed")
+                    return formats
+                if current in formats:
+                    break
+                formats.add(current)
+            raise OSError("clipboard format enumeration incomplete")
+        finally:
+            if not api.CloseClipboard():
+                raise OSError("clipboard format access did not close")
+    if system == "Darwin":
+        board = importlib.import_module("AppKit").NSPasteboard.generalPasteboard()
+        revision = board.changeCount()
+        items = board.pasteboardItems()
+        formats = set(board.types())
+        if items is None or len(items) != 1 or board.changeCount() != revision:
+            # pyperclip cannot preserve multiple text items as separate items.
+            raise OSError("clipboard items cannot be preserved")
+        return formats
+    if system == "Linux":
+        command = shutil.which("xclip")
+        if command is None:
+            raise OSError("clipboard target inspection unavailable")
+        result = subprocess.run(
+            [command, "-selection", "clipboard", "-out", "-target", "TARGETS"],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=1,
+        )
+        if len(result.stdout) > 8192:
+            raise OSError("clipboard target inspection incomplete")
+        return set(result.stdout.splitlines())
+    raise OSError("clipboard format inspection unsupported")
+
+
+def _require_plain_text_clipboard() -> None:
+    try:
+        formats = _clipboard_formats()
+        text: set[int | str]
+        metadata: set[int | str]
+        if platform.system() == "Windows":
+            # CF_TEXT, CF_OEMTEXT, CF_UNICODETEXT; CF_LOCALE is encoding metadata.
+            text, metadata = {1, 7, 13}, {16}
+        elif platform.system() == "Darwin":
+            text, metadata = {"public.utf8-plain-text", "NSStringPboardType"}, set()
+        else:
+            text = {
+                "UTF8_STRING",
+                "STRING",
+                "TEXT",
+                "COMPOUND_TEXT",
+                "text/plain",
+                "text/plain;charset=utf-8",
+                "text/plain;charset=UTF-8",
+            }
+            metadata = {"TARGETS", "TIMESTAMP", "MULTIPLE", "SAVE_TARGETS"}
+        if not formats.intersection(text) or formats - text - metadata:
+            raise ValueError("clipboard is not exclusively plain text")
+    except BOUNDARY_ERRORS as exc:
+        raise _DesktopError(
+            "clipboard_format_unsupported",
+            "Unicode 输入需要可确认的纯文本剪贴板；非文本、多项目或未知格式已保留且未改写",
+        ) from exc
 
 
 class PyAutoGuiComputer:
@@ -268,7 +356,21 @@ class PyAutoGuiComputer:
         finally:
             self._release(gui, keys=keys)
 
-    def _step(self, gui: Any, step: dict) -> bool | None:
+    def _clipboard_text(self) -> str:
+        _require_plain_text_clipboard()
+        try:
+            self._clipboard = self._clipboard or importlib.import_module("pyperclip")
+            previous = self._clipboard.paste()
+            if not isinstance(previous, str):
+                raise ValueError("text clipboard unavailable")
+        except BOUNDARY_ERRORS as exc:
+            raise _DesktopError(
+                "clipboard_unavailable", "Unicode 输入需要可用的纯文本剪贴板"
+            ) from exc
+        _require_plain_text_clipboard()
+        return previous
+
+    def _step(self, gui: Any, step: dict, previous: str | None = None) -> bool | None:
         action = step["action"]
         if action == "click":
             gui.click(
@@ -295,8 +397,7 @@ class PyAutoGuiComputer:
         elif not _uses_clipboard(step):
             gui.write(step["text"], interval=0)
         else:
-            clip = self._clipboard or importlib.import_module("pyperclip")
-            previous = clip.paste()
+            clip = self._clipboard
             restored = False
             try:
                 clip.copy(step["text"])
@@ -304,7 +405,7 @@ class PyAutoGuiComputer:
                 time.sleep(0.15)
             finally:
                 try:
-                    if clip.paste() == step["text"]:
+                    if self._clipboard_text() == step["text"]:
                         clip.copy(previous)
                         restored = True
                 except BOUNDARY_ERRORS:
@@ -327,14 +428,7 @@ class PyAutoGuiComputer:
             gui = self._load()
             pixels = self._validate(gui, steps, verification, expected)
             if any(_uses_clipboard(step) for step in steps):
-                try:
-                    self._clipboard = self._clipboard or importlib.import_module("pyperclip")
-                    if not isinstance(self._clipboard.paste(), str):
-                        raise ValueError("text clipboard unavailable")
-                except BOUNDARY_ERRORS as exc:
-                    raise _DesktopError(
-                        "clipboard_unavailable", "Unicode 或长文本输入需要可用的文本剪贴板"
-                    ) from exc
+                self._clipboard_text()
             before, _image = self._capture(gui)
             if any(before[key] != expected[key] for key in (*_SPACE_FIELDS, "sha256")):
                 return _failed(
@@ -356,8 +450,9 @@ class PyAutoGuiComputer:
                         status="outcome_unknown" if completed else "stale_observation",
                         completed=completed,
                     )
+                previous = self._clipboard_text() if _uses_clipboard(step) else None
                 started = True
-                restored = self._step(gui, step)
+                restored = self._step(gui, step, previous)
                 if restored is not None:
                     clipboard_restored = (
                         restored if clipboard_restored is None else clipboard_restored and restored

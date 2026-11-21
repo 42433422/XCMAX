@@ -241,7 +241,7 @@ uv run --frozen --extra server-api --extra computer-use python -m playwright ins
 
 浏览器每次调用使用新的隔离 Context，首步必须为 `navigate`，不接管已有登录浏览器。支持按角色、标签、测试 ID 或 CSS 定位后点击、填值、按键、选择和勾选；使用 Playwright 的可操作性等待与后置断言。当前拦截全部 HTTP 重定向、WebSocket、Service Worker、弹窗和下载，因此依赖登录跳转或流式长连接的网站不在本版已验证范围内。单次最多 20 步、浏览器总时限 60 秒，执行后返回截图与标记为不可信外部内容的 ARIA 快照。
 
-桌面通过 PyAutoGUI 操作主显示器，保留四角 FailSafe 与任务停止；当前不提供多显示器、操作系统控件树或锁屏控制。先执行 `computer_observe`，将返回的 `snapshot_id` 传入桌面执行参数；快照 120 秒有效、只使用一次，执行前画面或尺寸变化会拒绝原坐标动作，需重新观察和审批。输入坐标使用 `input_width/input_height`，像素核验使用截图的物理尺寸。macOS 需要本机录屏和辅助功能授权；Linux 需要可用的 X11 会话与截图、剪贴板系统依赖。Unicode 输入借助剪贴板并尽量恢复原文本，不保证恢复富文本或图片格式。
+桌面通过 PyAutoGUI 操作主显示器，保留四角 FailSafe 与任务停止；当前不提供多显示器、操作系统控件树或锁屏控制。先执行 `computer_observe`，将返回的 `snapshot_id` 传入桌面执行参数；快照 120 秒有效、只使用一次，执行前画面或尺寸变化会拒绝原坐标动作，需重新观察和审批。输入坐标使用 `input_width/input_height`，像素核验使用截图的物理尺寸。macOS 需要本机录屏和辅助功能授权；Linux 需要可用的 X11 会话与截图系统依赖。ASCII 使用键盘输入，Unicode 借助经格式检查的纯文本剪贴板；图片、文件、富文本或格式无法可靠确定时拒绝这一路径，不覆盖原内容。Linux Unicode 输入需 `xclip` 能枚举 `TARGETS`。批次前、每次复制及恢复前均重查格式；检测到剪贴板被其他程序替换时不强行恢复。
 
 `verification` 缺失或不成立时，动作即使已发出也不返回成功；桌面像素条件仅证明视觉状态，不能代替业务结果核验。发生中断或回执未知时保留原 `request_id`，用 `computer_result {"request_id":"..."}` 读取回执并核对实际效果，不生成新请求重放原输入。`computer_stop` 记录停止请求，在执行检查点生效，返回 `stop_requested` 不代表操作系统已经停止。额外防重放回执只保存摘要和效果元数据；完整工具输出仍遵循既有 Agent 任务审计存储规则，可能包含截图和页面内容。
 
