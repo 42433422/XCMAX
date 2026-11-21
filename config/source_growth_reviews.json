@@ -543,11 +543,11 @@
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
       "base_blob": "9301b7ae2900583d16d97608221a0bdf671c1bc6",
-      "head_blob": "4c61c9c94338bdf4a44dff3d05f959fc90cd39e4",
+      "head_blob": "6c1d8a6a707bbf7361ffb6cf9d0c39d4dfe21606",
       "before_lines": 1124,
-      "after_lines": 1279,
-      "reason": "评审请求：在原AgentRun与ToolCall持久边界保持未知业务回执，只允许绑定原输入、输出和契约的负向只读观察增量，并从实际保留回执重建核验投影。",
-      "boundary": "复用原仓储、事务与CAS，不新增任务账本；任何执行字段漂移继续保留原值，独立观察不能结清原业务或费用责任。",
+      "after_lines": 1285,
+      "reason": "评审请求：在原AgentRun与ToolCall持久边界保持未知业务回执，只允许绑定原输入、输出和契约的负向只读观察增量，并从实际保留回执重建核验投影；原任务插入使用固定列与绑定参数。",
+      "boundary": "复用原仓储、事务与CAS，不新增任务账本；固定SQL保留租户/用户/任务冲突键和rowcount语义。任何执行字段漂移继续保留原值，独立观察不能结清原业务或费用责任。",
       "validation": "自动observer、原call完整性与恢复反例覆盖租约、队列漂移、撤权、重启和unknown；最终提交仍须必需CI与人工架构评审。",
       "follow_up": "审核原持久字段的精确相等条件与拒绝路径；后续业务适配必须读原来源，不能把新增观察变成执行成功。",
       "review_owner": "@42433422"

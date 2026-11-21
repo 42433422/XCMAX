@@ -39,6 +39,7 @@ from app.application.tools.workflow import (
     invalidate_workflow_tool_registry,
     run_natural_language_pandas,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # run_natural_language_pandas
@@ -909,7 +910,20 @@ class TestExecuteWorkflowToolMisc:
         assert data["error"] == "unknown_tool"
         assert data["tool"] == "totally_unknown"
 
-    def test_template_preview_empty_action_defaults_to_view(self) -> None:
+    def test_template_preview_empty_action_defaults_to_view(
+        self, trusted_actor, local_tools, tmp_path, monkeypatch
+    ) -> None:
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+        from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
+
+        actor = trusted_actor(
+            role="template-preview-reader",
+            permissions=[get_tool_action_spec("template_preview", "view").permission],
+        )
+        monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+        monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+        repo = InMemoryAgentRunRepository()
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -928,13 +942,33 @@ class TestExecuteWorkflowToolMisc:
             ),
             patch(
                 "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
-                return_value={"result": "ok"},
-                create=True,
+                wraps=execute_registered_workflow_tool,
+            ) as dispatch,
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
             ),
         ):
-            result = execute_workflow_tool("template_preview", {"action": ""})
+            result = execute_workflow_tool(
+                "template_preview", {"action": ""}, runtime_context=actor.context
+            )
         data = json.loads(result)
-        assert "result" in data
+        assert data["capability"]["action"] == "view"
+        assert data["result"]["success"] is True
+        assert data["result"]["redirect"] == "/console?view=template-preview"
+        run = repo.get(data["run_id"])
+        assert run is not None and len(run.tool_calls) == 1
+        assert data["result"] == {
+            **run.tool_calls[0].output,
+            "agent_run_id": run.run_id,
+            "run_id": run.run_id,
+            "agent_status": run.status,
+        }
+        dispatch.assert_called_once()
+        assert dispatch.call_args.args[:2] == ("template_preview", "view")
+        context = dispatch.call_args.args[2]["_runtime_context"]
+        assert context["user_id"] == str(actor.user_id)
+        assert context["tenant_id"] == str(actor.tenant_id)
 
     def test_employee_planner_tool_returned(self) -> None:
         with (
@@ -957,7 +991,8 @@ class TestExecuteWorkflowToolMisc:
             result = execute_workflow_tool("some_tool", {})
         assert "emp" in result
 
-    def test_planner_native_tool_error_swallowed(self) -> None:
+    def test_planner_native_tool_error_stays_unknown_without_fallback(self) -> None:
+        fallback = MagicMock(return_value='{"suggestions": []}')
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -968,18 +1003,26 @@ class TestExecuteWorkflowToolMisc:
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 side_effect=ImportError("no planner"),
                 create=True,
-            ),
+            ) as native,
             patch(
                 "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
-            ),
+            ) as employee,
+            patch("app.application.tools.workflow._json_tool", return_value=fallback),
         ):
             result = execute_workflow_tool("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["success"] is False and data["retryable"] is False
+        assert data["outcome"] == data["execution_state"] == "unknown"
+        assert data["error_code"] == "tool_execution_interrupted"
+        assert data["reconciliation_required"] is True and "suggestions" not in data
+        native.assert_called_once()
+        employee.assert_not_called()
+        fallback.assert_not_called()
 
-    def test_employee_planner_tool_error_swallowed(self) -> None:
+    def test_employee_planner_tool_error_stays_unknown_without_fallback(self) -> None:
+        fallback = MagicMock(return_value='{"suggestions": []}')
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -990,16 +1033,23 @@ class TestExecuteWorkflowToolMisc:
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 return_value=(None, None),
                 create=True,
-            ),
+            ) as native,
             patch(
                 "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 side_effect=RuntimeError("fail"),
                 create=True,
-            ),
+            ) as employee,
+            patch("app.application.tools.workflow._json_tool", return_value=fallback),
         ):
             result = execute_workflow_tool("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["success"] is False and data["retryable"] is False
+        assert data["outcome"] == data["execution_state"] == "unknown"
+        assert data["error_code"] == "tool_execution_interrupted"
+        assert data["reconciliation_required"] is True and "suggestions" not in data
+        native.assert_called_once()
+        employee.assert_called_once()
+        fallback.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
