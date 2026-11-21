@@ -27,7 +27,7 @@ describe('workflowEmployeeDatabaseLinks functions', () => {
       const link = databaseLinkForEmployee('wechat_msg')
       expect(link.empId).toBe('wechat_msg')
       expect(link.routeName).toBe('data-sources')
-      expect(link.query).toEqual({ source: 'wechat_local_db' })
+      expect(link.query).toEqual({ workspace: 'messages' })
     })
 
     it('returns wechat_phone link for wechat_phone empId', () => {
