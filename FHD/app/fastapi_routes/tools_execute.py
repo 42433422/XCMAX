@@ -21,7 +21,7 @@ def _resolve_tool_request(body: dict[str, Any]) -> tuple[str, str, dict[str, Any
     """Resolve HTTP and model envelopes against the existing action catalog."""
     from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
     from app.application.tools.registered_capabilities import ERP_CAPABILITY_TOOL_NAME
-    from app.services.tools_execution.registry import _normalize_action
+    from app.application.workflow_registry_app import _normalize_action
 
     payload = dict(body)
     name = str(payload.get("tool_name") or payload.get("name") or "").strip()
