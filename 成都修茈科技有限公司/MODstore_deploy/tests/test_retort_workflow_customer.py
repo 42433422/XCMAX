@@ -263,7 +263,16 @@ def test_rollout_new_graph_keeps_provenance_without_new_experimental_samples(cus
     assert observations(env["run"]) == before
     refund(env)
     denied = env["execute"]()
-    assert denied.status_code == 500 and "approved" in denied.text
+    assert denied.status_code == 500
+    assert denied.json() == {"detail": "工作流执行失败，请查看执行记录"}
+    with get_session_factory()() as db:
+        failed = db.scalars(
+            select(WorkflowExecution)
+            .where(WorkflowExecution.user_id == env["customer_id"])
+            .order_by(WorkflowExecution.id.desc())
+        ).first()
+        assert failed.status == "failed" and "approved" in failed.error_message
+        assert failed.error_message not in denied.text
     assert env["run"]["advance"]()["status"] == "awaiting_rollout_readback"
     assert env["run"]["advance"]()["decision"] == "rollback"
     assert observations(env["run"]) == before
