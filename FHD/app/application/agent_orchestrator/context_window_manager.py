@@ -47,6 +47,35 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _observe_context(stage: str, tokens: int) -> None:
+    """上下文指标为可观测性埋点，采集失败不能影响主流程。"""
+    try:
+        from app.utils import metrics
+
+        metrics.context_window_tokens.labels(stage=stage).observe(max(0, int(tokens)))
+    except RECOVERABLE_ERRORS:
+        logger.debug("context window metric skipped", exc_info=True)
+
+
+def _observe_compression(strategy: str) -> None:
+    try:
+        from app.utils import metrics
+
+        metrics.context_compression_total.labels(strategy=strategy).inc()
+    except RECOVERABLE_ERRORS:
+        logger.debug("context compression metric skipped", exc_info=True)
+
+
+def _observe_overflow(stage: str) -> None:
+    try:
+        from app.utils import metrics
+
+        metrics.context_window_overflow_total.labels(stage=stage).inc()
+    except RECOVERABLE_ERRORS:
+        logger.debug("context overflow metric skipped", exc_info=True)
+
+
 __all__ = [
     "CONTEXT_WINDOW_MANAGER_VERSION",
     "ContextCompressionResult",
@@ -229,36 +258,40 @@ class ContextWindowManager:
         output_tokens: int = 0,
         external_tokens: int = 0,
     ) -> ContextCompressionResult:
-        if context is not None:
-            lock = getattr(context, "_compression_lock", None)
-            if lock is None:
-                lock = asyncio.Lock()
-                context._compression_lock = lock
-            async with lock:
-                return await self._compress(
-                    messages or [],
-                    user_id,
-                    trace_id,
-                    provider,
-                    context,
-                    reserved_tokens,
-                    model,
-                    model_limits,
-                    output_tokens,
-                    external_tokens,
-                )
-        return await self._compress(
-            messages or [],
-            user_id,
-            trace_id,
-            provider,
-            None,
-            reserved_tokens,
-            model,
-            model_limits,
-            output_tokens,
-            external_tokens,
-        )
+        try:
+            if context is not None:
+                lock = getattr(context, "_compression_lock", None)
+                if lock is None:
+                    lock = asyncio.Lock()
+                    context._compression_lock = lock
+                async with lock:
+                    return await self._compress(
+                        messages or [],
+                        user_id,
+                        trace_id,
+                        provider,
+                        context,
+                        reserved_tokens,
+                        model,
+                        model_limits,
+                        output_tokens,
+                        external_tokens,
+                    )
+            return await self._compress(
+                messages or [],
+                user_id,
+                trace_id,
+                provider,
+                None,
+                reserved_tokens,
+                model,
+                model_limits,
+                output_tokens,
+                external_tokens,
+            )
+        except ContextWindowExceeded:
+            _observe_overflow("compress")
+            raise
 
     async def _compress(
         self,
@@ -281,6 +314,8 @@ class ContextWindowManager:
         budget = self._input_budget(
             model, model_limits, output_tokens, external_tokens, reserved_tokens
         )
+        _observe_context("pre", pre_tokens)
+        _observe_context("budget", budget)
         system = [m for m in messages if m.get("role") in {"system", "developer"}]
         history = [m for m in messages if m.get("role") not in {"system", "developer"}]
         groups = _turns(history)
@@ -372,6 +407,8 @@ class ContextWindowManager:
         post_tokens = estimate_messages_tokens(compressed)
         if messages and post_tokens > budget:
             raise ContextWindowExceeded("上下文超过预算，原文未被裁剪。")
+        _observe_context("post", post_tokens)
+        _observe_compression(strategy)
         if model_limits is not None:
             model_limits.assert_current()
         return ContextCompressionResult(

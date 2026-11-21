@@ -422,6 +422,16 @@ class PlannedWorkflowDispatch:
         from app.infrastructure.chat_stream_lifetime import publish_stream_note
 
         if plan is None:
+            from app.application.ai_chat.dialogue_memory import last_assistant_question
+            from app.application.workflow.clarification_selection import (
+                build_continuation_message,
+                looks_like_continuation_reply,
+            )
+
+            if looks_like_continuation_reply(message):
+                prior_question = last_assistant_question(context)
+                if prior_question:
+                    planner_message = build_continuation_message(planner_message, prior_question)
             publish_stream_note("正在分析需求，生成执行计划…")
             plan = self.planner.plan(
                 user_id=user_id,

@@ -14,6 +14,7 @@ from app.application.tools.workflow_tools.contracts import (
     VectorIngest,
     WorkbookSchema,
 )
+from app.infrastructure.excel.date_norm import normalize_excel_dates
 
 
 def compare_frames(left: pd.DataFrame, right: pd.DataFrame, keys: list[str]) -> Payload:
@@ -123,8 +124,17 @@ class WorkbookOperations:
                 "workspace_root": root,
                 "resolved_path": str(path),
             }
-        df = self.io.read(path, sheet_name=sheet, header_row_1based=header)
-        return self.schema_factory().understand_dataframe(df, file_path=file_path)
+        if header is None:
+            from app.application.tools.workflow_tools.excel_analysis import auto_header_row
+
+            header = auto_header_row(path, str(sheet).strip() if sheet else None)
+        df = normalize_excel_dates(
+            self.io.read(path, sheet_name=sheet, header_row_1based=header)
+        )
+        return {
+            **self.schema_factory().understand_dataframe(df, file_path=file_path),
+            "header_row": header,
+        }
 
     def vector_index(self, args: Payload, workspace_root: str | None) -> Payload:
         file_path = str(args.get("file_path") or "").strip()

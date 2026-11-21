@@ -46,20 +46,19 @@ from app.application.tools.workflow import (
 
 
 def _patch_excel_text_to_pandas(translate_return=None, translate_side_effect=None):
-    """构造一个注入 sys.modules 的 fake ExcelTextToPandas 模块。
-
-    app.legacy.excel_text_to_pandas 在本仓库不存在，run_natural_language_pandas
-    通过 from ... import 延迟导入；测试需要用 patch.dict 注入 fake 模块。
-    """
+    """替换自然语言 pandas 翻译器（避免测试依赖真实 LLM）。"""
     mock_converter = MagicMock()
     if translate_side_effect is not None:
         mock_converter.translate.side_effect = translate_side_effect
     else:
         mock_converter.translate.return_value = translate_return
-    fake_module = MagicMock(ExcelTextToPandas=MagicMock(return_value=mock_converter))
-    return patch.dict(
-        "sys.modules", {"app.legacy.excel_text_to_pandas": fake_module}
-    ), mock_converter
+    return (
+        patch(
+            "app.application.tools.workflow.adapters.translate_pandas",
+            side_effect=mock_converter.translate,
+        ),
+        mock_converter,
+    )
 
 
 class TestRunNaturalLanguagePandas:
@@ -111,12 +110,13 @@ class TestRunNaturalLanguagePandas:
         assert result["returned_rows"] == 10
 
     def test_import_error_sets_error_msg(self) -> None:
-        """app.legacy.excel_text_to_pandas 不存在时 ImportError 被捕获。"""
+        """翻译器不可用（ImportError）时按可恢复错误兜底。"""
         df = pd.DataFrame({"a": [1, 2]})
-        # 不注入 fake 模块，让真实 import 失败
-        with patch.dict("sys.modules", {"app.legacy.excel_text_to_pandas": None}):
+        patch_ctx, _ = _patch_excel_text_to_pandas(
+            translate_side_effect=ImportError("translator missing")
+        )
+        with patch_ctx:
             result = run_natural_language_pandas(df, "x")
-        # ImportError 属于 RECOVERABLE_ERRORS，会被捕获并设置 error
         assert "error" in result
         assert result["generated_code"] == ""
 

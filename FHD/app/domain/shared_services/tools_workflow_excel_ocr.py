@@ -120,6 +120,9 @@ def _registered_router_excel_analysis(
             result.update(success=False, message="Excel 核验未通过：" + "、".join(mismatches))
     if not result.get("success") and "error" in result and "message" not in result:
         result["message"] = result["error"]
+    # 失败结果也必须带 success，否则输出契约校验会把普通失败误判为结果未知。
+    if "success" not in result:
+        result["success"] = not bool(result.get("error"))
     if result.get("success") is True and not isinstance(result.get("data"), dict):
         result = {
             **result,

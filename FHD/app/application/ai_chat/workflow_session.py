@@ -1497,6 +1497,16 @@ class WorkflowSession:
             except (AttributeError, TypeError, ValueError):
                 invalid_plan = True
         if control and (not pending or invalid_plan):
+            if not pending and text in CONFIRM_WORDS and text not in {"继续"}:
+                from app.application.ai_chat.dialogue_memory import last_assistant_question
+
+                prior_question = last_assistant_question(
+                    context, require_explicit_request=True
+                )
+                if prior_question:
+                    # 上一轮只是助手的文字提问（没有形成结构化计划），
+                    # 这里不回复"没有待确认的操作"，交给规划器按续跑重新判断。
+                    return (False, None)
             reply = (
                 "原待办计划缺失或损坏，请返回原任务核对后重新提交；未执行任何操作。"
                 if invalid_plan

@@ -450,6 +450,27 @@ def track_request_duration(method: str, endpoint: str):
     return decorator
 
 
+# --- 上下文窗口指标（app/application/agent_orchestrator/context_window_manager.py）
+context_window_tokens = Histogram(
+    "context_window_tokens",
+    "Estimated prompt tokens at context window boundaries",
+    ["stage"],
+    buckets=(1000, 4000, 8000, 16000, 32000, 64000, 128000, 256000),
+)
+
+context_compression_total = Counter(
+    "context_compression_total",
+    "Context compression outcomes",
+    ["strategy"],
+)
+
+context_window_overflow_total = Counter(
+    "context_window_overflow_total",
+    "Context window overflows by boundary",
+    ["stage"],
+)
+
+
 def track_ai_request(service: str):
     """AI 请求追踪装饰器"""
 

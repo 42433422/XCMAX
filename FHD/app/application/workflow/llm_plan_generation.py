@@ -278,12 +278,46 @@ async def _consume_reply_stream(stream, on_prefix: Callable[[str], None]) -> tup
     return "".join(chunks), emitted_text
 
 
+def _slim_schema(schema: Any) -> Any:
+    """只保留规划所需结构：字段名、类型、枚举、必填与简短说明。
+
+    输出 schema、执行元数据与长描述不进入规划 prompt，避免工具目录挤占上下文。
+    """
+    if not isinstance(schema, dict):
+        return {}
+    slim: dict[str, Any] = {}
+    for key in ("type", "required", "enum"):
+        if key in schema:
+            slim[key] = schema[key]
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        slim_props: dict[str, Any] = {}
+        for name, prop in properties.items():
+            if not isinstance(prop, dict):
+                slim_props[name] = prop
+                continue
+            item: dict[str, Any] = {}
+            for key in ("type", "enum", "items"):
+                if key in prop:
+                    item[key] = prop[key]
+            description = str(prop.get("description") or "").strip()
+            if description:
+                item["description"] = description[:80]
+            slim_props[name] = item
+        slim["properties"] = slim_props
+    if isinstance(schema.get("items"), dict):
+        slim["items"] = _slim_schema(schema["items"])
+    return slim
+
+
 def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
     from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
 
     contracts = build_tool_specs_v2()
     result = []
-    for tool_id, spec in tool_registry.items():
+    # 固定顺序保证 system 前缀稳定，命中供应商的 prompt 缓存。
+    for tool_id in sorted(tool_registry, key=str):
+        spec = tool_registry[tool_id]
         actions = spec.get("actions", {})
         action_specs = []
         for name, metadata in actions.items():
@@ -293,14 +327,13 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
                 "action": name,
                 "description": str(
                     getattr(contract, "description", "") or spec.get("description") or ""
-                )[:240],
+                )[:160],
                 "risk": metadata.get("risk", "low"),
                 "idempotent": bool(metadata.get("idempotent", False)),
-                "output_schema": getattr(contract, "output_schema", {}),
-                "input_schema": raw_schema,
+                "input_schema": _slim_schema(raw_schema),
             }
-            # The complete JSON Schema already carries this exact requirement.
             # Keep differing legacy requirements; never rewrite nested schemas.
+            # Planner catalog uses slim input schema only (no output_schema).
             required = metadata.get("required_params", [])
             if required != raw_schema.get("required", []):
                 action_spec["required_params"] = required

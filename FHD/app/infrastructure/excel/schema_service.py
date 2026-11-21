@@ -9,6 +9,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.infrastructure.excel.date_norm import date_like_columns
+
 
 def dataframe_schema_snapshot(df: pd.DataFrame, sample_rows: int = 3) -> dict[str, Any]:
     return {
@@ -29,14 +31,22 @@ class ExcelSchemaUnderstandingService:
         sheet_name: str | None = None,
     ) -> dict[str, Any]:
         snap = dataframe_schema_snapshot(df)
+        dtypes = snap["dtypes"]
         return {
+            "success": True,
             "file_path": file_path,
             "sheet_name": sheet_name,
             "snapshot": snap,
-            "llm_understanding": {
-                "table_summary": "自动分析摘要",
-                "business_domain": "unknown",
-                "columns": [{"name": c} for c in snap["columns"]],
+            "structure": {
+                "row_count": snap["row_count"],
+                "column_count": snap["column_count"],
+                "columns": [
+                    {"name": column, "dtype": dtypes.get(column)} for column in snap["columns"]
+                ],
+                "numeric_columns": [
+                    str(name) for name in df.select_dtypes(include="number").columns
+                ],
+                "date_like_columns": date_like_columns(df),
             },
         }
 
