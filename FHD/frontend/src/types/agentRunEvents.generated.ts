@@ -38,6 +38,7 @@ export type AgentRunEventType =
   | 'run.failed'
   | 'run.idempotency_conflict'
   | 'run.observation_interrupted'
+  | 'run.observed'
   | 'step.approved'
   | 'step.blocked'
   | 'step.clarification_required'
