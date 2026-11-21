@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import tomllib
+from importlib.metadata import version
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -34,12 +37,101 @@ def _platform_key(provider: str, key: str = "sk-platform") -> PlatformApiKey:
     )
 
 
+def test_web_installs_the_same_pinned_litellm_as_the_router_extra():
+    project = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    extras = tomllib.loads(project.read_text(encoding="utf-8"))["project"]["optional-dependencies"]
+    web_pin = [dependency for dependency in extras["web"] if dependency.startswith("litellm")]
+    assert web_pin == extras["llm-router"] == [f"litellm=={version('litellm')}"]
+
+
 def test_deployment_maps_openai_compatible_provider():
     dep = router_mod._deployment("primary", "deepseek", "deepseek-chat", "sk-test", None)
 
     assert dep is not None
     assert dep["litellm_params"]["model"] == "openai/deepseek-chat"
     assert dep["litellm_params"]["api_base"].endswith("/v1")
+
+
+def test_router_model_info_uses_litellm_limits_without_guessing_total_window(monkeypatch):
+    from unittest.mock import Mock
+
+    info = {
+        "litellm_provider": "deepseek",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "max_tokens": 8192,
+    }
+    lookup = Mock(return_value=info)
+    monkeypatch.setattr(
+        router_mod,
+        "_load_litellm",
+        lambda: SimpleNamespace(
+            model_cost={"deepseek/deepseek-chat": info},
+            get_model_info=lookup,
+        ),
+    )
+    dep = router_mod._deployment("primary", "deepseek", "deepseek-chat", "sk-test", None)
+    assert dep["model_info"] == {
+        "id": "primary",
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+    }
+    lookup.assert_called_once_with(model="deepseek-chat", custom_llm_provider="deepseek")
+    assert router_mod.model_limits("litellm", "unknown-alias") == {}
+
+
+def test_doubao_capabilities_resolve_only_the_exact_volcengine_registry_model(monkeypatch):
+    from unittest.mock import Mock
+
+    model = "doubao-seed-exact"
+    info = {"litellm_provider": "volcengine", "max_input_tokens": 65536, "max_output_tokens": 4096}
+    lookup = Mock(return_value=info)
+    monkeypatch.setattr(
+        router_mod,
+        "_load_litellm",
+        lambda: SimpleNamespace(
+            model_cost={f"volcengine/{model}": info},
+            get_model_info=lookup,
+        ),
+    )
+    assert router_mod.model_limits("doubao", model) == {
+        "max_input_tokens": 65536,
+        "max_output_tokens": 4096,
+    }
+    lookup.assert_called_once_with(model=model, custom_llm_provider="volcengine")
+    assert router_mod.model_limits("doubao", "xcmax-doubao-code") == {}
+
+
+def test_registry_provider_mismatch_does_not_call_provider_lookup(monkeypatch):
+    from unittest.mock import Mock
+
+    info = {"litellm_provider": "openai", "max_input_tokens": 128000}
+    lookup = Mock(side_effect=AssertionError("mismatched provider must not reach LiteLLM"))
+    monkeypatch.setattr(
+        router_mod,
+        "_load_litellm",
+        lambda: SimpleNamespace(
+            model_cost={"gpt-4o": info},
+            get_model_info=lookup,
+        ),
+    )
+    assert router_mod.model_limits("litellm", "gpt-4o") == {}
+    lookup.assert_not_called()
+    lookup.side_effect, lookup.return_value = None, None
+    assert router_mod.model_limits("openai", "gpt-4o") == {"max_input_tokens": 128000}
+
+
+def test_real_litellm_namespace_mismatch_is_rejected_before_its_unmapped_error(monkeypatch):
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    import litellm
+
+    monkeypatch.setattr(router_mod, "_load_litellm", lambda: litellm)
+    with pytest.raises(litellm.ModelNotMappedError):
+        litellm.get_model_info(model="gpt-4o", custom_llm_provider="litellm")
+    assert router_mod.model_limits("litellm", "gpt-4o") == {}
+    assert router_mod.model_limits("openai", "gpt-4o")["max_input_tokens"] > 0
 
 
 def test_deployment_maps_minimax_token_plan_to_anthropic():
