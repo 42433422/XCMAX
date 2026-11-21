@@ -232,8 +232,10 @@ class PlannedWorkflowDispatch:
                     and current.status == "waiting_user"
                     and interaction.get("success")
                 ):
-                    interaction.setdefault("status", "waiting_user")
-                    interaction.setdefault("execution_state", "waiting_user")
+                    # The persisted run is authoritative. A callback may still
+                    # carry a stale terminal projection from an earlier turn.
+                    interaction["status"] = "waiting_user"
+                    interaction["execution_state"] = "waiting_user"
                     interaction["needs_user_input"] = True
             return interaction
         result = self.callbacks._format_agent_run_response(
