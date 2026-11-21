@@ -269,8 +269,8 @@ async def _prepare_model_messages(
             from app.utils import metrics
 
             metrics.context_window_overflow_total.labels(stage="tool_catalog_trimmed").inc()
-        except Exception:  # noqa: BLE001 - 指标失败不影响重试
-            pass
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError):
+            logger.debug("planner tool trim metric unavailable", exc_info=True)
         diagnostics["message_tokens"] = estimate_messages_tokens(outbound)
         diagnostics["tool_catalog_trimmed"] = True
         try:
