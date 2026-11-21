@@ -98,9 +98,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def mod_tools_execute(request: Request, body: dict | None = Body(default=None)):
         from fastapi.responses import JSONResponse
 
-        from app.fastapi_routes.tools_execute import run_tools_execute_agent
+        from app.mod_sdk.planner_compat import run_planner_tool_agent
 
-        data, code = run_tools_execute_agent(
+        data, code = run_planner_tool_agent(
             request=request, body=body or {}, route_path=str(request.url.path)
         )
         ok = bool(data.get("success"))

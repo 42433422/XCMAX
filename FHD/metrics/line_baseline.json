@@ -1,5 +1,5 @@
 {
-  "lines": 2561481,
+  "lines": 2561491,
   "updated": "2026-11-21",
-  "note": "PR #3440 工具权限/安全重试：原分支2561389行 + main自维护净增92行 = 2561481行。已保留统一工具协议与安全拒绝行为，后续需修正旧调用方和测试，旧CI有实际失败，不能以此声明验收完成。"
+  "note": "PR #3440 Mod架构门禁修复：xcagi-planner-bridge 的 tools/execute 不再直接跨层导入 app.fastapi_routes，改通过 app.mod_sdk.planner_compat 稳定门面调用原 host 受控执行函数。保持原鉴权、幂等、回执行为；净增10行，当前基线2561491行。其他调用测试与权限失败仍待最新CI验收。"
 }
