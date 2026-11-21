@@ -65,12 +65,11 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     return accepted.conclusion === 'success' ? 0 : 1;
   }
   const budgeted = accepted.strategic_budget?.kind === 'github_opencode_workspace';
-  const isolatedFeedback = customerRepair && env.DEVFLEET_FORCE_OPENCODE === '1'
+  const isolatedFeedback = (repair || customerRepair) && env.DEVFLEET_FORCE_OPENCODE === '1'
     && env.PARA_PLATFORM_POOL === '1'
     && accepted.model_allocation?.execution_isolation === OPENCODE_CREDENTIAL_ISOLATION;
-  if (repair || (customerRepair && !isolatedFeedback)) {
-    // Raw keys and login material remain forbidden. Customer repair requires the
-    // admitted native SRT mask profile; original-PR repair keeps its existing gate.
+  if ((repair || customerRepair) && !isolatedFeedback) {
+    // Every untrusted repair requires the admitted native SRT header-only profile.
     const reason = customerRepair ? 'customer_feedback_requires_non_exportable_model_credentials'
       : 'original_pr_repair_requires_non_exportable_model_credentials';
     mkdirSync(directory, { recursive: true });
@@ -79,7 +78,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     }) + '\n');
     throw new Error(reason);
   }
-  if (customerRepair && !budgeted) throw new Error('workspace_requires_original_isolated_budget_binding');
+  if ((repair || customerRepair) && !budgeted) throw new Error('workspace_requires_original_isolated_budget_binding');
   let phase;
   if (budgeted) {
     verifyFeedbackIsolation(env);

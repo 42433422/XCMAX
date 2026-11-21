@@ -10,6 +10,8 @@ import argparse
 import json
 import re
 import time
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import self_heal_freshness as freshness
@@ -75,6 +77,8 @@ def recovery_plan(
                 "reason": f"dispatch_{record.get('status', 'unknown')}",
                 "control_task_id": str(record.get("control_task_id") or ""),
                 "dispatch_run_id": int(record.get("dispatch_run_id") or 0),
+                "dispatch_comment_id": comment.get("id"),
+                "dispatch_receipt": record,
             }
         for record in _identities(body, para.RECEIPT_MARKER):
             if any(record.get(k) != v for k, v in identity.items()):
@@ -120,6 +124,73 @@ def recovery_plan(
             comments,
         )
     return plan
+
+
+def _dispatch_run_matches(run, repo, number, request_id):
+    return (
+        type(run.get("id")) is int
+        and run["id"] > 0
+        and run.get("display_title") == f"AI Issue Implement #{number} [dispatch:{request_id}]"
+        and run.get("path") == IMPLEMENT_PATH
+        and run.get("event") == "workflow_dispatch"
+        and run.get("head_branch") == "main"
+        and (run.get("repository") or {}).get("full_name", "").casefold() == repo.casefold()
+        and bool(re.fullmatch(r"[0-9a-f]{40}", str(run.get("head_sha") or "")))
+        and type(run.get("run_attempt")) is int
+        and run["run_attempt"] > 0
+    )
+
+
+def recover_dispatch(plan, *, repo, number, get, write, dry_run):
+    """Adopt only the uniquely identified original run; never repeat its POST."""
+    receipt = plan.get("dispatch_receipt") or {}
+    request_id = receipt.get("dispatch_request_id", "")
+    if not request_id:
+        return plan
+    try:
+        if not isinstance(request_id, str) or str(uuid.UUID(request_id)) != request_id:
+            raise ValueError("invalid dispatch identity")
+        since = datetime.fromtimestamp(int(receipt["requested_at"]), UTC).isoformat()
+        if type(plan.get("dispatch_comment_id")) is not int or plan["dispatch_comment_id"] < 1:
+            raise ValueError("original comment missing")
+    except (ValueError, TypeError, KeyError, OverflowError):
+        return {**plan, "reason": "dispatch_identity_invalid"}
+    runs = list(
+        freshness.pages(
+            get,
+            f"/repos/{repo}/actions/workflows/fhd-ai-issue-implement.yml/runs",
+            {"event": "workflow_dispatch", "branch": "main", "created": ">=" + since},
+            key="workflow_runs",
+        )
+    )
+    matches = [
+        run
+        for run in runs
+        if run.get("display_title") == f"AI Issue Implement #{number} [dispatch:{request_id}]"
+    ]
+    if not matches:
+        return {**plan, "reason": "dispatch_run_not_yet_visible"}
+    if len(matches) != 1:
+        return {**plan, "reason": "dispatch_run_identity_ambiguous"}
+    run = matches[0]
+    if not _dispatch_run_matches(run, repo, number, request_id):
+        return {**plan, "reason": "dispatch_run_identity_mismatch"}
+    # Save the observation before the normal next reconciliation can resume it.
+    # A lost PATCH acknowledgement is harmless: the original run is only read.
+    if not dry_run:
+        status, _ = write(
+            "PATCH",
+            f"/repos/{repo}/issues/comments/{plan['dispatch_comment_id']}",
+            {"body": receipt_body({**receipt, "dispatch_run_id": run["id"], "status": "observed"})},
+        )
+        if status != 200:
+            return {**plan, "reason": "dispatch_observation_not_persisted"}
+    return {
+        **plan,
+        "state": "observing",
+        "reason": "dispatch_run_recovered",
+        "dispatch_run_id": run["id"],
+    }
 
 
 def original_repair_result(source, repo, number, get):
@@ -273,13 +344,23 @@ def reconcile_one(issue: dict[str, Any], *, repo: str, get, write, dispatch, dry
         "pr_created",
     }:
         return result
+    run_id = int(plan.get("dispatch_run_id") or 0)
+    if not run_id and plan["reason"] != "dispatch_rejected":
+        return {
+            **result,
+            **recover_dispatch(
+                plan,
+                repo=repo,
+                number=number,
+                get=get,
+                write=write,
+                dry_run=dry_run,
+            ),
+        }
     if plan["dispatch_count"] >= MAX_RECOVERY_ATTEMPTS:
         return {**result, "reason": "recovery_attempt_budget_exhausted"}
-    run_id = int(plan.get("dispatch_run_id") or 0)
     if not run_id:
         # A definitive rejection may be retried; timeout/204/pending never proves absence.
-        if plan["reason"] != "dispatch_rejected":
-            return result
         action = "retry_rejected_dispatch"
     else:
         run = freshness._get(get, f"/repos/{repo}/actions/runs/{run_id}")
@@ -288,6 +369,15 @@ def reconcile_one(issue: dict[str, Any], *, repo: str, get, write, dispatch, dry
             or freshness.workflow_identity(run)[1] != IMPLEMENT_PATH
             or run.get("event") not in {"workflow_dispatch", "issues", "issue_comment"}
             or run.get("head_branch") != "main"
+            or (
+                (plan.get("dispatch_receipt") or {}).get("dispatch_request_id")
+                and not _dispatch_run_matches(
+                    run,
+                    repo,
+                    number,
+                    plan["dispatch_receipt"]["dispatch_request_id"],
+                )
+            )
         ):
             return {**result, "reason": "implementation_run_identity_mismatch"}
         if not run.get("run_attempt") or not run.get("status"):

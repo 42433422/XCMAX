@@ -74,14 +74,19 @@ def _evidence(sha: str):
     }
 
 
-def test_real_server_and_three_desktop_targets_pass() -> None:
+def test_well_formed_claims_do_not_prove_real_server_or_desktop_acceptance() -> None:
     mod = _module()
     sha = "a" * 40
     evidence = _evidence(sha)
     evidence["desktops"]["macos"]["os_version"] = "26.3"
     evidence["desktops"]["windows10"]["os_version"] = "10.0.19045"
     evidence["desktops"]["windows11"]["os_version"] = "11.0.26100"
-    assert mod.verify(evidence, release_sha=sha)["passed"] is True
+    evidence["verification_scope"] = "measured_native_acceptance"  # Caller cannot self-certify.
+    result = mod.verify(evidence, release_sha=sha)
+    assert result["structural_passed"] is True
+    assert result["passed"] is False
+    assert result["verification_scope"] == "submitted_claims"
+    assert result["blockers"] == ["independent_native_measurements_missing"]
 
 
 def test_customer_device_or_synthetic_rollback_cannot_pass() -> None:
@@ -128,7 +133,17 @@ def test_published_rollback_step_executes_from_its_workflow_directory(tmp_path) 
         timeout=15,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads((tmp_path / "upgrade-rollback-verification.json").read_text())["passed"]
+    registered = json.loads((tmp_path / "upgrade-rollback-verification.json").read_text())
+    assert registered["structural_passed"] is True
+    assert registered["passed"] is False
+    # Registering inputs is useful, but the release consumer must retain failure.
+    verify = subprocess.run(
+        [sys.executable, str(repo / "FHD/scripts/release/verify_upgrade_rollback_evidence.py"),
+         "--evidence", str(tmp_path / "upgrade-rollback-raw.json"), "--release-sha", sha],
+        capture_output=True, text=True, check=False,
+    )
+    assert verify.returncode == 1
+    assert json.loads(verify.stdout)["verification_scope"] == "submitted_claims"
 
 
 def test_readback_preflight_runs_without_checkout_and_rejects_invalid_sha(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import tempfile
@@ -81,6 +82,17 @@ def _successful_steps(repo, run_id, attempt):
     }
 
 
+def _source_contract():
+    # Reuse the verifier shipped with this release, never an operator-selected module.
+    path = Path(__file__).resolve().parents[3] / "scripts/ci/verify_modstore_release_approval.py"
+    spec = importlib.util.spec_from_file_location("_xcmax_release_source_contract", path)
+    if not spec or not spec.loader:
+        raise ValueError("original production source verifier unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _release_receipt(repo, run, release, product_version, release_id):
     release_sha = release.git_sha
     artifacts = list(_rows(f"/repos/{repo}/actions/runs/{run['id']}/artifacts", "artifacts"))
@@ -120,33 +132,43 @@ def _release_receipt(repo, run, release, product_version, release_id):
         or receipt.get("runtime_release_id") != release_id
     ):
         raise ValueError("production acceptance does not match the signed running release")
-    for key, workflow in (
-        ("ci_run_id", "fhd-ci-cd.yml"),
-        ("security_scan_run_id", "fhd-security-full-scan.yml"),
-    ):
+    source_contract = _source_contract()
+    for key in ("ci_run_id", "security_scan_run_id"):
         run_id = receipt.get(key)
         if type(run_id) is not int or run_id <= 0:
             raise ValueError("production receipt is missing an exact evidence run")
         evidence = github("GET", f"/repos/{repo}/actions/runs/{run_id}")
-        if (
-            evidence.get("id") != run_id
-            or evidence.get("path") != f".github/workflows/{workflow}"
-            or evidence.get("head_sha") != release_sha
-            or evidence.get("head_branch") != "main"
-            or evidence.get("status") != "completed"
-            or evidence.get("conclusion") != "success"
-        ):
+        if evidence.get("id") != run_id:
             raise ValueError(f"{key} does not attest the exact successful main release")
-        # Manual CI can test inputs.release_sha while head_sha names main's
-        # controller. Preserve both identities before accepting old receipts.
-        if key == "ci_run_id" and (
-            evidence.get("event") not in {"push", "schedule", "workflow_dispatch"}
-            or (
-                evidence.get("event") == "workflow_dispatch"
-                and evidence.get("display_title") != f"CI/CD {release_sha}"
+        expected = (receipt.get("source_evidence") or {}).get(key)
+        source_contract.verify_run_source(
+            key,
+            evidence,
+            release_sha,
+            source_evidence=expected,
+            contains=lambda ancestor, descendant: _contains_commit(repo, ancestor, descendant),
+        )
+        if evidence["head_sha"] != release_sha:
+
+            def read_archive(source_artifact):
+                with tempfile.TemporaryDirectory(prefix="retort-source-") as directory:
+                    root = Path(directory)
+                    _download_artifact(repo, source_artifact["id"], root, source_artifact["digest"])
+                    return {
+                        path.relative_to(root).as_posix(): path.read_bytes()
+                        for path in root.rglob("*.json")
+                    }
+
+            actual = source_contract.read_source_evidence(
+                repo,
+                key,
+                evidence,
+                release_sha,
+                api=lambda path: github("GET", path),
+                read_archive=read_archive,
             )
-        ):
-            raise ValueError("CI evidence did not test the exact release source")
+            if actual != expected:
+                raise ValueError("original source evidence changed since release approval")
     deployment_attempt = run.get("run_attempt")
     signed_attempt = receipt.get("signed_run_attempt", "")
     if (

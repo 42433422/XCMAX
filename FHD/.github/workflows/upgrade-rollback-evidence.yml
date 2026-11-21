@@ -9,7 +9,7 @@ on:
         required: true
         type: string
       evidence_json:
-        description: JSON evidence for production server rollback plus macOS, Windows 10 and Windows 11 real-machine exercises
+        description: Submitted rollback claims; registration validates their structure, not physical acceptance
         required: true
         type: string
 
@@ -18,26 +18,30 @@ permissions:
 
 jobs:
   verify:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_sha }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - name: Validate real rollback and OTA evidence
+      - name: Register rollback claims without certifying physical acceptance
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
           EVIDENCE_JSON: ${{ inputs.evidence_json }}
         run: |
           set -euo pipefail
           printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
-          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git merge-base --is-ancestor "$RELEASE_SHA" HEAD
           printf '%s\n' "$EVIDENCE_JSON" > "${RUNNER_TEMP}/upgrade-rollback-raw.json"
           python scripts/release/verify_upgrade_rollback_evidence.py \
             --evidence "${RUNNER_TEMP}/upgrade-rollback-raw.json" \
             --release-sha "$RELEASE_SHA" \
+            --register-claims \
             --output "${RUNNER_TEMP}/upgrade-rollback-verification.json"
       - name: Upload verification and restricted raw evidence
         if: always()

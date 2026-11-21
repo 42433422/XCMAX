@@ -158,198 +158,40 @@ def test_service_token_is_not_an_admin_credential(setup):
     assert created.status_code in {401, 403}
 
 
-@pytest.mark.parametrize("lost_dispatch_response", [False, True])
 @pytest.mark.parametrize("pool,tool", [(False, "codex"), (True, "codex"), (True, "opencode")])
-def test_original_pr_uses_hosted_worker_and_reads_back_publication(
-    setup,
-    monkeypatch,
-    lost_dispatch_response,
-    pool,
-    tool,
-):
-    from modstore_server import customer_ticket_github as bridge
+def test_original_pr_waits_for_its_approved_isolated_budget(setup, monkeypatch, pool, tool):
+    from modstore_server import customer_ticket_github as github
     from modstore_server import para_github_repair as repair
-    from modstore_server import para_model_admission as admission
-
-    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1" if tool == "opencode" else "0")
-    monkeypatch.setenv("MODSTORE_PARA_PLATFORM_POOL", "1" if pool else "0")
-    waiting = {"status": "waiting", "reason": "no_verified_headroom"}
-    allocated = {"status": "admitted", "model": "coding-route", "approved_models": ["coding-route"]}
-    decision = [waiting if pool else None]
-    monkeypatch.setattr(admission, "platform_model_admission", lambda: decision[0])
+    from modstore_server import strategic_remote_bridge as remote
 
     client, factory = setup
-    repo, old, new = "owner/repo", "a" * 40, "b" * 40
+    monkeypatch.setattr(remote, "get_session_factory", lambda: factory)
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1" if tool == "opencode" else "0")
+    monkeypatch.setenv("MODSTORE_PARA_PLATFORM_POOL", "1" if pool else "0")
     monkeypatch.setattr(
-        bridge,
+        github,
         "configuration",
         lambda: {
-            "repository": repo,
+            "repository": "owner/repo",
             "configured": True,
             "para_configured": True,
         },
     )
+    monkeypatch.setattr(repair, "_current_source", lambda *_: True)
+    monkeypatch.setattr(github, "github", lambda *_: pytest.fail("no unbudgeted workflow dispatch"))
+    monkeypatch.setattr(repair, "ParaClient", lambda **_: pytest.fail("no unbudgeted model task"))
+    payload = body(source_sha="a" * 40, github_issue=5, pull_request=7, source_run_id=99)
     route = "/api/service/mac-control/github-pr-tasks"
-    payload = body(source_sha=old, github_issue=5, pull_request=7, source_run_id=99)
-    assert client.post(route, json=payload).status_code == 401
-    result = client.post(route, headers=auth(), json=payload)
-    assert result.status_code == 202, result.text
-    task = result.json()["task"]
-    assert task["executor"] == repair.REPAIR_KIND
-    assert client.post(route, headers=auth(), json=payload).json()["task"]["id"] == task["id"]
-    request_id = str(uuid.UUID(hex=task["id"]))
-    status_url = f"/api/service/mac-control/github-runs/{request_id}"
-    record_url = f"/api/service/mac-control/tasks/{task['id']}"
-    name = f"para-workspace-{request_id}"
-    branch, device = "devfleet/fix", "cloud"
-    monkeypatch.setenv("MODSTORE_PARA_GITHUB_DEVICE_ID", device)
-    initial_run = {
-        "id": 33,
-        "display_title": name,
-        "event": "workflow_dispatch",
-        "path": f".github/workflows/{repair.WORKFLOW}",
-        "head_branch": "main",
-        "run_attempt": 1,
-        "repository": {"full_name": repo},
-        "status": "queued",
-    }
-    posted = []
-
-    def github(method, path, data=None):
-        if method == "POST":
-            posted.append(data["inputs"]["request_id"])
-            assert path.endswith(f"/{repair.WORKFLOW}/dispatches") and data["ref"] == "main"
-            if lost_dispatch_response:
-                raise HTTPException(502)
-            return {"workflow_run_id": 33}
-        if path.endswith("/pulls/7"):
-            return {
-                "state": "open",
-                "draft": False,
-                "head": {"sha": old, "ref": "fix/x", "repo": {"full_name": repo}},
-                "base": {"ref": "main", "repo": {"full_name": repo}},
-            }
-        if path.endswith("/issues/5"):
-            return {
-                "state": "open",
-                "user": {"login": "github-actions[bot]", "type": "Bot"},
-                "labels": [{"name": label} for label in ("ai-implement", "auto-incident")],
-                "body": "- Self-Heal-Run: `99/1`",
-            }
-        if path.endswith("/runs/99"):
-            return {
-                "head_sha": old,
-                "head_branch": "fix/x",
-                "run_attempt": 1,
-                "status": "completed",
-                "conclusion": "failure",
-                "head_repository": {"full_name": repo},
-            }
-        if path.endswith("/runs/33"):
-            return initial_run
-        if "/runs?" in path:
-            return {"workflow_runs": [initial_run]}
-        if path.endswith("/runs/33/jobs"):
-            return {"jobs": [{"name": "publish-candidate", "conclusion": "success"}]}
-        if path.endswith(f"/git/ref/heads/{branch}"):
-            return {"object": {"sha": new}}
-        pytest.fail(f"unexpected GitHub call {method} {path}")
-
-    class CloudClient:
-        def __init__(self, *, github_worker):
-            assert github_worker
-
-        def devices(self):
-            return [
-                {
-                    "id": device,
-                    "status": "online",
-                    "lastSeen": datetime.now(UTC).isoformat(),
-                    "tools": [{"toolName": tool, "status": "idle"}],
-                    "capabilities": {
-                        "github_actions": True,
-                        "github_request_id": request_id,
-                        "github_run_id": 33,
-                        "github_run_attempt": 1,
-                        "github_stage": "execute",
-                        "supports_exact_commit": True,
-                    },
-                }
-            ]
-
-        def submit(self, data):
-            assert data["branch"] == old and data["auto_merge"] is False
-            assert data["tool_name"] == tool
-            submitted.append(data["title"])
-            return {"id": "para1"}
-
-        def task(self, task_id):
-            assert task_id == "para1"
-            title = submitted[0]
-            report = {
-                "source": "executor_git_readback",
-                "pushed": False,
-                "publication": "artifact_pending",
-                "base_sha": old,
-                "branch": branch,
-                "task_id": task_id,
-                "subtask_id": "sub1",
-                "attempt_id": title.split(":")[2].split("]")[0],
-                "commit_sha": new,
-                "archive_sha256": "c" * 64,
-                "bundle_sha256": "d" * 64,
-            }
-            return {
-                "id": task_id,
-                "status": "completed",
-                "title": title,
-                "repo_url": f"https://github.com/{repo}.git",
-                "subTasks": [
-                    {
-                        "id": "sub1",
-                        "device_id": device,
-                        "branch_name": branch,
-                        "status": "completed",
-                        "logs": [{"content": json.dumps(report)}],
-                    },
-                ],
-            }
-
-        def close(self):
-            pass
-
-    submitted = []
-    monkeypatch.setattr(bridge, "github", github)
-    monkeypatch.setattr(repair, "ParaClient", CloudClient)
-    if pool:
-        repair.sync(factory)
-        assert posted == [] and submitted == []
-        assert client.get(status_url, headers=auth()).json()["model_allocation"] == waiting
-        decision[0] = allocated
-    repair.sync(factory)
-    if pool:
-        assert client.get(status_url, headers=auth()).json()["model_allocation"] == allocated
-    monkeypatch.setattr(
-        admission,
-        "platform_model_admission",
-        lambda: pytest.fail("an accepted workflow must retain its original allocation"),
-    )
-    initial_run["status"] = "in_progress"
-    repair.sync(factory)
-    # Changing the policy after acceptance cannot replace the original attempt.
-    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "0" if tool == "opencode" else "1")
-    repair.sync(factory)
-    status = client.get(status_url, headers=auth()).json()
-    assert status["run_id"] == 33 and status["source_sha"] == old
-    assert not status["finished"] and status["publication_candidate"]["commit_sha"] == new
-    initial_run.update(status="completed", conclusion="success")
+    response = client.post(route, json=payload, headers=auth())
+    assert response.status_code == 202
+    task_id = response.json()["task"]["id"]
+    assert client.post(route, json=payload, headers=auth()).json()["task"]["id"] == task_id
     repair.sync(factory)
     repair.sync(factory)
-    final = client.get(record_url, headers=auth()).json()["task"]
-    assert (final["state"], final["github_run_id"], final["para_task_id"]) == (
-        "execution_completed",
-        33,
-        "para1",
-    )
-    assert final["execution"]["reports"][0]["report"]["commit_sha"] == new
-    assert posted == [request_id] and len(submitted) == 1
+    state = client.get(f"/api/service/mac-control/tasks/{task_id}", headers=auth()).json()["task"]
+    assert state["state"] == "waiting_device" and not state["terminal"]
+    assert state["reason"] == "original_pr_isolated_budget_required"
+    with factory() as session:
+        original = session.get(MacControlTask, task_id)
+        assert not original.attempt_id and not original.para_task_id
+        assert json.loads(original.snapshot_json) == {}

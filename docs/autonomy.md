@@ -102,7 +102,7 @@ L6 反思可通过管理员配置的原 `retort_template_id` 绑定原 Retort �
 |---|---|---|
 | 通用工具与自动核验 | 已接宿主明确登记的只读合同及限定业务/surface 适配，原 dispatcher 自动只读观察；旧任务无冻结契约时不补造通过 | 未登记只读且没有适配器的动作保持 `inconclusive`；自动 observer 不能结清 unknown、续期权限或重做未完成步骤，需逐来源接入真实证据 |
 | 电脑/浏览器执行面 | 原生、Computer、AIOPEN 和持久 MCP 已接原任务；证据明确为历史 DOM/像素/制品或当前同会话页面条件 | 保持沙箱的真实 Chromium CI、授权客户站点与 Windows/macOS 真机验收；无后置条件或会话丢失不能完成，DOM/像素不能代替订单、付款和外发事实 |
-| L6 外部执行适配 | 已接报告与已批准原 Retort 工程消费者；外部 Para/Cursor 和原 PR repair 仍不具备同等合同 | 对应服务须提供原始用量、原任务终态及隔离发布身份；未接适配器继续在出站前拒绝，不能删除阻塞条件冒充全量接入 |
+| L6 外部执行适配 | 已接报告、已批准原 Retort 工程消费者和具有原请求预算批准的 PR 修复；其他外部 Para/Cursor 未统一到同等合同 | 对应服务须提供原始用量、原任务终态及隔离发布身份；未接适配器继续在出站前拒绝，不能删除阻塞条件冒充全量接入 |
 | L6 供应商未知用量收敛 | 原账本保留 unknown 占用且不重放，已有恢复只读取已结算的原调用与原生任务 | 尚无原供应商请求查询/账单回执经身份核验后补结原 call 的消费者；须接专用可信回查适配，不能通过重置状态、重试或修改配置释放责任 |
 | L5 任意产品实验 | 每个 surface 必须有真实消费者；员工 prompt 的接入不自动覆盖 RAG、受理策略、完整工作流图和模型路由 | 分别冻结资源身份与配置，保留原权限过滤，接真实曝光及后续验收。共享工作流图不能以全局节点改写冒充分用户 A/B |
 | L5 自主改进范围 | 原失败训练与候选审批已覆盖员工 prompt 和工作流生成 prompt，后者另有真实执行指标 | 其他 surface 仍需要原运行输入、独立验证和候选发布的实际适配；离线静态验证只能形成待审候选，运行改善由实际执行实验决定 |
@@ -366,6 +366,25 @@ Rundeck 候选不替换这些代码修复及发布流程。
 
 本轮已吸收的固定来源与未纳入范围见[源 PR 处置](#本轮源-pr-处置)，包括 #3437 的原生回执与 #3398 的预算/交付消费者。下面说明原链路中的断点与改造；源码与受控回归是 E1/E2，不等于原生部署、真实模型或客户验收。
 
+### L3 原执行链补齐（2026-11-22）
+
+本次在 PR #3449 已发布的 `f71246900c1b` 上继续修改，并保留后续 `e2b985fdbac` 的原经营归因修复与 `ca35d7d025a` 的 L1 原回复、会话和降级回执修复。复用现有执行器、公司预算、GitHub Actions、独立 publisher、filelock 和持久账本；独立 publisher 在本次之前已经存在，原 PR 修复缺的是自身批准与计量合同的接入。
+
+| 已复现的断点 | 当前代码行为与原承接点 |
+|---|---|
+| 原 PR repair 无条件阻断 | `para_github_repair.py` 与 `strategic_workspace_*` 保留原 MacControlTask，预算记录使用由原请求派生的独立 UUID。原组合批准须冻结 `original_request_kind=original_pr_repair`、原请求 ID 和 `approval_digest`；原 PR/source、可信控制器 SHA、原 task/subtask/attempt/device 均核对后才发阶段 grant。缺批准或未知用量继续等待。 |
+| 候选/发布与修复完成混用 | `github_para_executor.mjs` 和 `publish_para_candidate.py` 仅放行上述原预算与 SRT 隔离；回读原 attempt 的完成 publisher job、候选及分支。原 Issue dispatcher 在受信 bare Git 中核对祖先、变更范围及未漂移的原 head 后，按 CAS 快进原 PR 分支；原精确候选的 CI 通过才结清修复，明确失败记失败，交付仍为未核验。 |
+| 自愈 workflow_dispatch 丢确认永久悬挂 | `ai_self_heal.py` 先在原机器人评论保存请求 UUID，再传入原工作流。`self_heal_reconcile.py` 通过完整原运行列表找回唯一相符 run 并写回原评论；后续沿原 run/控制任务继续，不再 POST 新任务。旧无请求标识的未知记录仍不能猜测。 |
+| 合入后原 CI 消失时替换成另一成功 run | `ai_self_heal_sla.py` 将原 PR/head 的稳定请求标识接入两条原主干 CI；已知 run ID 暂不可见只保留观察，未知 ID 仅接受唯一匹配。列表截断、重复 ID、总数漂移及错仓库/attempt 不得结单。 |
+| 合并/部署最终确认丢失，或部署 pending 被清检查点 | `maintenance_loop` 在出站前冻结原任务、head、批准及部署范围，读回原远端任务和 GitHub 合并身份，或本地已发布 Git 的真实父提交。沿原部署请求继续，冷却与阈值不丢弃原恢复；不重做代码、审核、QA 或合并。 |
+| 首次收尾落盘后、合并意图之前崩溃 | 原子保存 `before_policy`、原终态、gate 与部署范围，只允许此阶段恢复纯预检。已落 `merge_intent` 后只读回；不能取得有效原 head/base SHA 或不支持的仓库在 POST 前 hold，避免产生无法核对的合并。 |
+| 结果记账或知识回写中断重复消费 | 原终态、结果摘要和知识文件复用原账本/记忆投影；正式投影按原 run 与冻结内容幂等续写，历史缺证明或内容冲突保留待核对。 |
+| 管理端停止意图没有到达原设备进程 | `mac_control_receipts.py` 沿既有认证回执返回原停止意图，核对 device/correlation/attempt/task/subtask；`control_receipt_outbox.mjs` 与 `para_e2e_agent.mjs` 按单任务 AbortController 停止原 Codex 进程树并等待退出。原设备停止证据和 Para 终态均核对后收口；双 outbox 可乱序，已完成子任务和独立失败保留，未知用量不结零。 |
+| 汇总证据凭文件名与自报成功即放行 | `build_closure_reports.py` 读回原成功 main 工作流、attempt 与不可变 ZIP 摘要，核对完整制品目录、源码祖先关系及读取期间身份；版本取原发布目录。修正工作目录重复 FHD 和浅历史校验。 |
+| 人工回滚 JSON 伪装实测通过 | `verify_upgrade_rollback_evidence.py` 只给出结构校验与 `submitted_claims` 范围，不能产生测量通过。闭环汇总保留缺少独立原生测量的 blocker；当前 Windows 托管机和 macOS 启动回执均不能代替 Win10/Win11/mac 真机 OTA/回滚。 |
+
+主干 CI 的请求标识不代表生产批准；生产审批与 Retort 回读继续核对原 release SHA、控制器 SHA、原成功 run、签名制品及运行身份。上述修复的正向和反向回归覆盖真实 SQL、文件锁、持久 JSON、Git 与 ZIP；外部 API 用受控传输替身，不能记为真实模型/机器/生产验收。没有创建第二套执行引擎或为本轮调整审批与发布保护。
+
 | 缺口 | 原执行链中的修复与复用 |
 |---|---|
 | Codex 退出码 0 或文本被当成成功 | 依据固定 0.153.4 协议消费原生 JSONL，并记录实际 CLI 版本；同时要求完整 `turn.completed` 和退出 0，保留 thread、usage 与工具回执。 |
@@ -381,7 +400,7 @@ Rundeck 候选不替换这些代码修复及发布流程。
 | 修复重试换提示词却复用旧幂等键 | 持久 request ID 的步骤只执行或回读一次；明确失败由原外层修复生成新身份，审查和 QA 保留原代码目标。 |
 | 派发或步骤间重启丢失进度 | 原 loop memory 在派发前持久化 request/actor/步骤；已确认步骤保留到整轮结果落盘，恢复只核对原任务及原代码分支。 |
 | 原 review 未核对就被新知识拒绝分支清除 | 回读原 review 前不再执行会清检查点的知识/Retort 分支；新 review 派发仍需原门禁。 |
-| 最终合并或记账后重启，再执行最终策略 | 最终策略前保存意图；有原最终回执时只续记账，已确认记账只清检查点，未知合并或投影保持待核对。 |
+| 最终合并或记账后重启，再执行最终策略 | 最终策略前保存意图；按冻结身份读回原合并、续查原部署及幂等记账。没有原意图或内容漂移的历史记录保持待核对。 |
 | 整理记忆覆盖正在执行的记录 | 公开清理/关闭/对账入口共用原 loop lease；忙时明确返回，保留原待处理项。 |
 | 验证命令没有退出码仍算通过 | 提供了 delivery validation 时，要求非空命令回执及真实整数退出码 0；缺失、超时和非法回执拒绝。 |
 
@@ -389,12 +408,12 @@ Rundeck 候选不替换这些代码修复及发布流程。
 
 | 尚未闭合的范围 | 具体条件 |
 |---|---|
-| 原 PR 自动修复 | 原 `MacControlTask` 来源与 Retort 的公司预算/attempt 合同不同。须把原 PR/source SHA/run/attempt 与已批准额度、原生隔离及 publisher 回执接通；保留 `original_pr_repair` 阻断，不能冒用 Retort 身份。 |
+| 原 PR 修复上线验收 | 自身 MacControlTask 与原组合预算、逐调用 grant、SRT 和 publisher 已接线；须配置针对原请求摘要的真实批准，再取得最终主线 SHA 上的执行与原 PR CI 回执。没有批准的旧任务继续等待，不冒用 Retort 身份。 |
 | 客户反馈修复的生产验收 | #3398 的受信 SRT/OpenCode、逐调用预算与隔离发布已进入本集成候选；仍需最终主线 SHA、真实执行、发布身份及客户效果回执，不能据接线状态宣称已在生产运行。 |
-| 原生线程续跑与远程取消 | 本轮保留 Codex thread ID 并修复工作进程信号退出；自动 `codex exec resume`、远程 task cancel 到 thread interrupt 的身份/批准适配仍需独立接线。任务状态回读不等于恢复原生线程。 |
-| 请求已发送但无远端任务号 | 持久执行意图保持待核对，禁止新派单；须由远端提供同一 request ID 的可信查找/对账，不能按相似文本推断完成。 |
-| 最终副作用丢确认 | 合并/部署已开始而最终回执缺失、或记账已开始但持久投影无法确认时保持待核对；自动恢复仍须按原 task/source/head/merge SHA 接通可信回读，不能重放策略。 |
-| 模型硬预算和其他执行器 | Codex 原生 usage 已记录；设备 CLI 的输出 token 上限仍标明 `output_limit_enforced=false`，真实费用/公司额度硬停未闭合。Cursor/Claude 沿用原退出码/stream 合同，尚未统一到同等级原生终态。 |
+| 原生线程续跑 | 设备 Codex 当前使用 `--ephemeral`，原生线程续跑缺少持久 thread/工作区/原批准与预算的绑定及恢复消费者；不能仅凭回传 thread ID 调用 `resume`。已配对 Codex 任务的原进程停止已接通；其他工具或覆盖执行器没有原生停止证明时继续待核对。 |
+| 通用 Para 请求缺可信远端关联 | 无受信 task/attempt 回执的通用 Para 请求保持待核对，禁止新派单；上游须提供同一 Idempotency-Key 的可信 request→task/subtask 查找合同。MacControl 与 GitHub 已有的精确身份恢复不在此缺口内，不能用相似提示词代替缺失的原始关联。 |
+| 历史最终副作用缺证明 | 新冻结意图可恢复原合并、部署和结果投影；旧 finalizing 记录缺 head/批准绑定、或不可幂等的自定义投影仍保持待核对，不能补造身份或重放策略。 |
+| 设备模型硬预算和其他执行器 | 设备 CLI 的输出 token 上限仍标明 `output_limit_enforced=false`。可复用的逐调用 SQL 预留与真实模型出口限制已用于 GitHub OpenCode；设备 Codex 的原批准预算→原任务 grant→受限出口适配尚未接通，直接 key/ChatGPT 登录和事后 usage 不能冒充事前硬限制。Cursor/Claude 也未统一到同等级原生终态。 |
 | 真实环境与长期质量 | 原生 Windows/macOS 进程树、Ubuntu 22.04 SRT、实际模型账单、真实多文件编程留出任务及客户验收分别验证；固定 CLI 的受控进程测试不代表付费模型质量。 |
 | 正式交付 | exact head CI、正式审查/合入、同 main SHA 安全扫描和发布、运行版本回读仍走原门禁；受控回归不提升 L1–L6 等级或对标分数。 |
 
@@ -531,9 +550,9 @@ Vue Flow 图和产物保留在「原执行记录」，不从历史页新增或�
 保留原员工身份。代码修复交给 Para，Codex 是 Para 内部执行工具，不接 Codex Action。
 当前工作流使用独立 execute、publish、resume 和 verification 任务；发布令牌不进入模型任务。
 旧 `github_para_worker.mjs` 的 `blocked_isolated_publisher_required` 仍保留，不能借旧入口绕过边界。
-客户反馈与训练候选修复仅接受 `srt-0.0.83-header-only-platform-v1`：可信控制进程持有 key，
+客户反馈、训练候选和有原预算批准的 PR 修复仅接受 `srt-0.0.83-header-only-platform-v1`：可信控制进程持有 key，
 模型进程只拿占位符，SRT 官方 TLS 代理按精确主机、路径、方法和批准模型注入请求头。
-普通 mask 的请求正文替换功能不启用。原 PR repair 尚未接此专用协议，仍保持原暂停状态。
+普通 mask 的请求正文替换功能不启用。原 PR repair 使用自身控制任务批准与预算记录，不借用客户工单或 Retort 身份。
 隔离、模型分配或回执不满足时保持 blocked/waiting；正式发布仍沿用主线 CI 与管理端审批。
 本地自研 LLM 实现引擎及进化账本本地回退已移除，原 Para 工作流与授权检查保留。
 服务端使用 `MODSTORE_GITHUB_TOKEN`（Issues/Actions 写、Contents/PR 读）、

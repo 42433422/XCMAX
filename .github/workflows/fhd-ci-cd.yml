@@ -2,7 +2,7 @@
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: CI/CD Pipeline
 run-name: >-
-  CI/CD ${{ github.event_name == 'workflow_dispatch' && inputs.release_sha || github.sha }}
+  CI/CD ${{ github.event_name == 'workflow_dispatch' && inputs.release_sha || github.sha }}${{ inputs.delivery_request_id && format(' [delivery:{0}]', inputs.delivery_request_id) || '' }}
 
 on:
   push:
@@ -43,6 +43,11 @@ on:
         type: boolean
       release_sha:
         description: "Exact 40-character SHA to build/deploy; required when push_to_cvm=true"
+        required: false
+        default: ""
+        type: string
+      delivery_request_id:
+        description: "Original post-merge CI request identity; retained across observation retries"
         required: false
         default: ""
         type: string

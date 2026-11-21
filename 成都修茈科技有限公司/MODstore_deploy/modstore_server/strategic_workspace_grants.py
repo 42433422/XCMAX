@@ -37,6 +37,7 @@ def _phase_identity(request: dict[str, Any], identity: dict[str, Any]) -> dict[s
     }
     if (
         phase not in {"execute", "resume"}
+        or (request.get("original_request_kind") == "original_pr_repair" and phase != "execute")
         or identity != expected
         or run.get("status") != "in_progress"
     ):
@@ -176,6 +177,11 @@ def current_attempt(session, request, effects, event_id, identity):
     """The original incident claim remains the authority, not a worker payload."""
     from modstore_server.retort_github_workspace import authorized_incident
 
+    if request.get("original_request_kind") == "original_pr_repair":
+        from modstore_server.para_github_repair import budget_attempt
+
+        return budget_attempt(session, request, effects, identity)
+
     event = session.get(IncidentEvent, event_id) if event_id else None
     payload = json.loads(event.payload_json) if event else {}
     if event is None or not authorized_incident(session, payload, event_id):
@@ -296,8 +302,14 @@ def bind_task(request_id: str, token: str, identity: dict[str, Any]) -> dict[str
         bridge.verify_allocation(request, effects)
         if identity["run_id"] != effects.get("run_id") or current.get("model_grant"):
             raise PortfolioError("workspace has another active model task")
-        member = current_attempt(session, request, effects, original_row.event_id, identity)
+        event_id = getattr(original_row, "event_id", None)
+        member = current_attempt(session, request, effects, event_id, identity)
         source_sha = request["source_sha"]
+        if request.get("original_request_kind") == "original_pr_repair":
+            _, source, _ = bridge.original(session, request, active=True)
+            source_sha = source["source_sha"]
+            if identity["description"] != source["message"]:
+                raise PortfolioError("workspace original PR prompt changed")
         if member["role"] == "verify":
             event = session.get(IncidentEvent, original_row.event_id)
             team = json.loads(event.payload_json).get("_team_claim", {}).get("team", [])
@@ -321,23 +333,23 @@ def bind_task(request_id: str, token: str, identity: dict[str, Any]) -> dict[str
             for item in grants
         ):
             raise PortfolioError("workspace task grant cannot be replayed")
-        bound_event = current.get("event_id", original_row.event_id)
-        if not bound_event or bound_event != original_row.event_id:
+        origin = (
+            {"control_task_id": original_row.id} if event_id is None else {"event_id": event_id}
+        )
+        if any(current.get(key, value) != value for key, value in origin.items()):
             raise PortfolioError("workspace original event changed")
         grant = {
             **{
                 k: identity[k]
                 for k in ("phase", "run_id", "task_id", "subtask_id", "attempt_id", "device_id")
             },
-            "event_id": bound_event,
+            **origin,
             "role": member["role"],
             "task_sha256": digest(identity),
             "source_sha": source_sha,
             "grant_id": secrets.token_hex(16),
         }
-        current.update(
-            event_id=bound_event, model_grant={**grant, "token_sha256": _sha(model_token)}
-        )
+        current.update(**origin, model_grant={**grant, "token_sha256": _sha(model_token)})
         grants.append({**grant, "status": "active"})
         record.state = "claimed"
         return {

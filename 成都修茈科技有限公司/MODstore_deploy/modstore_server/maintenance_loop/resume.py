@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from typing import Any, Dict, Optional, Tuple
@@ -15,6 +16,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config
 from . import memory as memory_domain
+from . import store
 
 
 def _pending_execution_candidate(memory: Dict[str, Any], user_id: int) -> Optional[Dict[str, Any]]:
@@ -77,6 +79,26 @@ def _pending_execution_candidate(memory: Dict[str, Any], user_id: int) -> Option
     ):
         raise ValueError("pending_execution_terminal_mismatch")
     if pending.get("state") in final_states:
+        if pending["state"] == "finalizing" and isinstance(pending.get("final_record"), dict):
+            original = pending["final_record"]
+            if (
+                original.get("run_id") == pending.get("final_run_id")
+                and original.get("phase") == "complete"
+                and original.get("para_task_id") == pending.get("code_task_id")
+                and original.get("branch") == pending.get("branch")
+                and isinstance(pending.get("final_steps"), list)
+                and original.get("steps") == pending["final_steps"]
+                and pending["final_steps"][: len(steps)] == steps
+                and isinstance(pending.get("final_gate"), dict)
+                and isinstance(pending.get("final_policy_progress"), dict)
+                and (
+                    original.get("status") == "completed"
+                    and pending["final_steps"] == steps
+                    or original.get("status") == "failed"
+                    and pending["final_policy_progress"].get("stage") == "before_policy"
+                )
+            ):
+                return {"reason": "resume_finalizing_execution"}
         final = pending.get("final_outcome")
         last = memory.get("last_run")
         if (
@@ -102,7 +124,18 @@ def _pending_execution_candidate(memory: Dict[str, Any], user_id: int) -> Option
             )
             and last.get("action") == final["policy_decision"].get("action")
         )
-        if pending["state"] == "recording_outcome" and not recorded:
+        if recorded and pending.get("outcome_recoverable") is True:
+            recorded = (
+                last.get("outcome_projection_id")
+                == hashlib.sha256(
+                    store._dumps_ledger([final, pending["final_gate"]]).encode()
+                ).hexdigest()
+            )
+        if (
+            pending["state"] == "recording_outcome"
+            and not recorded
+            and pending.get("outcome_recoverable") is not True
+        ):
             raise ValueError("pending_outcome_requires_reconciliation")
         return {
             "reason": "resume_finalized_execution",

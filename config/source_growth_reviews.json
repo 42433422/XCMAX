@@ -483,12 +483,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_usage.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "1494f39d3a631dd28834204d324fe1aebff3f973",
+      "head_blob": "5ea58a5dec4969a89272c09055e1fe919991414d",
       "before_lines": 0,
-      "after_lines": 869,
-      "reason": "评审请求：已有平台调用、公司封套、原组合任务与小C规划接回同一持久消费身份；保留公司优先、原始attempt限制，接已验证网关额度及其非供应商账单标记。",
+      "after_lines": 870,
+      "reason": "评审请求：已有平台调用、公司封套、原组合任务与小C规划接回同一持久消费身份；保留公司优先、原始attempt限制，接已验证网关额度及其非供应商账单标记。 本轮只在既有调用身份白名单加入 control_task_id，以绑定原 PR 的 MacControlTask，不借用 Retort event_id。",
       "boundary": "保留原SQL事务CAS与journal，已批准费率仅计提；未知、重试、撤权与中断不会变成零消费，调用者绑定仅由受信服务端生成。",
-      "validation": "整合网关、公司/规划预算和原始usage定向149项通过；正常mypy6个生产源码通过。未知用量保留占用，额度观测不能代替单次调用回执，真实供应商账单仍未验收。",
+      "validation": "整合网关、公司/规划预算和原始usage定向149项通过；正常mypy6个生产源码通过。未知用量保留占用，额度观测不能代替单次调用回执，真实供应商账单仍未验收。 本轮原 PR 原任务预算、逐调用 grant、未知用量及原候选 CI 结算定向23项通过；新增身份沿原事务消费。",
       "follow_up": "请维护者复核三个已有资源责任的生命周期关联；未来扩张按实际职责抽取，不能通过新增宽泛回执或自动退款绕过本合同。",
       "review_owner": "@42433422"
     },

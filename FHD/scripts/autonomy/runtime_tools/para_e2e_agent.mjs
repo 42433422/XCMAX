@@ -299,6 +299,8 @@ const codexModelAvailability = createModelAvailability({
 const codexModelAttemptsByTaskDir = new Map();
 const taskExecutionReceipts = new WeakMap();
 const taskExecutionReceiptsRecorded = new WeakSet();
+const taskExecutionStarted = new WeakSet();
+const taskSignals = new WeakMap();
 const codexBinaryVersions = new Map();
 const agentShutdown = new AbortController();
 
@@ -307,38 +309,42 @@ function positiveIntEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function spawnCodexOnce(cwd, prompt, { args, env, log, timeoutMs = toolCommandTimeoutMs }) {
+async function spawnCodexOnce(cwd, prompt, { args, env, log, timeoutMs = toolCommandTimeoutMs,
+  signal = agentShutdown.signal, onReceipt }) {
   const executable = resolveCodexAgentBin();
   const identity = JSON.stringify([executable, env.PATH || '']);
   if (!codexBinaryVersions.has(identity)) {
     codexBinaryVersions.set(identity, probeTools({ codex: executable }).then(result => result.codex));
   }
   const observed = await codexBinaryVersions.get(identity);
-  return runCodexCli({ executable, cwd, prompt, args, env, log, timeoutMs,
-    signal: agentShutdown.signal, cliVersion: observed?.ok ? observed.version || null : null,
+  const result = await runCodexCli({ executable, cwd, prompt, args, env, log, timeoutMs,
+    signal, cliVersion: observed?.ok ? observed.version || null : null,
     versionCheckedAt: observed?.checked_at || null });
+  onReceipt?.(result);
+  return result;
 }
 
-async function probeCodexModel(model, env, providerArgs = []) {
+async function probeCodexModel(model, env, providerArgs = [], signal, onReceipt) {
   const result = await spawnCodexOnce(
     tmpdir(),
     'Health check. Reply with exactly: OK',
     {
       args: ['exec', '--sandbox', 'read-only', '--ephemeral', '--skip-git-repo-check', ...providerArgs, '-m', model, '-'],
       env,
+      signal, onReceipt,
       timeoutMs: positiveIntEnv('DEVFLEET_CODEX_MODEL_PROBE_TIMEOUT_MS', 90_000),
     },
   );
   return { ...result, executionStarted: false, receipt: { ...result.receipt, purpose: 'read_only_probe' } };
 }
 
-async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false) {
+async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false, signal, onReceipt) {
   const isReportOnly = reportOnly || String(prompt || '').toLowerCase().includes('modstore_report_only=1');
   const execution = codexExecutionConfig({ prompt, reportOnly: isReportOnly });
   const codexEnv = toolEnv(prompt, 'codex');
   const invoke = (model, env, providerArgs = []) => runCodexBudgetedAttempt({
     execution: { ...execution, args: [...execution.args, ...providerArgs] }, model, log,
-    run: (args) => spawnCodexOnce(taskDir, prompt, { args, env, log }),
+    run: (args) => spawnCodexOnce(taskDir, prompt, { args, env, log, signal, onReceipt }),
   });
   if (process.env.PARA_PLATFORM_MODEL) {
     if (!codexEnv.CODEX_API_KEY) throw new Error('platform_model_credential_not_granted');
@@ -357,9 +363,9 @@ async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false
           key: modelEnv(model).CODEX_API_KEY,
           runProbe: (url, probeToken) => probeCodexModel(model, { ...modelEnv(model), CODEX_API_KEY: probeToken }, [
             ...providerArgs(model), '-c', `model_providers.volcengine-agent-plan.base_url="${url}"`,
-          ]),
+          ], signal, onReceipt),
         })
-        : probeCodexModel(model, modelEnv(model)),
+        : probeCodexModel(model, modelEnv(model), [], signal, onReceipt),
       classify: (output, model) => isAgentPlan(model) ? classifyAgentPlanError(output) : classifyModelError(output),
       log,
     });
@@ -381,7 +387,7 @@ async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false
   if (process.env.DEVFLEET_CODEX_MODEL_PROBE !== '0') {
     const probe = await runWithModelFallback({
       candidates, availability: codexModelAvailability, readOnlyProbe: true,
-      runAttempt: model => probeCodexModel(model, auth.childEnv), log,
+      runAttempt: model => probeCodexModel(model, auth.childEnv, [], signal, onReceipt), log,
     });
     codexModelAttemptsByTaskDir.set(taskDir, formatModelsTried(probe.attempts));
     if (!probe.ok) return probe;
@@ -493,7 +499,8 @@ function toolAvailable(tool) {
   return false;
 }
 
-function runToolOnce(tool, taskDir, prompt, log, reportOnly, workspaceGrant, runAgent = runOpenCodeAgent) {
+function runToolOnce(tool, taskDir, prompt, log, reportOnly, workspaceGrant, runAgent = runOpenCodeAgent,
+  signal, onReceipt) {
   if (tool === 'opencode') return runAgent(taskDir, prompt, {
     env: workspaceGrant?.modelEnv || toolEnv(prompt, tool),
     timeoutMs: Math.min(toolCommandTimeoutMs, workspaceGrant?.timeoutMs ?? Infinity), reportOnly, log,
@@ -501,7 +508,7 @@ function runToolOnce(tool, taskDir, prompt, log, reportOnly, workspaceGrant, run
   if (tool === 'trae') return runTraeAgent(taskDir, prompt, log);
   if (tool === 'claude_code') return runClaudeAgent(taskDir, prompt, log);
   if (tool === 'cursor') return runCursorAgent(taskDir, prompt, log);
-  return runCodexAgent(taskDir, prompt, log, reportOnly);
+  return runCodexAgent(taskDir, prompt, log, reportOnly, signal, onReceipt);
 }
 
 // 失败摘要只取工具自己的 stdout/stderr 尾部，不取 err.message（execFile 会把整段 prompt 拼进去）。
@@ -521,6 +528,7 @@ function describeToolError(tool, err) {
 }
 
 async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requestedTool, baseHead, reportOnly, workspaceGrant, runAgent }) {
+  const signal = taskSignals.get(task) || agentShutdown.signal;
   if (process.env.PARA_STRATEGIC_REQUEST_ID && (!workspaceGrant || plan.length !== 1 || plan[0] !== 'opencode')) {
     throw new Error('workspace_requires_bound_opencode_task');
   }
@@ -538,7 +546,7 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
   log(`tool fallback chain: requested=${requested} plan=${plan.join('>') || '(none installed)'} on=${mode}`);
   if (!plan.length) return { toolError: 'tool fallback chain: no installed tool', toolOutput: '', toolUsed: '' };
   for (let i = 0; i < plan.length; i += 1) {
-    if (agentShutdown.signal.aborted) { toolError = 'agent_shutdown'; break; }
+    if (signal.aborted) { toolError = 'executor_stop_requested'; break; }
     const tool = plan[i];
     if (i > 0 && !reportOnly) {
       try {
@@ -554,7 +562,17 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
     let safeToFallback = false;
     let output = '';
     try {
-      const result = await runToolOnce(tool, taskDir, prompt, log, reportOnly, workspaceGrant, runAgent);
+      if (tool !== 'codex') {
+        // Overrides/fallbacks have no Codex close receipt. Conservatively keep
+        // their effects unknown; absence of a Codex receipt is not no execution.
+        taskExecutionStarted.add(task);
+        taskExecutionReceipts.delete(task);
+      }
+      const result = await runToolOnce(tool, taskDir, prompt, log, reportOnly, workspaceGrant, runAgent,
+        signal, result => {
+          if (result.executionStarted) taskExecutionStarted.add(task);
+          taskExecutionReceipts.set(task, result.receipt);
+        });
       if (tool === 'codex') {
         output = String(result?.output || '');
         safeToFallback = result?.executionStarted === false;
@@ -567,6 +585,9 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
       failure = describeToolError(tool, err);
       safeToFallback = err?.executionStarted === false || err?.code === 'ENOENT';
     }
+    // A real native attempt has already closed here. Preserve its receipt and
+    // stop before formatting, another model or publication when cancellation won.
+    if (signal.aborted) throw signal.reason;
     if (!failure) {
       attempts.push(`${tool}:ok`);
       if (output) log(output.slice(0, 4000));
@@ -575,7 +596,7 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
       return { toolError: '', toolOutput: output.trim(), toolUsed: tool };
     }
     // Once any real executor started, effects may exist outside git. Never replay it.
-    const fallBack = !agentShutdown.signal.aborted && safeToFallback && i < plan.length - 1 && isToolFallbackEligible(failure.raw || failure.summary, mode);
+    const fallBack = !signal.aborted && safeToFallback && i < plan.length - 1 && isToolFallbackEligible(failure.raw || failure.summary, mode);
     attempts.push(`${tool}:failed`);
     toolError = `${tool === 'codex' ? codexModelsTriedPrefix(taskDir) : ''}${tool} 失败: ${failure.summary}`;
     log(`tool attempt ${i + 1}/${plan.length} failed: used=${tool} next=${fallBack ? plan[i + 1] : 'stop'} reason=${failure.summary}`, 'warn');
@@ -1072,9 +1093,10 @@ async function headMovedFromBase(taskDir, baseHead) {
   return head !== baseHead;
 }
 
-async function waitForMeaningfulChanges(taskDir, timeoutMs = 900_000, baseHead = '') {
+async function waitForMeaningfulChanges(taskDir, timeoutMs = 900_000, baseHead = '', signal) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
+    signal?.throwIfAborted();
     const dirty = await git(taskDir, [
       'status', '--porcelain', '--', '.',
     ]);
@@ -1178,6 +1200,7 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   if (!status || !status.trim()) {
     // 工作区干净但 HEAD 已移动：工具(如 trae)已自行 commit → 跳过空 commit，直接 push。
     if (await headMovedFromBase(taskDir, baseHead)) {
+      await checkTaskControl(task);
       if (candidateMode()) return settleCandidate(ws, task, taskDir, baseHead);
       const pushedCommitted = await pushBranch(taskDir, task.work_branch);
       return settleAfterPush(ws, task, taskDir, baseHead, pushedCommitted,
@@ -1198,6 +1221,7 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   await git(taskDir, ['config', 'user.email', 'e2e@devfleet.local']);
   await git(taskDir, ['add', '-A', '--', '.']);
   await git(taskDir, ['commit', '-m', `devfleet: ${task.title}`]);
+  await checkTaskControl(task);
   if (candidateMode()) return settleCandidate(ws, task, taskDir, baseHead);
   const pushed = await pushBranch(taskDir, task.work_branch);
   return settleAfterPush(ws, task, taskDir, baseHead, pushed,
@@ -1305,11 +1329,41 @@ async function failTask(ws, task, content) {
 
 }
 
+async function checkTaskControl(task) {
+  await controlReceipts.check(task);
+  (taskSignals.get(task) || agentShutdown.signal).throwIfAborted();
+}
+
+async function reportCancellation(ws, task) {
+  const control = controlReceipts.cancellation(task);
+  const native = taskExecutionReceipts.get(task);
+  const notStarted = !taskExecutionStarted.has(task);
+  const exited = native?.reason === 'codex_cancelled'
+    && ['posix_process_group', 'windows_taskkill_tree'].includes(native.termination_method);
+  const finished = native?.status === 'completed' && native.exit_code === 0;
+  // Only the native adapter's awaited close, or never launching a native call,
+  // proves stop. An aborted signal alone cannot acknowledge an executor stop.
+  if (control && (notStarted || exited || finished)) {
+    controlReceipts.record({ type: 'task_progress', task_id: task.task_id, subtask_id: task.subtask_id,
+      status: 'cancelled', progress: 0, cancellation: {
+        intent_id: control.intent_id, outcome: notStarted ? 'not_started' : 'process_exited',
+        usage_status: notStarted ? 'not_started' : finished ? 'known' : 'unknown', native: notStarted ? null : native,
+      } });
+    await controlReceipts.drain();
+  }
+  await failTask(ws, task, JSON.stringify({ source: 'mac_control_cancel', control,
+    stop_confirmed: Boolean(exited || notStarted || finished), model_usage_settled: false,
+    workspace_preserved: true }));
+}
+
 export async function handleTask(ws, task, { runAgent = runOpenCodeAgent } = {}) {
   let taskDir = null;
   let workspaceGrant;
   let completed = false;
+  const local = controlReceipts.signal(task);
+  taskSignals.set(task, local ? AbortSignal.any([agentShutdown.signal, local]) : agentShutdown.signal);
   try {
+  await checkTaskControl(task);
   // Budget refusal precedes workspace fetches, credential grants and model probes.
   const reportOnly = isReportOnlyTask(task);
   const targetBranch = reportOnlyTargetBranch(task);
@@ -1401,6 +1455,7 @@ export async function handleTask(ws, task, { runAgent = runOpenCodeAgent } = {})
   let toolError = '';
   let toolOutput = '';
   const hasExecutor = plan.length > 0;
+  await checkTaskControl(task);
   if (hasExecutor) {
     ({ toolError, toolOutput } = await runToolFallbackChain({
       ws, task, taskDir, prompt: executionPrompt, plan, requestedTool, baseHead, reportOnly, workspaceGrant, runAgent,
@@ -1444,7 +1499,7 @@ export async function handleTask(ws, task, { runAgent = runOpenCodeAgent } = {})
   }
 
   const waitMs = hasExecutor ? 120_000 : 900_000;
-  if (!(await waitForMeaningfulChanges(taskDir, waitMs, baseHead))) {
+  if (!(await waitForMeaningfulChanges(taskDir, waitMs, baseHead, taskSignals.get(task)))) {
     await failTask(
       ws,
       task,
@@ -1462,12 +1517,18 @@ export async function handleTask(ws, task, { runAgent = runOpenCodeAgent } = {})
     progress: 80,
     status: 'running',
   });
+  await checkTaskControl(task);
   completed = await finalizeTask(ws, task, taskDir, baseHead);
+  } catch (error) {
+    if (!controlReceipts.cancellation(task)) throw error;
+    await reportCancellation(ws, task);
   } finally {
     // Failed/unknown work remains available for reconciliation; only delivered work is disposable.
     codexModelAttemptsByTaskDir.delete(taskDir);
     if (completed && !paraReports.handles(task)) cleanupWorkspace(taskDir);
     workspaceTaskGrants.delete(task);
+    controlReceipts.finish(task);
+    taskSignals.delete(task);
     if (workspaceGrant) await workspaceGrant.close();
   }
 }
@@ -1573,6 +1634,7 @@ function drainToolQueue(tool) {
       runningTaskPromises.delete(pending);
       taskExecutionReceipts.delete(next.task);
       taskExecutionReceiptsRecorded.delete(next.task);
+      taskExecutionStarted.delete(next.task);
       const subtaskId = String(next.task?.subtask_id || '').trim();
       if (subtaskId) knownSubtasks.delete(subtaskId);
       credentialVault.revokeTask(String(next.task?.task_id || ''), 'task_finished');
@@ -1688,9 +1750,16 @@ if (process.argv.includes('--spawn')) {
   child.unref();
   console.log(`[e2e-agent] spawned pid ${child.pid}`);
 } else {
+  // Control readback stays live while the Para WebSocket is disconnected. This
+  // uses the original authenticated receipt route, never a guessed Para API.
+  const controls = setInterval(() => {
+    void controlReceipts.poll();
+    void controlReceipts.drain();
+  }, 5000);
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
     if (agentShutdown.signal.aborted) return;
     agentShutdown.abort(new Error('agent_shutdown'));
+    clearInterval(controls);
     Promise.allSettled([...runningTaskPromises]).then(() => process.exit(signal === 'SIGINT' ? 130 : 143));
   });
   gcStaleWorkspaces();

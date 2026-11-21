@@ -1,4 +1,6 @@
 name: AI Issue Implement
+run-name: >-
+  AI Issue Implement #${{ github.event.issue.number || inputs.issue_number }}${{ inputs.dispatch_request_id && format(' [dispatch:{0}]', inputs.dispatch_request_id) || '' }}
 
 # 决策矩阵承诺兑现：
 #   - issue 打 `ai-implement` 标签时触发
@@ -32,6 +34,11 @@ on:
         description: "修复 PR 的目标分支（自愈事件传入原失败分支）"
         required: false
         default: "main"
+      dispatch_request_id:
+        description: "Original self-heal dispatch identity for lost-response readback"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   actions: read
