@@ -375,7 +375,11 @@ class WorkflowApprovalBridge:
                 }
             return self._request_next_approval(request_id, workflow, run, approvals, approved)
         receipt = run_execution_receipt(run)
-        if receipt["execution_accepted"] or receipt["code"] == "outcome_unknown":
+        if (
+            receipt["execution_accepted"]
+            or receipt["code"] == "outcome_unknown"
+            or receipt.get("execution_started") is False
+        ):
             return {
                 **receipt,
                 "approval_request_id": request_id,

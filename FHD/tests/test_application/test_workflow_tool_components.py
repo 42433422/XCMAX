@@ -84,7 +84,11 @@ def test_empty_extension_result_is_handled_without_fallback(owner, dispatch_port
 
 
 def test_native_mod_failure_does_not_execute_legacy_or_builtin(dispatch_ports):
-    failure = {"success": False, "error": "mod_execution_failed", "mod_id": "tenant-mod"}
+    failure = {
+        "success": False,
+        "error": "mod_execution_failed",
+        "mod_id": "tenant-mod",
+    }
     dispatch_ports["native"].return_value = (json.dumps(failure), "tenant-mod")
 
     result = workflow.execute_workflow_tool("excel_analysis", {}, db_write_token="write-token")
@@ -165,21 +169,34 @@ def test_native_handler_signature_is_selected_before_one_invocation(monkeypatch,
         "write", {}, runtime_context={"turn_id": "original-turn"}
     )
     result = json.loads(raw)
-    assert calls == ["write"]
+    assert calls == ([] if legacy else ["write"])
     assert owner == "tenant-mod"
-    assert result["success"] is legacy
-    if not legacy:
-        assert result["execution_state"] == "unknown"
-        assert result["retryable"] is False
+    assert result["success"] is False
+    assert result["retryable"] is False
+    assert result["execution_status"] == ("not_started" if legacy else "unknown")
+    if legacy:
+        assert result["error_code"] == "tool_context_unsupported"
+    else:
+        assert result["reconciliation_required"] is True
 
 
-def test_template_registration_precedes_legacy_employee(dispatch_ports):
+def test_template_registration_precedes_legacy_employee(monkeypatch, dispatch_ports):
     args = {"action": "create", "file_path": "quote.xlsx"}
+    registered = Mock(return_value=json.dumps({"source": "registered"}))
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability",
+        registered,
+    )
 
     assert json.loads(workflow.execute_workflow_tool("template_preview", args)) == {
         "source": "registered"
     }
-    dispatch_ports["registered"].assert_called_once_with("template_preview", "create", args)
+    registered.assert_called_once_with(
+        {"tool_id": "template_preview", "action": "create", "params": args},
+        workspace_root=None,
+        runtime_context=None,
+    )
+    dispatch_ports["registered"].assert_not_called()
     dispatch_ports["legacy"].assert_not_called()
 
 
@@ -191,7 +208,7 @@ def test_non_object_arguments_are_normalized_before_business_dispatch(raw_args, 
         "success": True,
         "source": "business",
     }
-    dispatch_ports["business"].assert_called_once_with("business_db_read", {})
+    dispatch_ports["business"].assert_called_once_with("business_db_read", {"_runtime_context": {}})
     dispatch_ports["crud"].assert_not_called()
 
 
@@ -203,12 +220,20 @@ def test_preview_reads_selected_rows_without_instantiating_any_writer(
     from app.services import unified_query_service
 
     df = pd.DataFrame(
-        {"产品名称": ["涂料 A", "涂料 B"], "客户名称": ["客户甲", "客户乙"], "数量": [2, 3]}
+        {
+            "产品名称": ["涂料 A", "涂料 B"],
+            "客户名称": ["客户甲", "客户乙"],
+            "数量": [2, 3],
+        }
     )
     path = tmp_path / "source.xlsx"
     df.to_excel(path, sheet_name="报价", startrow=2, index=False)
     writers = []
-    for name in ("get_customer_app_service", "get_products_service", "get_shipment_app_service"):
+    for name in (
+        "get_customer_app_service",
+        "get_products_service",
+        "get_shipment_app_service",
+    ):
         factory = Mock(side_effect=AssertionError("preview must not construct a writer"))
         monkeypatch.setattr(bootstrap, name, factory)
         writers.append(factory)
@@ -249,7 +274,9 @@ def test_preview_reads_selected_rows_without_instantiating_any_writer(
         }
 
 
-def test_registry_cache_rebuilds_current_employee_tools_without_accumulation(monkeypatch):
+def test_registry_cache_rebuilds_current_employee_tools_without_accumulation(
+    monkeypatch,
+):
     from app.mod_sdk import employee_tool_registry
 
     monkeypatch.setattr(workflow, "_workflow_tool_registry_cache", None)
@@ -259,7 +286,10 @@ def test_registry_cache_rebuilds_current_employee_tools_without_accumulation(mon
     monkeypatch.setattr(workflow, "_base_registry", lambda: [{"function": {"name": "base"}}])
     monkeypatch.setattr(workflow, "extend_workflow_tool_registry", lambda specs: specs)
     employees = Mock(
-        side_effect=[[{"function": {"name": "employee-a"}}], [{"function": {"name": "employee-b"}}]]
+        side_effect=[
+            [{"function": {"name": "employee-a"}}],
+            [{"function": {"name": "employee-b"}}],
+        ]
     )
     invalidate = Mock()
     monkeypatch.setattr(employee_tool_registry, "build_employee_pack_tool_definitions", employees)
@@ -308,4 +338,7 @@ def test_json_output_preserves_each_tools_error_boundary(
             "success": False,
             "error": "read_excel_failed",
             "message": "读取 Excel 文件失败，请检查文件后重试",
+            "outcome": "unknown",
+            "retryable": False,
+            "reconciliation_required": True,
         }

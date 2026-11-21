@@ -291,7 +291,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             _success(
                 message="employee run accepted",
                 employee_id="quote-agent",
-                data={"status": "accepted"},
+                data={"status": "accepted", "execution_status": "accepted"},
             ),
         )
     ],

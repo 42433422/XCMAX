@@ -38,6 +38,7 @@ streams:
       orchestration:
         - { type: "approval.resume_plan_rejected", const: APPROVAL_RESUME_PLAN_REJECTED }
         - { type: "approval.resume_proof_missing", const: APPROVAL_RESUME_PROOF_MISSING }
+        - { type: "approval.scope_changed", const: APPROVAL_SCOPE_CHANGED, payload_fields: [step_id] }
         - { type: "run.clarification_resumed", const: RUN_CLARIFICATION_RESUMED }
         - { type: "run.idempotency_conflict", const: RUN_IDEMPOTENCY_CONFLICT }
         - { type: "step.clarification_required", const: STEP_CLARIFICATION_REQUIRED }

@@ -44,6 +44,7 @@ from app.fastapi_routes.domains.agent.route_support import (
 )
 from app.fastapi_routes.domains.agent.route_support import (
     authenticated_runtime_context,
+    project_execution_failure,
 )
 from app.fastapi_routes.domains.agent.route_support import (
     enqueue_run as _enqueue_run,
@@ -242,8 +243,16 @@ def list_agent_runs(
             limit=limit,
             mod_id=str((principal.mod_authorization or {}).get("mod_id") or ""),
         )
+        executions = get_task_execution_repository().list_for_run_ids([run.run_id for run in runs])
         return _success(
-            [_public_run_dict(run, read_run=repository.get) for run in runs], count=len(runs)
+            [
+                _public_run_dict(
+                    project_execution_failure(run, executions.get(run.run_id)),
+                    read_run=repository.get,
+                )
+                for run in runs
+            ],
+            count=len(runs),
         )
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent runs")
@@ -407,6 +416,7 @@ def continue_agent_run(
                     principal_id=principal.user_id,
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
             else:
                 durable = False
@@ -418,6 +428,7 @@ def continue_agent_run(
                     current,
                     principal_id=principal.user_id,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
                 claims = consume_approval_grant(
                     str(data.get("approval_grant") or ""),
@@ -430,6 +441,8 @@ def continue_agent_run(
                     approved_step_id=str(claims["step_id"]),
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
+                    approval_claims=claims,
                 )
         if run is None:
             return JSONResponse(
@@ -494,6 +507,7 @@ def _control_agent_run(
                     principal_id=principal.user_id,
                     runtime_context=runtime_context or {},
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
                 durable_resume = True
             else:
@@ -502,6 +516,7 @@ def _control_agent_run(
                     requested_by=principal.user_id,
                     runtime_context=runtime_context,
                     authenticated_binding=principal.mod_authorization,
+                    authenticated_actor_binding=principal.actor_authorization,
                 )
         if run is None:
             return JSONResponse(
@@ -610,6 +625,7 @@ def retry_agent_run(
                 requested_by=principal.user_id,
                 auto_execute=False,
                 authenticated_binding=principal.mod_authorization,
+                authenticated_actor_binding=principal.actor_authorization,
             )
             if retried is not None and retried.status == "queued":
                 if isinstance(get_agent_run_repository(), SQLAlchemyAgentRunRepository):

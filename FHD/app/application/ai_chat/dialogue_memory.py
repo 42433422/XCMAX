@@ -281,10 +281,14 @@ def mark_history_persisted(
 
 def _request_messages(text: str, context: Mapping[str, Any] | None) -> list[dict[str, str]]:
     key = conversation_key(context)
+    if key and (context or {}).get("_chat_evidence_authorized") is True:
+        return [{"role": "system", "content": _SYSTEM}, *conversation_history_messages(context)]
     loaded = _read(key, context) if key else {"turns": []}
     if not key:
         _append_user(loaded, text, "", context)
-    return _model_messages(loaded, str((context or {}).get("turn_id") or ""))
+    return _model_messages(
+        loaded, str((context or {}).get("turn_id") or ""), exclude_current_user=True
+    )
 
 
 def conversation_history_messages(context: Mapping[str, Any] | None) -> list[dict[str, str]]:
@@ -293,6 +297,7 @@ def conversation_history_messages(context: Mapping[str, Any] | None) -> list[dic
     if not key:
         return []
     if (context or {}).get("_chat_evidence_authorized") is True:
+        conversation_summary(context)  # Reject a recalled/deleted SQL history snapshot.
         rows = (context or {}).get("_chat_history_messages")
         if rows is None:
             rows = (context or {}).get("chat_owned_history")
@@ -434,8 +439,6 @@ def enrich_model_messages(
             system_message += "\n\n" + "\n\n".join(evidence_blocks)
     # The current model message may contain images or tool protocol fields; preserve it.
     history = memory[1:]
-    if history and history[-1].get("content") == message.strip():
-        history = history[:-1]
     if not history:
         if not messages:
             return [{"role": "system", "content": system_message}]

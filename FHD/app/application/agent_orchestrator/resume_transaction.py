@@ -44,6 +44,7 @@ def retry_and_enqueue(
     principal_id: str,
     runtime_context: dict[str, Any],
     authenticated_binding: dict[str, Any] | None = None,
+    authenticated_actor_binding: dict[str, Any] | None = None,
 ) -> AgentRun | None:
     """CAS a safe continuation and its queue without changing run/step identities."""
     from app.application.agent_orchestrator.run_lifecycle import (
@@ -93,6 +94,7 @@ def retry_and_enqueue(
             run,
             principal_id=principal_id,
             authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
             operation="retry",
         )
         run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
@@ -120,6 +122,7 @@ def resume_and_enqueue(
     principal_id: str,
     runtime_context: dict[str, Any],
     authenticated_binding: dict[str, Any] | None = None,
+    authenticated_actor_binding: dict[str, Any] | None = None,
 ) -> AgentRun | None:
     with runs.transaction() as db:
         with queue.transaction(read_only=True) as queue_db:
@@ -161,10 +164,13 @@ def resume_and_enqueue(
             raise ApprovalGrantError("任务执行结果尚需人工核对，不能恢复执行")
         if any(step.status == "running" for step in run.steps):
             raise ApprovalGrantError("任务存在执行结果未确认的步骤，需要先核对")
+        if unresolved_effects(db, run, clear_confirmed=True):
+            raise ApprovalGrantError("任务仍有未确认的业务写入，需要人工核对")
         renew_approval_session(
             run,
             principal_id=principal_id,
             authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
             operation="resume",
         )
         context = merge_runtime_context(run, runtime_context)

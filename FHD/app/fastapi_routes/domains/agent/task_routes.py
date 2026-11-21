@@ -7,7 +7,7 @@ import json
 import threading
 import time
 from concurrent.futures import Future, wait
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Callable, Generic, TypeVar, cast
 
 from fastapi import APIRouter, Body, Depends, Query
@@ -36,6 +36,7 @@ from app.application.agent_orchestrator.unified_task import (
 from app.fastapi_routes.domains.agent.route_support import (
     authenticated_runtime_context,
     internal_error_response,
+    project_execution_failure,
     public_run_dict,
     run_response,
     scoped_tasks,
@@ -177,23 +178,32 @@ def _task_envelope(
         ):
             active = None
         runs = []
-    payload = task.to_dict()
+    if executions is None:
+        executions = get_task_execution_repository().list_for_run_ids(
+            [run.run_id for run in runs] or ([active.run_id] if active is not None else [])
+        )
+    execution = None
     if active is not None:
-        payload["progress"] = task_progress_snapshot(active, viewer=viewer)
-    payload["runs"] = [public_run_dict(run, read_run=orchestrator.get_run) for run in runs]
+        execution = executions.get(active.run_id)
+        task = replace(
+            task,
+            metadata={**task.metadata, "progress": task_progress_snapshot(active, viewer=viewer)},
+        )
+        active = project_execution_failure(active, execution)
+    payload = project_execution_failure(task, execution).to_dict()
+    payload["runs"] = [
+        public_run_dict(
+            project_execution_failure(run, executions.get(run.run_id)),
+            read_run=orchestrator.get_run,
+        )
+        for run in runs
+    ]
     payload["active_run"] = (
         public_run_dict(active, read_run=orchestrator.get_run) if active is not None else None
     )
     payload["capabilities"] = task_capabilities(active) if active is not None else {}
     command = orchestrator.latest_task_control(active.run_id) if active is not None else None
     payload["control_command"] = command.to_dict() if command is not None else None
-    execution = None
-    if active is not None:
-        execution = (
-            executions.get(active.run_id)
-            if executions is not None
-            else get_task_execution_repository().get(active.run_id)
-        )
     payload["execution"] = execution.to_dict() if execution is not None else None
     return cast("dict[str, Any]", payload)
 
@@ -204,8 +214,8 @@ def _execution_map(tasks: list[Any]) -> dict[str, Any]:
 
 
 def _task_stream_envelope(task: Any, executions: dict[str, Any]) -> dict[str, Any]:
-    payload = task.to_dict()
     execution = executions.get(str(task.active_run_id or ""))
+    payload = project_execution_failure(task, execution).to_dict()
     payload.update(
         {
             "runs": [],
@@ -219,7 +229,8 @@ def _task_stream_envelope(task: Any, executions: dict[str, Any]) -> dict[str, An
 
 
 def _task_progress_overview(tasks: list[Any]) -> dict[str, int]:
-    snapshots = [task.to_dict() for task in tasks]
+    executions = _execution_map(tasks)
+    snapshots = [_task_stream_envelope(task, executions) for task in tasks]
     percents: list[int] = []
     for item in snapshots:
         try:
@@ -234,7 +245,7 @@ def _task_progress_overview(tasks: list[Any]) -> dict[str, int]:
             for item in snapshots
         ),
         "attention_count": sum(
-            str(item.get("status") or "") in {"waiting_user", "blocked", "failed"}
+            str(item.get("status") or "") in {"waiting_user", "blocked", "failed", "unknown"}
             for item in snapshots
         ),
         "completed_count": sum(str(item.get("status") or "") == "completed" for item in snapshots),

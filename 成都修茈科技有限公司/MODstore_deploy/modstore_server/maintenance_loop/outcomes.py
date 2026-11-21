@@ -245,7 +245,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     raw_steps = final.get("steps")
     steps = raw_steps if isinstance(raw_steps, list) else []
     failed_steps = [
-        step.get("step") for step in steps if isinstance(step, dict) and not step.get("ok")
+        step.get("step")
+        for step in steps
+        if isinstance(step, dict) and not step.get("ok") and not step.get("requires_reconciliation")
     ]
     if failed_steps:
         run_id = str(final.get("run_id") or "")

@@ -13,6 +13,10 @@ from app.application.agent_orchestrator.run_models import (
 from app.application.agent_orchestrator.run_repository import get_agent_run_repository
 from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2
+from app.domain.task_lifecycle.results import (
+    execution_result_requires_reconciliation,
+    normalize_execution_result,
+)
 
 _MAX_TEXT = 4000
 _MAX_ITEMS = 40
@@ -83,17 +87,23 @@ def create_observed_tool_trace_run(
 
     emit_current_lane("tool")
     safe_params = _safe_value(params)
-    safe_output = _safe_value(output)
+    # Classify before the bounded observation view drops deep or late fields.
+    projected = normalize_execution_result(output)
+    requires_reconciliation = execution_result_requires_reconciliation(projected)
+    safe_output = _safe_value(projected)
     assert isinstance(safe_params, dict)
     assert isinstance(safe_output, dict)
-    succeeded = safe_output.get("success") is not False
+    succeeded = projected.get("success") is True
+    safe_output["success"] = succeeded
+    if requires_reconciliation:
+        safe_output.update(outcome="unknown", retryable=False, reconciliation_required=True)
     run_status: Literal["completed", "failed"] = "completed" if succeeded else "failed"
     finished_at = utc_now_iso()
     runtime = _task_runtime_context(runtime_context, user_id=user_id)
     run = AgentRun(
         user_id=user_id,
         message=str(message or "")[:_MAX_TEXT],
-        status=run_status,
+        status="blocked" if requires_reconciliation else run_status,
         intent=f"{spec.tool_id}_{spec.action}",
         metadata={
             "channel": "desktop_observed_tool",
@@ -136,8 +146,18 @@ def create_observed_tool_trace_run(
         call.metadata["authorization_permission"] = spec.permission
     run.steps.append(step)
     run.tool_calls.append(call)
+    if not succeeded:
+        run.error = step.error = call.error = str(
+            projected.get("message") or "工具观察未提供成功回执"
+        )[:_MAX_TEXT]
+    if requires_reconciliation:
+        run.metadata["recovery"] = {
+            "state": "manual_reconciliation_required",
+            "step_ids": [step.step_id],
+            "error_code": "tool_outcome_unknown",
+        }
     run.final_output = {
-        "response": str(response or "")[:_MAX_TEXT],
+        "response": str(response or "")[:_MAX_TEXT] if succeeded else run.error,
         "node_outputs": {step.node_id: safe_output},
         "tool_calls": [call.to_dict()],
         "cost_units_total": int(spec.cost_units or 0),
@@ -153,8 +173,8 @@ def create_observed_tool_trace_run(
         {"step_id": step.step_id, "call_id": call.call_id, "observed": True},
     )
     run.add_event(
-        "run.completed" if succeeded else "run.failed",
-        "桌面工具调用追踪完成" if succeeded else "桌面工具调用报告失败",
+        f"run.{run.status}",
+        "桌面工具调用追踪完成" if succeeded else run.error,
         {"observed": True},
     )
     return get_agent_run_repository().save(run)

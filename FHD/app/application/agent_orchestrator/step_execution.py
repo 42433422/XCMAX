@@ -18,6 +18,10 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 )
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.domain.task_lifecycle.results import (
+    execution_result_requires_reconciliation,
+    normalize_execution_result,
+)
 from app.infrastructure.observability.genai_spans import tool_call_span
 from app.infrastructure.observability.metrics import observe_tool_call
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
@@ -220,6 +224,22 @@ class StepExecution:
         if not isinstance(ctx.get("_actor_authorization"), dict):
             execution_scope["user_id"] = run.user_id
         ctx.update(execution_scope)
+        receipt = run.metadata.get("approval_receipt")
+        if (
+            isinstance(receipt, dict)
+            and receipt.get("step_id") == step.step_id
+            and step.tool_id != "catalog_products_v1"
+        ):
+            ctx["_tool_approval_scope"] = {
+                key: receipt.get(key)
+                for key in (
+                    "tool_id",
+                    "action",
+                    "authorization_scope_sha256",
+                    "tool_contract_sha256",
+                    "tool_version",
+                )
+            }
         tool_call.metadata["idempotency_key"] = ctx["idempotency_key"]
         validation = self.dependencies.validate(step.tool_id, step.action, step.params)
         if not validation.ok:
@@ -242,11 +262,8 @@ class StepExecution:
             from app.application.agent_orchestrator.elt_checkpoint_recovery import (
                 EltCheckpointWorkerExited,
             )
+            from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
 
-            if not step.idempotent:
-                from app.application.agent_orchestrator.task_dispatcher import note_open_effect
-
-                note_open_effect(run.run_id, step.step_id)
             try:
                 from app.application.agent_orchestrator.tool_executor import (
                     execute_with_tool_deadline,
@@ -272,7 +289,7 @@ class StepExecution:
                             float(getattr(spec, "timeout_seconds", 0) or 0),
                         ),
                     )
-            except EltCheckpointWorkerExited:
+            except (EltCheckpointWorkerExited, WorkerLeaseLost):
                 raise
             except RECOVERABLE_ERRORS:
                 logger.exception("agent tool execution failed")
@@ -288,7 +305,9 @@ class StepExecution:
                     "error_code": "tool_exception",
                     "message": "工具执行失败",
                 }
-        step.output = _confirm_customer_create(step, dict(output or {}), runtime_context)
+        step.output = normalize_execution_result(
+            _confirm_customer_create(step, dict(output or {}), runtime_context)
+        )
         if step.output.get("success") is not True:
             step.output["success"] = False
         from app.application.agent_orchestrator.tool_permission import absorb_tool_output
@@ -296,10 +315,24 @@ class StepExecution:
         run.metadata["runtime_context"] = absorb_tool_output(
             dict(run.metadata.get("runtime_context") or {}), step.output
         )
-        if step.output.get("retryable") is False:
+        uncertain = execution_result_requires_reconciliation(step.output)
+        if uncertain or (
+            step.output.get("retryable") is False
+            and (
+                step.output.get("success") is not True
+                # Catalog terminal receipts retain their independent source
+                # readback in AgentOrchestrator._verified_catalog_terminal.
+                or step.tool_id == "catalog_products_v1"
+            )
+        ):
             run.metadata["non_retryable"] = True
-        if step.output.get("outcome") == "unknown" or step.output.get("reconciliation_required"):
-            run.metadata["non_retryable"] = True
+        if uncertain:
+            step.output.update(
+                success=False,
+                outcome="unknown",
+                retryable=False,
+                reconciliation_required=True,
+            )
             run.metadata["recovery"] = {
                 "state": "manual_reconciliation_required",
                 "error_code": str(step.output.get("error_code") or "tool_outcome_unknown"),
@@ -376,11 +409,7 @@ class StepExecution:
             )
             self.repository.save(run)
             return
-        if (
-            str(step.output.get("error_code") or "") != "tool_billing_blocked"
-            and not step.output.get("reconciliation_required")
-            and step.output.get("outcome") != "unknown"
-        ):
+        if str(step.output.get("error_code") or "") != "tool_billing_blocked" and not uncertain:
             self.usage.record_tool_usage_refund(run, tool_call, reason=step.error)
         self.usage.refresh_run_cost_metadata(run)
         run.add_event(

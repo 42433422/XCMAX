@@ -77,7 +77,13 @@ def run_execution_receipt(run: Any) -> JsonObject:
         else execution_result_pending_state(outputs)
         or _payload_status({"agent_status": str(run.status or "unknown"), **outputs})
     )
-    accepted = state in {
+    events = getattr(run, "events", None) or []
+    blocked_before_execution = bool(
+        state == "blocked"
+        and events
+        and (getattr(events[-1], "data", None) or {}).get("execution_started") is False
+    )
+    accepted = not blocked_before_execution and state in {
         "queued",
         "pending",
         "planning",
@@ -92,7 +98,9 @@ def run_execution_receipt(run: Any) -> JsonObject:
     }
     success = state == "completed"
     code, message = canonical_workflow_outcome(success=success)
-    if state == "unknown":
+    if blocked_before_execution:
+        message = str(getattr(run, "error", "") or message)
+    elif state == "unknown":
         code, message = (
             "outcome_unknown",
             "业务结果尚未确认；请核对原任务，勿重复提交。",
@@ -116,6 +124,7 @@ def run_execution_receipt(run: Any) -> JsonObject:
         "message": message,
         "nodes_executed": len([step for step in run.steps if step.status == "completed"]),
         "nodes_total": len(run.steps),
+        **({"execution_started": False} if blocked_before_execution else {}),
         **({"requires_reconciliation": True, "retryable": False} if unknown else {}),
     }
 

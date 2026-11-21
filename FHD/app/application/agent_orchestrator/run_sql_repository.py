@@ -12,7 +12,8 @@ from typing import cast
 
 from sqlalchemy import JSON, String, Table, and_, case, func, literal, or_
 from sqlalchemy import cast as sql_cast
-from sqlalchemy import text as sql_text
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -348,6 +349,14 @@ def preserve_run_evidence(
     if not allow_safe_retry and (
         (previous.status in terminal and run.status != previous.status)
         or (
+            previous.status == "unknown"
+            and run.status != previous.status
+            and (
+                old.get("non_retryable")
+                or (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+            )
+        )
+        or (
             previous.status in {"paused", "blocked"}
             and run.status in {"queued", "planning", "running", "retrying"}
             and (
@@ -649,13 +658,17 @@ class SQLAlchemyAgentRunRepository:
             preserve_catalog_run_authority,
         )
 
-        preserve_catalog_run_authority(db, run, previous)
+        catalog_fenced = preserve_catalog_run_authority(db, run, previous)
         preserve_run_evidence(
             run,
             previous,
             allow_safe_retry=allow_safe_retry,
             allow_planning_replacement=allow_planning_replacement,
         )
+        if catalog_fenced:
+            # A validated no-effect reconciliation closes the original action.
+            # Preserve its failed receipts without reviving the pre-fence status.
+            run.status = "cancelled"
         ensure_terminal_business_result(run)
         run_terminal_metrics.record_terminal_transition(run, previous, db)
         run.touch()
@@ -704,6 +717,7 @@ class SQLAlchemyAgentRunRepository:
         mod_id: str | None = None,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
@@ -712,6 +726,8 @@ class SQLAlchemyAgentRunRepository:
             query = db.query(AgentRunRecord)
             if user_id is not None:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
+            if status is not None:
+                query = query.filter(AgentRunRecord.status == status)
             if runtime_scope is not None:
                 query = query.filter(
                     _runtime_scope_candidates(
@@ -1208,13 +1224,16 @@ class SQLAlchemyAgentRunRepository:
 
     @classmethod
     def _insert_task_record(cls, db: Session, task: AgentTask) -> bool:
+        from app.db.models.agent import AgentTaskRecord
+
         values = cls._task_record_values(task)
-        statement = sql_text(
-            f"INSERT INTO agent_tasks ({', '.join(values)}) "
-            f"VALUES ({', '.join(':' + key for key in values)}) "
-            "ON CONFLICT(tenant_id, user_id, task_id) DO NOTHING"
+        insert = sqlite_insert if db.get_bind().dialect.name == "sqlite" else postgresql_insert
+        statement = (
+            insert(AgentTaskRecord)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=["tenant_id", "user_id", "task_id"])
         )
-        return cast(CursorResult, db.execute(statement, values)).rowcount == 1
+        return cast(CursorResult, db.execute(statement)).rowcount == 1
 
     @classmethod
     def _lock_task_record(cls, db: Session, task: AgentTask):

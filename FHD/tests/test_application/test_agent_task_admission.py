@@ -157,9 +157,9 @@ def test_task_admission_rolls_back_identity_if_run_persistence_fails(
         engine.dispose()
 
 
-@pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled", "rejected"])
+@pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled", "rejected", "unknown"])
 @pytest.mark.parametrize("durable", [False, True])
-def test_late_run_saves_cannot_reopen_or_replace_a_terminal_outcome(tmp_path, terminal, durable):
+def test_late_run_saves_cannot_reopen_or_replace_a_protected_outcome(tmp_path, terminal, durable):
     import copy
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
@@ -172,6 +172,8 @@ def test_late_run_saves_cannot_reopen_or_replace_a_terminal_outcome(tmp_path, te
     )
     run = _scope_run("owner", "finished-task", "mod")
     run.status = terminal
+    if terminal == "unknown":
+        run.metadata["non_retryable"] = True
     run.final_output = {"answer": "committed"}
     repo.save(run)
     try:

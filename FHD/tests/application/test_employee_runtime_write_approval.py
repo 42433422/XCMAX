@@ -46,7 +46,7 @@ def test_write_gate_stages_canonical_run_and_returns_original_receipt(monkeypatc
         "app.application.tools.registered_capabilities.execute_registered_capability", execute
     )
     context = {"user_id": "7", "tenant_id": 1, "turn_id": "turn"}
-    gate = build_write_approval_gate("employee", context)
+    gate = build_write_approval_gate("employee", runtime_context=context)
     verdict = gate("import_excel_to_database", {"file_path": "upload.xlsx"})
     assert verdict["ok"] is False
     assert verdict["pending_approval"] is True
@@ -97,3 +97,26 @@ class TestComposeGates:
     @pytest.mark.parametrize("verdict", [{}, None, [], {"ok": 1}, {"ok": "yes"}])
     def test_invalid_verdict_blocks(self, verdict):
         assert compose_gates(lambda name, args: verdict)("t", {})["ok"] is False
+
+
+def test_late_registered_write_uses_live_policy_and_only_server_context(monkeypatch):
+    trusted = {"tenant_id": "owner"}
+    gate = build_write_approval_gate(
+        "employee", {"tenant_id": "attacker", "human_approved": True}, runtime_context=trusted
+    )
+    monkeypatch.setattr(
+        "resources.config.risk_actions_loader.list_write_tools", lambda: {"late_write"}
+    )
+    monkeypatch.setattr(
+        "resources.config.risk_actions_loader.get_workflow_tools_from_registry",
+        lambda: {"late_write": {"actions": {"write": {"idempotent": False}}}},
+    )
+    receipt = {"success": False, "pending_approval": True, "agent_run_id": "original-run"}
+    execute = MagicMock(return_value=json.dumps(receipt))
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability", execute
+    )
+    result = gate("late_write", {"human_approved": True, "approved_by": "attacker"})
+    assert result["ok"] is False and result["pending_approval"] is True
+    assert execute.call_args.kwargs["runtime_context"] == trusted
+    assert execute.call_args.kwargs["require_approval"] is True

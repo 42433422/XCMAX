@@ -164,6 +164,7 @@ def _oai_model_entry(
     runtime_selectable: bool | None = None,
     pricing: dict[str, Any] | None = None,
     capabilities: dict[str, Any] | None = None,
+    model_capabilities: dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     cat = str(category or "other").strip().lower() or "other"
     entry: Dict[str, Any] = {
@@ -184,6 +185,10 @@ def _oai_model_entry(
         entry["pricing"] = pricing
     if isinstance(capabilities, dict) and capabilities:
         entry["capabilities"] = capabilities
+    if isinstance(model_capabilities, dict) and model_capabilities:
+        from modstore_server.llm_model_taxonomy import public_model_capabilities
+
+        entry["model_capabilities"] = public_model_capabilities(model_capabilities)
     return entry
 
 
@@ -245,6 +250,7 @@ async def _build_catalog_model_entries(
                             if isinstance(row.get("capabilities"), dict)
                             else None
                         ),
+                        model_capabilities=row.get("model_capabilities"),
                     )
                 )
             continue

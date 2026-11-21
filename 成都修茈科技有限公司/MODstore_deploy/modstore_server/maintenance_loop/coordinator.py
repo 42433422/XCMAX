@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -11,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional
 from modstore_server import platform_llm_scope
 from modstore_server import self_maintenance_remediation_lineage as lineage
 from modstore_server import self_maintenance_retort_remediation as retort_remediation
+from modstore_server.customer_issue_delivery_contract import execution_requires_reconciliation
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config, resume
@@ -35,6 +37,35 @@ class _RunContext:
     para_task_id: Optional[str]
     branch: Optional[str]
     steps: List[Dict[str, Any]] = field(default_factory=list)
+    scope_steps: List[str] = field(default_factory=lambda: ["code", "review", "qa"])
+
+
+class _DotMailboxConfigurationError(ValueError):
+    """Cloud routing is enabled but no cloud device can be addressed."""
+
+
+def _dot_mailbox_code_extra(
+    extra: Dict[str, Any], *, run_id: str, employee_id: str
+) -> Dict[str, Any]:
+    """Route the code step to the dot/GitHub mailbox executor when configured.
+
+    dot only accepts control tasks whose title starts with ``[xcmax:<32hex>:<32hex>]``.
+    Keeping the routing here leaves the default Mac dispatch and other employees untouched.
+    """
+    if not config._env_bool("MODSTORE_SELF_MAINTENANCE_DOT_MAILBOX", False):
+        return extra
+    device_id = os.environ.get("MODSTORE_SELF_MAINTENANCE_DEVICE_ID", "").strip()
+    if not device_id:
+        raise _DotMailboxConfigurationError(
+            "MODSTORE_SELF_MAINTENANCE_DEVICE_ID is required for dot mailbox routing"
+        )
+    run_hex = re.sub(r"[^0-9a-f]", "", str(run_id).lower())[:32].ljust(32, "0")
+    return {
+        **extra,
+        "device_id": device_id,
+        "title": f"[xcmax:{run_hex}:{uuid.uuid4().hex}] {employee_id}",
+        "tool_name": os.environ.get("MODSTORE_SELF_MAINTENANCE_TOOL") or "dolt",
+    }
 
 
 class MaintenanceRuntime:
@@ -119,8 +150,30 @@ class MaintenanceRuntime:
             return record
         user_id = self.policy.actor_user_id()
         memory = self.state.load_memory()
+        try:
+            pending_candidate = resume._pending_execution_candidate(memory, user_id)
+        except ValueError as exc:
+            # A lost POST response or unreadable journal cannot authorize another POST.
+            record = {
+                "created_at": config._iso(started_at),
+                "phase": "skip",
+                "run_id": run_id,
+                "status": "waiting_reconciliation",
+                "reason": "pending_execution_identity_unavailable",
+                "reconciliation_reason": str(exc),
+                "triggered_by": triggered_by,
+                "requires_reconciliation": True,
+            }
+            self.state.append(record)
+            return record
+        if pending_candidate and pending_candidate.get("final_outcome"):
+            final: Dict[str, Any] = pending_candidate["final_outcome"]
+            if pending_candidate["outcome_recorded"]:
+                self._clear_execution_checkpoint(memory)
+                return final
+            return self._record_final_outcome(memory, final)
         reconciliations = self._recover_memory(memory)
-        candidate = (
+        candidate = pending_candidate or (
             lineage.resume_candidate_from_context(memory, remediation_context)
             if remediation_context
             else resume._resume_review_qa_candidate(memory)
@@ -168,10 +221,16 @@ class MaintenanceRuntime:
             resume_candidate=candidate,
             para_task_id=task_id,
             branch=branch,
+            steps=list((pending_candidate or {}).get("confirmed_steps") or []),
+            scope_steps=(pending_candidate or {}).get("scope_steps")
+            or [step for step in ("code", "review", "qa") if step in resume_steps],
         )
-        plan = self._plan(context, steps_to_run)
         try:
-            return self._execute(context, plan)
+            return self._execute(context, self._plan(context, steps_to_run))
+        except _DotMailboxConfigurationError as exc:
+            return self._finish(
+                context, status="failed", extra={"error": str(exc), "failed_step": "code"}
+            )
         except RECOVERABLE_ERRORS as exc:
             config.logger.exception("self-maintenance loop failed")
             return self._finish(context, status="failed", extra={"error": str(exc)})
@@ -198,6 +257,9 @@ class MaintenanceRuntime:
         plan = []
         if "code" in steps_to_run:
             extra: Dict[str, Any] = {"allow_medium_risk": True, "skip_path_guard": True}
+            extra = _dot_mailbox_code_extra(
+                extra, run_id=context.run_id, employee_id="vibe-coding-maintainer"
+            )
             if context.resume_candidate and context.resume_candidate.get(
                 "continue_existing_code_task"
             ):
@@ -233,6 +295,15 @@ class MaintenanceRuntime:
         return plan
 
     def _execute(self, context: _RunContext, plan: list) -> Dict[str, Any]:
+        if context.steps and context.steps[-1].get("ok") is False:
+            return self._finish(
+                context,
+                status="failed",
+                extra={
+                    "error": context.steps[-1].get("error"),
+                    "failed_step": context.steps[-1].get("step"),
+                },
+            )
         for employee_id, step_name, task_text, extra in plan:
             if step_name == "review":
                 task_text = self.prompts.review(context.run_id, context.branch, context.memory)
@@ -248,7 +319,17 @@ class MaintenanceRuntime:
                     "review_target_branch": context.branch,
                     "review_target_para_task_id": context.para_task_id,
                 }
-            if step_name == "review":
+            pending = (context.resume_candidate or {}).get("pending_execution")
+            if isinstance(pending, dict) and pending.get("step") == step_name:
+                extra = {
+                    **extra,
+                    "para_task_id": pending["task_id"],
+                    "request_id": pending.get("request_id"),
+                }
+            if step_name == "review" and not extra.get("para_task_id"):
+                stopped = self._check_code_knowledge(context)
+                if stopped is not None:
+                    return stopped
                 stopped = self._retort_stop(context, employee_id)
                 if stopped is not None:
                     return stopped
@@ -256,43 +337,57 @@ class MaintenanceRuntime:
             if not record["ok"]:
                 return self._finish(
                     context,
-                    status="failed",
+                    status=(
+                        "waiting_reconciliation" if record["requires_reconciliation"] else "failed"
+                    ),
                     extra={"error": record["error"], "failed_step": step_name},
                 )
-            if step_name == "code" and context.branch:
-                try:
-                    early_kb = self.execution.validate_knowledge(
-                        run_id=context.run_id, branch=context.branch
-                    )
-                except RECOVERABLE_ERRORS:
-                    config.logger.exception(
-                        "early KB validation crashed for branch=%s run_id=%s; skipping",
-                        context.branch,
-                        context.run_id,
-                    )
-                    early_kb = {"ok": True, "reason": "early_kb_validation_crashed"}
-                if (
-                    isinstance(early_kb, dict)
-                    and not early_kb.get("ok")
-                    and early_kb.get("reason") == "kb_json_schema_validation_failed"
-                    and isinstance(early_kb.get("kb_validation"), dict)
-                ):
-                    config.logger.warning(
-                        "early KB schema validation failed for branch=%s run_id=%s; rejecting and retrying code step",
-                        context.branch,
-                        context.run_id,
-                    )
-                    return self.execution.reject_knowledge(
-                        run_id=context.run_id,
-                        branch=context.branch,
-                        para_task_id=context.para_task_id,
-                        kb_validation=early_kb["kb_validation"],
-                        steps=context.steps,
-                        gate=context.gate,
-                        triggered_by=context.triggered_by,
-                        started_at=context.started_at,
-                    )
         return self._finish(context, status="completed")
+
+    def _check_code_knowledge(self, context: _RunContext) -> Optional[Dict[str, Any]]:
+        if not context.branch:
+            return None
+        early_kb = self.execution.validate_knowledge(run_id=context.run_id, branch=context.branch)
+        if (
+            isinstance(early_kb, dict)
+            and not early_kb.get("ok")
+            and early_kb.get("reason") == "kb_json_schema_validation_failed"
+            and isinstance(early_kb.get("kb_validation"), dict)
+        ):
+            rejected = self.execution.reject_knowledge(
+                run_id=context.run_id,
+                branch=context.branch,
+                para_task_id=context.para_task_id,
+                kb_validation=early_kb["kb_validation"],
+                steps=context.steps,
+                gate=context.gate,
+                triggered_by=context.triggered_by,
+                started_at=context.started_at,
+            )
+            self._clear_execution_checkpoint(context.memory)
+            return rejected
+        return None
+
+    def _clear_execution_checkpoint(self, owned_memory: Dict[str, Any]) -> None:
+        memory = self.state.load_memory()
+        if memory.get("execution_state_unavailable"):
+            raise RuntimeError("execution_state_unavailable")
+        pending = memory.get("pending_execution") or {}
+        owned = owned_memory.get("pending_execution") or {}
+        if owned.get("request_id") and pending.get("request_id") == owned["request_id"]:
+            memory.pop("pending_execution", None)
+            self.state.write_memory(memory)
+
+    def _record_final_outcome(
+        self, memory: Dict[str, Any], final: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        pending = memory["pending_execution"]
+        pending["state"] = "recording_outcome"
+        self.state.write_memory(memory)
+        self.state.append(final)
+        self.state.record_outcome(final, pending["final_gate"])
+        self._clear_execution_checkpoint(memory)
+        return final
 
     def _retort_stop(self, context: _RunContext, employee_id: str) -> Optional[Dict[str, Any]]:
         gate = self.execution.retort_before_review(
@@ -348,6 +443,22 @@ class MaintenanceRuntime:
         extra: dict,
     ) -> Dict[str, Any]:
         base_branch = str(extra.get("branch") or "").strip() if step_name == "code" else ""
+        extra = {**extra, "request_id": extra.get("request_id") or uuid.uuid4().hex}
+        pending = {
+            "state": "dispatching",
+            "run_id": context.run_id,
+            "user_id": context.user_id,
+            "employee_id": employee_id,
+            "step": step_name,
+            "request_id": extra["request_id"],
+            "task_id": str(extra.get("para_task_id") or ""),
+            "code_task_id": context.para_task_id,
+            "branch": context.branch,
+            "steps": list(context.steps),
+            "scope_steps": context.scope_steps,
+        }
+        context.memory["pending_execution"] = pending
+        self.state.write_memory(context.memory)
         result, ok, failure, para, report, code_retries, marker_retries = self.execution.run_step(
             employee_id=employee_id,
             step_name=step_name,
@@ -356,10 +467,20 @@ class MaintenanceRuntime:
             user_id=context.user_id,
             run_id=context.run_id,
         )
-        if para.get("task_id") and context.para_task_id is None:
+        identity_mismatch = (
+            bool(extra.get("para_task_id")) and para.get("task_id") != extra["para_task_id"]
+        )
+        if not identity_mismatch and para.get("task_id") and context.para_task_id is None:
             context.para_task_id = str(para["task_id"])
-        if step_name == "code" and para.get("branch"):
+        if not identity_mismatch and step_name == "code" and para.get("branch"):
             context.branch = str(para["branch"])
+        uncertain = execution_requires_reconciliation(result)
+        if identity_mismatch:
+            uncertain = True
+            failure = "original_execution_identity_mismatch"
+        if uncertain:
+            ok = False
+            failure = failure or "original_execution_requires_reconciliation"
         validation = None
         if step_name == "code" and ok and base_branch:
             validation = self.execution.validate_branch_delivery(
@@ -379,7 +500,8 @@ class MaintenanceRuntime:
             "code_fix_retry_rounds": code_retries,
             "marker_retry_rounds": marker_retries,
             "run_id": context.run_id,
-            "status": "success" if ok else "failed",
+            "status": "waiting_reconciliation" if uncertain else ("success" if ok else "failed"),
+            "requires_reconciliation": uncertain,
             "step": step_name,
             "timestamp": config._iso(self.now()),
         }
@@ -387,6 +509,22 @@ class MaintenanceRuntime:
             record["branch_delivery_validation"] = validation
         context.steps.append(record)
         self.state.append(record)
+        if uncertain:
+            pending.update(
+                state="waiting_reconciliation",
+                task_id=pending["task_id"] or para.get("task_id"),
+                code_task_id=context.para_task_id,
+                branch=context.branch,
+            )
+        else:
+            pending.update(
+                state="settled",
+                task_id=para.get("task_id"),
+                code_task_id=context.para_task_id,
+                branch=context.branch,
+                steps=list(context.steps),
+            )
+        self.state.write_memory(context.memory)
         return record
 
     def _finish(
@@ -397,6 +535,32 @@ class MaintenanceRuntime:
         extra: Optional[Dict[str, Any]] = None,
         policy_override: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        pending = context.memory.get("pending_execution") or {}
+        if pending.get("state") in {"finalizing", "finalized", "recording_outcome"}:
+            # A final policy can POST a merge or deploy. An exception after its
+            # intent is durable is not permission to replay it as a failed run.
+            record = {
+                "created_at": config._iso(self.now()),
+                "phase": "skip",
+                "run_id": pending["final_run_id"],
+                "status": "waiting_reconciliation",
+                "reason": "pending_finalization_requires_reconciliation",
+                "triggered_by": context.triggered_by,
+                "requires_reconciliation": True,
+            }
+            self.state.append(record)
+            return record
+        terminal = pending.get("state") == "settled" and (
+            status == "completed" or (context.steps and context.steps[-1].get("ok") is False)
+        )
+        if terminal:
+            pending.update(
+                state="finalizing",
+                final_run_id=context.run_id,
+                final_gate=context.gate,
+                final_steps=list(context.steps),
+            )
+            self.state.write_memory(context.memory)
         policy = (
             policy_override
             if policy_override is not None
@@ -431,6 +595,10 @@ class MaintenanceRuntime:
         }
         if context.resume_candidate:
             final["resume_candidate"] = context.resume_candidate
+        if terminal:
+            pending.update(state="finalized", final_outcome=final)
+            self.state.write_memory(context.memory)
+            return self._record_final_outcome(context.memory, final)
         self.state.append(final)
         self.state.record_outcome(final, context.gate)
         return final

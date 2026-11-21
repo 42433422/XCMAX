@@ -120,7 +120,7 @@ describe('agent task center store', () => {
     expect(apiMock.getTask).toHaveBeenCalledTimes(3)
   })
 
-  it('preserves verified file progress across coarse snapshots for the same run only', async () => {
+  it.each(['blocked', 'unknown'])('preserves verified file progress across coarse %s snapshots for the same run only', async (status) => {
     class FakeEventSource {
       static instances: FakeEventSource[] = []
       listeners = new Map<string, (event: MessageEvent) => void>()
@@ -151,12 +151,14 @@ describe('agent task center store', () => {
     await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1))
     await vi.waitFor(() => expect(store.tasks[0]?.progress).toEqual(fileProgress))
     const connection = FakeEventSource.instances[0]
-    connection.emit('task.snapshot', [{ ...task, status: 'blocked', progress: stepProgress }])
-    expect(store.tasks[0]).toMatchObject({ status: 'blocked', progress: fileProgress })
+    connection.emit('task.snapshot', [{ ...task, status, progress: stepProgress }])
+    expect(store.tasks[0]).toMatchObject({ status, progress: fileProgress })
+    expect(store.attentionCount).toBe(1)
+    expect(store.approvalCount).toBe(0)
 
     const laterProgress = { ...fileProgress, percent: 67, updated_at: '2026-11-19T12:00:01Z' }
-    connection.emit('task.snapshot', [{ ...task, status: 'blocked', progress: laterProgress }])
-    connection.emit('task.snapshot', [{ ...task, status: 'blocked', progress: fileProgress }])
+    connection.emit('task.snapshot', [{ ...task, status, progress: laterProgress }])
+    connection.emit('task.snapshot', [{ ...task, status, progress: fileProgress }])
     expect(store.tasks[0].progress).toEqual(laterProgress)
 
     connection.emit('task.snapshot', [{ ...task, active_run_id: 'run-2', status: 'completed', attention_state: 'result_unread', progress: stepProgress }])

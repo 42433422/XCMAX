@@ -51,7 +51,7 @@ def settle_target(
     code = str(error_code or "")
     if target == "unknown":
         return "unknown", "needs_verification"
-    if target == "failed" and open_effects:
+    if target in {"failed", "blocked"} and open_effects:
         return "unknown", "needs_verification"
     if target == "failed" and failure_retries(attempts, code):
         return "queued", code

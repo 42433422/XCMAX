@@ -334,7 +334,16 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             return cast("AgentRun", self._repo.save(value)) if persist else value
 
         context = dict(runtime_context or {})
+        from app.application.agent_orchestrator.approval_grant import (
+            authorization_scope_hash,
+        )
         from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+        scope = dict(context)
+        if not isinstance(scope.get("_actor_authorization"), dict):
+            scope["user_id"] = str(user_id or "")
+        authorization_scope = authorization_scope_hash(scope)
 
         plan = copy.deepcopy(plan)
         self._apply_approval_risk_policy(plan)
@@ -359,6 +368,11 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 existing.user_id == str(user_id or "")
                 and existing.plan_id == str(plan.plan_id or "")
                 and existing.metadata.get("execution_idempotency_key") == idempotency_key
+                and existing.metadata.get("execution_authorization_scope") == authorization_scope
+                and all(
+                    actor_tool_denial(step.tool_id, step.action, scope, step.params) is None
+                    for step in existing.steps
+                )
             ):
                 return cast("AgentRun", existing)
             logger.error("plan idempotency collision; refusing to start run_id=%s", run_id)
@@ -381,6 +395,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         run.metadata["runtime_context"] = context
         run.metadata["plan_sha256"] = plan_sha256
         run.metadata["execution_idempotency_key"] = idempotency_key
+        run.metadata["execution_authorization_scope"] = authorization_scope
         apply_task_context(run, runtime_context)
         run.add_event("run.created", "Agent run 已创建")
         run.add_event(
@@ -531,7 +546,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         waiting_step.status = "pending"
         run.status = "running"
         run.error = ""
+        from app.application.agent_orchestrator.approval_grant import (
+            approval_receipt_claims,
+        )
+
         run.metadata["approval_receipt"] = {
+            **approval_receipt_claims(run, waiting_step),
             "task_id": str((context or {}).get("task_id") or run.run_id),
             "step_id": waiting_step.step_id,
             "tool_id": waiting_step.tool_id,
@@ -737,7 +757,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         if not self._repo.save_if_unchanged(run, previous):
             return None
         if not confirmed:
-            return cast("AgentRun", self._repo.get(run_id))
+            stored = cast("AgentRun", self._repo.get(run_id))
+            self._release_browser_run_resources(stored)
+            return stored
         self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun", self._repo.save(run))
 
@@ -838,7 +860,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "审批已拒绝，未执行工具",
             dict(run.metadata["approval_decision"]),
         )
-        return cast("AgentRun | None", self._repo.save(run))
+        stored = cast("AgentRun", self._repo.save(run))
+        self._release_browser_run_resources(stored)
+        return stored
 
     def note_approval_timeout(self, run_id: str) -> AgentRun | None:
         """An expired approval window does not approve or execute the step."""
@@ -924,7 +948,16 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         limit: int = 50,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]:
+        if status is not None:
+            return self._repo.list_recent(
+                user_id=user_id,
+                limit=limit,
+                matches=matches,
+                runtime_scope=runtime_scope,
+                status=status,
+            )
         if runtime_scope is not None:
             return self._repo.list_recent(
                 user_id=user_id, limit=limit, matches=matches, runtime_scope=runtime_scope
@@ -937,6 +970,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         return cast("list[RunEvent]", self._repo.list_events(run_id, after_event_id=after_event_id))
 
     def _apply_plan(self, run: AgentRun, plan: PlanGraph, *, stable_step_ids: bool = False) -> None:
+        from app.application.agent_orchestrator.browser_loop import initialize_browser_run
+
+        browser_error = initialize_browser_run(run, plan)
         self._apply_approval_risk_policy(plan)
         run.plan_id = plan.plan_id
         run.intent = plan.intent
@@ -958,10 +994,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             for step in run.steps:
                 if step.node_id in required_ids:
                     step.risk = "high"
-        if graph_error:
+        if browser_error or graph_error:
             run.status = "blocked"
-            run.error = graph_error
-            run.add_event("planner.blocked", graph_error)
+            run.error = browser_error or graph_error or "browser_graph_invalid"
+            run.add_event("planner.blocked", run.error)
             return
         self._apply_repair_policy(run, plan_metadata)
         self._attach_artifacts_from_payload(run, plan_metadata, source="plan.metadata")
@@ -1405,6 +1441,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 self._repo.save(run)
                 return dict(step.output)
+            from app.application.agent_orchestrator.approval_grant import (
+                approval_scope_matches,
+            )
+
             if not self._can_auto_execute(step) and not (
                 approved and approved in {step.step_id, step.node_id}
             ):
@@ -1440,6 +1480,27 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 return denial
             while True:
+                if approved in {
+                    step.step_id,
+                    step.node_id,
+                } and not approval_scope_matches(run, step):
+                    step.status = run.status = "waiting_user"
+                    step.output = {
+                        "success": False,
+                        "error_code": "approval_scope_changed",
+                        "retryable": False,
+                        "message": "审批后的身份范围、参数或工具契约已变化，请重新审批",
+                    }
+                    run.error = step.error = step.output["message"]
+                    (run.metadata.get("dispatch") or {}).pop("approved_step_id", None)
+                    run.add_event("approval.scope_changed", run.error, {"step_id": step.step_id})
+                    self._repo.save(run)
+                    stopped_for_interaction = True
+                    return {
+                        "success": True,
+                        "requires_approval": True,
+                        "step_id": step.step_id,
+                    }
                 budget = budget_exceeded_payload(
                     run,
                     additional_cost_units=self._step_cost_units(step),
@@ -1619,6 +1680,13 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 run.add_event(
                     "step.skipped", step.error, {"step_id": step.step_id, "node_id": step.node_id}
                 )
+        from app.application.agent_orchestrator.browser_loop import advance_browser_run
+
+        if self._apply_requested_control(run):
+            return
+        if advance_browser_run(run, runtime_context, self._usage):
+            self._repo.save(run)
+            return
         run.status = "completed"
         self._ingest_confirmed_plan_artifacts(run)
         self._refresh_run_cost_metadata(run)
@@ -1631,6 +1699,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "ai_cost_units_total": run.metadata["ai_cost_units_total"],
             "repair_count": run.metadata.get("repair_count", 0),
         }
+        browser = run.metadata.get("browser_loop")
+        if isinstance(browser, dict) and browser.get("phase") == "verified":
+            run.final_output["browser"] = copy.deepcopy(browser.get("result"))
         self._append_llm_summary_to_final_output(run)
         self._remember_run_outcome_for(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)

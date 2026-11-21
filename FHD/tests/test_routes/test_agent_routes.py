@@ -558,6 +558,69 @@ def test_record_observed_tool_rejects_write_or_unknown_tools() -> None:
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "case", ["deep_unknown", "late_unknown", "nested_failure", "missing_success", "nonbool_success"]
+)
+def test_observed_receipt_classification_survives_sql_storage_and_bounded_view(trusted_actor, case):
+    from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
+
+    actor = trusted_actor(role="admin")
+    set_agent_run_repository_for_tests(SQLAlchemyAgentRunRepository(session_factory=actor.factory))
+    output = {"success": True}
+    if case == "deep_unknown":
+        child = {"outcome_unknown": True}
+        for _ in range(6):
+            child = {"result": child}
+        output["result"] = child
+    elif case == "late_unknown":
+        output.update({f"field_{index}": index for index in range(45)})
+        output["requires_reconciliation"] = True
+    elif case == "nested_failure":
+        output["result"] = {"outputs": [{"success": False, "message": "child rejected"}]}
+    elif case == "missing_success":
+        output = {"message": "transport delivered"}
+    else:
+        output["success"] = "false"
+    client = _client(actor=actor)
+    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as dispatch:
+        response = client.post(
+            "/api/agent/runs/observed-tool",
+            json={
+                "message": "查产品",
+                "tool_id": "products",
+                "action": "query",
+                "params": {"keyword": "5003"},
+                "output": output,
+                "response": "已全部完成",
+            },
+        )
+        assert response.status_code == 200, response.text
+        reference = response.json()["data"]
+        unknown = case in {"deep_unknown", "late_unknown"}
+        assert reference["status"] == ("blocked" if unknown else "failed")
+        # Reopen the durable repository before reading or attempting continuation.
+        repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+        set_agent_run_repository_for_tests(repository)
+        read = client.get(f"/api/agent/runs/{reference['run_id']}")
+        assert read.status_code == 200, read.text
+        stored = repository.get(reference["run_id"])
+        assert stored.status == reference["status"]
+        assert read.json()["data"]["status"] == stored.status
+        assert stored.steps[0].output["success"] is False
+        assert stored.tool_calls[0].status == "failed"
+        assert stored.final_output["response"] != "已全部完成"
+        assert stored.events[-1].event_type == f"run.{stored.status}"
+        if unknown:
+            assert stored.steps[0].output["outcome"] == "unknown"
+            assert stored.steps[0].output["retryable"] is False
+            assert stored.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        before = stored.to_dict()
+        assert client.post(f"/api/agent/runs/{stored.run_id}/retry", json={}).status_code == 409
+        assert repository.get(stored.run_id).to_dict() == before
+        assert get_task_execution_repository().get(stored.run_id) is None
+        dispatch.assert_not_called()
+
+
 def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
     get_agent_run_repository().clear()
     client = _client("u1")
@@ -1461,6 +1524,119 @@ def test_task_center_stream_emits_tenant_scoped_snapshot() -> None:
         "completed_count": 0,
         "overall_percent": 0,
     }
+
+
+@pytest.mark.parametrize(
+    "error_code", ["needs_verification", "retries_exhausted", "worker_incomplete_state"]
+)
+@pytest.mark.parametrize("run_status", ["running", "completed"])
+def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
+    tmp_path, error_code, run_status
+):
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'recovery-projection.db'}")
+    factory = sessionmaker(bind=engine)
+    runs = SQLAlchemyAgentRunRepository(session_factory=factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    set_agent_run_repository_for_tests(runs)
+    set_task_execution_repository_for_tests(queue)
+    run = AgentRun(user_id="u1", message="保留已确认结果", status=run_status)
+    run.metadata["task_context"] = {"task_id": "recovery-projection"}
+    run.final_output = {"business_result": {"receipt_id": "confirmed-part", "rows_written": 3}}
+    run.steps = [
+        AgentStep(
+            node_id="confirmed",
+            tool_id="products",
+            action="query",
+            status="completed",
+            output={"success": True, "receipt_id": "confirmed-part"},
+        )
+    ]
+    runs.save(run)
+    before = runs.get(run.run_id).to_dict()
+    task_before = runs.get_task(user_id="u1", task_id="recovery-projection").to_dict()
+    queued = queue.enqueue(run)
+    now = datetime.fromisoformat(queued.available_at)
+    lease_seconds = 30 if error_code == "worker_incomplete_state" else 1
+    assert (
+        queue.claim("expired-worker", lease_seconds=lease_seconds, now=now.isoformat()) is not None
+    )
+    if error_code == "worker_incomplete_state":
+        assert queue.finish(run.run_id, "expired-worker", "unknown", error_code=error_code)
+    elif error_code == "needs_verification":
+        queue.mark_open_effect(run.run_id, "unconfirmed-next-write")
+    else:
+        for attempt in range(1, DEFAULT_MAX_ATTEMPTS):
+            assert (
+                queue.claim(
+                    f"worker-{attempt}",
+                    lease_seconds=1,
+                    now=(now + timedelta(seconds=attempt * 2)).isoformat(),
+                )
+                is not None
+            )
+    assert (
+        queue.claim("replacement", lease_seconds=1, now=(now + timedelta(seconds=20)).isoformat())
+        is None
+    )
+    settled_code = "needs_verification" if error_code == "worker_incomplete_state" else error_code
+    assert queue.get(run.run_id).last_error_code == settled_code
+    expected = (
+        "completed"
+        if run_status == "completed"
+        else "unknown"
+        if settled_code == "needs_verification"
+        else "failed"
+    )
+    client = _client()
+    with patch.object(AgentOrchestrator, "execute_dispatched_run") as execute:
+        run_response = client.get(f"/api/agent/runs/{run.run_id}").json()
+        run_listing = client.get("/api/agent/runs").json()["data"][0]
+        task = client.get("/api/agent/tasks/recovery-projection").json()["data"]
+        listing = client.get("/api/agent/tasks").json()["data"][0]
+        streamed = client.get("/api/agent/tasks/events/stream?once=true").text
+        snapshot = json.loads(
+            next(line[6:] for line in streamed.splitlines() if line.startswith("data: ["))
+        )[0]
+        overview = client.get("/api/agent/task-runtime").json()["data"]["progress"]
+        execute.assert_not_called()
+    assert run_response["data"]["status"] == expected
+    assert run_listing["status"] == expected
+    assert run_response["data"]["final_output"] == before["final_output"]
+    assert run_response["data"]["steps"] == before["steps"]
+    assert run_response["capabilities"]["retry"] is False
+    for payload in (task, listing, snapshot):
+        assert payload["status"] == payload["progress"]["status"] == expected
+        assert payload["execution"]["last_error_code"] == settled_code
+        assert payload["metadata"]["business_result"] == before["final_output"]["business_result"]
+        assert payload["progress"]["completed_units"] == 1
+        assert (
+            payload["attention_state"]
+            == {"completed": "result_unread", "unknown": "blocked", "failed": "failed"}[expected]
+        )
+    assert task["active_run"]["status"] == task["runs"][0]["status"] == expected
+    assert task["capabilities"]["retry"] is False
+    if expected == "unknown":
+        assert (
+            run_response["data"]["metadata"]["recovery"]["state"]
+            == "manual_reconciliation_required"
+        )
+    assert overview["active_count"] == 0
+    assert overview["attention_count"] == int(expected != "completed")
+    assert overview["completed_count"] == int(expected == "completed")
+    assert runs.get(run.run_id).to_dict() == before
+    assert runs.get_task(user_id="u1", task_id="recovery-projection").to_dict() == task_before
+    engine.dispose()
 
 
 def test_task_control_command_survives_process_local_control_reset() -> None:

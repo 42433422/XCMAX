@@ -26,6 +26,8 @@ from app.application.tool_execution_deadline import (
     invocation_deadline,
     invocation_requires_reconciliation,
 )
+from app.application.workflow.retry_policy import is_transport_error
+from app.domain.task_lifecycle.results import normalize_execution_result
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -109,9 +111,11 @@ def _reviewed_query_tenant(
             permission = (
                 "customer.view"
                 if (spec.tool_id, spec.action) in _CUSTOMER_READ_ACTIONS
-                else "shipment.view"
-                if (spec.tool_id, spec.action) in _SHIPMENT_READ_ACTIONS
-                else "product.view"
+                else (
+                    "shipment.view"
+                    if (spec.tool_id, spec.action) in _SHIPMENT_READ_ACTIONS
+                    else "product.view"
+                )
             )
             tenant = check_owned_business_permission(actor, permission)
             if str(context.get("tenant_id")) != str(tenant):
@@ -232,10 +236,52 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
             factory.engine.dispose()
 
 
+def _validate_local_mutation_input(
+    tool_id: str, action: str, params: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Run owned, pure guards before creating a claim or invoking an adapter."""
+    if (tool_id, action) == ("business_event", "shipment_create"):
+        from app.domain.shipment.shipment_quantities import (
+            ShipmentQuantityValidationError,
+            validate_shipment_products,
+        )
+
+        items = params.get("items") or []
+        if not items:
+            return {
+                "success": False,
+                "error_code": "PRODUCTS_REQUIRED",
+                "message": "产品列表不能为空",
+            }
+        try:
+            validate_shipment_products(items)
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
+    if (tool_id, action) == ("customers", "batch_delete"):
+        from app.application.customer_deletion import valid_customer_delete_ids
+
+        ids = params.get("ids") or params.get("customer_ids") or []
+        if not valid_customer_delete_ids(ids):
+            return {"success": False, "message": "ids 须为非空正整数数组", "deleted_count": 0}
+    return None
+
+
 class AgentToolExecutor:
     def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
         from app.application.agent_orchestrator.tool_process import execute_isolated
 
+        if str(step.tool_id).startswith("mcp__"):
+            from app.application.tools.mcp.registry import browser_server_config
+
+            config = browser_server_config(step.tool_id)
+            if config is not None:
+                from app.application.agent_orchestrator.browser_tool_process import (
+                    execute_browser_isolated,
+                )
+
+                return execute_browser_isolated(
+                    self, step, runtime_context, deadline_monotonic, config
+                )
         if (
             step.tool_id == "dataset_rag"
             and step.action == "rebuild_index"
@@ -353,6 +399,16 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action,
             }
+        if validation.spec is not None and validation.spec.availability == "aiopen":
+            # AIOPEN owns key scopes and live screen sessions in its async entry.
+            # Its catalog entry does not bind a handler in this process boundary.
+            return {
+                "success": False,
+                "error_code": "tool_entry_unsupported",
+                "execution_status": "not_started",
+                "retryable": False,
+                "message": "此工具需通过已授权的 AIOPEN 入口执行",
+            }
         from app.application.chat_turn_guard import _is_mutation
 
         guard_policy = str((runtime_context or {}).get("mutation_policy") or "")
@@ -386,6 +442,9 @@ class AgentToolExecutor:
         )
         if approval_denied is not None:
             return approval_denied
+        refusal = _validate_local_mutation_input(validation.tool_id, guard_action, params)
+        if refusal is not None:
+            return refusal
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
         product_db_read = (validation.tool_id, validation.action) == (
@@ -419,7 +478,10 @@ class AgentToolExecutor:
         action = validation.action or step.action
         runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
         runtime_tenant_id: int | None = query_tenant
-        if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
+        if (
+            step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS
+            or (validation.tool_id, action) == ("products", "batch_delete")
+        ) and runtime_tenant_raw not in (None, ""):
             try:
                 if isinstance(runtime_tenant_raw, bool) or not str(runtime_tenant_raw).isdigit():
                     raise ValueError
@@ -530,15 +592,24 @@ class AgentToolExecutor:
                 except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
                     raise
                 except RECOVERABLE_ERRORS as exc:
+                    safe_read_retry = (
+                        validation.spec is not None
+                        and validation.spec.read_only
+                        and is_transport_error(exc)
+                        and not isinstance(
+                            exc, (FileNotFoundError, IsADirectoryError, NotADirectoryError)
+                        )
+                        and not invocation_requires_reconciliation()
+                    )
                     result = {
                         "success": False,
-                        "error_code": "tool_exception",
+                        "error_code": "tool_unavailable" if safe_read_retry else "tool_exception",
                         "message": "工具执行失败",
                         "exception_type": type(exc).__name__,
-                        "outcome": "unknown",
-                        "retryable": False,
-                        "reconciliation_required": True,
+                        "retryable": safe_read_retry,
                     }
+                    if not safe_read_retry:
+                        result.update(outcome="unknown", reconciliation_required=True)
                 finally:
                     if idem_key and not isinstance(result, dict):
                         finish_idempotent_replay(
@@ -584,7 +655,10 @@ class AgentToolExecutor:
             status_value = 0
         if status_value >= 400:
             result = {**result, **classify_http_status(status_value)}
-        empty = reject_empty_business_result(result, action=action)
+        empty = reject_empty_business_result(
+            result,
+            action="read" if validation.spec is not None and validation.spec.read_only else action,
+        )
         if empty is not None:
             result = {**empty, "outcome": "unknown", "reconciliation_required": True}
 
@@ -615,6 +689,28 @@ class AgentToolExecutor:
             }
             if requires_reconciliation:
                 result.update(outcome="unknown", retryable=False, reconciliation_required=True)
+        # Settle the durable receipt with the same trusted uncertainty as the
+        # outer deadline wrapper. A schema-valid employee "success" cannot erase
+        # a lost HTTP response and leave a successful cached receipt behind.
+        # After entering a mutating handler, failure alone is not proof of no
+        # effect (adapters may have caught an exception after commit). Genuine
+        # pre-dispatch validation/authorization refusals returned before claim.
+        if (
+            invocation_requires_reconciliation()
+            or execution_result_requires_reconciliation(result)
+            or (
+                result.get("success") is not True
+                and (validation.spec is None or not validation.spec.read_only)
+            )
+        ):
+            result = {
+                **result,
+                "success": False,
+                "outcome": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
+            }
+        result = normalize_execution_result(result)
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)
@@ -657,11 +753,33 @@ def execute_with_tool_deadline(
             "message": "工具缺少可取消/隔离的有界执行适配器，已拒绝执行",
         }
     result: Any = None
+    from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+    from app.infrastructure.auth.agent_mod_scope import (
+        AgentModAuthorizationError,
+        agent_mod_execution_scope,
+    )
     from app.utils.resilience.rate_limiter import (
         ToolCircuitOpenError,
         ToolConcurrencyLimitError,
         tool_execution_slot,
     )
+
+    # Refuse an already revoked host binding before opening a write effect,
+    # reserving an execution slot, or spawning a worker. The child rechecks;
+    # a later refusal cannot erase an effect opened by this attempt.
+    try:
+        with agent_mod_execution_scope(context.get("_mod_authorization")):
+            pass
+    except AgentModAuthorizationError as exc:
+        return {
+            "success": False,
+            "error_code": "mod_authorization_invalid",
+            "message": str(exc),
+            "execution_status": "not_started",
+            "retryable": False,
+            "tool_id": step.tool_id,
+            "action": step.action,
+        }
 
     try:
         tenant_id = (
@@ -674,12 +792,18 @@ def execute_with_tool_deadline(
             f"{step.tool_id}.{step.action}", tenant_id=str(tenant_id)
         ) as record_result:
             with invocation_deadline(math.inf if file_deadlines else deadline) as invocation:
+                if not step.idempotent:
+                    from app.application.agent_orchestrator.task_dispatcher import note_open_effect
+
+                    note_open_effect(str(context.get("run_id") or ""), step.step_id)
                 result = (
                     bounded(step, runtime_context=context, deadline_monotonic=deadline)
                     if callable(bounded)
                     else executor.execute(step, runtime_context=context)
                 )
-            record_result(result)
+            record_result(
+                normalize_execution_result(result) if isinstance(result, dict) else result
+            )
     except TimeoutError:
         pass
     except ToolConcurrencyLimitError:
@@ -699,6 +823,8 @@ def execute_with_tool_deadline(
             "execution_status": "not_started",
             "message": "该工具暂时不可用，本次操作尚未开始，请稍后重试。",
         }
+    except WorkerLeaseLost:
+        raise
     except RECOVERABLE_ERRORS as exc:
         if not invocation.uncertain:
             raise
@@ -711,20 +837,11 @@ def execute_with_tool_deadline(
             (file_deadlines or time.monotonic() <= deadline)
             and isinstance(result, dict)
             and not invocation.uncertain
-            and (
-                result.get("outcome") != "unknown"
-                or result.get("error_code")
-                in {
-                    "tool_identity_required",
-                    "tool_identity_override",
-                    "tool_permission_denied",
-                    "tool_contract_unavailable",
-                    "tool_scope_unavailable",
-                    "catalog_identity_override",
-                }
-            )
-            and not result.get("reconciliation_required")
         ):
+            # An on-time unknown receipt is still a receipt. Preserve its original
+            # error and task identity while forbidding replay; only a missed
+            # deadline or observed uncertain I/O warrants the timeout envelope.
+            result = normalize_execution_result(result)
             if (
                 step.tool_id == "business_db"
                 and step.action == "write"
@@ -741,7 +858,7 @@ def execute_with_tool_deadline(
                     str(step.params.get("operation") or "create"),
                     result,
                 )
-            return result
+            return cast("dict[str, Any]", result)
     worker_exited = isinstance(result, dict) and result.get("error_code") == "tool_worker_exited"
     return {
         "success": False,

@@ -1290,7 +1290,16 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     mockRequestChatByModeWithTimeout.mockRejectedValue(new Error('请求超时'))
     const api = createApi()
     await api.sendMessage('普通')
-    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('请求超时'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
+    expect(mockAddMessage).toHaveBeenCalledWith(
+      expect.stringContaining('结果未知'),
+      'ai',
+      expect.objectContaining({
+        turnId: expect.any(String),
+        workflowAction: 'unknown',
+        execution: expect.objectContaining({ outcome: 'unknown', committed: false }),
+      }),
+      expect.any(Object),
+    )
   })
 
   it('单条请求抛出非 Error 类型', async () => {
@@ -1298,7 +1307,16 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     const api = createApi()
     await api.sendMessage('普通')
     await vi.waitFor(() => {
-      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('字符串错误'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
+      expect(mockAddMessage).toHaveBeenCalledWith(
+        expect.stringContaining('结果未知'),
+        'ai',
+        expect.objectContaining({
+          turnId: expect.any(String),
+          workflowAction: 'unknown',
+          execution: expect.objectContaining({ outcome: 'unknown', committed: false }),
+        }),
+        expect.any(Object),
+      )
     })
   })
 

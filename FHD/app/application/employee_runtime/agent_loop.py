@@ -644,6 +644,7 @@ def run_employee_agent_loop(
                                 "employee_id": employee_id,
                                 "source": "employee_runtime",
                                 "call_id": tc_id,
+                                "tool_call_id": tc_id,
                             },
                         )
                     )

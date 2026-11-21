@@ -30,19 +30,22 @@ class ConversationLlmMixin:
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000,
+        max_tokens: int | None = None,
         **kwargs,
     ) -> dict[str, Any] | None:
         """Call the active platform, direct, or legacy LLM provider."""
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+        from app.application.ai_chat.dialogue_memory import conversation_summary
         from app.domain.neuro.cognition.token_estimator import estimate_tokens
-        from app.infrastructure.llm.model_context_windows import model_for_budget
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
+        from app.infrastructure.llm.model_context_windows import resolve_model_limits
 
         started = time.perf_counter()
         context = kwargs.pop("conversation_context", None)
+        request_context = (getattr(context, "metadata", None) or {}).get("request_context")
         schemas = {
             name: kwargs[name]
-            for name in ("tools", "functions", "response_format")
+            for name in ("tools", "functions", "response_format", "tool_choice", "function_call")
             if name in kwargs
         }
         schema_text = json.dumps(schemas, ensure_ascii=False) if schemas else ""
@@ -59,20 +62,32 @@ class ConversationLlmMixin:
                 get_context_window_manager,
             )
 
+            limits = await resolve_model_limits(
+                provider, kwargs.get("model"), kwargs.get("provider"), messages=messages
+            )
+            output_limit = (
+                max_tokens if max_tokens is not None else limits.default_output_tokens(2000)
+            )
             compression = await get_context_window_manager().compress(
                 messages,
                 user_id=str(getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""),
                 provider=provider,
                 context=context,
-                reserved_tokens=max_tokens + schema_tokens,
-                model=await model_for_budget(provider, kwargs.get("model"), kwargs.get("provider")),
+                model=limits.model,
+                model_limits=limits,
+                output_tokens=output_limit,
+                external_tokens=schema_tokens,
             )
+            if isinstance(request_context, dict):
+                conversation_summary(request_context)
+            limits.assert_current()
             result = await provider.chat_completion(
                 messages=compression.messages,
                 temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs,
+                max_tokens=output_limit,
+                **{**kwargs, **limits.request_options},
             )
+            limits.assert_current()
             if result:
                 latency_ms = (time.perf_counter() - started) * 1000.0
                 trace = _api_module()._build_llm_trace(
@@ -133,8 +148,17 @@ class ConversationLlmMixin:
                     except RECOVERABLE_ERRORS:
                         pass
             return result
+        except ConversationRevisionError:
+            raise
         except ContextWindowExceeded as error:
-            return {"error": {"code": "context_window_exceeded", "message": str(error)}}
+            return {
+                "error": {
+                    "code": "context_window_exceeded",
+                    "message": str(error),
+                    "reason": error.reason,
+                    "budget": error.diagnostics,
+                }
+            }
         except RECOVERABLE_ERRORS as error:
             from app.domain.model_admission_errors import (
                 ModelCircuitOpenError,

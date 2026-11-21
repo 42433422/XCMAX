@@ -4878,9 +4878,8 @@ class TestFindDeliveryValidation:
 
         assert found is dv
 
-    def test_find_delivery_validation_commands_with_exit_code_none(self):
-        """exit_code=None 的 command 不视为失败：_find_delivery_validation 仍能找到 dv，
-        但 _extract_failure_reason 不会返回 delivery_validation_failed。"""
+    def test_find_delivery_validation_commands_with_unobserved_exit(self):
+        """没有观察到退出码时，保留原验证回执并拒绝把它当作验证成功。"""
         dv = {"commands": [{"exit_code": None, "command": "pytest"}]}
         result = {"result": {"ok": False, "delivery_validation": dv}}
 
@@ -4888,9 +4887,8 @@ class TestFindDeliveryValidation:
         found = _find_delivery_validation(result)
         assert found is dv
 
-        # _extract_failure_reason 不把 exit_code=None 视为失败，落到 fallback
         reason = _extract_failure_reason(result, {})
-        assert "delivery_validation_failed" not in reason
+        assert "delivery_validation_failed" in reason and "exit=None" in reason
 
     def test_find_delivery_validation_commands_with_exit_code_zero(self):
         """exit_code=0 的 command 不视为失败。"""
@@ -5963,3 +5961,37 @@ def test_run_cmd_excerpt_raises_on_nonzero_when_truncated():
             [sys.executable, "-c", script],
             max_chars=128,
         )
+
+
+def test_dot_mailbox_code_extra_requires_explicit_opt_in(monkeypatch):
+    from modstore_server.maintenance_loop.coordinator import _dot_mailbox_code_extra
+
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_DOT_MAILBOX", raising=False)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_DEVICE_ID", "dot-device")
+    extra = {"allow_medium_risk": True}
+    assert (
+        _dot_mailbox_code_extra(extra, run_id="run-1", employee_id="vibe-coding-maintainer")
+        == extra
+    )
+
+
+def test_dot_mailbox_code_extra_adds_control_title_and_cloud_device(monkeypatch):
+    import re
+
+    from modstore_server.maintenance_loop.coordinator import _dot_mailbox_code_extra
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_DOT_MAILBOX", "1")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_DEVICE_ID", "2f49b3dc-dot")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_TOOL", "dolt")
+    routed = _dot_mailbox_code_extra(
+        {"allow_medium_risk": True},
+        run_id="c9ec5c33-b200-47a4-941d-431839a615e8",
+        employee_id="vibe-coding-maintainer",
+    )
+    assert routed["allow_medium_risk"] is True
+    assert routed["device_id"] == "2f49b3dc-dot"
+    assert routed["tool_name"] == "dolt"
+    assert re.match(
+        r"^\[xcmax:[0-9a-f]{32}:[0-9a-f]{32}\] vibe-coding-maintainer$", routed["title"]
+    )
+    assert "c9ec5c33b20047a4" in routed["title"]

@@ -30,6 +30,7 @@ def preserve_catalog_run_authority(db, run, previous):
     This runs before generic generation matching: renewed sessions may change that
     match, but can never change the original operation or its consumed approval.
     New catalog runs must already have a signed operation/head in this transaction.
+    Return whether a validated no-effect reconciliation permanently fenced this run.
     """
 
     def catalog(value):
@@ -42,7 +43,7 @@ def preserve_catalog_run_authority(db, run, previous):
         )
 
     if not catalog(run) and not catalog(previous):
-        return
+        return False
     from app.application.agent_orchestrator.approval_grant import _EVIDENCE_KEY
     from app.application.agent_orchestrator.business_action_ledger import canonical_hash
     from app.application.agent_orchestrator.catalog_product_edit import (
@@ -141,6 +142,7 @@ def preserve_catalog_run_authority(db, run, previous):
         and (head.status != "active" or head.runtime_context != key)
     ):
         raise ValueError("catalog operation head missing or changed")
+    return row.status in {"resolving_no_effect", "finalized_no_effect"}
 
 
 @dataclass(frozen=True)

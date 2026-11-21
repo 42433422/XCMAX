@@ -628,7 +628,9 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     trusted_actor, monkeypatch, tmp_path, cleanup_verified
 ):
     from app.application.agent_orchestrator import tool_process
-    from app.application.agent_orchestrator.approval_grant import _params_hash
+    from app.application.agent_orchestrator.approval_grant import (
+        approval_receipt_claims,
+    )
     from app.application.agent_orchestrator.elt_checkpoint_recovery import ELT_CHECKPOINT_PROTOCOL
     from app.application.workflow.workflow_types import plan_fingerprint
 
@@ -675,10 +677,10 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
             "tool_id": step.tool_id,
             "action": step.action,
             "approved_by": run.user_id,
-            "params_sha256": _params_hash(step),
             "plan_sha256": plan_fingerprint(plan),
         },
     )
+    run.metadata["approval_receipt"].update(approval_receipt_claims(run, step))
     repository.save(run)
     queue.enqueue(run)
     old = queue.claim("old", lease_seconds=60)
@@ -792,13 +794,37 @@ def test_concurrent_retry_preserves_completed_write_and_atomically_requeues_same
     ]
 
 
-@pytest.mark.parametrize("condition", ["unknown", "plan_changed", "write_pending", "live_lease"])
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "unknown",
+        "nested_unknown",
+        "nested_timeout",
+        "completed_unknown",
+        "completed_failure",
+        "plan_changed",
+        "write_pending",
+        "live_lease",
+    ],
+)
 def test_retry_rejects_unverified_original_state_without_queue_changes(trusted_actor, condition):
     actor = trusted_actor(role="admin")
     repository, queue = _repositories(actor)
     run = _run(actor, status="failed", completed_write=True)
     if condition == "unknown":
         run.steps[1].output = {"success": False, "outcome": "unknown"}
+    elif condition in {"nested_unknown", "nested_timeout"}:
+        run.steps[1].output = {
+            "success": True,
+            "result": {
+                "execution_status": "unknown" if condition == "nested_unknown" else "timeout"
+            },
+        }
+    elif condition in {"completed_unknown", "completed_failure"}:
+        child = (
+            {"outcome_unknown": True} if condition == "completed_unknown" else {"success": False}
+        )
+        run.steps[0].output["result"] = {"outputs": [{"output": child}]}
     elif condition == "plan_changed":
         run.steps[1].params["keyword"] = "new business intent"
     elif condition == "write_pending":

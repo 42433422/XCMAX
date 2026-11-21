@@ -215,7 +215,8 @@ def test_reused_query_component_resolves_current_mod_database_and_tenant(monkeyp
 
 
 @pytest.mark.parametrize(
-    "state", ["completed", "queued", "retrying", "paused", "blocked", "unknown"]
+    "state",
+    ["completed", "queued", "retrying", "paused", "blocked", "unknown", "preflight_rejected"],
 )
 def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatch, state):
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
@@ -290,13 +291,17 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatc
         }
     current = [approvals[0]]
     agent = MagicMock()
+    run_state = "blocked" if state == "preflight_rejected" else state
     agent.continue_run.side_effect = lambda run_id, **kwargs: SimpleNamespace(
         run_id=run_id,
-        status="completed" if state == "unknown" else state,
+        status="completed" if state == "unknown" else run_state,
         plan_id=runs[run_id].plan_id,
         intent="delete_customer",
         steps=[SimpleNamespace(status="completed")],
         tool_calls=[],
+        events=[SimpleNamespace(data={"execution_started": False})]
+        if state == "preflight_rejected"
+        else [],
         final_output=({"output": {"requires_reconciliation": True}} if state == "unknown" else {}),
     )
     monkeypatch.setattr(
@@ -319,8 +324,12 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatc
         current[0] = backend
         result = bridge.resume(request_no=f"request-{index}", opinion="approved", approved_by="7")
         assert result["success"] is (state == "completed"), result
-        assert result["execution_state"] == state
-        if state not in {"completed", "unknown"}:
+        assert result["execution_state"] == run_state
+        if state == "preflight_rejected":
+            assert result["execution_accepted"] is False
+            assert result["workflow_executed"] is False
+            assert result["execution_started"] is False
+        elif state not in {"completed", "unknown"}:
             assert result["execution_accepted"] is True
             assert result["workflow_executed"] is False
         if state == "unknown":

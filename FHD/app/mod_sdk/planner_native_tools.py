@@ -8,10 +8,9 @@ import logging
 from functools import lru_cache
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_NATIVE_TOOL_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (TypeError,)
 
 PLANNER_EXCEL_TOOLS_MOD_ID = "xcagi-planner-excel-tools"
 
@@ -33,7 +32,10 @@ def is_planner_native_tools_enabled() -> bool:
 def _discover_native_tool_mods() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
-        from app.infrastructure.mods.mod_manager import get_mod_manager, is_mods_disabled
+        from app.infrastructure.mods.mod_manager import (
+            get_mod_manager,
+            is_mods_disabled,
+        )
 
         if is_mods_disabled():
             return rows
@@ -127,39 +129,62 @@ def try_execute_native_planner_tool(
             continue
         mod_id = str(row.get("mod_id") or "")
         mod_path = str(row.get("mod_path") or "")
-        if not mod_path:
-            continue
+        handler_started = False
         try:
+            if not mod_path:
+                raise ValueError("Registered native tool has no module path")
             mod = _load_handler_module(mod_path, mod_id)
             fn = getattr(mod, "run_native_tool", None)
             if not callable(fn):
-                continue
-            parameters = inspect.signature(fn).parameters
+                raise ValueError("Registered native tool has no executable handler")
             kwargs: dict[str, Any] = {
                 "workspace_root": workspace_root,
                 "db_write_token": db_write_token,
             }
-            if "runtime_context" in parameters or any(
-                parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+            signature = inspect.signature(fn)
+            if "runtime_context" in signature.parameters or any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in signature.parameters.values()
             ):
                 kwargs["runtime_context"] = runtime_context
-            # Select the legacy signature before invocation. A TypeError raised
-            # inside a handler can follow a committed write and must not replay it.
+            elif runtime_context:
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "error_code": "tool_context_unsupported",
+                            "retryable": False,
+                            "execution_status": "not_started",
+                            "message": "模块工具尚不支持传递当前授权上下文",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    mod_id,
+                )
+            # Inspect compatibility before execution. Retrying a TypeError from
+            # inside a handler can repeat a write which already completed.
+            signature.bind(tool, args, **kwargs)
+            handler_started = True
             out = fn(tool, args, **kwargs)
             if out is None:
-                raise ValueError("registered native tool returned no receipt")
+                raise ValueError("Registered native tool returned no execution receipt")
             return str(out), mod_id
-        except _NATIVE_TOOL_ERRORS:
+        except BOUNDARY_ERRORS:
+            # A plugin may raise a programming error after a side effect. This
+            # isolation boundary must retain that unknown result, never call a
+            # second handler or retry with fewer authorization arguments.
             logger.exception("native planner tool failed mod=%s tool=%s", mod_id, tool)
             return (
                 json.dumps(
                     {
                         "success": False,
                         "error": "native_tool_failed",
+                        "error_code": "native_tool_failed",
                         "mod_id": mod_id,
-                        "execution_state": "unknown",
+                        "outcome": "unknown" if handler_started else "not_started",
+                        "execution_status": ("unknown" if handler_started else "not_started"),
                         "retryable": False,
-                        "reconciliation_required": True,
+                        "reconciliation_required": handler_started,
                     },
                     ensure_ascii=False,
                 ),
