@@ -1,4 +1,4 @@
-"""Bounded inputs for the channel module; no runtime identity or approval flags."""
+"""Kellai domain operation inputs; runtime identity and approval are not user data."""
 
 KELLAI_INPUT_SCHEMAS = {
     ("kellai", "channels"): {"type": "object", "properties": {}, "additionalProperties": False},

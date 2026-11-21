@@ -35,6 +35,7 @@ export const useKellaiStore = defineStore('kellai', () => {
   let conversationRevision = 0
   let consumers = 0
   let deliveryScope = ''
+  let receiptRecovery: (() => boolean) | undefined
   let timer: ReturnType<typeof setInterval> | undefined
   const copilot = useKellaiCopilot({ activeCustomerId, messages, error })
   const scopes = computed(() => binding.value.connection?.authorized_scopes || [])
@@ -146,6 +147,25 @@ export const useKellaiStore = defineStore('kellai', () => {
     }
   }
 
+  async function recoverReceipts(): Promise<void> {
+    if (receiptRecovery?.() || !canSend.value || !deliveryScope) return
+    const valid = current()
+    const storageScope = deliveryScope
+    const scopedDeliveries = deliveries.value
+    const connectionId = binding.value.connection?.connection_id
+    const applies = () => valid() && storageScope === deliveryScope && scopedDeliveries === deliveries.value
+      && connectionId === binding.value.connection?.connection_id && binding.value.state === 'connected' && canSend.value
+    receiptRecovery = applies
+    try {
+      const pending = Object.keys(deliveries.value).filter(id => unresolved(deliveries.value[id].receipt.status))
+      for (let offset = 0; offset < pending.length && applies(); offset += 4) {
+        await Promise.all(pending.slice(offset, offset + 4).map(queryReceipt))
+      }
+    } finally {
+      if (receiptRecovery === applies) receiptRecovery = undefined
+    }
+  }
+
   async function refreshAll(): Promise<void> {
     if (busy.value) return
     const valid = current()
@@ -171,11 +191,8 @@ export const useKellaiStore = defineStore('kellai', () => {
         clearConversation()
         return
       }
-      const pending = Object.keys(deliveries.value).filter(id => unresolved(deliveries.value[id].receipt.status))
-      for (let offset = 0; offset < pending.length; offset += 4) {
-        await Promise.all(pending.slice(offset, offset + 4).map(queryReceipt))
-        if (!valid()) return
-      }
+      // Request IDs already block duplicates; provider latency must not block local reads.
+      void recoverReceipts()
       customersLoading.value = true
       const [statusResult, customerResult, channelResult] = await Promise.allSettled([
         api.dataStatus(), api.customers(50), scopes.value.includes('channels.read') ? api.channels() : Promise.resolve([]),
@@ -291,13 +308,16 @@ export const useKellaiStore = defineStore('kellai', () => {
     const delivery = deliveries.value[requestId]
     if (!delivery || delivery.checking || !canSend.value) return
     const valid = current()
+    const connectionId = binding.value.connection?.connection_id
+    const applies = () => valid() && connectionId === binding.value.connection?.connection_id
+      && deliveries.value[requestId] === delivery
     delivery.checking = true
     try {
       const receipt = await api.sendReceipt(delivery.request_id)
-      if (valid()) applyReceipt(delivery, receipt)
+      if (applies()) applyReceipt(delivery, receipt)
     } catch (cause) {
-      if (valid()) delivery.error = cause instanceof Error ? cause.message : '无法查询回执'
-    } finally { if (valid()) delivery.checking = false }
+      if (applies()) delivery.error = cause instanceof Error ? cause.message : '无法查询回执'
+    } finally { if (applies()) delivery.checking = false }
   }
 
   function attach(): void {

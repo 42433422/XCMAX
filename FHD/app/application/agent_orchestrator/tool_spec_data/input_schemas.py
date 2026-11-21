@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .kellai_schemas import KELLAI_INPUT_SCHEMAS
+from app.domain.shared_services.kellai_tool_contract import KELLAI_INPUT_SCHEMAS
+
 from .report_input_schemas import REPORT_INPUT_SCHEMAS
 
 
