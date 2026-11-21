@@ -391,7 +391,10 @@ def test_planning_answer_cannot_change_the_original_authorization(roundtrip, cha
     roundtrip.executor.execute_with_deadline.assert_not_called()
 
 
-def test_competing_answers_replace_one_wait_and_execute_once(roundtrip, monkeypatch):
+@pytest.mark.parametrize("new_turn_context", [True, False])
+def test_competing_answers_replace_one_wait_and_execute_once(
+    roundtrip, monkeypatch, new_turn_context
+):
     first = roundtrip.send(roundtrip.service(), ORIGINAL)
     waiting = roundtrip.repository.get(first["run_id"])
     original_plan = plan_from_dict(waiting.metadata["plan"])
@@ -417,6 +420,15 @@ def test_competing_answers_replace_one_wait_and_execute_once(roundtrip, monkeypa
         return save(repository, run, previous)
 
     monkeypatch.setattr(SQLAlchemyAgentRunRepository, "save_if_unchanged", competing_save)
+    context = deepcopy(waiting.metadata["runtime_context"])
+    if new_turn_context:
+        context.update(
+            turn_id="concurrent-answer-turn",
+            planning_clarification={
+                "original_request": ORIGINAL,
+                "exchanges": [{"question": QUESTION, "answer": "A"}],
+            },
+        )
 
     def answer():
         with tenant_scope(roundtrip.actor.tenant_id):
@@ -428,14 +440,7 @@ def test_competing_answers_replace_one_wait_and_execute_once(roundtrip, monkeypa
                 expected_snapshot_sha256=canonical_hash(waiting.to_dict()),
                 plan=deepcopy(replacement),
                 answer="A",
-                runtime_context={
-                    **deepcopy(waiting.metadata["runtime_context"]),
-                    "turn_id": "concurrent-answer-turn",
-                    "planning_clarification": {
-                        "original_request": ORIGINAL,
-                        "exchanges": [{"question": QUESTION, "answer": "A"}],
-                    },
-                },
+                runtime_context=deepcopy(context),
             )
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -447,4 +452,59 @@ def test_competing_answers_replace_one_wait_and_execute_once(roundtrip, monkeypa
         [(e.event_type, e.message) for e in completed.events],
     )
     assert len(completed.tool_calls) == 1
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+def test_replaying_original_plan_after_clarification_returns_the_original_run(roundtrip):
+    engine = roundtrip.actor.factory.kw["bind"]
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE original_plan_effects (run_id TEXT NOT NULL)")
+    output = deepcopy(roundtrip.executor.execute_with_deadline.return_value)
+
+    def observe_effect(step, *, runtime_context, deadline_monotonic):
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO original_plan_effects (run_id) VALUES (?)",
+                (runtime_context["run_id"],),
+            )
+        return deepcopy(output)
+
+    roundtrip.executor.execute_with_deadline.side_effect = observe_effect
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    plan = plan_from_dict(waiting.metadata["plan"])
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["run_id"] == waiting.run_id and result["success"] is True
+    completed = roundtrip.repository.get(waiting.run_id)
+    replay = roundtrip.orchestrator().start_run_from_plan(
+        user_id=waiting.user_id,
+        message=ORIGINAL,
+        plan=plan,
+        runtime_context=deepcopy(waiting.metadata["runtime_context"]),
+    )
+    assert replay == completed
+    assert len(roundtrip.repository.list_recent(user_id=waiting.user_id)) == 1
+    with engine.connect() as connection:
+        effects = connection.exec_driver_sql("SELECT run_id FROM original_plan_effects").all()
+    assert [row[0] for row in effects] == [waiting.run_id]
+    assert len(completed.tool_calls) == 1
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+def test_late_preclarification_sql_save_cannot_replace_completed_generation(roundtrip):
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["success"] is True
+    completed = roundtrip.repository.get(waiting.run_id)
+    writer = SQLAlchemyAgentRunRepository(
+        session_factory=roundtrip.actor.factory, auto_create=False
+    )
+    with pytest.raises(ValueError, match="planning generation"):
+        writer.save(waiting)
+    stored = roundtrip.repository.get(waiting.run_id)
+    assert stored.status == "completed"
+    assert stored.metadata["runtime_context"] == completed.metadata["runtime_context"]
+    assert stored.steps == completed.steps and stored.tool_calls == completed.tool_calls
+    assert stored == completed
     assert roundtrip.executor.execute_with_deadline.call_count == 1

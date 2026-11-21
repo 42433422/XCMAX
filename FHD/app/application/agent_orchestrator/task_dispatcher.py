@@ -16,6 +16,7 @@ from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
+from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
 from app.application.agent_orchestrator.task_execution_repository import (
     AgentTaskExecution,
     TaskExecutionRepository,
@@ -24,17 +25,24 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_open_effect: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+_open_effect: contextvars.ContextVar[tuple[object, str, str] | None] = contextvars.ContextVar(
     "task_open_effect", default=None
 )
 
 
 def note_open_effect(run_id: str, effect_id: str) -> None:
     """Record a side effect only while a worker is inside a real tool call."""
-    repo = _open_effect.get()
+    claim = _open_effect.get()
+    if claim is None:
+        return
+    repo, claimed_run_id, owner_id = claim
     marker = getattr(repo, "mark_open_effect", None)
     if marker is not None:
-        marker(run_id, effect_id)
+        effect = effect_id if run_id == claimed_run_id else f"child:{run_id}:{effect_id}"
+        if marker(claimed_run_id, effect, owner_id=owner_id) is False:
+            from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+
+            raise WorkerLeaseLost("worker lease expired before opening a side effect")
 
 
 @dataclass
@@ -220,7 +228,7 @@ class AgentTaskDispatcher:
         error_code = ""
         state = "failed"
         abandon = False
-        effect_token = _open_effect.set(self._execution_repo)
+        effect_token = _open_effect.set((self._execution_repo, execution.run_id, owner_id))
         try:
             orchestrator = self._orchestrator_factory(repository)
             preview = self._run_repo.get(execution.run_id)
@@ -264,22 +272,7 @@ class AgentTaskDispatcher:
             if run is None:
                 error_code = "worker_run_unavailable"
             else:
-                state = {
-                    "completed": "succeeded",
-                    "succeeded": "succeeded",
-                    "failed": "failed",
-                    "timed_out": "timed_out",
-                    "cancelled": "cancelled",
-                    "paused": "waiting_approval",
-                    "waiting_approval": "waiting_approval",
-                    "blocked": "failed",
-                    "waiting_user": "waiting_approval",
-                    "rejected": "rejected",
-                }.get(run.status, "failed")
-                if run.status == "blocked":
-                    error_code = "needs_verification"
-                elif state == "failed" and run.status != "failed":
-                    error_code = "worker_incomplete_state"
+                state, error_code = dispatched_run_state(run)
         except EltCheckpointWorkerExited:
             abandon = True
             try:
@@ -305,7 +298,11 @@ class AgentTaskDispatcher:
             logger.exception("agent task worker failed for run %s", execution.run_id)
             error_code = "worker_execution_failed"
             try:
-                self._orchestrator_factory(repository).fail_dispatched_run(execution.run_id)
+                failed_run = self._orchestrator_factory(repository).fail_dispatched_run(
+                    execution.run_id
+                )
+                if failed_run is not None:
+                    state, error_code = dispatched_run_state(failed_run)
             except RECOVERABLE_ERRORS:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:

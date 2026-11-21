@@ -117,9 +117,10 @@ def finish_employee_run_log(
         row.attempts = max(1, int(attempts))
         row.verified = 1 if verified else 0
         row.finished_at = (
-            None
-            if row.status in {"unknown", "pending", "accepted", "running", "awaiting_approval"}
-            else datetime.now(UTC).replace(tzinfo=None)
+            datetime.now(UTC).replace(tzinfo=None)
+            if canonicalize("employee", row.status)
+            in {"succeeded", "failed", "timed_out", "cancelled", "rejected"}
+            else None
         )
         db.commit()
 

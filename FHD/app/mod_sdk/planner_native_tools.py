@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from functools import lru_cache
@@ -10,6 +11,7 @@ from typing import Any
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_NATIVE_TOOL_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (TypeError,)
 
 PLANNER_EXCEL_TOOLS_MOD_ID = "xcagi-planner-excel-tools"
 
@@ -132,32 +134,33 @@ def try_execute_native_planner_tool(
             fn = getattr(mod, "run_native_tool", None)
             if not callable(fn):
                 continue
-            try:
-                out = fn(
-                    tool,
-                    args,
-                    workspace_root=workspace_root,
-                    db_write_token=db_write_token,
-                    runtime_context=runtime_context,
-                )
-            except TypeError as error:
-                if "runtime_context" not in str(error):
-                    raise
-                # 旧版 Mod 处理器没有 runtime_context 形参，退回到原调用签名。
-                out = fn(
-                    tool,
-                    args,
-                    workspace_root=workspace_root,
-                    db_write_token=db_write_token,
-                )
+            parameters = inspect.signature(fn).parameters
+            kwargs: dict[str, Any] = {
+                "workspace_root": workspace_root,
+                "db_write_token": db_write_token,
+            }
+            if "runtime_context" in parameters or any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+            ):
+                kwargs["runtime_context"] = runtime_context
+            # Select the legacy signature before invocation. A TypeError raised
+            # inside a handler can follow a committed write and must not replay it.
+            out = fn(tool, args, **kwargs)
             if out is None:
-                continue
+                raise ValueError("registered native tool returned no receipt")
             return str(out), mod_id
-        except RECOVERABLE_ERRORS:
+        except _NATIVE_TOOL_ERRORS:
             logger.exception("native planner tool failed mod=%s tool=%s", mod_id, tool)
             return (
                 json.dumps(
-                    {"success": False, "error": "native_tool_failed", "mod_id": mod_id},
+                    {
+                        "success": False,
+                        "error": "native_tool_failed",
+                        "mod_id": mod_id,
+                        "execution_state": "unknown",
+                        "retryable": False,
+                        "reconciliation_required": True,
+                    },
                     ensure_ascii=False,
                 ),
                 mod_id,

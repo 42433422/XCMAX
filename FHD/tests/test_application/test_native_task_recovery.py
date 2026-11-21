@@ -716,7 +716,8 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
         assert stored.status == "blocked", stored.steps[0].output
         assert stored.steps[0].output["error_code"] == "tool_worker_exited"
         assert stored.steps[0].output["reconciliation_evidence"]["cleanup_unresolved"] is True
-        assert queue.get(run.run_id).state == "failed"
+        assert queue.get(run.run_id).state == "unknown"
+        assert not queue.get(run.run_id).finished_at
         with sqlite3.connect(fixture) as db:
             assert db.execute("select file from elt_checkpoint_test").fetchall() == [(1,)]
         return

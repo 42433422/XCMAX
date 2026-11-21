@@ -65,7 +65,14 @@ class WorkflowToolDispatcher:
                 return json.dumps(crud(call.args), ensure_ascii=False, default=json_safe)
             except RECOVERABLE_ERRORS:
                 return json.dumps(
-                    {"success": False, "error": "tool_dispatch_failed"}, ensure_ascii=False
+                    {
+                        "success": False,
+                        "error": "tool_dispatch_failed",
+                        "execution_state": "unknown",
+                        "retryable": False,
+                        "reconciliation_required": True,
+                    },
+                    ensure_ascii=False,
                 )
         return json.dumps(
             {"success": False, "error": "unknown_tool", "tool": call.name}, ensure_ascii=False
@@ -75,8 +82,18 @@ class WorkflowToolDispatcher:
         try:
             return handler(call)
         except RECOVERABLE_ERRORS:
-            self.logger.debug("%s tool dispatch skipped", label, exc_info=True)
-            return None
+            self.logger.exception("%s tool receipt unavailable; dispatch stopped", label)
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "tool_receipt_unavailable",
+                    "execution_state": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
+                    "tool": call.name,
+                },
+                ensure_ascii=False,
+            )
 
 
 def _resolve_user_message(runtime_context: dict, params: dict) -> str:
@@ -174,7 +191,14 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
             parsed = json.loads(raw)
             return parsed if isinstance(parsed, dict) else {"success": False, "message": raw}
     except RECOVERABLE_ERRORS:
-        logging.getLogger(__name__).debug(
-            "employee tool direct dispatch skipped tool=%s", tool_id, exc_info=True
+        logging.getLogger(__name__).exception(
+            "employee tool direct receipt unavailable tool=%s", tool_id
         )
+        return {
+            "success": False,
+            "message": "员工执行回执不可用，请核对原任务",
+            "execution_state": "unknown",
+            "retryable": False,
+            "reconciliation_required": True,
+        }
     return {"success": False, "message": f"未注册的工具动作: {tool_id}.{action}"}

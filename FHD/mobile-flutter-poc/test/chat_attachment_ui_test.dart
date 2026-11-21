@@ -57,6 +57,8 @@ class _Repository extends MobileRepository {
   final plainBodies = <String>[];
   @override
   Future<String> streamMessage({
+    String idempotencyKey = '',
+    bool resumeOnly = false,
     required ConversationItem conversation,
     required String body,
     int userId = 0,
@@ -67,11 +69,17 @@ class _Repository extends MobileRepository {
     bool Function()? isCancelled,
   }) async {
     plainBodies.add(body);
+    if (resumeOnly) {
+      turnKeys.add(idempotencyKey);
+      expect(body, isEmpty);
+      return '已核对原附件结果';
+    }
     return '已收到';
   }
 
   @override
   Future<String> streamAttachedMessage({
+    bool resumeOnly = false,
     required ConversationItem conversation,
     required String body,
     required List<MobileChatAttachment> attachments,
@@ -83,13 +91,13 @@ class _Repository extends MobileRepository {
     sentBodies.add(body);
     if (turnKeys.length == 1) {
       throw const MobileApiException(
-          statusCode: 502, message: '结果待核对', body: {});
+          statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING', message: '结果待核对', body: {});
     }
     return '已处理附件';
   }
 
   @override
-  Future<void> removeQueuedMessage(String conversationId, String body) async {}
+  Future<void> removeQueuedMessage(String conversationId, String body, {String idempotencyKey = ''}) async {}
   @override
   Future<List<ChatMessage>> loadInitialMessages(
           ConversationItem conversation) async =>
@@ -247,12 +255,13 @@ void main() {
     final failed = tester
         .widgetList<MessageBubble>(find.byType(MessageBubble))
         .singleWhere(
-            (bubble) => bubble.message.status == ChatDeliveryStatus.failed);
+            (bubble) => bubble.message.status == ChatDeliveryStatus.pending);
     failed.onResend!();
     await tester.pumpAndSettle();
     expect(repo.turnKeys, hasLength(2));
     expect(repo.turnKeys[1], repo.turnKeys[0]);
-    expect(repo.sentBodies[1], repo.sentBodies[0]);
+    expect(repo.sentBodies, hasLength(1));
+    expect(find.text('已核对原附件结果'), findsOneWidget);
     await attachAndSend();
     expect(repo.turnKeys, hasLength(3));
     expect(repo.turnKeys[2], isNot(repo.turnKeys[0]));

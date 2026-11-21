@@ -111,6 +111,7 @@ class MessageSynchronizer:
         return match.group(1).strip() if match else ""
 
     def upsert_direct_reply_messages(self, *, user_id: int, rows: list[dict[str, Any]]) -> bool:
+        """Rebuild static presentation only; reading history never starts another CLI call."""
         request_ids_with_reply = {
             str(item.get("dispatch_request_id") or "")
             for item in rows
@@ -124,7 +125,6 @@ class MessageSynchronizer:
             )
         }
         changed = False
-        cli_backfills = 0
         for item in list(rows):
             if int(item.get("user_id") or 0) != int(user_id):
                 continue
@@ -135,9 +135,6 @@ class MessageSynchronizer:
                 continue
             text = str(item.get("body") or "")
             body = self._ports.direct_reply(text)
-            if not body and cli_backfills < 1 and self._ports.should_reply(text, {}):
-                (body, _) = self._ports.compose_reply(text, {})
-                cli_backfills += 1
             if not body:
                 continue
             rows.append(

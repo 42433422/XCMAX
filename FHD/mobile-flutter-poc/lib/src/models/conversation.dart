@@ -101,7 +101,7 @@ class ConversationItem {
 
 enum ChatRole { assistant, user, system }
 
-enum ChatDeliveryStatus { sent, sending, failed, queued }
+enum ChatDeliveryStatus { sent, sending, failed, queued, pending }
 
 class ChatMessage {
   const ChatMessage({
@@ -116,6 +116,7 @@ class ChatMessage {
     this.status = ChatDeliveryStatus.sent,
     this.quote,
     this.cacheTimestampMs = 0,
+    this.turnId = '',
   });
 
   final String id;
@@ -129,6 +130,7 @@ class ChatMessage {
   final ChatDeliveryStatus status;
   final String? quote;
   final int cacheTimestampMs;
+  final String turnId;
 }
 
 class AiGroupMember {

@@ -253,10 +253,18 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     bool allowAuthRefresh = true,
     bool followRedirects = true,
     String? expectedConnectionBase,
+    int? expectedAuthGeneration,
     String activeModId = '',
   }) async {
-    final generation = _authGeneration;
+    final generation = expectedAuthGeneration ?? _authGeneration;
     Future<Map<String, Object?>> perform() async {
+      if (generation != _authGeneration) {
+        throw const MobileApiException(
+          statusCode: 409,
+          message: '登录状态已变更，请重试',
+          body: {},
+        );
+      }
       var effectiveBase = baseUrl;
       if (effectiveBase == null || effectiveBase.trim().isEmpty) {
         // Skip LAN→cloud flip for the health probe itself to avoid recursion.

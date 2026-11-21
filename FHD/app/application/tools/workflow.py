@@ -277,8 +277,18 @@ def execute_workflow_tool(
 
         registered = execute_if_registered(name, args, runtime_context)
     except RECOVERABLE_ERRORS:
-        logger.debug("agent tool lifecycle dispatch skipped", exc_info=True)
-        registered = None
+        logger.exception("agent tool receipt unavailable; dispatch stopped")
+        return json.dumps(
+            {
+                "success": False,
+                "error": "tool_receipt_unavailable",
+                "execution_state": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
+                "tool": name,
+            },
+            ensure_ascii=False,
+        )
     if registered is not None:
         return registered
     workbooks = WorkbookOperations(

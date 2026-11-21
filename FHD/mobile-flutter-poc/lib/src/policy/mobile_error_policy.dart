@@ -7,6 +7,7 @@ String mobileErrorText(
 }) {
   if (error == null) return fallback;
   if (error is MobileApiException) {
+    if (['CHAT_RECEIPT_PENDING', 'CHAT_RECEIPT_TERMINAL'].contains(error.errorCode)) return error.message;
     return mobileProductErrorMessage(
       'HTTP ${error.statusCode} ${error.errorCode} ${error.message}',
       fallback,

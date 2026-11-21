@@ -164,7 +164,7 @@ def test_codex_super_employee_backfills_stuck_identity_dispatch(
     assert sum(1 for item in second if item["kind"] == CODEX_DIRECT_MESSAGE_KIND) == 1
 
 
-def test_codex_super_employee_backfills_stuck_natural_question_with_codex_cli(
+def test_codex_super_employee_history_never_reexecutes_a_stuck_natural_question(
     tmp_path: Path,
     monkeypatch,
 ):
@@ -211,10 +211,10 @@ def test_codex_super_employee_backfills_stuck_natural_question_with_codex_cli(
     second = svc.list_messages(user_id=1)
 
     direct = [item for item in first if item["kind"] == CODEX_DIRECT_MESSAGE_KIND]
-    assert len(direct) == 1
-    assert "不能查看你的真实账户额度" in direct[0]["body"]
-    assert sum(1 for item in second if item["kind"] == CODEX_DIRECT_MESSAGE_KIND) == 1
-    assert len(seen) == 1
+    assert direct == []
+    assert not any(item["kind"] == CODEX_DIRECT_MESSAGE_KIND for item in second)
+    assert seen == []
+    assert any(item["dispatch_request_id"] == request_id for item in second)
 
 
 def test_codex_super_employee_upgrades_legacy_dispatch_ack_and_syncs_status(

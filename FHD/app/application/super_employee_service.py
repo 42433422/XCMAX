@@ -278,6 +278,35 @@ class SuperEmployeeService:
         ]
         return rows[-max(1, min(int(limit), 200)) :]
 
+    def read_dispatch_receipt(
+        self, *, user_id: int, request_id: str, task_id: str
+    ) -> dict[str, Any] | None:
+        """Read one persisted dispatch; never run message-list CLI backfills."""
+        if not request_id:
+            return None
+        rows = [
+            row
+            for row in self._read_all_message_rows()
+            if int(row.get("user_id") or 0) == int(user_id)
+            and row.get("dispatch_request_id") == request_id
+            and row.get("kind") == DISPATCHER_MESSAGE_KIND
+            and (not task_id or row.get("task_id") == task_id)
+        ]
+        if len(rows) != 1:
+            return None
+        original_id = str(rows[0].get("task_id") or "")
+        if not original_id:
+            return None
+        task = self._fetch_para_task(original_id)
+        if not task or str(task.get("id") or task.get("task_id") or "") != original_id:
+            return None
+        state = str(task.get("status") or "unknown")
+        state = {"merged": "completed", "merge_conflict": "blocked"}.get(state, state)
+        return {
+            "dispatch": {"request_id": request_id, "task_id": original_id, "status": state},
+            "assistant_message": {"body": self._para_task_status_reply(task)},
+        }
+
     def invoke(
         self, *, user_id: int, message: str, context: dict[str, Any] | None = None
     ) -> dict[str, Any]:
