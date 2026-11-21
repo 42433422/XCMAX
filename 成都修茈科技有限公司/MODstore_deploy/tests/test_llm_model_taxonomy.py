@@ -121,7 +121,34 @@ def test_tts_capability_is_preserved_but_not_runtime_selectable() -> None:
     assert row["capabilities"]["output_modalities"] == ["audio"]
     assert row["capabilities"]["operations"] == ["text_to_speech"]
     assert row["runtime_selectable"] is False
-    assert row["capability_source"] == "model_id_inference"
+    assert row["capability_source"] in {"litellm_registry", "model_id_inference"}
+
+
+@pytest.mark.parametrize(
+    "mode, expected_operations, expected_source",
+    [
+        ("audio_transcription", ["speech_to_text"], "litellm_registry"),
+        ("audio_speech", ["text_to_speech"], "litellm_registry"),
+        ({"type": "chat"}, ["chat"], "model_id_inference"),
+        ({"type": "speech-to-text"}, ["chat"], "model_id_inference"),
+        (["text-to-speech"], ["chat"], "model_id_inference"),
+        (None, ["chat"], "model_id_inference"),
+    ],
+)
+def test_registry_mode_is_used_only_when_text(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: object,
+    expected_operations: list[str],
+    expected_source: str,
+) -> None:
+    monkeypatch.setattr(
+        "modstore_server.llm_litellm_router.model_registry_entry",
+        lambda _provider, _model_id: {"mode": mode},
+    )
+    profile = discover_model_capabilities("openai", "unknown-fixture-model")
+
+    assert profile["operations"] == expected_operations
+    assert profile["source"] == expected_source
 
 
 def test_mimo_audio_variants_are_not_chat_runtime_models() -> None:
@@ -163,3 +190,55 @@ def test_provider_metadata_is_sanitized_and_returned_with_limits() -> None:
     assert row["provider_metadata"]["context_window"] == 32768
     assert "api_key" not in row["provider_metadata"]
     assert row["runtime_selectable"] is True
+
+
+@pytest.mark.parametrize("invalid", [True, -1, 0, 1.5, 4096.0, float("inf"), "invalid"])
+def test_invalid_capacities_do_not_manufacture_context(invalid):
+    from modstore_server.llm_model_taxonomy import public_model_capabilities
+
+    assert (
+        public_model_capabilities(
+            {
+                "max_tokens": 999999,
+                "max_input_tokens": invalid,
+                "context_window": invalid,
+                "max_output_tokens": invalid,
+                "resolved_model": "https://credentials@example.com/private",
+                "source": {},
+            }
+        )
+        == {}
+    )
+
+
+def test_input_limit_is_not_a_combined_context_window():
+    from modstore_server.llm_model_taxonomy import public_model_capabilities
+
+    capabilities = public_model_capabilities({"inputTokenLimit": 65536, "outputTokenLimit": 8192})
+    assert capabilities == {
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "source": "provider_metadata",
+    }
+
+
+def test_gateway_alias_metadata_keeps_resolved_model_and_strictest_declared_limit():
+    from modstore_server.llm_model_taxonomy import public_model_capabilities
+
+    capabilities = public_model_capabilities(
+        {
+            "max_input_tokens": 65536,
+            "resolved_model": "doubao/seed-code",
+            "model_info": {
+                "max_input_tokens": 32768,
+                "max_output_tokens": 4096,
+                "api_key": "secret",
+            },
+        }
+    )
+    assert capabilities == {
+        "max_input_tokens": 32768,
+        "max_output_tokens": 4096,
+        "resolved_model": "doubao/seed-code",
+        "source": "provider_metadata",
+    }

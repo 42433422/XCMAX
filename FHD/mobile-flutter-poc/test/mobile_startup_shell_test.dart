@@ -27,6 +27,23 @@ void main() {
   });
   tearDown(MobileOfflineStore.resetSharedForTest);
 
+  test('missing remote legal config cannot skip first-run consent', () {
+    expect(
+      resolveMobileStartupRoute(
+        session: const MobileSessionData(),
+        appConfig: null,
+      ),
+      MobileStartupRoute.legal,
+    );
+    expect(
+      resolveMobileStartupRoute(
+        session: const MobileSessionData(legalAcceptedVersion: 'legal-2'),
+        appConfig: MobileAppConfigData.fromJson({'ok': true}),
+      ),
+      MobileStartupRoute.auth,
+    );
+  });
+
   test('startup route matches the mobile AppViewModel priority', () {
     final config = _appConfig('legal-2');
 
@@ -325,56 +342,53 @@ void main() {
     }
   });
 
-  testWidgets('guest can open local workspace while cloud config is pending',
+  testWidgets('clean startup and refusal make no app config requests',
       (tester) async {
-    final config = Completer<MobileAppConfigData>();
     final api = _FakeStartupApi(
       session: const MobileSessionData(),
-      config: _appConfig('legal-2'),
-      delayedConfig: config.future,
+      config: _appConfig('1'),
+      delayedConfig: Completer<MobileAppConfigData>().future,
     );
-    await tester.pumpWidget(
-      MobileStartupApp(
-        repository: _StartupRepository(api),
-        enableBiometricGate: false,
-      ),
+    final app = MobileStartupApp(
+      repository: _StartupRepository(api),
+      enableBiometricGate: false,
     );
-    await tester.pump();
-    expect(find.text('打开本地工作台'), findsOneWidget);
-    expect(find.text('密码登录'), findsNothing);
-
-    config.complete(_appConfig('legal-2'));
+    await tester.pumpWidget(app);
     await tester.pumpAndSettle();
-    expect(find.text('请先同意协议'), findsOneWidget);
+    expect(find.text('不同意'), findsOneWidget);
+    expect(find.text('打开本地工作台'), findsNothing);
+    expect(find.text('密码登录'), findsNothing);
+    await tester.tap(find.text('不同意'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('你已拒绝'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+    expect(find.text('不同意'), findsOneWidget);
+    expect(api.configCalls, 0);
+    expect(api.acceptedVersions, isEmpty);
   });
 
-  testWidgets('legal version gates the Flutter root before auth', (
-    tester,
-  ) async {
+  testWidgets('new remote version is gated before auth and saved once',
+      (tester) async {
     final api = _FakeStartupApi(
       session: const MobileSessionData(),
       config: _appConfig('legal-2'),
     );
-
-    await tester.pumpWidget(
-      MobileStartupApp(
-        repository: _StartupRepository(api),
-        enableBiometricGate: false,
-      ),
-    );
+    await tester.pumpWidget(MobileStartupApp(
+      repository: _StartupRepository(api),
+      enableBiometricGate: false,
+      openLegalDocument: _readableLegal,
+    ));
     await tester.pumpAndSettle();
-
-    expect(find.text('XCAGI'), findsOneWidget);
-    expect(find.text('请先同意协议'), findsOneWidget);
-
-    await tester.tap(find.textContaining('我已阅读并同意'));
-    await tester.pump();
-    await tester.tap(find.text('进入 XCAGI'));
-    await tester.pumpAndSettle();
-
-    expect(api.session.legalAcceptedVersion, 'legal-2');
+    expect(api.configCalls, 0);
+    await _agree(tester);
+    expect(api.acceptedVersions, ['1']);
+    expect(find.text('密码登录'), findsNothing);
+    await _agree(tester);
+    expect(api.configCalls, 1);
+    expect(api.acceptedVersions, ['1', 'legal-2']);
     expect(find.text('密码登录'), findsOneWidget);
-    expect(find.text('账号注册'), findsOneWidget);
   });
 
   testWidgets('auto-login route displays Flutter auth screen while retrying', (
@@ -511,7 +525,7 @@ void main() {
   ) async {
     final api = _FakeStartupApi(
       session: const MobileSessionData(),
-      config: _appConfig('legal-2'),
+      config: _appConfig('1'),
     );
     final opened = <Uri>[];
     await tester.pumpWidget(
@@ -523,16 +537,14 @@ void main() {
           return true;
         },
         enableBiometricGate: false,
+        openLegalDocument: _readableLegal,
       ),
     );
     await tester.pumpAndSettle();
     expect(opened, isEmpty);
-    expect(find.text('请先同意协议'), findsOneWidget);
+    expect(find.text('不同意'), findsOneWidget);
 
-    await tester.tap(find.textContaining('我已阅读并同意'));
-    await tester.pump();
-    await tester.tap(find.text('进入 XCAGI'));
-    await tester.pumpAndSettle();
+    await _agree(tester);
 
     expect(opened.single.toString(),
         'https://xiu-ci.com/market/register?source=xcagi-mobile');
@@ -597,7 +609,7 @@ void main() {
   ) async {
     final api = _FakeStartupApi(
       session: const MobileSessionData(),
-      config: _appConfig('legal-2'),
+      config: _appConfig('1'),
     );
     final repository = _StartupRepository(
       api,
@@ -611,20 +623,16 @@ void main() {
           initialRouteValue: 'pairing?code=123456',
         ),
         enableBiometricGate: false,
+        openLegalDocument: _readableLegal,
       ),
     );
     await tester.pump();
     await tester.pump();
 
     expect(repository.pairingAttempts, isEmpty);
-    expect(find.text('请先同意协议'), findsOneWidget);
+    expect(find.text('不同意'), findsOneWidget);
 
-    await tester.tap(find.textContaining('我已阅读并同意'));
-    await tester.pump();
-    await tester.tap(find.text('进入 XCAGI'));
-    await tester.pump();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await _agree(tester);
 
     expect(repository.pairingAttempts, ['123456']);
     expect(find.text('未找到电脑'), findsOneWidget);
@@ -662,6 +670,17 @@ void main() {
   });
 }
 
+Future<bool> _readableLegal(
+        BuildContext context, String title, Uri url) async =>
+    true;
+
+Future<void> _agree(WidgetTester tester) async {
+  for (final label in ['《用户协议与隐私政策》', '同意并继续']) {
+    await tester.tap(find.text(label));
+    await tester.pumpAndSettle();
+  }
+}
+
 MobileAppConfigData _appConfig(String legalVersion) {
   return MobileAppConfigData(
     ok: true,
@@ -682,6 +701,8 @@ class _FakeStartupApi extends MobileApiClient {
   final Future<MobileAppConfigData>? delayedConfig;
   final _changes = StreamController<MobileSessionData>.broadcast();
   MobileSessionData session;
+  int configCalls = 0;
+  final acceptedVersions = <String>[];
 
   @override
   Stream<MobileSessionData> get sessionChanges => _changes.stream;
@@ -695,11 +716,13 @@ class _FakeStartupApi extends MobileApiClient {
     int currentVersionCode = MobileBuildConfig.versionCode,
     String sku = MobileBuildConfig.productSku,
   }) async {
+    configCalls++;
     return await (delayedConfig ?? Future.value(config));
   }
 
   @override
   Future<void> saveLegalAcceptedVersion(String version) async {
+    acceptedVersions.add(version);
     session = session.copyWith(legalAcceptedVersion: version.trim());
     _changes.add(session);
   }

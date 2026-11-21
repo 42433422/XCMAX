@@ -31,6 +31,7 @@ const h = vi.hoisted(() => {
     state,
     readPlannerSseResponse,
     sendChatStream: vi.fn(),
+    resumeChatStream: vi.fn(),
     getConversation: vi.fn(),
     parseChatStreamErrorResponse: vi.fn(async () => '流式请求失败'),
     searchProducts: vi.fn(),
@@ -49,7 +50,7 @@ vi.mock('@/utils/chatStorageKeys', async (importOriginal) => ({
   resolveChatIdentity: (modId?: string) => `identity:${String(modId ?? '')}`,
 }))
 vi.mock('@/api/chat', () => ({
-  default: { sendChatStream: h.sendChatStream, getConversation: h.getConversation },
+  default: { sendChatStream: h.sendChatStream, resumeChatStream: h.resumeChatStream, getConversation: h.getConversation },
   parseChatStreamErrorResponse: h.parseChatStreamErrorResponse,
 }))
 vi.mock('@/api/products', () => ({ default: { searchProducts: h.searchProducts } }))
@@ -165,6 +166,7 @@ function setup(options: { tts?: boolean; multimodal?: number; excelContext?: boo
     attachAgentRunTraceToLastAiMessage: vi.fn(),
     attachContextSummaryToLastAiMessage: vi.fn(),
     syncAgentRunFromPayload: vi.fn(async () => undefined),
+    observeActiveTurn: vi.fn(),
     showTaskConfirm: vi.fn(),
     maybeCloseAssistantFloatForShipmentTask: vi.fn(),
     emitAssistantPush: vi.fn(),
@@ -201,6 +203,7 @@ beforeEach(() => {
   h.state.productKeyword = null
   h.state.sseScript = null
   h.sendChatStream.mockResolvedValue({ ok: true, status: 200, body: {} })
+  h.resumeChatStream.mockReset().mockResolvedValue({ ok: true, status: 200, body: {} })
   h.getConversation.mockReset()
   h.getConversation.mockRejectedValue(new Error('history unavailable'))
   h.searchProducts.mockResolvedValue({ success: true, data: [], total: 0 })
@@ -694,28 +697,59 @@ describe('executeRemoteChatRound 流式回合', () => {
 })
 
 describe('executeRemoteChatRound 断线续传与超时', () => {
-  it('超时后带同一 run_id 续传并收敛为完成', async () => {
+  it.each(['running', 'blocked'])('继续回执绑定原 %s 任务且不触发业务动作', async status => {
+    const { round, deps, messages } = setup()
+    feed([{ type: 'done', result: {
+      success: status === 'running', response: '查看原导入任务',
+      active_turn: { turn_id: 'original-turn', run_id: 'original-run', task_id: 'original-task', status },
+      autoAction: { type: 'should-not-run' },
+    } }])
+
+    await round.executeRemoteChatRound(['继续'], undefined, scope())
+
+    expect(messages.value[0]).toMatchObject({ workflowAction: status, recoveryTaskId: 'original-task' })
+    expect(deps.observeActiveTurn).toHaveBeenCalledWith(expect.objectContaining({
+      turnId: 'original-turn', runId: 'original-run', taskId: 'original-task', status,
+    }))
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
+    expect(h.sendChatStream).toHaveBeenCalledTimes(1)
+  })
+
+  it('回放不可用时采用同轮的任务运行状态，替换旧观察超时回执', async () => {
+    const { round, deps, messages } = setup()
+    h.resumeChatStream.mockResolvedValueOnce({ ok: false, status: 404, headers: new Headers() })
+    feed([{ type: 'error', code: 'STREAM_INTERRUPTED', message: '流已中断' }])
+    h.getConversation.mockResolvedValueOnce({
+      active_turn: { turn_id: 'turn-1', run_id: 'run-1', status: 'running', message: '当前预演 8/21' },
+      messages: [{ role: 'assistant', content: '旧提示', metadata: { summary: { turn_id: 'turn-1', status: 'unknown', success: false } } }],
+    })
+
+    await round.executeRemoteChatRound(['导入'], undefined, scope())
+
+    expect(messages.value[0]).toMatchObject({ content: '当前预演 8/21', workflowAction: 'running' })
+    expect(deps.observeActiveTurn).toHaveBeenCalledWith(expect.objectContaining({ turnId: 'turn-1', runId: 'run-1' }))
+    expect(h.sendChatStream).toHaveBeenCalledTimes(1)
+  })
+
+  it('超时后只读续传原 turn 并收敛为完成', async () => {
     const { round, deps, messages } = setup()
     deps.chatRequest.resolveChatTimeoutMs.mockReturnValue(120_000)
-    const aborter = new AbortController()
     let attempt = 0
-    h.state.sseScript = async (emit, signal) => {
+    h.state.sseScript = async emit => {
       attempt += 1
       if (attempt === 1) {
         emit({ type: 'tool_progress', text: '执行中', run_id: 'run-t' })
-        await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve()))
         throw Object.assign(new Error('aborted'), { name: 'AbortError' })
       }
       emit({ type: 'token', text: '续传完成' })
       emit({ type: 'done', result: { success: true, response: '续传完成' } })
     }
 
-    const running = round.executeRemoteChatRound(['执行'], undefined, scope({ signal: aborter.signal }))
-    await vi.waitFor(() => expect(h.sendChatStream).toHaveBeenCalledTimes(1))
-    aborter.abort()
-    await running
+    await round.executeRemoteChatRound(['执行'], undefined, scope())
 
     expect(attempt).toBe(2)
+    expect(h.sendChatStream).toHaveBeenCalledTimes(1)
+    expect(h.resumeChatStream).toHaveBeenCalledWith('turn-1', expect.any(AbortSignal))
     expect(deps.applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '续传完成')
     expect(messages.value[0].workflowAction).toBe('completed')
     expect(messages.value[0].waitingHint).toBeUndefined()
@@ -756,7 +790,7 @@ describe('executeRemoteChatRound 断线续传与超时', () => {
     expect(deps.stateSteps.value).toEqual([{ node_id: 'read', status: 'failed', output_summary: '' }])
   })
 
-  it('续传也失败时给出连接中断回执', async () => {
+  it('用户显式停止观察后不会重连，原任务结果仍待回读', async () => {
     const { round, deps, appliedTexts, messages } = setup()
     deps.chatRequest.resolveChatTimeoutMs.mockReturnValue(120_000)
     const aborter = new AbortController()
@@ -776,7 +810,8 @@ describe('executeRemoteChatRound 断线续传与超时', () => {
     aborter.abort()
     await running
 
-    expect(attempt).toBe(2)
+    expect(attempt).toBe(1)
+    expect(h.resumeChatStream).not.toHaveBeenCalled()
     expect(appliedTexts().at(-1)).toContain('对话连接已超时，任务可能仍在执行')
     expect(messages.value[0].workflowAction).toBe('unknown')
   })
@@ -1155,6 +1190,62 @@ describe('executeRemoteChatRound 状态保护与边界分支', () => {
     expect(deps.flushMessagesCache).not.toHaveBeenCalled()
   })
 
+  it('streams two conversations independently and applies a background receipt to its original rows', async () => {
+    const { sessionId, deps } = setup({ tts: false })
+    const aRows = ref<UiChatMessage[]>([{ role: 'user', content: 'Question A', time: '', turnId: 'turn-1' }])
+    const bRows = ref<UiChatMessage[]>([{ role: 'user', content: 'Question B', time: '', turnId: 'turn-2' }])
+    const persist = vi.fn()
+    const release = vi.fn()
+    const retainConversationMessages = (id?: string) => {
+      const rows = id === 'session-1' ? aRows : bRows
+      return {
+        messages: rows, persist, release,
+        pushStreamingAiShell() {
+          rows.value.push({ role: 'ai', content: '', time: '', streamingShell: true })
+          return rows.value.length - 1
+        },
+        applyPlainTextToMessageIndex(index: number, content: string, extras?: Partial<UiChatMessage>) {
+          Object.assign(rows.value[index], { content }, extras)
+          delete rows.value[index].streamingShell
+        },
+      }
+    }
+    const { executeRemoteChatRound } = useChatOrchestrationRemoteRound({
+      ...deps, retainConversationMessages,
+    } as unknown as Parameters<typeof useChatOrchestrationRemoteRound>[0])
+    const streams: Array<{ emit: (event: PlannerSseEvent) => void; finish: () => void }> = []
+    h.state.sseScript = emit => new Promise(finish => streams.push({ emit, finish }))
+    const a = executeRemoteChatRound(['Question A'], undefined, scope())
+    await vi.waitFor(() => expect(streams).toHaveLength(1))
+    sessionId.value = 'session-2'
+    const b = executeRemoteChatRound(['Question B'], undefined, scope({ sessionId: 'session-2', turnId: 'turn-2' }))
+    await vi.waitFor(() => expect(streams).toHaveLength(2))
+    expect(deps.chatSessionActivity.statuses.value).toEqual({ 'session-1': 'streaming', 'session-2': 'streaming' })
+
+    streams[0].emit({ type: 'token', text: 'A in progress' })
+    await vi.waitFor(() => expect(aRows.value.at(-1)?.content).toBe('A in progress'))
+    expect(bRows.value.at(-1)?.content).toBe('')
+    streams[0].emit({ type: 'done', result: { success: true, response: 'Answer A', history_persistence: {
+      status: 'saved', turn_id: 'turn-1', message_ids: [101, 102],
+    } } })
+    streams[0].finish()
+    await a
+    expect(aRows.value.map(row => row.persistence?.id)).toEqual(['server:101', 'server:102'])
+    expect(aRows.value.at(-1)?.content).toBe('Answer A')
+    expect(bRows.value[0].persistence).toBeUndefined()
+    expect(deps.chatSessionActivity.statuses.value).toEqual({ 'session-1': 'ready', 'session-2': 'streaming' })
+    expect(deps.syncTaskFromChatResponse).not.toHaveBeenCalled()
+
+    sessionId.value = 'session-1'
+    streams[1].emit({ type: 'error', message: 'Model B unavailable' })
+    streams[1].finish()
+    await b
+    expect(bRows.value.at(-1)?.content).toContain('Model B unavailable')
+    expect(deps.chatSessionActivity.statuses.value).toEqual({ 'session-1': 'ready', 'session-2': 'error' })
+    expect(persist).toHaveBeenCalledTimes(2)
+    expect(release).toHaveBeenCalledTimes(2)
+  })
+
   it('附件轨迹累积到当前气泡', async () => {
     const { round, messages } = setup()
     feed([
@@ -1199,13 +1290,11 @@ describe('executeRemoteChatRound 状态保护与边界分支', () => {
 
   it('续传只补齐终态，不重复授权等副作用', async () => {
     const { round, deps, messages } = setup()
-    const aborter = new AbortController()
     let attempt = 0
-    h.state.sseScript = async (emit, signal) => {
+    h.state.sseScript = async emit => {
       attempt += 1
       if (attempt === 1) {
         emit({ type: 'tool_progress', text: '执行中', run_id: 'run-r' })
-        await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve()))
         throw Object.assign(new Error('aborted'), { name: 'AbortError' })
       }
       emit({ type: 'error', message: '回放提示', requires_reconciliation: true })
@@ -1214,10 +1303,7 @@ describe('executeRemoteChatRound 状态保护与边界分支', () => {
       emit({ type: 'done', result: { success: true, response: '续传正文' } })
     }
 
-    const running = round.executeRemoteChatRound(['执行'], undefined, scope({ signal: aborter.signal }))
-    await vi.waitFor(() => expect(h.sendChatStream).toHaveBeenCalledTimes(1))
-    aborter.abort()
-    await running
+    await round.executeRemoteChatRound(['执行'], undefined, scope())
 
     expect(attempt).toBe(2)
     expect(deps.handleChatRequiresToken).not.toHaveBeenCalled()

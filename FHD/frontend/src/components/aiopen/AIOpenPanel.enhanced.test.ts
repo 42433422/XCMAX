@@ -11,7 +11,6 @@ import { mount } from '@vue/test-utils'
 const mockSafeJsonRequest = vi.fn().mockResolvedValue({ ok: true, data: { success: true }, status: 200 })
 const mockGetApiBase = vi.fn(() => 'http://localhost:5100')
 const mockBuildAiopenOneLiner = vi.fn(() => 'one-liner-text')
-const mockBuildAiAssistantSetupPrompt = vi.fn(() => 'assistant-prompt')
 const mockBuildAiopenClientInstalls = vi.fn(() => [
   {
     id: 'cursor',
@@ -59,7 +58,6 @@ vi.mock('@/composables/useAiOpenCursor', () => ({
 vi.mock('@/utils/aiopenMcpInstall', () => ({
   AIOPEN_MCP_SERVER_NAME: 'AIOPEN',
   buildAiopenClientInstalls: (...args: unknown[]) => mockBuildAiopenClientInstalls(...args),
-  buildAiAssistantSetupPrompt: (...args: unknown[]) => mockBuildAiAssistantSetupPrompt(...args),
   buildAiopenOneLiner: (...args: unknown[]) => mockBuildAiopenOneLiner(...args),
   markAiopenClientInstalled: (...args: unknown[]) => mockMarkAiopenClientInstalled(...args),
   unmarkAiopenClientInstalled: (...args: unknown[]) => mockUnmarkAiopenClientInstalled(...args),
@@ -295,37 +293,16 @@ describe('AIOpenPanel.vue – client handling', () => {
 describe('AIOpenPanel.vue – copy functions', () => {
   beforeEach(beforeEachPanelScenario1)
 
-  it('copyOneLiner copies text and marks as installed', async () => {
+  it('shows a useful error and leaves the clipboard unchanged when issuing fails', async () => {
     const wrapper = await mountAIOpenPanel()
-    wrapper.vm.newKey = 'test-key'
+    await wrapper.vm.loadPanel()
+    mockSafeJsonRequest.mockResolvedValueOnce({ ok: false, status: 409, message: '连接口令数量已达上限' })
     await wrapper.vm.copyOneLiner()
-    expect(navigator.clipboard.writeText).toHaveBeenCalled()
-    expect(wrapper.vm.oneLinerCopied).toBe(true)
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect(wrapper.vm.accessResult).toBe('连接口令数量已达上限')
     wrapper.unmount()
   })
 
-  it('copyAiAssistantPrompt copies prompt', async () => {
-    const wrapper = await mountAIOpenPanel()
-    wrapper.vm.newKey = 'test-key'
-    await wrapper.vm.copyAiAssistantPrompt()
-    expect(navigator.clipboard.writeText).toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('copyText sets accessResult on success', async () => {
-    const wrapper = await mountAIOpenPanel()
-    await wrapper.vm.copyText('test')
-    expect(wrapper.vm.accessResult).toBe('已复制')
-    wrapper.unmount()
-  })
-
-  it('copyText sets error message on failure', async () => {
-    const wrapper = await mountAIOpenPanel()
-    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error('fail'))
-    await wrapper.vm.copyText('test')
-    expect(wrapper.vm.accessResult).toBe('复制失败，请手动复制')
-    wrapper.unmount()
-  })
 })
 
 describe('AIOpenPanel.vue – panel loading', () => {
@@ -443,7 +420,48 @@ describe('AIOpenPanel.vue – createKey', () => {
     const wrapper = await mountAIOpenPanel()
     wrapper.vm.panelAvailable = false
     await wrapper.vm.createKey()
-    expect(wrapper.vm.accessResult).toContain('开发模式')
+    expect(wrapper.vm.accessResult).toContain('登录并刷新状态')
+    wrapper.unmount()
+  })
+
+  it('falls back after an admin 403 and only operates on the signed-in client', async () => {
+    let hasActiveKey = true
+    mockSafeJsonRequest.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url === '/api/aiopen/panel') return { ok: false, status: 403 }
+      if (url === '/api/aiopen/client') return {
+        ok: true, status: 200, data: { success: true, client_mode: true, has_active_key: hasActiveKey, remote_control_enabled: true },
+      }
+      if (url === '/api/aiopen/client/key') {
+        hasActiveKey = options?.method === 'POST'
+        return { ok: true, data: { success: true, ...(hasActiveKey ? { key: 'client-test-key' } : {}) } }
+      }
+      return { ok: true, data: { success: true } }
+    })
+    const wrapper = await mountAIOpenPanel(), vm = wrapper.vm as any
+    await vm.loadPanel()
+    expect(vm.clientMode).toBe(true)
+    expect(vm.panelAvailable).toBe(true)
+    expect(vm.remoteControlEnabled).toBe(true)
+    expect(vm.aiOpenActive).toBe(false)
+    expect(wrapper.text()).not.toContain('允许 AI 远程操控')
+    expect(wrapper.text()).not.toContain('开启全业务白名单')
+    await vm.handlePrimaryAction()
+    expect(vm.accessResult).toBe('本页已开启待命')
+    await vm.handleClientClick(vm.aiClients[0])
+    expect(vm.accessResult).toContain('重新生成口令')
+    expect(mockSafeJsonRequest.mock.calls.some(([url]) => url === '/api/aiopen/client/key')).toBe(false)
+    await vm.createKey()
+    expect(mockSafeJsonRequest).toHaveBeenCalledWith('/api/aiopen/client/key', expect.objectContaining({
+      method: 'POST', body: '{}',
+    }))
+    expect(vm.newKey).toBe('client-test-key')
+    await vm.loadPanel()
+    expect(mockSafeJsonRequest.mock.calls.filter(([url]) => String(url).includes('/install')).every(([url]) => url === '/api/aiopen/install')).toBe(true)
+    await vm.revokeClientKey()
+    expect(mockSafeJsonRequest).toHaveBeenLastCalledWith('/api/aiopen/client/key', { method: 'DELETE' })
+    expect(vm.newKey).toBe('')
+    expect(vm.hasActiveClientKey).toBe(false)
+    expect(mockSafeJsonRequest.mock.calls.some(([url]) => /^\/api\/aiopen\/(?:keys|control|usage)/.test(url))).toBe(false)
     wrapper.unmount()
   })
 })
@@ -530,33 +548,6 @@ describe('AIOpenPanel.vue – OpenClaw', () => {
 describe('AIOpenPanel.vue – computed properties', () => {
   beforeEach(beforeEachPanelScenario1)
 
-  it('mcpUrl is computed from backendOrigin', async () => {
-    const wrapper = await mountAIOpenPanel()
-    expect(wrapper.vm.mcpUrl).toContain('/api/aiopen/mcp')
-    wrapper.unmount()
-  })
-
-  it('guideUrl is computed from backendOrigin', async () => {
-    const wrapper = await mountAIOpenPanel()
-    expect(wrapper.vm.guideUrl).toContain('/api/aiopen/guide')
-    wrapper.unmount()
-  })
-
-  it('oneLinerPreview shows the complete sentence', async () => {
-    const full = '请打开 http://127.0.0.1:42424/api/aiopen/guide?format=markdown 阅读 XCAGI AIOPEN 接入说明，帮我写好 MCP 配置并验证连通，完成后告诉我能否操控本软件。'
-    mockBuildAiopenOneLiner.mockReturnValue(full)
-    const wrapper = await mountAIOpenPanel()
-    expect(wrapper.vm.oneLinerPreview).toBe(full)
-    wrapper.unmount()
-  })
-
-  it('oneLinerPreview keeps short text as-is', async () => {
-    mockBuildAiopenOneLiner.mockReturnValue('short text')
-    const wrapper = await mountAIOpenPanel()
-    expect(wrapper.vm.oneLinerPreview).toBe('short text')
-    wrapper.unmount()
-  })
-
   it('aiOpenActive is true when remoteControlEnabled', async () => {
     const wrapper = await mountAIOpenPanel()
     wrapper.vm.remoteControlEnabled = true
@@ -578,16 +569,8 @@ describe('AIOpenPanel.vue – computed properties', () => {
     wrapper.unmount()
   })
 
-  it('selectedClient returns matching client', async () => {
-    const wrapper = await mountAIOpenPanel()
-    wrapper.vm.selectedClientId = 'cursor'
-    expect(wrapper.vm.selectedClient.id).toBe('cursor')
-    wrapper.unmount()
-  })
-
   it('selectedClientConfigSnippet returns mcpJson', async () => {
     const wrapper = await mountAIOpenPanel()
-    wrapper.vm.selectedClientId = 'cursor'
     expect(typeof wrapper.vm.selectedClientConfigSnippet).toBe('string')
     wrapper.unmount()
   })
@@ -761,7 +744,7 @@ describe('AIOpenPanel backend capability controls', () => {
       expect(mockSafeJsonRequest).toHaveBeenLastCalledWith(path, expect.objectContaining({ body: '{"enabled":true}' }))
       vm.panelAvailable = false; mockSafeJsonRequest.mockClear()
       await vm[action]({ target: null })
-      expect(vm[field]).toBe(false); expect(mockSafeJsonRequest).not.toHaveBeenCalled()
+      expect(vm[field]).toBe(true); expect(mockSafeJsonRequest).not.toHaveBeenCalled()
       vm.panelAvailable = true
     }
     wrapper.unmount()
@@ -786,25 +769,25 @@ describe('AIOpenPanel backend capability controls', () => {
     expect(mockSafeJsonRequest).not.toHaveBeenCalled()
     wrapper.unmount()
   })
-  it('uses the real installation mode, schedules the visible-page fallback and can cancel installation', async () => {
+  it('copies the local config without opening installation links and only records a successful copy', async () => {
     const wrapper = await mountAIOpenPanel(), vm = wrapper.vm as any
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
-    vi.useFakeTimers()
-    const client = { id: 'cursor', name: 'Cursor', installMode: 'deeplink', installUrl: '#install', installFallbackUrl: 'https://example.com/setup' }
+    const currentUrl = window.location.href
+    const client = vm.aiClients[0]
+    vm.newKey = 'test-key'
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error('clipboard denied'))
     await vm.handleClientClick(client)
-    expect(window.location.hash).toBe('#install')
+    expect(vm.accessResult).toContain('写入剪贴板失败')
+    expect(mockMarkAiopenClientInstalled).not.toHaveBeenCalled()
+    await vm.handleClientClick(client)
+    expect(window.location.href).toBe(currentUrl)
+    expect(open).not.toHaveBeenCalled()
     expect(mockMarkAiopenClientInstalled).toHaveBeenCalledWith('cursor')
-    await vi.advanceTimersByTimeAsync(1200)
-    expect(open).toHaveBeenCalledWith(client.installFallbackUrl, '_blank', 'noopener,noreferrer')
     vm.installedClientIds = ['cursor']
     await vm.handleClientClick(client)
     expect(mockUnmarkAiopenClientInstalled).toHaveBeenCalledWith('cursor')
     expect(vm.accessResult).toContain('已取消')
-    vm.installedClientIds = []
-    await vm.handleClientClick({ ...client, id: 'vscode', installMode: 'vscode', installUrl: '#vscode' })
-    expect(window.location.hash).toBe('#vscode')
-    expect(vm.accessResult).toContain('VS Code 安装')
-    vi.useRealTimers(); open.mockRestore(); wrapper.unmount()
+    open.mockRestore(); wrapper.unmount()
   })
 })
 

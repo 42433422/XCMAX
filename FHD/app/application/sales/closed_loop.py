@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.db.models import SalesOrder, SalesOrderItem
 
 from .contracts import ClosedLoopExecutionError, FingerprintPorts, ReferencePorts, SalesOperations
-from .idempotency import closed_loop_order_no, verify_payment_replay
+from .idempotency import closed_loop_order_no, closed_loop_payment_key, verify_payment_replay
 from .validation import finite_decimal
 
 
@@ -37,9 +37,19 @@ class ClosedLoopRunner:
         fulfillment = payload["fulfillment"]
         invoice = payload["invoice"]
         pa = payload["payment_allocation"]
-        payment_key = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+        payment_key = closed_loop_payment_key(idempotency_key)
         customer = self._references.customer(db, order, tenant_id)
         products = self._references.products(db, order, tenant_id)
+        shipped_quantities: list[Decimal]
+        if "line_quantities" in fulfillment:
+            shipped_quantities = []
+            for raw in fulfillment["line_quantities"]:
+                quantity = finite_decimal(raw)
+                if quantity is None:
+                    raise ClosedLoopExecutionError("deliver", "交付数量非法")
+                shipped_quantities.append(quantity)
+        else:
+            shipped_quantities = [product["quantity"] for product in products]
         warehouse = self._references.warehouse(db, fulfillment, tenant_id)
         fingerprint = self._fingerprints.build(
             customer, products, warehouse, order, fulfillment, invoice, pa
@@ -78,10 +88,10 @@ class ClosedLoopRunner:
                     db,
                     product_id=product["product_id"],
                     warehouse_id=warehouse["id"],
-                    quantity=product["quantity"],
+                    quantity=quantity,
                     tenant_id=tenant_id,
                 )
-                for product in products
+                for product, quantity in zip(products, shipped_quantities, strict=True)
             ]
         confirm_res = self._operations.confirm(order_id, db=db)
         require_success(confirm_res, "confirm", "确认销售订单失败")
@@ -93,12 +103,12 @@ class ClosedLoopRunner:
         )
         item_ids = [oi.id for oi in order_items]
         fulfillment_results = []
-        for idx, oi in enumerate(order_items):
+        for idx, (oi, quantity) in enumerate(zip(order_items, shipped_quantities, strict=True)):
             deliver_key = f"{idempotency_key}:line:{idx}"
             deliver_res = self._operations.deliver(
                 order_id,
                 oi.id,
-                oi.quantity,
+                quantity,
                 warehouse_id=warehouse["id"],
                 product_id=oi.product_id,
                 batch_no=inventory_sources[idx]["batch_no"],
@@ -121,7 +131,7 @@ class ClosedLoopRunner:
         if pa.get("requested"):
             payment_res = self._operations.payment(
                 order_id,
-                amount=finite_decimal(order.get("total_amount")),
+                amount=finite_decimal(pa["amount"]),
                 db=db,
                 idempotency_key=payment_key,
             )

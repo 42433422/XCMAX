@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.customer_issue_delivery_contract import issue_resolution
 from modstore_server.customer_service_tools import json_dumps, json_loads
+from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
 from modstore_server.eventing import db_outbox
 from modstore_server.models import IncidentClaim, IncidentEvent, IncidentInbox
 from modstore_server.models_cs import CustomerServiceTicket
@@ -32,7 +33,7 @@ def record_dispatch_failure(payload: dict[str, Any], error: str) -> None:
         return
     with get_session_factory()() as db:
         ticket = db.query(CustomerServiceTicket).filter_by(id=ticket_id, user_id=owner_id).first()
-        if ticket is None or ticket.status in {"resolved", "closed", "expired"}:
+        if ticket is None or intake_dispatch_block_reason(ticket):
             return
         evidence = json_loads(ticket.evidence_json, {})
         resolution = issue_resolution(ticket, evidence)
@@ -63,6 +64,8 @@ def enqueue_issue(
     private_factory: bool = False,
     support_report: dict[str, Any] | None = None,
 ) -> str:
+    if intake_dispatch_block_reason(ticket):
+        return ""
     evidence = json_loads(ticket.evidence_json, {})
     if not isinstance(evidence, dict):
         evidence = {}
@@ -156,6 +159,21 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
 
         if active_shared_repair(db, ticket):
             return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
+        block_reason = intake_dispatch_block_reason(ticket)
+        if block_reason:
+            if payload.get("github_workspace") and block_reason in {
+                "ticket_dispatch_revoked",
+                "ticket_terminal",
+            }:
+                from modstore_server.para_github_runner import reconcile_stopped_ticket_runner
+
+                if not reconcile_stopped_ticket_runner(db, payload):
+                    return {
+                        "ok": False,
+                        "skipped": True,
+                        "message": "已停止新派发，等待原 GitHub 执行回执",
+                    }
+            return {"ok": True, "skipped": True, "reason": block_reason}
         if payload.get("github_workspace"):
             from modstore_server.para_github_runner import ensure_runner
 
@@ -175,6 +193,13 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
                 return {"ok": True, "skipped": True, "reason": "github_runner_stopped"}
             if not ready:
                 return {"ok": False, "skipped": True, "message": "等待 GitHub 临时执行器就绪"}
+            db.refresh(ticket)
+            if intake_dispatch_block_reason(ticket):
+                return {
+                    "ok": False,
+                    "skipped": True,
+                    "message": "工单已停止新派发，等待原 GitHub 执行回执",
+                }
     if payload.get("intake_source") == "private_mod_rework":
         from modstore_server.customer_issue_private_factory import (
             dispatch_private_rework,
@@ -201,7 +226,7 @@ def dispatch_pending_issue_events(ticket_id: int) -> None:
     """Retry original intake while retaining dispatched outbox evidence."""
     with db_outbox.get_session_factory()() as db:
         ticket = db.get(CustomerServiceTicket, ticket_id)
-        if ticket is None or ticket.status in {"resolved", "closed", "expired"}:
+        if ticket is None or intake_dispatch_block_reason(ticket):
             return
         prefix, owner_id = f"{ticket.ticket_no}:", int(ticket.user_id)
     for record in db_outbox.fetch_pending(

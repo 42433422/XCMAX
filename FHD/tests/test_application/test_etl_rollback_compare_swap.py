@@ -7,16 +7,27 @@ import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
+from app.application.elt.chat_recall import (
+    imports_already_rolled_back,
+    prepare_import_rollback,
+    record_import_origin,
+    rollback_imports,
+)
 from app.application.elt.errors import EltError
+from app.application.elt.service import EltService
+from app.application.elt.service_support import dump_json
 from app.application.elt.targets import get_adapter
 from app.db.db_base import Base
 from app.db.models import InventoryLedger, Product, PurchaseUnit, ShipmentRecord, Warehouse
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -141,6 +152,142 @@ def import_update(store, target, field):
             "before": preview.before,
             "after": result["after"],
         }
+
+
+def test_chat_rollback_requires_original_step_and_complete_effect_receipts(store, monkeypatch):
+    _engine, factory, ids = store
+    before_image = import_update(store, "products", "price")
+    origin = {
+        "conversation_id": "conversation",
+        "turn_id": "turn",
+        "run_id": "agent-run",
+        "step_id": "step",
+        "mod_id": "",
+    }
+    owner = {"tenant_id": 1, "owner_user_id": 1}
+    with factory() as db, tenant_scope(1):
+        upload = EltUpload(
+            id="chat-upload",
+            **owner,
+            file_name="synthetic.csv",
+            suffix=".csv",
+            size_bytes=1,
+            sha256="a" * 64,
+            storage_path="unused-synthetic-source.csv",
+        )
+        db.add(upload)
+        db.flush()
+        run = EltRun(
+            id="chat-import",
+            **owner,
+            upload_id=upload.id,
+            file_sha256=upload.sha256,
+            target_type="products",
+            status="completed",
+            reversible=True,
+        )
+        record_import_origin(run, origin)
+        run.confirmed_at = run.executed_at = datetime.now(UTC).replace(tzinfo=None)
+        run.executed_rows = 1
+        run.receipt_json = dump_json({"run_id": run.id, "executed_rows": 1, "partial": False})
+        db.add(run)
+        db.flush()
+        db.add(
+            EltRunRow(
+                **owner,
+                run_id=run.id,
+                source_row=1,
+                final_action="update",
+                execution_status="success",
+                match_ref=before_image["match_ref"],
+                before_json=dump_json(before_image["before"]),
+                after_json=dump_json(before_image["after"]),
+            )
+        )
+        db.commit()
+        payload = {
+            "run_id": run.id,
+            "status": "completed",
+            "reversible": True,
+            "executed_rows": 1,
+            "knowledge": {"action": "skip", "reason": "empty_document"},
+            "template": {"action": "skip", "reason": "no_region"},
+        }
+        receipt = {"success": True, "data": payload}
+        with pytest.raises(EltError, match="无法核实"):
+            prepare_import_rollback(
+                db, candidates=[({**origin, "step_id": "other-step"}, receipt)], **owner
+            )
+        with pytest.raises(EltError, match="无法一并撤回"):
+            prepare_import_rollback(
+                db,
+                candidates=[
+                    (origin, {**receipt, "data": {**payload, "template": {"action": "new"}}})
+                ],
+                **owner,
+            )
+        assert db.get(Product, ids[1]).price == Decimal("20")
+        service = EltService(adviser=MagicMock())
+        monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: service)
+        plan = prepare_import_rollback(db, candidates=[(origin, receipt)], **owner)
+        assert imports_already_rolled_back(db, candidates=[(origin, receipt)], **owner) is False
+        assert rollback_imports(db, plan, **owner) == 1
+        assert rollback_imports(db, plan, **owner) == 1
+        assert imports_already_rolled_back(db, candidates=[(origin, receipt)], **owner) is True
+        assert db.query(EltRunRow).one().execution_status == "rolled_back"
+        assert db.get(Product, ids[1]).price == Decimal("10")
+
+        from app.application import chat_recall
+        from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+
+        previous = AgentRun(
+            user_id="1",
+            message="import",
+            run_id="agent-run",
+            status="completed",
+            metadata={
+                "runtime_context": {
+                    "tenant_id": "1",
+                    "turn_id": "turn",
+                    "conversation_id": "conversation",
+                }
+            },
+            steps=[
+                AgentStep(
+                    node_id="import",
+                    step_id="step",
+                    tool_id="elt_import",
+                    action="execute",
+                    status="completed",
+                    output=receipt,
+                )
+            ],
+        )
+        monkeypatch.setattr(chat_recall, "get_db", factory)
+        monkeypatch.setattr(
+            chat_recall,
+            "get_agent_run_repository",
+            lambda: MagicMock(list_task_runs_for_user=MagicMock(return_value=[previous])),
+        )
+        rows = [
+            {
+                "timestamp": "2000-01-01T00:00:00",
+                "metadata": "{}",
+                "role": "user",
+                "content": "earlier message",
+            }
+        ]
+        assert (
+            chat_recall._undo_candidates(
+                rows, session_id="conversation", user_id="1", tenant_id="1", mod_id=""
+            )
+            == []
+        )
+        previous.steps[0].step_id = "different-step"
+        with pytest.raises(chat_recall.ConversationRevisionError):
+            chat_recall._undo_candidates(
+                rows, session_id="conversation", user_id="1", tenant_id="1", mod_id=""
+            )
 
 
 UPDATE_CASES = [

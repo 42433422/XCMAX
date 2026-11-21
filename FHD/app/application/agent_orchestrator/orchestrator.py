@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections.abc import Callable
 from typing import Any, cast
+from uuid import UUID
 
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
 from app.application.agent_orchestrator.budget import (
@@ -29,6 +31,7 @@ from app.application.agent_orchestrator.repair_advisor import (
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
+    RunContextScope,
     RunEvent,
     ToolCall,
     utc_now_iso,
@@ -258,7 +261,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         tool_executor: AgentToolExecutor | None = None,
         dependencies: RuntimeDependencies | None = None,
     ) -> None:
-        self._repo = repository or get_agent_run_repository()
+        self._repo: AgentRunRepository = repository or get_agent_run_repository()
         self._repository_status = {
             "mode": "sqlalchemy"
             if isinstance(self._repo, SQLAlchemyAgentRunRepository)
@@ -401,9 +404,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         approval_request_id: str = "",
         runtime_context: dict[str, Any] | None = None,
     ) -> AgentRun | None:
-        run = self._repo.get(run_id)
+        run: AgentRun | None = self._repo.get(run_id)
         if run is None or run.status == "cancelled":
-            return cast("AgentRun | None", run)
+            return run
         waiting_step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if waiting_step is None:
             run.add_event(
@@ -517,6 +520,48 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "approval_request_id": str(approval_request_id or ""),
             "plan_sha256": approval_plan_sha256,
         }
+        if plan.metadata.get("durable_elt_batch") is True and (
+            waiting_step.tool_id,
+            waiting_step.action,
+        ) == ("elt_import", "execute"):
+            from app.application.agent_orchestrator.approval_transaction import (
+                enqueue_claimed_workspace_approval,
+            )
+            from app.application.agent_orchestrator.task_dispatcher import (
+                notify_agent_task_dispatcher,
+            )
+            from app.application.agent_orchestrator.task_execution_repository import (
+                get_task_execution_repository,
+            )
+            from app.application.agent_orchestrator.task_execution_sql_repository import (
+                SQLAlchemyTaskExecutionRepository,
+            )
+
+            paths = waiting_step.params.get("file_paths")
+            if not approval_plan_sha256 or not isinstance(paths, list) or not paths:
+                return None
+            try:
+                if any(not isinstance(path, str) or str(UUID(path)) != path for path in paths):
+                    return None
+            except ValueError:
+                return None
+            queue = get_task_execution_repository()
+            if not isinstance(self._repo, SQLAlchemyAgentRunRepository) or not isinstance(
+                queue, SQLAlchemyTaskExecutionRepository
+            ):
+                return None
+            if not enqueue_claimed_workspace_approval(
+                self._repo,
+                queue,
+                run=run,
+                previous=previous,
+                step=waiting_step,
+                approved_by=approved_by,
+                runtime_context=context,
+            ):
+                return None
+            notify_agent_task_dispatcher()
+            return run
         run.add_event(
             "step.approved",
             f"步骤 {waiting_step.node_id} 已确认继续",
@@ -676,6 +721,73 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun", self._repo.save(run))
 
+    def continue_planning_clarification(
+        self,
+        run_id: str,
+        *,
+        answered_by: str,
+        clarification_step_id: str,
+        expected_plan_sha256: str,
+        expected_snapshot_sha256: str,
+        plan: PlanGraph,
+        answer: str,
+        runtime_context: dict[str, Any],
+    ) -> AgentRun | None:
+        """Replace only a pristine planning question, using the existing run CAS and lease."""
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+        from app.application.agent_orchestrator.clarification import is_planning_clarification
+        from app.application.agent_orchestrator.runtime_context import merge_runtime_context
+        from app.application.workflow.workflow_types import plan_fingerprint
+
+        run = self._repo.get(run_id)
+        if run is None or run.user_id != answered_by or not str(answer).strip():
+            return None
+        waiting = find_waiting_step(run, approved_step_id=clarification_step_id)
+        previous_plan = plan_from_dict(run.metadata.get("plan"))
+        if (
+            waiting is None
+            or not is_planning_clarification(run, waiting)
+            or previous_plan is None
+            or plan_fingerprint(previous_plan) != expected_plan_sha256
+            or canonical_hash(run.to_dict()) != expected_snapshot_sha256
+            or plan.metadata.get("planning_rejected")
+        ):
+            return None
+        context = merge_runtime_context(run, runtime_context)
+        if self._preflight_resume_plan(run, context):
+            return None
+        previous = copy.deepcopy(run)
+        replacement = copy.deepcopy(plan)
+        replacement.plan_id = run.plan_id
+        self._apply_plan(run, replacement, stable_step_ids=True)
+        if replacement.metadata.get("response_mode") == "reply":
+            from app.application.agent_orchestrator.reply_plan import valid_reply_plan
+
+            if not valid_reply_plan(run, replacement):
+                return None
+        elif self._preflight_resume_plan(run, context):
+            return None
+        run.metadata["runtime_context"] = context
+        run.metadata["plan_sha256"] = plan_fingerprint(replacement)
+        run.final_output, run.error = {}, ""
+        apply_ai_budget_metadata(run, context)
+        run.add_event(
+            "run.clarification_resumed",
+            "已将用户答复绑定原任务并重新核对执行计划",
+            {
+                "kind": "planning_scope",
+                "step_id": clarification_step_id,
+                "question": str(waiting.params.get("question") or ""),
+                "answer": str(answer),
+                "previous_plan_sha256": expected_plan_sha256,
+                "plan_sha256": run.metadata["plan_sha256"],
+            },
+        )
+        if not self._repo.save_if_unchanged(run, previous):
+            return None
+        self._execute_with_durable_lease(run, runtime_context=context)
+        return cast("AgentRun", self._repo.save(run))
+
     def reject_waiting_step(self, run_id: str, *, rejector: str, reason: str) -> AgentRun | None:
         """Stop a waiting sensitive step. Rejection records who, when, and why, and does not execute."""
         run = self._repo.get(run_id)
@@ -781,8 +893,21 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         self._repo.save(parent)
         return True
 
-    def list_runs(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]:
-        return cast("list[AgentRun]", self._repo.list_recent(user_id=user_id, limit=limit))
+    def list_runs(
+        self,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+        matches: Callable[[AgentRun], bool] | None = None,
+        runtime_scope: RunContextScope | None = None,
+    ) -> list[AgentRun]:
+        if runtime_scope is not None:
+            return self._repo.list_recent(
+                user_id=user_id, limit=limit, matches=matches, runtime_scope=runtime_scope
+            )
+        if matches is None:
+            return self._repo.list_recent(user_id=user_id, limit=limit)
+        return self._repo.list_recent(user_id=user_id, limit=limit, matches=matches)
 
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         return cast("list[RunEvent]", self._repo.list_events(run_id, after_event_id=after_event_id))

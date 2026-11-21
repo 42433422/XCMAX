@@ -465,6 +465,8 @@ def start(
     previous = _actions(db, ticket.id, RUN_ACTION).first()
     if previous:
         return _receipt(previous)
+    if json_loads(ticket.evidence_json, {}).get("dispatch_revocation"):
+        raise HTTPException(409, "原工单已撤销派发，不能启动新执行")
     from modstore_server.para_github_runner import publisher_capability
 
     capability = publisher_capability()
@@ -477,6 +479,9 @@ def start(
     number = json_loads(issue.result_json, {})["number"]
     if github("GET", f"/repos/{repo}/issues/{number}").get("state") != "open":
         raise HTTPException(409, "Issue 已关闭，请核对原修复与验收记录")
+    db.refresh(ticket, with_for_update=True)
+    if ticket.closed_at or json_loads(ticket.evidence_json, {}).get("dispatch_revocation"):
+        raise HTTPException(409, "原工单已结束或撤销派发，不能启动新执行")
     request = {
         "issue_number": number,
         "request_id": str(body.request_id),
@@ -509,10 +514,15 @@ def start(
 
 def authorized_incident(db, payload, event_id):
     workspace = payload.get("github_workspace") or {}
+    ticket = db.get(CustomerServiceTicket, payload.get("ticket_id") or 0)
     row = db.get(CustomerServiceAction, workspace.get("action_id", 0))
     inbox = _inbox(db, row)
     return bool(
         row
+        and ticket
+        and row.ticket_id == ticket.id
+        and ticket.user_id == row.user_id
+        and not json_loads(ticket.evidence_json, {}).get("dispatch_revocation")
         and inbox
         and inbox.incident_event_id == event_id
         and row.action_type == RUN_ACTION

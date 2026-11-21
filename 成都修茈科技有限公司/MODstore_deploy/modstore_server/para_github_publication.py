@@ -85,9 +85,13 @@ def publication_candidate(db, event, *, fetcher=None):
     workspace = payload.get("github_workspace") or {}
     if workspace.get("retort_run_id"):
         from modstore_server.retort_github_workspace import authorized_incident
+
+        authorized = authorized_incident(db, payload, event.id, read_only=True)
     else:
         from modstore_server.customer_ticket_github import authorized_incident
-    if not workspace or not authorized_incident(db, payload, event.id):
+
+        authorized = authorized_incident(db, payload, event.id)
+    if not workspace or not authorized:
         return None
     rows = (payload.get("_team_claim") or {}).get("team", [])
     if any(r.get("status") in {"failed", "cancelled", "rejected", "manual_review"} for r in rows):

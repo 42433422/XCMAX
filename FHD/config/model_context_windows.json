@@ -1,14 +1,13 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "_source": "https://github.com/BerriAI/litellm/blob/736b05716593347fa51b92afa9526a2397af312c/model_prices_and_context_window.json",
   "_revision": "736b05716593347fa51b92afa9526a2397af312c",
   "_license": "MIT",
-  "_doc": "各模型可用的输入上下文窗口（tokens）。数据取自 LiteLLM 公开目录，运行时不做联网查询；新增模型在此登记，未登记的模型使用 default_window。",
+  "_doc": "离线保守容量取自固定 LiteLLM 目录及 README 引用的官方文档。数字条目按总窗口计算；对象分别使用 context_window、max_input_tokens、max_output_tokens，不能把 LiteLLM max_tokens 当总窗口。平台别名优先读取当前账号已选路由的能力，未确认容量使用 default_window 并标明来源。按实际输出与工具开销预留一次，不再固定折半；ceiling=null 表示不额外截成32K。MiMo V2.6 Flash 来源：https://mimo.mi.com/models/en-US/mimo-v2.6-flash",
   "default_window": 16384,
   "policy": {
-    "reserve_ratio": 0.5,
-    "floor": 8000,
-    "ceiling": 32000
+    "safety_margin_tokens": 256,
+    "ceiling": null
   },
   "models": {
     "deepseek-chat": 131072,
@@ -16,6 +15,8 @@
     "gpt-4o": 128000,
     "gpt-4o-mini": 128000,
     "claude-sonnet-4-5": 200000,
-    "claude-sonnet-4-6": 1000000
+    "claude-sonnet-4-6": 1000000,
+    "mimo-v2.6-flash": 1000000,
+    "xiaomi/mimo-v2.6-flash": 1000000
   }
 }

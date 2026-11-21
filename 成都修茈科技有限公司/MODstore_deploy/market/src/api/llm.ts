@@ -121,6 +121,7 @@ export const llm = {
     maxTokens: number | null = null,
     conversationId: number | null = null,
     allowFailover: boolean = true,
+    clientRequestId: string = crypto.randomUUID(),
   ) => {
     const res = (await req('/api/llm/chat', {
       method: 'POST',
@@ -128,6 +129,7 @@ export const llm = {
         provider,
         model,
         messages,
+        client_request_id: clientRequestId,
         max_tokens: maxTokens,
         conversation_id: conversationId,
         allow_failover: allowFailover,
@@ -146,6 +148,7 @@ export const llm = {
     conversationId: number | null = null,
     signal?: AbortSignal,
     allowFailover: boolean = true,
+    clientRequestId: string = crypto.randomUUID(),
   ) => {
     const headers = new Headers(authHeaders())
     headers.set('Content-Type', 'application/json')
@@ -158,19 +161,21 @@ export const llm = {
         provider,
         model,
         messages,
+        client_request_id: clientRequestId,
         max_tokens: maxTokens,
         conversation_id: conversationId,
         allow_failover: allowFailover,
       }),
     })
   },
-  llmGenerateImage: (provider: string, model: string, prompt: string, opts: { size?: string; count?: number; n?: number } = {}) =>
+  llmGenerateImage: (provider: string, model: string, prompt: string, opts: { size?: string; count?: number; n?: number; clientRequestId?: string } = {}) =>
     req<{ images?: string[] }>('/api/llm/image', {
       method: 'POST',
       body: JSON.stringify({
         provider,
         model,
         prompt,
+        client_request_id: opts.clientRequestId || crypto.randomUUID(),
         size: opts.size || '1024x1024',
         n: opts.count || opts.n || 1,
       }),
@@ -179,7 +184,7 @@ export const llm = {
     provider: string,
     model: string,
     prompt: string,
-    opts: { size?: string; seconds?: number; durationSec?: number } = {},
+    opts: { size?: string; seconds?: number; durationSec?: number; clientRequestId?: string } = {},
   ) =>
     req<{ status?: string; job_id?: string; preview_url?: string }>('/api/llm/video', {
       method: 'POST',
@@ -187,6 +192,7 @@ export const llm = {
         provider,
         model,
         prompt,
+        client_request_id: opts.clientRequestId || crypto.randomUUID(),
         size: opts.size || '1280x720',
         seconds: opts.seconds || opts.durationSec || 5,
       }),

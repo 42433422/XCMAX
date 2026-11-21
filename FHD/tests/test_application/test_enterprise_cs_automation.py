@@ -349,13 +349,23 @@ async def test_unsupported_model_retains_message_and_records_safe_failure(cs_db,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "mode,outcome", [("ai", "received"), ("human", "received"), ("ai", "unknown")]
+    "mode,outcome,receipt_state,reply_status",
+    [
+        ("ai", "received", "RECEIVED", "工单已受理"),
+        ("human", "received", "RECEIVED", "工单已受理"),
+        ("ai", "unknown", "RECEIVED", "暂无法确认"),
+        ("ai", "pending_review", "PENDING_REVIEW", "待管理员核实"),
+        ("ai", "terminal", "TERMINAL", "已结束"),
+        ("human", "revoked", "DISPATCH_REVOKED", "已停止自动派发"),
+    ],
 )
 async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model(
     cs_db,
     monkeypatch,
     mode,
     outcome,
+    receipt_state,
+    reply_status,
 ):
     from app.application import client_product_issue_intake as intake
 
@@ -370,7 +380,12 @@ async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model
         if kwargs.get("method") == "POST":
             if outcome == "unknown":
                 raise ConnectionError("fixture response lost after sending")
-            return {"success": True, "ticket_id": 101, "ticket_no": "CS-fixture"}
+            return {
+                "success": True,
+                "ticket_id": 101,
+                "ticket_no": "CS-fixture",
+                "dispatch_status": outcome,
+            }
         if outcome == "unknown" and len(calls) == 2:
             return {"items": []}
         return {
@@ -378,6 +393,7 @@ async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model
                 {
                     "id": 101,
                     "ticket_no": "CS-fixture",
+                    "dispatch_status": outcome,
                     "evidence": {
                         "source_ref": calls[0][2]["payload"]["source_ref"],
                     },
@@ -412,8 +428,12 @@ async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model
     assert "user_id" not in payload
     assert len([call for call in calls if call[2].get("method") == "POST"]) == 1
     reply = result["message"]["body"]
-    assert ("CS-fixture" in reply) is (outcome == "received")
+    assert reply_status in reply
+    assert ("CS-fixture" in reply) is (outcome != "unknown")
     assert ("暂无法确认" in reply) is (outcome == "unknown")
+    assert result["intake"]["state"] == (
+        "OWNER_ROUTE_UNAVAILABLE" if outcome == "unknown" else receipt_state
+    )
     assert "fixture-customer-token" not in json.dumps(result)
     repeated = await automation.handle_customer_message(
         conversation_id=conversation_id,
@@ -422,7 +442,7 @@ async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model
         body=text,
         market_token="fixture-customer-token",
     )
-    assert repeated["intake"]["state"] == "RECEIVED"
+    assert repeated["intake"]["state"] == receipt_state
     assert (repeated["message"] is not None) is (outcome == "unknown")
     followup = svc.send_message(conversation_id, 7, "提交工单", origin="customer")["message"]
     resumed = await automation.handle_customer_message(

@@ -14,6 +14,7 @@ from contextlib import contextmanager, nullcontext
 from contextvars import copy_context
 from datetime import date, datetime
 from decimal import Decimal
+from multiprocessing.connection import wait
 from pathlib import Path
 from typing import Any, cast
 
@@ -195,16 +196,22 @@ def _worker(
     executor_type,
     payload,
     folder,
-    ready,
+    control,
     start,
-    done,
     deadline,
     llm_scope=None,
     catalog_profile=None,
     catalog_claim=None,
     stream_connection=None,
+    elt_claim=None,
 ):
+    from app.application.agent_orchestrator.business_write_guard import restore_worker_claim
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
+    from app.application.agent_orchestrator.tool_timeouts import (
+        ELT_FILE_PHASES,
+        ELT_FILE_WATCHDOG_SECONDS,
+        uses_elt_file_deadlines,
+    )
     from app.application.tool_execution_deadline import invocation_deadline
     from app.infrastructure.llm.client import (
         llm_client_factory_scope,
@@ -231,7 +238,7 @@ def _worker(
 
     if os.name != "nt":
         os.setsid()
-    ready.set()
+    control.send_bytes(b"r")
     if not start.wait(max(0, deadline - time.monotonic())):
         return
     route_metadata: dict[str, str | int] = {}
@@ -246,6 +253,11 @@ def _worker(
 
     try:
         data = json.loads(payload)
+        step = agent_step_from_dict(data["step"])
+        context = data["context"]
+        context.pop("durable_elt_batch", None)
+        if elt_claim is not None:
+            context["durable_elt_batch"] = True
         business_db_url = str(data.get("business_db_url") or "")
         office_stage = (data["step"].get("tool_id"), data["step"].get("action")) == (
             "excel_import",
@@ -273,7 +285,7 @@ def _worker(
                 ),
                 encoding="utf-8",
             )
-            done.set()
+            control.send_bytes(b"d")
             return
         from app.application.agent_orchestrator.catalog_product_worker import (
             restore_catalog_claim,
@@ -283,14 +295,23 @@ def _worker(
         restore_catalog_worker_profile(catalog_profile)
         with (
             restore_catalog_claim(catalog_claim),
+            restore_worker_claim(elt_claim, elt_step_id=step.step_id if elt_claim else ""),
             invocation_deadline(deadline) as budget,
             llm_client_factory_scope(restore_llm_scope) if llm_scope is not None else nullcontext(),
             _worker_stream(stream_connection) as finish_stream,
         ):
+            if uses_elt_file_deadlines(step.tool_id, step.action, step.params or {}):
+
+                def renew_file_deadline(phase: str) -> float:
+                    marker = ELT_FILE_PHASES[phase]
+                    renewed_deadline = time.monotonic() + ELT_FILE_WATCHDOG_SECONDS[marker]
+                    budget.deadline = renewed_deadline
+                    control.send_bytes(marker)
+                    return renewed_deadline
+
+                context["_renew_elt_file_deadline"] = renew_file_deadline
             try:
-                output = executor_type().execute(
-                    agent_step_from_dict(data["step"]), runtime_context=data["context"]
-                )
+                output = executor_type().execute(step, runtime_context=context)
             finally:
                 route_metadata = scoped_route_metadata(worker_client[0] if worker_client else None)
         encoded = json.dumps(
@@ -301,7 +322,7 @@ def _worker(
         if len(encoded.encode()) > 8 * 1024 * 1024:
             raise ValueError("tool result exceeds transport limit")
         Path(folder, "result").write_text(encoded, encoding="utf-8")
-        done.set()
+        control.send_bytes(b"d")
     except BOUNDARY_ERRORS as exc:
         # Dispatch may already have written: preserve uncertainty without waiting
         # out the deadline or inviting a duplicate write. Never expose raw errors.
@@ -325,7 +346,7 @@ def _worker(
             ),
             encoding="utf-8",
         )
-        done.set()
+        control.send_bytes(b"d")
     finally:
         if stream_connection is not None:
             try:
@@ -476,7 +497,36 @@ def _bind_worker_business_db(url: str, *, bind_workflow_db: bool = False) -> boo
     return True
 
 
-def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
+def _worker_acknowledged(
+    control, process, marker: bytes, deadline: float, *, renew=None
+) -> tuple[bool, bool]:
+    """Wake on an acknowledgement or worker exit without reaping the process."""
+    sentinel = process.sentinel
+    while True:
+        readable = wait((control, sentinel), timeout=max(0, deadline - time.monotonic()))
+        exited = sentinel in readable
+        # A receipt can already be buffered when the sentinel becomes readable.
+        if control not in readable and not (exited and control.poll()):
+            return False, exited
+        try:
+            frame = control.recv_bytes(1)
+        except EOFError:
+            # The child's control endpoint can close just before its sentinel fires.
+            return False, exited or bool(
+                wait((sentinel,), timeout=max(0, deadline - time.monotonic()))
+            )
+        if frame == marker:
+            return True, exited
+        deadline = renew(frame) if renew is not None else 0.0
+        if not deadline:
+            return False, exited
+
+
+def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]:
+    from app.application.agent_orchestrator.tool_timeouts import (
+        ELT_FILE_WATCHDOG_SECONDS,
+        uses_elt_file_deadlines,
+    )
     from app.infrastructure.chat_stream_lifetime import current_lifetime
     from app.infrastructure.llm.client import capture_worker_llm_scope, record_worker_route_metadata
 
@@ -503,15 +553,20 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
             "error_code": "tool_process_namespace_unverified",
             "retryable": False,
         }
-    from app.application.agent_orchestrator.business_write_guard import capture_worker_claim
+    from app.application.agent_orchestrator.business_write_guard import (
+        capture_elt_worker_claim,
+        capture_worker_claim,
+    )
     from app.application.agent_orchestrator.catalog_product_worker import (
         capture_catalog_worker_profile,
     )
 
     catalog_profile = capture_catalog_worker_profile(step)
     catalog_claim = capture_worker_claim() if catalog_profile is not None else None
+    elt_claim = capture_elt_worker_claim(step, context)
     ctx = multiprocessing.get_context("spawn")
-    ready, start, done = (ctx.Event() for _ in range(3))
+    start = ctx.Event()
+    control_in, control_out = ctx.Pipe(duplex=False)
     lifetime = current_lifetime.get()
     receiver, sender = ctx.Pipe(duplex=False) if lifetime is not None else (None, None)
     drained, failed, stopped = (threading.Event() for _ in range(3))
@@ -524,21 +579,32 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
             type(executor),
             payload,
             folder,
-            ready,
+            control_out,
             start,
-            done,
             deadline,
             llm_scope,
             catalog_profile,
             catalog_claim,
             sender,
+            elt_claim,
         ),
     )
     armed = False
+    early_exit = False
     clean = True
     result = {}
+
+    def renew_file_deadline(marker: bytes) -> float:
+        nonlocal deadline
+        if (seconds := ELT_FILE_WATCHDOG_SECONDS.get(marker)) is None:
+            return 0.0
+        deadline = time.monotonic() + seconds
+        return deadline
+
+    file_deadlines = uses_elt_file_deadlines(step.tool_id, step.action, step.params or {})
     try:
         process.start()
+        control_out.close()
         if sender is not None and lifetime is not None:
             sender.close()  # Only the spawned child may keep the write endpoint alive.
             lifetime.worker_started()
@@ -554,10 +620,19 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
                 relay = None
                 lifetime.worker_finished()
                 raise
-        if ready.wait(max(0, deadline - time.monotonic())) and time.monotonic() < deadline:
+        ready, exited = _worker_acknowledged(control_in, process, b"r", deadline)
+        if ready and not exited and time.monotonic() < deadline:
             armed = True
             start.set()
-            if done.wait(max(0, deadline - time.monotonic())):
+            done, exited = _worker_acknowledged(
+                control_in,
+                process,
+                b"d",
+                deadline,
+                renew=renew_file_deadline if file_deadlines else None,
+            )
+            early_exit = not done and exited and time.monotonic() < deadline
+            if done:
                 result = json.loads(Path(folder, "result").read_text(encoding="utf-8"))
                 if (
                     relay is not None and not drained.wait(max(0, deadline - time.monotonic()))
@@ -572,6 +647,8 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
         logging.getLogger(__name__).warning("tool worker boundary failed: %s", type(exc).__name__)
     finally:
         stopped.set()
+        control_in.close()
+        control_out.close()
         if sender is not None:
             sender.close()
         if receiver is not None and relay is None:
@@ -592,7 +669,7 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
             executor._tool_cleanup_failed = True
     if result:
         record_worker_route_metadata(result.get("llm_route_metadata"), llm_scope)
-    if not clean:
+    if not clean and not early_exit:
         return {"outcome": "unknown", "error_code": "tool_cleanup_failed", "retryable": False}
     if result:
         from app.application.tool_execution_deadline import invocation_deadline
@@ -602,4 +679,17 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
         return cast(dict[str, Any], result["output"])
     if not armed:
         return {"success": False, "error_code": "tool_worker_not_started", "retryable": False}
-    return {"outcome": "unknown", "error_code": "tool_worker_incomplete", "retryable": False}
+    if elt_claim is not None and early_exit and clean:
+        from app.application.agent_orchestrator.elt_checkpoint_recovery import (
+            EltCheckpointWorkerExited,
+        )
+        from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+
+        if elt_claim[2] < DEFAULT_MAX_ATTEMPTS:
+            raise EltCheckpointWorkerExited
+    return {
+        "outcome": "unknown",
+        "error_code": "tool_worker_exited" if early_exit else "tool_worker_incomplete",
+        "retryable": False,
+        **({"cleanup_unresolved": True} if not clean else {}),
+    }

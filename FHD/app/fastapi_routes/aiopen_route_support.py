@@ -6,7 +6,7 @@ import logging
 import secrets
 from typing import Any, Callable
 
-from fastapi import Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.application.aiopen.definitions import (
@@ -14,6 +14,14 @@ from app.application.aiopen.definitions import (
     MCP_PROTOCOL_VERSIONS,
     TOOL_DEFINITIONS,
 )
+from app.application.aiopen.runtime import ClientKeyLimitReached
+from app.application.aiopen.service import (
+    AIOPEN_STATE,
+    has_active_client_key,
+    issue_client_key,
+    revoke_client_key,
+)
+from app.domain.aiopen.principal import ScreenPrincipal
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _TRACE_FLAGS = (
@@ -269,3 +277,56 @@ def wrap_mcp_json(
     if payload is None:
         return Response(status_code=status_code, headers=headers)
     return JSONResponse(payload, status_code=status_code, headers=headers)
+
+
+def create_client_router(trace_result, get_logged_in_user):
+    router = APIRouter()
+
+    def _client_principal(user: Any = Depends(get_logged_in_user)) -> ScreenPrincipal:
+        principal = ScreenPrincipal.from_user(user)
+        if principal is None:
+            raise HTTPException(status_code=403, detail="当前账号没有有效的租户归属")
+        return principal
+
+    @router.get("/api/aiopen/client")
+    def aiopen_client_panel(principal: ScreenPrincipal = Depends(_client_principal)):
+        return {
+            "success": True,
+            "client_mode": True,
+            "has_active_key": has_active_client_key(principal),
+            "keys": [],
+            "remote_control_enabled": bool(AIOPEN_STATE.get("remote_control_enabled")),
+        }
+
+    @router.post("/api/aiopen/client/key")
+    def aiopen_client_key_create(
+        principal: ScreenPrincipal = Depends(_client_principal), keep_existing: bool = False
+    ):
+        try:
+            issued = issue_client_key(principal, keep_existing=keep_existing)
+        except ClientKeyLimitReached as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=503, detail="口令存储暂不可用") from exc
+        result = trace_result(
+            {"success": True, "key": issued["key"], "expires_at": issued["expires_at"]},
+            route="/api/aiopen/client/key",
+            action="client_key_create",
+            user_id=principal.principal_id,
+        )
+        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+    @router.delete("/api/aiopen/client/key")
+    def aiopen_client_key_revoke(principal: ScreenPrincipal = Depends(_client_principal)):
+        try:
+            revoked = revoke_client_key(principal)
+        except OSError as exc:
+            raise HTTPException(status_code=503, detail="口令撤销尚未保存") from exc
+        return trace_result(
+            {"success": True, "revoked": revoked},
+            route="/api/aiopen/client/key",
+            action="client_key_revoke",
+            user_id=principal.principal_id,
+        )
+
+    return router

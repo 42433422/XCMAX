@@ -72,6 +72,7 @@ class LangGraphExecutionMixin:
         attempts: list[dict[str, Any]] = []
         last_error = ""
         last_output: dict[str, Any] = {}
+        unknown_outcome = False
         retries = 0
         started = _now_iso()
         begin = time.perf_counter()
@@ -163,6 +164,10 @@ class LangGraphExecutionMixin:
             failure_output=last_output,
         )
         duration_ms = int((time.perf_counter() - begin) * 1000)
+        receipt = {key: True for key in ("committed", "deferred") if last_output.get(key) is True}
+        if unknown_outcome:
+            receipt["requires_reconciliation"] = True
+        receipt_preview = {"output_preview": last_error} if receipt else {}
         _emit(
             "finished",
             success=False,
@@ -170,6 +175,8 @@ class LangGraphExecutionMixin:
             error=last_error,
             retries=max(0, retries - 1),
             recovery_hint=recovery_hint,
+            **receipt,
+            **receipt_preview,
         )
         return NodeExecutionResult(
             node_id=node.node_id,

@@ -12,6 +12,10 @@ export function candidateMode(env = process.env) {
   return env.GITHUB_ACTIONS === 'true' && env.PARA_GITHUB_STAGE === 'execute';
 }
 
+export function candidateBaseSha(env = process.env) {
+  return env.PARA_GITHUB_SOURCE_SHA || env.GITHUB_SHA;
+}
+
 export function githubReadEnv(env = process.env) {
   if (env.GITHUB_ACTIONS !== 'true' || !['execute', 'resume'].includes(env.PARA_GITHUB_STAGE)
       || !env.GITHUB_TOKEN || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPOSITORY || '')) return env;
@@ -32,7 +36,7 @@ export async function exportCandidate(task, taskDir, baseHead, env = process.env
       || !match || match[1] !== marker || task.auto_merge === true
       || !/^devfleet\/[A-Za-z0-9_./-]+$/.test(task.work_branch || '')
       || task.work_branch.includes('..') || task.work_branch.endsWith('.lock')
-      || baseHead !== env.GITHUB_SHA || !/^[0-9a-f]{40}$/.test(baseHead)
+      || baseHead !== candidateBaseSha(env) || !/^[0-9a-f]{40}$/.test(baseHead)
       || task.repo_url !== `https://github.com/${env.GITHUB_REPOSITORY}.git`
       || !env.PARA_GITHUB_CANDIDATE_DIR) throw new Error('candidate_dispatch_identity_mismatch');
   const identity = await sourceIdentity(taskDir);

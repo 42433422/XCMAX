@@ -102,7 +102,7 @@ def test_wrong_operation_and_excess_lifetime_are_rejected(keypair):
         verify(long_lived, {"synthetic": public}, operation="preauthorize")
 
 
-@pytest.mark.parametrize("operation", ["settle", "release"])
+@pytest.mark.parametrize("operation", ["settle", "release", "read"])
 def test_finalization_requires_reservation(keypair, operation):
     private, public = keypair
     with pytest.raises(ValueError):

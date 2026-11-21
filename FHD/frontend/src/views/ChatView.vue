@@ -15,6 +15,7 @@
         @retry-model="retryFailedModel"
         @recall-edit="recallMessage"
         @reconcile-turn="reconcileTurn"
+        @open-original-task="openOriginalTask"
         @confirm-destructive="confirmDestructiveScope"
         :session-key="messageSessionKey"
         :has-earlier="messagesHaveEarlier"
@@ -119,15 +120,14 @@
     >
       <div v-if="composerDragOver" class="composer-drop-overlay" role="status">松开以上传附件</div>
       <ChatInputToolbar
-        :excel-analyze-uploading="excelAnalyzeUploading"
+        :attachment-uploading="attachmentUploading"
         :multimodal-pending-count="multimodalPendingCount"
         :proactive-suggestions-enabled="proactiveEnabled"
         :tts-enabled="ttsEnabled"
-        :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         :office-docking-processing="officeDockingProcessing"
         @new-conversation="newConversation"
         @trigger-office-docking="triggerOfficeDocking"
-        @excel-file-change="onExcelAnalyzeFileChange"
+        @attachment-file-change="onAttachmentFileChange"
         @proactive-suggestions-change="onProactiveSuggestionsChange"
         @toggle-tts="setTtsEnabled"
       />
@@ -257,6 +257,15 @@
             <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
           </button>
         </div>
+        <button
+          type="button"
+          class="btn"
+          :disabled="!messageInput.trim() || isLoading || imagePending || multimodalPendingCount > 0 || artifactStaging.length > 0 || unsupportedStaging.length > 0"
+          data-testid="generate-chat-image"
+          @click="generateChatImage"
+        >
+          {{ imagePending ? '生图中' : '生图' }}
+        </button>
         <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply()">停止回复</button>
         <button
           class="btn btn-primary send-message-btn"
@@ -268,6 +277,12 @@
         >
           {{ isLoading ? '发送纠正' : '发送' }}
         </button>
+      </div>
+      <div v-if="chatImage?.scope === messageSessionKey" aria-live="polite">
+        <figure v-for="image of chatImage.images" :key="image">
+          <img :src="image" alt="AI 生成图片" referrerpolicy="no-referrer" width="256" />
+          <figcaption>{{ chatImage.model }} · {{ chatImage.charge }}</figcaption>
+        </figure>
       </div>
       <div
         v-if="composerStatusText"
@@ -347,8 +362,10 @@ import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
+import { reserveImageRequest, finishImageRequest } from '@/utils/pendingImageRequest'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import chatApi from '@/api/chat'
+import { ApiError } from '@/api/core'
 import { isDurableChatScope } from '@/utils/chatSessionRestore'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
@@ -389,7 +406,6 @@ const chatScope = computed(() => resolveChatStorageScope())
 const chatViewApi = useChatView({ sessionId: currentSessionId })
 const chatRefBag = {
   chatMessagesRef: chatViewApi.chatMessagesRef,
-  excelAnalyzeInputRef: chatViewApi.excelAnalyzeInputRef,
 }
 
 const {
@@ -401,6 +417,7 @@ const {
   currentTask,
   orderNumberFetching,
   isLoading,
+  isRecalling,
   isStreamingReply,
   isExecuting,
   latestAssistantPush,
@@ -421,7 +438,7 @@ const {
   loadMoreHistorySessions,
   pushCopied,
   loadingProgressText,
-  excelAnalyzeUploading,
+  attachmentUploading,
   multimodalPendingCount,
   multimodalStaging,
   artifactStaging,
@@ -445,7 +462,7 @@ const {
   refetchTaskOrderNumber,
   setCustomOrderNumber,
   cancelTask,
-  onExcelAnalyzeFileChange,
+  onAttachmentFileChange,
   bindExcelSheetToChat,
   bindAllExcelSheetsToChat,
   toggleTaskExpanded,
@@ -529,20 +546,25 @@ const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback(
 
 const messageInput = ref('')
 async function recallMessage(index: number) {
-  if (!window.confirm('撤回这条消息及其之后的所有回复，并把内容放回输入框重新编辑？')) return
+  if (isRecalling.value || !window.confirm('撤回这条消息及后续对话，同时撤销可核实的业务操作？原消息将放回输入框。')) return
   const result = await chatViewApi.recallUserMessage(index)
   if (!result.ok) {
     if (result.message) window.alert(result.message)
     return
   }
   messageInput.value = result.text
+  if (result.message) showAppToast(result.message, 'info')
   document.getElementById('messageInput')?.focus()
 }
 async function reconcileTurn(index: number) {
   const result = await chatViewApi.reconcileTurnMessage(index)
   if (!result.ok && result.message) window.alert(result.message)
 }
+function openOriginalTask(taskId: string) {
+  void router.push({ name: 'task-workspace', params: { taskId }, query: { conversation: currentSessionId.value } })
+}
 function retryFailedModel(payload: { text: string; turnId: string }) {
+  if (isRecalling.value) return
   messageInput.value = ''
   void retryModelOnly(payload.text, payload.turnId)
 }
@@ -640,7 +662,7 @@ function onComposerDragLeave() {
 async function onComposerDrop(e: DragEvent) {
   composerDragDepth = 0
   composerDragOver.value = false
-  if (isLoading.value || excelAnalyzeUploading.value) return
+  if (isLoading.value || attachmentUploading.value) return
   const files = await filesFromDataTransfer(e.dataTransfer)
   if (!files.length) return
   const accepted = files.filter(isComposerAcceptedFile)
@@ -649,7 +671,7 @@ async function onComposerDrop(e: DragEvent) {
     return
   }
   // The picker snapshots these files and applies the existing session/identity guard.
-  await onExcelAnalyzeFileChange({ target: { files: accepted, value: '' } } as unknown as Event)
+  await onAttachmentFileChange({ target: { files: accepted, value: '' } } as unknown as Event)
 }
 
 const {
@@ -697,7 +719,9 @@ async function restoreOwnedConversation() {
     const text = plainTextFromChatHtml(msg.content).replace(/\s+/g, ' ').trim()
     return text && (msg.role === 'user' || msg.role === 'task' || !/^(你好，我是|您好！我是)/.test(text))
   })
-  if (!hasRealTurn) {
+  if (hasRealTurn) {
+    await syncSessionMessages({ isCurrent: canApply }).catch(() => undefined)
+  } else {
     try { await restoreLatestOwnedSession?.(canApply) } catch { /* History exposes its own retry state. */ }
   }
 }
@@ -793,20 +817,72 @@ const inputPlaceholder = computed(() => {
   return preset.placeholderNormal
 })
 
-const canSendMessage = computed(() => !!messageInput.value.trim())
+const canSendMessage = computed(() => !isRecalling.value && !!messageInput.value.trim())
 const sendButtonTitle = computed(() => {
+  if (isRecalling.value) return '正在撤回操作'
   if (isLoading.value) return '可停止回复或发送纠正；已执行的工具不会撤销'
   if (!messageInput.value.trim()) return '请先输入内容'
   return '发送消息'
 })
 const composerStatusText = computed(() => {
   if (voiceFeedbackText.value) return voiceFeedbackText.value
+  if (isRecalling.value) return '正在撤回操作…'
   if (isLoading.value) return '可停止回复或发送纠正；已执行的工具不会撤销'
   if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
 })
 
+const imagePending = ref(false)
+const chatImage = ref<{ scope: string; images: string[]; model: string; charge: string } | null>(null)
+let imageViewMounted = true
+onBeforeUnmount(() => { imageViewMounted = false })
+
+async function generateChatImage() {
+  const prompt = messageInput.value.trim()
+  if (!prompt || isLoading.value || imagePending.value || multimodalPendingCount.value || artifactStaging.value.length || unsupportedStaging.value.length) return
+  const scope = messageSessionKey.value
+  const identity = resolveChatStorageScope()
+  const sessionId = currentSessionId.value
+  const modId = modsStore.activeModId
+  const isOwnerCurrent = captureAuthSession()
+  let pending: Awaited<ReturnType<typeof reserveImageRequest>> | undefined
+  imagePending.value = true
+  try {
+    pending = await reserveImageRequest(identity, sessionId, modId, prompt)
+    if (!isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
+    const result = await chatApi.generateImage(prompt, pending.requestId)
+    if (!imageViewMounted || !isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
+    const images = result.images.filter(url =>
+      /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url) || url.startsWith('https://'),
+    )
+    if (!images.length) {
+      showAppToast('生图结果没有可显示的图片。')
+      return
+    }
+    chatImage.value = {
+      scope,
+      images,
+      model: result.model,
+      charge: result.billed ? `本次扣费 ¥${result.charge_amount}` : '自带密钥',
+    }
+    await nextTick()
+    if (!imageViewMounted || !isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
+    finishImageRequest(pending.key, pending.requestId)
+    if (messageInput.value.trim() === prompt) messageInput.value = ''
+  } catch (error: unknown) {
+    if (error instanceof ApiError && [400, 401, 402, 403, 404, 422, 429].includes(error.status)) {
+      if (pending) finishImageRequest(pending.key, pending.requestId)
+    }
+    if (messageSessionKey.value === scope) {
+      showAppToast(error instanceof Error ? error.message : '生图失败，请核对模型和计费状态。')
+    }
+  } finally {
+    imagePending.value = false
+  }
+}
+
 const sendMessage = async () => {
+  if (isRecalling.value) return
   const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
   const raw = messageInput.value || (domInput && domInput.value) || ''
   const message = raw.trim()

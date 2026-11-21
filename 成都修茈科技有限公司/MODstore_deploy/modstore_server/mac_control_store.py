@@ -118,6 +118,8 @@ def transition(
     state: str,
     reason: str = "",
     snapshot: dict | None = None,
+    *,
+    commit: bool = True,
 ) -> None:
     task.state, task.reason, task.updated_at = state, reason, time.time()
     if snapshot is not None:
@@ -132,7 +134,22 @@ def transition(
             "snapshot": snapshot or {},
         },
     )
-    db.commit()
+    if commit:
+        db.commit()
+
+
+def request_cancellation(db: Session, task: MacControlTask, *, commit: bool = True) -> str:
+    if task.state not in TERMINAL and task.state != "cancel_requested":
+        # Without an exact executor stop command, started work requires readback.
+        started = bool(task.attempt_id or task.para_task_id)
+        transition(
+            db,
+            task,
+            "cancel_requested" if started else "cancelled",
+            "executor_stop_confirmation_required" if started else "cancelled_before_dispatch",
+            commit=commit,
+        )
+    return task.state
 
 
 def view(task: MacControlTask) -> dict:

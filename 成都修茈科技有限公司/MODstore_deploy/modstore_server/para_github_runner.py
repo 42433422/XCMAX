@@ -6,13 +6,14 @@ import os
 import re
 import time
 from urllib.parse import quote, urlparse
+from uuid import UUID
 
 import httpx
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
-from modstore_server.mac_control_transport import age_seconds
+from modstore_server.mac_control_transport import age_seconds, execution_tool
 from modstore_server.models_cs import CustomerServiceAction
 
 WORKFLOW = "fhd-para-github-worker.yml"
@@ -88,6 +89,7 @@ def auth_headers() -> dict[str, str]:
 
 def device_matches(device, workspace):
     caps = device.get("capabilities") or {}
+    tool_name = execution_tool()
     return bool(
         device.get("id") == os.environ.get("MODSTORE_PARA_GITHUB_DEVICE_ID")
         and device.get("status") == "online"
@@ -99,7 +101,7 @@ def device_matches(device, workspace):
         and (not workspace.get("stage") or caps.get("github_stage") == workspace["stage"])
         and not caps.get("server_bridge")
         and any(
-            t.get("toolName") == "codex" and t.get("status") in {"idle", "running"}
+            t.get("toolName") == tool_name and t.get("status") in {"idle", "running"}
             for t in device.get("tools", [])
         )
     )
@@ -116,13 +118,149 @@ def resume_worker_ready(workspace):
 
 
 def _save(db, row, status, **result):
+    db.refresh(row, with_for_update=True)
+    if row.status in {"blocked", "runner_stopped"} and status != row.status:
+        db.rollback()
+        return False
     row.status = status
     row.result_json = json_dumps({**json_loads(row.result_json, {}), **result})
     db.commit()
+    return True
+
+
+def _find_runner_id(github, repo, request_id):
+    matches = []
+    for page in range(1, 4):
+        runs = github(
+            "GET",
+            f"/repos/{repo}/actions/workflows/{WORKFLOW}/runs"
+            f"?event=workflow_dispatch&per_page=100&page={page}",
+        ).get("workflow_runs", [])
+        matches.extend(
+            r
+            for r in runs
+            if r.get("display_title") == f"para-workspace-{request_id}"
+            and r.get("head_branch") == "main"
+        )
+        if len(runs) < 100:
+            break
+    if len(matches) != 1:
+        return None
+    run_id = matches[0].get("id")
+    return run_id if type(run_id) is int and run_id > 0 else None
+
+
+def _was_ticket_stopped(db, action):
+    from modstore_server.customer_ticket_github import RUN_ACTION
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    if action.action_type != RUN_ACTION or action.target_type != "github":
+        return False
+    ticket = db.get(CustomerServiceTicket, action.ticket_id)
+    if ticket is None or ticket.user_id != action.user_id:
+        return False
+    evidence = json_loads(ticket.evidence_json, {})
+    return isinstance(evidence, dict) and bool(
+        evidence.get("dispatch_revocation") or evidence.get("admin_disposition")
+    )
+
+
+def _recover_stopped_runner_id(db, action, github, repo):
+    request_id = json_loads(action.request_json, {}).get("request_id")
+    if not request_id or action.status not in {"dispatching", "requested", "unknown", "running"}:
+        return None
+    run_id = _find_runner_id(github, repo, request_id)
+    if run_id is None:
+        return None
+    db.refresh(action, with_for_update=True)
+    receipt = json_loads(action.result_json, {})
+    if receipt.get("run_id") not in (None, run_id):
+        return None
+    # Keep the old action and its original outbox receipt. This is observation of
+    # an existing workflow, not authorization to start work on the stopped ticket.
+    action.result_json = json_dumps(
+        {**receipt, "run_id": run_id, "url": f"https://github.com/{repo}/actions/runs/{run_id}"}
+    )
+    db.commit()
+    return run_id
+
+
+def _stopped_runner_has_unsettled_attempts(db, action):
+    from modstore_server.customer_ticket_github import _inbox
+    from modstore_server.models import IncidentClaim, IncidentEvent
+
+    inbox = _inbox(db, action)
+    if not inbox:
+        return False  # Para execution first requires the original incident.
+    event = db.get(IncidentEvent, inbox.incident_event_id)
+    if event is None:
+        return True
+    payload = json_loads(event.payload_json, {})
+    workspace = payload.get("github_workspace") or {}
+    if (
+        payload.get("ticket_id") != action.ticket_id
+        or payload.get("user_id") != action.user_id
+        or workspace.get("action_id") != action.id
+    ):
+        return True
+    claim = payload.get("_team_claim") or {}
+    if event.dispatched_count and not claim:
+        return True
+    incident_lease = db.get(IncidentClaim, event.id)
+    if incident_lease is not None and incident_lease.dispatch_state in {"dispatching", "unknown"}:
+        return True
+    if any(
+        intent.get("state") in {"dispatching", "unknown"}
+        for intent in (claim.get("follow_up_intents") or {}).values()
+    ):
+        return True
+    if any(
+        receipt.get("requires_reconciliation")
+        or receipt.get("state") not in {"requested", "completed", "failed", "cancelled"}
+        for receipt in (claim.get("escalations") or {}).values()
+    ):
+        return True
+    settled = {"completed", "failed", "cancelled", "rejected", "ticket_dispatch_blocked"}
+    return any(
+        row.get("attempt_id")
+        and (row.get("outcome") == "unknown" or row.get("status") not in settled)
+        for row in claim.get("team", [])
+    )
+
+
+def _runner_settlement(db, action, *, stopped):
+    from modstore_server.customer_ticket_github import _execution, github
+
+    request = json_loads(action.request_json, {})
+    repo = request.get("repository") if isinstance(request, dict) else None
+    if not repo:
+        return None
+    receipt, _ = _execution(db, action)
+    run_id = receipt.get("run_id")
+    if not run_id and stopped:
+        run_id = _recover_stopped_runner_id(db, action, github, repo)
+        receipt, _ = _execution(db, action)
+    terminal_states = {"completed", "failed", "cancelled"}
+    if stopped:
+        terminal_states.update(("rejected", "ticket_dispatch_blocked"))
+    if (
+        not run_id
+        or (stopped and _stopped_runner_has_unsettled_attempts(db, action))
+        or any(
+            r.get("requires_reconciliation") or r.get("state") not in terminal_states
+            for r in receipt.get("receipts", [])
+        )
+    ):
+        return None
+    run = github("GET", f"/repos/{repo}/actions/runs/{run_id}")
+    if run.get("status") != "completed" or (
+        stopped and (run.get("id") != run_id or run.get("run_attempt") != 1)
+    ):
+        return None
+    return run
 
 
 def _claim_worker_slot(db, row, *, owner_key=None):
-    from modstore_server.customer_ticket_github import _execution, github
     from modstore_server.db.mac_control import MacControlSyncLease
 
     slot = db.get(MacControlSyncLease, "github-worker")
@@ -137,7 +275,25 @@ def _claim_worker_slot(db, row, *, owner_key=None):
     requested_owner = owner_key or str(row.id)
     if owner == requested_owner:
         return True
-    if owner.startswith("retort:"):
+    if owner.startswith("repair:"):
+        from modstore_server.customer_ticket_github import github
+        from modstore_server.db.mac_control import MacControlTask
+        from modstore_server.mac_control_store import TERMINAL
+
+        repair = db.get(MacControlTask, owner.removeprefix("repair:"))
+        if not repair or repair.state not in TERMINAL:
+            return False
+        snapshot = json_loads(repair.snapshot_json, {})
+        if snapshot.get("runner_intent"):
+            repo = json_loads(repair.request_json, {})["repository"]
+            run_id = snapshot.get("run_id")
+            if (
+                not run_id
+                or github("GET", f"/repos/{repo}/actions/runs/{run_id}").get("status")
+                != "completed"
+            ):
+                return False
+    elif owner.startswith("retort:"):
         from modstore_server.retort_github_workspace import slot_finished
 
         if not slot_finished(owner.removeprefix("retort:")):
@@ -146,18 +302,7 @@ def _claim_worker_slot(db, row, *, owner_key=None):
         previous = db.get(CustomerServiceAction, int(owner))
         if not previous:
             return False
-        receipt, _ = _execution(db, previous)
-        if not receipt.get("run_id") or any(
-            r.get("requires_reconciliation")
-            or r.get("state") not in {"completed", "failed", "cancelled"}
-            for r in receipt.get("receipts", [])
-        ):
-            return False
-        repo = json_loads(previous.request_json, {})["repository"]
-        if (
-            github("GET", f"/repos/{repo}/actions/runs/{receipt['run_id']}").get("status")
-            != "completed"
-        ):
+        if _runner_settlement(db, previous, stopped=_was_ticket_stopped(db, previous)) is None:
             return False
         previous.status = "runner_stopped"
     changed = (
@@ -167,6 +312,38 @@ def _claim_worker_slot(db, row, *, owner_key=None):
     )
     db.commit()
     return bool(changed)
+
+
+def stop_queued_ticket_runner(db, ticket, *, reason):
+    from modstore_server.customer_ticket_github import RUN_ACTION
+
+    blocked, unresolved = [], []
+    rows = (
+        db.query(CustomerServiceAction)
+        .filter_by(
+            ticket_id=ticket.id, user_id=ticket.user_id, action_type=RUN_ACTION, status="queued"
+        )
+        .with_for_update()
+        .all()
+    )
+    for row in rows:
+        receipt = json_loads(row.result_json, {})
+        if receipt.get("run_id"):
+            unresolved.append(row.id)
+            continue
+        row.status = "blocked"
+        row.result_json = json_dumps({**receipt, "reason": reason})
+        _release_worker_slot(db, row.id)
+        blocked.append(row.id)
+    return blocked, unresolved
+
+
+def _release_worker_slot(db, action_id):
+    from modstore_server.db.mac_control import MacControlSyncLease
+
+    db.query(MacControlSyncLease).filter_by(id="github-worker", owner=str(action_id)).update(
+        {"owner": ""}, synchronize_session=False
+    )
 
 
 def ensure_runner(db, payload):
@@ -180,8 +357,8 @@ def ensure_runner(db, payload):
         return False
 
 
-def _ensure_runner(db, payload):
-    from modstore_server.customer_ticket_github import ISSUE_ACTION, RUN_ACTION, github
+def _owned_workspace_action(db, payload):
+    from modstore_server.customer_ticket_github import RUN_ACTION
 
     workspace = payload["github_workspace"]
     row = db.get(CustomerServiceAction, workspace.get("action_id"))
@@ -194,6 +371,42 @@ def _ensure_runner(db, payload):
         != {k: workspace.get(k) for k in ("issue_number", "request_id", "repository")}
     ):
         raise ValueError("GitHub 派工记录不匹配")
+    return row
+
+
+def reconcile_stopped_ticket_runner(db, payload):
+    """Read existing work only; leave queued or unconfirmed work out of dispatch."""
+    action = _owned_workspace_action(db, payload)
+    if not _was_ticket_stopped(db, action):
+        return True
+    if action.status in {"queued", "blocked"} and not json_loads(action.result_json, {}).get(
+        "run_id"
+    ):
+        return True
+    try:
+        run = _runner_settlement(db, action, stopped=True)
+    except (HTTPException, httpx.HTTPError):
+        return False
+    if run is None:
+        return False
+    db.refresh(action, with_for_update=True)
+    _release_worker_slot(db, action.id)
+    _save(db, action, "runner_stopped", conclusion=run.get("conclusion") or "unknown")
+    return True
+
+
+def _record_runner_submission(db, action, status):
+    db.query(CustomerServiceAction).filter_by(id=action.id, status="dispatching").update(
+        {"status": status}, synchronize_session=False
+    )
+    db.commit()
+
+
+def _ensure_runner(db, payload):
+    from modstore_server.customer_ticket_github import ISSUE_ACTION, github
+
+    workspace = payload["github_workspace"]
+    row = _owned_workspace_action(db, payload)
     repo, request_id = workspace["repository"], workspace["request_id"]
     if row.status in {"runner_stopped", "blocked"}:
         return None
@@ -202,12 +415,59 @@ def _ensure_runner(db, payload):
         if not capability["available"]:
             _save(db, row, "blocked", reason=capability["reason"])
             return None
+        from modstore_server.para_model_admission import platform_model_admission
+
+        allocation = platform_model_admission()
+        if allocation:
+            result = {
+                "result_json": json_dumps(
+                    {
+                        **json_loads(row.result_json, {}),
+                        "model_allocation": allocation,
+                    }
+                )
+            }
+        else:
+            saved = json_loads(row.result_json, {})
+            saved.pop("model_allocation", None)
+            result = {"result_json": json_dumps(saved)}
+        pending = db.query(CustomerServiceAction).filter_by(id=row.id, status="queued")
+        if allocation and allocation["status"] != "admitted":
+            pending.update(result, synchronize_session=False)
+            db.commit()
+            return False
         if not _claim_worker_slot(db, row):
             return False
+        from modstore_server.customer_service_tools import begin_immediate_write
+        from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
+        from modstore_server.models_cs import CustomerServiceTicket
+
+        # Slot acquisition commits separately. Recheck the original ticket under its
+        # write fence before making a new durable downstream dispatch claim.
+        ticket_id = row.ticket_id
+        db.rollback()
+        begin_immediate_write(db)
+        ticket = db.get(CustomerServiceTicket, ticket_id, with_for_update=True)
+        db.refresh(row, with_for_update=True)
+        if row.status == "blocked":
+            _release_worker_slot(db, row.id)
+            db.commit()
+            return None
+        if row.status != "queued":
+            return False
+        blocked = (
+            intake_dispatch_block_reason(ticket)
+            if ticket and ticket.user_id == row.user_id
+            else "ticket_owner_mismatch"
+        )
+        if blocked:
+            _release_worker_slot(db, row.id)
+            _save(db, row, "blocked", reason=blocked)
+            return None
         claimed = (
             db.query(CustomerServiceAction)
             .filter_by(id=row.id, status="queued")
-            .update({"status": "dispatching"}, synchronize_session=False)
+            .update({**result, "status": "dispatching"}, synchronize_session=False)
         )
         db.commit()  # Persist uncertainty before an external workflow dispatch.
         if claimed:
@@ -217,38 +477,24 @@ def _ensure_runner(db, payload):
                     f"/repos/{repo}/actions/workflows/{WORKFLOW}/dispatches",
                     {"ref": "main", "inputs": {"request_id": request_id}},
                 )
-                _save(db, row, "requested")
+                _record_runner_submission(db, row, "requested")
             except HTTPException:
-                _save(db, row, "unknown")
+                _record_runner_submission(db, row, "unknown")
         return False
     receipt = json_loads(row.result_json, {})
     run_id = receipt.get("run_id")
     if not run_id:
-        matches = []
-        for page in range(1, 4):
-            runs = github(
-                "GET",
-                f"/repos/{repo}/actions/workflows/{WORKFLOW}/runs"
-                f"?event=workflow_dispatch&per_page=100&page={page}",
-            ).get("workflow_runs", [])
-            matches.extend(
-                r
-                for r in runs
-                if r.get("display_title") == f"para-workspace-{request_id}"
-                and r.get("head_branch") == "main"
-            )
-            if len(runs) < 100:
-                break
-        if len(matches) != 1:
+        run_id = _find_runner_id(github, repo, request_id)
+        if run_id is None:
             return False  # Missing/ambiguous acknowledgement never resubmits.
-        run_id = matches[0]["id"]
-        _save(
+        if not _save(
             db,
             row,
             "requested",
             run_id=run_id,
             url=f"https://github.com/{repo}/actions/runs/{run_id}",
-        )
+        ):
+            return None
     run = github("GET", f"/repos/{repo}/actions/runs/{run_id}")
     if run.get("run_attempt") != 1 or run.get("status") == "completed":
         _save(db, row, "runner_stopped", conclusion=run.get("conclusion") or "unknown")
@@ -261,7 +507,8 @@ def _ensure_runner(db, payload):
         response.raise_for_status()
         ready = any(device_matches(d, workspace) for d in response.json().get("devices", []))
     if ready:
-        _save(db, row, "running")
+        if not _save(db, row, "running"):
+            return None
         issue = (
             db.query(CustomerServiceAction)
             .filter_by(ticket_id=row.ticket_id, action_type=ISSUE_ACTION)
@@ -277,8 +524,15 @@ def _ensure_runner(db, payload):
 
 def run_status(db, request_id):
     from modstore_server.customer_ticket_github import RUN_ACTION, _execution, _inbox
+    from modstore_server.db.mac_control import MacControlTask
     from modstore_server.models import IncidentEvent
     from modstore_server.para_github_publication import publication_candidate
+    from modstore_server.para_github_repair import REPAIR_ACTOR
+    from modstore_server.para_github_repair import run_status as repair_status
+
+    repair = db.get(MacControlTask, UUID(str(request_id)).hex)
+    if repair and repair.actor == REPAIR_ACTOR:
+        return repair_status(repair)
 
     # The service sees only the opaque dispatch and execution state, never customer facts.
     rows = (
@@ -315,6 +569,7 @@ def run_status(db, request_id):
         "jobs": jobs,
         "receipts": execution.get("receipts", []),
         "publication_candidate": publication_candidate(db, event),
+        "model_allocation": json_loads(row.result_json, {}).get("model_allocation"),
     }
 
 

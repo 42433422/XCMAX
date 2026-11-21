@@ -11,6 +11,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from multiprocessing.connection import wait
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,8 +28,38 @@ from app.application.agent_orchestrator.task_background import task_execution_co
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
+from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+class _ExitingCheckpointExecutor(AgentToolExecutor):
+    def execute(self, step, *, runtime_context):
+        from app.application.agent_orchestrator.business_write_guard import (
+            capture_worker_claim,
+            owns_elt_step,
+        )
+        from app.application.agent_orchestrator.tool_permission import (
+            begin_idempotent_replay,
+            finish_idempotent_replay,
+        )
+
+        assert owns_elt_step(runtime_context) and runtime_context["durable_elt_batch"] is True
+        key, replay = begin_idempotent_replay(
+            runtime_context, step.tool_id, step.action, step.params
+        )
+        assert replay is None, replay
+        fixture = os.environ["DATABASE_URL"].removeprefix("sqlite:///")
+        if capture_worker_claim()[2] == 1:
+            with sqlite3.connect(fixture) as db:
+                db.execute("insert into elt_checkpoint_test values (1)")
+            os._exit(23)
+        with sqlite3.connect(fixture) as db:
+            assert db.execute("select file from elt_checkpoint_test").fetchall() == [(1,)]
+            db.execute("insert into elt_checkpoint_test values (2)")
+        result = {"success": True, "data": {"executed_rows": 2}}
+        finish_idempotent_replay(key, result)
+        return result
 
 
 def _run(actor, *, status="queued", completed_write=False):
@@ -370,6 +401,348 @@ raise SystemExit(99)
     assert queue.get(run.run_id).recovery_count == 1
 
 
+@pytest.mark.parametrize("open_effect", [False, True])
+@pytest.mark.parametrize("approval_source", ["grant", "workspace", "workspace_legacy"])
+def test_restart_preserves_exact_queued_approval_before_first_write(
+    trusted_actor, monkeypatch, open_effect, approval_source
+):
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+    from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+    from app.application.agent_orchestrator.stale_run_reconciler import reconcile_stale_running_runs
+    from app.application.workflow.approval_persistence import (
+        claim_agent_approval,
+        persist_agent_run_link,
+        persist_workflow_approval,
+    )
+    from app.application.workflow.workflow_types import ApprovalRequest, ApprovalStatus
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    actor = trusted_actor(role="admin")
+    repository, queue = _repositories(actor)
+    node = WorkflowNode(
+        "import",
+        "elt_import",
+        "execute",
+        {"file_paths": ["648777a2-83cb-4b1d-b20f-8370b498032b"]},
+        risk="high",
+    )
+    plan = PlanGraph("queued-import", "导入", nodes=[node])
+    plan.metadata["approval_required_node_ids"] = [node.node_id]
+    if approval_source != "grant":
+        plan.metadata["durable_elt_batch"] = True
+    legacy = approval_source == "workspace_legacy"
+    parent = None
+    if legacy:
+        parent = repository.save(AgentRun(str(actor.user_id), "原导入", status="blocked"))
+        plan.plan_id = f"continue-{parent.run_id}"
+        plan.metadata.update(
+            source="elt_batch_continuation",
+            continued_from_run_id=parent.run_id,
+            legacy_elt_tail_recheck=True,
+        )
+    step = AgentOrchestrator._step_from_node(node)
+    step.status = "waiting_user"
+    step.risk = "high"
+    node.idempotent = step.idempotent
+    run = AgentRun(
+        user_id=str(actor.user_id),
+        message=plan.intent,
+        status="waiting_user",
+        plan_id=plan.plan_id,
+        steps=[step],
+    )
+    run.metadata.update(plan=plan_to_dict(plan), runtime_context=actor.context)
+    if parent is not None:
+        run.metadata["task_context"] = {
+            "task_id": parent.run_id,
+            "parent_run_id": parent.run_id,
+            "root_run_id": parent.run_id,
+            "attempt": 2,
+        }
+    repository.save(run)
+    queue.get(run.run_id)
+    if approval_source != "grant":
+        request = ApprovalRequest(
+            "workspace-task",
+            plan.plan_id,
+            node.node_id,
+            node.tool_id,
+            node.action,
+            node.params,
+            ApprovalStatus.PENDING,
+            datetime.now(UTC),
+            tenant_id=actor.tenant_id,
+        )
+        monkeypatch.setattr(
+            "app.application.agent_orchestrator.task_execution_repository.get_task_execution_repository",
+            lambda: queue,
+        )
+        notified = []
+        monkeypatch.setattr(
+            task_dispatcher, "notify_agent_task_dispatcher", lambda: notified.append(1)
+        )
+        service = AgentOrchestrator(repository=repository)
+        args = {
+            "approved_by": run.user_id,
+            "approved_step_id": step.step_id,
+            "approval_request_id": request.request_id,
+        }
+        with tenant_scope(actor.tenant_id):
+            assert persist_workflow_approval(
+                request, actor.context, flow_key="import-test", plan=plan
+            )
+            assert persist_agent_run_link(
+                request.request_id, agent_run_id=run.run_id, approved_step_id=step.step_id
+            )
+            assert service.continue_run(run.run_id, **args) is None
+            assert (
+                repository.get(run.run_id).status == "waiting_user"
+                and queue.get(run.run_id) is None
+            )
+            assert claim_agent_approval(
+                request.request_id, agent_run_id=run.run_id, approved_step_id=step.step_id
+            )
+            if parent is not None:
+                lineage = {
+                    "task_id": parent.run_id,
+                    "root_run_id": parent.run_id,
+                    "task_attempt": 2,
+                }
+                checked = []
+                pinned = copy.deepcopy(plan)
+
+                def readback(source, context):
+                    checked.append(source.run_id)
+                    assert context["_actor_authorization"] == actor.context["_actor_authorization"]
+                    return pinned, lineage
+
+                monkeypatch.setattr(
+                    "app.application.elt.batch_continuation.build_legacy_batch_continuation",
+                    readback,
+                )
+                pinned.nodes[0].params["file_paths"] = ["648777a2-83cb-4b1d-b20f-8370b498032c"]
+                assert service.continue_run(run.run_id, **args) is None
+                assert repository.get(run.run_id).status == "waiting_user"
+                assert queue.get(run.run_id) is None and notified == []
+                pinned.nodes[0].params["file_paths"] = node.params["file_paths"]
+            approved = service.continue_run(run.run_id, **args)
+            if parent is not None:
+                assert checked == [parent.run_id, parent.run_id]
+        assert notified == [1]
+        assert approved.metadata["approval_receipt"]["queue_approval"] == "workspace_claim"
+    else:
+        grant = issue_approval_grant(run, principal_id=run.user_id)
+        approved = approve_and_enqueue(
+            repository,
+            queue,
+            run_id=run.run_id,
+            token=grant["grant"],
+            principal_id=run.user_id,
+            runtime_context={},
+        )
+    assert approved.status == queue.get(run.run_id).state == "queued"
+    assert approved.metadata["approval_receipt"]["step_id"] == step.step_id
+    assert "grant" not in approved.metadata["approval_receipt"]
+
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import os, sys
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.task_execution_sql_repository import SQLAlchemyTaskExecutionRepository
+factory = sessionmaker(bind=create_engine(os.environ["DATABASE_URL"]))
+repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+run = repo.get(sys.argv[1])
+assert queue.claim("crashed", lease_seconds=60).run_id == run.run_id
+run.status = run.metadata["dispatch"]["state"] = "running"
+if sys.argv[2] == "True":
+    run.steps[0].status = "running"
+    queue.mark_open_effect(run.run_id, run.steps[0].step_id)
+repo.save(run)
+os._exit(23)
+""",
+            run.run_id,
+            str(open_effect),
+        ],
+        timeout=25,
+        capture_output=True,
+    )
+    assert child.returncode == 23, child.stderr.decode()
+
+    if open_effect and approval_source == "grant":
+        set_agent_run_repository_for_tests(repository)
+        try:
+            assert reconcile_stale_running_runs() == 1
+            stored = repository.get(run.run_id)
+            assert stored.metadata["recovery"]["step_ids"] == [step.step_id]
+            assert stored.metadata["recovery"]["state"] == "manual_reconciliation_required"
+            assert queue.claim("replacement", lease_seconds=60) is None
+        finally:
+            set_agent_run_repository_for_tests(None)
+        return
+
+    calls = []
+
+    def execute(resumed_step, *, runtime_context):
+        calls.append((resumed_step.step_id, runtime_context["idempotency_key"]))
+        if open_effect:
+            return {"success": False, "outcome": "unknown", "reconciliation_required": True}
+        return {"success": True, "data": {"executed_rows": 1}}
+
+    if open_effect:
+        set_agent_run_repository_for_tests(repository)
+        try:
+            assert reconcile_stale_running_runs() == 1
+            claimed = queue.claim("replacement", lease_seconds=60)
+            dispatcher = task_dispatcher.AgentTaskDispatcher(
+                execution_repository=queue,
+                run_repository=repository,
+                orchestrator_factory=lambda repo: AgentOrchestrator(
+                    repository=repo,
+                    tool_executor=SimpleNamespace(execute=execute),
+                ),
+            )
+            dispatcher._execute_claim(claimed, "replacement")
+            assert queue.claim("second-replacement", lease_seconds=60) is None
+            stored = repository.get(run.run_id)
+            assert stored.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        finally:
+            set_agent_run_repository_for_tests(None)
+    else:
+        stored = _finish_with_startup(monkeypatch, repository, queue, execute, run.run_id)
+    assert (
+        approved.metadata["approval_receipt"].items() <= stored.metadata["approval_receipt"].items()
+    )
+    assert calls == [(step.step_id, task_execution_context(run, step)["idempotency_key"])]
+    assert queue.get(run.run_id).execution_count == 2
+
+
+@pytest.mark.parametrize("cleanup_verified", [True, False], ids=["verified", "unverified"])
+def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
+    trusted_actor, monkeypatch, tmp_path, cleanup_verified
+):
+    from app.application.agent_orchestrator import tool_process
+    from app.application.agent_orchestrator.approval_grant import _params_hash
+    from app.application.agent_orchestrator.elt_checkpoint_recovery import ELT_CHECKPOINT_PROTOCOL
+    from app.application.workflow.workflow_types import plan_fingerprint
+
+    actor = trusted_actor(role="admin")
+    repository, queue = _repositories(actor)
+    node = WorkflowNode(
+        "import",
+        "elt_import",
+        "execute",
+        {
+            "file_paths": [
+                "648777a2-83cb-4b1d-b20f-8370b498032b",
+                "648777a2-83cb-4b1d-b20f-8370b498032c",
+            ]
+        },
+        risk="high",
+    )
+    plan = PlanGraph(
+        "original-elt",
+        "导入",
+        nodes=[node],
+        metadata={"durable_elt_batch": True, "approval_required_node_ids": [node.node_id]},
+    )
+    step = AgentOrchestrator._step_from_node(node)
+    node.idempotent = step.idempotent
+    run = AgentRun(
+        user_id=str(actor.user_id),
+        message=plan.intent,
+        status="queued",
+        plan_id=plan.plan_id,
+        steps=[step],
+    )
+    run.metadata.update(
+        plan=plan_to_dict(plan),
+        runtime_context=actor.context,
+        dispatch={
+            "approved_step_id": step.step_id,
+            "elt_checkpoint_protocol": ELT_CHECKPOINT_PROTOCOL,
+        },
+        approval_receipt={
+            "queue_approval": "workspace_claim",
+            "approval_request_id": "test",
+            "step_id": step.step_id,
+            "tool_id": step.tool_id,
+            "action": step.action,
+            "approved_by": run.user_id,
+            "params_sha256": _params_hash(step),
+            "plan_sha256": plan_fingerprint(plan),
+        },
+    )
+    repository.save(run)
+    queue.enqueue(run)
+    old = queue.claim("old", lease_seconds=60)
+    dispatcher = task_dispatcher.AgentTaskDispatcher(
+        execution_repository=queue,
+        run_repository=repository,
+        orchestrator_factory=lambda repo: AgentOrchestrator(
+            repository=repo, tool_executor=_ExitingCheckpointExecutor()
+        ),
+    )
+    fixture = os.environ["DATABASE_URL"].removeprefix("sqlite:///")
+    with sqlite3.connect(fixture) as db:
+        db.execute("create table elt_checkpoint_test (file int primary key)")
+    marker_db = tmp_path / "elt-tool-claims.sqlite"
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(marker_db))
+    monkeypatch.setattr(tool_process, "_caller_business_db_url", lambda: "")
+    monkeypatch.setattr(tool_process.tempfile, "tempdir", str(tmp_path))
+    original_reap = tool_process._reap
+
+    def inspect_fixture_exit(process):
+        if wait((process.sentinel,), timeout=0):
+            # A concurrent multiprocessing launch can reap an exited PID
+            # before psutil sees it. Exercise that path deterministically.
+            process.join(timeout=1)
+            # The synthetic worker only uses in-process SQLite. Supply the
+            # clean verdict for the separate queue handoff case.
+            if process.exitcode == 23 and cleanup_verified:
+                return True
+        return original_reap(process)
+
+    monkeypatch.setattr(tool_process, "_reap", inspect_fixture_exit)
+    dispatcher._execute_claim(old, "old")
+    stored = repository.get(run.run_id)
+    if not cleanup_verified:
+        assert stored.status == "blocked", stored.steps[0].output
+        assert stored.steps[0].output["error_code"] == "tool_worker_exited"
+        assert stored.steps[0].output["reconciliation_evidence"]["cleanup_unresolved"] is True
+        assert queue.get(run.run_id).state == "failed"
+        with sqlite3.connect(fixture) as db:
+            assert db.execute("select file from elt_checkpoint_test").fetchall() == [(1,)]
+        return
+    assert stored.status == "running", (stored.steps[0].status, stored.steps[0].output)
+    with sqlite3.connect(marker_db) as db:
+        owner, inflight = db.execute("select owner, inflight from tool_idempotency").fetchone()
+        assert ":elt-lease-v1:" in owner and inflight == 1
+    expired = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+    with sqlite3.connect(fixture) as db:
+        db.execute(
+            "update agent_task_executions set lease_expires_at=? where run_id=?",
+            (expired, run.run_id),
+        )
+    new = queue.claim("replacement", lease_seconds=60)
+    assert new.run_id == old.run_id and new.execution_count == old.execution_count + 1
+    dispatcher._execute_claim(new, "replacement")
+    stored = repository.get(run.run_id)
+    assert stored.status == "completed" and queue.get(run.run_id).state == "succeeded"
+    assert stored.steps[0].output == {"success": True, "data": {"executed_rows": 2}}
+    with sqlite3.connect(fixture) as db:
+        assert db.execute("select file from elt_checkpoint_test order by file").fetchall() == [
+            (1,),
+            (2,),
+        ]
+
+
 def test_concurrent_retry_preserves_completed_write_and_atomically_requeues_same_run(
     trusted_actor, monkeypatch
 ):
@@ -521,6 +894,35 @@ def test_unknown_checkpoint_version_fails_before_tool_dispatch(trusted_actor):
     stored = service.execute_dispatched_run(run.run_id)
     assert stored.status == "blocked" and "版本" in stored.error
     assert calls == []
+
+
+@pytest.mark.skipif(
+    not os.environ.get("XCAGI_TEST_AGENT_POSTGRES_URL"), reason="requires CI PostgreSQL service"
+)
+@pytest.mark.parametrize("entrypoint", ["continue", "active"])
+@pytest.mark.parametrize("present", [False, True])
+def test_postgres_batch_scope_filters_history_and_keeps_legacy_payloads(
+    monkeypatch, entrypoint, present
+):
+    import uuid
+
+    from sqlalchemy import create_engine
+
+    from tests.test_application.test_elt_batch_continuation import _assert_batch_scope_lookup
+
+    url = os.environ["XCAGI_TEST_AGENT_POSTGRES_URL"]
+    admin = create_engine(url)
+    schema = "batch_scope_" + uuid.uuid4().hex
+    with admin.begin() as db:
+        db.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    try:
+        _assert_batch_scope_lookup(monkeypatch, engine, entrypoint, present)
+    finally:
+        engine.dispose()
+        with admin.begin() as db:
+            db.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+        admin.dispose()
 
 
 @pytest.mark.skipif(

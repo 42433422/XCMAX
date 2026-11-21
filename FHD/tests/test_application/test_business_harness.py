@@ -63,6 +63,21 @@ def test_terminal_result_exposes_bounded_business_facts_and_event_identity() -> 
     assert result["projection_key"].endswith(f":{run.run_id}:completed")
 
 
+def test_planning_rejection_receipt_reports_that_execution_never_started() -> None:
+    run = AgentRun(user_id="7", message="清理全部数据库", status="failed")
+    run.final_output = {
+        "chat_payload": {
+            "success": False,
+            "data": {"action": "workflow_planning_failed", "execution_started": False},
+        }
+    }
+
+    result = ensure_terminal_business_result(run)
+
+    assert result["summary"] == "计划未通过复核，业务操作未开始"
+    assert result["evidence"]["completed_tool_count"] == 0
+
+
 def test_approval_result_projection_is_idempotency_keyed_and_readable() -> None:
     run = AgentRun(user_id="7", message="新增客户", status="completed")
     run.metadata["runtime_context"] = {

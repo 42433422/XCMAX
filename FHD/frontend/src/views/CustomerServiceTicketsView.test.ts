@@ -196,6 +196,111 @@ describe('customer service ticket detail', () => {
     expect(wrapper.find('.cs-close-form').exists()).toBe(false)
     wrapper.unmount()
   })
+  it.each(['invalid', 'out_of_scope'])('submits %s on the original ticket and reads its stop evidence', async kind => {
+    const note = '核对原问题后形成客户可见处置结论'
+    const verification = '按工单原文和给出的页面步骤核对当前产品功能与受理范围。'
+    detail.mockResolvedValueOnce({ ...payload, ticket: { ...ticket, status: 'processing', assigned_admin_id: 1 } })
+    detail.mockResolvedValueOnce({
+      ...payload,
+      ticket: { ...ticket, status: 'rejected', closed_at: '2026-11-20', disposition: {
+        kind, note, verification, execution_stop: { state: 'stop_unconfirmed' },
+      } },
+      audit_logs: [{ event_type: 'admin_ticket_disposed', detail: { reason: note } }],
+    })
+    confirm.mockResolvedValue(true)
+    post.mockResolvedValue({})
+    const wrapper = mountDetail(); await flushPromises()
+    const form = wrapper.find('.cs-close-form')
+    expect(form.findAll('option').map(option => option.attributes('value'))).toEqual(['expired', 'invalid', 'out_of_scope'])
+    await form.find('select').setValue(kind)
+    await form.findAll('textarea')[0].setValue(note)
+    await form.findAll('textarea')[1].setValue(verification)
+    await form.trigger('submit'); await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/xcmax/admin/customer-service/tickets/42/disposition', {
+      disposition: kind, note, verification, request_id: expect.any(String),
+    })
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining(ticket.ticket_no), expect.any(Object))
+    expect(wrapper.text()).toContain('已拒绝')
+    expect(wrapper.text()).toContain('已派发任务停止状态待核实')
+    expect(wrapper.text()).toContain('管理员驳回原工单')
+    expect(wrapper.text()).toContain(note)
+    expect(wrapper.find('.cs-close-form').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('revokes only dispatch, reconciles the original on uncertainty, and shows precise downstream receipts', async () => {
+    const note = '自动分类错误，改为当前管理员继续人工复核'
+    const processing = { ...ticket, status: 'processing', lifecycle_label: '处理中', assigned_admin_id: 17 }
+    detail.mockResolvedValue({ ...payload, ticket: processing })
+    get.mockResolvedValue({ viewer_id: 17 })
+    confirm.mockResolvedValue(true)
+    post.mockRejectedValueOnce(new Error('撤销回执暂不可确认'))
+    const wrapper = mountDetail(); await flushPromises()
+    const revoke = () => wrapper.findAll('button').find(button => button.text() === '撤销派发')!
+    await wrapper.get('[aria-label="人工处理"]').get('input[minlength="4"]').setValue(note)
+    await revoke().trigger('click'); await flushPromises()
+    const original = post.mock.calls[0]
+    expect(original).toEqual(['/api/xcmax/admin/customer-service/tickets/42/dispatch-revoke', {
+      request_id: expect.any(String), note,
+    }])
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining(ticket.ticket_no), expect.any(Object))
+    expect(wrapper.text()).toContain('撤销回执暂不可确认')
+    expect(wrapper.findAll('button').find(button => button.text() === '撤销派发')).toBeUndefined()
+    await wrapper.findAll('button').find(button => button.text() === '重试详情')!.trigger('click'); await flushPromises()
+    detail.mockResolvedValue({
+      ...payload, ticket: { ...processing, dispatch_revocation: { note, at: '2026-11-20T07:00:00Z', execution_stop: {
+        state: 'stop_unconfirmed', new_dispatch_blocked: true,
+        unsettled_incidents: [{ incident_event_id: 77, task_ids: ['para-pending'] }],
+        unsettled_action_ids: [83],
+        blocked_action_ids: [84],
+        mac_control_tasks: [{ id: 'queued-local', state: 'cancelled' }, { id: 'running-local', state: 'cancel_requested' }],
+      } } },
+      audit_logs: [{ event_type: 'admin_ticket_dispatch_revoked', detail: { note } }],
+      execution_overview: { revocation_task_receipts: [{ id: 'running-local', state: 'cancelled' }] },
+    })
+    post.mockResolvedValue({})
+    await revoke().trigger('click'); await flushPromises()
+    expect(post.mock.calls[1]).toEqual(original)
+    expect(wrapper.text()).toContain('处理中')
+    expect(wrapper.text()).toContain('管理员撤销派发')
+    const receipt = wrapper.get('[aria-label="撤销派发回执"]')
+    expect(receipt.text()).toContain('撤销时的执行状态')
+    expect(receipt.text()).toContain('已派发任务停止状态待核实')
+    expect(receipt.text()).toContain('queued-local · 已取消')
+    expect(receipt.text()).toContain('running-local · 已申请取消，等待执行端确认')
+    expect(receipt.text()).toContain('最新回执 已取消')
+    expect(receipt.text()).toContain('para-pending')
+    expect(receipt.text()).toContain('动作 #83 · 停止状态待核实')
+    expect(receipt.text()).toContain('动作 #84 · 启动前已阻止')
+    expect(wrapper.findAll('button').find(button => button.text() === '撤销派发')).toBeUndefined()
+    expect(wrapper.find('.cs-close-form').exists()).toBe(true)
+    wrapper.unmount()
+  })
+  it('does not revoke from a different administrator account', async () => {
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: 'open', assigned_admin_id: 17 } })
+    get.mockResolvedValue({ viewer_id: 21 })
+    const wrapper = mountDetail(); await flushPromises()
+    const handle = wrapper.get('[aria-label="人工处理"]')
+    await handle.get('input[minlength="4"]').setValue('自动派发需要转由管理员核对')
+    await handle.findAll('button').find(button => button.text() === '撤销派发')!.trigger('click'); await flushPromises()
+    expect(handle.get('[role="alert"]').text()).toContain('仅当前工单处理人')
+    expect(confirm).not.toHaveBeenCalled()
+    expect(post).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('assigns the selected original to the verified logged-in admin', async () => {
+    detail.mockResolvedValue({ ...payload, ticket: { ...ticket, status: 'processing' } })
+    get.mockResolvedValue({ viewer_id: 17, items: [{ id: 21 }, { id: 17 }] })
+    post.mockResolvedValue({})
+    const wrapper = mountDetail(); await flushPromises()
+    const handle = wrapper.find('[aria-label="人工处理"]')
+    await handle.findAll('input')[1].setValue('核对这张原单后处理')
+    await handle.findAll('button').find(button => button.text() === '指派给我')!.trigger('click'); await flushPromises()
+    expect(get).toHaveBeenCalledWith('/api/xcmax/admin/customer-service/staff')
+    expect(post).toHaveBeenCalledWith('/api/xcmax/admin/customer-service/tickets/42/assign', {
+      assignee_id: 17, reason: '核对这张原单后处理',
+    })
+    wrapper.unmount()
+  })
   it('does not apply an old ETA save result after navigating to another ticket', async () => {
     let complete!: (value: unknown) => void
     updateEta.mockReturnValueOnce(new Promise(resolve => { complete = resolve }))

@@ -117,6 +117,30 @@ def test_bulk_preview_names_scope_and_does_not_call_the_model(monkeypatch):
     assert not is_bulk_destructive("删除这个客户")
 
 
+@pytest.mark.parametrize(
+    "prompt", ["清理全部知识库和数据库和模板库", "清理全部客户、知识库和模板库", "全部的"]
+)
+def test_cleanup_and_followups_reach_planner_with_conversation_history(monkeypatch, prompt):
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    snapshot = MagicMock()
+    monkeypatch.setattr("app.application.chat_turn_guard.scope_snapshot", snapshot)
+    history = [
+        {"role": "user", "content": "清理全部知识库和数据库和模板库"},
+        {"role": "assistant", "content": "需要清理哪些范围？"},
+    ]
+    service = object.__new__(AIChatApplicationService)
+    service._process_chat_impl = MagicMock(return_value={"response": "模型回复"})
+    result = service.process_chat(
+        "user-1", prompt, context={"_chat_history_messages": history, "destructive_confirmed": True}
+    )
+    args = service._process_chat_impl.call_args.args
+    assert args[1] == prompt and args[2]["_chat_history_messages"] == history
+    assert "_bulk_preview_scopes" not in args[2]
+    assert result == {"response": "模型回复"}
+    snapshot.assert_not_called()
+
+
 def test_model_reply_is_visible_after_langgraph():
     import json
     from unittest.mock import Mock

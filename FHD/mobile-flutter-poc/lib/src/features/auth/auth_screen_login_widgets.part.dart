@@ -3,8 +3,6 @@
 part of 'auth_screen.dart';
 
 
-const _termsUrl = 'https://xiu-ci.com/legal/terms';
-const _privacyUrl = 'https://xiu-ci.com/legal/privacy';
 
 class _AuthLogo extends StatelessWidget {
   const _AuthLogo();

@@ -24,6 +24,7 @@ from app.legacy.routes.conversation.compat_extra import (
     _xcagi_user_sessions,
     router,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # Unit tests for helper functions
@@ -217,30 +218,28 @@ def _make_app() -> FastAPI:
         ),
     ],
 )
-def test_message_permission_error_does_not_expose_storage_path(monkeypatch, method, path, expected):
+def test_message_permission_error_does_not_expose_storage_path(
+    monkeypatch, trusted_actor, method, path, expected
+):
+    actor = trusted_actor(user_id=41)
     private_path = "/private/permission-regression/customer-data/xcagi.db"
     calls = []
-
-    def authenticated_actor(_request):
-        calls.append("authenticated")
-        return MagicMock(id=41)
 
     def denied_session():
         calls.append("storage")
         raise PermissionError(errno.EACCES, "Permission denied", private_path)
 
-    monkeypatch.setattr(
-        "app.infrastructure.auth.dependencies.resolve_session_user", authenticated_actor
-    )
-    # Keep the real store and context manager; fail only when it opens storage.
+    # Keep real session/principal authentication and the store transaction;
+    # only business storage fails, after the verified actor has been resolved.
     monkeypatch.setattr("app.db.session.SessionLocal", denied_session)
     with TestClient(_make_app()) as client:
         response = client.request(
             method,
             path,
+            headers=actor.headers,
             json={"session_id": "private-session", "content": "hello", "user_id": "42"},
         )
-    assert calls == ["authenticated", "storage"]
+    assert calls == ["storage"]
     assert response.status_code == 403
     assert private_path not in response.text
     assert "[Errno" not in response.text

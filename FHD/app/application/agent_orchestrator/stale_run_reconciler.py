@@ -24,7 +24,7 @@ from typing import Any
 
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.application.agent_orchestrator.run_models import agent_run_from_dict, utc_now_iso
+from app.application.agent_orchestrator.run_models import AgentRun, agent_run_from_dict, utc_now_iso
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -78,12 +78,63 @@ def _desktop_single_process() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _approved_unsubmitted_step(db: Any, run: AgentRun) -> str:
+    """Recognize a committed queue approval that never reached its tool."""
+    from app.application.agent_orchestrator.approval_grant import _params_hash
+    from app.db.models.agent_approval import AgentApprovalConsumption
+
+    dispatch = run.metadata.get("dispatch")
+    receipt = run.metadata.get("approval_receipt")
+    if not isinstance(dispatch, dict) or not isinstance(receipt, dict):
+        return ""
+    step_id = dispatch.get("approved_step_id")
+    step = next((step for step in run.steps if step.step_id == step_id), None)
+    if (
+        step is None
+        or step.status != "pending"
+        or step.output
+        or step.started_at
+        or step.attempt_count
+        or any(call.step_id == step_id for call in run.tool_calls)
+        or (receipt.get("step_id"), receipt.get("tool_id"), receipt.get("action"))
+        != (step_id, step.tool_id, step.action)
+        or receipt.get("params_sha256") != _params_hash(step)
+    ):
+        return ""
+    if receipt.get("queue_approval") == "workspace_claim":
+        from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
+
+        plan = plan_from_dict(run.metadata.get("plan"))
+        return (
+            str(step_id)
+            if (
+                receipt.get("approval_request_id")
+                and receipt.get("approved_by")
+                and (step.tool_id, step.action) == ("elt_import", "execute")
+                and plan is not None
+                and plan.metadata.get("durable_elt_batch") is True
+                and receipt.get("plan_sha256") == plan_fingerprint(plan)
+            )
+            else ""
+        )
+    grant_id = receipt.get("grant_id")
+    if not isinstance(grant_id, str) or not grant_id or receipt.get("approved_by") != run.user_id:
+        return ""
+    consumed = db.get(AgentApprovalConsumption, grant_id)
+    return (
+        str(step_id)
+        if consumed and (consumed.run_id, consumed.step_id) == (run.run_id, step_id)
+        else ""
+    )
+
+
 def reconcile_stale_running_runs(
     *,
     stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
     now: str | None = None,
 ) -> int:
     """恢复可证明安全的原计划余步，其余中断任务保护停机；返回收敛条数。"""
+    from app.application.agent_orchestrator.elt_checkpoint_recovery import checkpoint_step
     from app.application.agent_orchestrator.resume_transaction import unresolved_effects
     from app.application.agent_orchestrator.run_lifecycle import (
         prepare_safe_continuation,
@@ -160,9 +211,26 @@ def reconcile_stale_running_runs(
             payload = _load_payload(record.payload_json)
             interrupted = agent_run_from_dict(payload)
             unknown_effects = unresolved_effects(db, interrupted)
+            checkpoint = checkpoint_step(interrupted) if execution is not None else None
+            checkpoint_id = (
+                checkpoint.step_id
+                if checkpoint is not None and set(unknown_effects) <= {checkpoint.step_id}
+                else ""
+            )
+            approved_step = (
+                _approved_unsubmitted_step(db, interrupted)
+                if not unknown_effects
+                and execution is not None
+                and execution.state in {"queued", "claimed", "running"}
+                else ""
+            )
             if (
-                not unknown_effects
-                and not safe_continuation_error(interrupted)
+                (not unknown_effects or checkpoint_id)
+                and not safe_continuation_error(
+                    interrupted,
+                    approved_unsubmitted_step_id=approved_step,
+                    elt_checkpoint_step_id=checkpoint_id,
+                )
                 and (execution is None or execution.state in {"queued", "claimed", "running"})
                 and (
                     execution is None or int(execution.execution_count or 0) < DEFAULT_MAX_ATTEMPTS
@@ -170,7 +238,11 @@ def reconcile_stale_running_runs(
             ):
                 unresolved_effects(db, interrupted, clear_confirmed=True)
                 prepare_safe_continuation(
-                    interrupted, requested_by="startup", reason="process_restart"
+                    interrupted,
+                    requested_by="startup",
+                    reason="process_restart",
+                    approved_unsubmitted_step_id=approved_step,
+                    elt_checkpoint_step_id=checkpoint_id,
                 )
                 if execution is not None:
                     execution.recovery_count = int(execution.recovery_count or 0) + 1

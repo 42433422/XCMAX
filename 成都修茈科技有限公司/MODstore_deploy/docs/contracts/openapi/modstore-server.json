@@ -9983,6 +9983,42 @@
             }
           },
           {
+            "in": "query",
+            "name": "transcript_before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transcript Before Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "transcript_image_message_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transcript Image Message Id"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -10020,7 +10056,9 @@
           }
         },
         "summary": "Session Detail",
-        "tags": ["customer-service"]
+        "tags": [
+          "customer-service"
+        ]
       }
     },
     "/api/customer-service/standards": {
@@ -10266,6 +10304,52 @@
             }
           },
           {
+            "in": "query",
+            "name": "include_transcript",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Transcript",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "transcript_before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transcript Before Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "transcript_image_message_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483647,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transcript Image Message Id"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -10303,7 +10387,9 @@
           }
         },
         "summary": "Ticket Detail",
-        "tags": ["customer-service"]
+        "tags": [
+          "customer-service"
+        ]
       }
     },
     "/api/debug/focus-primary": {

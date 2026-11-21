@@ -1,11 +1,14 @@
 """Capture real planner provider IO without a paid model or external storage."""
 
+import asyncio
 import copy
 import json
 import re
 import time
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from app.application.agent_orchestrator import context_window_manager as windows
@@ -61,6 +64,336 @@ def long_history(count=180):
         }
         for index in range(count)
     ]
+
+
+def test_batch_attachment_import_fits_default_budget_with_every_file(monkeypatch, model_boundary):
+    provider, _ = model_boundary
+    monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "4096")
+    files = [{"id": str(i), "name": f"表格{i}.xlsx", "suffix": ".xlsx"} for i in range(22)]
+    context = {
+        "artifact_ids": [file["id"] for file in files],
+        "file_context": {"attachment_manifest": files},
+        "available_employees": ["员工介绍" * 50] * 80,
+    }
+    registry = {
+        "elt_import": {"actions": {"preview": {}, "execute": {}}},
+        "unrelated": {"description": "业务说明" * 8000, "actions": {"query": {}}},
+    }
+    planner = generation.LlmPlanGeneration(
+        SimpleNamespace(get_context=lambda _: None),
+        gateway.request_planner_completion,
+        lambda: None,
+    )
+    assert planner.generate("p", "1", "导入", registry, context) is not None
+    prompt = json.loads(provider.requests[-1]["messages"][-1]["content"])
+    assert [tool["tool_id"] for tool in prompt["tool_registry"]] == ["elt_import"]
+    actions = prompt["tool_registry"][0]["actions"]
+    assert [item["action"] for item in actions] == ["execute"]
+    assert "file_paths" in actions[0]["input_schema"]["properties"]
+    assert prompt["context"] == {
+        "file_context": {"attachment_manifest": [file["name"] for file in files]}
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_platform_alias_full_catalog_reaches_original_provider(monkeypatch, streaming):
+    """The reported greeting must fit without deleting any registered contract."""
+    from app.application.facades.tools_facade import get_workflow_tool_registry
+    from app.application.workflow.tool_calling import plan_function_tools
+
+    registry = get_workflow_tool_registry()
+    original = generation._tool_specs(registry)
+    prompt = {
+        "user_message": "你好，请只回复收到",
+        "rules": list(generation.BASE_RULES),
+        "conversation_history": [],
+        "tool_registry": original,
+    }
+    messages = [
+        {"role": "system", "content": "根据用户输入回复或规划，只输出约定 JSON。"},
+        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+    ]
+    assert windows.estimate_messages_tokens(messages) > 8192
+    provider = RecordingProvider()
+    provider.provider_id = "modstore"
+    provider._adapter = SimpleNamespace(
+        resolve_chat_route=AsyncMock(return_value=("litellm", "xcmax-doubao-code")),
+        resolve_model_capabilities=AsyncMock(
+            return_value={
+                "context_window": 65536,
+                "max_output_tokens": 8192,
+                "resolved_model": "doubao/verified-test-deployment",
+                "source": "litellm_model_info",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **_: provider
+    )
+    extra = {"tools": plan_function_tools(), "tool_choice": "auto"}
+    monkeypatch.setattr(
+        windows,
+        "get_context_window_manager",
+        lambda: windows.ContextWindowManager(token_budget=8192),
+    )
+    with pytest.raises(windows.ContextWindowExceeded):
+        await gateway._prepare_model_messages(provider, {}, messages, 4096, extra)
+    assert not provider.requests and not provider.summaries
+
+    monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
+    context = {}
+    if streaming:
+        stream = gateway.stream_planner_completion(
+            ai_service=None, context=context, messages=messages, max_tokens=4096, **extra
+        )
+        assert [part async for part in stream]
+    else:
+        result = await asyncio.to_thread(
+            gateway.request_planner_completion,
+            ai_service=None,
+            context=context,
+            messages=messages,
+            max_tokens=4096,
+            **extra,
+        )
+        assert json.loads(result["choices"][0]["message"]["content"])["reply"] == "收到"
+    assert len(provider.requests) == 1 and not provider.summaries
+    sent = provider.requests[0]
+    rebuilt = json.loads(sent["messages"][-1]["content"])
+    for tool in rebuilt["tool_registry"]:
+        for action in tool["actions"]:
+            for key in ("input_schema", "output_schema"):
+                reference = action.pop(f"{key}_ref", None)
+                if reference is not None:
+                    action[key] = rebuilt["tool_schemas"][reference]
+            action.setdefault("description", tool["description"])
+    assert rebuilt["tool_registry"] == original
+    assert rebuilt["user_message"] == prompt["user_message"]
+    assert sent["tools"] == extra["tools"] and sent["max_tokens"] == 4096
+    assert context["_context_budget"]["capability_source"] == "litellm_model_info"
+    assert context["_context_budget"]["context_window"] == 65536
+    assert sent.get("model") != "doubao/verified-test-deployment"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("vision_window", [None, 4000, 65536])
+async def test_scoped_sdk_budgets_and_calls_the_same_selected_route(
+    monkeypatch, streaming, vision_window
+):
+    from app.application.facades.tools_facade import get_workflow_tool_registry
+    from app.domain.shared_services.conversation import modstore_adapter as facade
+    from app.infrastructure.llm.client import llm_client_factory_scope
+    from app.infrastructure.llm.providers import registry
+
+    requests, operations = [], []
+
+    def respond(request):
+        assert request.headers["authorization"] == "Bearer synthetic-budget-owner"
+        if request.url.path == "/api/llm/resolve-chat-default":
+            operation = request.url.params.get("operation", "chat")
+            operations.append(operation)
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "provider": "litellm",
+                    "model": "vision-alias" if operation == "vision" else "xcmax-doubao-code",
+                    "operation": operation,
+                    "route_source": "platform_gateway",
+                    "key_source": "platform",
+                    "route_token": f"synthetic-{operation}-route",
+                    "config_revision": "budget-fixture-v1",
+                    "model_capabilities": {
+                        "context_window": vision_window if operation == "vision" else 65536,
+                        "source": "litellm_model_info",
+                    },
+                },
+            )
+        assert request.url.path == "/api/llm/chat/stream"
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, text='data: {"delta":"收到"}\n\ndata: [DONE]\n\n')
+
+    client_type = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: client_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
+    )
+    monkeypatch.setattr(registry, "_maybe_instrument", lambda provider: provider)
+    monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
+    adapter = facade.ModstorePlatformAdapter(
+        platform_url="https://market.invalid", auth_token="synthetic-budget-owner"
+    )
+    adapter._use_account_default = True
+    prompt = json.dumps(
+        {
+            "user_message": "你好，请只回复收到",
+            "tool_registry": generation._tool_specs(get_workflow_tool_registry()),
+        },
+        ensure_ascii=False,
+    )
+    content = (
+        [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": "https://image.invalid/fixture.png"}},
+        ]
+        if vision_window is not None
+        else prompt
+    )
+    messages = [{"role": "user", "content": content}]
+    context = {}
+
+    async def invoke():
+        if streaming:
+            return "".join(
+                [
+                    part
+                    async for part in gateway.stream_planner_completion(
+                        ai_service=None, context=context, messages=messages, max_tokens=512
+                    )
+                ]
+            )
+        result = await asyncio.to_thread(
+            gateway.request_planner_completion,
+            ai_service=None,
+            context=context,
+            messages=messages,
+            max_tokens=512,
+        )
+        return result["choices"][0]["message"]["content"]
+
+    with llm_client_factory_scope(lambda: facade.ModstoreOpenAICompatibleClient(adapter)):
+        if vision_window == 4000:
+            with pytest.raises(windows.ContextWindowExceeded):
+                await invoke()
+            assert not requests
+        else:
+            assert await invoke() == "收到"
+            assert len(requests) == 1
+            sent = requests[0]
+            assert sent["provider"] == "litellm"
+            assert sent["model"] == (
+                "vision-alias" if vision_window is not None else "xcmax-doubao-code"
+            )
+            assert "_prepared_chat_route" not in sent
+            assert sent["allow_failover"] is False
+            if vision_window is not None:
+                assert sent["messages"] == messages
+    assert context["_context_budget"]["context_window"] == (vision_window or 65536)
+    assert operations.count("vision") == (1 if vision_window is not None else 0)
+    assert adapter.resolve_default_route() == ("litellm", "xcmax-doubao-code")
+
+
+@pytest.mark.asyncio
+async def test_unknown_alias_still_reports_missing_capability_without_paid_retry(monkeypatch):
+    provider = RecordingProvider()
+    provider.provider_id = "modstore"
+    provider._adapter = SimpleNamespace(
+        resolve_chat_route=AsyncMock(return_value=("litellm", "unregistered-alias")),
+        resolve_model_capabilities=AsyncMock(return_value={}),
+    )
+    messages = [
+        {"role": "system", "content": "必要工具约束" * 5000},
+        {"role": "user", "content": "你好，请只回复收到"},
+    ]
+    context = {}
+    with pytest.raises(windows.ContextWindowExceeded):
+        await gateway._prepare_model_messages(provider, context, messages, 4096, {})
+    assert context["_context_budget"]["capability_source"] == "catalog:default"
+    assert not provider.requests and not provider.summaries
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("requested,expected", [(None, 2048), (1024, 1024), (4096, None)])
+async def test_planner_default_output_fits_selected_model_without_changing_explicit_requests(
+    monkeypatch, streaming, requested, expected
+):
+    provider = RecordingProvider()
+    provider.model_info = {"context_window": 32768, "max_output_tokens": 2048}
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "4096")
+    monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **_: provider
+    )
+    context = {}
+    kwargs = {
+        "ai_service": None,
+        "context": context,
+        "messages": [{"role": "user", "content": "你好，请只回复收到"}],
+        "max_tokens": requested,
+    }
+
+    async def invoke():
+        if streaming:
+            return [chunk async for chunk in gateway.stream_planner_completion(**kwargs)]
+        return await asyncio.to_thread(gateway.request_planner_completion, **kwargs)
+
+    if expected is None:
+        with pytest.raises(windows.ContextWindowExceeded) as error:
+            await invoke()
+        assert error.value.reason == "model_output_limit_exceeded"
+        assert not provider.requests and not provider.summaries
+    else:
+        assert await invoke()
+        assert len(provider.requests) == 1
+        assert provider.requests[0]["max_tokens"] == expected
+        assert context["_context_budget"]["requested_output_tokens"] == expected
+        assert not provider.summaries
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_account_change_during_summary_stops_the_original_primary_call(
+    monkeypatch, streaming
+):
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    provider = RecordingProvider()
+    provider.provider_id = "modstore"
+    identity = ["original-account"]
+    provider._adapter = SimpleNamespace(
+        _connection=lambda: identity[0],
+        resolve_chat_route=AsyncMock(return_value=("litellm", "shared-alias")),
+        resolve_model_capabilities=AsyncMock(return_value={"context_window": 4000}),
+    )
+    original_complete = provider.chat_completion
+
+    async def change_account(**request):
+        result = await original_complete(**request)
+        assert provider.summaries and not provider.requests
+        identity[0] = "different-account"
+        return result
+
+    monkeypatch.setattr(provider, "chat_completion", change_account)
+    monkeypatch.setattr(windows.ContextWindowManager, "_record_summary_usage", lambda *_: None)
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **_: provider
+    )
+    messages = [
+        {"role": "system", "content": "保留原任务"},
+        *[{"role": "user", "content": "历史事实" * 100} for _ in range(16)],
+        {"role": "user", "content": "继续原任务"},
+    ]
+    with pytest.raises(MarketModelError) as error:
+        if streaming:
+            stream = gateway.stream_planner_completion(
+                ai_service=None, context={}, messages=messages, max_tokens=512
+            )
+            _ = [chunk async for chunk in stream]
+        else:
+            await asyncio.to_thread(
+                gateway.request_planner_completion,
+                ai_service=None,
+                context={},
+                messages=messages,
+                max_tokens=512,
+            )
+    assert error.value.status_code == 409
+    assert len(provider.summaries) == 1 and not provider.requests
 
 
 @pytest.mark.parametrize("field", ["file_context", "file_analysis"])

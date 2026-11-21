@@ -199,6 +199,13 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
         error = public_run_error(run) if status == "failed" else ""
         return f"{error}\n{warning}" if error else warning
     if status == "failed":
+        if not getattr(run, "steps", None) and any(
+            data.get("action") == "workflow_planning_failed"
+            and data.get("execution_started") is False
+            for payload in payloads
+            if isinstance(data := payload.get("data"), dict)
+        ):
+            return "计划未通过复核，业务操作未开始"
         return public_run_error(run) or "业务任务执行失败，详细信息已记录"
     if status == "cancelled":
         return "业务任务已取消，未继续执行"

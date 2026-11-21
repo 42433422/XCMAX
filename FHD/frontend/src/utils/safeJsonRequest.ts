@@ -1,3 +1,5 @@
+import { apiFetch } from './apiBase'
+
 export type SafeJsonResult<T = unknown> = {
   ok: boolean
   status: number
@@ -9,7 +11,7 @@ export type SafeJsonResult<T = unknown> = {
  * fetch + JSON 解析，非 JSON 或解析失败时返回结构化错误（供生态页、小猫分析等复用）。
  */
 export async function safeJsonRequest<T = unknown>(url: string, options: RequestInit = {}): Promise<SafeJsonResult<T>> {
-  const resp = await fetch(url, options)
+  const resp = await (url.startsWith('/api/') ? apiFetch(url, options) : fetch(url, options))
   const contentType = String(resp.headers.get('content-type') || '').toLowerCase()
   const text = await resp.text()
   if (!contentType.includes('application/json')) {
@@ -24,8 +26,9 @@ export async function safeJsonRequest<T = unknown>(url: string, options: Request
   try {
     const data = (text ? JSON.parse(text) : {}) as T
     if (!resp.ok) {
-      const msg =
-        typeof (data as { message?: string })?.message === 'string' ? (data as { message: string }).message : `请求失败（${resp.status}）`
+      const error = data as { message?: unknown; detail?: unknown } | null
+      const msg = typeof error?.message === 'string' ? error.message
+        : typeof error?.detail === 'string' ? error.detail : `请求失败（${resp.status}）`
       return {
         ok: false,
         status: resp.status,

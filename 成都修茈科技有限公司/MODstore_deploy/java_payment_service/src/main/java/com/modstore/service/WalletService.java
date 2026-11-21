@@ -449,6 +449,12 @@ public class WalletService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public Optional<WalletHold> findAiHoldForReadback(User user, String holdNo) {
+        return walletHoldRepository.findByHoldNo(holdNo)
+                .filter(hold -> user.getId().equals(hold.getUser().getId()));
+    }
+
     private WalletHold requireOwnedHold(User user, String holdNo) {
         String safeHoldNo = (holdNo == null ? "" : holdNo.trim());
         if (safeHoldNo.isEmpty()) {

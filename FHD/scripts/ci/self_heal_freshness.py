@@ -31,6 +31,9 @@ CODE_CI_STALE_FILTER: dict[str, frozenset[str]] = {
     "Source Governance": frozenset({"pull_request", "push"}),
     "Smoke Tests": frozenset({"pull_request", "push"}),
     "Employee Smoke Gate": frozenset({"pull_request", "push"}),
+    # Contract-only release gate runs are repairable only for a current PR; its
+    # push/workflow_dispatch runs remain unfiltered release evidence.
+    "Release gate CI": frozenset({"pull_request"}),
     "desktop-macos-smoke": frozenset({"pull_request", "push"}),
     "ci-mobile-flutter": frozenset({"pull_request", "push"}),
 }
@@ -40,6 +43,7 @@ CODE_CI_PATHS = {
     ".github/workflows/source-governance.yml": "Source Governance",
     ".github/workflows/fhd-test.yml": "Smoke Tests",
     ".github/workflows/fhd-employee-smoke-gate.yml": "Employee Smoke Gate",
+    ".github/workflows/fhd-release-gate-ci.yml": "Release gate CI",
     ".github/workflows/desktop-macos-smoke.yml": "desktop-macos-smoke",
     ".github/workflows/fhd-ci-mobile-flutter.yml": "ci-mobile-flutter",
 }

@@ -262,6 +262,29 @@ jobs:
           "$helper" fhd-production-observability.yml \
             "Production observability configuration ${RELEASE_SHA}" \
             -f "release_sha=${RELEASE_SHA}"
+      - name: Record exact server digests after production deployment
+        working-directory: FHD
+        env:
+          ADMIN_TOKEN: ${{ secrets.RELEASE_CONVERGENCE_ADMIN_TOKEN }}
+          ENDPOINT: ${{ vars.RELEASE_CONVERGENCE_URL || 'https://xiu-ci.com/api/admin/release-convergence' }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
+        run: |
+          set -euo pipefail
+          : "${ADMIN_TOKEN:?missing production readback credential}"
+          proof="$(mktemp -d)"
+          trap 'rm -rf "$proof"' EXIT
+          curl --proto '=https' -fsS --retry 3 --connect-timeout 15 --max-time 60 \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Cache-Control: no-cache' \
+            "$ENDPOINT" -o "$proof/release-convergence.json"
+          python3 scripts/release/verify_formal_release_identity.py --capture-production \
+            --evidence "$proof" --sha "$RELEASE_SHA" --version "$PRODUCT_VERSION" \
+            --orchestrator-run "$GITHUB_RUN_ID" > "$RUNNER_TEMP/production-deployment.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-production-deployment-identity
+          path: ${{ runner.temp }}/production-deployment.json
+          if-no-files-found: error
 
   dispatch-client-releases:
     needs: [verify-version-anchors, build-frontend, deploy-servers-in-order]
@@ -277,6 +300,22 @@ jobs:
           - fhd-release-web.yml
           - fhd-release-android.yml
     steps:
+      - name: Require exact current main before checking out dispatch helper
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/heads/main ]] || ! printf '%s' "$XCAGI_RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::Client dispatch requires main and a full release SHA."
+            exit 1
+          fi
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$main_sha" = "$XCAGI_RELEASE_SHA"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
       - name: Trigger ${{ matrix.workflow }}
         working-directory: .
         env:
@@ -284,6 +323,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$XCAGI_RELEASE_SHA"
           raw="${XCAGI_PRODUCT_VERSION}"
           raw="${raw#FHD/}"
           raw="${raw#v}"
@@ -324,11 +364,14 @@ jobs:
     needs: dispatch-client-releases
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      run_id: ${{ steps.readback.outputs.run_id }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
       - name: Require every source and device to report the frozen release
+        id: readback
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -345,22 +388,65 @@ jobs:
     if: ${{ needs.verify-full-convergence.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Promote and read back the already-verified GitHub release
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: xcagi-production-deployment-identity
+          path: ${{ runner.temp }}/formal-release
+      - name: Bind signed installers and production to the frozen GitHub draft
+        working-directory: FHD
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ inputs.release_sha }}
           PRODUCT_VERSION: ${{ inputs.product_version }}
+          CONVERGENCE_RUN: ${{ needs.verify-full-convergence.outputs.run_id }}
         run: |
           set -euo pipefail
-          tag="FHD/v${PRODUCT_VERSION}"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
-          release="$(gh api "repos/${GH_REPO}/releases/tags/${tag}")"
-          jq -e --arg sha "$RELEASE_SHA" --arg tag "$tag" '
-            .draft == true and .target_commitish == $sha and .tag_name == $tag and
-            ([.assets[].name | select(endswith(".exe"))] | length > 0) and
-            ([.assets[].name | select(endswith(".dmg"))] | length > 0)
-          ' <<<"$release" >/dev/null
+          [[ "$PRODUCT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
+          [[ "$CONVERGENCE_RUN" =~ ^[1-9][0-9]*$ ]]
+          tag="FHD/v${PRODUCT_VERSION}"
+          proof="$RUNNER_TEMP/formal-release"
+          mkdir -p "$proof"
+          fetch() {
+            curl --proto '=https' -fsS --connect-timeout 15 --max-time 60 --retry 3 \
+              -H 'Cache-Control: no-cache' "$1" -o "$proof/$2"
+          }
+          read_public_identity() {
+            fetch 'https://xiu-ci.com/download-release.json' public-pointer.json
+            fetch "https://xiu-ci.com/releases/builds/${PRODUCT_VERSION}/${RELEASE_SHA}/manifest.json" public-manifest.json
+            fetch 'https://xiu-ci.com/releases/stable/manifest.json' stable-manifest.json
+          }
+          read_public_identity
+          desktop_run="$(jq -er '.build_workflow_run_id | select(type == "string")' "$proof/public-pointer.json")"
+          [[ "$desktop_run" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/${GH_REPO}/actions/runs/${desktop_run}" | jq -e --arg sha "$RELEASE_SHA" '
+            .head_sha == $sha and .head_branch == "main" and .event == "workflow_dispatch" and
+            .path == ".github/workflows/fhd-release-desktop.yml" and .conclusion == "success"
+          ' >/dev/null
+          for artifact in xcagi-download-manifest xcagi-mac-release-signatures \
+              xcagi-windows-release-signature xcagi-github-release-asset-inventory; do
+            gh run download "$desktop_run" --repo "$GH_REPO" --name "$artifact" --dir "$proof"
+          done
+          cmp "$proof/public-pointer.json" "$proof/download-release.json"
+          gh run download "$CONVERGENCE_RUN" --repo "$GH_REPO" --name xcagi-release-convergence --dir "$proof"
+          gh api --paginate --slurp "repos/${GH_REPO}/releases?per_page=100" \
+            | jq -e --arg tag "$tag" '[.[][] | select(.tag_name == $tag)] | select(length == 1) | .[0]' \
+            > "$proof/github-release.json"
+          args=(--evidence "$proof" --version "$PRODUCT_VERSION" --sha "$RELEASE_SHA"
+                --desktop-run "$desktop_run" --orchestrator-run "$GITHUB_RUN_ID")
+          test "$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq .object.sha)" = "$RELEASE_SHA"
+          if jq -e '.draft == false' "$proof/github-release.json" >/dev/null; then
+            test "$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq .object.sha)" = "$RELEASE_SHA"
+            python3 scripts/release/verify_formal_release_identity.py "${args[@]}" --published
+            exit 0
+          fi
+          python3 scripts/release/verify_formal_release_identity.py "${args[@]}" >/dev/null
+          github_release_id="$(jq -er '.id | select(type == "number")' "$proof/github-release.json")"
           ref_sha="$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)"
           if [ -n "$ref_sha" ]; then
             test "$ref_sha" = "$RELEASE_SHA" || {
@@ -371,9 +457,9 @@ jobs:
             gh api --method POST "repos/${GH_REPO}/git/refs" \
               -f "ref=refs/tags/${tag}" -f "sha=${RELEASE_SHA}" >/dev/null
           fi
-          gh release edit "$tag" --repo "$GH_REPO" --draft=false
-          published="$(gh api "repos/${GH_REPO}/releases/tags/${tag}")"
-          jq -e --arg sha "$RELEASE_SHA" --arg tag "$tag" '
-            .draft == false and .target_commitish == $sha and .tag_name == $tag and
-            (.published_at | type == "string" and length > 0)
-          ' <<<"$published" >/dev/null
+          gh api --method PATCH "repos/${GH_REPO}/releases/${github_release_id}" -F draft=false >/dev/null
+          gh api "repos/${GH_REPO}/releases/${github_release_id}" > "$proof/github-release.json"
+          test "$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq .object.sha)" = "$RELEASE_SHA"
+          read_public_identity
+          cmp "$proof/public-pointer.json" "$proof/download-release.json"
+          python3 scripts/release/verify_formal_release_identity.py "${args[@]}" --published

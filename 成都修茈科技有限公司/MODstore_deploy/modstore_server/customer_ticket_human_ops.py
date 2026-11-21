@@ -25,7 +25,7 @@ from modstore_server.customer_service_tools import (
     json_loads,
 )
 from modstore_server.models import User
-from modstore_server.models_cs import CustomerServiceTicket
+from modstore_server.models_cs import CustomerServiceAction, CustomerServiceTicket
 
 
 def _evidence(ticket: CustomerServiceTicket) -> dict[str, Any]:
@@ -45,6 +45,8 @@ def _cas(
     evidence: dict[str, Any],
     assignee: int | None = None,
     set_assignee: bool = False,
+    closed_at: datetime | None = None,
+    commit: bool = True,
 ) -> CustomerServiceTicket:
     begin_immediate_write(db)
     before = str(ticket.status or "")
@@ -74,6 +76,8 @@ def _cas(
     }
     if set_assignee:
         values["assigned_admin_id"] = assignee
+    if closed_at is not None:
+        values.update(closed_at=closed_at, decision_status="rejected")
     changed = (
         db.query(CustomerServiceTicket)
         .filter(
@@ -102,15 +106,166 @@ def _cas(
             "at": now.isoformat(),
         },
     )
-    db.commit()
-    db.refresh(ticket)
+    if commit:
+        db.commit()
+        db.refresh(ticket)
     return ticket
+
+
+def revoke_ticket_dispatch(
+    db: Session, ticket: CustomerServiceTicket, user: User, *, request: dict[str, str]
+) -> dict[str, Any]:
+    """Stop new automated work on the original ticket without deciding the ticket."""
+    from modstore_server.custom_delivery_incident_policy import is_delivery_managed
+    from modstore_server.customer_service_orchestrator import ticket_payload
+    from modstore_server.customer_ticket_execution import ticket_dispatch_stop
+
+    if not user.is_admin:
+        raise HTTPException(403, "需要管理员权限")
+    db.refresh(ticket, with_for_update=True)
+    evidence = _evidence(ticket)
+    prior = evidence.get("dispatch_revocation")
+    if isinstance(prior, dict):
+        if (
+            prior.get("request_id") == request["request_id"]
+            and prior.get("operator_id") == int(user.id)
+            and prior.get("note") == request["note"]
+        ):
+            return {"ticket": ticket_payload(ticket), "replayed": True}
+        raise HTTPException(409, "原工单已撤销派发，请核对已保存的回执")
+    before = str(ticket.status or "")
+    if before not in {"open", "processing"} or ticket.closed_at:
+        raise HTTPException(409, "只有待处理或处理中的原工单可以撤销派发")
+    if ticket.assigned_admin_id != int(user.id):
+        raise HTTPException(403, "只有当前工单处理人可以撤销派发")
+    if is_delivery_managed(str(ticket.intent), evidence) or ticket.intent == "custom_delivery":
+        raise HTTPException(409, "定制交付工单须按原交付流程处置")
+    if issue_resolution(ticket, evidence).get("repair_verified") is True:
+        raise HTTPException(409, "已核验修复的工单须沿用原验收流程")
+    receipt = {
+        "request_id": request["request_id"],
+        "operator_id": int(user.id),
+        "note": request["note"],
+        "at": datetime.now(UTC).isoformat(),
+        "execution_stop": ticket_dispatch_stop(db, ticket, reason="ticket_dispatch_revoked"),
+    }
+    evidence["dispatch_revocation"] = receipt
+    _cas(
+        db,
+        ticket,
+        user,
+        expected=before,
+        new_status=before,
+        event="admin_ticket_dispatch_revoked",
+        reason=request["note"],
+        evidence=evidence,
+        commit=False,
+    )
+    db.add(
+        CustomerServiceAction(
+            ticket_id=ticket.id,
+            user_id=user.id,
+            action_type="ticket.dispatch_revoke",
+            target_type="ticket",
+            target_id=str(ticket.id),
+            status="completed",
+            request_json=json_dumps(request),
+            result_json=json_dumps(receipt),
+            idempotency_key=f"admin-ticket-dispatch-revoke:{ticket.id}:{request['request_id']}",
+        )
+    )
+    db.commit()
+    return {"ticket": ticket_payload(ticket), "replayed": False}
+
+
+def dispose_ticket(
+    db: Session, ticket: CustomerServiceTicket, user: User, *, request: dict[str, str]
+) -> dict[str, Any]:
+    """Record a terminal triage outcome and notify the owner in one transaction."""
+    from modstore_server.customer_service_api_helpers import record_original_session_message
+    from modstore_server.customer_service_orchestrator import ticket_payload
+    from modstore_server.customer_ticket_disposition import prepare_disposition
+    from modstore_server.customer_ticket_execution import ticket_dispatch_stop
+
+    if not user.is_admin:
+        raise HTTPException(403, "需要管理员权限")
+    db.refresh(ticket, with_for_update=True)
+    evidence = _evidence(ticket)
+    prior = evidence.get("admin_disposition")
+    if isinstance(prior, dict) and prior.get("request_id") == request["request_id"]:
+        if prior.get("operator_id") != int(user.id) or any(
+            prior.get(field) != request[key]
+            for field, key in (
+                ("kind", "disposition"),
+                ("note", "note"),
+                ("verification", "verification"),
+            )
+        ):
+            raise HTTPException(409, "同一处置标识不能用于不同操作者或内容")
+        if ticket.status != "rejected" or not ticket.closed_at:
+            raise HTTPException(409, "原工单状态已变化，请刷新后核对")
+        return {"ticket": ticket_payload(ticket), "replayed": True}
+    if ticket.status != "processing" or ticket.closed_at:
+        raise HTTPException(409, "只有处理中且未关闭的工单可以记录无效或无关处置")
+    if ticket.assigned_admin_id != int(user.id):
+        raise HTTPException(403, "只有当前工单处理人可以记录处置")
+    if not any(
+        isinstance(note, dict) and note.get("operator_id") == int(user.id)
+        for note in evidence.get("diagnoses") or []
+    ):
+        raise HTTPException(409, "当前处理人需先登记诊断证据")
+    from modstore_server.custom_delivery_incident_policy import is_delivery_managed
+
+    if is_delivery_managed(str(ticket.intent), evidence) or ticket.intent == "custom_delivery":
+        raise HTTPException(409, "定制交付工单须按原交付流程处置")
+    resolution = issue_resolution(ticket, evidence)
+    if resolution.get("repair_verified") is True:
+        raise HTTPException(409, "已核验修复的工单须沿用原验收流程")
+    now = datetime.now(UTC)
+    disposition = {
+        "kind": request["disposition"],
+        "request_id": request["request_id"],
+        "operator_id": int(user.id),
+        "note": request["note"],
+        "verification": request["verification"],
+        "at": now.isoformat(),
+        "execution_stop": ticket_dispatch_stop(db, ticket),
+    }
+    note = prepare_disposition(ticket, evidence, disposition, source="admin_disposition")
+    _cas(
+        db,
+        ticket,
+        user,
+        expected="processing",
+        new_status="rejected",
+        event="admin_ticket_disposed",
+        reason=request["note"],
+        evidence=evidence,
+        closed_at=now,
+        commit=False,
+    )
+    record_original_session_message(db, ticket, user, note, now=now, origin="admin_disposition")
+    db.add(
+        CustomerServiceAction(
+            ticket_id=ticket.id,
+            user_id=user.id,
+            action_type="ticket.disposition",
+            target_type="ticket",
+            target_id=str(ticket.id),
+            status="completed",
+            request_json=json_dumps(request),
+            result_json=json_dumps(disposition),
+            idempotency_key=f"admin-ticket-disposition:{ticket.id}:{request['request_id']}",
+        )
+    )
+    db.commit()
+    return {"ticket": ticket_payload(ticket), "replayed": False}
 
 
 def assign_ticket(
     db: Session, ticket: CustomerServiceTicket, user: User, assignee_id: int, reason: str
 ) -> CustomerServiceTicket:
-    if ticket.status not in {"open", "processing", "awaiting_customer"}:
+    if ticket.status not in {"open", "processing", "awaiting_customer", "waiting_user"}:
         raise HTTPException(409, "当前状态不能指派")
     assignee = db.get(User, int(assignee_id))
     if assignee is None or not assignee.is_admin:

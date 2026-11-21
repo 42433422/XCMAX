@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+ELT_WORKBOOK_SUFFIXES = frozenset({".xlsx", ".xlsm", ".xls"})
+
 
 @dataclass
 class SheetInfo:

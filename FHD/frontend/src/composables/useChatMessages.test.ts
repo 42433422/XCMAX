@@ -940,14 +940,16 @@ it('restores two same-minute failures once each across repeated server syncs', a
 it.each([undefined, 'explicit-turn'])('preserves the user turn through the save envelope and server restoration (override=%s)', async override => {
   localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks()
   const chatApi = (await import('@/api/chat')).default
-  vi.mocked(chatApi.saveMessage).mockResolvedValueOnce({ success: true, saved: true, durable: true } as never)
+  vi.mocked(chatApi.saveMessage).mockResolvedValueOnce({ success: true, saved: true, durable: true, message_id: 41 } as never)
   const api = useChatMessages(ref('user-turn-persistence'))
   api.addMessage('本轮原文', 'user', { turnId: 'local-turn' })
   await api.saveMessage('user', '本轮原文', undefined, override ? { turnId: override } : undefined)
+  expect(api.messages.value.at(-1)?.serverMessageId).toBe(41)
   const payload = vi.mocked(chatApi.saveMessage).mock.calls[0]![0] as { metadata: string; client_message_id: string }
   const storedMetadata = { ...JSON.parse(payload.metadata), client_message_id: payload.client_message_id }
   const restored = chatMessageExtrasFromServerRow({ id: 41, role: 'user', metadata: JSON.stringify(storedMetadata) })
   expect(restored.turnId).toBe(override || 'local-turn')
+  expect(restored.serverMessageId).toBe(41)
   expect(restored.persistence).toEqual({ id: payload.client_message_id, status: 'saved' })
 })
 
@@ -1017,6 +1019,27 @@ it('retires only cached streaming placeholders after refresh while preserving un
   expect(history.messages.value.at(-1)?.routeMetadata).toEqual(route)
   invalidateEnterpriseSessionCache()
   expect(lastChatModelRoute('refresh-stream')).toBeNull()
+})
+
+it('keeps the live reply when switching away and back and saves it under its original conversation', () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  const sid = ref('parallel-origin')
+  const view = useChatMessages(sid)
+  const reply = view.retainConversationMessages()
+  const index = reply.pushStreamingAiShell()
+  const shell = reply.messages.value[index]
+  sid.value = 'parallel-next'
+  view.addMessage('Question in the second conversation', 'user')
+  sid.value = 'parallel-origin'
+  expect(view.messages.value[index]).toBe(shell)
+  expect(shell.streamingShell).toBe(true)
+  sid.value = 'parallel-next'
+  reply.applyPlainTextToMessageIndex(index, 'Original conversation reply')
+  reply.persist()
+  reply.release()
+  expect(view.messages.value.at(-1)?.content).toBe('Question in the second conversation')
+  sid.value = 'parallel-origin'
+  expect(view.messages.value.at(-1)?.content).toBe('Original conversation reply')
 })
 
 it.each([false, true])('cached chat startup owns its read without a DOM readiness flag (previously ready: %s)', async previouslyReady => {

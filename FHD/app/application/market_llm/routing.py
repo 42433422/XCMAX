@@ -14,13 +14,18 @@ from app.infrastructure.modstore_transport import MarketModelError
 from app.infrastructure.modstore_transport import safe_route_metadata as route_metadata
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .catalog import public_model_capabilities
 from .protocols import Connection, Payload, Route, SyncClientFactory
 from .protocols import preflight_timeout as _preflight_timeout
 from .responses import _response_status_code
 
 
 def resolve_account_route(
-    connection: Connection, client_factory: SyncClientFactory, route: Route | None = None
+    connection: Connection,
+    client_factory: SyncClientFactory,
+    route: Route | None = None,
+    *,
+    operation: str = "chat",
 ) -> Payload:
     """Resolve account preferences/BYOK/platform defaults at their server-owned source."""
     with client_factory(
@@ -28,11 +33,10 @@ def resolve_account_route(
         headers=connection.headers(),
     ) as client:
         url = f"{connection.platform_url}/api/llm/resolve-chat-default"
-        response = (
-            client.get(url, params={"provider": route[0], "model": route[1]})
-            if route
-            else client.get(url)
-        )
+        params = {"provider": route[0], "model": route[1]} if route else {}
+        if operation != "chat":
+            params["operation"] = operation
+        response = client.get(url, params=params) if params else client.get(url)
         status = _response_status_code(response)
         try:
             data = response.json()
@@ -49,6 +53,8 @@ def resolve_account_route(
             error.recovery = "choose_chat_model_or_follow_platform"
         raise error
     if isinstance(data, dict) and data.get("ok") is not False:
+        if operation != "chat" and data.get("operation") != operation:
+            raise MarketModelError({"status": 503})
         provider, model = data.get("provider"), data.get("model")
         if (
             isinstance(provider, str)
@@ -61,6 +67,7 @@ def resolve_account_route(
                 "provider": provider.strip().lower(),
                 "model": model.strip(),
                 "route_source": data.get("route_source") or data.get("source") or "unknown",
+                "model_capabilities": public_model_capabilities(data.get("model_capabilities")),
                 **(
                     {"route_token": data["route_token"]}
                     if isinstance(data.get("route_token"), str)

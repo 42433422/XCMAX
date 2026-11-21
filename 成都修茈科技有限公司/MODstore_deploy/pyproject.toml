@@ -9,6 +9,8 @@ dependencies = []
 governance = ["retort-engine[evolution]>=0.4.0,<0.5", "xcagi-common>=0.1.0,<0.2", "filelock>=3.16,<5"]
 web = [
     "fastapi>=0.115",
+    # Model capabilities and routing are part of every web deployment.
+    "litellm==1.109.3",
     "uvicorn[standard]>=0.27",
     "websockets>=15,<17",
     "python-multipart>=0.0.33",
@@ -66,10 +68,9 @@ evolution-metrics = [
 aliyun-tts = [
     "dashscope>=1.14",
 ]
-# 多渠道路由/重试/冷却/fallback 统一交给 LiteLLM Router（可选依赖）：
-# 未安装时 llm_litellm_router 自动降级到原有 provider 适配链路。
+# Keep the existing extra compatible; the web runtime uses the same pinned Router.
 llm-router = [
-    "litellm>=1.109,<1.110",
+    "litellm==1.109.3",
 ]
 vibe = [
     # vibe-coding 接入：NL → 代码 → 沙盒 → 自愈 + 仓库级 patch / heal。

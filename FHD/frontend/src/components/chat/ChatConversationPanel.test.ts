@@ -47,10 +47,17 @@ it('groups dated and invalid history, marks the current local session and emits 
   wrapper.unmount()
 })
 
-it('gates loading, reports a retryable error and renders empty history', async () => {
-  const wrapper = setup({ loading: true })
-  expect(wrapper.find('.conv-list').exists()).toBe(false)
-  expect(wrapper.findAll('.conv-panel-toolbar button').every(x => x.attributes('disabled') !== undefined)).toBe(true)
+it('keeps conversations selectable during history refresh and reports errors and empty history', async () => {
+  const wrapper = setup({ loading: true, sessions: [
+    { ...sessions[0], activity: 'streaming' }, { ...sessions[1], activity: 'waiting' },
+  ] })
+  expect(wrapper.findAll('.conv-item-status').map(status => status.attributes('data-status'))).toEqual(['streaming', 'waiting'])
+  const [create, clear] = wrapper.findAll('.conv-panel-toolbar button')
+  expect(clear.attributes('disabled')).toBeDefined()
+  await create.trigger('click')
+  expect(wrapper.emitted('new')).toEqual([[]])
+  await wrapper.findAll('.conv-item-main')[1].trigger('click')
+  expect(wrapper.emitted('load')).toEqual([['s1']])
   await wrapper.setProps({ loading: false, error: '会话加载失败' })
   expect(wrapper.get('.conv-error-text').text()).toBe('会话加载失败')
   await wrapper.get('.conv-error button').trigger('click')

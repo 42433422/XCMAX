@@ -15,6 +15,9 @@ import pytest
 
 from tests.test_customer_service_api import _as_user, _make_user
 
+pytestmark = pytest.mark.usefixtures("approved_support_assessment")
+
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EMPLOYEE_ROOT = REPO_ROOT / "FHD" / "mods" / "_employees"
 
@@ -132,7 +135,6 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
         assert db.get(CustomerServiceTicket, case_ticket_payload["ticket_id"]).user_id == 42
     customer_service_api._publish_customer_ticket_incident(dict(case_ticket_payload))
     assert len(published) == 1  # A second wake cannot dispatch an already drained event.
-    engine.dispose()
     assert published[0]["payload"].get("requests")
     assert published[0]["payload"].get("ticket", {}).get("knowledge_sources")
 
@@ -165,6 +167,7 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
         "modstore_server.incident_bus.execute_employee_task",
         _fake_execute,
     )
+    monkeypatch.setattr("modstore_server.incident_bus.get_session_factory", lambda: sessions)
     monkeypatch.setattr(
         "modstore_server.duty_workforce_contracts.duty_event_execution_input",
         lambda eid, **kw: {
@@ -188,7 +191,7 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
     assert _extract_routing_plan(exec_result)
     extra = _dispatch_intake_routing_plan(
         exec_result,
-        incident_payload=enriched,
+        incident_payload=published[0]["payload"],
         event_type="ops.intake.customer_ticket",
         source="customer-service-api",
         admin_id=1,
@@ -197,6 +200,7 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
         brief="[ops.intake.customer_ticket] 官网浅色模式文字看不见",
     )
     assert extra >= 1
+    engine.dispose()
     assert "user-customer-service-officer" in executed
 
 

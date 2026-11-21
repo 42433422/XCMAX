@@ -10,6 +10,13 @@ def _object_schema(required: list[str], properties: dict[str, Any]) -> dict[str,
 
 
 _BUSINESS_ENTITIES = ["customers", "products", "materials", "shipment_records"]
+_ELT_FILE_PATHS = {
+    "type": "array",
+    "items": {"type": "string"},
+    "minItems": 1,
+    "maxItems": 50,
+    "description": "逐项列出本轮指定的文件名或上传 ID（最多 50 个）",
+}
 
 _SHIPMENT_PRODUCTS_SCHEMA = {
     "type": "array",
@@ -837,12 +844,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
                 "type": "string",
                 "description": "已上传的单个文件名或上传记录 ID（不是本地目录路径）",
             },
-            "file_paths": {
-                "type": "array",
-                "items": {"type": "string"},
-                "maxItems": 50,
-                "description": "已上传的多个文件名/ID（最多 50 个），与 file_path 二选一；整个目录请逐个列出或留空按本轮上传处理",
-            },
+            "file_paths": _ELT_FILE_PATHS,
             "valid_rows_only": {"type": "boolean"},
             "accept_suggested": {
                 "type": "boolean",
@@ -853,6 +855,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("elt_import", "execute"): _object_schema(
         [],
         {
+            "file_paths": _ELT_FILE_PATHS,
             "run_id": {"type": "string", "description": "单个预演编号"},
             "preview_revision": {
                 "type": "string",

@@ -32,7 +32,7 @@ from app.infrastructure.tenant_scope import current_tenant_id
 __all__ = ["invoice", "credit_note"]
 
 
-def _find_sale_entry(db, order_id: int) -> JournalEntry | None:
+def find_sale_invoice_entry(db, order_id: int) -> JournalEntry | None:
     """查找订单的销售开票凭证（未冲销、非贷项通知单）。
 
     幂等性按当前租户隔离（同一事务内）；无租户上下文时不加过滤（存量 NULL 租户数据可见）。
@@ -79,7 +79,7 @@ def invoice(
     owned = db is None
     cm = nullcontext(db) if not owned else get_db()
     with cm as ctx:
-        existing = _find_sale_entry(ctx, order_id)
+        existing = find_sale_invoice_entry(ctx, order_id)
         if existing is not None:
             return {
                 "success": True,
@@ -122,7 +122,7 @@ def credit_note(
       **同一调用方事务**内提交，任一失败整体回滚。
     """
     with get_db() as db:
-        original = _find_sale_entry(db, order_id)
+        original = find_sale_invoice_entry(db, order_id)
         if original is None:
             return {
                 "success": False,

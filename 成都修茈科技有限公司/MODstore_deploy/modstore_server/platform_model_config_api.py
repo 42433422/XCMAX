@@ -75,6 +75,11 @@ def _scope(state: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _body(request: Request, provider: str) -> dict[str, Any]:
+    if provider == "litellm":
+        raise HTTPException(
+            400,
+            "统一网关由服务端 LITELLM_MASTER_KEY / LITELLM_BASE_URL 管理，模型池来自网关 /v1/models",
+        )
     if provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         raise HTTPException(400, "请选择支持 OpenAI 兼容协议的模型供应商")
     try:

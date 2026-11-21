@@ -25,6 +25,7 @@ def register_extensions(
         ("capability_proposal_relay", "register_capability_proposal_relay_job"),
         ("cs_webhook_outbox", "register_retry_job"),
         ("incident_team_completion", "register_completion_job"),
+        ("customer_corp_download_reconciliation", "register_corp_download_job"),
     ):
         try:
             getattr(import_module(f"modstore_server.{module}"), register)(

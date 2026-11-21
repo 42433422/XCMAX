@@ -141,6 +141,7 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
             from modstore_server.customer_issue_shared_repairs import (
                 active_shared_repair,
             )
+            from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
             from modstore_server.models_cs import CustomerServiceTicket
 
             ticket = session.get(CustomerServiceTicket, ticket_id, with_for_update=True)
@@ -152,6 +153,8 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
                 }
             if active_shared_repair(session, ticket):
                 return {"claimed": True, "ok": False, "reason": "shared_repair_reused"}
+            if intake_dispatch_block_reason(ticket):
+                return {"claimed": True, "ok": False, "reason": "incident_not_active"}
             evidence = json.loads(ticket.evidence_json or "{}")
             resolution = evidence.get("resolution") or {}
             original_resolution = updated.get("resolution") or {}
@@ -300,6 +303,8 @@ def member_runtime_input(
             checks = (team_plan.get("independent_checks") or {}).get(role)
             if checks:
                 runtime["independent_checks"] = checks
+    if event_type == "ops.intake.customer_ticket":
+        runtime.update(ticket_id=payload.get("ticket_id"), customer_id=payload.get("user_id"))
     if payload.get("github_workspace"):
         workspace = payload["github_workspace"]
         runtime.update(

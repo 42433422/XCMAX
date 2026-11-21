@@ -140,6 +140,30 @@ def test_public_whitelist_does_not_restore_withdrawn_customer_evidence() -> None
     )
     cases = json.loads((ROOT / "FHD/config/public_cases.json").read_text())["cases"]
     assert cases == []
+    page = (SITE / "cases.html").read_text(encoding="utf-8")
+    descriptions = re.findall(
+        r'<meta (?:name="(?:description|twitter:description)"|property="og:description") '
+        r'content="([^"]+)"',
+        page,
+    )
+    assert len(descriptions) == 3
+    structured = json.loads(
+        re.search(r'<script type="application/ld\+json">(.*?)</script>', page, re.S)[1]
+    )
+    descriptions.extend(
+        node["description"] for node in structured["@graph"] if node["@type"] == "WebPage"
+    )
+    assert len(descriptions) == 4
+    descriptions.append(
+        next(
+            line
+            for line in (SITE / "llms.txt").read_text(encoding="utf-8").splitlines()
+            if line.startswith("- [客户案例]")
+        )
+    )
+    for description in descriptions:
+        assert "当前没有通过公开授权和证据核验的客户案例可展示" in description
+        assert "授权、脱敏和结果复核完成后发布" in description
 
 
 @pytest.fixture

@@ -93,10 +93,9 @@ def record_worker_repair(db: Any, ticket: Any, event_id: int, rows: list[dict[st
     if cr is None or cr.source_employee_id != fix.get("employee_id"):
         return
     key = f"issue-repair:{int(ticket.id)}:{int(event_id)}:{reference}"
-    if db.query(CustomerServiceAction).filter_by(idempotency_key=key).first():
-        return
-    db.add(
-        CustomerServiceAction(
+    action = db.query(CustomerServiceAction).filter_by(idempotency_key=key).first()
+    if action is None:
+        action = CustomerServiceAction(
             ticket_id=ticket.id,
             user_id=ticket.user_id,
             action_type="issue.repair.result",
@@ -109,8 +108,20 @@ def record_worker_repair(db: Any, ticket: Any, event_id: int, rows: list[dict[st
             ),
             result_json=json_dumps({"team_verified": True, "change_request_id": reference}),
         )
-    )
-    db.flush()
+        db.add(action)
+        db.flush()
+    from modstore_server.customer_corp_download_case import register_corp_download_case
+
+    evidence = json_loads(ticket.evidence_json, {})
+    resolution = issue_resolution(ticket, evidence)
+    if (
+        action.id > int(resolution.get("reopen_after_action_id") or 0)
+        and resolution.get("incident_event_id") == event_id
+    ):
+        register_corp_download_case(db, ticket, evidence)
+        if evidence.get("corp_download_case"):
+            evidence["corp_download_repair_action_id"] = int(action.id)
+            ticket.evidence_json = json_dumps(evidence)
 
 
 def _merged_repair(
@@ -180,6 +191,8 @@ def bind_shared_release(
     db: Any, ticket: Any, host_sha: str, *, proofs: _ReleaseProofBatch | None = None
 ) -> dict[str, Any] | None:
     evidence = json_loads(ticket.evidence_json, {})
+    if evidence.get("admin_disposition") or evidence.get("corp_download_case"):
+        return None
     resolution = issue_resolution(ticket, evidence)
     private_prerequisite = resolution.get("route") == "private_mod" and evidence.get(
         "shared_core_prerequisite"
@@ -286,7 +299,7 @@ def record_shared_runtime(
         if prior.get("request_sha256") != digest:
             raise HTTPException(409, "同一回执标识不可绑定不同内容")
         return {"replayed": True, "record": prior}
-    if ticket.status in {"resolved", "closed", "expired"}:
+    if ticket.status in {"resolved", "closed", "expired", "rejected"}:
         raise HTTPException(409, "该工单已完成，新的问题请通过原交付返工入口受理")
     target = bind_shared_release(db, ticket, str(body.get("host_sha") or ""))
     if not target:

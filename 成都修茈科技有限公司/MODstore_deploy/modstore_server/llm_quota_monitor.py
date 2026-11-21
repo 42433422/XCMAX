@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
 from urllib.parse import urlsplit
 
+import httpx
 from sqlalchemy import case, func
 
 from modstore_server.llm_key_resolver import (
@@ -183,6 +184,7 @@ async def fetch_minimax_token_plan_quota(
     *,
     base_url: Optional[str] = None,
     timeout: float = 20.0,
+    isolated_http: bool = False,
 ) -> dict[str, Any]:
     from modstore_server.infrastructure.http_clients import get_external_client
 
@@ -222,6 +224,11 @@ async def fetch_minimax_token_plan_quota(
                 method="GET",
             ) as response:
                 pass
+        elif isolated_http:
+            import httpx
+
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, timeout=timeout)
         else:
             response = await get_external_client().get(url, headers=headers, timeout=timeout)
         if response.status_code >= 400:
@@ -245,6 +252,84 @@ async def fetch_minimax_token_plan_quota(
             "error": f"额度查询失败（{type(exc).__name__}）",
             "source": "minimax_token_plan_remains_api",
         }
+
+
+_XIAOMI_TOKEN_PLAN_HOST = "token-plan-cn.xiaomimimo.com"
+
+
+def parse_xiaomi_token_plan_quota(payload: Any, *, now: datetime | None = None) -> dict[str, Any]:
+    """The official MiMo endpoint reports plan-wide credits in a billing period."""
+    if not isinstance(payload, dict) or payload.get("object") != "token_plan":
+        raise ValueError("invalid Xiaomi Token Plan response")
+    quota, period = payload.get("quota"), payload.get("period")
+    if not isinstance(quota, dict) or not isinstance(period, dict):
+        raise ValueError("missing Xiaomi Token Plan quota")
+    total, used, left = (
+        quota.get(field) for field in ("total_credits", "used_credits", "remaining_credits")
+    )
+    if (
+        not isinstance(total, int)
+        or isinstance(total, bool)
+        or not isinstance(used, int)
+        or isinstance(used, bool)
+        or not isinstance(left, int)
+        or isinstance(left, bool)
+    ):
+        raise ValueError("inconsistent Xiaomi credits")
+    if total <= 0 or used < 0 or left != max(0, total - used):
+        raise ValueError("inconsistent Xiaomi credits")
+    start = datetime.strptime(period["start_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+    end = datetime.strptime(period["end_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+    if not start <= (now or datetime.now(UTC)) < end:
+        raise ValueError("Xiaomi quota period not current")
+    percent = left * 100 // total
+    state = _quota_state(percent)
+    return {
+        "state": state,
+        "visibility": "exact",
+        "remaining_percent": percent,
+        "resources": [
+            {
+                "resource": "general",
+                "state": state,
+                "remaining_percent": percent,
+                "total_credits": total,
+                "used_credits": used,
+                "interval_reset_at_ms": int(end.timestamp() * 1000),
+            }
+        ],
+        "source": "xiaomi_token_plan_api",
+        "error": "",
+    }
+
+
+async def fetch_xiaomi_token_plan_quota(api_key: str, *, base_url: str) -> dict[str, Any]:
+    """Send a MiMo plan key only to Xiaomi's documented HTTPS quota endpoint."""
+    unavailable: dict[str, Any] = {
+        "state": "unknown",
+        "visibility": "usage_only",
+        "remaining_percent": None,
+        "resources": [],
+        "source": "xiaomi_token_plan_api",
+    }
+    base = urlsplit(base_url)
+    if (
+        not api_key.startswith("tp-")
+        or base.scheme != "https"
+        or base.netloc != _XIAOMI_TOKEN_PLAN_HOST
+    ):
+        return {**unavailable, "error": "official Xiaomi Token Plan credential unavailable"}
+    url = f"https://{_XIAOMI_TOKEN_PLAN_HOST}/v1/platform/token_plan"
+    headers = {"api-key": api_key}
+    try:
+        async with llm_http_response(
+            url, api_key, headers, {}, timeout=8, limits=httpx.Limits(), method="GET"
+        ) as response:
+            if not response.is_success:
+                return {**unavailable, "error": f"http {response.status_code}"}
+            return parse_xiaomi_token_plan_quota(response.json())
+    except (ValueError, TypeError, KeyError, OSError, httpx.HTTPError):
+        return {**unavailable, "error": "Xiaomi Token Plan quota unavailable"}
 
 
 def classify_probe_result(result: dict[str, Any]) -> str:
@@ -297,6 +382,7 @@ async def platform_quota_snapshot(
     *,
     live_probe: bool = False,
     catalog: Optional[dict[str, Any]] = None,
+    isolated_http: bool = False,
 ) -> dict[str, Any]:
     """Return exact provider quota when available, otherwise explicit inference."""
 
@@ -320,10 +406,17 @@ async def platform_quota_snapshot(
         key = platform_api_key(provider) or ""
         quota: dict[str, Any]
         if provider == "minimax" and is_minimax_token_plan_key(key):
-            quota = await fetch_minimax_token_plan_quota(
-                key,
-                base_url=platform_base_url(provider),
+            options: dict[str, Any] = {"base_url": platform_base_url(provider)}
+            if isolated_http:
+                options["isolated_http"] = True
+            quota = await fetch_minimax_token_plan_quota(key, **options)
+        elif provider == "xiaomi":
+            base_url = (
+                key.configuration["base_url"]
+                if isinstance(key, PlatformApiKey)
+                else platform_base_url(provider) or ""
             )
+            quota = await fetch_xiaomi_token_plan_quota(key, base_url=base_url)
         else:
             quota = {
                 "state": "unknown",

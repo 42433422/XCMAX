@@ -476,6 +476,39 @@ async def test_heartbeat_does_not_renew_completed_producer(monkeypatch, mocker, 
     assert producer.done() and not producer.cancelled()
 
 
+@pytest.mark.parametrize("mode", ["progress", "idle", "interrupted"])
+async def test_replay_idle_timeout_measures_time_since_last_event(monkeypatch, mocker, mode):
+    turn, owner, tenant = "long-running", "7", "2"
+    clock = 0.0
+    scope = {"owner": owner, "tenant": tenant}
+    mocker.patch.object(compat_routes, "time").monotonic.side_effect = lambda: clock
+    if mode != "interrupted":
+        assert replay.claim_runner(turn, **scope)
+
+    async def advance_clock(_delay):
+        nonlocal clock
+        clock += 250
+        assert clock <= 1000
+        if mode == "progress":
+            replay.append(turn, {"type": "token", "text": str(int(clock))}, **scope)
+            if clock == 1000:
+                replay.mark_finished(turn, **scope)
+
+    monkeypatch.setattr(compat_routes.asyncio, "sleep", advance_clock)
+    chunks = [chunk async for chunk in compat_routes._follow_replay(turn, **scope)]
+
+    if mode == "progress":
+        rows = replay.events_after(turn, **scope)
+        assert clock == 1000 and len(rows) == 4
+        assert chunks == [compat_routes._replay_line(row) for row in rows]
+    elif mode == "idle":
+        assert clock == 750
+        assert chunks == [b": replay idle timeout\n\n"]
+    else:
+        assert clock == 250
+        assert len(chunks) == 1 and b"STREAM_INTERRUPTED" in chunks[0]
+
+
 @pytest.mark.parametrize("decode_responses", [False, True])
 async def test_redis_response_modes_preserve_replay_payload_cursor_and_done(decode_responses):
     fake = pytest.importorskip("fakeredis").FakeRedis(decode_responses=decode_responses)

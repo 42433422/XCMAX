@@ -59,7 +59,7 @@ describe('ChatHistoryModal', () => {
   })
 
   it('shows loading state when historyLoading is true', () => {
-    const wrapper = mountModal({ historyLoading: true })
+    const wrapper = mountModal({ historyLoading: true, historySessions: [] })
     expect(wrapper.text()).toContain('正在加载')
   })
 

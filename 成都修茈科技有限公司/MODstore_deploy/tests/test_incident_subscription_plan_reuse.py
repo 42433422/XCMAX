@@ -6,6 +6,7 @@ import pytest
 
 import modstore_server.models as models
 from modstore_server import incident_bus, incident_dispatch
+from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
 from tests.test_incident_bus import admin_user, fresh_db  # noqa: F401
 
 
@@ -38,6 +39,18 @@ def test_intake_routing_suggestions_cannot_duplicate_persisted_team(monkeypatch)
 def test_customer_status_subscriber_keeps_original_team_context(admin_user, monkeypatch):
     members = {"intake-dispatcher", "code-owner", "user-customer-service-officer"}
     with models.get_session_factory()() as db:
+        session = CustomerServiceSession(user_id=admin_user.id)
+        db.add(session)
+        db.flush()
+        ticket = CustomerServiceTicket(
+            user_id=admin_user.id,
+            session_id=session.id,
+            ticket_no="CI-status-subscriber",
+            title="same original ticket",
+            intent="product_issue",
+        )
+        db.add(ticket)
+        db.flush()
         db.query(models.EmployeeTriggerBinding).delete()
         for employee in members:
             db.add(
@@ -53,6 +66,8 @@ def test_customer_status_subscriber_keeps_original_team_context(admin_user, monk
             payload_json=json.dumps(
                 {
                     "summary": "same original ticket",
+                    "ticket_id": ticket.id,
+                    "user_id": ticket.user_id,
                     "_team_claim": {"team": [{"role": "fix", "employee_id": "code-owner"}]},
                 }
             ),

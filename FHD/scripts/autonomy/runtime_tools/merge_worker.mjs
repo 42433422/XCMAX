@@ -378,8 +378,7 @@ async function reportMerged(token, task, sha) {
 // 解析 GitHub repo owner/name，用于 gh --repo 参数
 export function parseGithubRepo(repoUrl) {
   const url = String(repoUrl || '').trim();
-  // git@github.com:owner/name.git 或 https://github.com/owner/name.git
-  const m = url.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/i);
+  const m = url.match(/^(?:(?:https?|ssh|git):\/\/(?:[^/@]+@)?github\.com(?::\d+)?\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i);
   return m ? `${m[1]}/${m[2]}` : '';
 }
 
@@ -556,8 +555,49 @@ export function botMergeWatchdogDecision(
   };
 }
 
+export function usesOrderedMainIntegration(repository, base = 'main') {
+  return String(repository || '').toLowerCase() === '42433422/xcmax' && base === 'main';
+}
+
+const integrationClock = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23',
+});
+
+export function withinMainIntegrationWindow(nowMs = Date.now()) {
+  const hour = Number(integrationClock.format(nowMs));
+  return hour >= 2 && hour < 5;
+}
+
+export function awaitingMainIntegration(results) {
+  return results.some((result) => result.pendingIntegration)
+    && results.every((result) => result.merged || result.pendingIntegration);
+}
+
+export async function readIntegratedMainSha(repoFull, receipts, read = async (path) => {
+  const { stdout } = await execFileAsync('gh', ['api', `repos/${repoFull}/${path}`], {
+    timeout: 30_000, maxBuffer: 10 * 1024 * 1024,
+  });
+  return JSON.parse(stdout);
+}) {
+  const sha = (await read('git/ref/heads/main'))?.object?.sha || '';
+  if (!/^[0-9a-f]{40}$/.test(sha) || receipts.length === 0) {
+    throw new Error('invalid-integrated-main-receipt');
+  }
+  for (const receipt of receipts) {
+    if (!/^[0-9a-f]{40}$/.test(receipt.sha || '')
+        || !['ahead', 'identical'].includes(
+          (await read(`compare/${receipt.sha}...${sha}`))?.status,
+        )) {
+      throw new Error(`merge-not-on-main: PR #${receipt.prNumber}`);
+    }
+  }
+  return sha;
+}
+
 async function maybeRecoverStaleBotMergeWorkflow(nowMs = Date.now()) {
   if (!BOT_MERGE_WORKFLOW || !BOT_MERGE_WATCHDOG_REPOSITORY) return;
+  const scheduled = usesOrderedMainIntegration(BOT_MERGE_WATCHDOG_REPOSITORY);
+  if (scheduled && !withinMainIntegrationWindow(nowMs)) return;
   if (nowMs - botMergeWatchdogLastCheckedAt < BOT_MERGE_WATCHDOG_CHECK_MS) return;
   botMergeWatchdogLastCheckedAt = nowMs;
   const { stdout } = await execFileAsync('gh', [
@@ -576,11 +616,18 @@ async function maybeRecoverStaleBotMergeWorkflow(nowMs = Date.now()) {
       createdAt: row?.created_at,
       status: row?.status,
     }));
-  const decision = botMergeWatchdogDecision(rows, {
+  const integrationRuns = scheduled ? rows.filter((row) => {
+    const startedAt = Date.parse(row.createdAt || '');
+    return row.status !== 'completed' || (
+      Number.isFinite(startedAt) && nowMs - startedAt < 3 * 60 * 60 * 1000
+      && withinMainIntegrationWindow(startedAt)
+    );
+  }) : rows;
+  const decision = botMergeWatchdogDecision(integrationRuns, {
     nowMs,
     lastDispatchAtMs: botMergeWatchdogLastDispatchAt,
   });
-  if (!decision.dispatch) return;
+  if (!decision.dispatch || (scheduled && !withinMainIntegrationWindow())) return;
   await execFileAsync('gh', [
     'workflow', 'run', BOT_MERGE_WORKFLOW,
     '--repo', BOT_MERGE_WATCHDOG_REPOSITORY,
@@ -850,19 +897,6 @@ async function changedFilesForPR(workspace, branch, baseBranch, prNumber, repoFu
   return String(stdout || '').split('\n').map((item) => item.trim()).filter(Boolean);
 }
 
-async function isGitHubOrigin(workspace, repoUrl) {
-  if (!workspace) {
-    // 无 workspace：只用 repo_url 判断
-    return Boolean(parseGithubRepo(repoUrl));
-  }
-  try {
-    const url = await git(workspace, ['remote', 'get-url', 'origin']);
-    return /github\.com/.test(url);
-  } catch {
-    return Boolean(parseGithubRepo(repoUrl));
-  }
-}
-
 async function ensureBranchOnOrigin(workspace, branch) {
   // 本地有该分支吗？没有则 fetch
   const local = await gitMaybe(workspace, ['rev-parse', '--verify', branch]);
@@ -889,6 +923,10 @@ async function ensureBaseBranchOnOrigin(workspace, baseBranch) {
 
 async function createPullRequest(workspace, branch, baseBranch, task, repoFull) {
   const title = String(task.title || branch).slice(0, 80);
+  const approval = usesOrderedMainIntegration(repoFull, baseBranch)
+    ? '保留 `hold-merge` 等待正式评审。当前提交经排定后进入北京时间 02:00–05:00 的主线集成。'
+    : '**初始状态**：标 `hold-merge`，在独立 AI review 完成前禁止合并。\n'
+      + 'AI review APPROVE → 添加 `risk:r0`、移除 `hold-merge`，再触发 GitHub Actions bot 三重门禁合并。';
   const body = [
     `## Para 自动派工产物`,
     ``,
@@ -898,8 +936,7 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
     ``,
     `本 PR 由 merge-worker 自动创建，源任务由 Trae CLI 执行。`,
     ``,
-    `**初始状态**：标 \`hold-merge\`，在独立 AI review 完成前禁止合并。`,
-    `AI review APPROVE → 添加 \`risk:r0\`、移除 \`hold-merge\`，再触发 GitHub Actions bot 三重门禁合并。`,
+    approval,
     `合并身份固定为 \`github-actions[bot]\`，且仍受 required checks 和 branch protection 约束。`,
   ].join('\n');
   const args = [
@@ -1498,12 +1535,14 @@ async function mergePR(workspace, prNumber, repoFull) {
 async function checkExistingPR(workspace, branch, baseBranch, repoFull) {
   // 检查分支是否已有 PR（merged/open/closed），避免重复创建
   try {
+    const scheduled = usesOrderedMainIntegration(repoFull, baseBranch);
+    const fields = 'number,state,mergeCommit,url';
     const args = [
       'pr', 'list',
       '--head', branch,
       '--base', baseBranch,
       '--state', 'all',
-      '--json', 'number,state,mergeCommit,url',
+      '--json', scheduled ? `${fields},isCrossRepository,mergeable` : fields,
       '--limit', '5',
     ];
     if (repoFull) args.push('--repo', repoFull);
@@ -1514,8 +1553,9 @@ async function checkExistingPR(workspace, branch, baseBranch, repoFull) {
       timeout: 30_000,
     });
     const prs = JSON.parse(stdout || '[]');
-    return prs[0] || null;
-  } catch {
+    return (scheduled ? prs.find((pr) => pr.isCrossRepository === false) : prs[0]) || null;
+  } catch (error) {
+    if (usesOrderedMainIntegration(repoFull, baseBranch)) throw error;
     return null;
   }
 }
@@ -1595,7 +1635,7 @@ async function processTask(token, task, state) {
   }
   const previousState = state[task.id];
   if (
-    previousState?.status === 'retrying'
+    ['retrying', 'awaiting_integration'].includes(previousState?.status)
     && Date.parse(previousState.next_retry_at || '') > Date.now()
   ) {
     return;
@@ -1606,7 +1646,14 @@ async function processTask(token, task, state) {
     log(`task ${task.id} 注意：workspace_path 已被回收 (${workspace})，改用 GitHub-only 模式`);
   }
   const repoUrl = String(task.repo_url || '').trim();
-  const repoFull = parseGithubRepo(repoUrl);
+  const declaredRepo = parseGithubRepo(repoUrl);
+  const origin = workspaceExists ? await gitMaybe(workspace, ['remote', 'get-url', 'origin']) : '';
+  const workspaceRepo = parseGithubRepo(origin);
+  if (origin && declaredRepo && declaredRepo.toLowerCase() !== workspaceRepo.toLowerCase()) {
+    log(`task ${task.id} 阻断：派工 GitHub 仓库与 workspace origin 不一致`);
+    return;
+  }
+  const repoFull = workspaceRepo || declaredRepo;
   const subs = task.subTasks || [];
   const branches = subs
     .map((s) => String(s.branch_name || '').trim())
@@ -1616,7 +1663,7 @@ async function processTask(token, task, state) {
     return;
   }
   let baseBranch = String(task.branch || 'main').trim() || 'main';
-  const isGithub = await isGitHubOrigin(workspaceExists ? workspace : '', repoUrl);
+  const isGithub = Boolean(repoFull);
   if (isGithub && (
     isExternalReviewRemediationTask(task) || isSelfMaintenanceCanonicalMainTask(task)
   )) {
@@ -1640,6 +1687,7 @@ async function processTask(token, task, state) {
       return;
     }
   }
+  const scheduled = isGithub && usesOrderedMainIntegration(repoFull, baseBranch);
   if (!isGithub) {
     if (!workspaceExists) {
       log(`task ${task.id} 跳过：非 GitHub 仓库 且 workspace 已被回收，无法直接 merge`);
@@ -1655,6 +1703,8 @@ async function processTask(token, task, state) {
     if (isGithub) {
       const actor = await verifyAutomationIdentity(workspaceExists ? workspace : '', repoFull);
       log(`  GitHub automation actor=${actor}`);
+    }
+    if (isGithub && !scheduled) {
       for (const branch of branches) {
         const existingPR = await checkExistingPR(workspaceExists ? workspace : '', branch, baseBranch, repoFull);
         if (existingPR && String(existingPR.state || '').toUpperCase() === 'MERGED') {
@@ -1677,9 +1727,9 @@ async function processTask(token, task, state) {
     }
 
     if (isGithub) {
-      // GitHub 仓库：创建 PR → AI review → 自动 merge
+      // Create or reuse GitHub PRs before handing them to the applicable merge path.
       // workspace 存在时先确保 base branch 已 push（如本地新建的 demo base）
-      if (workspaceExists) {
+      if (workspaceExists && !scheduled) {
         await ensureBaseBranchOnOrigin(workspace, baseBranch);
       }
       const results = [];
@@ -1689,6 +1739,19 @@ async function processTask(token, task, state) {
           const existingPR = await checkExistingPR(workspaceExists ? workspace : '', branch, baseBranch, repoFull);
           let prNumber = '';
           let prUrl = '';
+          if (scheduled && existingPR?.state === 'MERGED') {
+            if (!/^[0-9a-f]{40}$/.test(existingPR.mergeCommit?.oid || '')) {
+              throw new Error('missing-merge-commit');
+            }
+            results.push({ branch, prNumber: existingPR.number, prUrl: existingPR.url,
+              merged: true, sha: existingPR.mergeCommit.oid });
+            continue;
+          }
+          if (scheduled && existingPR?.state === 'CLOSED') {
+            results.push({ branch, prNumber: existingPR.number, prUrl: existingPR.url,
+              merged: false, reason: 'pr-closed-without-merge', vetoed: true });
+            continue;
+          }
           if (existingPR && String(existingPR.state || '').toUpperCase() === 'OPEN') {
             prNumber = String(existingPR.number || '');
             prUrl = String(existingPR.url || '');
@@ -1702,6 +1765,19 @@ async function processTask(token, task, state) {
             prUrl = created.url;
             prNumber = created.number;
             log(`  ✓ ${branch} → PR #${prNumber}: ${prUrl}`);
+          }
+
+          if (scheduled) {
+            if (existingPR?.mergeable === 'CONFLICTING'
+                && withinMainIntegrationWindow()) {
+              results.push({ branch, prNumber, prUrl, merged: false, conflict: true,
+                reason: `PR #${prNumber} merge conflict with ${baseBranch}` });
+              continue;
+            }
+            // The GitHub bot reads the reviewed order and owns the merge.
+            // Reusing a PR here must not change its reviewed head or remove a hold.
+            results.push({ branch, prNumber, prUrl, merged: false, pendingIntegration: true });
+            continue;
           }
 
           // Existing PRs from older workers may already carry risk:r0.  Apply
@@ -1799,11 +1875,28 @@ async function processTask(token, task, state) {
       }
 
       const merged = results.filter((r) => r.merged);
-      const failed = results.filter((r) => !r.merged);
+      const failed = results.filter((r) => !r.merged && !r.pendingIntegration);
+      const receipts = results.map((r) => ({ branch: r.branch, number: r.prNumber,
+        url: r.prUrl, merged: r.merged, sha: r.sha }));
+      state[task.id] = { ...state[task.id], prs: receipts };
+      saveProcessed(state);
 
-      if (merged.length > 0) {
-        // 至少一个 PR 被 AI approve 并 merge 了
-        const finalSha = merged[merged.length - 1].sha;
+      if (scheduled && awaitingMainIntegration(results)) {
+        state[task.id] = {
+          status: 'awaiting_integration',
+          at: new Date().toISOString(),
+          next_retry_at: new Date(Date.now() + BOT_MERGE_WATCHDOG_CHECK_MS).toISOString(),
+          attempts: Number(previousState?.attempts || 0),
+          prs: receipts,
+        };
+        saveProcessed(state);
+        log(`task ${task.id} 等待主线集成回执 (${merged.length}/${branches.length})`);
+        return;
+      }
+      if (merged.length > 0 && (!scheduled || failed.length === 0)) {
+        const finalSha = scheduled
+          ? await readIntegratedMainSha(repoFull, merged)
+          : merged[merged.length - 1].sha;
         const { ok, status, body } = await reportMerged(token, task, finalSha);
         if (ok) {
           state[task.id] = {
@@ -1812,7 +1905,7 @@ async function processTask(token, task, state) {
             sha: finalSha,
             run_id: extractSelfMaintenanceRunId(task),
             deployment: { status: 'pending', at: new Date().toISOString() },
-            prs: results.map((r) => ({ branch: r.branch, number: r.prNumber, url: r.prUrl, merged: r.merged })),
+            prs: receipts,
           };
           saveProcessed(state);
           log(`task ${task.id} → ai_reviewed_merged (${merged.length}/${results.length} PR merged)`);
@@ -1828,6 +1921,7 @@ async function processTask(token, task, state) {
         let terminalAttempts = Number(state[task.id]?.attempts || 0);
         if (retryable) {
           const retry = nextMergeRetryState(state[task.id], reason);
+          retry.prs = receipts;
           if (!retry.exhausted) {
             state[task.id] = retry;
             saveProcessed(state);
@@ -1839,12 +1933,14 @@ async function processTask(token, task, state) {
         const conflictSource = failed.some((result) => result.vetoed)
           ? 'ai-review-veto'
           : 'merge-worker';
-        await reportMergeConflict(token, task, reason, conflictSource);
+        const report = await reportMergeConflict(token, task, reason, conflictSource);
+        if (!report.ok) throw new Error(`merge-conflict-report-http-${report.status}`);
         state[task.id] = {
-          status: retryable ? 'conflict' : 'ai_rejected',
+          status: retryable || failed.some((r) => r.conflict) ? 'conflict' : 'ai_rejected',
           at: new Date().toISOString(),
           reason,
           attempts: terminalAttempts,
+          prs: receipts,
         };
         saveProcessed(state);
         log(`task ${task.id} → ${state[task.id].status}`);
@@ -1872,6 +1968,7 @@ async function processTask(token, task, state) {
     let terminalAttempts = Number(state[task.id]?.attempts || 0);
     if (isTransientMergeFailure(reason)) {
       const retry = nextMergeRetryState(state[task.id], reason);
+      retry.prs = state[task.id]?.prs;
       if (!retry.exhausted) {
         state[task.id] = retry;
         saveProcessed(state);
@@ -1886,6 +1983,7 @@ async function processTask(token, task, state) {
       at: new Date().toISOString(),
       reason: reason.slice(0, 2000),
       attempts: terminalAttempts,
+      prs: state[task.id]?.prs,
     };
     saveProcessed(state);
   }

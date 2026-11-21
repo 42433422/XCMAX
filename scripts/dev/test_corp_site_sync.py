@@ -1,4 +1,5 @@
 """No-network regression for the actual workflow's bootstrap shell."""
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,265 @@ WORKFLOW = ROOT / '.github/workflows/corp-site-deploy.yml'
 
 
 class CorpSiteSyncTest(unittest.TestCase):
+    def test_alternate_static_publisher_only_preserves_current_unchanged_marker(self):
+        updater = (ROOT / '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh').read_text()
+        start = updater.index('guard_corp_download_marker()')
+        end = updater.index('\n# Git checkout updates', start)
+        guard = updater[start:end]
+        self.assertIn('guard_corp_download_marker "$live_site" "$git_site" || return 1\n  log "发布官网静态', updater)
+        self.assertIn('guard_corp_download_marker "$(readlink -f "$SITE_ROOT")" || return 1\n  install', updater)
+        sha = 'a' * 40
+        cases = ('same', 'new_source', 'live_html_changed', 'untracked_html_changed', 'head_unclear',
+                 'marker_symlink', 'directory_symlink', 'source_marker', 'nginx_reload')
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                live = root / 'live'
+                data = live / 'site/data'
+                source = root / 'git/public'
+                (source / 'site/data').mkdir(parents=True)
+                data.mkdir(parents=True)
+                outside = root / 'external.json'
+                outside.write_text('must stay untouched')
+                pointer = live / 'download-release.json'
+                pointer.write_text('release publisher owns this')
+                marker = data / 'corp-download-deployment.json'
+                (source / 'download.html').write_text('Git download page')
+                (live / 'download.html').write_text('other page' if case == 'live_html_changed' else 'Git download page')
+                if case == 'marker_symlink':
+                    marker.symlink_to(outside)
+                else:
+                    marker.write_text(json.dumps({'deployed_sha': 'b' * 40 if case == 'new_source' else sha}))
+                if case == 'directory_symlink':
+                    data.rename(root / 'escaped')
+                    data.symlink_to(root / 'escaped', target_is_directory=True)
+                if case == 'source_marker':
+                    (source / 'site/data' / marker.name).write_text('unsafe bootstrap')
+                git = r'''
+git() {
+  case "$3" in
+    rev-parse) printf '%s\n' "$CURRENT_HEAD" ;;
+    show) printf '%s' "$COMMITTED_HTML" ;;
+    *) exit 44 ;;
+  esac
+}
+'''
+                result = subprocess.run(
+                    ['bash', '-c', f'set -euo pipefail\nlog() {{ :; }}\n{git}\n{guard}\nguard_corp_download_marker "$SITE_ROOT" "$SOURCE"'],
+                    env=dict(
+                        os.environ, SITE_ROOT=str(live.resolve()), SITE_SUBDIR='public',
+                        SOURCE='' if case == 'nginx_reload' else str(source), XCMAX_ROOT=str(source.parent),
+                        NEW_XCMAX_SHA=sha, CURRENT_HEAD='' if case == 'head_unclear' else sha,
+                        COMMITTED_HTML='different Git version' if case == 'untracked_html_changed' else 'Git download page',
+                    ),
+                    capture_output=True, text=True, timeout=5,
+                )
+                rejected_path = case in ('directory_symlink', 'source_marker')
+                self.assertEqual(result.returncode == 0, not rejected_path, result.stderr)
+                self.assertEqual(marker.exists(), case == 'same' or rejected_path)
+                self.assertFalse(marker.is_symlink())
+                self.assertEqual(pointer.read_text(), 'release publisher owns this')
+                self.assertEqual(outside.read_text(), 'must stay untouched')
+
+    def test_deployment_marker_is_invalidated_before_copy_and_issued_only_after_smoke(self):
+        workflow = WORKFLOW.read_text()
+        begin = workflow.index('            deployment_marker_path()')
+        copy = workflow.index('            if [ -d "${GIT_SITE}" ]', begin)
+        publish = workflow.index('            SYNC_STAGE=deployment-marker', copy)
+        release = workflow.index('            exec 8>&-', publish)
+        self.assertLess(workflow.index('flock -w 60 8'), begin)
+        self.assertLess(workflow.index('wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png"'), publish)
+        self.assertEqual(workflow.count('exec 8>&-'), 1)
+        invalidate = '\n'.join(line[12:] for line in workflow[begin:copy].splitlines())
+        issue = '\n'.join(line[12:] for line in workflow[publish:release].splitlines())
+        for expression, value in {
+            'github.ref': '$FIXTURE_REF', 'github.sha': '$CONTROLLER_SHA',
+            'github.run_id': '1234', 'github.run_attempt': '2',
+        }.items():
+            issue = issue.replace('${{ ' + expression + ' }}', value)
+        sha = 'a' * 40
+        for case in ('main', 'non_main', 'non_main_ref', 'different_sha', 'failed_smoke', 'root_changed',
+                     'head_changed', 'html_drift', 'unsafe_marker_directory', 'tracked_marker'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                live = root / 'live'
+                data = live / 'site/data'
+                source_data = root / 'git/site/data'
+                source_data.mkdir(parents=True)
+                data.mkdir(parents=True)
+                marker = data / 'corp-download-deployment.json'
+                marker.write_text('old marker')
+                (live / 'download.html').write_text('wrong page' if case == 'html_drift' else 'official page')
+                release_pointer = live / 'download-release.json'
+                release_pointer.write_text('release publisher owns this')
+                outside = root / 'outside'
+                if case == 'unsafe_marker_directory':
+                    data.rename(outside)
+                    data.symlink_to(outside, target_is_directory=True)
+                if case == 'tracked_marker':
+                    (source_data / marker.name).write_text('source must not publish a marker')
+                fixture = r'''
+readlink() { printf '%s\n' "$CURRENT_ROOT"; }
+git() {
+  case "$3" in
+    rev-parse) printf '%s\n' "$CURRENT_HEAD" ;;
+    show) printf 'official page' ;;
+    *) exit 44 ;;
+  esac
+}
+'''
+                smoke = 'test ! -e "$DEPLOYMENT_MARKER"\nprintf "SMOKE\\n"\n[ "$SMOKE_OK" = 1 ]'
+                result = subprocess.run(
+                    ['bash', '-c', f'set -euo pipefail\n{fixture}\n{invalidate}\n{smoke}\n{issue}'],
+                    env=dict(
+                        os.environ, LIVE_SITE=str(live), GIT_SITE=str(root / 'git'), REMOTE_ROOT=str(root / 'git'),
+                        DEPLOY_SHA=sha, CONTROLLER_SHA='b' * 40 if case == 'different_sha' else sha,
+                        CURRENT_HEAD='b' * 40 if case == 'head_changed' else sha,
+                        CURRENT_ROOT=str(root / 'replaced' if case == 'root_changed' else live),
+                        BRANCH='test' if case == 'non_main' else 'main',
+                        FIXTURE_REF='refs/heads/test' if case == 'non_main_ref' else 'refs/heads/main',
+                        SMOKE_OK='0' if case == 'failed_smoke' else '1',
+                    ),
+                    capture_output=True, text=True, timeout=5,
+                )
+                self.assertEqual(result.returncode == 0, case in ('main', 'non_main', 'non_main_ref', 'different_sha'),
+                                 result.stderr)
+                self.assertEqual(release_pointer.read_text(), 'release publisher owns this')
+                if case == 'main':
+                    payload = json.loads(marker.read_text())
+                    self.assertEqual(payload.pop('verified_at')[-6:], '+00:00')
+                    self.assertEqual(payload, {'deployed_sha': sha, 'workflow_run_id': 1234, 'run_attempt': 2})
+                    self.assertEqual(marker.stat().st_mode & 0o777, 0o644)
+                    self.assertEqual(list(data.iterdir()), [marker])
+                elif case == 'unsafe_marker_directory':
+                    self.assertEqual((outside / marker.name).read_text(), 'old marker')
+                    self.assertNotIn('SMOKE', result.stdout)
+                else:
+                    self.assertFalse(marker.exists())
+                    if case == 'tracked_marker':
+                        self.assertNotIn('SMOKE', result.stdout)
+
+    def test_download_redirect_smoke_verifies_original_urls_and_deploy_sha(self):
+        workflow = WORKFLOW.read_text()
+        start = workflow.index('            # Verify the original slash URL')
+        end = workflow.index('            echo "[verify] capability center', start)
+        block = '\n'.join(line[12:] for line in workflow[start:end].splitlines())
+        # Stand in for the existing retrying curl helper without using the network.
+        fake_curl = r"""
+xc_curl() {
+  local output method=GET url host suffix target
+  while [ "$#" -gt 1 ]; do
+    case "$1" in
+      -w) shift 2 ;;
+      -o) output="$2"; shift 2 ;;
+      --head) method=HEAD; shift ;;
+      *) return 90 ;;
+    esac
+  done
+  url="$1"
+  printf '%s %s\n' "$method" "$url" >> "$CALLS"
+  case "$url" in
+    https://xiu-ci.com/download*|https://www.xiu-ci.com/download*) ;;
+    *) return 91 ;;
+  esac
+  host="${url#https://}"
+  host="${host%%/*}"
+  suffix=""
+  if [[ "$url" == *\?* ]]; then
+    suffix="?${url#*\?}"
+    [ "$suffix" = "?xcmax_download_probe=${DEPLOY_SHA}" ] || return 92
+  fi
+  target="https://${host}/download${suffix}"
+  if [ "$SCENARIO" = canonical_host ]; then
+    target="https://xiu-ci.com/download${suffix}"
+  fi
+  if [ "$SCENARIO" = retry ]; then printf '000 \n'; fi
+  case "${url%%\?*}" in
+    */download/)
+      if [ -z "$suffix" ] && [ "$SCENARIO" = bare_www_404 ] && [ "$host" = www.xiu-ci.com ]; then
+        printf '404 \n'
+        return
+      fi
+      if [ "$host" = www.xiu-ci.com ]; then
+        case "$SCENARIO" in
+          canonical_slash_host|host_loop|dropped_query_second_hop|head_differs_second_hop)
+            target="https://xiu-ci.com/download/${suffix}" ;;
+          self_loop) target="https://www.xiu-ci.com/download/${suffix}" ;;
+          dropped_query_host_hop) target="https://xiu-ci.com/download/" ;;
+          dropped_query) target="${target%%\?*}" ;;
+          foreign_target) target="https://example.invalid/download${suffix}" ;;
+          head_differs) if [ "$method" = HEAD ]; then target="${target%%\?*}"; fi ;;
+          temporary_redirect) printf '302 %s\n' "$target"; return ;;
+        esac
+      elif grep -Fxq "GET https://www.xiu-ci.com/download/${suffix}" "$CALLS"; then
+        case "$SCENARIO" in
+          host_loop) target="https://www.xiu-ci.com/download/${suffix}" ;;
+          dropped_query_second_hop) target="${target%%\?*}" ;;
+          head_differs_second_hop) if [ "$method" = HEAD ]; then target="${target%%\?*}"; fi ;;
+        esac
+      fi
+      printf '301 %s\n' "$target"
+      ;;
+    *)
+      if [ "$SCENARIO" = wrong_body ] || { [ "$SCENARIO" = bare_wrong_body ] && [ -z "$suffix" ]; }; then
+        printf '<title>官网首页</title>' > "$output"
+      else
+        printf '<title>XCAGI 产品下载</title>' > "$output"
+      fi
+      if [ "$SCENARIO" = final_redirect ] || \
+         { [ "$SCENARIO" = final_head_differs ] && [ "$method" = HEAD ]; }; then
+        printf '302 https://example.invalid/download%s\n' "$suffix"
+      else
+        printf '200 \n'
+      fi
+      ;;
+  esac
+}
+"""
+        sha = 'a' * 40
+        cases = {
+            'direct': True, 'canonical_host': True, 'canonical_slash_host': True, 'retry': True,
+            'dropped_query': False, 'foreign_target': False, 'head_differs': False,
+            'temporary_redirect': False, 'wrong_body': False, 'final_redirect': False,
+            'self_loop': False, 'host_loop': False,
+            'dropped_query_host_hop': False, 'dropped_query_second_hop': False,
+            'head_differs_second_hop': False, 'final_head_differs': False,
+            'bare_www_404': False, 'bare_wrong_body': False,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            calls = Path(directory) / 'calls'
+            for scenario, passed in cases.items():
+                with self.subTest(scenario=scenario):
+                    calls.write_text('')
+                    result = subprocess.run(
+                        ['bash', '-c', f'set -euo pipefail\n{fake_curl}\n{block}'],
+                        env=dict(os.environ, CALLS=str(calls), DEPLOY_SHA=sha, SCENARIO=scenario),
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    self.assertEqual(result.returncode == 0, passed, result.stderr)
+                    requests = calls.read_text().splitlines()
+                    self.assertFalse(any('example.invalid' in call for call in requests))
+                    if scenario in ('self_loop', 'host_loop'):
+                        self.assertEqual(
+                            requests.count(f'GET https://www.xiu-ci.com/download/?xcmax_download_probe={sha}'), 1,
+                        )
+                    if passed:
+                        self.assertEqual(len(requests), 20 if scenario == 'canonical_slash_host' else 16)
+                        for host in ('xiu-ci.com', 'www.xiu-ci.com'):
+                            hops = 2 if host == 'www.xiu-ci.com' and scenario == 'canonical_slash_host' else 1
+                            self.assertEqual(
+                                result.stdout.count(f'sha={sha} host={host} get=301 head=301 hops={hops}'), 2,
+                            )
+                            self.assertIn(f'GET https://{host}/download/', requests)
+                            self.assertIn(f'HEAD https://{host}/download/', requests)
+                    else:
+                        self.assertIn(f'sha={sha}', result.stderr)
+                    if scenario in ('bare_www_404', 'bare_wrong_body'):
+                        self.assertTrue(all(f'?xcmax_download_probe={sha}' in call for call in requests[:8]))
+                        self.assertEqual(result.stdout.count('status=200'), 3 if scenario == 'bare_www_404' else 2)
+                        failed_url = 'https://www.xiu-ci.com/download/' if scenario == 'bare_www_404' else 'https://xiu-ci.com/download/'
+                        self.assertIn(failed_url, result.stderr)
+
     def test_bootstrap_is_bounded_and_fail_closed(self):
         workflow = WORKFLOW.read_text()
         start = workflow.index('            # Bound each bootstrap command')

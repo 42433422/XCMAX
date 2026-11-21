@@ -22,7 +22,7 @@ describe('AgentStepChain', () => {
     const wrapper = mount(AgentStepChain, {
       props: { steps: [step({ durationMs: 320 }), step({ id: 'n2', title: '表格' })] },
     })
-    expect(wrapper.text()).toContain('执行链')
+    expect(wrapper.text()).toContain('工具步骤')
     expect(wrapper.text()).toContain('2 步')
     expect(wrapper.text()).toContain('已完成')
     expect(wrapper.text()).toContain('320ms')

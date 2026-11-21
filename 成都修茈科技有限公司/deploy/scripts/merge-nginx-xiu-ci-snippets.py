@@ -24,6 +24,7 @@ MANAGED_INCLUDES = (
 WWW_MANAGED_INCLUDES = ("include /etc/nginx/snippets/admin-console-www.inc.conf;",)
 
 MANAGED_LOCATION_HEADERS = (
+    "location = /llms.txt {",
     "location ~ ^/(styles\\.css|main\\.js|release-data\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
     "location = /data/release-history.json {",
     "location ~ ^/(styles\\.css|main\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
@@ -35,6 +36,7 @@ MANAGED_LOCATION_HEADERS = (
     "location = /admin/vite.svg {",
     "location = /api/xcmax/ops/founder-autonomy {",
     "location = /download-founder-autonomy.json {",
+    "location = /download/ {",
     "location ^~ /market/assets/assets/ {",
     "location ^~ /market/assets/ {",
     "location = /market/main.js {",

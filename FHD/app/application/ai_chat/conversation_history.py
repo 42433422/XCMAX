@@ -216,6 +216,7 @@ def persist_chat_turn(
         "turn_id": context.get("turn_id"),
         "conversation_id": session_id,
         "run_id": summary.get("run_id"),
+        "recall_bound": True,
     }
     turn_id = str(context.get("turn_id") or "").strip()
     user_fingerprint = uuid.uuid5(

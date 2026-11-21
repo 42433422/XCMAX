@@ -15,7 +15,7 @@ from modstore_server.models import get_session_factory  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def isolate_customer_ticket_workers(monkeypatch):
+def isolate_customer_ticket_workers(monkeypatch, approved_support_assessment):
     """Keep API workers inside their fixture and never invoke real repair employees."""
     from modstore_server import incident_bus
 

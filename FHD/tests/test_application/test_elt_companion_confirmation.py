@@ -71,6 +71,7 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
         user_id=7, tenant_id=1, role="importer", permissions=["elt.execute"]
     )
     monkeypatch.setattr(db_session, "SessionLocal", store.factory)
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     with store.factory() as db:
         assert db.query(UserSession).filter_by(session_id=actor.session_id).first() is None
     assert require_agent_principal(actor.request, x_user_id=None).user_id == "7"

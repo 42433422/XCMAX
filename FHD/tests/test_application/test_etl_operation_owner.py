@@ -14,14 +14,16 @@ from unittest.mock import MagicMock
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import inspect, update
+from sqlalchemy import event, inspect, update
 
+from app.application.elt import operation_owner
 from app.application.elt.errors import EltError
 from app.application.elt.operation_owner import (
     bind_owner,
     claim_operation,
     fail_operation,
     finish_operation,
+    keep_preview_lease,
     unbind_owner,
 )
 from app.application.elt.preview_confirmation import (
@@ -64,6 +66,37 @@ def test_active_owner_blocks_other_connections_even_when_status_is_failed(store)
         db.rollback()
     with factory() as db:
         assert db.get(EltRun, run_id).operation_token == owner.token
+
+
+@pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
+def test_blocking_preview_renews_ownership_without_advancing_progress(store, monkeypatch):
+    _engine, factory, _ids = store
+    run_id = make_run(store)
+    monkeypatch.setattr(operation_owner, "LEASE_SECONDS", 3)
+    with factory() as db:
+        run = db.get(EltRun, run_id)
+        owner = claim_operation(db, run, "preview", allowed_statuses={"completed"})
+        run.status = "previewing"
+        run.stage = "parsing"
+        run.progress = 5
+        db.commit()
+        lease_until, updated_at = run.operation_lease_until, run.updated_at
+
+    renewed = threading.Event()
+
+    def heartbeat_session():
+        session = factory()
+        event.listen(session, "after_commit", lambda _: renewed.set(), once=True)
+        return session
+
+    with keep_preview_lease(owner, heartbeat_session):
+        assert renewed.wait(5), "ELT did not renew the lease while the preview was blocked"
+
+    with factory() as db:
+        run = db.get(EltRun, run_id)
+        assert run.operation_lease_until > lease_until
+        assert run.operation_token == owner.token
+        assert (run.updated_at, run.stage, run.progress) == (updated_at, "parsing", 5)
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)

@@ -203,6 +203,9 @@ class AgentTaskDispatcher:
         from contextlib import nullcontext
 
         from app.application.agent_orchestrator.business_write_guard import worker_claim_scope
+        from app.application.agent_orchestrator.elt_checkpoint_recovery import (
+            EltCheckpointWorkerExited,
+        )
         from app.application.agent_orchestrator.run_sql_repository import (
             SQLAlchemyAgentRunRepository,
         )
@@ -277,6 +280,16 @@ class AgentTaskDispatcher:
                     error_code = "needs_verification"
                 elif state == "failed" and run.status != "failed":
                     error_code = "worker_incomplete_state"
+        except EltCheckpointWorkerExited:
+            abandon = True
+            try:
+                self._execution_repo.heartbeat(execution.run_id, owner_id, lease_seconds=1.0)
+            except RECOVERABLE_ERRORS:
+                logger.info("ELT worker claim will expire normally for %s", execution.run_id)
+            logger.warning(
+                "ELT checkpoint worker exited; leaving queue claim to expire for %s",
+                execution.run_id,
+            )
         except InjectedTransactionFault:
             abandon = True
             logger.warning("transaction fault abandoned lease for %s", execution.run_id)

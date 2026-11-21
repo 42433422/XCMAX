@@ -615,14 +615,15 @@ def test_planner_discards_prior_turn_failure_diagnostics(monkeypatch):
 
 def test_replanning_repair_balance_failure_keeps_recharge_response(monkeypatch):
     from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
+    from app.application.facades.tools_facade import get_workflow_tool_registry
     from app.infrastructure.modstore_transport import MarketModelError
 
     message = "查询产品 A1"
     node = {
         "node_id": "n1",
-        "tool_id": "clarify",
-        "action": "ask",
-        "params": {"question": "请确认产品"},
+        "tool_id": "products",
+        "action": "query",
+        "params": {"keyword": "A0"},
     }
     completion = Mock(
         side_effect=[
@@ -633,22 +634,23 @@ def test_replanning_repair_balance_failure_keeps_recharge_response(monkeypatch):
                         {
                             "goal_id": "g1",
                             "source": message,
-                            "outcome": "clarify",
+                            "outcome": "execute",
                             "node_ids": ["n1"],
                         }
                     ],
                     "violations": ["遗漏产品 A1"],
                 }
             ),
-            _completion({"nodes": [{**node, "action": "ask.invalid"}]}),
+            _completion({"nodes": [{**node, "action": "query.invalid"}]}),
             MarketModelError({"status": 402}),
         ]
     )
     planner = LLMWorkflowPlanner(
         ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
     )
+    registry = {"products": get_workflow_tool_registry()["products"]}
     monkeypatch.setattr(
-        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: registry
     )
     callbacks, risk_gate, approval = Mock(), Mock(), Mock()
     callbacks._resume_pending_dynamic_workflow.return_value = (False, None)

@@ -142,7 +142,11 @@ def test_desktop_production_dispatch_is_not_the_default_candidate_lane(workflow_
     assert "Test-only candidate cannot trigger production deployments" in check
     assert "windows_interim_release" in check
     assert jobs["deploy-servers-in-order"]["needs"] == "verify-version-anchors"
-    step = next(s for s in jobs["dispatch-client-releases"]["steps"] if "run" in s)
+    steps = jobs["dispatch-client-releases"]["steps"]
+    dispatch_steps = [
+        step for step in steps if step.get("name") == "Trigger ${{ matrix.workflow }}"
+    ]
+    (step,) = dispatch_steps
     run = step["run"]
     for flag in ("windows_installer_only=false", "candidate_only=false", "verify_only=false"):
         assert f"-f {flag}" in run

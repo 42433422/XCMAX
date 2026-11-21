@@ -10,6 +10,7 @@ import type { CustomerTicket } from './customerServiceTypes'
 export function useCustomerServiceTickets() {
   const tickets = ref<CustomerTicket[]>([])
   const expandedTicketIds = ref<Set<number>>(new Set())
+  let listGeneration = 0
 
   const allTicketsExpanded = computed(() => tickets.value.length > 0 && expandedTicketIds.value.size >= tickets.value.length)
 
@@ -44,11 +45,14 @@ export function useCustomerServiceTickets() {
   }
 
   async function loadTickets() {
+    const generation = ++listGeneration
     try {
       const res = asUnknownRecord(await api.customerServiceTickets())
+      if (generation !== listGeneration) return
       tickets.value = Array.isArray(res.items) ? (res.items as CustomerTicket[]) : []
       preferExpandWaitingTickets(tickets.value)
     } catch {
+      if (generation !== listGeneration) return
       tickets.value = []
       expandedTicketIds.value = new Set()
     }

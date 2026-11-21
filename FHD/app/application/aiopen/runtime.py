@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
+from functools import wraps
+from hashlib import sha256
 from pathlib import Path
 from secrets import compare_digest
-from typing import Any
+from tempfile import NamedTemporaryFile
+from threading import RLock
+from typing import Any, Concatenate, ParamSpec, TypeVar
+
+from filelock import FileLock
 
 from app.domain.aiopen.principal import ScreenPrincipal
 
@@ -16,6 +23,42 @@ _KEY_EXPIRED = "AIOPEN_KEY_EXPIRED"
 _SCOPE_DENIED = "AIOPEN_SCOPE_DENIED"
 _RATE_LIMITED = "AIOPEN_RATE_LIMITED"
 _QUOTA_EXCEEDED = "AIOPEN_QUOTA_EXCEEDED"
+_CLIENT_PREFIX = "aiopen_client_"
+_CLIENT_DIGEST_PREFIX = "client-sha256:"
+_MAX_ACTIVE_CLIENT_KEYS = 8
+_KeyParams = ParamSpec("_KeyParams")
+_KeyResult = TypeVar("_KeyResult")
+
+
+class ClientKeyLimitReached(Exception):
+    """This principal already has the maximum number of active client keys."""
+
+
+def _storage_key(secret: str) -> str:
+    if secret.startswith(_CLIENT_PREFIX):
+        return _CLIENT_DIGEST_PREFIX + sha256(secret.encode()).hexdigest()
+    return "" if secret.startswith(_CLIENT_DIGEST_PREFIX) else secret
+
+
+def _shared_keys(
+    method: Callable[Concatenate[ApiKeyRegistry, _KeyParams], _KeyResult],
+) -> Callable[Concatenate[ApiKeyRegistry, _KeyParams], _KeyResult]:
+    """Serialize disk read/modify/write across workers using the existing filelock."""
+
+    @wraps(method)
+    def wrapped(
+        self: ApiKeyRegistry, *args: _KeyParams.args, **kwargs: _KeyParams.kwargs
+    ) -> _KeyResult:
+        with self._lock:
+            path = self._path()
+            if path is None:
+                return method(self, *args, **kwargs)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with FileLock(str(path) + ".lock", timeout=5):
+                self._reload_shared(path)
+                return method(self, *args, **kwargs)
+
+    return wrapped
 
 
 @dataclass
@@ -64,6 +107,7 @@ class ApiKeyRegistry:
         self._storage = storage
         self._rpm: dict[str, list[float]] = {}
         self._loaded = False
+        self._lock = RLock()
 
     # ── 持久化 ────────────────────────────────────────────────────────
 
@@ -77,37 +121,68 @@ class ApiKeyRegistry:
 
     def _entries(self) -> dict[str, dict[str, Any]]:
         # 始终拿到可写引用：持久化加载必须挂回共享状态，否则重启后 Key 不可见。
-        entries = self._state.keys(create=True)
-        if not self._loaded:
-            self._loaded = True
-            path = self._path()
-            if path is not None and path.is_file():
-                try:
-                    raw = json.loads(path.read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    raw = None
-                if isinstance(raw, dict):
-                    for key, meta in raw.items():
-                        if isinstance(key, str) and isinstance(meta, dict):
-                            entries.setdefault(key, meta)
-        return entries
+        with self._lock:
+            entries = self._state.keys(create=True)
+            if not self._loaded:
+                self._loaded = True
+                path = self._path()
+                if path is not None and path.is_file():
+                    try:
+                        raw = json.loads(path.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        raw = None
+                    if isinstance(raw, dict):
+                        for key, meta in raw.items():
+                            if isinstance(key, str) and key and isinstance(meta, dict):
+                                entries.setdefault(key, meta)
+            return entries
 
-    def _persist(self) -> None:
-        path = self._path()
-        if path is None:
+    def _reload_shared(self, path: Path) -> None:
+        entries = self._state.keys(create=True)
+        if not path.exists():
+            if self._loaded:
+                entries.clear()
+            self._loaded = True
             return
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(path.suffix + ".tmp")
-            tmp.write_text(
-                json.dumps(self._entries(), ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            tmp.replace(path)
-        except OSError:
-            pass
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            entries.clear()
+            raise OSError("could not read shared API keys") from exc
+        if not isinstance(raw, dict) or any(
+            not isinstance(key, str) or not key or not isinstance(meta, dict)
+            for key, meta in raw.items()
+        ):
+            entries.clear()
+            raise OSError("invalid shared API keys")
+        entries.clear()
+        entries.update(raw)
+        self._loaded = True
+
+    def _persist(self) -> bool:
+        path = self._path()
+        if path is None:
+            return True
+        with self._lock:
+            temporary = None
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with NamedTemporaryFile(
+                    mode="w", dir=path.parent, encoding="utf-8", delete=False
+                ) as stream:
+                    temporary = Path(stream.name)
+                    json.dump(self._entries(), stream, ensure_ascii=False, indent=2)
+                temporary.replace(path)
+                return True
+            except OSError:
+                if temporary is not None:
+                    with suppress(OSError):
+                        temporary.unlink(missing_ok=True)
+                return False
 
     # ── 校验与生命周期 ────────────────────────────────────────────────
 
+    @_shared_keys
     def verify(self, provided: str | None) -> bool:
         """Require a configured key; uninitialized installations fail closed."""
         env_key = self._env_key()
@@ -119,8 +194,10 @@ class ApiKeyRegistry:
             return False
         if env_key and compare_digest(got.encode("utf-8"), env_key.encode("utf-8")):
             return True
-        return got in entries
+        # Compatibility endpoints verify a service key without a per-tool scope.
+        return got in entries and not got.startswith(_CLIENT_DIGEST_PREFIX)
 
+    @_shared_keys
     def generate(
         self,
         label: str = "",
@@ -130,8 +207,12 @@ class ApiKeyRegistry:
         expires_at: float | None = None,
         rate_limit_per_min: int | None = None,
         daily_quota: int | None = None,
+        client_key: bool = False,
+        keep_existing: bool = False,
     ) -> dict[str, Any]:
-        key = "aiopen_" + self._token(24)
+        if client_key and (principal is None or not scopes or "*" in scopes or expires_at is None):
+            raise ValueError("client keys require an owner, restricted scopes and expiration")
+        key = (_CLIENT_PREFIX if client_key else "aiopen_") + self._token(24)
         now = self._clock()
         entry: dict[str, Any] = {
             "label": (label or "").strip() or "未命名",
@@ -150,30 +231,104 @@ class ApiKeyRegistry:
             entry["rate_limit_per_min"] = int(rate_limit_per_min)
         if daily_quota is not None and int(daily_quota) > 0:
             entry["daily_quota"] = int(daily_quota)
-        self._entries()[key] = entry
-        self._persist()
+        stored = _storage_key(key)
+        with self._lock:
+            entries = self._entries()
+            removed = {}
+            if client_key and principal is not None:
+                if stored in entries:
+                    raise OSError("client key generation collided with an existing key")
+                owned = self._owned_client_keys(entries, principal)
+                removed = owned
+                if keep_existing:
+                    now = self._clock()
+                    removed = {
+                        key: meta
+                        for key, meta in owned.items()
+                        if self._client_key_expired(meta, now)
+                    }
+                    if len(owned) - len(removed) >= _MAX_ACTIVE_CLIENT_KEYS:
+                        raise ClientKeyLimitReached(
+                            f"已达到 {_MAX_ACTIVE_CLIENT_KEYS} 个有效客户端口令的上限，请等待口令过期或撤销后重试。"
+                        )
+                for previous in removed:
+                    del entries[previous]
+                entry["key_preview"] = "客户端 · " + stored[-8:]
+            entries[stored] = entry
+            if not self._persist() and client_key:
+                del entries[stored]
+                entries.update(removed)
+                raise OSError("could not persist client key")
+            for previous in removed:
+                self._rpm.pop(previous, None)
         return {"key": key, **entry}
 
+    @_shared_keys
     def resolve_principal(self, provided: str | None) -> ScreenPrincipal | None:
         """Legacy/environment keys authenticate a service, not a screen owner."""
-        if not self.verify(provided):
-            return None
         key = (provided or "").strip()
         env_key = self._env_key()
         if env_key and compare_digest(key.encode("utf-8"), env_key.encode("utf-8")):
             return None
-        entry = self._entries().get(key)
+        entry = self._entries().get(_storage_key(key))
         if not isinstance(entry, dict):
             return None
         return ScreenPrincipal.from_ids(entry.get("principal_id"), entry.get("tenant_id"))
 
+    @_shared_keys
     def revoke(self, key: str | None) -> bool:
-        removed = self._entries().pop((key or "").strip(), None) is not None
-        if removed:
-            self._rpm.pop((key or "").strip(), None)
-            self._persist()
+        with self._lock:
+            stored = _storage_key((key or "").strip())
+            removed = self._entries().pop(stored, None) is not None
+            if removed:
+                self._rpm.pop(stored, None)
+                self._persist()
         return removed
 
+    @_shared_keys
+    def revoke_client_key(self, principal: ScreenPrincipal) -> bool:
+        with self._lock:
+            entries = self._entries()
+            removed = self._owned_client_keys(entries, principal)
+            for key in removed:
+                del entries[key]
+            if removed and not self._persist():
+                entries.update(removed)
+                raise OSError("could not persist client key revocation")
+            for key in removed:
+                self._rpm.pop(key, None)
+            return bool(removed)
+
+    @_shared_keys
+    def has_active_client_key(self, principal: ScreenPrincipal) -> bool:
+        with self._lock:
+            now = self._clock()
+            return any(
+                not self._client_key_expired(meta, now)
+                for meta in self._owned_client_keys(self._entries(), principal).values()
+            )
+
+    @staticmethod
+    def _owned_client_keys(
+        entries: dict[str, dict[str, Any]], principal: ScreenPrincipal
+    ) -> dict[str, dict[str, Any]]:
+        return {
+            key: meta
+            for key, meta in entries.items()
+            if key.startswith(_CLIENT_DIGEST_PREFIX) and principal.owns(meta)
+        }
+
+    @staticmethod
+    def _client_key_expired(meta: dict[str, Any], now: float) -> bool:
+        expires_at = meta.get("expires_at")
+        if expires_at is None:
+            return True
+        try:
+            return not float(expires_at) > now
+        except (TypeError, ValueError):
+            return True
+
+    @_shared_keys
     def list_keys(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         if self._env_key():
@@ -181,11 +336,11 @@ class ApiKeyRegistry:
                 {"key_preview": "env:AIOPEN_API_KEY", "label": "环境变量", "created_at": None}
             )
         now = self._clock()
-        for key, meta in self._entries().items():
+        for key, meta in self._entries().copy().items():
             self._roll_day(meta, now)
             out.append(
                 {
-                    "key_preview": key[:12] + "…",
+                    "key_preview": meta.get("key_preview") or key[:12] + "…",
                     "label": meta.get("label", ""),
                     "created_at": meta.get("created_at"),
                     "scopes": meta.get("scopes") or ["*"],
@@ -202,6 +357,7 @@ class ApiKeyRegistry:
 
     # ── 授权与计量 ────────────────────────────────────────────────────
 
+    @_shared_keys
     def authorize(
         self, provided: str | None, tool: str = "", *, now: float | None = None
     ) -> dict[str, Any]:
@@ -221,11 +377,12 @@ class ApiKeyRegistry:
                 "key_preview": "env:AIOPEN_API_KEY",
                 "env": True,
             }
-        entry = entries.get(got)
+        stored = _storage_key(got)
+        entry = entries.get(stored)
         if not isinstance(entry, dict):
             return self._deny(_KEY_INVALID, "X-AIOPEN-Key 无效")
         current = float(now if now is not None else self._clock())
-        preview = got[:12] + "…"
+        preview = str(entry.get("key_preview") or got[:12] + "…")
         expires_at = entry.get("expires_at")
         if expires_at is not None:
             try:
@@ -240,12 +397,12 @@ class ApiKeyRegistry:
                 return self._deny(_SCOPE_DENIED, f"Key 未授权工具：{tool}", preview)
         limit = self._int(entry.get("rate_limit_per_min"))
         if limit > 0:
-            window = [stamp for stamp in self._rpm.get(got, []) if current - stamp < 60.0]
+            window = [stamp for stamp in self._rpm.get(stored, []) if current - stamp < 60.0]
             if len(window) >= limit:
-                self._rpm[got] = window
+                self._rpm[stored] = window
                 return self._deny(_RATE_LIMITED, f"超过每分钟 {limit} 次调用限制", preview)
             window.append(current)
-            self._rpm[got] = window
+            self._rpm[stored] = window
         quota = self._int(entry.get("daily_quota"))
         if quota > 0:
             self._roll_day(entry, current)
@@ -253,6 +410,7 @@ class ApiKeyRegistry:
                 return self._deny(_QUOTA_EXCEEDED, f"已达每日 {quota} 次调用配额", preview)
         return {"ok": True, "code": "", "message": "", "key_preview": preview, "env": False}
 
+    @_shared_keys
     def record_use(
         self,
         provided: str | None,
@@ -265,7 +423,7 @@ class ApiKeyRegistry:
         env_key = self._env_key()
         if not key or (env_key and compare_digest(key.encode("utf-8"), env_key.encode("utf-8"))):
             return {"key_preview": "env:AIOPEN_API_KEY" if key else "", "label": "环境变量"}
-        entry = self._entries().get(key)
+        entry = self._entries().get(_storage_key(key))
         if not isinstance(entry, dict):
             return {"key_preview": key[:12] + "…", "label": ""}
         current = float(now if now is not None else self._clock())
@@ -277,7 +435,10 @@ class ApiKeyRegistry:
             entry["error_calls"] = int(entry.get("error_calls") or 0) + 1
         entry["last_used_at"] = current
         self._persist()
-        return {"key_preview": key[:12] + "…", "label": str(entry.get("label") or "")}
+        return {
+            "key_preview": str(entry.get("key_preview") or key[:12] + "…"),
+            "label": str(entry.get("label") or ""),
+        }
 
     # ── 内部工具 ──────────────────────────────────────────────────────
 

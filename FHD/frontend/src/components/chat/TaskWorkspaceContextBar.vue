@@ -6,6 +6,7 @@ const props = withDefaults(
     title: string
     status?: string
     stage?: string
+    detail?: string
     progress?: number
     unreadCount?: number
     approvalRequired?: boolean
@@ -67,6 +68,7 @@ function can(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): boole
         aria-valuemax="100"
         ><span :style="{ width: `${progress ?? 0}%` }"
       /></span>
+      <p v-if="detail" class="chat-workspace-context__detail">{{ detail }}</p>
       <div v-if="can('approve') || can('pause') || can('cancel') || can('resume') || can('retry')" class="chat-workspace-context__actions">
         <button v-if="can('approve')" type="button" :disabled="Boolean(actionPending)" @click="emit('control', 'approve')">
           审批并执行
@@ -160,6 +162,10 @@ function can(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): boole
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--xc-color-primary), var(--xc-color-info));
+}
+.chat-workspace-context__detail {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .chat-workspace-context__actions {
   display: flex;

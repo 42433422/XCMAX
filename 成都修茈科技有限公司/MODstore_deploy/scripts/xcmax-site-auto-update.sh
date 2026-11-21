@@ -324,6 +324,37 @@ sync_site_static() {
   log "官网静态文件已同步"
 }
 
+guard_corp_download_marker() {
+  local live_site="$1" git_site="${2:-}" parent marker
+  [[ -d "$live_site" && "$(readlink -f "$SITE_ROOT")" == "$live_site" ]] || return 1
+  for parent in "$live_site/site" "$live_site/site/data"; do
+    if [[ -L "$parent" || ( -e "$parent" && ! -d "$parent" ) ]]; then
+      log "ERROR: unsafe deployment marker directory"
+      return 1
+    fi
+  done
+  marker="$live_site/site/data/corp-download-deployment.json"
+  if [[ -n "$git_site" ]] && [[ -e "$git_site/site/data/${marker##*/}" || -L "$git_site/site/data/${marker##*/}" ]]; then
+    log "ERROR: deployment marker must not be included in Git site data"
+    return 1
+  fi
+  [[ -e "$marker" || -L "$marker" ]] || return 0
+
+  # A same-SHA refresh preserves proof only when it copies the same download
+  # page bytes that are already live and match the exact Git source.
+  if [[ -n "$git_site" && -f "$marker" && ! -L "$marker" &&
+        "${NEW_XCMAX_SHA:-}" =~ ^[0-9a-f]{40}$ &&
+        "$(git -C "$XCMAX_ROOT" rev-parse HEAD)" == "$NEW_XCMAX_SHA" &&
+        ! -L "$git_site/download.html" && ! -L "$live_site/download.html" ]] &&
+     cmp -s "$git_site/download.html" "$live_site/download.html" &&
+     git -C "$XCMAX_ROOT" show "$NEW_XCMAX_SHA:$SITE_SUBDIR/download.html" | cmp -s - "$git_site/download.html" &&
+     python3 -c 'import json, sys; sys.exit(json.load(open(sys.argv[1])).get("deployed_sha") != sys.argv[2])' \
+       "$marker" "$NEW_XCMAX_SHA" 2>/dev/null; then
+    return 0
+  fi
+  rm -f -- "$marker"
+}
+
 # Git checkout updates $XCMAX_ROOT/... only. Production nginx root is usually the
 # immutable-release symlink at $SITE_ROOT (/root/成都修茈科技有限公司). Without this
 # publish step, homepage/nav fixes never become visible on xiu-ci.com.
@@ -356,6 +387,7 @@ publish_site_static_to_live() {
     log "live site root == git tree，无需二次发布"
     return 0
   fi
+  guard_corp_download_marker "$live_site" "$git_site" || return 1
   log "发布官网静态到 live root: $live_site"
   chmod u+w "$live_site" 2>/dev/null || true
   mkdir -p "$live_site/partials" "$live_site/assets" "$live_site/corp-butler"
@@ -609,7 +641,6 @@ ensure_market_dist || true
 validate_market_dist_identity || true
 
 restart_app_services
-)
 
 sync_nginx_corp_root() {
   local conf_src="${SITE_ROOT}/nginx-xiu-ci-root.conf"
@@ -624,6 +655,7 @@ sync_nginx_corp_root() {
     log "canonical xiu-ci.com.conf 已存在，跳过会产生 server_name 冲突的 standalone corp root vhost"
     return 0
   fi
+  guard_corp_download_marker "$(readlink -f "$SITE_ROOT")" || return 1
   install -m 644 "$conf_src" /etc/nginx/conf.d/xiu-ci-corp-root.conf
   if nginx -t >>"$LOG" 2>&1; then
     systemctl reload nginx >>"$LOG" 2>&1 || true
@@ -637,6 +669,7 @@ if paths_changed_since "$XCMAX_ROOT" "$OLD_XCMAX_SHA" "$NEW_XCMAX_SHA" \
   '^'"${SITE_SUBDIR}"'/nginx-xiu-ci.*\.conf$'; then
   sync_nginx_corp_root
 fi
+)
 
 echo "$NEW_XCMAX_SHA" >"${STATE_DIR}/xcmax.sha"
 # 兼容旧监控

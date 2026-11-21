@@ -6,12 +6,11 @@ from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.workflow.workflow_types import PlanGraph, validate_plan_graph
 
 
-def execute_reply_plan(run: AgentRun, plan: PlanGraph, context: dict[str, Any]) -> bool:
-    if plan.metadata.get("response_mode") != "reply":
-        return False
+def valid_reply_plan(run: AgentRun, plan: PlanGraph) -> bool:
+    """Validate the internal reply envelope without executing or changing a run."""
     nodes = plan.nodes
     text = str(plan.metadata.get("reply") or "").strip()
-    valid = (
+    return bool(
         not validate_plan_graph(plan)
         and len(nodes) == len(run.steps) == 1
         and (nodes[0].tool_id, nodes[0].action) == ("conversation", "reply")
@@ -26,7 +25,12 @@ def execute_reply_plan(run: AgentRun, plan: PlanGraph, context: dict[str, Any]) 
         and run.steps[0].risk == nodes[0].risk
         and run.steps[0].idempotent is nodes[0].idempotent
     )
-    if not valid:
+
+
+def execute_reply_plan(run: AgentRun, plan: PlanGraph, context: dict[str, Any]) -> bool:
+    if plan.metadata.get("response_mode") != "reply":
+        return False
+    if not valid_reply_plan(run, plan):
         run.status, run.error = "blocked", "普通回复计划包含非回复动作或不一致内容，拒绝执行"
         run.add_event("workflow.plan_audit_rejected", run.error)
         return True

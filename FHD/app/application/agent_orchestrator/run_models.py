@@ -46,6 +46,27 @@ RetrievalCallStatus = Literal["completed", "failed"]
 MemoryReferenceStatus = Literal["completed", "failed"]
 
 
+@dataclass(frozen=True)
+class RunContextScope:
+    """Persisted conversation scope, distinct from a Mod authorization binding."""
+
+    tenant_id: str
+    mod_id: str
+    session_id: str
+    revision: int
+
+    def matches(self, run: AgentRun) -> bool:
+        saved = run.metadata.get("runtime_context") or {}
+        return (
+            isinstance(saved, dict)
+            and str(saved.get("tenant_id")) == self.tenant_id
+            and str(saved.get("mod_id") or saved.get("active_mod_id") or "") == self.mod_id
+            and str(saved.get("session_id") or saved.get("conversation_id") or "")
+            == self.session_id
+            and saved.get("_conversation_revision") == self.revision
+        )
+
+
 @dataclass
 class AgentStep:
     node_id: str

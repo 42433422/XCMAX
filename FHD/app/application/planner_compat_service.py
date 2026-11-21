@@ -320,12 +320,14 @@ async def _with_attachment_evidence(
             memory_context=body.context,
         )
         block = evidence_system_block(evidence["evidence"])
-        if block:
+        manifest = evidence.get("manifest") or []
+        if block or manifest:
             context = dict(body.context or {})
             file_context = context.get("file_context")
             context["file_context"] = {
                 **(file_context if isinstance(file_context, dict) else {}),
                 "attachment_evidence": block,
+                "attachment_manifest": manifest,
             }
             body = body.model_copy(update={"context": context})
         return body, evidence["trace"]

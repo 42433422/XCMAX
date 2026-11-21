@@ -50,6 +50,7 @@ function isUser(m: ChatLikeMessage): boolean {
 }
 
 export function isFailedChatReply(message: ChatLikeMessage): boolean {
+  if (['running', 'queued', 'paused', 'waiting_approval', 'blocked'].includes(message.workflowAction || '')) return false
   if (/failed|error/.test(message.workflowAction || '') || message.agentRunTrace?.status === 'failed') return true
   const raw = messageText(message)
   const text = raw.includes('<') || raw.includes('&') ? plainTextFromChatHtml(raw).trim() : raw

@@ -541,7 +541,6 @@ def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkey
         str(tmp_path),
         Mock(),
         Mock(),
-        Mock(),
         time.monotonic() + 5,
         {},
     )

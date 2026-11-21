@@ -125,4 +125,30 @@ describe('native AI SDK tool stream', () => {
     expect(steps).toHaveLength(1)
     expect(steps[0]).toMatchObject({ state: 'success', error: undefined, retries: 1, output: '20 行' })
   })
+
+  it('distinguishes deferred ELT receipts, confirmed writes and unknown side effects', async () => {
+    const events: PlannerSseEvent[] = [
+      { type: 'tool_call', phase: 'progress', node_id: 'link', tool_id: 'elt_import', label: '正在预演客户及产品' },
+      { type: 'tool_call', phase: 'finished', node_id: 'link', success: false, deferred: true,
+        output_preview: '客户及产品预演尚未就绪，尚未提交写入', error: '旧版等待信息' },
+      { type: 'tool_call', phase: 'finished', node_id: 'some-written', tool_id: 'elt_import', success: false,
+        deferred: true, committed: true, output_preview: '运单已写入，客户及产品未提交写入' },
+      { type: 'tool_call', phase: 'finished', node_id: 'companion-failed', tool_id: 'elt_import', success: false,
+        committed: true, output_preview: '运单已写入', error: '客户及产品处理失败' },
+      { type: 'tool_call', phase: 'finished', node_id: 'unknown', tool_id: 'elt_import', success: false,
+        committed: true, requires_reconciliation: true, error: '请核对客户及产品回执' },
+      { type: 'done', result: { success: false } },
+    ]
+    sendChatStream.mockResolvedValueOnce(sseResponse(events.map(event => JSON.stringify(event))))
+    let steps: AgentStepView[] = []
+    const result = await useAiSdkChatRound({ onMessage: message => { steps = stepsFromAiParts(message.parts) } }).send({})
+
+    expect(result.error).toBeNull()
+    expect(steps).toMatchObject([
+      { state: 'deferred', output: '客户及产品预演尚未就绪，尚未提交写入', error: undefined },
+      { state: 'partial', output: '运单已写入，客户及产品未提交写入', error: undefined },
+      { state: 'partial', output: '运单已写入', error: '客户及产品处理失败' },
+      { state: 'unknown', error: '请核对客户及产品回执' },
+    ])
+  })
 })

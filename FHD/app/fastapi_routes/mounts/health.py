@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
+import os
+import re
 from copy import deepcopy
 
 from fastapi import FastAPI, Request, Response
 
 from app.build_identity import build_identity
+from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode
 from app.runtime_integrity import merge_public_degradation, runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -108,7 +112,20 @@ def register_health_routes(app: FastAPI) -> None:
         return payload
 
     @app.get("/api/ping", tags=["health"])
-    async def ping():
+    async def ping(request: Request, response: Response):
+        challenge = request.query_params.get("desktop_challenge", "")
+        token = os.environ.get("XCAGI_DESKTOP_WORKSPACE_TOKEN", "")
+        if (
+            is_desktop_mode()
+            and re.fullmatch(r"[0-9a-f]{64}", challenge)
+            and re.fullmatch(r"[0-9a-f]{64}", token)
+        ):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-XCAGI-Desktop-Proof"] = hmac.new(
+                token.encode("ascii"),
+                f"xcagi-desktop-backend-v1:{challenge}".encode("ascii"),
+                digestmod="sha256",
+            ).hexdigest()
         return {"pong": True}
 
     logger.info("Registered health check routes")

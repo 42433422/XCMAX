@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -35,6 +36,34 @@ class _RunContext:
     para_task_id: Optional[str]
     branch: Optional[str]
     steps: List[Dict[str, Any]] = field(default_factory=list)
+
+
+class _DotMailboxConfigurationError(ValueError):
+    """Cloud routing is enabled but no cloud device can be addressed."""
+
+
+def _dot_mailbox_code_extra(
+    extra: Dict[str, Any], *, run_id: str, employee_id: str
+) -> Dict[str, Any]:
+    """Route the code step to the dot/GitHub mailbox executor when configured.
+
+    dot only accepts control tasks whose title starts with ``[xcmax:<32hex>:<32hex>]``.
+    Keeping the routing here leaves the default Mac dispatch and other employees untouched.
+    """
+    if not config._env_bool("MODSTORE_SELF_MAINTENANCE_DOT_MAILBOX", False):
+        return extra
+    device_id = os.environ.get("MODSTORE_SELF_MAINTENANCE_DEVICE_ID", "").strip()
+    if not device_id:
+        raise _DotMailboxConfigurationError(
+            "MODSTORE_SELF_MAINTENANCE_DEVICE_ID is required for dot mailbox routing"
+        )
+    run_hex = re.sub(r"[^0-9a-f]", "", str(run_id).lower())[:32].ljust(32, "0")
+    return {
+        **extra,
+        "device_id": device_id,
+        "title": f"[xcmax:{run_hex}:{uuid.uuid4().hex}] {employee_id}",
+        "tool_name": os.environ.get("MODSTORE_SELF_MAINTENANCE_TOOL") or "dolt",
+    }
 
 
 class MaintenanceRuntime:
@@ -169,9 +198,12 @@ class MaintenanceRuntime:
             para_task_id=task_id,
             branch=branch,
         )
-        plan = self._plan(context, steps_to_run)
         try:
-            return self._execute(context, plan)
+            return self._execute(context, self._plan(context, steps_to_run))
+        except _DotMailboxConfigurationError as exc:
+            return self._finish(
+                context, status="failed", extra={"error": str(exc), "failed_step": "code"}
+            )
         except RECOVERABLE_ERRORS as exc:
             config.logger.exception("self-maintenance loop failed")
             return self._finish(context, status="failed", extra={"error": str(exc)})
@@ -198,6 +230,9 @@ class MaintenanceRuntime:
         plan = []
         if "code" in steps_to_run:
             extra: Dict[str, Any] = {"allow_medium_risk": True, "skip_path_guard": True}
+            extra = _dot_mailbox_code_extra(
+                extra, run_id=context.run_id, employee_id="vibe-coding-maintainer"
+            )
             if context.resume_candidate and context.resume_candidate.get(
                 "continue_existing_code_task"
             ):

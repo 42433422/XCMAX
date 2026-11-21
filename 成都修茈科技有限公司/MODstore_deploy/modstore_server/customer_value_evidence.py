@@ -296,8 +296,9 @@ def build_customer_value_evidence(
     orders: list[dict[str, Any]] | None = None,
     session_factory: Callable[..., Any] | None = None,
     now: datetime | None = None,
+    delivery_scope: tuple[int, str, datetime] | None = None,
 ) -> dict[str, Any]:
-    """Build the safe aggregate consumed by the founder scorecard."""
+    """Build a safe aggregate, optionally limited to same-order outcome and acceptance."""
 
     current = (now or datetime.now(UTC)).astimezone(UTC)
     days = max(1, min(int(window_days), 3650))
@@ -360,6 +361,44 @@ def build_customer_value_evidence(
         if order_no in refunded_order_nos:
             excluded["refunded"] += 1
             eligible_orders.pop(order_no, None)
+
+    if delivery_scope:
+        owner_id, artifact_digest, deployed_at = delivery_scope
+        # Keep each order and goal together. A paid order from this account
+        # alone does not prove value from the particular deployed artifact.
+        matched: dict[tuple[str, str], set[str]] = {}
+        for row in verified_receipts:
+            if (
+                row.receipt_kind not in {"outcome", "acceptance"}
+                or not row.customer_goal_id
+                or not row.order_no
+                or row.environment not in {"production", "prod"}
+                or row.currency != "CNY"
+                or row.occurred_at.replace(tzinfo=UTC) < deployed_at
+            ):
+                continue
+            try:
+                evidence = json.loads(row.evidence_json or "{}")
+            except (TypeError, ValueError):
+                continue
+            if isinstance(evidence, dict) and evidence.get("artifact_sha256") == artifact_digest:
+                matched.setdefault((row.order_no, row.customer_goal_id), set()).add(
+                    row.receipt_kind
+                )
+        goals = {pair for pair, kinds in matched.items() if kinds == {"outcome", "acceptance"}}
+        accepted_orders = {order_no for order_no, _ in goals}
+        eligible_orders = {
+            order_no: order
+            for order_no, order in eligible_orders.items()
+            if order_no in accepted_orders
+            and str(order.get("user_id")) == str(owner_id)
+            and str(order.get("currency") or "CNY").upper() == "CNY"
+        }
+        verified_receipts = [
+            row
+            for row in verified_receipts
+            if (row.order_no, row.customer_goal_id) in goals and row.order_no in eligible_orders
+        ]
 
     paid_amount_cents = sum(_amount_cents(order) for order in eligible_orders.values())
     customer_goal_ids = {

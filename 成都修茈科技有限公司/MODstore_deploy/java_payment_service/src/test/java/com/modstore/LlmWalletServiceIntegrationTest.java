@@ -154,6 +154,27 @@ class LlmWalletServiceIntegrationTest {
                 .header("X-Llm-Wallet-Assertion", settleToken)
                 .contentType("application/json").content(settle)).andExpect(status().isOk());
         assertThat(wallet.getBalance(user)).isEqualByComparingTo("98.00");
+        byte[] read = json.writeValueAsBytes(Map.of("hold_no", hold, "request_id", "synthetic-request",
+                "idempotency_key", "synthetic-request:read"));
+        http.perform(post("/api/internal/llm-wallet/read").contentType("application/json").content(read))
+                .andExpect(status().isUnauthorized());
+        String readToken = sign(read, "read", user.getId(), "modstore-llm-wallet", Instant.now().plusSeconds(40), hold);
+        var readResult = http.perform(post("/api/internal/llm-wallet/read")
+                .header("X-Llm-Wallet-Assertion", readToken).contentType("application/json").content(read))
+                .andExpect(status().isOk()).andReturn();
+        var readHold = json.readTree(readResult.getResponse().getContentAsByteArray()).path("hold");
+        assertThat(readHold.path("request_id").asText()).isEqualTo("synthetic-request");
+        assertThat(readHold.path("status").asText()).isEqualTo("settled");
+        assertThat(readHold.path("provider").asText()).isEqualTo("synthetic");
+        assertThat(readHold.path("model").asText()).isEqualTo("model");
+        assertThat(readHold.path("settled_amount").decimalValue()).isEqualByComparingTo("2.00");
+        http.perform(post("/api/internal/llm-wallet/read")
+                .header("X-Llm-Wallet-Assertion", sign(read, "read", other.getId(), "modstore-llm-wallet", Instant.now().plusSeconds(40), hold))
+                .contentType("application/json").content(read)).andExpect(status().isUnauthorized());
+        byte[] changedRead = json.writeValueAsBytes(Map.of("hold_no", hold, "request_id", "other-request", "idempotency_key", "other-request:read"));
+        http.perform(post("/api/internal/llm-wallet/read")
+                .header("X-Llm-Wallet-Assertion", sign(changedRead, "read", user.getId(), "modstore-llm-wallet", Instant.now().plusSeconds(40), hold))
+                .contentType("application/json").content(changedRead)).andExpect(status().isUnauthorized());
         http.perform(post("/api/internal/llm-wallet/preauthorize")
                 .header("X-Llm-Wallet-Assertion", token).contentType("application/json").content(pre))
                 .andExpect(status().isConflict());

@@ -8,8 +8,14 @@ expired batch ownership is intentionally never automatically reclaimed.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import copy_context
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from threading import Event, Thread
+from time import monotonic
 from typing import Any, cast
 from uuid import uuid4
 
@@ -20,7 +26,9 @@ from app.application.elt.errors import EltConflict
 from app.application.elt.service_support import utcnow
 from app.db.models.elt import EltRun
 from app.infrastructure.tenant_scope import tenant_id_for_write
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+logger = logging.getLogger(__name__)
 LEASE_SECONDS = 300
 _SESSION_KEY = "elt_operation_owner"
 _SKIP_FENCE = "elt_internal_owner_dml"
@@ -132,10 +140,13 @@ def unbind_owner(db: Session) -> None:
     db.info.pop(_SESSION_KEY, None)
 
 
-def fence_operation(db: Session, owner: OperationOwner) -> None:
+def fence_operation(db: Session, owner: OperationOwner, *, record_progress: bool = True) -> None:
     if tenant_id_for_write() != owner.tenant_id:
         raise EltConflict("ELT_OPERATION_LEASE_LOST", "任务租户上下文已改变，已停止写入")
     columns = EltRun.__table__.c
+    values = {"operation_lease_until": _expiry(db)}
+    if not record_progress:
+        values["updated_at"] = columns.updated_at
     result = _dml(
         db,
         update(_RUN_TABLE)
@@ -145,12 +156,42 @@ def fence_operation(db: Session, owner: OperationOwner) -> None:
             columns.operation_token == owner.token,
             columns.operation_lease_until > _clock(db),
         )
-        .values(operation_lease_until=_expiry(db)),
+        .values(**values),
     )
     if result.rowcount != 1:
         raise EltConflict(
             "ELT_OPERATION_LEASE_LOST", "任务执行权已失效，已停止写入，请刷新运行状态"
         )
+
+
+@contextmanager
+def keep_preview_lease(owner: OperationOwner, new_session: Callable[[], Session]) -> Iterator[None]:
+    """Keep ownership during a blocking read phase, bounded by the stale-run window."""
+    from app.application.elt.stale_watchdog import stale_after_seconds
+
+    stop = Event()
+    deadline = monotonic() + stale_after_seconds()
+
+    def heartbeat() -> None:
+        while not stop.wait(LEASE_SECONDS / 3) and monotonic() < deadline:
+            try:
+                with new_session() as db:
+                    fence_operation(db, owner, record_progress=False)
+                    db.commit()
+            except EltConflict:
+                return
+            except RECOVERABLE_ERRORS:
+                logger.warning(
+                    "Unable to renew ELT preview lease for %s", owner.run_id, exc_info=True
+                )
+
+    thread = Thread(target=copy_context().run, args=(heartbeat,), daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join()
 
 
 def finish_operation(db: Session, owner: OperationOwner) -> None:

@@ -23,6 +23,76 @@ WF_PATH = ".github/workflows/modstore-ci-backend-python.yml"
 CI_PATH = ".github/workflows/fhd-ci-cd.yml"
 
 
+def _scan_pr(*, labels: list[str] | None = None, run_sha: str = OLD) -> tuple[dict, dict]:
+    pr = {
+        "number": 5,
+        "state": "open",
+        "draft": False,
+        "user": {"login": "42433422"},
+        "labels": [{"name": name} for name in (labels or [])],
+        "head": {"ref": "feat/x", "sha": OLD, "repo": {"full_name": REPO}},
+        "base": {"ref": "main", "repo": {"full_name": REPO}},
+    }
+    run = {
+        "id": 7,
+        "name": WF,
+        "workflow_id": 99,
+        "path": WF_PATH,
+        "head_sha": run_sha,
+        "head_branch": "feat/x",
+        "event": "pull_request",
+        "run_attempt": 1,
+        "conclusion": "failure",
+        "status": "completed",
+        "created_at": "2026-10-10T10:00:00Z",
+        "pull_requests": [{"number": 5}],
+    }
+    return pr, run
+
+
+@pytest.mark.parametrize(
+    ("labels", "run_sha", "latest_retry", "expected"),
+    [
+        ([], OLD, None, [7]),
+        (["hold-merge"], OLD, None, []),
+        ([], NEW, None, []),
+        ([], OLD, "in_progress", []),
+        ([], OLD, "completed", []),
+    ],
+)
+def test_scheduled_pr_scan_only_dispatches_authorized_exact_head_failures(
+    monkeypatch, capsys, labels: list[str], run_sha: str, latest_retry, expected: list[int]
+) -> None:
+    pr, run = _scan_pr(labels=labels, run_sha=run_sha)
+    calls: list[str] = []
+    runs = [run]
+    if latest_retry:
+        runs.append({**run, "id": 8, "status": latest_retry, "conclusion": "success"})
+
+    def get(path: str, params: dict) -> tuple[int, object]:
+        if path.endswith("/pulls"):
+            return 200, [pr]
+        if path.endswith("/actions/runs"):
+            return 200, {"workflow_runs": runs}
+        if path.endswith("/pulls/5"):
+            return 200, pr
+        raise AssertionError(f"unexpected GitHub read: {path}")
+
+    monkeypatch.setattr(heal, "_github_getter", lambda token, repo: get)
+    monkeypatch.setattr(
+        heal,
+        "check_freshness",
+        lambda workflow, run_id, token, repo: (
+            calls.append(str(run_id))
+            or fr.Decision(fr.SKIP, "already_dispositioned", run_id=run_id)
+        ),
+    )
+    monkeypatch.setenv("GITHUB_REPOSITORY", REPO)
+    assert heal.scan_open_prs("token", REPO) == 0
+    assert calls == [str(item) for item in expected]
+    assert f"eligible exact-HEAD PR failures={len(expected)}" in capsys.readouterr().out
+
+
 class FakeGitHub:
     """按 path 返回预置响应；记录调用。value 为 Exception 时抛出（模拟网络故障）。"""
 
@@ -197,7 +267,6 @@ def test_event_api_mismatch_and_incomplete_run_block() -> None:
         ("Deploy MODstore Production", "push"),
         ("fhd-deploy", "workflow_dispatch"),
         ("cvm-autonomy-watcher", "schedule"),
-        ("Release gate CI", "push"),
         ("CI/CD Pipeline", "push"),
         ("CI/CD Pipeline", "workflow_dispatch"),
         ("CI/CD Pipeline", "schedule"),
@@ -218,6 +287,26 @@ def test_ci_cd_pipeline_pr_is_filtered() -> None:
         event=_event(name="CI/CD Pipeline", path=CI_PATH),
     )
     assert d.reason == "stale_head"
+
+
+def test_release_gate_failure_is_repairable_only_for_current_pull_request() -> None:
+    path = ".github/workflows/fhd-release-gate-ci.yml"
+    d = _eval(
+        FakeGitHub(
+            run={"name": "Release gate CI", "path": path},
+            pr_head=OLD,
+        ),
+        workflow="Release gate CI",
+        event=_event(name="Release gate CI", path=path),
+    )
+    assert (d.action, d.disposition, d.workflow_path) == (fr.PROCEED, "current", path)
+
+    push = _eval(
+        FakeGitHub(run={"name": "Release gate CI", "path": path, "event": "push"}),
+        workflow="Release gate CI",
+        event=_event(name="Release gate CI", path=path, event="push"),
+    )
+    assert (push.action, push.disposition) == (fr.PROCEED, "unfiltered")
 
 
 def test_event_payload_reader(tmp_path: Path) -> None:
@@ -631,6 +720,66 @@ def test_verified_recovery_and_supersession_close_with_different_meaning(
         {"state": "closed", "state_reason": close_reason},
     )
     assert state in writes[0][2]["body"]
+
+
+@pytest.mark.parametrize(
+    ("merged", "ci", "on_main", "closed"),
+    [
+        (False, "success", False, False),
+        (True, "failure", True, False),
+        (True, "success", False, False),
+        (True, "success", True, True),
+    ],
+)
+def test_para_update_closes_incident_only_after_ci_and_main_receipt(merged, ci, on_main, closed):
+    repair = heal.recovery.para.repair
+    target = repair.Target(5, "feat/x", OLD, 7, 99, WF_PATH)
+    merge_sha = "c" * 40
+    intent = repair.intent_body(
+        REPO,
+        1,
+        target,
+        NEW,
+        control_task_id="ctl1",
+        para_task_id="para1",
+        github_run_id=50,
+    )
+    run = {
+        **FakeGitHub().run,
+        "id": 8,
+        "head_sha": NEW,
+        "head_repository": {"full_name": REPO},
+        "conclusion": ci,
+    }
+
+    class GitHub(RecoveryGitHub):
+        def __call__(self, path, params):
+            if path.endswith("/pulls/5"):
+                return 200, {
+                    "number": 5,
+                    "state": "closed" if merged else "open",
+                    "merged": merged,
+                    "merge_commit_sha": merge_sha if merged else None,
+                    "head": {"ref": target.branch, "sha": NEW, "repo": {"full_name": REPO}},
+                    "base": {"ref": "main", "repo": {"full_name": REPO}},
+                }
+            if path.endswith("/runs/8"):
+                return 200, run
+            if path.endswith("/runs") and params.get("head_sha") == NEW:
+                return 200, {"workflow_runs": [run]}
+            if path.endswith("/compare/" + merge_sha + "...main"):
+                return 200, {"merge_base_commit": {"sha": merge_sha if on_main else OLD}}
+            return super().__call__(path, params)
+
+    result, writes, dispatches = _recover(GitHub(comments=[{"user": BOT, "body": intent}]))
+    assert not dispatches
+    assert bool(writes) is closed
+    if closed:
+        assert result["state"] == "recovered"
+        assert result["merge_commit_sha"] == merge_sha and result["ci_run_id"] == 8
+        assert writes[-1][2] == {"state": "closed", "state_reason": "completed"}
+    else:
+        assert result["state"] == "observing"
 
 
 @pytest.mark.parametrize("missing", ["/actions/runs/7", "/pulls/5", "/runs"])

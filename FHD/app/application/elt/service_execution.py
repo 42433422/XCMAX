@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.application.elt.chat_recall import record_import_origin
 from app.application.elt.errors import EltConflict, EltError
 from app.application.elt.operation_owner import (
     OperationOwner,
@@ -92,6 +93,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         valid_rows_only: bool,
         preview_revision: str | None = None,
         accept_suggested: bool = False,
+        chat_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
         if not confirmed:
@@ -151,6 +153,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 )
             assert preview_revision is not None
             record_confirmation(run, preview_revision, valid_rows_only=valid_rows_only)
+            record_import_origin(run, chat_context)
             run.status = "executing"
             run.stage = "executing"
             run.progress = 0

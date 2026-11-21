@@ -1,4 +1,4 @@
-"""Public market LLM adapter: explicit credential, catalog, completion and stream assembly."""
+"""Market LLM adapter: credential, catalog, completion and stream assembly."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from app.application.market_llm import (
     catalog,
     completions,
     multimodal,
+    responses,
     routing,
     streaming,
 )
@@ -37,20 +38,15 @@ from app.application.market_llm.protocols import (
     CompletionPorts,
     Connection,
     OpenAIPorts,
+    PreparedChatRoute,
     ResponsePorts,
     StreamPorts,
 )
-from app.application.market_llm.responses import _response_status_code as _status_code
 from app.application.market_llm.responses import (
     neuro_notify_ai_model_roundtrip as neuro_notify_ai_model_roundtrip,
 )
 from app.infrastructure import modstore_transport as _transport
 from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
-from app.infrastructure.llm.modstore_response_normalize import (
-    absorb_stream_payload,
-    normalize_collected_stream,
-    normalize_market_chat_response,
-)
 from app.legacy.market_llm import openai_compat
 from app.legacy.market_llm.openai_compat import (
     _market_sse_payload_has_content as _market_sse_payload_has_content,
@@ -75,7 +71,7 @@ _CATALOG_CACHE_LOCK = threading.Lock()
 
 
 def _response_status_code(response: Any, default: int = 200) -> int:
-    return _status_code(response, default)
+    return responses._response_status_code(response, default)
 
 
 def _iter_market_sse_data_payloads(response: Any) -> Iterator[str]:
@@ -143,8 +139,6 @@ def _stream_payload_has_content(payload: Any) -> bool:
 
 
 class ModstorePlatformAdapter:
-    """Forward model requests through market routing, credentials and billing."""
-
     def __init__(
         self,
         platform_url: str | None = None,
@@ -154,7 +148,6 @@ class ModstorePlatformAdapter:
         default_model: str = "mimo-v2.6-flash",
         timeout: float = 150.0,
     ):
-        """初始化市场地址、凭据、默认模型和连接超时；显式值保持原环境回退规则。"""
         self.platform_url = (
             platform_url
             or os.environ.get("XCAGI_MARKET_BASE_URL", "").strip()
@@ -179,7 +172,6 @@ class ModstorePlatformAdapter:
         self._route_aliases: dict[tuple[Connection, tuple[str, str]], tuple[str, str]] = {}
         self.last_route_metadata: dict[str, Any] = {}
         self._default_route_lock = threading.Lock()
-        # 平台路由发现是独立网络调用；失败时短暂回退到配置默认路由，避免拖垮整轮对话。
         self._route_fallback_until = 0.0
         self._route_failures = 0
         self._source = "env"
@@ -195,7 +187,6 @@ class ModstorePlatformAdapter:
 
     @staticmethod
     def _parse_user_id(value: str) -> Optional[int]:
-        """解析用户ID"""
         if not value:
             return None
         try:
@@ -205,7 +196,6 @@ class ModstorePlatformAdapter:
 
     @classmethod
     def from_session(cls, session_id: str | None = None, request: Any = None, **kwargs) -> Self:
-        """从显式配置或 FHD 会话取得市场凭据；最近令牌回退限定为已解析的会话所有者。"""
         platform_url = (
             kwargs.get("platform_url")
             or os.environ.get("XCAGI_MARKET_BASE_URL")
@@ -243,13 +233,12 @@ class ModstorePlatformAdapter:
 
     @classmethod
     def from_request(cls, request: Any, **kwargs) -> Self:
-        """使用 FastAPI 请求中的本地会话创建市场适配器；Authorization 不直接作为市场令牌。"""
         return cls.from_session(request=request, **kwargs)
 
     def refresh_token_from_session(
         self, session_id: str | None = None, request: Any = None
     ) -> bool:
-        """刷新市场令牌；后续请求使用新凭据，已开始的请求保留其凭据快照。"""
+        """Refresh future calls; active requests retain their credential snapshot."""
         token = authentication.refresh_credential(
             session_id, request, authentication.load_session_ports, logger
         )
@@ -268,11 +257,10 @@ class ModstorePlatformAdapter:
 
     @property
     def is_configured(self) -> bool:
-        """检查是否已配置（有platform_url即可）"""
         return bool(self.platform_url)
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """获取HTTP客户端。规划器每次 asyncio.run 都是新循环，旧连接不能复用。"""
+        """Keep HTTP connections within their originating event loop."""
         loop_id = id(asyncio.get_running_loop())
         client = self._client
         bound = self._client_loop_id
@@ -288,7 +276,6 @@ class ModstorePlatformAdapter:
         return client
 
     def _build_headers(self) -> Dict[str, str]:
-        """构建请求头"""
         return self._connection().headers()
 
     def _list_chat_failover_candidates_sync(
@@ -331,7 +318,7 @@ class ModstorePlatformAdapter:
     def _normalize_response(
         self, raw_response: Dict[str, Any], provider: str, model: str
     ) -> Dict[str, Any]:
-        result = normalize_market_chat_response(raw_response, provider, model)
+        result = responses.normalize_market_chat_response(raw_response, provider, model)
         metadata = routing.route_metadata(result.get("route_metadata") or {})
         if metadata:
             self.last_route_metadata = metadata
@@ -354,7 +341,7 @@ class ModstorePlatformAdapter:
         return Path(raw)
 
     def _load_route_snapshot(self, connection: Connection) -> dict[str, Any] | None:
-        """读取上次成功的路由快照（30 分钟内有效），用于平台不可达时继续对话。"""
+        """Read the last route identity with a 30-minute expiry."""
         path = self._route_snapshot_path()
         if path is None:
             return None
@@ -411,11 +398,8 @@ class ModstorePlatformAdapter:
                 try:
                     snapshot = routing.resolve_account_route(connection, _httpx_sync_client)
                 except httpx.HTTPError as exc:
-                    # 仅传输层失败（握手超时/连接中断）时回退：这类失败代表根本没能
-                    # 询问平台，回退不会掩盖平台给出的业务结论。平台明确返回的拒绝
-                    # （解析失败、4xx/5xx）必须原样抛出，保持“未解析的路由不许发送”约束。
+                    # Back off transport failures only; explicit platform refusals propagate.
                     self._route_failures += 1
-                    # 指数退避式的熔断冷却：30s → 60s → 120s → 300s，成功后清零。
                     backoff = min(300, 30 * (2 ** (self._route_failures - 1)))
                     self._route_fallback_until = time.monotonic() + backoff
                     logger.warning(
@@ -450,11 +434,22 @@ class ModstorePlatformAdapter:
         snapshot = self._route_snapshots.get((connection, route)) or {}
         return snapshot if snapshot.get("key_source") or snapshot.get("route_token") else {}
 
-    def _chat_input(self, connection, route, messages, temperature, max_tokens, extra):
-        snapshot = self._pinned_snapshot(connection, route)
+    def _vision_snapshot(self, connection, provider, model, messages):
+        from app.application.workflow.multimodal_user_content import messages_have_image_parts
+
+        if (
+            self._use_account_default
+            and not provider
+            and not model
+            and messages_have_image_parts(messages)
+        ):
+            return routing.resolve_account_route(connection, _httpx_sync_client, operation="vision")
+        return None
+
+    def _chat_input(self, prepared, messages, temperature, max_tokens, extra):
+        snapshot = prepared.snapshot
         extra = dict(extra or {})
-        # Callers that explicitly opt into client failover (template analyze/preview)
-        # must keep allow_failover=True even when a route snapshot is pinned.
+        # Template callers may explicitly allow text-route failover.
         force_failover = extra.get("allow_failover") is True
         if snapshot:
             self.last_route_metadata = {
@@ -469,9 +464,57 @@ class ModstorePlatformAdapter:
                     if key in snapshot
                 },
             }
-            if not force_failover:
+            if prepared.native_vision or not force_failover:
                 extra["allow_failover"] = False
-        return ChatInput(messages, temperature, max_tokens, extra)
+        return ChatInput(messages, temperature, max_tokens, extra, prepared.native_vision)
+
+    def _prepare_chat_route(
+        self,
+        messages,
+        provider=None,
+        model=None,
+        *,
+        fallback_model=None,
+        prepared: PreparedChatRoute | None = None,
+        connection=None,
+    ) -> PreparedChatRoute:
+        connection = connection or self._connection()
+        authentication.validate_demo_destination(connection)
+        if prepared is not None:
+            if not isinstance(prepared, PreparedChatRoute):
+                raise _transport.MarketModelError({"status": 409})
+            prepared.assert_valid(connection, provider, model)
+            return prepared
+        vision = self._vision_snapshot(connection, provider, model, messages)
+        route = (
+            (vision["provider"], vision["model"])
+            if vision
+            else self._resolve_provider_model(
+                provider, model or fallback_model, connection=connection
+            )
+        )
+        prepared = PreparedChatRoute(
+            connection,
+            route,
+            dict(vision or self._verified_snapshot(connection, route)),
+            bool(vision),
+        )
+        prepared.assert_valid(connection)
+        return prepared
+
+    async def prepare_chat_route(
+        self, messages, provider=None, model=None, *, fallback_model=None
+    ) -> PreparedChatRoute:
+        prepared = await asyncio.to_thread(
+            self._prepare_chat_route,
+            messages,
+            provider,
+            model,
+            fallback_model=fallback_model,
+            connection=self._connection(),
+        )
+        prepared.assert_valid(self._connection())
+        return prepared
 
     @contextmanager
     def _route_observation(self):
@@ -546,14 +589,44 @@ class ModstorePlatformAdapter:
                 self._account_default = (connection, route)
         return route
 
-    async def _resolve_provider_model_async(
-        self, provider: str | None, model: str | None, connection: Connection
+    async def resolve_chat_route(
+        self, provider: str | None, model: str | None, connection: Connection | None = None
     ) -> tuple[str, str]:
-        if self._use_account_default and not provider and not model:
-            return await asyncio.to_thread(self.resolve_default_route, connection)
         return await asyncio.to_thread(
             self._resolve_provider_model, provider, model, connection=connection
         )
+
+    def _verified_snapshot(self, connection, route):
+        snapshot = self._route_snapshots.get((connection, route)) or {}
+        if (
+            self._use_account_default
+            and "model_capabilities" not in snapshot
+            and not self._pinned_snapshot(connection, route)
+        ):
+            # Disk snapshots contain identity only; revalidate before any model call.
+            snapshot = routing.resolve_account_route(connection, _httpx_sync_client, route)
+            PreparedChatRoute(connection, route, snapshot).assert_valid(connection)
+            with self._default_route_lock:
+                self._route_snapshots[(connection, route)] = snapshot
+                self._account_default = (connection, route)
+        return snapshot
+
+    async def resolve_model_capabilities(
+        self, provider: str, model: str, *, prepared_route=None
+    ) -> dict[str, Any]:
+        connection, route = self._connection(), (provider, model)
+        snapshot = (
+            self._prepare_chat_route([], provider, model, prepared=prepared_route).snapshot
+            if prepared_route is not None
+            else await asyncio.to_thread(self._verified_snapshot, connection, route)
+        )
+        capabilities = catalog.public_model_capabilities(snapshot.get("model_capabilities"))
+        if not capabilities:
+            value = await self._catalog_gateway(connection).read_async()
+            capabilities = catalog.model_capabilities(value or {}, provider, model)
+        if self._connection() != connection:
+            raise _transport.MarketModelError({"status": 409})
+        return capabilities
 
     def _catalog_cache_key(self) -> tuple[str, str]:
         return catalog.cache_key(self._connection())
@@ -592,7 +665,7 @@ class ModstorePlatformAdapter:
         ending: dict | None = None,
         reasoning: list[str] | None = None,
     ) -> None:
-        absorb_stream_payload(
+        responses.absorb_stream_payload(
             data,
             status_cb,
             pieces,
@@ -610,7 +683,7 @@ class ModstorePlatformAdapter:
         max_tokens: int,
         reasoning: str = "",
     ) -> Dict[str, Any]:
-        return normalize_collected_stream(
+        return responses.normalize_collected_stream(
             pieces,
             provider,
             model,
@@ -631,7 +704,6 @@ class ModstorePlatformAdapter:
         model: str | None = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """同一条流式调用收成完整响应。处理中的状态不另开请求。"""
         kwargs.pop("_stream_status", None)
         status_cb = kwargs.get("_processing_status")
         pieces: list[str] = []
@@ -654,20 +726,22 @@ class ModstorePlatformAdapter:
         model: str | None = None,
         **kwargs,
     ):
-        """
-        流式聊天补全（SSE）
-
-        Yields:
-            SSE数据行
-        """
-        connection = self._connection()
-        authentication.validate_demo_destination(connection)
-        route = await self._resolve_provider_model_async(provider, model, connection)
+        guarded = "_prepared_chat_route" in kwargs
+        prepared = await asyncio.to_thread(
+            self._prepare_chat_route,
+            messages,
+            provider,
+            model,
+            prepared=kwargs.pop("_prepared_chat_route", None),
+            connection=self._connection(),
+        )
+        if guarded:
+            prepared.assert_valid(self._connection())
         source = streaming.stream_async(
-            connection,
-            route,
-            self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
-            self._stream_ports(connection),
+            prepared.connection,
+            prepared.route,
+            self._chat_input(prepared, messages, temperature, max_tokens, kwargs),
+            self._stream_ports(prepared.connection),
         )
         with self._route_observation():
             async with aclosing(source) as chunks:
@@ -683,7 +757,6 @@ class ModstorePlatformAdapter:
         model: str | None = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """同步版也走同一条流，收成完整响应。处理中的状态不另开请求。"""
         kwargs.pop("_stream_status", None)
         status_cb = kwargs.get("_processing_status")
         pieces: list[str] = []
@@ -706,33 +779,66 @@ class ModstorePlatformAdapter:
         model: str | None = None,
         **kwargs,
     ) -> Iterator[str]:
-        """同步版平台流式补全，逐条产出 SSE data payload。"""
-        connection = self._connection()
-        authentication.validate_demo_destination(connection)
-        route = self._resolve_provider_model(provider, model, connection=connection)
+        prepared = self._prepare_chat_route(
+            messages, provider, model, prepared=kwargs.pop("_prepared_chat_route", None)
+        )
         with self._route_observation():
             for data in streaming.stream_sync(
-                connection,
-                route,
-                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
-                self._stream_ports(connection),
+                prepared.connection,
+                prepared.route,
+                self._chat_input(prepared, messages, temperature, max_tokens, kwargs),
+                self._stream_ports(prepared.connection),
             ):
                 yield self._observe_stream_payload(data)
 
+    async def generate_image(self, body: dict[str, Any]) -> dict[str, Any]:
+        from fastapi import HTTPException
+
+        connection = self._connection()
+        authentication.validate_demo_destination(connection)
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"{connection.platform_url}/api/llm/image",
+                headers=connection.headers(),
+                json=body,
+                timeout=httpx.Timeout(180.0, connect=15.0),
+            )
+            data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(409, "生图结果待核对，请保留原请求键") from exc
+        if response.status_code >= 400:
+            detail = data.get("detail") if isinstance(data, dict) else None
+            if response.status_code == 409 and isinstance(detail, dict):
+                raise HTTPException(
+                    409,
+                    {
+                        "message": str(detail.get("message") or "生图结果待核对"),
+                        "request_id": str(detail.get("request_id") or ""),
+                    },
+                )
+            raise HTTPException(
+                response.status_code,
+                str(_transport.MarketModelError({"status": response.status_code})),
+            )
+        if not isinstance(data, dict) or data.get("ok") is not True:
+            status = data.get("status") if isinstance(data, dict) else None
+            if type(status) is int and status in {400, 401, 402, 403, 404, 413, 422, 429}:
+                raise HTTPException(status, "生图请求被拒绝")
+            raise HTTPException(502, "生图平台未返回可确认的结果")
+        return data
+
     async def get_available_providers(self) -> List[Dict[str, Any]]:
-        """获取当前凭据可用的供应商列表。"""
         return await account_queries.available_providers(
             self._connection(), self._get_client, logger
         )
 
     async def get_credential_status(self, provider: str | None = None) -> Dict[str, Any]:
-        """获取指定供应商的密钥状态。"""
         return await account_queries.credential_status(
             self._connection(), provider or self.default_provider, self._get_client
         )
 
     async def close(self):
-        """关闭连接"""
         client, self._client = (self._client, None)
         self._client_loop_id = None
         if client is not None and (not client.is_closed):
@@ -801,17 +907,6 @@ class ModstorePlatformAdapter:
 
 
 def create_modstore_adapter_from_env() -> Optional[ModstorePlatformAdapter]:
-    """
-    从环境变量创建修茈市场适配器
-
-    环境变量：
-    - MODSTORE_PLATFORM_URL: 平台服务地址 (必须)
-    - MODSTORE_AUTH_TOKEN: 认证Token (推荐)
-    - MODSTORE_USER_ID: 用户ID (可选)
-
-    Returns:
-        配置好的适配器实例，如果未配置则返回None
-    """
     platform_url = os.environ.get("MODSTORE_PLATFORM_URL", "").strip()
 
     if not platform_url:

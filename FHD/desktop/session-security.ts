@@ -3,7 +3,7 @@ import { DEFAULT_PORT } from './desktop-config'
 import { isTrustedDesktopOrigin } from './desktop-navigation'
 import { desktopWorkspaceToken } from './backend-env'
 import { isTrustedIpcSender } from './ipc-sender-guard'
-import { desktopRuntime } from './runtime-state'
+import { desktopRuntime, hasVerifiedDesktopBackend } from './runtime-state'
 
 /** Authenticate the anonymous local workspace without disclosing the token to JS. */
 export function installDesktopWorkspaceCapability(ses: Session = session.defaultSession): void {
@@ -15,7 +15,7 @@ export function installDesktopWorkspaceCapability(ses: Session = session.default
     }
     try {
       const target = new URL(details.url)
-      if (details.resourceType === 'xhr'
+      if (hasVerifiedDesktopBackend() && details.resourceType === 'xhr'
         && !target.username && !target.password
         && target.pathname.startsWith('/api/local-workspace/')
         && isTrustedDesktopOrigin(target.href, DEFAULT_PORT)

@@ -251,13 +251,19 @@ class HistoryServiceMixin:
         }
 
     def row_dict(self, row: EltRunRow) -> dict[str, Any]:
+        provenance = load_json(row.provenance_json, {})
         return {
             "id": row.id,
             "source_sheet": row.source_sheet,
             "source_row": row.source_row,
             "source": load_json(row.source_json, {}),
             "normalized": load_json(row.normalized_json, {}),
-            "provenance": load_json(row.provenance_json, {}),
+            "provenance": provenance,
+            **(
+                {"customer_display_name": provenance["customer_display_name"]}
+                if provenance.get("customer_display_name")
+                else {}
+            ),
             "validation_issues": load_json(row.validation_json, []),
             "llm_suggestion": load_json(row.llm_suggestion_json, {}),
             "suggested_action": row.suggested_action,

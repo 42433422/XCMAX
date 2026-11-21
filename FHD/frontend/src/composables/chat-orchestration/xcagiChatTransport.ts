@@ -31,10 +31,10 @@ const TEXT_ID = 'text-1'
  * 异常不会抛给消费方，而是通过 ``onStreamError`` 原样交回控制面，再正常关闭流。
  */
 export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
-  async function buildStream(body: Record<string, unknown>, signal?: AbortSignal) {
+  async function buildStream(fetchStream: () => Promise<Response>, signal?: AbortSignal) {
     let response: Response
     try {
-      response = await chatApi.sendChatStream(body as ChatRequest & Record<string, unknown>, { signal })
+      response = await fetchStream()
     } catch (error) {
       options.onStreamError?.(error)
       return terminalStream(error instanceof Error ? error.message : '流式对话失败')
@@ -130,8 +130,9 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
       }
       controller.enqueue({ type: 'data-tool-progress', id, data: event })
       if (event.phase === 'finished') {
-        controller.enqueue(event.success
-          ? { type: 'tool-output-available', toolCallId: id, output: event.output_preview || '' }
+        const deferred = event.deferred === true && event.requires_reconciliation !== true
+        controller.enqueue(event.success || deferred
+          ? { type: 'tool-output-available', toolCallId: id, output: event.output_preview || (deferred ? event.error : '') || '' }
           : { type: 'tool-output-error', toolCallId: id, errorText: event.error || '工具执行失败' })
       }
       return
@@ -162,11 +163,10 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
 
   return {
     async sendMessages(arg: { abortSignal?: AbortSignal; body?: object }) {
-      return buildStream((arg.body || {}) as Record<string, unknown>, arg.abortSignal)
+      return buildStream(() => chatApi.sendChatStream((arg.body || {}) as ChatRequest & Record<string, unknown>, { signal: arg.abortSignal }), arg.abortSignal)
     },
-    /** 断线续传由调用方用同一 turn_id 重新发起，不使用框架的自动重连。 */
-    async reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
-      return null
+    async reconnectToStream(turnId: string, signal?: AbortSignal) {
+      return buildStream(() => chatApi.resumeChatStream(turnId, signal), signal)
     },
   }
 }

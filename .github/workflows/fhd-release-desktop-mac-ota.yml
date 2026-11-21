@@ -2,6 +2,7 @@
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 # macOS OTA: Build-only native candidates; frozen pairs are promoted by Fix macOS update feed.
 name: Release Desktop macOS OTA
+run-name: macOS candidate ${{ inputs.release_sha }} ${{ inputs.architecture || 'arm64' }}
 
 on:
   workflow_dispatch:

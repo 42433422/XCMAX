@@ -137,6 +137,44 @@ def test_sql_mod_filter_precedes_limit_across_batches(tmp_path):
         engine.dispose()
 
 
+@pytest.mark.parametrize(
+    "tenant,mod,session,revision",
+    [(1, "m", "s", 3.0), (True, True, 7, True), (1e20, "m", "s", 3), (10**25, "m", "s", 0)],
+)
+def test_runtime_scope_keeps_legacy_scalar_and_alias_semantics(
+    tmp_path, tenant, mod, session, revision
+):
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.run_models import RunContextScope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-scope.db'}")
+    try:
+        scope = RunContextScope(str(tenant), str(mod), str(session), int(revision))
+        for repository in (
+            InMemoryAgentRunRepository(),
+            SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine)),
+        ):
+            run = AgentRun("owner", "legacy identity")
+            run.metadata["runtime_context"] = {
+                "tenant_id": tenant,
+                "mod_id": "",
+                "active_mod_id": mod,
+                "session_id": False,
+                "conversation_id": session,
+                "_conversation_revision": revision,
+                "_mod_authorization": {"mod_id": "different authorization identity"},
+            }
+            repository.save(run)
+            assert [
+                item.run_id
+                for item in repository.list_recent(user_id="owner", runtime_scope=scope, limit=1)
+            ] == [run.run_id]
+            assert repository.list_recent(user_id="other-owner", runtime_scope=scope, limit=1) == []
+            assert repository.list_recent(user_id="owner", runtime_scope=scope, limit=0) == []
+    finally:
+        engine.dispose()
+
+
 def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'agent-runs.db'}")
     session_factory = sessionmaker(bind=engine)

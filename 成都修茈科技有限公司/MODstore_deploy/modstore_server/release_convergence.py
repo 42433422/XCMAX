@@ -11,8 +11,9 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 from sqlalchemy.orm import Session
@@ -47,7 +48,7 @@ def _fetch_json(url: str) -> dict[str, Any]:
         response.raise_for_status()
         payload = response.json()
     if not isinstance(payload, dict):
-        raise ValueError("expected JSON object")
+        raise TypeError("expected JSON object")
     return payload
 
 
@@ -107,6 +108,10 @@ def _remote_sources(
         try:
             payload = json_fetcher(url)
             reported = payload.get("sha") if name == "origin_main" else payload.get("git_sha")
+            build = payload.get("build")
+            digest = (
+                build.get("artifact_sha256") if isinstance(build, dict) else None
+            ) or payload.get("artifact_sha256")
             result.append(
                 _source(
                     name,
@@ -114,6 +119,7 @@ def _remote_sources(
                     expected_sha,
                     release_id=str(payload.get("release_id") or ""),
                     expected_release_id=("" if name == "origin_main" else expected_release_id),
+                    **({"artifact_sha256": str(digest or "")} if name == "fhd_production" else {}),
                 )
             )
         except (httpx.HTTPError, OSError, TypeError, ValueError) as exc:
@@ -276,6 +282,7 @@ def build_release_convergence(
             release_sha,
             release_id=str(local.get("release_id") or ""),
             expected_release_id=release_id,
+            artifact_sha256=str(local.get("artifact_sha256") or ""),
         )
     ]
     sources.extend(

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Literal, Mapping, Optional, Set, Tuple
 
 from modstore_server.llm_model_classification import classify_model as classify_model
@@ -270,7 +271,7 @@ def _declared_profile(
         operations.add("embeddings")
     if "score" in outputs:
         operations.add("rerank")
-    if "audio" in inputs and "text" in outputs:
+    if "audio" in inputs and "text" in outputs and "chat" not in operations:
         operations.add("speech_to_text")
     if "text" in inputs and "audio" in outputs:
         operations.add("text_to_speech")
@@ -312,6 +313,8 @@ def _category_from_profile(
         return "video"
     if "image_generation" in operations or "image" in outputs:
         return "image"
+    if "chat" in operations and "text" in outputs:
+        return "vlm" if "vision" in operations or "image" in inputs else "llm"
     if operations & {"text_to_speech", "speech_to_text", "audio_generation"}:
         return "audio"
     if "audio" in outputs and "text" not in outputs:
@@ -336,6 +339,42 @@ def discover_model_capabilities(
 
     raw: Mapping[str, Any] = metadata or {}
     declared_in, declared_out, declared_ops, evidence = _declared_profile(raw)
+    registry_used = False
+    if not evidence:
+        from modstore_server.llm_litellm_router import model_registry_entry
+
+        entry = model_registry_entry(provider, model_id)
+        mode = entry.get("mode")
+        type_name: str | None = None
+        if isinstance(mode, str):
+            type_name = {
+                "audio_transcription": "speech-to-text",
+                "audio_speech": "text-to-speech",
+            }.get(mode, mode)
+        flags = {
+            "vision": entry.get("supports_vision") is True,
+            "audio-input": entry.get("supports_audio_input") is True,
+            "audio-output": entry.get("supports_audio_output") is True,
+        }
+        params = [
+            parameter
+            for parameter, field in (
+                ("tools", "supports_function_calling"),
+                ("response_format", "supports_response_schema"),
+                ("reasoning_effort", "supports_reasoning"),
+            )
+            if entry.get(field) is True
+        ]
+        declared_in, declared_out, declared_ops, evidence = _declared_profile(
+            {"type": type_name, "capabilities": flags, "supported_parameters": params}
+        )
+        if evidence:
+            registry_used = True
+            if "chat" in declared_ops:
+                declared_in.add("text")
+                declared_out.add("text")
+            if "vision" in declared_ops:
+                declared_out.add("text")
     inferred_in, inferred_out, inferred_ops = _infer_profile(provider, model_id)
     inputs = set(declared_in)
     outputs = set(declared_out)
@@ -363,7 +402,10 @@ def discover_model_capabilities(
     fallback_category = classify_model(provider, model_id)
     category = _category_from_profile(fallback_category, inputs, outputs, operations)
     origin = str(raw.get("_catalog_origin") or "").strip()
-    if evidence and used_inference:
+    if registry_used:
+        source = "litellm_registry"
+        confidence = "mixed" if used_inference else "declared"
+    elif evidence and used_inference:
         source = "hybrid"
         confidence = "mixed"
     elif evidence:
@@ -389,33 +431,94 @@ def discover_model_capabilities(
 
 
 def _positive_int(value: Any) -> Optional[int]:
+    if isinstance(value, (bool, float)):
+        return None
     try:
         number = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if number > 0 else None
 
 
-def _public_provider_metadata(metadata: Mapping[str, Any]) -> Dict[str, Any]:
-    architecture = metadata.get("architecture")
-    if not isinstance(architecture, Mapping):
-        architecture = {}
-    context_window = _positive_int(
-        metadata.get("context_length")
-        or metadata.get("inputTokenLimit")
-        or metadata.get("input_token_limit")
-        or architecture.get("context_length")
-    )
-    max_output_tokens = _positive_int(
-        metadata.get("outputTokenLimit")
-        or metadata.get("output_token_limit")
-        or metadata.get("max_completion_tokens")
-    )
+def public_model_capabilities(metadata: Mapping[str, Any]) -> Dict[str, Any]:
+    """Keep declared input, output and combined limits distinct; never infer from max_tokens."""
+    aggregate = metadata.get("model_capabilities")
+    aggregated = isinstance(aggregate, Mapping) and aggregate.get("source") == "litellm_model_info"
+    sources = [metadata]
+    for key in ("model_capabilities", "model_info", "provider_metadata", "architecture"):
+        value = metadata.get(key)
+        if isinstance(value, Mapping):
+            sources.append(value)
     out: Dict[str, Any] = {}
-    if context_window:
-        out["context_window"] = context_window
-    if max_output_tokens:
-        out["max_output_tokens"] = max_output_tokens
+    for key, aliases in {
+        "context_window": ("context_window", "context_length"),
+        "max_input_tokens": ("max_input_tokens", "inputTokenLimit", "input_token_limit"),
+        "max_output_tokens": (
+            "max_output_tokens",
+            "outputTokenLimit",
+            "output_token_limit",
+            "max_completion_tokens",
+        ),
+    }.items():
+        values = [
+            limit
+            for source in sources
+            for alias in aliases
+            if (limit := _positive_int(source.get(alias))) is not None
+        ]
+        if values:
+            out[key] = min(values)
+    for source in ([aggregate] if aggregated and isinstance(aggregate, Mapping) else sources):
+        resolved = source.get("resolved_model")
+        if (
+            isinstance(resolved, str)
+            and 0 < len(resolved) <= 256
+            and "://" not in resolved
+            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]*", resolved)
+        ):
+            out["resolved_model"] = resolved
+            break
+    if aggregated or metadata.get("source") == "litellm_model_info":
+        out["source"] = "litellm_model_info"
+    elif out:
+        out["source"] = next(
+            (
+                source["source"]
+                for source in sources
+                if isinstance(source.get("source"), str)
+                and source["source"]
+                in {"litellm_registry", "provider_metadata", "litellm_model_info"}
+            ),
+            "provider_metadata",
+        )
+    return out
+
+
+def model_context_capabilities(
+    provider: str, model: str, metadata: Optional[Mapping[str, Any]] = None
+) -> Dict[str, Any]:
+    """Use the selected deployment's declarations, supplemented by LiteLLM's pinned registry."""
+    from modstore_server.llm_litellm_router import model_limits
+
+    out = public_model_capabilities(metadata or {})
+    if out.get("source") == "litellm_model_info":
+        # This is the intersection of every deployment behind an alias. Missing
+        # fields are unknown, not permission to refill a larger base-model limit.
+        return out
+    registry_provider, registry_model = provider, model
+    resolved = out.get("resolved_model")
+    if resolved and "/" in resolved:
+        registry_provider, registry_model = resolved.split("/", 1)
+    limits = model_limits(registry_provider, registry_model)
+    if limits:
+        for key, limit in limits.items():
+            out.setdefault(key, limit)
+        out.setdefault("source", "litellm_registry")
+    return out
+
+
+def _public_provider_metadata(metadata: Mapping[str, Any]) -> Dict[str, Any]:
+    out = public_model_capabilities(metadata)
     provider_type = str(metadata.get("type") or metadata.get("sub_type") or "").strip()
     if provider_type:
         out["provider_type"] = provider_type
@@ -469,6 +572,7 @@ def build_models_detailed(
                 "capability_confidence": capabilities["confidence"],
                 "capability_evidence": capabilities["evidence"],
                 "provider_metadata": public_metadata,
+                "model_capabilities": model_context_capabilities(provider, mid, metadata),
             }
         )
     rows.sort(key=lambda r: (_category_sort_key(r["category"]), r["id"]))
