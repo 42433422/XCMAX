@@ -1,5 +1,5 @@
 {
-  "lines": 2556412,
+  "lines": 2556651,
   "updated": "2026-11-21",
-  "note": "修复 Excel 自然语言查询链路：date_norm.py 179 行、header_detection.py 84 行、pandas_translator.py 134 行、test_excel_query_pipeline.py 113 行，另有 excel_analysis 等改造净增约 193 行；经用户口头批准并入 PR #3423"
+  "note": "多轮续跑修复：选项字母解析与跨轮续跑约 125 行，新增回归测试 test_multiturn_recovery.py 114 行，只读动作风险收敛与意图裁剪回退修复；经用户口头批准并入 PR #3423"
 }
