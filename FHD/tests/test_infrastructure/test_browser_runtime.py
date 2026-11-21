@@ -10,14 +10,11 @@ import asyncio
 import hashlib
 import importlib
 import json
+import multiprocessing
 import os
 import shutil
-import signal
-import subprocess
-import sys
 import threading
 import time
-from contextlib import suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -349,44 +346,78 @@ def test_screenshot_masks_embedded_frame_rectangle(website, browser_executable, 
         assert pixels.getpixel((20, 80)) == (255, 255, 255)
 
 
+def _browser_resource_worker(control, start, deadline, origin, executable, artifact_dir):
+    import resource
+
+    import psutil
+
+    from app.application.agent_orchestrator.tool_process import _worker_start
+
+    inherited_as = resource.getrlimit(resource.RLIMIT_AS)
+    sandbox_checked = False
+
+    def check_sandbox_launch():
+        nonlocal sandbox_checked
+        browser_arguments = []
+        for child in psutil.Process().children(recursive=True):
+            try:
+                arguments = child.cmdline()
+            except psutil.NoSuchProcess:
+                continue
+            if "--remote-debugging-pipe" in arguments:
+                browser_arguments.append(arguments)
+        assert browser_arguments and all("--no-sandbox" not in args for args in browser_arguments)
+        sandbox_checked = True
+
+    try:
+        if not _worker_start(control, start, deadline, monitored_memory=True):
+            return
+        limits = {
+            name: resource.getrlimit(getattr(resource, name))[0]
+            for name in ("RLIMIT_CPU", "RLIMIT_AS", "RLIMIT_NOFILE")
+        }
+        result = asyncio.run(
+            execute_browser_plan(
+                {
+                    "url": origin,
+                    "steps": [
+                        {"action": "fill", "locator": {"label": "Name"}, "value": "Limited"},
+                        {"action": "click", "locator": {"selector": "#submit"}},
+                    ],
+                    "verify": [text_check("#receipt", "receipt-1:Limited")],
+                },
+                artifact_dir=artifact_dir,
+                allowed_origins=frozenset({origin}),
+                executable_path=executable,
+                deadline_monotonic=deadline,
+                before_action=check_sandbox_launch,
+            )
+        )
+        (artifact_dir / "resource-result.json").write_text(
+            json.dumps(
+                {
+                    "limits": limits,
+                    "inherited_as": inherited_as,
+                    "chromium_sandbox_checked": sandbox_checked,
+                    "result": result,
+                }
+            ),
+            encoding="utf-8",
+        )
+        control.send_bytes(b"d")
+        # Preserve ancestry until the same production parent supervisor reaps it.
+        start.clear()
+        start.wait()
+    finally:
+        control.close()
+
+
 def test_browser_executes_under_default_tool_worker_resource_limits(
-    website, browser_executable, tmp_path
+    website, browser_executable, tmp_path, monkeypatch
 ):
+    from app.application.agent_orchestrator.tool_process import _WorkerProcessSupervisor
+
     origin, state = website
-    script = """import asyncio, json, resource, sys, time
-from pathlib import Path
-from app.application.agent_orchestrator.tool_process import _apply_resource_limits
-from app.infrastructure.browser.runtime import execute_browser_plan
-settings = json.loads(sys.argv[1])
-profile = settings["profile"]
-original = {name: resource.getrlimit(getattr(resource, name))
-            for name in ("RLIMIT_CPU", "RLIMIT_AS", "RLIMIT_NOFILE")}
-_apply_resource_limits()
-if profile == "cpu_fd_only":
-    resource.setrlimit(resource.RLIMIT_AS, original["RLIMIT_AS"])
-elif profile == "address_space_only":
-    for name in ("RLIMIT_CPU", "RLIMIT_NOFILE"):
-        resource.setrlimit(getattr(resource, name), original[name])
-limits = {name: resource.getrlimit(getattr(resource, name))[0]
-          for name in ("RLIMIT_CPU", "RLIMIT_AS", "RLIMIT_NOFILE")}
-print(json.dumps({"profile": profile, "limits": limits}), flush=True)
-plan = {"url": settings["origin"], "steps": [
-        {"action": "fill", "locator": {"label": "Name"}, "value": "Limited"},
-        {"action": "click", "locator": {"selector": "#submit"}}],
-     "verify": [{"kind": "text", "locator": {"selector": "#receipt"},
-                 "expected": "receipt-1:Limited"}]}
-if profile != "production":
-    plan = {"url": settings["origin"] + "/cookies/read", "observe": True}
-result = asyncio.run(execute_browser_plan(plan,
-    artifact_dir=Path(settings["artifact_dir"]),
-    allowed_origins=frozenset({settings["origin"]}),
-    executable_path=settings["executable"], deadline_monotonic=time.monotonic() + 12))
-print(json.dumps({"result": result}), flush=True)
-"""
-    environment = dict(os.environ)
-    # The child runs only synthetic local pages; browser launch diagnostics reveal
-    # resource reservation failures without recording page bodies or form values.
-    environment["DEBUG"] = "pw:browser"
     # Exercise production defaults regardless of a developer shell's overrides.
     for key in (
         "XCAGI_TOOL_SANDBOX",
@@ -394,48 +425,46 @@ print(json.dumps({"result": result}), flush=True)
         "XCAGI_TOOL_MEMORY_MB",
         "XCAGI_TOOL_MAX_FILES",
     ):
-        environment.pop(key, None)
-
-    def launch(profile):
-        settings = {
-            "origin": origin,
-            "artifact_dir": str(tmp_path / profile),
-            "executable": browser_executable,
-            "profile": profile,
-        }
-        with subprocess.Popen(
-            [sys.executable, "-c", script, json.dumps(settings)],
-            env=environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            start_new_session=True,
-        ) as process:
-            try:
-                stdout, stderr = process.communicate(timeout=20)
-            finally:
-                with suppress(ProcessLookupError):
-                    os.killpg(process.pid, signal.SIGKILL)
-        print(f"resource_profile={profile} exit={process.returncode}")
-        print(stdout)
-        print(stderr)
-        return process.returncode, stdout, stderr
-
-    returncode, stdout, stderr = launch("production")
-    records = [json.loads(line) for line in stdout.splitlines()] if returncode == 0 else []
-    if not records or not records[-1]["result"]["success"]:
-        # Diagnostics only, on synthetic GET pages. Neither comparison replaces
-        # the production-default assertions or changes the mandatory CI gate.
-        for profile in ("cpu_fd_only", "address_space_only"):
-            launch(profile)
-    assert returncode == 0, (stdout, stderr[-4000:])
-    assert records[0]["limits"] == {
-        "RLIMIT_CPU": 60,
-        "RLIMIT_AS": 2048 * 1024 * 1024,
-        "RLIMIT_NOFILE": 256,
+        monkeypatch.delenv(key, raising=False)
+    deadline = time.monotonic() + 20
+    context = multiprocessing.get_context("spawn")
+    control, sender = context.Pipe(duplex=False)
+    start = context.Event()
+    process = context.Process(
+        target=_browser_resource_worker,
+        args=(sender, start, deadline, origin, browser_executable, tmp_path),
+    )
+    budget = 2048 * 1024 * 1024
+    supervisor = _WorkerProcessSupervisor(process, memory_limit_bytes=budget)
+    try:
+        with supervisor:
+            sender.close()
+            assert supervisor.wait_ack(control, b"r", deadline) == (True, False)
+            guard = supervisor.memory_guard
+            assert guard is not None and guard.limit_bytes == budget
+            root_process = guard.processes[guard.root_identity]
+            supervisor.release(start)
+            assert supervisor.wait_ack(control, b"d", deadline) == (True, False)
+            receipt = json.loads((tmp_path / "resource-result.json").read_text())
+            print(json.dumps(receipt, indent=2))
+            assert receipt["limits"]["RLIMIT_CPU"] == 60
+            assert receipt["limits"]["RLIMIT_NOFILE"] == 256
+            assert receipt["limits"]["RLIMIT_AS"] == receipt["inherited_as"][0]
+            assert receipt["chromium_sandbox_checked"]
+            supervisor.check()
+            assert 0 < guard.peak_bytes <= budget
+    finally:
+        control.close()
+        sender.close()
+    assert supervisor.clean and not root_process.is_running()
+    receipt["supervision"] = {
+        "tree_rss_budget_bytes": budget,
+        "observed_peak_rss_bytes": guard.peak_bytes,
+        "cleanup_verified": supervisor.clean,
     }
-    result = records[-1]["result"]
-    assert result["success"] and result["verified"], (result, stderr[-4000:])
+    (tmp_path / "resource-result.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+    result = receipt["result"]
+    assert result["success"] and result["verified"], result
     assert len(state["submissions"]) == 1 and state["submissions"][0]["name"] == "Limited"
 
 

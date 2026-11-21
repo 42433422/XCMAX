@@ -744,6 +744,18 @@
       "validation": "131 项 ELT、checkpoint、batch 与进度回归通过，包含审批前规范化及真实 CSV/SQLite 的 fresh、resume、unreadable 三种重复附件场景。最终远端 CI 与人工架构审查仍需完成；此登记不是批准。 最终 CI 类型修复保留既有装饰器、仓库及附件身份契约；在同 CI Python 3.11.18 / mypy 2.4.1 与依赖版本环境中，全量 app 类型检查和 186 项相关回归通过。 历史评审补修：续接复用仓库 matches 在 limit 前筛选完整授权范围；真实内存与文件 SQLite 各加入64条跨范围记录及外部账号，旧8失败/2通过，修复后续接与仓库56项通过，定点mypy及Ruff通过。 新增SQLite旧实现4失败，修后无匹配0条/有目标1条反序列化；相关完整文件60项及新增旧标量4项通过，独立复核162组无假阴性。PostgreSQL16真实场景与完整mypy待本head CI。",
       "follow_up": "评审后沿既有批次入口拆分上传来源核对与续接计划构造，保留冻结审批和真实回执契约。",
       "review_owner": "@42433422"
+    },
+    "FHD/app/application/agent_orchestrator/tool_process.py": {
+      "base_file": "FHD/app/application/agent_orchestrator/tool_process.py",
+      "base_blob": "acfa7d1385047b168954500421dc43fc6dfe4bf8",
+      "head_blob": "226f37dd18bcbd07ee89b9705c43bc7771bc8499",
+      "before_lines": 695,
+      "after_lines": 906,
+      "reason": "真实固定 Chromium 对照确认生产 2 GiB RLIMIT_AS 阻止启动；复用已锁定 psutil 和现有进程握手、截止与回收器，对可信 browser 任务改用整树 RSS 预算，完成用户要求的浏览器代码执行闭环。",
+      "boundary": "保留同一 Agent 工具进程边界，不另建调度器；启动放行前仍施加原 AS，父监督建立后才恢复继承上限。CPU/FD/Chromium sandbox、其他工具 AS 与清理失败封锁保留；已观测后代按 PID/创建时间计量和回收。采样不是内核硬上限，严格隔离仍由宿主负责。",
+      "validation": "13 项真实进程资源测试覆盖聚合超额、执行/排空/回执三个阶段、8 GiB 低 RSS 预留、AccessDenied、外部 AS 硬限制和重挂后代。资源/清理/流式/spawn 62 项通过，整合工具回归 249 项通过，Ruff 与定向 mypy 通过；当前提交的真实 Chromium 和完整批准 Agent 整链 CI 尚待执行，不据此宣称上线。",
+      "follow_up": "由 @42433422 在 PR #3434 复核进程所有权、采样边界和实际 Chromium 证据，按主序列评审；本记录仅申请源文件增长评审，不表示批准。保持进程生命周期在现有边界内，后续变更按职责评估。",
+      "review_owner": "@42433422"
     }
   }
 }

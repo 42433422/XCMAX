@@ -187,7 +187,8 @@ def test_market_checks_initialized_child_without_mixing_parent_types() -> None:
 
 
 @pytest.mark.parametrize("report", ["passed", "missing", "empty", "skipped", "failure", "error"])
-def test_browser_contract_rejects_missing_or_unexecuted_evidence(tmp_path, report):
+@pytest.mark.parametrize("evidence_kind", ["runtime", "agent"])
+def test_browser_contract_rejects_missing_or_unexecuted_evidence(tmp_path, report, evidence_kind):
     import xml.etree.ElementTree as ET
 
     rendered = publisher._render_fhd(REPO_ROOT / "FHD/.github/workflows/browser-runtime.yml")
@@ -198,28 +199,47 @@ def test_browser_contract_rejects_missing_or_unexecuted_evidence(tmp_path, repor
     for event in ("push", "pull_request"):
         paths = workflow["on"][event]["paths"]
         assert "FHD/app/infrastructure/browser/**" in paths
+        assert "FHD/tests/test_application/test_browser_agent_e2e.py" in paths
+        assert "FHD/ops/deploy/requirements-server-api.lock.txt" in paths
         assert "FHD/.github/workflows/browser-runtime.*" in paths
         assert ".github/workflows/fhd-browser-runtime.yml" in paths
     job = workflow["jobs"]["browser-runtime-e2e"]
     assert job["env"]["XCMAX_BROWSER_REQUIRE_REAL"] == "1"
     assert not job.get("continue-on-error")
-    step = next(s for s in job["steps"] if s.get("name", "").startswith("Reject missing"))
+    steps = job["steps"]
+    step = next(
+        s
+        for s in steps
+        if s.get("name", "").startswith("Reject missing")
+        and ("Agent browser" in s["name"]) == (evidence_kind == "agent")
+    )
     assert step["if"] == "always()"
+    runtime = next(s for s in steps if s.get("name", "").startswith("Run the real browser"))
+    server = next(s for s in steps if s.get("id") == "server_dependencies")
+    agent = next(s for s in steps if s.get("name", "").startswith("Run the real approved"))
+    assert steps.index(runtime) < steps.index(server) < steps.index(agent)
+    assert "tests/test_application/test_browser_agent_e2e.py" in agent["run"]
+    report_name = "agent-results.xml" if evidence_kind == "agent" else "results.xml"
+    required_names = (
+        ("test_approved_agent_spawns_real_browser_and_reuses_durable_receipt",)
+        if evidence_kind == "agent"
+        else (
+            "test_form_receipt_upload_and_durable_download",
+            "test_context_isolation_between_runs",
+            "test_screenshot_masks_embedded_frame_rectangle",
+            "test_browser_executes_under_default_tool_worker_resource_limits",
+        )
+    )
     if report != "missing":
         evidence = tmp_path / "browser-runtime"
         evidence.mkdir()
         suite = ET.Element("testsuite")
         if report != "empty":
-            for case_name in (
-                "test_form_receipt_upload_and_durable_download",
-                "test_context_isolation_between_runs",
-                "test_screenshot_masks_embedded_frame_rectangle",
-                "test_browser_executes_under_default_tool_worker_resource_limits",
-            ):
+            for case_name in required_names:
                 case = ET.SubElement(suite, "testcase", name=case_name)
                 if report != "passed":
                     ET.SubElement(case, report)
-        ET.ElementTree(suite).write(evidence / "results.xml", encoding="utf-8")
+        ET.ElementTree(suite).write(evidence / report_name, encoding="utf-8")
     result = subprocess.run(
         [sys.executable, "-c", step["run"]],
         env={**os.environ, "RUNNER_TEMP": str(tmp_path)},

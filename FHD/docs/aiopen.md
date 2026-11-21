@@ -242,6 +242,8 @@ export XCAGI_AIOPEN_INTERNAL_URL='http://127.0.0.1:5000'
 
 `7` 是示例租户，域名应替换为实际授权站点。配置没有对应租户时拒绝执行；不接受通配符、路径、账号口令或模型传入白名单。资源域名、登录跳转域名必须逐项显式批准。可通过宿主配置 `XCAGI_BROWSER_EXECUTABLE` 指定受维护的 Chromium；模型不能指定二进制、启动参数、本地文件路径、任意 JavaScript 或共享浏览器 profile。Chromium sandbox 保持开启，无法启动时失败。
 
+浏览器任务复用 psutil 7.2.2 对 worker、驱动和已观测浏览器后代合计 RSS，预算取 `XCAGI_TOOL_MEMORY_MB`，默认 2048 MiB。父进程在启动放行、运行等待、流式排空和接受回执前检查；不可观察或超额均停止，已放行的任务标记结果未知并禁止自动重放。子进程放行前仍用原地址空间限制，确认受监督后仅恢复继承的地址空间上限；默认 CPU 60 秒、句柄 256 及 Chromium sandbox 保留。其他工具沿用原地址空间限制。采样 RSS 会重复计共享页，也有采样间短时超额和未观测后代的边界；需要内核硬限制的部署应使用 [cgroup v2 memory controller](https://docs.kernel.org/admin-guide/cgroup-v2.html#memory)，不将轮询当作内核隔离。
+
 以下仅为进入现有审批流程的计划参数示例，不是直接执行端点：
 
 ```json
@@ -289,11 +291,14 @@ export XCAGI_AIOPEN_INTERNAL_URL='http://127.0.0.1:5000'
 | 站点跳转/子资源可越过初始 URL 限制 | 每跳 exact-origin 校验，阻断 WebSocket/Service Worker；observe 仅 GET/HEAD | 来源限制不是 OS 网络沙箱；未实现 DNS/IP 钉住与流式传输配额 |
 | 外部 AIOPEN 客户端只有事后轨迹 | 本次受控 Agent 入口复用写前账本 | 直接外部 REST/MCP 多次调用不具备端到端幂等保证 |
 | Codex CLI 错误可能被直接回复/流式链路当完成 | 非零/未知退出、超时或缺终态保留部分输出并显式失败；直答、fallback、消息回填和开发循环不再提升为完成 | 已验证真实子进程协议边界；Codex 原生 JSONL 全部事件、实际模型及业务任务仍需分别验收 |
+| 生产 2 GiB 虚拟地址上限阻止 Chromium 启动 | 真实 CPU/FD 与 AS-only 对照定位，复用 psutil 的整树 RSS 预算与已有握手、截止和回收器 | RSS 采样不是内核硬限制；保留外部继承的限制，严格隔离依赖宿主 cgroup 等机制 |
 | 单测可通过但没有真实浏览器验收 | 专项 CI 强制真实 Chromium，缺依赖/启动失败/skip 均失败 | CI 成功只证明合成站点集成，实际模型、业务站点与生产仍需验收 |
 
 ### 验证与回滚
 
 `tests/test_application/test_aiopen_agent_bridge.py` 使用真实 SQLite、会话签名、审批消耗、Agent executor 与 FastAPI route 验证身份和幂等；只替换 HTTP 传输与 screen。`test_browser_tool.py` 核对授权与实际产物存储；`test_surface_worker.py` 经真实 spawn 验证租约、原 workflow 数据库和默认资源限制下的 Playwright 驱动，页面效果仍为替身。`test_mcp_tools.py` 使用固定 SDK 的真实 stdio 子进程。`tests/test_infrastructure/test_browser_runtime.py` 在合成 HTTP 站点上验证表单、上传、提交、下载、回读、隔离、超时、iframe 截图遮罩和默认资源限制下的真实 Chromium。
+
+`test_browser_agent_e2e.py` 复用真实会话、审批和产物夹具，经原 AgentToolExecutor 启动真实 Chromium，完成表单、归属文件上传、提交及下载回执，再以新子进程读取同一幂等结果并断言网站只收到一次提交。专项 CI 为此使用独立 JUnit，缺报告或跳过均失败，并记录服务器依赖锁摘要及实际版本。
 
 真实浏览器门禁设置 `XCMAX_BROWSER_REQUIRE_REAL=1`，本地依赖缺失或 sandbox 启动失败时的 skip 不算通过。线上启用需另外核对安装版本、租户站点、真实模型任务、实际业务回执与生产 SHA；可先移除对应租户的站点配置以停止新外站任务，未知旧任务仍须回读核对。
 

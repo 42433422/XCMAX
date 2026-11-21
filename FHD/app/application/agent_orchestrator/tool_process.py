@@ -23,6 +23,148 @@ import psutil
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _STREAM_FRAME_LIMIT = 256 * 1024
+_RESOURCE_POLL_SECONDS = 0.1
+
+
+class _WorkerResourceError(RuntimeError):
+    def __init__(self, code: str, *, limit_bytes: int, rss_bytes: int = 0):
+        super().__init__(code)
+        self.code, self.limit_bytes, self.rss_bytes = code, limit_bytes, rss_bytes
+
+
+class _ProcessTreeMemoryGuard:
+    """Parent-owned sampled RSS budget, not a kernel memory isolation boundary.
+
+    Retain observed PID/create-time identities across reparenting. Descendants
+    created and orphaned entirely between samples remain an observation limit.
+    Shared pages count in each process, making the sum conservative.
+    """
+
+    def __init__(self, pid: int, limit_bytes: int):
+        self.limit_bytes, self.peak_bytes = limit_bytes, 0
+        self.processes: dict[tuple[int, float], Any] = {}
+        try:
+            if not _process_namespace_matches():
+                raise psutil.AccessDenied(pid)
+            root = psutil.Process(pid)
+            self.root_identity = (root.pid, root.create_time())
+            self.processes[self.root_identity] = root
+        except (psutil.Error, OSError) as exc:
+            raise self._unavailable() from exc
+
+    def _unavailable(self):
+        return _WorkerResourceError(
+            "tool_memory_monitor_unavailable",
+            limit_bytes=self.limit_bytes,
+            rss_bytes=self.peak_bytes,
+        )
+
+    @property
+    def descendants(self):
+        return tuple(p for identity, p in self.processes.items() if identity != self.root_identity)
+
+    def check(self) -> None:
+        pending = list(self.processes.items())
+        inspected = set()
+        total = 0
+        try:
+            while pending:
+                identity, process = pending.pop()
+                if identity in inspected:
+                    continue
+                inspected.add(identity)
+                try:
+                    # is_running checks PID reuse before memory reads and discovery.
+                    if not process.is_running():
+                        self.processes.pop(identity, None)
+                        continue
+                    for child in process.children(recursive=True):
+                        try:
+                            child_identity = (child.pid, child.create_time())
+                        except psutil.NoSuchProcess:
+                            continue
+                        self.processes.setdefault(child_identity, child)
+                        pending.append((child_identity, self.processes[child_identity]))
+                    total += process.memory_info().rss
+                except psutil.NoSuchProcess:
+                    self.processes.pop(identity, None)
+                    continue
+                self.peak_bytes = max(self.peak_bytes, total)
+                if total > self.limit_bytes:
+                    raise _WorkerResourceError(
+                        "tool_memory_limit_exceeded", limit_bytes=self.limit_bytes, rss_bytes=total
+                    )
+        except (psutil.Error, OSError) as exc:
+            # A live process that cannot be inspected is never counted as zero.
+            raise self._unavailable() from exc
+
+
+class _WorkerProcessSupervisor:
+    """Share process release, bounded waits and cleanup with the browser CI contract."""
+
+    def __init__(self, process, *, memory_limit_bytes: int | None = None):
+        self.process, self.memory_limit_bytes = process, memory_limit_bytes
+        self.memory_guard = None
+        self.clean = True
+        self._closed = False
+
+    def start(self):
+        self.process.start()
+        if self.memory_limit_bytes is not None:
+            self.memory_guard = _ProcessTreeMemoryGuard(self.process.pid, self.memory_limit_bytes)
+            self.check()
+        return self
+
+    def check(self):
+        if self.memory_guard is not None:
+            self.memory_guard.check()
+
+    def release(self, start):
+        self.check()
+        start.set()
+
+    def wait_ack(self, control, marker, deadline, *, renew=None):
+        return _worker_acknowledged(
+            control, self.process, marker, deadline, renew=renew, memory_guard=self.memory_guard
+        )
+
+    def wait_event(self, event, deadline):
+        while True:
+            self.check()
+            remaining = max(0, deadline - time.monotonic())
+            if event.wait(
+                min(remaining, _RESOURCE_POLL_SECONDS) if self.memory_guard else remaining
+            ):
+                self.check()
+                return True
+            if time.monotonic() >= deadline:
+                return False
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        if self.process.pid is not None:
+            try:
+                self.clean = (
+                    _reap(self.process, observed=self.memory_guard.descendants)
+                    if self.memory_guard is not None
+                    else _reap(self.process)
+                )
+                if self.clean:
+                    self.process.close()
+            except OSError:
+                self.clean = False
+
+    def __enter__(self):
+        try:
+            return self.start()
+        except BOUNDARY_ERRORS:
+            self.close()
+            raise
+
+    def __exit__(self, *_exc):
+        self.close()
 
 
 @contextmanager
@@ -163,8 +305,8 @@ def _limit_from_env(name: str, default: int) -> int:
     return value
 
 
-def _apply_resource_limits() -> None:
-    """在子进程内施加 POSIX 资源硬限制；设置失败只告警，不阻断执行。"""
+def _apply_resource_limits():
+    """设置子进程 POSIX 软限制并保留继承的硬上限；设置失败记录告警。"""
     if not _sandbox_enabled():
         return
     log = logging.getLogger(__name__)
@@ -174,6 +316,7 @@ def _apply_resource_limits() -> None:
         # 非 POSIX 平台（如 Windows）没有 resource 模块，由父进程 deadline 兜底。
         log.warning("tool worker resource limits unavailable on this platform")
         return
+    previous_as = None
     targets = (
         ("RLIMIT_CPU", _limit_from_env("XCAGI_TOOL_CPU_SECONDS", 60)),
         ("RLIMIT_AS", _limit_from_env("XCAGI_TOOL_MEMORY_MB", 2048) * 1024 * 1024),
@@ -184,12 +327,32 @@ def _apply_resource_limits() -> None:
         if limit_type is None:
             continue
         try:
-            _, hard = resource.getrlimit(limit_type)
+            prior = resource.getrlimit(limit_type)
+            _, hard = prior
             # 硬限制不可通过非特权方式提高，软限制不得超过现有硬限制。
             target = value if hard == resource.RLIM_INFINITY else min(value, hard)
             resource.setrlimit(limit_type, (target, hard))
+            if name == "RLIMIT_AS":
+                previous_as = prior
         except (OSError, ValueError) as exc:
             log.warning("tool worker %s limit not applied: %s", name, type(exc).__name__)
+    return previous_as
+
+
+def _worker_start(control, start, deadline, *, monitored_memory=False):
+    # Startup still uses AS. Restore only the inherited AS limit after the
+    # supervising parent has checked RSS and released this trusted handshake.
+    previous_as = _apply_resource_limits() if multiprocessing.parent_process() is not None else None
+    if os.name != "nt":
+        os.setsid()
+    control.send_bytes(b"r")
+    if not start.wait(max(0, deadline - time.monotonic())):
+        return False
+    if monitored_memory and previous_as is not None:
+        import resource
+
+        resource.setrlimit(resource.RLIMIT_AS, previous_as)
+    return True
 
 
 def _worker(
@@ -205,6 +368,7 @@ def _worker(
     stream_connection=None,
     elt_claim=None,
     surface_claim=None,
+    monitored_memory=False,
 ):
     from app.application.agent_orchestrator.business_write_guard import restore_worker_claim
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
@@ -220,7 +384,7 @@ def _worker(
         scoped_route_metadata,
     )
 
-    # 真正执行工具前先收敛子进程能力：环境清洗 + POSIX 资源硬限制。
+    # 真正执行工具前先收敛子进程能力：环境清洗 + POSIX 资源软限制。
     # 失败只告警，调度语义仍由父进程 deadline 与进程回收保证。
     if _env_scrub_enabled():
         scrubbed_env = _scrubbed_env()
@@ -231,16 +395,10 @@ def _worker(
             logging.getLogger(__name__).warning(
                 "tool worker env scrub skipped: %s", type(exc).__name__
             )
-    # 资源硬限制只属于 spawn 出的工具子进程。在原进程内调用
+    # 资源限制只属于 spawn 出的工具子进程。在原进程内调用
     # _worker（测试或误入父进程）时若施加 RLIMIT_CPU，累计 CPU
     # 已超过工具预算就会立即 SIGXCPU 杀死调用方。
-    if multiprocessing.parent_process() is not None:
-        _apply_resource_limits()
-
-    if os.name != "nt":
-        os.setsid()
-    control.send_bytes(b"r")
-    if not start.wait(max(0, deadline - time.monotonic())):
+    if not _worker_start(control, start, deadline, monitored_memory=monitored_memory):
         return
     route_metadata: dict[str, str | int] = {}
     worker_client: tuple[Any, str] | None = None
@@ -383,40 +541,58 @@ def _process_namespace_matches() -> bool:
     return False
 
 
-def _reap(process) -> bool:
+def _reap(process, *, observed=()) -> bool:
     children = []
     tree_collected = False
+    clean = True
+    root = None
     try:
         if not _process_namespace_matches():
             # Only this owned child handle is trustworthy. Its descendants are
             # unverified, so killing it cannot establish successful cleanup.
-            process.kill()
             return False
+        children = list(observed)
         root = psutil.Process(process.pid)
         root.suspend()
         # Freeze parents before collecting descendants to stop ordinary spawn races.
         for _ in range(2):
-            for child in root.children(recursive=True):
-                if child not in children:
-                    children.append(child)
-                    try:
-                        child.suspend()
-                    except psutil.NoSuchProcess:
-                        pass
+            for parent in [root, *observed]:
+                try:
+                    if parent is not root:
+                        parent.suspend()
+                    for child in parent.children(recursive=True):
+                        if child not in children:
+                            children.append(child)
+                        try:
+                            child.suspend()
+                        except psutil.NoSuchProcess:
+                            continue
+                except psutil.NoSuchProcess:
+                    continue
         tree_collected = True
+    except psutil.NoSuchProcess:
+        pass
+    except psutil.Error:
+        clean = False
+    finally:
+        # Observed descendants remain owned even after an intermediate exits.
         for child in reversed(children):
             try:
                 child.kill()
             except psutil.NoSuchProcess:
                 pass
-        root.kill()
-    except psutil.NoSuchProcess:
-        if not tree_collected:
+            except psutil.Error:
+                clean = False
+        try:
+            if root is not None and tree_collected:
+                root.kill()
+            else:
+                process.kill()
+        except psutil.NoSuchProcess:
+            pass
+        except psutil.Error:
             process.kill()
-    except psutil.Error:
-        process.kill()
-        return False
-    finally:
+            clean = False
         process.join(timeout=1)
     try:
         _, alive = psutil.wait_procs(children, timeout=1)
@@ -428,7 +604,7 @@ def _reap(process) -> bool:
                 pass
     except psutil.Error:
         return False
-    return tree_collected and not process.is_alive()
+    return clean and tree_collected and not process.is_alive()
 
 
 def _ignore_missing_cleanup_entry(_function, _path, error):
@@ -501,12 +677,20 @@ def _bind_worker_business_db(url: str, *, bind_workflow_db: bool = False) -> boo
 
 
 def _worker_acknowledged(
-    control, process, marker: bytes, deadline: float, *, renew=None
+    control, process, marker: bytes, deadline: float, *, renew=None, memory_guard=None
 ) -> tuple[bool, bool]:
     """Wake on an acknowledgement or worker exit without reaping the process."""
     sentinel = process.sentinel
     while True:
-        readable = wait((control, sentinel), timeout=max(0, deadline - time.monotonic()))
+        if memory_guard is not None:
+            memory_guard.check()
+        remaining = max(0, deadline - time.monotonic())
+        readable = wait(
+            (control, sentinel),
+            timeout=min(remaining, _RESOURCE_POLL_SECONDS) if memory_guard else remaining,
+        )
+        if not readable and memory_guard and time.monotonic() < deadline:
+            continue
         exited = sentinel in readable
         # A receipt can already be buffered when the sentinel becomes readable.
         if control not in readable and not (exited and control.poll()):
@@ -515,10 +699,15 @@ def _worker_acknowledged(
             frame = control.recv_bytes(1)
         except EOFError:
             # The child's control endpoint can close just before its sentinel fires.
-            return False, exited or bool(
-                wait((sentinel,), timeout=max(0, deadline - time.monotonic()))
-            )
+            while not exited and time.monotonic() < deadline:
+                if memory_guard is not None:
+                    memory_guard.check()
+                remaining = max(0, deadline - time.monotonic())
+                exited = bool(wait((sentinel,), timeout=min(remaining, _RESOURCE_POLL_SECONDS)))
+            return False, exited
         if frame == marker:
+            if memory_guard is not None:
+                memory_guard.check()
             return True, exited
         deadline = renew(frame) if renew is not None else 0.0
         if not deadline:
@@ -568,6 +757,11 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
     catalog_claim = capture_worker_claim() if catalog_profile is not None else None
     elt_claim = capture_elt_worker_claim(step, context)
     surface_claim = capture_worker_claim() if step.tool_id in {"browser", "aiopen"} else None
+    memory_limit = (
+        _limit_from_env("XCAGI_TOOL_MEMORY_MB", 2048) * 1024 * 1024
+        if step.tool_id == "browser" and _sandbox_enabled()
+        else None
+    )
     ctx = multiprocessing.get_context("spawn")
     start = ctx.Event()
     control_in, control_out = ctx.Pipe(duplex=False)
@@ -592,12 +786,15 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
             sender,
             elt_claim,
             surface_claim,
+            memory_limit is not None,
         ),
     )
     armed = False
     early_exit = False
     clean = True
     result = {}
+    resource_error = None
+    supervisor = _WorkerProcessSupervisor(process, memory_limit_bytes=memory_limit)
 
     def renew_file_deadline(marker: bytes) -> float:
         nonlocal deadline
@@ -608,7 +805,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
 
     file_deadlines = uses_elt_file_deadlines(step.tool_id, step.action, step.params or {})
     try:
-        process.start()
+        supervisor.start()
         control_out.close()
         if sender is not None and lifetime is not None:
             sender.close()  # Only the spawned child may keep the write endpoint alive.
@@ -625,13 +822,13 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
                 relay = None
                 lifetime.worker_finished()
                 raise
-        ready, exited = _worker_acknowledged(control_in, process, b"r", deadline)
+        ready, exited = supervisor.wait_ack(control_in, b"r", deadline)
         if ready and not exited and time.monotonic() < deadline:
+            supervisor.check()
+            supervisor.release(start)
             armed = True
-            start.set()
-            done, exited = _worker_acknowledged(
+            done, exited = supervisor.wait_ack(
                 control_in,
-                process,
                 b"d",
                 deadline,
                 renew=renew_file_deadline if file_deadlines else None,
@@ -640,7 +837,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
             if done:
                 result = json.loads(Path(folder, "result").read_text(encoding="utf-8"))
                 if (
-                    relay is not None and not drained.wait(max(0, deadline - time.monotonic()))
+                    relay is not None and not supervisor.wait_event(drained, deadline)
                 ) or failed.is_set():
                     result["output"] = {
                         "outcome": "unknown",
@@ -648,6 +845,18 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
                         "retryable": False,
                         "reconciliation_evidence": result["output"],
                     }
+                supervisor.check()
+    except _WorkerResourceError as exc:
+        resource_error = {
+            "success": False,
+            "error_code": exc.code,
+            "outcome": "unknown" if armed else "not_started",
+            "execution_status": "unknown" if armed else "not_started",
+            "retryable": False,
+            "reconciliation_required": armed,
+            "memory_limit_bytes": exc.limit_bytes,
+            "observed_rss_bytes": exc.rss_bytes,
+        }
     except (OSError, RuntimeError, ValueError) as exc:
         logging.getLogger(__name__).warning("tool worker boundary failed: %s", type(exc).__name__)
     finally:
@@ -658,13 +867,8 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
             sender.close()
         if receiver is not None and relay is None:
             receiver.close()
-        if process.pid is not None:
-            try:
-                clean = _reap(process)
-                if clean:
-                    process.close()
-            except OSError:
-                clean = False
+        supervisor.close()
+        clean = supervisor.clean
         if clean:
             try:
                 shutil.rmtree(folder, onerror=_ignore_missing_cleanup_entry)
@@ -676,6 +880,8 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
         record_worker_route_metadata(result.get("llm_route_metadata"), llm_scope)
     if not clean and not early_exit:
         return {"outcome": "unknown", "error_code": "tool_cleanup_failed", "retryable": False}
+    if resource_error is not None:
+        return resource_error
     if result:
         from app.application.tool_execution_deadline import invocation_deadline
 
