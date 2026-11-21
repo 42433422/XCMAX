@@ -228,13 +228,22 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
         allMods.value = refineMarketItems(result.items || [], tab)
         writeMarketCatalogCache(cacheKey, tab, allMods.value)
       } else {
+        // The search endpoint limits mixed employee/module matches before this view can separate them.
+        const serverSearch = Boolean(query) && type === 'employee'
         const params = new URLSearchParams({ q: query, limit: '50' })
-        const response = await apiFetch(query ? `/api/mod-store/search?${params}` : '/api/mod-store/catalog', { timeoutMs: 90_000 })
+        const response = await apiFetch(serverSearch ? `/api/mod-store/search?${params}` : '/api/mod-store/catalog', { timeoutMs: 90_000 })
         const data = await response.json()
         if (!current()) return
         if (!data.success) throw new Error(data.message || data.error || '获取目录失败')
-        if (!query) catalogSnapshot.value = data.data.available || []
-        allMods.value = query ? data.data || [] : catalogSnapshot.value
+        if (serverSearch) {
+          allMods.value = data.data || []
+        } else {
+          catalogSnapshot.value = data.data.available || []
+          allMods.value = type === 'module'
+            ? refineMarketItems(catalogSnapshot.value, tab).filter((item) =>
+              !query || [item.name, item.id, item.description].some((field) => String(field || '').toLowerCase().includes(query.toLowerCase())))
+            : catalogSnapshot.value
+        }
       }
       fromCache.value = false
       applyFilters()

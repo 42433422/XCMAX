@@ -1966,26 +1966,52 @@ describe('AI market modules and employees', () => {
     } finally { wrapper.unmount() }
   })
 
+  it('finds modules after more than 50 matching employees using the complete catalog search fields', async () => {
+    const rows = [
+      ...Array.from({ length: 60 }, (_, index) => ({ ...employee, id: `employee-${index}`, name: `Daily employee ${index}` })),
+      { ...moduleRow, id: 'name-match', name: 'Z Daily report' },
+      { ...bundle, id: 'daily-bundle', name: 'A Package' },
+      { ...moduleRow, id: 'no-match', name: 'Other module', author: 'Daily author', pkg_id: 'daily-alias' },
+      { ...moduleRow, id: 'last-module', name: 'B Report', description: 'DAILY production summary' },
+    ]
+    mockApiFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/mod-store/catalog') return catalogResponse(rows)
+      const params = new URL(url, 'https://test.local').searchParams
+      const query = String(params.get('q') || '').trim().toLowerCase()
+      const matches = rows.filter(row => [row.name, row.id, row.description].some(field => String(field || '').toLowerCase().includes(query)))
+      return { ok: true, json: async () => ({ success: true, data: matches.slice(0, Number(params.get('limit') || 50)) }) }
+    })
+    const { wrapper } = await mountModStore({ type: 'module' })
+    try {
+      await waitForAsync()
+      mockApiFetch.mockClear()
+      await wrapper.get('.store-search__input').setValue('  dAiLy  ')
+      await wrapper.get('form.store-search').trigger('submit')
+      await waitForAsync()
+      expect(mockApiFetch).toHaveBeenCalledExactlyOnceWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
+      expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['A Package', 'B Report', 'Z Daily report'])
+      expect(wrapper.get('.store-main__meta').text()).toContain('共 3 个模块')
+      expect((wrapper.vm as any).filteredMods.map((item: any) => item.id)).toContain('last-module')
+    } finally { wrapper.unmount() }
+  })
+
   it('searches installed and uninstalled modules together until the installed-only filter is checked', async () => {
     const installed = { ...moduleRow, id: 'installed-erp', pkg_id: 'installed-erp', name: 'ERP 已安装模块', is_installed: true }
-    mockApiFetch.mockImplementation(async (url: string) => url.startsWith('/api/mod-store/search?')
-      ? { ok: true, json: async () => ({ success: true, data: url.includes('installed=true') ? [installed] : [moduleRow, installed, employee] }) }
-      : catalogResponse([moduleRow, installed, employee]))
+    mockApiFetch.mockResolvedValue(catalogResponse([moduleRow, installed, employee]))
     const { wrapper } = await mountModStore({ type: 'module' })
     try {
       await waitForAsync()
       await wrapper.get('.store-search__input').setValue('ERP')
       await wrapper.get('form.store-search').trigger('submit')
       await waitForAsync()
-      const searchCalls = mockApiFetch.mock.calls.filter(([url]) => String(url).startsWith('/api/mod-store/search?'))
-      expect(new URL(String(searchCalls.at(-1)![0]), 'https://test.local').searchParams.has('installed')).toBe(false)
+      expect(mockApiFetch).toHaveBeenLastCalledWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
       expect(wrapper.findAll('.store-card')).toHaveLength(2)
       await wrapper.get('.store-filter-check input').setValue(true)
       expect(wrapper.findAll('.store-card')).toHaveLength(1)
       expect(wrapper.get('.store-card').text()).toContain('ERP 已安装模块')
       await wrapper.get('form.store-search').trigger('submit')
       await waitForAsync()
-      expect(String(mockApiFetch.mock.calls.at(-1)![0])).not.toContain('installed=')
+      expect(mockApiFetch).toHaveBeenLastCalledWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
       expect(wrapper.findAll('.store-card')).toHaveLength(1)
       await wrapper.get('.store-filter-check input').setValue(false)
       expect(wrapper.findAll('.store-card')).toHaveLength(2)
@@ -1994,21 +2020,18 @@ describe('AI market modules and employees', () => {
 
   it('keeps only the latest module search result when responses arrive out of order', async () => {
     let finishFirst!: (value: any) => void
-    mockApiFetch.mockImplementation(async (url: string) => {
-      if (url.includes('q=first')) return new Promise(resolve => { finishFirst = resolve })
-      if (url.includes('q=second')) return { ok: true, json: async () => ({ success: true, data: [bundle] }) }
-      return catalogResponse([moduleRow, bundle])
-    })
+    mockApiFetch.mockResolvedValue(catalogResponse([moduleRow, bundle]))
     const { wrapper } = await mountModStore({ type: 'module' })
     try {
       await waitForAsync()
-      await wrapper.get('.store-search__input').setValue('first')
+      mockApiFetch.mockImplementationOnce(() => new Promise(resolve => { finishFirst = resolve }))
+      await wrapper.get('.store-search__input').setValue('ERP')
       await wrapper.get('form.store-search').trigger('submit')
       await flushPromises()
-      await wrapper.get('.store-search__input').setValue('second')
+      await wrapper.get('.store-search__input').setValue('质量')
       await wrapper.get('form.store-search').trigger('submit')
       await waitForAsync()
-      finishFirst({ ok: true, json: async () => ({ success: true, data: [moduleRow] }) })
+      finishFirst(catalogResponse([moduleRow, bundle]))
       await waitForAsync()
       expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['质量模块包'])
     } finally { wrapper.unmount() }
