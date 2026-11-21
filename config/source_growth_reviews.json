@@ -687,14 +687,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
-      "base_blob": "a15c70e7ebfefdea8ac022652cce75a8dedc694c",
-      "head_blob": "e4b6e02fa93a23db6baffe3e6f7b548344981566",
-      "before_lines": 1372,
-      "after_lines": 1528,
-      "reason": "Keep native automatic streaming receipt replay before mutable route discovery, using the same original-payload journal contract as synchronous and gateway chat.",
-      "boundary": "Retain account, request-key, payload-digest and wallet ownership checks. End the request credential transaction before provider discovery without detaching the journal.",
-      "validation": "Seventy-three model, receipt, catalog and wallet regressions passed, including changed-route streaming replay, payload conflicts and real SQLite paid-image recovery. Six affected production modules passed targeted mypy.",
-      "follow_up": "Architecture review of the legacy endpoint, format-driven growth and production settlement verification remain outstanding.",
+      "base_blob": "e4b6e02fa93a23db6baffe3e6f7b548344981566",
+      "head_blob": "f449f5781af352aabd6eb54d5abb1c29e79e4685",
+      "before_lines": 1528,
+      "after_lines": 1534,
+      "reason": "平台模型调用统一到同机 LiteLLM 网关这一单一来源：新增网关 provider 标签，并让「跟随平台」默认路由优先使用网关模型池。此前流式回执重放的原审查链路仍保留在下方边界说明中。",
+      "boundary": "仅新增 litellm 标签与默认路由前置分支；BYOK、显式选择、原有单厂商平台配置与密钥解析边界保持不变。原生流式回执重放仍沿用既有账号、请求键、负载摘要与钱包归属校验。",
+      "validation": "新增网关目录与默认路由回归，test_platform_model_config 73 项、目录生命周期与 bench 专项通过；远端 CI 与人工架构审查仍需完成，此登记不是批准。",
+      "follow_up": "评审后可将网关默认路由选择下沉到 llm_runtime_route，避免路由分支继续堆积在 API 合并模块。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py": {
@@ -743,18 +743,6 @@
       "boundary": "只使用同租户、同所有人且可核验的上传回执。审批前规范化保留首个来源；已有冻结计划保持原附件集合，每个批准 ID 必须具有真实执行或行级跳过回执，无法读取和未知写入均保持未完成。 复用SQLAlchemy JSON查询，原matches保留最终核验，旧别名及非标准JSON兼容；不设置会漏掉旧目标的固定窗口。",
       "validation": "131 项 ELT、checkpoint、batch 与进度回归通过，包含审批前规范化及真实 CSV/SQLite 的 fresh、resume、unreadable 三种重复附件场景。最终远端 CI 与人工架构审查仍需完成；此登记不是批准。 最终 CI 类型修复保留既有装饰器、仓库及附件身份契约；在同 CI Python 3.11.18 / mypy 2.4.1 与依赖版本环境中，全量 app 类型检查和 186 项相关回归通过。 历史评审补修：续接复用仓库 matches 在 limit 前筛选完整授权范围；真实内存与文件 SQLite 各加入64条跨范围记录及外部账号，旧8失败/2通过，修复后续接与仓库56项通过，定点mypy及Ruff通过。 新增SQLite旧实现4失败，修后无匹配0条/有目标1条反序列化；相关完整文件60项及新增旧标量4项通过，独立复核162组无假阴性。PostgreSQL16真实场景与完整mypy待本head CI。",
       "follow_up": "评审后沿既有批次入口拆分上传来源核对与续接计划构造，保留冻结审批和真实回执契约。",
-      "review_owner": "@42433422"
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
-      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
-      "base_blob": "e4b6e02fa93a23db6baffe3e6f7b548344981566",
-      "head_blob": "f449f5781af352aabd6eb54d5abb1c29e79e4685",
-      "before_lines": 1528,
-      "after_lines": 1534,
-      "reason": "平台模型调用统一到同机 LiteLLM 网关这一单一来源：新增网关 provider 标签，并让「跟随平台」默认路由优先使用网关模型池。",
-      "boundary": "仅新增 litellm 标签与默认路由前置分支；BYOK、显式选择、原有单厂商平台配置与密钥解析边界保持不变。",
-      "validation": "新增网关目录与默认路由回归，test_platform_model_config 73 项、目录生命周期与 bench 专项通过；远端 CI 与人工架构审查仍需完成，此登记不是批准。",
-      "follow_up": "评审后可将网关默认路由选择下沉到 llm_runtime_route，避免路由分支继续堆积在 API 合并模块。",
       "review_owner": "@42433422"
     }
   }
