@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime
 
@@ -12,6 +13,7 @@ from modstore_server.models import get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/health", tags=["health"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
@@ -26,8 +28,9 @@ async def health_check():
         with sf() as session:
             session.execute(text("SELECT 1"))
         checks["database"] = "ok"
-    except RECOVERABLE_ERRORS as e:
-        checks["database"] = f"error: {e}"
+    except RECOVERABLE_ERRORS:
+        logger.exception("health database check failed")
+        checks["database"] = "unavailable"
         checks["status"] = "degraded"
     return checks
 

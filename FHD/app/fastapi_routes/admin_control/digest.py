@@ -191,7 +191,9 @@ class DigestReader:
                     remote = await self._remote_digest(path)
                     if remote is not None:
                         return remote
-                return JSONResponse({"success": False, "message": str(exc)}, status_code=502)
+                return JSONResponse(
+                    {"success": False, "message": "摘要服务暂时不可用"}, status_code=502
+                )
         proxied = await self._proxy(
             request,
             method,

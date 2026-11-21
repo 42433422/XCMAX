@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from copy import deepcopy
@@ -19,6 +20,8 @@ from modstore_server.eskill_adapter import render_template as _render_template
 from modstore_server.models import ESkill, ESkillRun, ESkillVersion
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.workflow_variables import resolve_value
+
+logger = logging.getLogger(__name__)
 
 
 class ESkillRuntime:
@@ -102,8 +105,16 @@ class ESkillRuntime:
                 solidify=solidify,
             )
         except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+            logger.exception("ESkill static execution failed")
             if not bool(trigger_policy.get("on_error", True)):
-                return self._finish_run(db, run, {}, t0, "static_error", error=str(exc))
+                return self._finish_run(
+                    db,
+                    run,
+                    {},
+                    t0,
+                    "static_error",
+                    error="eskill_static_execution_failed",
+                )
             return self._run_dynamic(
                 db,
                 skill,
@@ -155,7 +166,8 @@ class ESkillRuntime:
         patched_logic = self._apply_patch(logic, patch)
         try:
             output = self._execute_logic(patched_logic, input_data, user_id=user_id)
-        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.exception("ESkill dynamic execution failed")
             if self._rollback_to_previous_version(db, skill):
                 db.commit()
             return self._finish_run(
@@ -165,7 +177,7 @@ class ESkillRuntime:
                 t0,
                 "rollback_or_ai_intervention",
                 patch=patch,
-                error=str(exc),
+                error="eskill_dynamic_execution_failed",
             )
 
         quality = self._quality_report(output, quality_gate)

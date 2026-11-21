@@ -38,6 +38,5 @@ class PaymentGatewayService:
 
 
 def java_payment_unreachable_message(exc: BaseException) -> str:
-    """502 等场景下带回 ``JAVA_PAYMENT_SERVICE_URL`` 实际解析值，便于排障（本机连不上 8080 时最常见）。"""
-    base = PaymentGatewayService().target_base_url()
-    return f"Java 支付服务不可用: {exc} (JAVA_PAYMENT_SERVICE_URL={base})"
+    """Keep payment endpoints and upstream exception details out of public responses."""
+    return "Java 支付服务暂时不可用，请稍后查询原支付状态"

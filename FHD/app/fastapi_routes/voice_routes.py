@@ -600,6 +600,7 @@ async def voice_command(
     if auto_execute:
         try:
             from app.application.ai_chat_app_service import get_ai_chat_app_service
+            from app.fastapi_routes.ai_intent import _public_unified_chat_payload
             from app.fastapi_routes.xcagi_compat_chat_helpers import (
                 _runtime_context_with_authenticated_actor,
             )
@@ -621,7 +622,11 @@ async def voice_command(
                 source="voice",
                 file_context={},
             )
-            result = payload if isinstance(payload, dict) else {"response": str(payload)}
+            result = (
+                _public_unified_chat_payload(payload)
+                if isinstance(payload, dict)
+                else {"response": str(payload)}
+            )
             details = result.get("data") or {}
             if not isinstance(details, dict):
                 details = {}

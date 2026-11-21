@@ -187,7 +187,7 @@ class AutonomyAdmin:
                 }
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("autonomy overview runtime status failed: %s", exc)
-            runtime = {"ok": False, "error": str(exc)}
+            runtime = {"ok": False, "error": "维护监控服务不可用"}
         closure: dict[str, Any] = {}
         try:
             closure = {
@@ -196,7 +196,7 @@ class AutonomyAdmin:
             }
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("autonomy overview closure status failed: %s", exc)
-            closure = {"success": False, "error": str(exc)}
+            closure = {"success": False, "error": "运行状态暂时无法核验"}
         return {
             "ok": True,
             "health": {"ok": True, "service": "ops-autonomy-approval"},
@@ -286,7 +286,10 @@ class AutonomyAdmin:
             return {"ok": True, "result": result}
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("admin force self-maintenance failed: %s", exc)
-            return JSONResponse({"ok": False, "message": str(exc)}, status_code=502)
+            return JSONResponse(
+                {"ok": False, "message": "维护服务暂时无法连接，请先核对原任务状态"},
+                status_code=502,
+            )
 
     async def admin_maintenance_tasks(self, request: Request):
         return await self._maintenance_call(request, "snapshot")

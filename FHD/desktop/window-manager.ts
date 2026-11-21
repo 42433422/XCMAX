@@ -139,11 +139,18 @@ export function desktopWindowCount(): number {
   return main + liveAuxiliaryWindows().length
 }
 
-function attachAuxiliaryGuards(win: Electron.BrowserWindow): void {
-  configureDesktopDownloads(win.webContents.session, () => app.getPath('downloads'), writeBackendLog)
+function attachDesktopNavigationGuards(win: Electron.BrowserWindow): void {
   win.webContents.on('will-navigate', (event, url) => {
     handleDesktopWillNavigate(url, DEFAULT_PORT, () => event.preventDefault(), console.warn)
   })
+  win.webContents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
+    if (isMainFrame) handleDesktopWillNavigate(url, DEFAULT_PORT, () => event.preventDefault(), console.warn)
+  })
+}
+
+function attachAuxiliaryGuards(win: Electron.BrowserWindow): void {
+  configureDesktopDownloads(win.webContents.session, () => app.getPath('downloads'), writeBackendLog)
+  attachDesktopNavigationGuards(win)
   win.webContents.setWindowOpenHandler(({ url }) => openTrustedAuxiliaryFromHandler(url, win))
   win.on('closed', () => {
     desktopRuntime.auxiliaryWindows.delete(win)
@@ -458,9 +465,7 @@ export async function createWindow(): Promise<void> {
     })
   }
 
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    handleDesktopWillNavigate(url, DEFAULT_PORT, () => event.preventDefault(), console.warn)
-  })
+  attachDesktopNavigationGuards(mainWindow)
   // 未注册 will-download 时 Chromium 只把文件留在下载目录的 <guid>.tmp，
   // 客户看不到「文件名: xxx.xlsx」对应的文件。显式落盘到下载目录并保留业务文件名。
   configureDesktopDownloads(mainWindow.webContents.session, () => app.getPath('downloads'), writeBackendLog)

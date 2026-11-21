@@ -126,7 +126,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             return {
                 "ok": False,
                 "validate_only": False,
-                "errors": [str(exc)],
+                "errors": ["workflow did not reach end"],
                 "warnings": topo_warnings + exc.evidence["warnings"],
                 "steps": exc.evidence["steps"],
                 "output": exc.evidence["partial_output"],

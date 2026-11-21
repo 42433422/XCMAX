@@ -23,6 +23,6 @@ async def get_public_company_hall(
     try:
         data = build_public_company_hall(day=day)
         return {"ok": True, "data": data}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("public company hall failed")
-        return {"ok": False, "error": str(exc), "data": None}
+        return {"ok": False, "error": "company_hall_unavailable", "data": None}

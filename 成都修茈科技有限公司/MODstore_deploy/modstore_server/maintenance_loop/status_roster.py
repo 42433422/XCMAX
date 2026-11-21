@@ -15,18 +15,22 @@ def _build_roster_alignment(
 ) -> Dict[str, Any]:
     try:
         planned_ids = set(all_planned_employee_ids())
-    except RECOVERABLE_ERRORS as exc:
-        config.logger.exception("failed to load duty roster ids for self-maintenance status")
+    except RECOVERABLE_ERRORS:
+        config.logger.exception(
+            "failed to load duty roster ids for self-maintenance status"
+        )
         planned_ids = set()
-        load_error = str(exc)[:300]
+        load_error = "duty_roster_unavailable"
     else:
         load_error = ""
     try:
         deployed_ids = set(duty_employee_registry.duty_employee_records().keys())
-    except RECOVERABLE_ERRORS as exc:
-        config.logger.exception("failed to load duty employee registry for self-maintenance status")
+    except RECOVERABLE_ERRORS:
+        config.logger.exception(
+            "failed to load duty employee registry for self-maintenance status"
+        )
         deployed_ids = set()
-        deployed_error = str(exc)[:300]
+        deployed_error = "duty_employee_registry_unavailable"
     else:
         deployed_error = ""
     participant_ids = sorted(participants.keys())
