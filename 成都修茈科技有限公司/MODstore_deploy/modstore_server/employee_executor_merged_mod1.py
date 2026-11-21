@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import importlib
+from io import BytesIO
+from pathlib import Path
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.employee_executor_policies import (
@@ -1578,7 +1580,7 @@ def _employee_pack_extract_root(
     if tmp.exists():
         _facade().shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, exist_ok=True)
-    source = _facade().io.BytesIO(archive_bytes) if archive_bytes is not None else zpath
+    source = BytesIO(archive_bytes) if archive_bytes is not None else zpath
     with _facade().zipfile.ZipFile(source, "r") as zf:
         root_prefix = f"{pack_id}/"
         for info in zf.infolist():
@@ -1637,7 +1639,7 @@ def _action_direct_python(
             direct_input.get("_trusted_duty_contract_execution")
         )
         if module is not None:
-            root = _facade().Path(module.__file__).parents[2]
+            root = Path(module.__file__).parents[2]
         elif reviewed_burn_in or reviewed_duty_execution:
             from modstore_server.duty_workforce_contracts import (
                 resolve_reviewed_duty_employee_root,

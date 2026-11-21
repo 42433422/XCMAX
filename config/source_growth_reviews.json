@@ -760,12 +760,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py",
       "base_blob": "b9f538e97e17f60326c29821ad4d8d0d4225585f",
-      "head_blob": "924e12827af0715cfbfd9f5d9e6264c74c9dbb57",
+      "head_blob": "4abf97f141fc42011c19e3cffdd8e0f46ecdf076",
       "before_lines": 2294,
-      "after_lines": 2355,
+      "after_lines": 2357,
       "reason": "Review request only: extend the existing employee executor to bind approved strategic input and execute the verified archive snapshot at the actual Python handler boundary; retain the existing experiment hook.",
-      "boundary": "Reuse the employee resolver, authorized owner and execute flag, archive extraction and standard-library SourceFileLoader; do not add another execution service or claim OS-level isolation.",
-      "validation": "744 integrated tests passed with two optional external-tool/database skips; actual archived CSV employee preserves its output in the tenant workspace. Existing and changed employee execution tests pass. Exact-head CI and human architecture review are still required.",
+      "boundary": "Reuse the employee resolver, authorized owner and execute flag, archive extraction and standard-library SourceFileLoader; do not add another execution service or claim OS-level isolation. Snapshot buffer and module paths use explicit standard-library imports; no added dynamic facade back-reference.",
+      "validation": "744 integrated tests passed with two optional external-tool/database skips; actual archived CSV employee preserves its output in the tenant workspace. Existing and changed employee execution tests pass. Exact-head CI and human architecture review are still required. Follow-up source-governance failure reproduced at 362 facade references versus baseline 360; both new standard-library references replaced with explicit imports, original snapshot/permission/hash/CSV regressions pass and source-governance passes without changing its baseline.",
       "follow_up": "Keep approval and archive snapshot handling in strategic_execution_contract.py. Further executor expansion must extract a reviewed responsibility from this existing mechanical module rather than adding more branches.",
       "review_owner": "@42433422"
     },
