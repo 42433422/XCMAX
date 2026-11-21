@@ -250,7 +250,7 @@ class MaintenanceRuntime:
 
     def _recover_final_outcome(self, memory: dict, candidate: Optional[dict]) -> Optional[dict]:
         if candidate and candidate.get("final_outcome"):
-            final = candidate["final_outcome"]
+            final: dict[str, Any] = candidate["final_outcome"]
             if candidate["outcome_recorded"]:
                 self._clear_execution_checkpoint(memory)
                 return final

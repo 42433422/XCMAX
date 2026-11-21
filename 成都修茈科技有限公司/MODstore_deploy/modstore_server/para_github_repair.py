@@ -7,6 +7,7 @@ import json
 import re
 import time
 import uuid
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import HTTPException
@@ -72,7 +73,7 @@ def budget_attempt(session, request, effects, identity, *, allow_published=False
     return {"role": "fix", "control_task_id": row.id}
 
 
-def budget_terminal(request, evidence):
+def budget_terminal(request: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any] | None:
     """Candidate publication is pending until the same original PR's CI recovers."""
     from modstore_server.customer_ticket_github import github
     from modstore_server.strategic_portfolio import digest
@@ -81,7 +82,7 @@ def budget_terminal(request, evidence):
     if status not in TERMINAL:
         return None
     completed = status == "execution_completed"
-    receipt = {
+    receipt: dict[str, Any] = {
         "schema": "strategic-workspace/v1",
         "request_id": request["original_request_id"],
         "control_task_id": evidence["control_task_id"],

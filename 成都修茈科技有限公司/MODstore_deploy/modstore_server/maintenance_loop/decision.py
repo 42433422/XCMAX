@@ -174,7 +174,7 @@ def _complete_merge_policy(
     if policy.get("deployment_scope") != deployment._deployment_scope():
         raise ValueError("original_deployment_scope_changed")
     result = policy["merge_result"]
-    receipt = (
+    receipt: dict[str, Any] = (
         {"enabled": False, "reason": "merge_not_completed"}
         if result.get("merge_requested")
         else deployment._run_deploy_receipts_after_merge(run_id=run_id, merge_result=result)
