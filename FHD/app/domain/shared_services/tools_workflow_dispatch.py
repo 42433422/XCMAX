@@ -107,17 +107,37 @@ def _registered_router_image_generate(action, params, runtime_context, profile, 
     adapter = ModstorePlatformAdapter.from_session(session_id)
     if not adapter.auth_token:
         return {"success": False, "message": "当前账号未绑定市场模型服务授权，无法生图"}
+    # The market adapter distinguishes a confirmed rejection from an unknown
+    # paid side effect. Never expose transport exceptions or silently retry an
+    # ambiguous image request with a different request key.
+    from contextlib import suppress
+
+    import httpx
+    from fastapi import HTTPException
+
     try:
         data = _run_awaitable(
             adapter.generate_image({"prompt": prompt, "client_request_id": request_id})
         )
-    except Exception as exc:  # noqa: BLE001 - 转成用户可读的失败结果
-        return {"success": False, "message": str(exc) or "生图失败，请稍后重试"}
+    except HTTPException as exc:
+        if exc.status_code >= 500 or exc.status_code == 409:
+            return {
+                "success": False,
+                "status": "blocked",
+                "client_request_id": request_id,
+                "message": "生图结果待核对，请保留原请求键",
+            }
+        return {"success": False, "message": "生图请求被拒绝，请检查授权或参数"}
+    except (httpx.HTTPError, OSError, RuntimeError, ValueError):
+        return {
+            "success": False,
+            "status": "blocked",
+            "client_request_id": request_id,
+            "message": "生图结果待核对，请保留原请求键",
+        }
     finally:
-        try:
+        with suppress(httpx.HTTPError, OSError, RuntimeError, ValueError):
             _run_awaitable(adapter.close())
-        except Exception:  # noqa: BLE001
-            pass
     images = [
         str(url)
         for url in (data.get("images") or [])
