@@ -229,7 +229,9 @@ def test_send_timeout_never_retries_and_validates_transport_input(app, monkeypat
 
 
 @pytest.mark.parametrize("lookup", ["absent", "accepted", "unknown", "unavailable"])
-def test_desktop_only_reply_checks_original_ledger_before_reporting_unsent(app, monkeypatch, lookup):
+def test_desktop_only_reply_checks_original_ledger_before_reporting_unsent(
+    app, monkeypatch, lookup
+):
     import io
     import urllib.error
 
@@ -243,22 +245,40 @@ def test_desktop_only_reply_checks_original_ledger_before_reporting_unsent(app, 
         requests.append(request)
         if request.method == "POST":
             raise urllib.error.HTTPError(
-                request.full_url, 409, "Conflict", {},
+                request.full_url,
+                409,
+                "Conflict",
+                {},
                 io.BytesIO(b'{"detail":"requires_desktop_execution"}'),
             )
         if lookup == "absent":
             raise urllib.error.HTTPError(
-                request.full_url, 404, "Not Found", {}, io.BytesIO(b'{"detail":"missing"}'),
+                request.full_url,
+                404,
+                "Not Found",
+                {},
+                io.BytesIO(b'{"detail":"missing"}'),
             )
         if lookup == "unavailable":
             raise TimeoutError("ledger unavailable")
-        return io.BytesIO(json.dumps({"success": True, "data": {
-            "request_id": request_id, "status": lookup, "persisted": False,
-        }}).encode())
+        return io.BytesIO(
+            json.dumps(
+                {
+                    "success": True,
+                    "data": {
+                        "request_id": request_id,
+                        "status": lookup,
+                        "persisted": False,
+                    },
+                }
+            ).encode()
+        )
 
     monkeypatch.setattr(kellai_binding, "_open_kellai_request", fake_open)
     response = client.post(
-        "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input(),
+        "/api/kellai/binding/messages/send",
+        headers=XCMAX_HEADERS,
+        json=send_input(),
     )
     assert [request.method for request in requests] == ["POST", "GET"]
     assert requests[1].full_url.endswith(f"messages/requests/{request_id}")
@@ -274,7 +294,9 @@ def test_desktop_only_reply_checks_original_ledger_before_reporting_unsent(app, 
 
 
 @pytest.mark.parametrize("success", [True, False])
-def test_message_receipt_must_match_original_request_even_with_success_flag(app, monkeypatch, success):
+def test_message_receipt_must_match_original_request_even_with_success_flag(
+    app, monkeypatch, success
+):
     import io
 
     client = local_client(app)
@@ -284,13 +306,23 @@ def test_message_receipt_must_match_original_request_even_with_success_flag(app,
 
     def wrong_receipt(request, *, timeout):
         calls.append(request)
-        return io.BytesIO(json.dumps({"success": success, "data": {
-            "request_id": "another-request-123", "status": "accepted",
-        }}).encode())
+        return io.BytesIO(
+            json.dumps(
+                {
+                    "success": success,
+                    "data": {
+                        "request_id": "another-request-123",
+                        "status": "accepted",
+                    },
+                }
+            ).encode()
+        )
 
     monkeypatch.setattr(kellai_binding, "_open_kellai_request", wrong_receipt)
     response = client.post(
-        "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input(),
+        "/api/kellai/binding/messages/send",
+        headers=XCMAX_HEADERS,
+        json=send_input(),
     )
     assert response.status_code == 502
     assert len(calls) == 1

@@ -116,11 +116,13 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
         result = request_kellai(path, connection, body)
         if action in {"send", "receipt"}:
             data = result.get("data") or {}
-            status = data.get("status")
+            status = str(data.get("status"))
             provider_state = data.get("provider_state")
             visible_status = (
                 provider_state
-                if status == "accepted" and provider_state in {"sent", "delivered", "read", "failed"}
+                if status == "accepted"
+                and isinstance(provider_state, str)
+                and provider_state in {"sent", "delivered", "read", "failed"}
                 else status
             )
             return {

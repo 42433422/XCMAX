@@ -189,6 +189,7 @@ def test_accepted_is_not_delivered_and_unknown_keeps_reconciliation_id(monkeypat
         ("accepted", "read", True, "渠道确认已读"),
         ("accepted", "failed", False, "渠道确认发送失败"),
         ("accepted", "unrecognized", True, "渠道已受理，尚无送达确认"),
+        ("accepted", ["read"], True, "渠道已受理，尚无送达确认"),
         ("unknown", "delivered", False, "渠道状态：unknown"),
     ],
 )

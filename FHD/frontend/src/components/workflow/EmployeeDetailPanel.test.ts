@@ -263,7 +263,7 @@ describe('EmployeeDetailPanel', () => {
     expect(pushSpy).toHaveBeenCalledWith(expect.objectContaining({ name: 'print' }))
   })
 
-  it('clicking database button for wechat_msg includes query', async () => {
+  it('clicking database button for wechat_msg opens the Kellai messages workspace', async () => {
     const wrapper = mountPanel(makeRow({ empId: 'wechat_msg' }))
     const router = wrapper.vm.$.appContext.config.globalProperties.$router
     const pushSpy = vi.spyOn(router, 'push')
@@ -271,7 +271,7 @@ describe('EmployeeDetailPanel', () => {
     expect(pushSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'data-sources',
-        query: { source: 'wechat_local_db' },
+        query: { workspace: 'messages' },
       }),
     )
   })

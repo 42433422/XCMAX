@@ -94,12 +94,17 @@ const { binding, channels, customers, scopes, busy, error, channelError, statusL
 const router = useRouter()
 const route = useRoute()
 const areas = ['connections', 'messages', 'contacts', 'data', 'automation']
-const normalizeWorkspace = (value: unknown) => typeof value === 'string' && areas.includes(value) ? value : 'connections'
-const workspace = ref(normalizeWorkspace(route.query.workspace))
+function routeWorkspace(): string {
+  const { workspace, source } = route.query
+  if (typeof workspace === 'string' && areas.includes(workspace)) return workspace
+  // Old links selected the optional WeChat source; open the authorized channel workspace instead.
+  return source === 'wechat_local_db' ? 'messages' : 'connections'
+}
+const workspace = ref(routeWorkspace())
 const requestSend = ref(false)
 const contactSearch = ref('')
 const filteredCustomers = computed(() => customers.value.filter(customer => `${customer.display_name} ${customer.channel_sources?.join(' ') || ''}`.toLowerCase().includes(contactSearch.value.trim().toLowerCase())))
-watch(() => route.query.workspace, value => { workspace.value = normalizeWorkspace(value) })
+watch(routeWorkspace, value => { workspace.value = value })
 function persistWorkspace(): void { void router.replace({ query: { ...route.query, workspace: workspace.value }, hash: route.hash }) }
 function setWorkspace(value: string): void { workspace.value = value; persistWorkspace() }
 async function openConversation(customerId: number): Promise<void> {

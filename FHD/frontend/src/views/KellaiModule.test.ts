@@ -39,6 +39,20 @@ describe('Kellai product module', () => {
     wrapper.unmount()
   })
 
+  it('maps old WeChat source links to the authorized inbox while honoring an explicit workspace', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/kellai', component: KellaiView }] })
+    await router.push('/kellai?source=wechat_local_db')
+    const wrapper = mount(KellaiView, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('消息中心')
+    expect(api.customers).not.toHaveBeenCalled()
+    expect(api.sendMessage).not.toHaveBeenCalled()
+    await router.push('/kellai?source=wechat_local_db&workspace=data')
+    await flushPromises()
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('数据接入')
+    wrapper.unmount()
+  })
+
   it('keeps receipt recovery available when the original channel is offline', async () => {
     const store = useKellaiStore()
     store.binding = { state: 'connected', connection: { connection_id: 'paired', authorized_scopes: ['messages.send'] } }
