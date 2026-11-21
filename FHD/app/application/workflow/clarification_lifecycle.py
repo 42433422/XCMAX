@@ -58,7 +58,10 @@ def insert_clarify_node(plan: PlanGraph, clarify_node: WorkflowNode) -> None:
 
 def entry_is_expired(entry: dict[str, Any] | None, now: float | None = None) -> bool:
     """Return whether one pending clarification has exceeded its TTL."""
-    if not isinstance(entry, dict) or entry.get("kind") != "clarification":
+    if not isinstance(entry, dict) or entry.get("kind") not in {
+        "clarification",
+        "clarification_unbound",
+    }:
         return False
     now = time.time() if now is None else now
     try:

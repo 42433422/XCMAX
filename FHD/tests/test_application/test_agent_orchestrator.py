@@ -1392,10 +1392,10 @@ def test_in_memory_approval_snapshot_cannot_resume_protected_plan():
             self.counter = 0
 
         def create_approval_request(
-            self, *, plan_id, node, runtime_context, plan, require_persistence
+            self, *, plan_id, node, runtime_context, plan, require_persistence, request_id=None
         ):
             self.counter += 1
-            request_id = f"request-{self.counter}"
+            request_id = request_id or f"request-{self.counter}"
             self.items[request_id] = {"plan": plan, "runtime_context": runtime_context}
             return SimpleNamespace(request_id=request_id)
 
