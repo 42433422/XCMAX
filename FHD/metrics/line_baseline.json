@@ -1,5 +1,5 @@
 {
-  "lines": 2561491,
+  "lines": 2561523,
   "updated": "2026-11-21",
-  "note": "PR #3440 Mod架构门禁修复：xcagi-planner-bridge 的 tools/execute 不再直接跨层导入 app.fastapi_routes，改通过 app.mod_sdk.planner_compat 稳定门面调用原 host 受控执行函数。保持原鉴权、幂等、回执行为；净增10行，当前基线2561491行。其他调用测试与权限失败仍待最新CI验收。"
+  "note": "PR #3440 原生Excel/Planner工具纯单元回归4文件采用局部pytest夹具，仅跳过与被测builtin处理器无关的租户工具注册库查询（返回未注册None），真实执行链/权限测试完全不受影响；新增长32行，基线2561523。原安全失败仍需对照最新CI复验。"
 }
