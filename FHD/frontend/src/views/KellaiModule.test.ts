@@ -44,7 +44,7 @@ describe('Kellai product module', () => {
     store.binding = { state: 'connected', connection: { connection_id: 'paired', authorized_scopes: ['messages.send'] } }
     store.activeCustomerId = 7
     const key = deliveryTargetKey({ customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9' })
-    store.deliveries[key] = { request_id: 'existing-request-id', receipt: { request_id: 'existing-request-id', status: 'unknown' }, checking: false, error: '' }
+    store.deliveries['existing-request-id'] = { request_id: 'existing-request-id', target_key: key, receipt: { request_id: 'existing-request-id', status: 'unknown' }, checking: false, error: '' }
     api.sendReceipt.mockResolvedValue({ request_id: 'existing-request-id', status: 'accepted', persisted: false })
     const wrapper = mount(KellaiMessageComposer)
     expect(wrapper.text()).toContain('当前会话没有已连接且支持发送的联系人')

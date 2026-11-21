@@ -19,6 +19,8 @@ const kellaiMocks = vi.hoisted(() => ({
   createFollowUpTask: vi.fn(),
   decideFollowUpTask: vi.fn(),
   disconnect: vi.fn(),
+  sendReceipt: vi.fn(),
+  sendMessage: vi.fn(),
 }))
 
 vi.mock('@/api/kellaiBinding', () => ({
@@ -163,8 +165,8 @@ describe('KellaiCustomerInbox', () => {
     const store = useKellaiStore()
     store.activeCustomerId = 7
     const key = deliveryTargetKey({ customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9' })
-    store.deliveries[key] = {
-      request_id: 'request-original-123', checking: false, error: '',
+    store.deliveries['request-original-123'] = {
+      request_id: 'request-original-123', target_key: key, checking: false, error: '',
       receipt: { request_id: 'request-original-123', status: status as string, provider_state: providerState as string | undefined },
     }
     const wrapper = mount(KellaiMessageComposer)
@@ -177,7 +179,30 @@ describe('KellaiCustomerInbox', () => {
       expect(receipt.text()).not.toContain('渠道确认送达')
       expect(receipt.text()).not.toContain('渠道确认已读')
     }
-    expect(store.deliveries[key].receipt.status).toBe(status)
+    expect(store.deliveries['request-original-123'].receipt.status).toBe(status)
+    wrapper.unmount()
+  })
+
+  it('shows and queries each receipt independently for consecutive messages to the same target', async () => {
+    const store = useKellaiStore()
+    store.binding = { state: 'connected', connection: { connection_id: 'paired', authorized_scopes: ['messages.send'] } }
+    store.activeCustomerId = 7
+    const targetKey = deliveryTargetKey({ customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9' })
+    for (const id of ['first-request-123', 'second-request-123']) {
+      store.deliveries[id] = { request_id: id, target_key: targetKey, checking: false, error: '', receipt: { request_id: id, status: 'accepted' } }
+    }
+    kellaiMocks.sendReceipt.mockResolvedValue({ request_id: 'first-request-123', status: 'accepted', provider_state: 'delivered' })
+    const wrapper = mount(KellaiMessageComposer)
+    expect(wrapper.findAll('.kellai-composer__receipt')).toHaveLength(2)
+    await wrapper.findAll('.kellai-composer__receipt')[0].get('button').trigger('click')
+    await flushPromises()
+    expect(kellaiMocks.sendReceipt).toHaveBeenCalledExactlyOnceWith('first-request-123')
+    const receipts = wrapper.findAll('.kellai-composer__receipt')
+    expect(receipts[0].text()).toContain('first-request-123')
+    expect(receipts[0].get('strong').text()).toBe('渠道确认送达')
+    expect(receipts[1].text()).toContain('second-request-123')
+    expect(receipts[1].get('strong').text()).toBe('渠道已受理')
+    expect(kellaiMocks.sendMessage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

@@ -132,6 +132,7 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
                     "delivered": "渠道确认送达",
                     "read": "渠道确认已读",
                     "failed": "渠道确认发送失败",
+                    "requires_desktop_execution": "此渠道需要在客来来桌面端执行，当前请求未外发",
                 }.get(visible_status, f"渠道状态：{status}"),
                 "retryable": False,
                 **(

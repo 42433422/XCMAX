@@ -41,12 +41,12 @@ import { deliveryTargetKey, useKellaiStore } from '@/stores/kellai'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 const store = useKellaiStore()
-const { activeCustomerId, activeCustomer, channels, messages, copilotDraft, deliveries, messagesLoading } = storeToRefs(store)
+const { activeCustomerId, activeCustomer, channels, messages, copilotDraft, deliveries, blockedTargets, messagesLoading } = storeToRefs(store)
 const selectedKey = ref('')
 const content = ref('')
 const customerReceipts = computed(() => Object.entries(deliveries.value).flatMap(([key, delivery]) => {
   try {
-    const [customerId, channel, contact] = JSON.parse(key)
+    const [customerId, channel, contact] = JSON.parse(delivery.target_key)
     return customerId === activeCustomerId.value ? [{ key, channel, contact, delivery, state: receiptState(delivery.receipt) }] : []
   } catch { return [] }
 }))
@@ -63,8 +63,7 @@ const targets = computed(() => {
   })
 })
 const target = computed(() => targets.value.find(item => item.key === selectedKey.value))
-const delivery = computed(() => deliveries.value[selectedKey.value])
-const locked = computed(() => !!delivery.value && (delivery.value.checking || !['accepted', 'delivered', 'failed', 'rejected', 'requires_desktop_execution'].includes(delivery.value.receipt.status)))
+const locked = computed(() => blockedTargets.value.has(selectedKey.value))
 
 watch([activeCustomerId, productReadAccountEpoch], () => { selectedKey.value = ''; content.value = '' }, { flush: 'sync' })
 watch(targets, (items) => {
@@ -77,8 +76,8 @@ async function send(): Promise<void> {
   if (!target.value || locked.value || !content.value.trim()) return
   const selected = target.value
   const text = content.value.trim()
-  await store.submitMessage({ customer_id: selected.customer_id, channel_type: selected.channel_type, contact_id: selected.contact_id, content: text })
-  if (selectedKey.value === selected.key && ['accepted', 'delivered'].includes(deliveries.value[selected.key]?.receipt.status)) {
+  const requestId = await store.submitMessage({ customer_id: selected.customer_id, channel_type: selected.channel_type, contact_id: selected.contact_id, content: text })
+  if (requestId && selectedKey.value === selected.key && content.value.trim() === text && ['accepted', 'delivered'].includes(deliveries.value[requestId]?.receipt.status)) {
     content.value = ''
     await store.loadMessages(selected.customer_id)
   }

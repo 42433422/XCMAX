@@ -35,7 +35,7 @@ describe('Kellai shared account and delivery state', () => {
     api.conversations.mockResolvedValue([])
     api.latestDraft.mockResolvedValue(null)
     api.followUpOverview.mockResolvedValue({ tasks: [], metrics: null })
-    api.sendMessage.mockResolvedValue({ request_id: 'accepted-request', status: 'accepted', persisted: true })
+    api.sendMessage.mockImplementation(async (input: { client_request_id: string }) => ({ request_id: input.client_request_id, status: 'accepted', persisted: true }))
     api.sendReceipt.mockImplementation(async (request_id: string) => ({ request_id, status: 'unknown' }))
   })
   afterEach(() => vi.restoreAllMocks())
@@ -93,31 +93,31 @@ describe('Kellai shared account and delivery state', () => {
     await store.refreshAll()
     await store.submitMessage(recipient)
     const id = api.sendMessage.mock.calls[0][0].client_request_id
-    expect(store.deliveries[key].receipt.status).toBe('unknown')
+    expect(store.deliveries[id].receipt.status).toBe('unknown')
     await store.submitMessage(recipient)
     expect(api.sendMessage).toHaveBeenCalledTimes(1)
-    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [key]: id })
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [id]: key })
     store.$dispose()
     sessionStorage.clear()
     setActivePinia(createPinia())
     api.status.mockResolvedValue({ ...connection, state: initialState })
     const recovered = useKellaiStore()
     await recovered.refreshAll()
-    expect(recovered.deliveries[key].request_id).toBe(id)
+    expect(recovered.deliveries[id].target_key).toBe(key)
     if (initialState === 'offline') {
       expect(api.sendReceipt).not.toHaveBeenCalled()
       api.status.mockResolvedValue(connection)
       await recovered.refreshAll()
     }
     expect(api.sendReceipt).toHaveBeenCalledExactlyOnceWith(id)
-    expect(recovered.deliveries[key].receipt.status).toBe('unknown')
+    expect(recovered.deliveries[id].receipt.status).toBe('unknown')
     await recovered.submitMessage(recipient)
     expect(api.sendMessage).toHaveBeenCalledTimes(1)
     api.sendReceipt.mockResolvedValue({ request_id: id, status: 'accepted', provider_message_id: 'provider-9', persisted: false })
-    await recovered.queryReceipt(key)
+    await recovered.queryReceipt(id)
     expect(api.sendReceipt).toHaveBeenCalledWith(id)
-    expect(recovered.deliveries[key].receipt.status).toBe('accepted')
-    expect(recovered.deliveries[key].receipt.persisted).toBe(false)
+    expect(recovered.deliveries[id].receipt.status).toBe('accepted')
+    expect(recovered.deliveries[id].receipt.persisted).toBe(false)
   })
 
   it('isolates persistent request IDs by owner and connection and respects revoked send access', async () => {
@@ -125,7 +125,7 @@ describe('Kellai shared account and delivery state', () => {
     const store = useKellaiStore()
     await store.refreshAll()
     await store.submitMessage(recipient)
-    const id = store.deliveries[key].request_id
+    const id = api.sendMessage.mock.calls[0][0].client_request_id
     setRuntimeTenantStorageScopeInput({ ...owner, localUserId: 2 })
     productReadAccountEpoch.value++
     await store.refreshAll()
@@ -134,7 +134,7 @@ describe('Kellai shared account and delivery state', () => {
     setRuntimeTenantStorageScopeInput(owner)
     productReadAccountEpoch.value++
     await store.refreshAll()
-    expect(store.deliveries[key].request_id).toBe(id)
+    expect(store.deliveries[id].target_key).toBe(key)
     expect(api.sendReceipt).toHaveBeenCalledExactlyOnceWith(id)
     api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, connection_id: 'conn-b' } })
     await store.refreshAll()
@@ -143,7 +143,7 @@ describe('Kellai shared account and delivery state', () => {
     api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, authorized_scopes: allScopes.slice(0, 2) } })
     await store.refreshAll()
     await store.submitMessage(recipient)
-    expect(store.deliveries[key].request_id).toBe(id)
+    expect(store.deliveries[id].target_key).toBe(key)
     expect(api.sendReceipt).not.toHaveBeenCalled()
     expect(api.sendMessage).toHaveBeenCalledTimes(1)
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -161,6 +161,120 @@ describe('Kellai shared account and delivery state', () => {
     expect(api.sendMessage).not.toHaveBeenCalled()
     expect(store.deliveries).toEqual({})
     expect(store.error).toContain('请求号')
+  })
+
+  it.each(['delivered', 'failed'])('keeps both accepted requests when the first later becomes %s, including after reopening', async providerState => {
+    const store = useKellaiStore()
+    await store.refreshAll()
+    const first = (await store.submitMessage(recipient))!
+    const late = deferred<{ request_id: string; status: string; provider_state: string }>()
+    api.sendReceipt.mockReturnValueOnce(late.promise)
+    const checking = store.queryReceipt(first)
+    const second = (await store.submitMessage({ ...recipient, content: '第二条已确认消息' }))!
+    expect(first).not.toBe(second)
+    expect(Object.keys(store.deliveries)).toEqual([first, second])
+    expect(api.sendMessage).toHaveBeenCalledTimes(2)
+    late.resolve({ request_id: first, status: 'accepted', provider_state: providerState })
+    await checking
+    expect(store.deliveries[first].receipt.provider_state).toBe(providerState)
+    expect(store.deliveries[second].receipt).toEqual({ request_id: second, status: 'accepted', persisted: true })
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [first]: key, [second]: key })
+    store.$dispose()
+    sessionStorage.clear()
+    setActivePinia(createPinia())
+    api.sendReceipt.mockClear()
+    api.sendReceipt.mockImplementation(async (id: string) => {
+      if (id === first) throw new Error('查询暂时中断')
+      return { request_id: id, status: 'accepted' }
+    })
+    const recovered = useKellaiStore()
+    await recovered.refreshAll()
+    expect(api.sendReceipt.mock.calls.map(call => call[0])).toEqual([first, second])
+    expect(recovered.deliveries[first].receipt.status).toBe('unknown')
+    expect(recovered.deliveries[second].receipt.status).toBe('accepted')
+    await recovered.submitMessage({ ...recipient, content: '尚不能提交的第三条' })
+    expect(api.sendMessage).toHaveBeenCalledTimes(2)
+    api.sendReceipt.mockResolvedValueOnce({ request_id: first, status: 'accepted', provider_state: providerState })
+    await recovered.queryReceipt(first)
+    expect(recovered.deliveries[first].receipt.provider_state).toBe(providerState)
+    expect(recovered.deliveries[second].receipt).toEqual({ request_id: second, status: 'accepted' })
+    expect(api.sendMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('preserves a legacy target-indexed request when adding the next accepted message', async () => {
+    const original = 'legacy-request-123'
+    localStorage.setItem(storageKey, JSON.stringify({ [key]: original }))
+    api.sendReceipt.mockResolvedValue({ request_id: original, status: 'accepted' })
+    const store = useKellaiStore()
+    await store.refreshAll()
+    expect(api.sendReceipt).toHaveBeenCalledExactlyOnceWith(original)
+    const next = (await store.submitMessage(recipient))!
+    expect(Object.keys(store.deliveries)).toEqual([original, next])
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [original]: key, [next]: key })
+  })
+
+  it('limits receipt recovery concurrency without posting any restored request', async () => {
+    const ids = Array.from({ length: 5 }, (_, index) => `restored-request-${index}`)
+    localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(ids.map(id => [id, key]))))
+    const batch = deferred<{ status: string }>()
+    api.sendReceipt.mockImplementation(async (id: string) => ({ request_id: id, ...await batch.promise }))
+    const store = useKellaiStore()
+    const restoring = store.refreshAll()
+    await flushPromises()
+    expect(api.sendReceipt).toHaveBeenCalledTimes(4)
+    expect(store.deliveries[ids[4]].receipt.status).toBe('unknown')
+    batch.resolve({ status: 'accepted' })
+    await restoring
+    expect(api.sendReceipt.mock.calls.map(call => call[0])).toEqual(ids)
+    expect(api.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not restore a confirmed unexecuted desktop request as an unknown ledger entry', async () => {
+    const native = { ...recipient, channel_type: 'wechat', contact_id: 'native-contact' }
+    api.channels.mockResolvedValue([channel, { ...channel, type: 'wechat' }])
+    const store = useKellaiStore()
+    await store.refreshAll()
+    const real = (await store.submitMessage(recipient))!
+    api.sendMessage.mockImplementationOnce(async (input: { client_request_id: string }) => ({
+      request_id: input.client_request_id, status: 'requires_desktop_execution', persisted: false,
+    }))
+    const unexecuted = (await store.submitMessage(native))!
+    expect(store.deliveries[unexecuted].receipt.status).toBe('requires_desktop_execution')
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [real]: key })
+    store.$dispose()
+    sessionStorage.clear()
+    setActivePinia(createPinia())
+    api.sendReceipt.mockResolvedValue({ request_id: real, status: 'accepted' })
+    const recovered = useKellaiStore()
+    await recovered.refreshAll()
+    expect(Object.keys(recovered.deliveries)).toEqual([real])
+    expect(api.sendReceipt).toHaveBeenCalledExactlyOnceWith(real)
+    expect(recovered.blockedTargets.has(deliveryTargetKey(native))).toBe(false)
+    expect(api.sendMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('retains a failed ledger receipt while allowing the next message to the same target', async () => {
+    const store = useKellaiStore()
+    await store.refreshAll()
+    api.sendMessage.mockImplementationOnce(async (input: { client_request_id: string }) => ({
+      request_id: input.client_request_id, status: 'failed', persisted: true, error: '渠道已明确拒绝',
+    }))
+    const failed = (await store.submitMessage(recipient))!
+    expect(store.deliveries[failed].receipt.status).toBe('failed')
+    expect(store.blockedTargets.has(key)).toBe(false)
+    const next = (await store.submitMessage({ ...recipient, content: '下一条已确认消息' }))!
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [failed]: key, [next]: key })
+    store.$dispose()
+    sessionStorage.clear()
+    setActivePinia(createPinia())
+    api.sendReceipt.mockImplementation(async (id: string) => ({ request_id: id, status: id === failed ? 'failed' : 'accepted' }))
+    const recovered = useKellaiStore()
+    await recovered.refreshAll()
+    expect(api.sendReceipt.mock.calls.map(call => call[0])).toEqual([failed, next])
+    expect(recovered.deliveries[failed].receipt.status).toBe('failed')
+    expect(recovered.deliveries[next].receipt.status).toBe('accepted')
+    expect(recovered.blockedTargets.has(key)).toBe(false)
+    expect(api.sendMessage).toHaveBeenCalledTimes(2)
   })
 
   it('clears channel capabilities on failure and blocks sends to disabled channels', async () => {

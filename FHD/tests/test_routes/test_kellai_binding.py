@@ -154,7 +154,8 @@ def test_owned_scope_checks_account_tenant_and_revocation(app, monkeypatch):
     )
 
 
-def test_send_preserves_idempotency_and_provider_acceptance_receipt(app, monkeypatch):
+@pytest.mark.parametrize("status", ["accepted", "failed", "unknown"])
+def test_send_preserves_idempotency_and_provider_receipt(app, monkeypatch, status):
     import io
 
     client = local_client(app)
@@ -163,7 +164,7 @@ def test_send_preserves_idempotency_and_provider_acceptance_receipt(app, monkeyp
     requests = []
     receipt = {
         "request_id": "message-request-12345",
-        "status": "accepted",
+        "status": status,
         "provider_message_id": "provider-9",
         "persisted": False,
         "replayed": False,
@@ -171,7 +172,7 @@ def test_send_preserves_idempotency_and_provider_acceptance_receipt(app, monkeyp
 
     def fake_open(request, *, timeout):
         requests.append(request)
-        return io.BytesIO(json.dumps({"success": True, "data": receipt}).encode())
+        return io.BytesIO(json.dumps({"success": status == "accepted", "data": receipt}).encode())
 
     monkeypatch.setattr(kellai_binding, "_open_kellai_request", fake_open)
     sent = client.post(
@@ -179,6 +180,7 @@ def test_send_preserves_idempotency_and_provider_acceptance_receipt(app, monkeyp
     )
     assert sent.status_code == 200
     assert sent.json()["data"] == receipt
+    assert sent.json()["success"] is (status == "accepted")
     assert json.loads(requests[0].data) == send_input()
     assert (
         requests[0].full_url == "http://127.0.0.1:8793/api/kellai/integrations/xcmax/messages/send"
@@ -223,6 +225,74 @@ def test_send_timeout_never_retries_and_validates_transport_input(app, monkeypat
             ).status_code
             == 422
         )
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("lookup", ["absent", "accepted", "unknown", "unavailable"])
+def test_desktop_only_reply_checks_original_ledger_before_reporting_unsent(app, monkeypatch, lookup):
+    import io
+    import urllib.error
+
+    client = local_client(app)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
+    approve_module(client)
+    requests = []
+    request_id = send_input()["client_request_id"]
+
+    def fake_open(request, *, timeout):
+        requests.append(request)
+        if request.method == "POST":
+            raise urllib.error.HTTPError(
+                request.full_url, 409, "Conflict", {},
+                io.BytesIO(b'{"detail":"requires_desktop_execution"}'),
+            )
+        if lookup == "absent":
+            raise urllib.error.HTTPError(
+                request.full_url, 404, "Not Found", {}, io.BytesIO(b'{"detail":"missing"}'),
+            )
+        if lookup == "unavailable":
+            raise TimeoutError("ledger unavailable")
+        return io.BytesIO(json.dumps({"success": True, "data": {
+            "request_id": request_id, "status": lookup, "persisted": False,
+        }}).encode())
+
+    monkeypatch.setattr(kellai_binding, "_open_kellai_request", fake_open)
+    response = client.post(
+        "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input(),
+    )
+    assert [request.method for request in requests] == ["POST", "GET"]
+    assert requests[1].full_url.endswith(f"messages/requests/{request_id}")
+    if lookup == "unavailable":
+        assert response.status_code == 503
+    elif lookup == "absent":
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "requires_desktop_execution"
+        assert response.json()["data"]["request_id"] == request_id
+    else:
+        assert response.status_code == 409
+        assert "原请求已有发送账本" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("success", [True, False])
+def test_message_receipt_must_match_original_request_even_with_success_flag(app, monkeypatch, success):
+    import io
+
+    client = local_client(app)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
+    approve_module(client)
+    calls = []
+
+    def wrong_receipt(request, *, timeout):
+        calls.append(request)
+        return io.BytesIO(json.dumps({"success": success, "data": {
+            "request_id": "another-request-123", "status": "accepted",
+        }}).encode())
+
+    monkeypatch.setattr(kellai_binding, "_open_kellai_request", wrong_receipt)
+    response = client.post(
+        "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input(),
+    )
+    assert response.status_code == 502
     assert len(calls) == 1
 
 

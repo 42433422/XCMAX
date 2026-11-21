@@ -21,6 +21,13 @@ def request_kellai(
     path: str, connection: dict[str, Any], body: dict[str, Any] | None = None, *, opener=None
 ) -> dict[str, Any]:
     """Never retry a write: lost responses must be reconciled by its request ID."""
+    receipt_id = (
+        str((body or {}).get("client_request_id") or "")
+        if path == "messages/send"
+        else path.removeprefix("messages/requests/")
+        if path.startswith("messages/requests/")
+        else ""
+    )
     request = urllib.request.Request(
         f"{_BASE}{path}",
         headers={
@@ -42,6 +49,28 @@ def request_kellai(
                 detail = detail.get("message") or detail.get("error")
         except (ValueError, OSError):
             detail = None
+        if path == "messages/send" and receipt_id and exc.code == 409 and detail == "requires_desktop_execution":
+            # A configuration change must not hide an earlier dispatch with
+            # this ID. Read the ledger before declaring this request unsent.
+            try:
+                request_kellai(f"messages/requests/{receipt_id}", connection, opener=opener)
+            except KellaiRequestError as lookup_error:
+                if lookup_error.status_code != 404:
+                    raise
+            else:
+                # This read does not prove the new POST has the original body.
+                # Keep it a conflict and let the caller explicitly query the ID.
+                raise KellaiRequestError("原请求已有发送账本，请查询原回执，不要变更内容复用请求号", 409) from exc
+            return {
+                "success": False,
+                "data": {
+                    "request_id": receipt_id,
+                    "status": "requires_desktop_execution",
+                    "success": False,
+                    "persisted": False,
+                    "error": "此渠道需要在客来来桌面端执行，当前请求未外发",
+                },
+            }
         raise KellaiRequestError(
             detail if isinstance(detail, str) else "客来来拒绝了请求，请检查授权和连接状态",
             exc.code if 400 <= exc.code < 600 else 502,
@@ -50,6 +79,21 @@ def request_kellai(
         raise KellaiRequestError(
             "客来来暂不可达；发送结果可能未知，请查询原请求回执后再操作"
         ) from exc
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if receipt_id:
+        # A valid failed/unknown receipt has success=false. Preserve its
+        # outcome instead of converting a known rejection into a transport error.
+        if (
+            isinstance(data, dict)
+            and data.get("request_id") == receipt_id
+            and isinstance(data.get("status"), str)
+            and data["status"] in {
+                "sending", "unknown", "accepted", "delivered", "failed", "cancelled",
+                "requires_desktop_execution", "rejected",
+            }
+        ):
+            return payload
+        raise KellaiRequestError("客来来回执与原请求不符，请查询原请求回执", 502)
     if not isinstance(payload, dict) or not payload.get("success") or "data" not in payload:
         raise KellaiRequestError("客来来响应无效，请查询原请求回执", 502)
     return payload

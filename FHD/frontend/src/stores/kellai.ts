@@ -13,7 +13,7 @@ export const KELLAI_READ_SCOPES = ['customer_profiles.read', 'customer_conversat
 export const deliveryTargetKey = (input: Pick<KellaiSendInput, 'customer_id' | 'channel_type' | 'contact_id'>): string =>
   JSON.stringify([input.customer_id, input.channel_type, input.contact_id])
 
-type Delivery = { request_id: string; receipt: KellaiSendReceipt; checking: boolean; error: string }
+type Delivery = { request_id: string; target_key: string; receipt: KellaiSendReceipt; checking: boolean; error: string }
 const unresolved = (status: string): boolean => !['accepted', 'delivered', 'failed', 'rejected', 'requires_desktop_execution'].includes(status)
 
 export const useKellaiStore = defineStore('kellai', () => {
@@ -29,6 +29,8 @@ export const useKellaiStore = defineStore('kellai', () => {
   const error = ref('')
   const channelError = ref('')
   const deliveries = ref<Record<string, Delivery>>({})
+  const blockedTargets = computed(() => new Set(Object.values(deliveries.value)
+    .filter(item => unresolved(item.receipt.status)).map(item => item.target_key)))
   let revision = 0
   let conversationRevision = 0
   let consumers = 0
@@ -54,10 +56,20 @@ export const useKellaiStore = defineStore('kellai', () => {
     try {
       if (!deliveryStorageKey()) return false
       localStorage.setItem(deliveryStorageKey(), JSON.stringify(Object.fromEntries(
-        Object.entries(deliveries.value).map(([key, item]) => [key, item.request_id]),
+        Object.values(deliveries.value).filter(item => item.receipt.status !== 'requires_desktop_execution')
+          .map(item => [item.request_id, item.target_key]),
       )))
       return true
     } catch { return false }
+  }
+
+  function applyReceipt(delivery: Delivery, receipt: KellaiSendReceipt): void {
+    delivery.receipt = receipt
+    delivery.error = ''
+    // This exact response confirms no ledger was created; retain only its in-memory explanation.
+    if (receipt.status === 'requires_desktop_execution' && !saveRequests()) {
+      delivery.error = '已确认未发送，但无法更新本机请求记录'
+    }
   }
 
   function restoreRequests(): boolean {
@@ -67,13 +79,22 @@ export const useKellaiStore = defineStore('kellai', () => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(storageKey) || '{}')
       if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('Invalid request record')
-      for (const [key, requestId] of Object.entries(saved)) {
-        const target: unknown = JSON.parse(key)
+      for (const [storedKey, storedValue] of Object.entries(saved)) {
+        // Earlier candidates stored one request per target; keep that ID on migration.
+        const legacy = storedKey.startsWith('[')
+        const requestId = legacy ? storedValue : storedKey
+        const targetKey = legacy ? storedKey : storedValue
+        if (typeof targetKey !== 'string') throw new Error('Invalid request record')
+        const target: unknown = JSON.parse(targetKey)
         if (!Array.isArray(target) || target.length !== 3 || !Number.isInteger(target[0])
           || typeof target[1] !== 'string' || typeof target[2] !== 'string'
           || typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{12,128}$/.test(requestId)) throw new Error('Invalid request record')
-        if (deliveries.value[key]?.request_id === requestId) continue
-        deliveries.value[key] = { request_id: requestId, receipt: { request_id: requestId, status: 'unknown' }, checking: false, error: '' }
+        const existing = deliveries.value[requestId]
+        if (existing) {
+          if (existing.target_key !== targetKey) throw new Error('Request target changed')
+          continue
+        }
+        deliveries.value[requestId] = { request_id: requestId, target_key: targetKey, receipt: { request_id: requestId, status: 'unknown' }, checking: false, error: '' }
       }
       return true
     } catch {
@@ -150,8 +171,11 @@ export const useKellaiStore = defineStore('kellai', () => {
         clearConversation()
         return
       }
-      await Promise.all(Object.keys(deliveries.value).filter(key => unresolved(deliveries.value[key].receipt.status)).map(queryReceipt))
-      if (!valid()) return
+      const pending = Object.keys(deliveries.value).filter(id => unresolved(deliveries.value[id].receipt.status))
+      for (let offset = 0; offset < pending.length; offset += 4) {
+        await Promise.all(pending.slice(offset, offset + 4).map(queryReceipt))
+        if (!valid()) return
+      }
       customersLoading.value = true
       const [statusResult, customerResult, channelResult] = await Promise.allSettled([
         api.dataStatus(), api.customers(50), scopes.value.includes('channels.read') ? api.channels() : Promise.resolve([]),
@@ -233,45 +257,44 @@ export const useKellaiStore = defineStore('kellai', () => {
     } finally { if (valid()) busy.value = false }
   }
 
-  async function submitMessage(input: Omit<KellaiSendInput, 'client_request_id'>): Promise<void> {
+  async function submitMessage(input: Omit<KellaiSendInput, 'client_request_id'>): Promise<string | undefined> {
     const key = deliveryTargetKey(input)
     if (!canSend.value) return
     if (!restoreRequests()) { error.value ||= '账号或连接尚未确认，暂不能发送'; return }
-    if (unresolved(deliveries.value[key]?.receipt.status || 'failed')) return
+    if (blockedTargets.value.has(key)) return
     const channel = channels.value.find(item => item.type === input.channel_type)
     if (!channel?.enabled || !channel.connected || !channel.capabilities.send) return
     const requestId = crypto.randomUUID()
     const valid = current()
     const connectionId = binding.value.connection?.connection_id
-    const applies = () => valid() && connectionId === binding.value.connection?.connection_id && deliveries.value[key]?.request_id === requestId
-    const previous = deliveries.value[key]
-    const delivery: Delivery = { request_id: requestId, receipt: { request_id: requestId, status: 'sending' }, checking: true, error: '' }
-    deliveries.value[key] = delivery
+    const applies = () => valid() && connectionId === binding.value.connection?.connection_id && !!deliveries.value[requestId]
+    const delivery: Delivery = { request_id: requestId, target_key: key, receipt: { request_id: requestId, status: 'sending' }, checking: true, error: '' }
+    deliveries.value[requestId] = delivery
     if (!saveRequests()) {
-      if (previous) deliveries.value[key] = previous
-      else delete deliveries.value[key]
+      delete deliveries.value[requestId]
       error.value = '无法保存发送请求号，消息未发送，请检查本机存储后重试'
       return
     }
     try {
       const receipt = await api.sendMessage({ ...input, client_request_id: requestId })
-      if (applies()) deliveries.value[key].receipt = receipt
+      if (applies()) applyReceipt(deliveries.value[requestId], receipt)
     } catch (cause) {
       if (applies()) {
-        deliveries.value[key].receipt = { request_id: requestId, status: 'unknown' }
-        deliveries.value[key].error = cause instanceof Error ? cause.message : '结果未知，请查询回执'
+        deliveries.value[requestId].receipt = { request_id: requestId, status: 'unknown' }
+        deliveries.value[requestId].error = cause instanceof Error ? cause.message : '结果未知，请查询回执'
       }
-    } finally { if (applies()) deliveries.value[key].checking = false }
+    } finally { if (applies()) deliveries.value[requestId].checking = false }
+    return applies() ? requestId : undefined
   }
 
-  async function queryReceipt(key: string): Promise<void> {
-    const delivery = deliveries.value[key]
+  async function queryReceipt(requestId: string): Promise<void> {
+    const delivery = deliveries.value[requestId]
     if (!delivery || delivery.checking || !canSend.value) return
     const valid = current()
     delivery.checking = true
     try {
       const receipt = await api.sendReceipt(delivery.request_id)
-      if (valid()) { delivery.receipt = receipt; delivery.error = '' }
+      if (valid()) applyReceipt(delivery, receipt)
     } catch (cause) {
       if (valid()) delivery.error = cause instanceof Error ? cause.message : '无法查询回执'
     } finally { if (valid()) delivery.checking = false }
@@ -290,7 +313,7 @@ export const useKellaiStore = defineStore('kellai', () => {
 
   return {
     binding, dataStatus, customers, messages, channels, activeCustomerId, busy, customersLoading,
-    messagesLoading, error, channelError, deliveries, scopes, canSend, activeCustomer, orderedMessages, statusLabel,
+    messagesLoading, error, channelError, deliveries, blockedTargets, scopes, canSend, activeCustomer, orderedMessages, statusLabel,
     ...copilot, refreshAll, loadMessages, selectCustomer, startBinding, handleOpenKellai,
     disconnect, submitMessage, queryReceipt, attach, detach, reset,
   }
