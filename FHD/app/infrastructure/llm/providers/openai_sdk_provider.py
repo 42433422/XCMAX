@@ -27,6 +27,27 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from ..reasoning_stream import publish_reasoning, reasoning_from_message
 
 
+def _bounded_sdk_timeout(timeout: Any, remaining: float) -> httpx.Timeout:
+    """Respect both the model client's phase timeouts and the invocation deadline.
+
+    SDK defaults may contain a nested httpx.Timeout phase; comparing that object
+    to seconds raises TypeError. Normalize it before applying the deadline cap.
+    Unknown timeout types remain invalid rather than bypassing the deadline.
+    """
+    configured = httpx.Timeout(timeout)
+    phases: dict[str, float] = {}
+    for name, value in configured.as_dict().items():
+        if isinstance(value, httpx.Timeout):
+            value = value.as_dict()[name]
+        if value is None:
+            phases[name] = remaining
+        elif isinstance(value, (int, float)) and not math.isnan(value) and value >= 0:
+            phases[name] = min(float(value), remaining)
+        else:
+            raise ValueError(f"invalid {name} timeout for SDK request")
+    return httpx.Timeout(**phases)
+
+
 async def _sdk_responses(client: Any, request: dict[str, Any], *, stream: bool):
     """Bridge sync SDK I/O without leaving an asyncio executor job on cancellation."""
     reads = StreamLifetime()
@@ -49,13 +70,7 @@ async def _sdk_responses(client: Any, request: dict[str, Any], *, stream: bool):
                         timeout = request.get("timeout", client.timeout)
                         if isinstance(timeout, NotGiven):
                             timeout = client.timeout
-                        configured = httpx.Timeout(timeout)
-                        request["timeout"] = httpx.Timeout(
-                            **{
-                                name: remaining if value is None else min(value, remaining)
-                                for name, value in configured.as_dict().items()
-                            }
-                        )
+                        request["timeout"] = _bounded_sdk_timeout(timeout, remaining)
                     check_invocation_deadline()
                     raw = stack.enter_context(
                         scoped.chat.completions.with_streaming_response.create(**request)
