@@ -117,12 +117,22 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
         if action in {"send", "receipt"}:
             data = result.get("data") or {}
             status = data.get("status")
+            provider_state = data.get("provider_state")
+            visible_status = (
+                provider_state
+                if status == "accepted" and provider_state in {"sent", "delivered", "read", "failed"}
+                else status
+            )
             return {
-                "success": status in {"accepted", "delivered"},
+                "success": status in {"accepted", "delivered"} and visible_status != "failed",
                 "data": data,
-                "message": "渠道已受理，尚无送达确认"
-                if status == "accepted"
-                else f"渠道状态：{status}",
+                "message": {
+                    "accepted": "渠道已受理，尚无送达确认",
+                    "sent": "渠道已发送，尚无送达确认",
+                    "delivered": "渠道确认送达",
+                    "read": "渠道确认已读",
+                    "failed": "渠道确认发送失败",
+                }.get(visible_status, f"渠道状态：{status}"),
                 "retryable": False,
                 **(
                     {"outcome": "unknown", "reconciliation_required": True}

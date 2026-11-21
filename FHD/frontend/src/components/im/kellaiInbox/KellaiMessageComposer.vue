@@ -18,11 +18,12 @@
       </div>
     </template>
     <div v-for="item in customerReceipts" :key="item.key" class="kellai-composer__receipt" role="status">
-      <strong>{{ receiptLabel(item.delivery.receipt.status) }}</strong>
+      <strong>{{ receiptLabel(item.state) }}</strong>
       <small>{{ item.channel }} · {{ item.contact }}</small>
-      <span v-if="item.delivery.receipt.status === 'accepted'">渠道已受理；尚无送达确认。</span>
-      <span v-if="item.delivery.receipt.status === 'unknown' || item.delivery.receipt.status === 'sending'">请查询原请求回执，暂不重复发送。</span>
-      <span v-if="item.delivery.receipt.status === 'requires_desktop_execution'">此渠道需要在客来来桌面端执行。</span>
+      <span v-if="item.state === 'accepted'">渠道已受理；尚无送达确认。</span>
+      <span v-if="item.state === 'sent'">平台已确认发出；尚无送达确认。</span>
+      <span v-if="item.state === 'unknown' || item.state === 'sending'">请查询原请求回执，暂不重复发送。</span>
+      <span v-if="item.state === 'requires_desktop_execution'">此渠道需要在客来来桌面端执行。</span>
       <span v-if="item.delivery.receipt.error || item.delivery.error">{{ item.delivery.receipt.error || item.delivery.error }}</span>
       <span v-if="item.delivery.receipt.persisted === false">发送记录尚未同步到会话，请保留此回执。</span>
       <small>请求 {{ item.delivery.request_id }}</small>
@@ -35,6 +36,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import type { KellaiSendReceipt } from '@/api/kellaiBinding'
 import { deliveryTargetKey, useKellaiStore } from '@/stores/kellai'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
@@ -45,7 +47,7 @@ const content = ref('')
 const customerReceipts = computed(() => Object.entries(deliveries.value).flatMap(([key, delivery]) => {
   try {
     const [customerId, channel, contact] = JSON.parse(key)
-    return customerId === activeCustomerId.value ? [{ key, channel, contact, delivery }] : []
+    return customerId === activeCustomerId.value ? [{ key, channel, contact, delivery, state: receiptState(delivery.receipt) }] : []
   } catch { return [] }
 }))
 const targets = computed(() => {
@@ -82,7 +84,14 @@ async function send(): Promise<void> {
   }
 }
 function receiptLabel(status: string): string {
-  return ({ sending: '发送处理中', accepted: '渠道已受理', delivered: '渠道确认送达', unknown: '发送结果未知', failed: '发送失败', rejected: '请求未获准', requires_desktop_execution: '需要桌面执行' } as Record<string, string>)[status] || `渠道状态：${status}`
+  return ({ sending: '发送处理中', accepted: '渠道已受理', sent: '渠道确认已发出', delivered: '渠道确认送达', read: '渠道确认已读', unknown: '发送结果未知', failed: '发送失败', rejected: '请求未获准', requires_desktop_execution: '需要桌面执行' } as Record<string, string>)[status] || `渠道状态：${status}`
+}
+function receiptState(receipt: KellaiSendReceipt): string {
+  // Ledger acceptance and verified provider progress are separate contracts.
+  // An uncertain ledger entry cannot be promoted by an unbound provider field.
+  return receipt.status === 'accepted' && ['sent', 'delivered', 'read', 'failed'].includes(receipt.provider_state || '')
+    ? receipt.provider_state!
+    : receipt.status
 }
 </script>
 

@@ -65,6 +65,7 @@ export type KellaiSendInput = {
 export type KellaiSendReceipt = {
   request_id: string
   status: 'sending' | 'accepted' | 'delivered' | 'failed' | 'unknown' | 'requires_desktop_execution' | string
+  provider_state?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed' | 'unknown' | string
   message_id?: string | null
   provider_message_id?: string | null
   persisted?: boolean

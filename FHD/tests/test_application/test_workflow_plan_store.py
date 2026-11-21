@@ -135,7 +135,7 @@ class TestWorkflowPlanStore:
     ):
         from unittest.mock import Mock, patch
 
-        from app.application.agent_orchestrator.run_models import AgentRun
+        from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
         from app.application.ai_chat_app_service import AIChatApplicationService
 
         store = WorkflowPlanStore(session_factory=session_factory)
@@ -157,15 +157,6 @@ class TestWorkflowPlanStore:
             assert svc._pending_workflows["u1"]["agent_run_id"] == "run-B"
             orchestrator = Mock()
             plan_a = plan_from_dict({**plan_to_dict(_plan()), "plan_id": "plan-A"})
-            orchestrator.get_run.return_value = AgentRun(
-                user_id="u1",
-                message="long task",
-                run_id="run-A",
-                status="waiting_user",
-                plan_id="plan-A",
-                intent="long_task",
-                metadata={"plan": plan_to_dict(plan_a)},
-            )
             plan_b = plan_from_dict({**plan_to_dict(_plan()), "plan_id": "plan-B"})
             orchestrator.get_run.side_effect = lambda run_id: AgentRun(
                 user_id="u1",
@@ -175,6 +166,16 @@ class TestWorkflowPlanStore:
                 plan_id="plan-B" if run_id == "run-B" else "plan-A",
                 intent="long_task",
                 metadata={"plan": plan_to_dict(plan_b if run_id == "run-B" else plan_a)},
+                steps=[
+                    AgentStep(
+                        node_id=node.node_id,
+                        tool_id=node.tool_id,
+                        action=node.action,
+                        depends_on=node.depends_on,
+                        status="waiting_user" if node.node_id == "n2" else "completed",
+                    )
+                    for node in plan_a.nodes
+                ],
             )
             orchestrator.continue_run.return_value = AgentRun(
                 user_id="u1",

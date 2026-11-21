@@ -179,3 +179,35 @@ def test_accepted_is_not_delivered_and_unknown_keeps_reconciliation_id(monkeypat
     unknown = kellai.execute_kellai("send", PARAMS, authorized)
     assert unknown["outcome"] == "unknown" and unknown["retryable"] is False
     assert unknown["data"]["request_id"] == calls[0][1]["client_request_id"]
+
+
+@pytest.mark.parametrize(
+    ("status", "provider_state", "success", "message"),
+    [
+        ("accepted", "sent", True, "渠道已发送，尚无送达确认"),
+        ("accepted", "delivered", True, "渠道确认送达"),
+        ("accepted", "read", True, "渠道确认已读"),
+        ("accepted", "failed", False, "渠道确认发送失败"),
+        ("accepted", "unrecognized", True, "渠道已受理，尚无送达确认"),
+        ("unknown", "delivered", False, "渠道状态：unknown"),
+    ],
+)
+def test_receipt_reports_provider_outcome_without_rewriting_dispatch_state(
+    monkeypatch, authorized, status, provider_state, success, message
+):
+    request_id = "agent_stable_request_123"
+    data = {"request_id": request_id, "status": status, "provider_state": provider_state}
+    calls = []
+
+    def query(path, connection, body):
+        calls.append((path, body))
+        return {"success": True, "data": data}
+
+    monkeypatch.setattr(kellai, "request_kellai", query)
+    result = kellai.execute_kellai("receipt", {"client_request_id": request_id}, authorized)
+    assert result["success"] is success
+    assert result["message"] == message
+    assert result["data"] == data and result["retryable"] is False
+    assert calls == [(f"messages/requests/{request_id}", None)]
+    if status == "unknown":
+        assert result["outcome"] == "unknown" and result["reconciliation_required"] is True

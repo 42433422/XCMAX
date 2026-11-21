@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import KellaiCustomerInbox from './KellaiCustomerInbox.vue'
+import KellaiMessageComposer from './kellaiInbox/KellaiMessageComposer.vue'
+import { deliveryTargetKey, useKellaiStore } from '@/stores/kellai'
 
 const kellaiMocks = vi.hoisted(() => ({
   status: vi.fn(),
@@ -144,6 +146,38 @@ describe('KellaiCustomerInbox', () => {
 
     const messageText = wrapper.find('.kellai-inbox__messages').text()
     expect(messageText.indexOf('请问什么时候可以交付？')).toBeLessThan(messageText.indexOf('我来确认交付时间。'))
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['accepted', undefined, '渠道已受理', true],
+    ['accepted', 'accepted', '渠道已受理', true],
+    ['accepted', 'sent', '渠道确认已发出', true],
+    ['accepted', 'delivered', '渠道确认送达', false],
+    ['accepted', 'read', '渠道确认已读', false],
+    ['accepted', 'failed', '发送失败', false],
+    ['unknown', 'delivered', '发送结果未知', false],
+    ['sending', 'read', '发送处理中', false],
+    ['failed', 'delivered', '发送失败', false],
+  ])('renders ledger %s with provider %s without inventing delivery confirmation', async (status, providerState, label, awaitingDelivery) => {
+    const store = useKellaiStore()
+    store.activeCustomerId = 7
+    const key = deliveryTargetKey({ customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9' })
+    store.deliveries[key] = {
+      request_id: 'request-original-123', checking: false, error: '',
+      receipt: { request_id: 'request-original-123', status: status as string, provider_state: providerState as string | undefined },
+    }
+    const wrapper = mount(KellaiMessageComposer)
+    await flushPromises()
+    const receipt = wrapper.get('.kellai-composer__receipt')
+    expect(receipt.get('strong').text()).toBe(label)
+    expect(receipt.text().includes('尚无送达确认')).toBe(awaitingDelivery)
+    if (status === 'unknown' || status === 'sending') {
+      expect(receipt.text()).toContain('请查询原请求回执，暂不重复发送')
+      expect(receipt.text()).not.toContain('渠道确认送达')
+      expect(receipt.text()).not.toContain('渠道确认已读')
+    }
+    expect(store.deliveries[key].receipt.status).toBe(status)
     wrapper.unmount()
   })
 

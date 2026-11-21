@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { deliveryTargetKey, useKellaiStore } from './kellai'
 
 const api = vi.hoisted(() => ({
@@ -15,6 +16,8 @@ const recipient = { customer_id: 7, channel_type: 'chatwoot', contact_id: 'conve
 const key = deliveryTargetKey(recipient)
 const allScopes = ['customer_profiles.read', 'customer_conversations.read', 'channels.read', 'messages.send']
 const connection = { state: 'connected', connection: { connection_id: 'conn-a', authorized_scopes: allScopes } }
+const owner = { tenantId: 3, localUserId: 1, accountKind: 'enterprise' }
+const storageKey = 'kellai-requests:[3,null,1,"enterprise","conn-a"]'
 const channel = { id: 1, type: 'chatwoot', name: 'Chatwoot', connected: true, enabled: true, connection_id: 'team:chatwoot:primary', capabilities: { send: true, receive: true, contacts: true, sync: true } }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(next => { resolve = next }); return { promise, resolve } }
 
@@ -22,7 +25,9 @@ describe('Kellai shared account and delivery state', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    localStorage.clear()
     sessionStorage.clear()
+    setRuntimeTenantStorageScopeInput(owner)
     api.status.mockResolvedValue(connection)
     api.dataStatus.mockResolvedValue({ customer_count: 1, unread_message_count: 0 })
     api.customers.mockResolvedValue([customer])
@@ -31,7 +36,9 @@ describe('Kellai shared account and delivery state', () => {
     api.latestDraft.mockResolvedValue(null)
     api.followUpOverview.mockResolvedValue({ tasks: [], metrics: null })
     api.sendMessage.mockResolvedValue({ request_id: 'accepted-request', status: 'accepted', persisted: true })
+    api.sendReceipt.mockImplementation(async (request_id: string) => ({ request_id, status: 'unknown' }))
   })
+  afterEach(() => vi.restoreAllMocks())
 
   it('shares one binding and never reads channel capability under the old read-only grant', async () => {
     api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, authorized_scopes: allScopes.slice(0, 2) } })
@@ -80,7 +87,7 @@ describe('Kellai shared account and delivery state', () => {
     expect(store.copilotDraft).toBeNull()
   })
 
-  it('retains the original request after a lost response and recovers receipts after remount', async () => {
+  it.each(['connected', 'offline'])('recovers the original unknown request after closing a window, initially %s', async initialState => {
     api.sendMessage.mockRejectedValueOnce(new Error('连接中断'))
     const store = useKellaiStore()
     await store.refreshAll()
@@ -89,11 +96,21 @@ describe('Kellai shared account and delivery state', () => {
     expect(store.deliveries[key].receipt.status).toBe('unknown')
     await store.submitMessage(recipient)
     expect(api.sendMessage).toHaveBeenCalledTimes(1)
-    expect(sessionStorage.getItem('kellai-requests:conn-a')).not.toContain(recipient.content)
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [key]: id })
+    store.$dispose()
+    sessionStorage.clear()
     setActivePinia(createPinia())
+    api.status.mockResolvedValue({ ...connection, state: initialState })
     const recovered = useKellaiStore()
     await recovered.refreshAll()
     expect(recovered.deliveries[key].request_id).toBe(id)
+    if (initialState === 'offline') {
+      expect(api.sendReceipt).not.toHaveBeenCalled()
+      api.status.mockResolvedValue(connection)
+      await recovered.refreshAll()
+    }
+    expect(api.sendReceipt).toHaveBeenCalledExactlyOnceWith(id)
+    expect(recovered.deliveries[key].receipt.status).toBe('unknown')
     await recovered.submitMessage(recipient)
     expect(api.sendMessage).toHaveBeenCalledTimes(1)
     api.sendReceipt.mockResolvedValue({ request_id: id, status: 'accepted', provider_message_id: 'provider-9', persisted: false })
@@ -101,6 +118,49 @@ describe('Kellai shared account and delivery state', () => {
     expect(api.sendReceipt).toHaveBeenCalledWith(id)
     expect(recovered.deliveries[key].receipt.status).toBe('accepted')
     expect(recovered.deliveries[key].receipt.persisted).toBe(false)
+  })
+
+  it('isolates persistent request IDs by owner and connection and respects revoked send access', async () => {
+    api.sendMessage.mockRejectedValueOnce(new Error('连接中断'))
+    const store = useKellaiStore()
+    await store.refreshAll()
+    await store.submitMessage(recipient)
+    const id = store.deliveries[key].request_id
+    setRuntimeTenantStorageScopeInput({ ...owner, localUserId: 2 })
+    productReadAccountEpoch.value++
+    await store.refreshAll()
+    expect(store.deliveries).toEqual({})
+    expect(api.sendReceipt).not.toHaveBeenCalled()
+    setRuntimeTenantStorageScopeInput(owner)
+    productReadAccountEpoch.value++
+    await store.refreshAll()
+    expect(store.deliveries[key].request_id).toBe(id)
+    expect(api.sendReceipt).toHaveBeenCalledExactlyOnceWith(id)
+    api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, connection_id: 'conn-b' } })
+    await store.refreshAll()
+    expect(store.deliveries).toEqual({})
+    api.sendReceipt.mockClear()
+    api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, authorized_scopes: allScopes.slice(0, 2) } })
+    await store.refreshAll()
+    await store.submitMessage(recipient)
+    expect(store.deliveries[key].request_id).toBe(id)
+    expect(api.sendReceipt).not.toHaveBeenCalled()
+    expect(api.sendMessage).toHaveBeenCalledTimes(1)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    api.disconnect.mockResolvedValue(undefined)
+    await store.disconnect()
+    expect(localStorage.getItem(storageKey)).toBeNull()
+    expect(store.deliveries).toEqual({})
+  })
+
+  it.each(['getItem', 'setItem'] as const)('does not post when persistent storage %s fails', async operation => {
+    const store = useKellaiStore()
+    await store.refreshAll()
+    vi.spyOn(Storage.prototype, operation).mockImplementation(() => { throw new Error('storage unavailable') })
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).not.toHaveBeenCalled()
+    expect(store.deliveries).toEqual({})
+    expect(store.error).toContain('请求号')
   })
 
   it('clears channel capabilities on failure and blocks sends to disabled channels', async () => {

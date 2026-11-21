@@ -7,6 +7,7 @@ import api, {
 } from '@/api/kellaiBinding'
 import { useKellaiCopilot } from '@/components/im/kellaiInbox/useKellaiCopilot'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 export const KELLAI_READ_SCOPES = ['customer_profiles.read', 'customer_conversations.read']
 export const deliveryTargetKey = (input: Pick<KellaiSendInput, 'customer_id' | 'channel_type' | 'contact_id'>): string =>
@@ -31,6 +32,7 @@ export const useKellaiStore = defineStore('kellai', () => {
   let revision = 0
   let conversationRevision = 0
   let consumers = 0
+  let deliveryScope = ''
   let timer: ReturnType<typeof setInterval> | undefined
   const copilot = useKellaiCopilot({ activeCustomerId, messages, error })
   const scopes = computed(() => binding.value.connection?.authorized_scopes || [])
@@ -39,26 +41,45 @@ export const useKellaiStore = defineStore('kellai', () => {
   const orderedMessages = computed(() => [...messages.value].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))))
   const statusLabel = computed(() => ({ connected: '已连接', pending: '等待授权', offline: '客来来未运行', not_connected: '未连接' })[binding.value.state])
   const current = () => { const saved = revision; return () => saved === revision }
-  const deliveryStorageKey = () => `kellai-requests:${binding.value.connection?.connection_id || ''}`
-
-  function saveRequests(): void {
-    // Store only receipt identifiers, never message content or access tokens.
-    try {
-      sessionStorage.setItem(deliveryStorageKey(), JSON.stringify(Object.fromEntries(
-        Object.entries(deliveries.value).map(([key, item]) => [key, item.request_id]),
-      )))
-    } catch { /* In-memory receipt recovery remains available when storage is disabled. */ }
+  const deliveryStorageKey = (): string => {
+    const identity = getRuntimeTenantStorageScopeInput()
+    const connectionId = binding.value.connection?.connection_id
+    if (!connectionId || !identity || (!identity.localUserId && !identity.marketUserId)) return ''
+    return `kellai-requests:${JSON.stringify([identity.tenantId ?? null, identity.marketUserId ?? null,
+      identity.localUserId ?? null, identity.accountKind ?? '', connectionId])}`
   }
 
-  function restoreRequests(): void {
+  function saveRequests(): boolean {
+    // Store only receipt identifiers, never message content or access tokens.
     try {
-      const saved: unknown = JSON.parse(sessionStorage.getItem(deliveryStorageKey()) || '{}')
-      if (!saved || typeof saved !== 'object') return
+      if (!deliveryStorageKey()) return false
+      localStorage.setItem(deliveryStorageKey(), JSON.stringify(Object.fromEntries(
+        Object.entries(deliveries.value).map(([key, item]) => [key, item.request_id]),
+      )))
+      return true
+    } catch { return false }
+  }
+
+  function restoreRequests(): boolean {
+    const storageKey = deliveryStorageKey()
+    if (!storageKey) return false
+    if (deliveryScope !== storageKey) { deliveries.value = {}; deliveryScope = storageKey }
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(storageKey) || '{}')
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('Invalid request record')
       for (const [key, requestId] of Object.entries(saved)) {
-        if (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{12,128}$/.test(requestId)) continue
+        const target: unknown = JSON.parse(key)
+        if (!Array.isArray(target) || target.length !== 3 || !Number.isInteger(target[0])
+          || typeof target[1] !== 'string' || typeof target[2] !== 'string'
+          || typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{12,128}$/.test(requestId)) throw new Error('Invalid request record')
+        if (deliveries.value[key]?.request_id === requestId) continue
         deliveries.value[key] = { request_id: requestId, receipt: { request_id: requestId, status: 'unknown' }, checking: false, error: '' }
       }
-    } catch { /* Untrusted storage is not a source of send authorization. */ }
+      return true
+    } catch {
+      error.value = '无法恢复原发送请求号，暂不能发送，请恢复本机存储后重试'
+      return false
+    }
   }
 
   function clearConversation(): void {
@@ -76,6 +97,7 @@ export const useKellaiStore = defineStore('kellai', () => {
     channels.value = []
     activeCustomerId.value = null
     deliveries.value = {}
+    deliveryScope = ''
     busy.value = false
     customersLoading.value = false
     error.value = ''
@@ -117,8 +139,9 @@ export const useKellaiStore = defineStore('kellai', () => {
       if (changed) {
         clearConversation()
         deliveries.value = {}
-        if (nextBinding.state === 'connected') restoreRequests()
       }
+      // Recover identifiers even when the first status after a restart is offline.
+      if (nextBinding.connection?.connection_id) restoreRequests()
       if (nextBinding.state !== 'connected') {
         dataStatus.value = null
         customers.value = []
@@ -127,6 +150,8 @@ export const useKellaiStore = defineStore('kellai', () => {
         clearConversation()
         return
       }
+      await Promise.all(Object.keys(deliveries.value).filter(key => unresolved(deliveries.value[key].receipt.status)).map(queryReceipt))
+      if (!valid()) return
       customersLoading.value = true
       const [statusResult, customerResult, channelResult] = await Promise.allSettled([
         api.dataStatus(), api.customers(50), scopes.value.includes('channels.read') ? api.channels() : Promise.resolve([]),
@@ -200,7 +225,7 @@ export const useKellaiStore = defineStore('kellai', () => {
     try {
       await api.disconnect()
       if (valid()) {
-        try { sessionStorage.removeItem(deliveryStorageKey()) } catch { /* Storage may be disabled. */ }
+        try { if (deliveryStorageKey()) localStorage.removeItem(deliveryStorageKey()) } catch { /* Revoked bindings cannot send. */ }
         reset()
       }
     } catch (cause) {
@@ -210,16 +235,24 @@ export const useKellaiStore = defineStore('kellai', () => {
 
   async function submitMessage(input: Omit<KellaiSendInput, 'client_request_id'>): Promise<void> {
     const key = deliveryTargetKey(input)
-    if (!canSend.value || unresolved(deliveries.value[key]?.receipt.status || 'failed')) return
+    if (!canSend.value) return
+    if (!restoreRequests()) { error.value ||= '账号或连接尚未确认，暂不能发送'; return }
+    if (unresolved(deliveries.value[key]?.receipt.status || 'failed')) return
     const channel = channels.value.find(item => item.type === input.channel_type)
     if (!channel?.enabled || !channel.connected || !channel.capabilities.send) return
     const requestId = crypto.randomUUID()
     const valid = current()
     const connectionId = binding.value.connection?.connection_id
     const applies = () => valid() && connectionId === binding.value.connection?.connection_id && deliveries.value[key]?.request_id === requestId
+    const previous = deliveries.value[key]
     const delivery: Delivery = { request_id: requestId, receipt: { request_id: requestId, status: 'sending' }, checking: true, error: '' }
     deliveries.value[key] = delivery
-    saveRequests()
+    if (!saveRequests()) {
+      if (previous) deliveries.value[key] = previous
+      else delete deliveries.value[key]
+      error.value = '无法保存发送请求号，消息未发送，请检查本机存储后重试'
+      return
+    }
     try {
       const receipt = await api.sendMessage({ ...input, client_request_id: requestId })
       if (applies()) deliveries.value[key].receipt = receipt
