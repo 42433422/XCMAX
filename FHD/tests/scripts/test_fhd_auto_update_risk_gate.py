@@ -3,9 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = FHD_ROOT / "scripts" / "deploy" / "fhd-auto-update.sh"
@@ -17,7 +20,9 @@ def _runtime(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     (deploy_root / ".venv" / "bin").mkdir(parents=True)
     (deploy_root / "app").symlink_to(FHD_ROOT / "app", target_is_directory=True)
     (deploy_root / "config").symlink_to(FHD_ROOT / "config", target_is_directory=True)
-    (deploy_root / "resources").symlink_to(FHD_ROOT / "resources", target_is_directory=True)
+    (deploy_root / "resources").symlink_to(
+        FHD_ROOT / "resources", target_is_directory=True
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     flock = bin_dir / "flock"
@@ -33,7 +38,9 @@ def _runtime(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
         "FHD_AUTO_UPDATE_LOCK": str(tmp_path / "update.lock"),
         "FHD_AUTONOMY_PYTHON": sys.executable,
         "XCAGI_AUTONOMY_DATA_DIR": str(tmp_path / "autonomy"),
-        "XCAGI_AUTONOMY_AUDIT_LOG_PATH": str(tmp_path / "autonomy" / "autonomy-audit-log.jsonl"),
+        "XCAGI_AUTONOMY_AUDIT_LOG_PATH": str(
+            tmp_path / "autonomy" / "autonomy-audit-log.jsonl"
+        ),
     }
     return deploy_root, manifest, env
 
@@ -90,11 +97,52 @@ def _manifest(*, approved: bool) -> dict:
 def test_stable_auto_update_requires_human_approval(tmp_path: Path) -> None:
     _, manifest, env = _runtime(tmp_path)
     manifest.write_text(json.dumps(_manifest(approved=False)), encoding="utf-8")
-    result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
+    result = subprocess.run(
+        ["bash", str(SCRIPT)], env=env, text=True, capture_output=True
+    )
     assert result.returncode == 77
     log = (tmp_path / "deploy.log").read_text(encoding="utf-8")
     assert "autonomy_guard 拒绝稳定通道发布" in log
     assert "artifact 不存在" not in log
+
+
+@pytest.mark.parametrize("changed_field", ["git_sha", "sha256"])
+def test_queued_staging_apply_rejects_changed_candidate_before_mutation(
+    tmp_path: Path, changed_field: str
+) -> None:
+    deploy_root, manifest, env = _runtime(tmp_path)
+    original = {
+        **_manifest(approved=False),
+        "channel": "staging",
+        "git_sha": "a" * 40,
+        "sha256": "b" * 64,
+    }
+    manifest.write_text(json.dumps(original), encoding="utf-8")
+    changed = {
+        **original,
+        changed_field: "c" * (40 if changed_field == "git_sha" else 64),
+    }
+    replacement = tmp_path / "queued-candidate.json"
+    replacement.write_text(json.dumps(changed), encoding="utf-8")
+    # Candidate publication advances while this updater waits for its deployment lock.
+    (tmp_path / "bin" / "flock").write_text(
+        f"#!/bin/sh\ncp {shlex.quote(str(replacement))} {shlex.quote(str(manifest))}\n",
+        encoding="utf-8",
+    )
+    identity = deploy_root / ".deploy-git-sha"
+    identity.write_text("previous-release", encoding="utf-8")
+    env.update(
+        FHD_EXPECTED_RELEASE_SHA=original["git_sha"],
+        FHD_EXPECTED_ARTIFACT_SHA256=original["sha256"],
+    )
+    result = subprocess.run(
+        ["bash", str(SCRIPT)], env=env, text=True, capture_output=True
+    )
+    assert result.returncode == 78
+    assert "bound deployment target" in (tmp_path / "deploy.log").read_text(
+        encoding="utf-8"
+    )
+    assert identity.read_text(encoding="utf-8") == "previous-release"
 
 
 def test_auto_update_trusts_only_ledger_approval_not_env_or_manifest() -> None:
@@ -133,7 +181,9 @@ def test_stable_auto_update_accepts_exact_ledger_approval(tmp_path: Path) -> Non
     )
     assert approval.returncode == 0, approval.stderr
 
-    result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
+    result = subprocess.run(
+        ["bash", str(SCRIPT)], env=env, text=True, capture_output=True
+    )
 
     assert result.returncode == 1
     log = (tmp_path / "deploy.log").read_text(encoding="utf-8")
@@ -179,13 +229,17 @@ def test_auto_update_prefers_bundled_dr_sync_for_immutable_release(
     )
 
     assert result.returncode == 0, result.stderr
-    assert marker.read_text(encoding="utf-8").strip() == (f"--component fhd --sha {git_sha}")
+    assert marker.read_text(encoding="utf-8").strip() == (
+        f"--component fhd --sha {git_sha}"
+    )
 
 
 def test_stable_auto_update_rejects_untrusted_manifest_approval(tmp_path: Path) -> None:
     _, manifest, env = _runtime(tmp_path)
     manifest.write_text(json.dumps(_manifest(approved=True)), encoding="utf-8")
-    result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
+    result = subprocess.run(
+        ["bash", str(SCRIPT)], env=env, text=True, capture_output=True
+    )
     assert result.returncode == 77
     log = (tmp_path / "deploy.log").read_text(encoding="utf-8")
     assert "autonomy_guard 拒绝稳定通道发布" in log

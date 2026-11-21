@@ -21,13 +21,19 @@ from modstore_server.models import (
     RetortEvolutionRun,
     get_session_factory,
 )
+from modstore_server.para_execution_isolation import (
+    HEADER_ONLY_PLATFORM_PROFILE,
+    feedback_allocation_isolated,
+    feedback_execution_kind,
+    feedback_executor_configured,
+)
 from modstore_server.para_github_runner import (
     WORKFLOW,
     api_base,
     auth_headers,
     device_matches,
 )
-from modstore_server.retort_customer_feedback import CREDENTIAL_BLOCK, REPAIR_KIND
+from modstore_server.retort_customer_feedback import CREDENTIAL_BLOCK
 
 
 def _load(request_id):
@@ -56,7 +62,7 @@ def begin_dispatch(request_id, state):
             optimization=state["optimization"],
             authorization=state["approval"],
         )
-    if "customer_feedback" in effects:
+    if feedback_execution_kind(effects) and not feedback_executor_configured():
         return {"status": "blocked", "reason": CREDENTIAL_BLOCK}
     _ensure_issue(request_id, protocol, effects)
     return {"request_id": request_id, "executor": "github_para", "status": "requested"}
@@ -110,6 +116,13 @@ def _ensure_runner(request_id, protocol, effects):
             from modstore_server.para_model_admission import platform_model_admission
 
             allocation = platform_model_admission("benchmark")
+            if feedback_execution_kind(effects):
+                if not feedback_executor_configured() or not allocation:
+                    return {
+                        **effects,
+                        "model_allocation": {"status": "waiting", "reason": CREDENTIAL_BLOCK},
+                    }
+                allocation = {**allocation, "execution_isolation": HEADER_ONLY_PLATFORM_PROFILE}
             if allocation and allocation["status"] != "admitted":
                 return {**effects, "model_allocation": allocation}
             with get_session_factory()() as db:
@@ -149,11 +162,15 @@ def _ensure_runner(request_id, protocol, effects):
 
 def collect_execution(request_id):
     protocol, effects = _load(request_id)
-    customer_feedback = "customer_feedback" in effects
+    customer_feedback = feedback_execution_kind(effects)
     blocked = {"status": "blocked", "reason": CREDENTIAL_BLOCK}
     # Retain historical readback, but never create an issue, runner, or model task
     # from a customer-controlled reproduction while credentials remain exportable.
-    if customer_feedback and (not effects.get("issue_number") or not effects.get("run_id")):
+    if (
+        customer_feedback
+        and not feedback_executor_configured()
+        and (not effects.get("issue_number") or not effects.get("run_id"))
+    ):
         return blocked
     effects = _ensure_issue(request_id, protocol, effects)
     if not effects.get("issue_number"):
@@ -278,7 +295,11 @@ def authorized_incident(db, payload, event_id, *, read_only=False):
         json_loads(row.protocol_json, {}),
         json_loads(row.effects_json, {}),
     )
-    if "customer_feedback" in effects and not read_only:
+    if (
+        feedback_execution_kind(effects)
+        and not read_only
+        and not feedback_allocation_isolated(effects.get("model_allocation"))
+    ):
         return False
     return bool(
         effects.get("authorization", {}).get("approved") is True
@@ -317,7 +338,7 @@ def worker_status(request_id):
     if target and not re.fullmatch(r"[0-9a-f]{40}", target):
         raise ValueError("员工代码回执缺少确切提交")
     return {
-        **({"kind": REPAIR_KIND} if "customer_feedback" in effects else {}),
+        **({"kind": feedback_execution_kind(effects)} if feedback_execution_kind(effects) else {}),
         "request_id": request_id,
         "run_id": effects.get("run_id"),
         "repository": protocol["repository"],

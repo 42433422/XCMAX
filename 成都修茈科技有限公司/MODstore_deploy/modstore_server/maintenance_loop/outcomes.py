@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import modstore_server.maintenance_loop.memory as memory_domain
 from modstore_server import (
     self_evolution_knowledge,
     self_maintenance_para_merge_remediation,
@@ -13,9 +14,7 @@ from modstore_server import (
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
-from . import config
-from . import memory as memory_domain
-from . import para_client, store
+from . import config, deployment, para_client, store
 
 
 def _close_items_resolved_by_final(
@@ -77,19 +76,45 @@ def _reconcile_requested_merge_feedback(
     accumulating an ever-larger inherited diff.
     """
     base = (api_base or os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
-    recent_runs = memory.get("recent_runs")
+    recent_runs = memory.get("recent_runs") or []
     open_items = memory.get("open_items")
-    if not base or not isinstance(recent_runs, list):
+    if not base:
         return {"changed": False, "merged": 0, "remediation_added": 0}
+    # The recent list is a bounded UI projection. Durable terminal records must
+    # fence stale projections after a crash, and remain available after eviction.
+    pending_runs = {
+        str(run.get("run_id") or run.get("para_task_id")): run
+        for run in store.merge_feedback_runs()
+    }
+    changed = False
+    for run in recent_runs if isinstance(recent_runs, list) else []:
+        if isinstance(run, dict):
+            key = str(run.get("run_id") or run.get("para_task_id"))
+            saved = pending_runs.get(key)
+            if saved and saved.get("status") in {"completed_merged", "completed_merge_failed"}:
+                changed = changed or any(
+                    run.get(k) != saved.get(k)
+                    for k in ("status", "merge_reconciliation", "deployment_receipt")
+                )
+                run.update(saved)
+            elif (
+                saved
+                and run.get("status") in {"completed_merged", "completed_merge_failed"}
+                and run.get("merge_reconciliation")
+            ):
+                # Memory was persisted before an interrupted terminal ledger append.
+                store._append_ledger({**run, "event": "merge_feedback_reconciled"})
+            elif saved:
+                run.update(saved)
+            pending_runs[key] = run
     if not isinstance(open_items, list):
         open_items = []
         memory["open_items"] = open_items
     fetcher = task_fetcher or para_client._fetch_para_task_state
-    changed = False
     merged = 0
     remediation_added = 0
     checked_task_ids: set[str] = set()
-    for run in reversed(recent_runs):
+    for run in reversed(list(pending_runs.values())):
         if not isinstance(run, dict):
             continue
         if str(run.get("status") or "") != "completed_merge_requested":
@@ -106,6 +131,7 @@ def _reconcile_requested_merge_feedback(
         task_status = str(task.get("status") or "").strip().lower()
         branch = str(run.get("branch") or "").strip()
         if task_status == "merged" and str(task.get("merge_commit_sha") or "").strip():
+            before = dict(run)
             merge_sha = str(task.get("merge_commit_sha") or "").strip()
             existing_receipt = run.get("merge_reconciliation")
             receipt = {
@@ -131,6 +157,32 @@ def _reconcile_requested_merge_feedback(
             )
             if closed.get("closed_count"):
                 changed = True
+            delivery = deployment._run_deploy_receipts_after_merge(
+                run_id=str(run.get("run_id") or ""),
+                merge_result={
+                    "ok": True,
+                    "merge_commit_sha": merge_sha,
+                    "remote_task_id": task_id,
+                    "branch": branch,
+                },
+            )
+            if run.get("deployment_receipt") != delivery:
+                run["deployment_receipt"] = delivery
+                changed = True
+            if (
+                delivery.get("enabled") is True
+                and delivery.get("ok") is True
+                and delivery.get("staging_verified") is True
+                and (
+                    delivery.get("production_enabled") is False
+                    or (delivery.get("production") or {}).get("verified") is True
+                )
+            ):
+                run["status"] = "completed_merged"
+                changed = True
+            if run != before:
+                store._write_loop_memory(memory)
+                store._append_ledger({**run, "event": "merge_feedback_reconciled"})
             merged += 1
             continue
         terminal_failure_statuses = {
@@ -175,13 +227,11 @@ def _reconcile_requested_merge_feedback(
             run["merge_reconciliation"] = receipt
             changed = True
         already_open = any(
-            (
-                isinstance(item, dict)
-                and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
-                and (item.get("reason") == reason)
-                and (item.get("kind") == item_kind)
-                for item in open_items
-            )
+            isinstance(item, dict)
+            and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
+            and (item.get("reason") == reason)
+            and (item.get("kind") == item_kind)
+            for item in open_items
         )
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()
@@ -219,6 +269,12 @@ def _reconcile_requested_merge_feedback(
             open_items.append(open_item)
             changed = True
             remediation_added += 1
+        run["status"] = "completed_merge_failed"
+        changed = True
+        # Persist the remediation before fencing this failed task. If interrupted
+        # between writes, replay finds the same open item instead of duplicating it.
+        store._write_loop_memory(memory)
+        store._append_ledger({**run, "event": "merge_feedback_reconciled"})
     if changed:
         memory["open_items"] = (memory.get("open_items") or [])[-50:]
         memory["updated_at"] = config._iso(config._utc_now())

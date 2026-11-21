@@ -4,10 +4,19 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ARK_AGENT_PLAN_MODEL } from './codex_model_gateway.mjs';
-import { openCodePlatformConfig } from './opencode_agent.mjs';
+import { assertOpenCodeHost, openCodeSandboxEntry, openCodePlatformConfig,
+  OPENCODE_CREDENTIAL_ISOLATION } from './opencode_agent.mjs';
+
+function assertFeedbackIsolation(env) {
+  assertOpenCodeHost();
+  if (process.platform !== 'linux' || !openCodeSandboxEntry(env)) {
+    throw new Error('customer_feedback_requires_non_exportable_model_credentials');
+  }
+}
 
 export async function runGithubExecutor({ env = process.env, fetchStatus = fetch, spawnWorker = spawn,
-  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now } = {}) {
+  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now,
+  verifyFeedbackIsolation = assertFeedbackIsolation } = {}) {
   const request = env.PARA_GITHUB_REQUEST_ID || '', run = env.GITHUB_RUN_ID || '';
   const stage = env.PARA_GITHUB_STAGE, directory = env.PARA_GITHUB_EVIDENCE_DIR;
   if (['GH_TOKEN', 'CI_COMMIT_TOKEN', 'GITHUB_PERSONAL_ACCESS_TOKEN'].some(key => env[key])) {
@@ -32,7 +41,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
   }
   let accepted = await state();
   const repair = accepted.kind === 'original_pr_repair';
-  const customerRepair = accepted.kind === 'customer_feedback_repair';
+  const customerRepair = ['customer_feedback_repair', 'training_candidate_repair'].includes(accepted.kind);
   if (repair) {
     for (let attempt = 0; !accepted.finished && !accepted.run_id && attempt < 18; attempt += 1) {
       await sleep(10000);
@@ -49,9 +58,12 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     writeFileSync(join(directory, 'execution.json'), JSON.stringify(accepted) + '\n');
     return accepted.conclusion === 'success' ? 0 : 1;
   }
-  if (repair || customerRepair) {
-    // Scoped environment grants and a same-user proxy cannot keep PR-controlled
-    // tools from exporting API keys or HOME login material. No safe executor exists yet.
+  const isolatedFeedback = customerRepair && env.DEVFLEET_FORCE_OPENCODE === '1'
+    && env.PARA_PLATFORM_POOL === '1'
+    && accepted.model_allocation?.execution_isolation === OPENCODE_CREDENTIAL_ISOLATION;
+  if (repair || (customerRepair && !isolatedFeedback)) {
+    // Raw keys and login material remain forbidden. Customer repair requires the
+    // admitted native SRT mask profile; original-PR repair keeps its existing gate.
     const reason = customerRepair ? 'customer_feedback_requires_non_exportable_model_credentials'
       : 'original_pr_repair_requires_non_exportable_model_credentials';
     mkdirSync(directory, { recursive: true });
@@ -119,6 +131,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
       agentEnv.PARA_OPENCODE_MODEL = allocation.model;
       agentEnv.OPENCODE_API_KEY = keys[allocation.model];
       const config = openCodePlatformConfig(agentEnv);
+      if (isolatedFeedback) verifyFeedbackIsolation(agentEnv);
       agentEnv.PARA_PLATFORM_GATEWAY_URL = config.provider.xcmax.options.baseURL;
       delete agentEnv.CODEX_API_KEY;
       delete agentEnv.PARA_PLATFORM_APPROVED_KEYRING;
@@ -156,6 +169,8 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
         }
         writeFileSync(join(directory, 'execution.json'), JSON.stringify({ request_id: request,
           run_id: run, status: 'awaiting_publication', finished: false,
+          ...(isolatedFeedback ? { execution_isolation: OPENCODE_CREDENTIAL_ISOLATION,
+            source_sha: env.GITHUB_SHA } : {}),
           candidate_sha: manifest.commit_sha }) + '\n');
         return 0; // This stage is done; neither the team nor delivery is complete.
       }

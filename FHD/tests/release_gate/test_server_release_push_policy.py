@@ -323,9 +323,7 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
         assert "previous_security_scan_run_id:" in workflow
         assert "verify_security_scan_pair.py" in workflow
         assert "inputs.release_channel == 'stable'" in workflow
-        cvm_job = workflow.split("  cvm-push-release:", 1)[1].split(
-            "  dispatch-evolution-after-cvm:", 1
-        )[0]
+        cvm_job = str(yaml.safe_load(workflow)["jobs"]["cvm-push-release"])
         assert "startsWith(github.ref, 'refs/tags/FHD/v')" not in cvm_job
 
 
@@ -383,30 +381,6 @@ def test_cvm_inputs_fail_before_checkout_and_expensive_jobs(tmp_path, overrides,
         assert (result.returncode == 0) is valid, result.stdout + result.stderr
         if not valid:
             assert "::error::" in result.stdout
-
-
-def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
-    source = yaml.safe_load((FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8"))
-    published = yaml.safe_load(
-        (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
-    )
-
-    for workflow in (source, published):
-        events = workflow.get("on", workflow.get(True))
-        dispatch_input = events["workflow_dispatch"]["inputs"]["dispatch_evolution"]
-        assert dispatch_input["type"] == "boolean"
-        assert dispatch_input["default"] is True
-        job = workflow["jobs"]["dispatch-evolution-after-cvm"]
-        assert job["needs"] == ["cvm-push-release"]
-        assert job["if"].split(" && ") == [
-            "github.event_name == 'workflow_dispatch'",
-            "github.ref == 'refs/heads/main'",
-            "inputs.push_to_cvm == true",
-            "inputs.dispatch_evolution == true",
-            "needs.cvm-push-release.result == 'success'",
-        ]
-        assert job["steps"][0]["working-directory"] == "."
-        assert "actions/checkout" not in str(job["steps"])
 
 
 def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
@@ -531,7 +505,9 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
     )
 
     inprocess_call = script.index("if run_inprocess_with_live_env; then")
-    http_call = script.index("if choose_base_via_http; then")
+    preflight_call = script.index("if choose_base_via_http; then")
+    http_call = script.index('if post_run_http "$PREFLIGHT_BASE"; then')
+    assert preflight_call < inprocess_call
     assert inprocess_call < http_call
     assert 'REASON_FILE="${2:?reason_file}"' in script
     assert 'TOKEN_FILE="${3:-}"' in script

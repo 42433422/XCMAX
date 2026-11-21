@@ -35,28 +35,6 @@ def test_post_merge_ci_checkout_and_title_share_the_explicit_target(source):
                 assert step["with"]["ref"] == "${{ inputs.release_sha || github.sha }}"
 
 
-def test_delayed_old_release_ci_cannot_validate_a_new_main_controller(tmp_path):
-    data = workflow("FHD/.github/workflows/evolution-orchestrator.yml")
-    step = next(s for s in data["jobs"]["scan-and-propose"]["steps"] if s.get("id") == "scan_scope")
-    output = tmp_path / "output"
-    result = subprocess.run(
-        ["bash", "-c", step["run"]],
-        cwd=ROOT,
-        env={
-            **os.environ,
-            "EVENT_NAME": "workflow_run",
-            "WORKFLOW_HEAD_SHA": "b" * 40,
-            "WORKFLOW_RUN_TITLE": "CI/CD " + "a" * 40,
-            "GITHUB_OUTPUT": str(output),
-        },
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
-    assert output.read_text().strip() == "should_scan=false"
-
-
 @pytest.mark.parametrize(
     "path,job,name,sha_env",
     [
@@ -118,9 +96,7 @@ def test_pr_jobs_do_not_inherit_repository_write_defaults():
         for name, job in data["jobs"].items():
             effective = job.get("permissions", data.get("permissions"))
             assert isinstance(effective, dict), (path.name, name, effective)
-            assert effective.get("contents") != "write" or path.name == (
-                "fhd-evolution-orchestrator.yml"
-            ), (path.name, name)
+            assert effective.get("contents") != "write", (path.name, name)
             if "write" in effective.values() or re.search(
                 r"\$\{\{[^}]*\bsecrets\.", json.dumps(job)
             ):
@@ -133,9 +109,6 @@ def test_pr_jobs_do_not_inherit_repository_write_defaults():
         ("fhd-ai-review.yml", "review"),
         ("fhd-ci-cd.yml", "docker-build-fhd-api"),
         ("fhd-ci-cd.yml", "cvm-push-release"),
-        ("fhd-ci-cd.yml", "dispatch-evolution-after-cvm"),
-        ("fhd-evolution-orchestrator.yml", "scan-and-propose"),
-        ("fhd-evolution-orchestrator.yml", "build-on-merge"),
         ("fhd-mod-auto-publish.yml", "prepare"),
         ("fhd-mod-auto-publish.yml", "package-and-publish"),
     }
@@ -197,12 +170,6 @@ def test_privileged_review_and_scan_load_only_the_protected_controller():
     assert init["build-mode"] == "none"
     assert init["source-root"] == "candidate"
     assert init["config-file"].startswith("./controller/")
-
-    evolution = workflow(".github/workflows/fhd-evolution-orchestrator.yml")
-    assert evolution["on"]["pull_request"]["branches"] == ["main"]
-    assert (
-        "github.event.pull_request.base.ref == 'main'" in evolution["jobs"]["build-on-merge"]["if"]
-    )
 
 
 @pytest.mark.parametrize(

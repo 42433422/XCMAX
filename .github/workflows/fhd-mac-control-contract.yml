@@ -97,7 +97,7 @@ jobs:
             npm install --prefix "$sandbox_root" --no-audit --no-fund "@anthropic-ai/sandbox-runtime@0.0.83"
           fi
           PARA_TEST_SANDBOX_ENTRY="$sandbox_root/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" \
-            node --test scripts/autonomy/runtime_tools/opencode_agent.test.mjs scripts/autonomy/runtime_tools/report_only_target_branch.test.mjs
+            node --test scripts/autonomy/runtime_tools/opencode_agent.test.mjs scripts/autonomy/runtime_tools/opencode_sandbox_controller.test.mjs scripts/autonomy/runtime_tools/report_only_target_branch.test.mjs
       - uses: actions/checkout@v4
         if: matrix.os == 'ubuntu-26.04'
         with:

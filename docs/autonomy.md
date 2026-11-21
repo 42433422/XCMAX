@@ -3,6 +3,113 @@
 维护范围：桌面、服务器和 CI 自治；源码、运行证据及客户验收分别报告。
 本文件随 autonomy 变更维护。发布门禁见 [CI_SSOT.md](./CI_SSOT.md)。
 
+## L2–L6 缺口与闭环边界（2026-11-21）
+
+这里的等级描述工程能力，不能用最高层的模块名称代替整套系统的生产验收。
+本轮复查 `main@392d50b5` 和集成 PR #3398 的 `e4d87b02` 后继续修复；#3396 的定时治理、
+战略候选和在职训练已包含在该 PR，#3397 的锁定依赖修复已在 main。
+同时逐一检查 #3403、#3405、#3406、#3407、#3408、#3409、#3410 的依赖变更；
+它们不承接下列自治缺口，未为统一分支而纳入本轮实现。
+下表列出审查发现的闭环缺口及代码承接点；实际部署、凭据配置、真实客户确认和业务观察须另有回执。
+
+| 层级/维度 | 发现的缺口 | 代码承接及完成条件 |
+|---|---|---|
+| L2 任务可靠性 | 派发或 queued 被当成完成；跨进程预算身份丢失 | 复用员工执行器和持久任务身份，终态回执才完成；无预算适配的远程执行在出站前拒绝 |
+| L3 staging | 继承生产环境标记、目录/端口/数据库不隔离，迁移错误被吞 | `staging_environment.py` 强制隔离；schema 与 Alembic revision 同事务恢复；按实际提交核验健康 |
+| L3 发布与恢复 | HTTP 200/退出码不能证明部署身份，回滚缺幂等请求；扫描与部署判定不一致 | 复用 immutable release 脚本；当前/目标制品 CAS、同一发布锁、持久请求与实际身份读回；手动扫描共用部署严格校验器，趋势制品独立命名 |
+| L3 异步合并交付 | `merge_requested` 稍后确认合入只更新任务，未接部署；冷却/低阈值跳过旧任务恢复 | 维护协调器在原 lease 内继续既有任务；核对原 task、request、分支和实际 merge SHA 后恢复原部署入口；不新增代码派发 |
+| L3 部署输入 | 原派发使用 `loop:*`，未提供生产工作流要求的 release SHA 和安全扫描编号 | 使用 `release:<40sha>`、同 SHA/main 的成功安全扫描及真实报告制品；复用发布严格校验器，保留生产开关与环境批准 |
+| L3 派发幂等 | 请求响应丢失、仅查最近 50 次运行可能重派；控制工作流 SHA 与目标制品 SHA 混用 | 复用 filelock 和原 ledger，出站前 fsync 意图；GitHub 无过滤完整分页并核对总数/唯一 ID；分支前进时验证 source、派发前/实际 controller、当前 ref 的祖先关系，只恢复原 run |
+| L3 交付终态 | 成功后仍反复回读，后续版本可能覆盖历史成功；部分交付重做已验证环境 | 原工作单收敛为 `completed_merged`；按仓库/工作流/ref/操作/环境/run/SHA 恢复已验证回执，只推进未完成环境 |
+| L3 备份与保留 | pg_restore 失败仍成功，SQL 失败被当成零行；估算行数与 dump 不同快照 | PostgreSQL 原生导出快照供 dump 与精确计数共享；恢复核对摘要与精确计数，旧估算明确未核验；事务/错误停止及清理失败如实上报 |
+| L4 客户修复执行 | 模型工具能读原始 key；普通 mask 也会把 key 替换进请求正文 | SRT 官方请求过滤只向固定 HTTPS 模型端点注入 Authorization；隔离进程只有无用占位符；私钥、宿主进程、发布凭据隔离 |
+| L4 发布衔接 | 执行器回报与受信发布器之间缺不可伪造的隔离身份 | GitHub artifact digest 绑定原 request/run/source/candidate；每次新写前复核管理端批准与模型分配 |
+| L4 客户验收 | 部署成功、原客户确认和新反馈不能混用；完成后重开不再进入效果/恢复节点 | 原工单同事务登记精确版本的 `impact_recheck`，LangGraph 从已完成 delivery 检查点重进效果/恢复，不重新构建发布；处理完成后标记收敛 |
+| L5 效果判定 | measured 就计为改进，负收益可能进入成功知识 | 预注册方向、最小提升、置信区间、样本和护栏；负面拒绝、不确定等待，成败均回流下一轮 |
+| L5 实验运行 | 只查已有统计，缺建实验、真实分流、曝光和停止 | GrowthBook REST + Python SDK，员工真实 system prompt 分流与 SQL outbox 曝光/结果；无数据源或样本不推广 |
+| L5 第二执行面 | 实验机制只被员工 prompt 消费，通用名称不能代表其他业务已接通 | `workflow_nl_prompt` 接现有自然语言生成工作流；真实 owner/workflow、固定生成器资源和 prompt 摘要绑定曝光，只有生成成功且 `sandbox_ok` 才记静态校验成功 |
+| L5 实验停止 | GrowthBook 5.2.0 temporary rollout 将 coverage 改为 1，原覆盖率比较会使部分 cohort 实验永远等待 | 仅持久停止/撤回意图允许该上游转换；本地选择仍严格限制原批准账号 cohort |
+| L5 结论稳定性 | 停止后重新读取 latest 统计可能改变原判定，重启不能完成原操作 | 在停止前冻结最终测量及 payload 摘要，恢复使用原测量和原意图 |
+| L5 运行期授权 | 实验创建时通过审批，后续分流未再次验证当前 owner/审批人；只查前 100 条会漏掉活动实验 | 每次真实选择/新操作核对 run、两次审批及接受摘要，撤销/失权回到 control；SQL 分批查找匹配资源，早退/异常显式关闭结果集 |
+| L5 失败撤回 | 仅登记回滚请求，未确认恢复 | LangGraph 恢复节点调用同一发布/实验适配器，保留当前与目标身份并实际读回；未知结果只核对 |
+| L5 在职训练 | 首簇类型错误、latest 漂移、仅汇总通过数、直接覆盖 prompt；真实 run ID 可以搭配无关案例 | #3396 trainer + promptfoo 固定版，同 case/provider 成对回归；逐项绑定实际失败样本原输入和摘要，缺原输入拒绝；仅形成待审批候选 |
+| L6 战略发现 | 无真实输入到提案的消费者，候选不关联历史结果 | 复用 #3396 18 域/模型资产/仓库信号和账号反馈；统一进入 SQL 战略提案，下一轮读取真实复盘 |
+| L6 资源组合 | 贪心/手工分配不能处理依赖、风险与多资源约束 | OR-Tools CP-SAT 同时约束费用、tokens、时长、依赖、并行度和风险；限整数范围并独立核验可行解 |
+| L6 授权与账本 | 默认自授预算、JSONL 先读后写可并发超支、旧通用接口可伪造 | 只使用 StrategicDecision/ActionItem SQL 账本；认证管理员、原账号、提案摘要、有效期绑定；旧路径无新预算写权 |
+| L6 执行合同 | 提案未冻结实际业务输入、租户路径和有效员工配置；模型可能覆盖已批准业务 ID | discover/提案接收有界 `input_data`；冻结包版本、manifest/archive/config/input 摘要；在实际执行入口重新核验，模型计划不能更换已批准输入 |
+| L6 Python 执行字节 | 入场核验后再次加载不同包，或复用内容已改变的解包缓存 | 战略路径重新按 owner/execute 解析权限；从一次读取并核验摘要的归档字节进行私有解包和入口编译，实际执行不使用旧缓存 |
+| L6 实际消费 | 按计划费用或缺失 usage 当零；内部重试隐藏费用 | 每次平台调用先持久预留，再记供应商真实 usage；按批准费率计提，不冒充供应商账单；未知消费保留占用并停止 |
+| L6 流式用量 | 原战略入口拒绝流式；SDK 可把无/不完整 usage 合成为估算；同一预留可重复出站 | 复用原 SSE 与固定 LiteLLM，逐次预留并限定一次实际出站；在 SDK 规范化前观察原始供应商 chunk；缺终态、估算、撤销、超时/取消、fallback 保留未知占用 |
+| L6 商业回报 | 全局开票/GMV 被算作本战略收入；不同制品/完成前的 outcome 与 acceptance 可被配对 | 同目标、同真实支付订单、同客户、同已完成制品 ID/SHA 的两种回执才归因，时间在实际完成后且位于观察窗；排除退款、未来时间和无关客户，缺完成时刻保持未知 |
+| L6 止损与再分配 | 无预注册观察窗/阈值；停止后仍可继续消费 | 预注册假设、窗口和停止条件；每次调用/调度复查；仅在已批准候选与剩余额度内再优化 |
+| L6 持续运行 | 模块存在却未调度，故障只写告警不回任务 | 既有 APScheduler 每 60 秒推进获批组合；#3396 清理空转任务、统一版本配置来源、补失败 incident；回执决定状态 |
+
+18 域、108 项验收仍使用 `FHD/config/audit_benchmark_ssot.json`，不创建第二套分数。
+依赖分层、ERP、Agent、ELT、意图路由、事件内核、Mod SDK、桌面、业务前端、商城 UI、
+商城后端、自治维护、Java 支付、Flutter、Retort、编码沙箱、客来来和 CI 发布都可作为
+战略候选的受控来源；本轮没有据模块接入宣称这 18 域已完成全部基准或真机验收。
+
+### 仍未闭合的范围
+
+下表是代码边界与外部验收的明确区分，不能把全部项改称「只缺证据」。
+
+| 范围 | 当前边界 | 完成所需 |
+|---|---|---|
+| L6 远程工程执行 | Para/Cursor 仍在出站前返回 `blocked_strategy_budget_adapter`；本地流式预算不自动跨进程传播 | 受信控制器绑定原 owner/task/request/期限；实际 Responses 网关逐调用原子预留与原始 usage 回执；远程终态回连原组合。现有 Para 服务/网关部署和凭据不在本地仓库可核验范围，不能删除阻断来冒充接入 |
+| L5 任意产品实验 | 每个 surface 必须有真实消费者；员工 prompt 的接入不自动覆盖 RAG、受理策略、完整工作流图和模型路由 | 分别冻结资源身份与配置，保留原权限过滤，接真实曝光及后续验收。共享工作流图不能以全局节点改写冒充分用户 A/B |
+| L5 自主改进范围 | 原失败输入支持员工 prompt 训练；固定工作流生成提示词的实验不等于已接失败训练 | 其他 surface 需要原运行输入、独立验证和候选发布的实际适配；禁止复用不相关案例或让模型自评代替效果 |
+| L6 市场/产品战略 | 候选消费既有仓库、18 域、模型资产、账户问题和真实业务回执 | 外部市场情报的有效来源、来源时效及产品假设的业务结果适配；当前不声称自主发现未知市场已完成 |
+| L6 企业资源配置 | 优化对象是批准任务的费用、tokens、时长、风险和并行度 | 云资源采购、人员/供应商和公司财务需真实资产/订单/权限接口及独立预算，当前没有任意外部资产支出能力 |
+| L3/L4 生产交付 | 分支代码和本地替身回执不能证明生产版本、真机升级或客户验收 | main 精确提交、制品摘要、服务身份、安全扫描配对、真机升级回滚与原客户确认 |
+| L5 真实效果 | 本地通过的分流/统计合同测试不是线上改善 | GrowthBook 实际数据源与查询、真实流量、样本和预注册观察窗；真实改善、推广或撤回回执 |
+| L6 商业止损 | 测试可验证同单归因/阈值/停止，但不能创造真实收入 | 已支付订单、同制品客户确认、退款和观察窗；实际消费及商业结果未知时保留未知 |
+
+因此可报告已落实的具体代码机制及测试，不能把整套系统命名为「完整 L5/L6」或赋予小数等级。
+
+### 战略控制入口
+
+`/api/xcmax/strategic/portfolios` 提供 discover、创建提案、读取、approve、plan、run、review、stop。
+所有写入使用认证管理员与原 owner；approve 必须提交 `expected_proposal_sha256`。
+通用 decisions/meetings/action-items 接口不能代写组合预算或执行结果。
+预算包含明确币种口径的费用上限、tokens、时长、并行度、风险、过期时间和模型费率来源。
+调度器只推进已批准的组合；账号失去管理权限、过期、消费不明或触发止损即停止新增消费。
+旧 `strategy_bets` JSONL 仅用于历史读取，不与 SQL 预算双写。
+
+持续选题使用 `MODSTORE_STRATEGY_DISCOVERY_TEMPLATE` 指向管理员维护的 JSON，包含
+`owner_user_id`、`goal`、`limits`、`period_days`（1–90）和可选 `use_llm`。
+`limits` 使用同一 `PortfolioLimits` 合同；绝对 `expires_at` 到期后须显式续订，不能定时自授新预算。
+既有 `plan_strategy` 消费该模板，周期键在 SQL 中唯一领取；同周期重试读取原结果。
+新结果始终为待批准提案。无模板返回 `not_configured`；旧域审计快照只提供带日期的待复查候选，
+canonical 域标识来自 `FHD/config/audit_benchmark_ssot.json`，历史缺口与 `UNRATED` 不当作本次现状或得分。
+
+在职训练仍使用 `MODSTORE_RETORT_PROTOCOLS` 内的受控模板，新增 `training_candidate` 配置：
+`employee_id`、`owner_id`、`goal`、`prompt_path`、`growthbook` 与 `recovery`。
+只接收原服务令牌提交的精确 bundle/result 原文与四个冻结文件，复查当前 main 提示词、
+真实失败 run ID 和摘要；重试同 request_key 不新建任务。第一次批准涵盖精确 replacement，
+独立验证后还有正式验收批准。原失败案例与结果保存在私有证据中，公开附件只含摘要和候选编号。
+候选执行与客户修复使用同一不可导出凭据协议；线上实验只覆盖预先批准的账号 cohort，
+推广也仅在该 cohort 内生效，扩大范围需新批准。配置、租约或审批失效不能把已发布候选当作默认全量结果。
+
+### 运行与验收前提
+
+- 生产安装 `MODstore[web,governance]` 及仓库固定版本的 Retort/LangGraph，使用现有数据库迁移。
+- 战略员工须由管理员在既有 `config.workspace_policy` 中配置批准范围内的非空 `scope_globs` 或 `forbidden_globs`。
+  完成回执要求实际路径检查已执行且通过、原 verification 至少一项实际检查及计数一致；未配置路径检查、缺失或未知回执保持未完成，不释放未知执行的预留额度。
+- 客户代码修复使用支持的 Ubuntu 22.04 原生隔离宿主、OpenCode 专属平台模型准入、
+  `DEVFLEET_FORCE_OPENCODE=1` 与 `MODSTORE_PARA_PLATFORM_POOL=1`；开关本身不构成隔离证明。
+- 实验须配置真实 GrowthBook API、项目、数据源、预注册指标和实际曝光查询；已接线入口为员工 prompt 与自然语言工作流生成 prompt。
+  后者使用 `surface=workflow_nl_prompt`、`resource_id=workflow_nl_generator`、`measurement_scope=workflow_generation_static_validation`；
+  按认证账号分流，每次结果绑定实际归属的 workflow。`ok=true` 但静态校验失败仍记失败；静态校验通过不等于工作流真实业务完成。
+  其他产品表面须接入真实消费者和结果，不能伪造曝光来补足样本。
+- `experiment.exposed` 写入真实账号曝光；`experiment.observed.success` 仅代表实际 cognition 模型调用结果。
+  整任务成功率从既有 `EmployeeExecutionMetric` 与 verification 结果关联曝光窗口，付费结果从原支付台账关联正式制品；不能用模型返回成功替代任务或商业成果。
+- 模型价格是已批准费率的计提依据，供应商账单与真实业务收入各保留自己的来源；缺失数据报告未知。
+- 自动发布恢复须将 `MODSTORE_AUTO_ROLLBACK_COMMAND` 配置为 `/usr/bin/bash /opt/xcmax/releases/<approved-controller-40sha>/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh --submit-rollback-json`。
+  控制器必须来自已有正式 manifest 的只读版本，不能指向 `current`。入口冻结请求后复用 systemd transient service，在独立服务中执行既有回滚；不修改服务权限。缺少既有权限返回等待，提交不明不重复执行，`accepted` 仅代表受理。
+  原版本清理器保留明确配置的控制器，以及未完成恢复请求的控制器、当前和目标版本；支付服务查询异常阻断完成，只有明确未安装才跳过其身份读回。
+  Retort 仅在同一请求的持久 `rollback_verified` 回执及 API、scheduler、public 和适用的 payment 身份重新核验后完成；指针已切换、命令退出零或单个入口健康均不足以确认恢复。
+- 生产部署、客户确认、付费转化和观察窗口尚未实际发生时，状态维持等待，不自动登记为 L6 验收完成。
+
 ## 共同契约
 
 | 对象 | 职责 |
@@ -151,7 +258,7 @@ SDK 固定 `@openim/wasm-client-sdk@3.8.3`，同时发布其实际 Apache-2.0 LI
 聊天界面候选直接使用 `vue-advanced-chat@2.1.2`（MIT），员工/普通会话/群聊共享组件；
 宿主只适配消息、草稿和业务动作，许可证随前端 `/licenses/vue-advanced-chat.txt` 发布。
 
-## 员工工作空间迁移候选（未合入主线）
+## 员工工作空间与受信发布器
 
 管理端默认展示 GitHub 工单工作空间，Element Plus 承担界面；原 LangGraph 任务、事件、
 Vue Flow 图和产物保留在「原执行记录」，不从历史页新增或恢复本地任务。
@@ -160,9 +267,12 @@ Vue Flow 图和产物保留在「原执行记录」，不从历史页新增或�
 共享产品工单进入 GitHub 待办，私有 Mod 保留原交付流程；已有 Mac 小组仍核对原回执。
 执行复用生产已有的员工编排、事务 outbox、事故领取与 Para 回执；核查、修复、验证岗位
 保留原员工身份。代码修复交给 Para，Codex 是 Para 内部执行工具，不接 Codex Action。
-当前 GitHub 临时执行器明确停用：返回 `blocked_isolated_publisher_required`，在注入模型、管理端及发布凭据或启动模型前终止。
-环境变量白名单不是操作系统身份隔离；须先实现并验证独立可信发布器，不能删除 guard 或设置开关强行启用。
-服务端新派工返回 503，已有排队回执在再次消费时转为可查询的 blocked，不伪装为运行中或执行成功；正式发布仍沿用主线 CI 与管理端审批。
+当前工作流使用独立 execute、publish、resume 和 verification 任务；发布令牌不进入模型任务。
+旧 `github_para_worker.mjs` 的 `blocked_isolated_publisher_required` 仍保留，不能借旧入口绕过边界。
+客户反馈与训练候选修复仅接受 `srt-0.0.83-header-only-platform-v1`：可信控制进程持有 key，
+模型进程只拿占位符，SRT 官方 TLS 代理按精确主机、路径、方法和批准模型注入请求头。
+普通 mask 的请求正文替换功能不启用。原 PR repair 尚未接此专用协议，仍保持原暂停状态。
+隔离、模型分配或回执不满足时保持 blocked/waiting；正式发布仍沿用主线 CI 与管理端审批。
 本地自研 LLM 实现引擎及进化账本本地回退已移除，原 Para 工作流与授权检查保留。
 服务端使用 `MODSTORE_GITHUB_TOKEN`（Issues/Actions 写、Contents/PR 读）、
 `MODSTORE_GITHUB_REPOSITORY` 和 `MODSTORE_PARA_GITHUB_{API_BASE,AUTH_TOKEN,DEVICE_ID}`。

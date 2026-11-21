@@ -17,8 +17,8 @@ import os
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_db
@@ -66,6 +66,16 @@ def require_dispatch_service(authorization: str = Header(default="")) -> str:
     return SERVICE_ACTOR
 
 
+@router.get("/release-train/state")
+def release_train_state(actor: str = Depends(require_dispatch_service)):
+    """只读版本状态，供 CI 的 version-ssot-sync 对齐 VERSION.md 与锚点。"""
+    from modstore_server.release_train import snapshot_public
+
+    state = dict(snapshot_public())
+    state.pop("ssot_path", None)
+    return {"success": True, "state": state}
+
+
 @router.get("/github-runs/{request_id}")
 def github_run_status(
     request_id: uuid.UUID,
@@ -83,6 +93,61 @@ class DispatchRequest(BaseModel):
     tool: str = Field(default="cursor", pattern=r"^(cursor|codex|claude_code|trae|opencode)$")
     source_sha: str = Field(default="", pattern=r"^(?:[0-9a-f]{40})?$")
     github_issue: int | None = Field(default=None, gt=0)
+
+
+@router.get("/training/failures")
+def training_failures(
+    days: int = 14, min_count: int = 2, actor: str = Depends(require_dispatch_service)
+):
+    from modstore_server.capability_trainer import mine
+    from modstore_server.dot_ticket_dispatch import redact_ticket_text
+    from modstore_server.maintenance_loop.store import ledger_path
+
+    clusters = mine(
+        ledger_path(), days=max(1, min(90, days)), min_count=max(1, min(50, min_count))
+    )[:20]
+    for cluster in clusters:
+        cluster["failure_reason"] = redact_ticket_text(cluster["failure_reason"], ())[:300]
+        for sample in cluster["samples"]:
+            sample["task"] = redact_ticket_text(sample.get("task", ""), ())[:2000]
+            sample["failure_reason"] = redact_ticket_text(sample["failure_reason"], ())[:300]
+    return {"success": True, "clusters": clusters}
+
+
+class TrainingCandidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_key: str = Field(min_length=8, max_length=128)
+    employee_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    failure_run_ids: list[str] = Field(min_length=1, max_length=20)
+    workflow_run_id: int = Field(gt=0)
+    bundle_json: str = Field(min_length=2, max_length=100000)
+    files: dict[str, str]
+    result_json: str = Field(min_length=2, max_length=1500000)
+
+
+@router.post("/training/candidates", status_code=202)
+def training_candidate(
+    body: TrainingCandidateRequest,
+    background: BackgroundTasks,
+    actor: str = Depends(require_dispatch_service),
+):
+    from modstore_server.retort_evolution_api import _advance
+    from modstore_server.retort_training_candidates import create_training_candidate
+
+    try:
+        request_id = create_training_candidate(body.model_dump())
+    except TimeoutError:
+        raise HTTPException(409, "training_candidate_busy") from None
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(409, str(exc)) from None
+    background.add_task(_advance, request_id)
+    return {
+        "success": True,
+        "request_id": request_id,
+        "status": "proposed",
+        "approval_required": True,
+    }
 
 
 class PullRequestDispatchRequest(BaseModel):

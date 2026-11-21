@@ -179,7 +179,7 @@ async def chat_dispatch_via_session(
             consume_llm_credit(session, uid, 1, charge=charge)
         except RECOVERABLE_ERRORS:
             pass
-    return result
+    return dict(result)
 
 
 # ── Platform-only bench helpers ───────────────────────────────────────────────
@@ -209,6 +209,8 @@ _BENCH_DEFAULT_MODELS: dict[str, str] = {
     "groq": "llama-3.3-70b-versatile",
     "together": "meta-llama/Llama-3-8b-chat-hf",
     "openrouter": "openai/gpt-4o-mini",
+    # 统一网关首选主力编码模型；其余网关模型仍可从模型池选择。
+    "litellm": "xcmax-kimi-code",
 }
 
 
@@ -338,19 +340,45 @@ async def chat_dispatch_via_platform_only(
             ),
         }
 
-    result = await chat_dispatch(
-        provider,
-        api_key=api_key,
-        base_url=base_url,
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-        **fallback_kwargs,
+    from modstore_server.llm_chat_proxy import normalize_model
+    from modstore_server.strategic_portfolio_usage import (
+        complete_platform_call,
+        platform_call_reservation,
+        prepare_platform_call,
     )
+
+    model = normalize_model(provider, model, base_url)
+    reservation = prepare_platform_call(provider, model, messages, max_tokens)
+    if reservation is not None:
+        max_tokens = reservation["max_tokens"]
+        # A hidden second provider call has no separate budget reservation.
+        # The strategic runtime may select another approved route on a new call.
+        fallback_kwargs = {}
+    result = None
+    try:
+        call = chat_dispatch(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            **fallback_kwargs,
+        )
+        if reservation is not None:
+            import asyncio
+
+            with platform_call_reservation(reservation):
+                result = await asyncio.wait_for(call, timeout=reservation["timeout_seconds"])
+        else:
+            result = await call
+    finally:
+        # Preserve cancellation/error propagation while retaining unresolved usage.
+        complete_platform_call(reservation, result)
     if result.get("_fallback_used"):
         result["_fallback_provider"] = fallback_provider
         result["_fallback_model"] = fallback_model
-    return result
+    return dict(result)
 
 
 _LOCK = Lock()

@@ -258,7 +258,8 @@ def test_scheduler_repairs_projection_after_checkpoint_was_committed(setup, monk
 
 
 @pytest.mark.parametrize(
-    "entry, digest_matches", [("log.txt", True), ("../escape", True), ("log.txt", False)]
+    "entry, digest_matches",
+    [("log.txt", True), ("../escape", True), ("log.txt", False)],
 )
 def test_artifact_download_checks_digest_paths_and_credential_boundary(
     tmp_path, monkeypatch, entry, digest_matches
@@ -423,7 +424,8 @@ def test_verified_logs_are_retained_with_existing_retort_encryption(tmp_path, mo
 
 
 @pytest.mark.skipif(
-    not os.environ.get("RETORT_TEST_POSTGRES_DSN"), reason="isolated PostgreSQL required"
+    not os.environ.get("RETORT_TEST_POSTGRES_DSN"),
+    reason="isolated PostgreSQL required",
 )
 def test_postgres_native_lock_excludes_another_connection(monkeypatch):
     from sqlalchemy import create_engine
@@ -655,7 +657,16 @@ def test_feedback_respects_persisted_intake_hold_at_each_boundary(setup, boundar
         )
 
 
-@pytest.mark.parametrize("customer_decision", ["resolved", "reopen", "resolved_then_reopen"])
+@pytest.mark.parametrize(
+    "customer_decision",
+    [
+        "resolved",
+        "reopen",
+        "resolved_then_reopen",
+        "completed_then_reopen",
+        "completion_race_then_reopen",
+    ],
+)
 def test_feedback_run_binds_original_customer_and_production_release(
     setup, monkeypatch, customer_decision
 ):
@@ -709,11 +720,15 @@ def test_feedback_run_binds_original_customer_and_production_release(
     if customer_decision == "resolved_then_reopen":
         from modstore_server import retort_feedback_measurements
 
-        templates["restore"]["customer_feedback"]["growthbook"] = {"project": "prod"}
+        templates["restore"]["customer_feedback"]["growthbook"] = {
+            "project": "prod",
+            "metric": "first_import",
+            "minimum_users": 100,
+        }
         monkeypatch.setattr(
             retort_feedback_measurements,
             "experiment_measurement",
-            lambda *_: {"status": "running"},
+            lambda *_, **__: {"status": "running"},
         )
     with open(os.environ["MODSTORE_RETORT_PROTOCOLS"], "w", encoding="utf-8") as fh:
         json.dump(templates, fh)
@@ -885,7 +900,7 @@ def test_feedback_run_binds_original_customer_and_production_release(
     decision_path = f"/api/customer-service/issues/{ticket_id}/decision"
     decision = {
         "decision": (
-            "resolved" if customer_decision == "resolved_then_reopen" else customer_decision
+            "resolved" if customer_decision.endswith("then_reopen") else customer_decision
         ),
         "note": "已按原业务路径复测成功",
         "idempotency_key": str(uuid4()),
@@ -895,14 +910,49 @@ def test_feedback_run_binds_original_customer_and_production_release(
     app.dependency_overrides[get_current_user] = lambda: customer
     result = client.post(decision_path, json=decision)
     assert result.status_code == 200, result.text
-    if customer_decision == "resolved_then_reopen":
-        assert resume()["status"] == "waiting_customer_impact"
-        reopened = client.post(
-            decision_path,
-            json={"decision": "reopen", "note": "原问题再次出现", "idempotency_key": str(uuid4())},
-        )
-        assert reopened.status_code == 200, reopened.text
-    if customer_decision in {"reopen", "resolved_then_reopen"}:
+    if customer_decision.endswith("then_reopen"):
+        previous_dispatches = len([call for call in setup["calls"] if call[0] == "POST"])
+
+        def reopen():
+            reopened = client.post(
+                decision_path,
+                json={
+                    "decision": "reopen",
+                    "note": "原问题再次出现",
+                    "idempotency_key": str(uuid4()),
+                },
+            )
+            assert reopened.status_code == 200, reopened.text
+
+        if customer_decision == "completion_race_then_reopen":
+            remember = service.ComponentPorts.remember
+
+            def reopen_after_impact_read(port, state):
+                result = remember(port, state)
+                reopen()
+                return result
+
+            with monkeypatch.context() as race:
+                race.setattr(service.ComponentPorts, "remember", reopen_after_impact_read)
+                assert resume()["status"] == "impact_recheck"
+        else:
+            assert resume()["status"] == (
+                "completed"
+                if customer_decision == "completed_then_reopen"
+                else "waiting_customer_impact"
+            )
+            reopen()
+        if customer_decision in {"completed_then_reopen", "completion_race_then_reopen"}:
+            assert read(client, request_id)["status"] == "impact_recheck"
+            assert service.accepted_knowledge() == []
+            # Reopen and graph advancement survive independent SQLite sessions;
+            # the first tick re-enters the existing impact interrupt.
+            service.tick()
+            assert read(client, request_id)["status"] == "delivered"
+            assert (
+                len([call for call in setup["calls"] if call[0] == "POST"]) == previous_dispatches
+            )
+    if customer_decision == "reopen" or customer_decision.endswith("then_reopen"):
         with get_session_factory()() as db:
             ticket = db.get(CustomerServiceTicket, ticket_id)
             evidence = json_loads(ticket.evidence_json, {})
@@ -910,9 +960,38 @@ def test_feedback_run_binds_original_customer_and_production_release(
             ticket.evidence_json = json_dumps(evidence)
             db.commit()
     final = resume()
-    if customer_decision in {"reopen", "resolved_then_reopen"}:
-        assert final["status"] == "customer_impact_rejected"
+    if customer_decision == "reopen" or customer_decision.endswith("then_reopen"):
+        assert final["status"] == "waiting_recovery"
         assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
+        assert final["effects"]["recovery"]["reason"] == "recovery_not_authorized"
+        assert service.accepted_knowledge() == []
+        lessons = service.outcome_knowledge()
+        assert lessons[0]["outcome"] == "rejected"
+        assert lessons[0]["customer_impact"]["reason"] == "original_customer_reopened"
+        assert "ticket_id" not in lessons[0]["customer_impact"]
+        if customer_decision in {"completed_then_reopen", "completion_race_then_reopen"}:
+            from modstore_server import retort_feedback_recovery
+
+            recoveries = []
+
+            def recovered(recovery_request_id, _state):
+                recoveries.append(recovery_request_id)
+                return {"status": "rollback_verified", "restored_release_sha": "a" * 40}
+
+            monkeypatch.setattr(retort_feedback_recovery, "recover_release", recovered)
+            terminal = resume()
+            assert terminal["status"] == "customer_impact_rejected"
+            assert terminal["snapshot"]["pending"] == []
+            with get_session_factory()() as db:
+                updated_at = db.get(RetortEvolutionRun, request_id).updated_at
+            recovered_count, dispatches = len(recoveries), list(setup["calls"])
+            for _ in range(3):
+                assert service.tick()["processed"] == 0
+                assert service.advance_run(request_id) == terminal["snapshot"]
+            assert len(recoveries) == recovered_count
+            assert setup["calls"] == dispatches
+            with get_session_factory()() as db:
+                assert db.get(RetortEvolutionRun, request_id).updated_at == updated_at
         return
     assert final["status"] == "completed"
     assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
@@ -979,6 +1058,7 @@ def test_growthbook_requires_same_run_production_exposure_and_valid_sample():
         == "unbound"
     )
     assert observed["status"] == "measured"
+    assert observed["decision"] == "promote"
     assert observed["lift"] == 0.12
     assert _snapshot(result, spec, "other-run", delivery)["status"] == "unbound"
     result["result"]["results"][0]["checks"]["srm"] = 0.0001
@@ -1012,3 +1092,194 @@ def test_commercial_evidence_uses_successful_job_bound_not_poll_time(monkeypatch
     del delivery["deployment_completed_at"]
     assert commercial_measurement(17, delivery)["status"] == "release_artifact_unavailable"
     assert len(observed) == 1
+
+
+def test_training_service_submits_frozen_candidate_only_to_original_approval(
+    setup, tmp_path, monkeypatch
+):
+    import base64
+    import hashlib
+    from pathlib import Path
+
+    from modstore_server import capability_trainer as trainer
+
+    monkeypatch.setenv("XCAGI_LLM_MODEL", "approved-model")
+    monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")
+    token = "training-service-fixture-" + "t" * 32
+    monkeypatch.setenv(
+        "MODSTORE_PARA_DISPATCH_TOKEN_SHA256", hashlib.sha256(token.encode()).hexdigest()
+    )
+    built = trainer.build_config(
+        out_dir=tmp_path / "bundle",
+        baseline_prompt="baseline",
+        candidate_prompt="candidate",
+        cases=[{"task": "private reproduction"}],
+    )
+    bundle = json.loads(Path(built["bundle"]).read_bytes())
+    result = {
+        "metadata": {"promptfooVersion": trainer.PROMPTFOO_VERSION},
+        "results": {
+            "prompts": [
+                {"raw": Path(built[key]).read_bytes().decode()} for key in ("baseline", "candidate")
+            ],
+            "results": [
+                {
+                    "promptIdx": i,
+                    "testIdx": 0,
+                    "success": bool(i),
+                    "failureReason": 0 if i else 1,
+                    "gradingResult": {"pass": bool(i)},
+                    "error": None if i else "Deterministic assertion failed",
+                    "provider": {"id": bundle["provider_id"]},
+                    "vars": {"task": "private reproduction", "case_id": bundle["case_ids"][0]},
+                }
+                for i in (0, 1)
+            ],
+        },
+    }
+    templates_path = Path(os.environ["MODSTORE_RETORT_PROTOCOLS"])
+    templates = json.loads(templates_path.read_bytes())
+    with get_session_factory()() as db:
+        other = User(username=uuid4().hex, password_hash="test-only")
+        db.add(other)
+        db.commit()
+        cohort = [setup["user"].id, other.id]
+    templates["restore"]["training_candidate"] = {
+        "employee_id": "help-desk",
+        "owner_id": setup["user"].id,
+        "goal": "Improve observed support execution",
+        "prompt_path": "catalog/help-desk@1.0.0/prompt.txt",
+        "growthbook": {
+            "project": "prod",
+            "metric": "success",
+            "minimum_users": 2,
+            "stats_engine": "frequentist",
+            "lifecycle": {
+                "employee_id": "help-desk",
+                "surface": "employee_prompt",
+                "cohort_user_ids": cohort,
+                "datasource_id": "warehouse",
+                "assignment_query_id": "actual-exposures",
+                "duration_hours": 24,
+                "coverage": 0.1,
+            },
+        },
+    }
+    templates_path.write_text(json.dumps(templates))
+    sample = {"run_id": "real-failure", "task": "private reproduction"}
+    monkeypatch.setattr(
+        trainer,
+        "mine",
+        lambda *_, **__: [{"employee_id": "help-desk", "samples": [sample]}],
+    )
+    calls = []
+
+    def github(method, path, body=None):
+        calls.append((method, path))
+        assert method == "GET"
+        return (
+            {"sha": "a" * 40}
+            if path.endswith("/commits/main")
+            else {"encoding": "base64", "content": base64.b64encode(b"baseline").decode()}
+        )
+
+    monkeypatch.setattr("modstore_server.customer_ticket_github.github", github)
+    body = {
+        "request_key": "training-fixture-1",
+        "employee_id": "help-desk",
+        "source_sha": "a" * 40,
+        "failure_run_ids": ["real-failure"],
+        "workflow_run_id": 77,
+        "bundle_json": Path(built["bundle"]).read_bytes().decode(),
+        "result_json": json.dumps(result, indent=2) + "\n",
+        "files": {
+            key: Path(built[key]).read_bytes().decode()
+            for key in ("baseline", "candidate", "config", "tests")
+        },
+    }
+    client, endpoint = setup["client"], "/api/service/mac-control/training/candidates"
+    auth = {"Authorization": f"Bearer {token}"}
+    assert client.post(endpoint, json=body).status_code == 401
+    assert (
+        client.post(
+            endpoint, headers=auth, json={**body, "failure_run_ids": ["invented"]}
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(endpoint, headers=auth, json={**body, "source_sha": "b" * 40}).status_code
+        == 409
+    )
+    for wrong_input in (None, "Different easier task"):
+        sample["task"] = wrong_input
+        invalid = client.post(endpoint, headers=auth, json=body)
+        assert invalid.status_code == 409 and "training_reproduction_source_unbound" in invalid.text
+    sample["task"] = "private reproduction"
+    response = client.post(endpoint, headers=auth, json=body)
+    assert response.status_code == 202, response.text
+    request_id = response.json()["request_id"]
+    assert response.json()["approval_required"] is True
+    assert client.post(endpoint, headers=auth, json=body).json()["request_id"] == request_id
+    current = read(client, request_id)
+    assert current["status"] == "awaiting_dispatch_approval"
+    assert current["snapshot"]["has_customer_feedback"] is True
+    assert (
+        current["snapshot"]["plan"]["feedback_policy"]["growthbook"]["lifecycle"][
+            "offline_evidence"
+        ]["verdict"]
+        == "candidate_for_approval"
+    )
+    assert "private reproduction" not in current["snapshot"]["plan"]["public_body"]
+    private = current["effects"]["training_candidate"]["private_evidence"]
+    assert private["result_json"] == body["result_json"]
+    assert not [call for call in setup["calls"] if call[0] == "POST"]
+    assert (
+        client.post(endpoint, headers=auth, json={**body, "workflow_run_id": 78}).status_code == 409
+    )
+    conflict = client.post(
+        endpoint, headers=auth, json={**body, "request_key": "training-fixture-2"}
+    )
+    assert conflict.status_code == 409 and "surface_already_reserved" in conflict.text
+    # Two independent request IDs must not reserve one surface concurrently.
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    with get_session_factory()() as db:
+        db.get(RetortEvolutionRun, request_id).status = "cancelled"
+        db.commit()
+    barrier = Barrier(2)
+    request = {
+        key: templates["restore"][key] for key in ("criterion_ids", "checks", "container_image")
+    }
+    request.update(
+        title="Training reservation",
+        goal="Bounded experiment",
+        repository="example/product",
+        source_sha="a" * 40,
+    )
+
+    def reserve(_index):
+        barrier.wait(timeout=5)
+        try:
+            return service.create_run(
+                {**request, "request_id": str(uuid4())},
+                setup["user"].id,
+                training_candidate=current["effects"]["training_candidate"],
+            )
+        except (ValueError, TimeoutError):
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sum(result is not None for result in pool.map(reserve, (0, 1))) == 1
+    with get_session_factory()() as db:
+        db.get(User, setup["user"].id).account_state = "disabled"
+        db.commit()
+    unavailable = client.post(endpoint, headers=auth, json=body)
+    assert unavailable.status_code == 409 and "training_owner_unavailable" in unavailable.text
+    app.dependency_overrides.pop(require_admin)
+    denied = client.post(
+        f"/api/retort-evolution/{request_id}/decision",
+        headers=auth,
+        json={"approved": True, "digest": current["snapshot"]["pending"][0]["digest"]},
+    )
+    assert denied.status_code in {401, 403}

@@ -14,6 +14,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -276,10 +277,13 @@ def run_workflow_sandbox(
     mock_employees: bool = True,
     validate_only: bool = False,
     user_id: int = 0,
+    session: Session | None = None,
 ) -> Dict[str, Any]:
-    SessionFactory = get_session_factory()
+    external_session = session is not None
+    if session is not None and not validate_only:
+        raise ValueError("an external transaction is only supported for static validation")
     t0 = time.perf_counter()
-    with SessionFactory() as session:
+    with nullcontext(session) if session is not None else get_session_factory()() as session:
         workflow = session.query(Workflow).filter(Workflow.id == workflow_id).first()
         if not workflow:
             return {
@@ -300,22 +304,33 @@ def run_workflow_sandbox(
         )
         duration_ms = round((time.perf_counter() - t0) * 1000, 3)
         status = "success" if result.get("ok") else "failed"
-        neuro_bus.publish(
-            new_event(
-                WORKFLOW_SANDBOX_COMPLETED,
-                producer="workflow",
-                subject_id=str(workflow_id),
-                payload={
-                    "workflow_id": workflow_id,
-                    "user_id": user_id,
-                    "status": status,
-                    "duration_ms": duration_ms,
-                    "ok": bool(result.get("ok")),
-                    "validate_only": validate_only,
-                },
-                idempotency_key=f"{WORKFLOW_SANDBOX_COMPLETED}:{workflow_id}:{duration_ms}",
-            )
+        event = new_event(
+            WORKFLOW_SANDBOX_COMPLETED,
+            producer="workflow",
+            subject_id=str(workflow_id),
+            payload={
+                "workflow_id": workflow_id,
+                "user_id": user_id,
+                "status": status,
+                "duration_ms": duration_ms,
+                "ok": bool(result.get("ok")),
+                "validate_only": validate_only,
+            },
+            idempotency_key=f"{WORKFLOW_SANDBOX_COMPLETED}:{workflow_id}:{duration_ms}",
         )
+        if external_session:
+            from modstore_server.eventing.db_outbox import enqueue
+
+            enqueue(
+                session,
+                WORKFLOW_SANDBOX_COMPLETED,
+                str(workflow_id),
+                event.payload,
+                producer="workflow",
+                event_id=event.idempotency_key,
+            )
+        else:
+            neuro_bus.publish(event)
         return cast(Dict[str, Any], result)
 
 

@@ -119,6 +119,9 @@ async def stream_openai_compatible(
       {"type": "toolcall", "choices": [{"index":0,"delta":{"tool_calls":[...]},"finish_reason":"tool_calls"}]}
       {"type": "usage", "usage": {...}} when upstream provides stream_options.include_usage
     """
+    from modstore_server.strategic_portfolio_usage import require_call_reservation
+
+    require_call_reservation(provider=provider, model=model, start_transport=True)
     url = f"{base_url.rstrip('/')}/chat/completions"
     body = _facade()._openai_chat_body(
         provider,
@@ -298,13 +301,18 @@ def _oai_to_gemini(messages: List[Dict[str, str]]) -> List[Dict[str, Any]]:
     return contents
 
 
-async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+async def chat_google(
+    api_key: str, model: str, messages: List[Dict[str, str]], *, max_tokens: Optional[int] = None
+) -> Dict[str, Any]:
     contents = _facade()._oai_to_gemini(messages)
+    payload: Dict[str, Any] = {"contents": contents}
+    if max_tokens is not None:
+        payload["generationConfig"] = {"maxOutputTokens": max_tokens}
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     async with _facade().httpx.AsyncClient(
         timeout=_facade()._LLM_TIMEOUT, limits=_facade()._LLM_LIMITS
     ) as client:
-        r = await client.post(url, params={"key": api_key}, json={"contents": contents})
+        r = await client.post(url, params={"key": api_key}, json=payload)
         text = r.text
     if r.status_code >= 400:
         return {"ok": False, "status": r.status_code, "error": text[:2000]}
@@ -325,4 +333,14 @@ async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) 
     parts = content_block.get("parts") or []
     texts = [str(p.get("text") or "") for p in parts if isinstance(p, dict)]
     usage = data.get("usageMetadata") or data.get("usage") or {}
+    if isinstance(usage, dict):
+        prompt, total = usage.get("promptTokenCount"), usage.get("totalTokenCount")
+        if type(prompt) is int and type(total) is int and 0 <= prompt <= total:
+            # Includes thinking/tool-use tokens in total; never infer missing usage as zero.
+            usage = {
+                **usage,
+                "prompt_tokens": prompt,
+                "completion_tokens": total - prompt,
+                "total_tokens": total,
+            }
     return {"ok": True, "content": "\n".join(texts), "usage": usage, "raw": data}

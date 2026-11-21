@@ -10,6 +10,7 @@ import {
 } from '@/constants/genericModPack'
 import type { EnterpriseOrgLayer } from '@/constants/enterpriseWorkflowEstablishment'
 import type { ModStoreState, StoreModRow } from './useModStoreState'
+import { marketItemType } from './useModStoreState'
 
 export interface ModStoreMeta {
   modIconClass: (mod: StoreModRow) => string
@@ -55,9 +56,7 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
   }
 
   const isEmployeePackItem = (mod?: StoreModRow | null): boolean =>
-    String(mod?.artifact || '')
-      .trim()
-      .toLowerCase() === 'employee_pack'
+    marketItemType(mod) === 'employee'
 
   const enterpriseModLabel = (mod: StoreModRow): string => {
     const art = String(mod?.artifact || '')
@@ -68,7 +67,7 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
     return label ? `企业 Mod：${label}` : ''
   }
 
-  const marketItemKindLabel = (mod: StoreModRow): string => (isEmployeePackItem(mod) ? '员工' : '扩展 Mod')
+  const marketItemKindLabel = (mod: StoreModRow): string => (isEmployeePackItem(mod) ? '员工' : '模块')
 
   const installSuccessMessage = (mod: StoreModRow, onboardNote = ''): string => {
     const kind = marketItemKindLabel(mod)

@@ -28,7 +28,7 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
     path: '/mod-store',
     name: 'mod-store',
     component: () => import('../../views/ModStore.vue'),
-    meta: { title: '能力库' },
+    meta: { title: 'AI 市场' },
   },
   {
     path: '/settings',

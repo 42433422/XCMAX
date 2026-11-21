@@ -104,6 +104,13 @@ class MaintenanceRuntime:
         gate = self.policy.admit(force=force, triggered_by=triggered_by)
         self.state.ensure_baseline()
         if not gate.get("should_run"):
+            # Admission throttles new code work, not the exact already accepted
+            # merge's readback. Disabled/provenance/metrics gates still stop it.
+            recovery = (
+                self._recover_memory(self.state.load_memory())
+                if gate.get("reason") in {"cooldown", "below_threshold"}
+                else {}
+            )
             record = {
                 "created_at": config._iso(started_at),
                 "force": force,
@@ -113,6 +120,7 @@ class MaintenanceRuntime:
                 "run_id": run_id,
                 "status": f"skipped_{gate.get('reason')}",
                 "triggered_by": triggered_by,
+                **recovery,
             }
             record.update(lineage.remediation_lineage_fields(remediation_context))
             self.state.append(record)

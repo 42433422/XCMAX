@@ -36,6 +36,39 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 保留原来的包内目录和各员工的文件包含规则。仓库内可直接运行入口；导出到仓库外的
 员工源码需要在构建环境安装 `xcagi-common`，生成的 `.xcemp` 无此构建依赖。
 
+## 战略与反馈闭环的开源复用
+
+缺口清单、控制入口和运行边界统一维护在 [自治运维手册](../../docs/autonomy.md)。
+本轮在 `main@392d50b5` 与 #3398 上复查，沿用已纳入的 #3396 战略候选、失败聚簇和定时治理；#3397 的依赖修复已在主干。审批预算与执行结果以既有 SQL 决策账本为准。
+
+| 组件 | 固定版本/许可证 | 复用职责与选择理由 |
+|---|---|---|
+| [Google OR-Tools](https://github.com/google/or-tools/releases/tag/v9.15) | `9.15.6755` / Apache-2.0 | CP-SAT 处理依赖、风险和多资源组合；产品层校验整数边界、审批范围及最终可行性 |
+| [GrowthBook Python SDK](https://github.com/growthbook/growthbook-python) | `4.0.1` / MIT | 官方稳定身份分流；与既有 GrowthBook `5.2.0` REST 统计接口衔接真实曝光/结果 |
+| [promptfoo](https://github.com/promptfoo/promptfoo/releases/tag/0.126.0) | CLI `0.126.0` / MIT | 在职训练的成对回归；冻结输入和输出哈希，只形成待审批候选 |
+| [Anthropic Sandbox Runtime](https://github.com/anthropics/sandbox-runtime) | `0.0.83` / Apache-2.0 | 官方命名空间、seccomp、TLS 与请求过滤；原始 key 只在受信控制进程闭包中使用 |
+| [LangGraph](https://github.com/langchain-ai/langgraph) / [GEPA](https://github.com/gepa-ai/gepa) | `1.2.10` / `0.1.4`，MIT | 沿用仓库固定包、持久检查点、审批中断和辅助实验；产品只实现协议适配 |
+| [APScheduler](https://github.com/agronholm/apscheduler/tree/3.11.3) | `3.11.3` / MIT | 复用现有独立调度进程，推进批准组合、实验和恢复读回 |
+| [LiteLLM](https://github.com/BerriAI/litellm/tree/v1.109.3) | SDK `1.109.3` / MIT | 复用现有流式路由；预算调用关闭隐性重试/fallback，在 SDK 归一化前观测供应商原始 usage，避免把本地估算当结算回执 |
+| [OpenAI Python SDK](https://github.com/openai/openai-python) | `3.57.0` / Apache-2.0 | 通过 LiteLLM 的请求专属 client 接口和 SDK 原生 `AsyncStream` 观察真实 chunk；不改全局回调或自行解析另一套 SSE |
+| [filelock](https://github.com/tox-dev/filelock) | 服务器锁定 `4.2.4` / Unlicense；沿用 governance 兼容范围 | 与原维护 ledger 共用派发锁；先持久化意图，再发起 GitHub 工作流，响应丢失只恢复原运行 |
+| [systemd](https://github.com/systemd/systemd/tree/v249) | 既有主机组件，接口基线 `v249` / LGPL-2.1-or-later | 复用 transient service，在独立服务进程中执行冻结的回滚请求；不修改服务 KillMode 或授予额外权限 |
+
+SQLAlchemy 和 PostgreSQL 继续承载事务、并发 CAS 与持久结果；备份复用既有 PostgreSQL 16 的 [导出快照](https://www.postgresql.org/docs/16/functions-admin.html#FUNCTIONS-SNAPSHOT-SYNCHRONIZATION)与 `pg_dump --snapshot`（PostgreSQL License），不另建快照引擎。已批准的模型费率用于计提，
+真实 usage、支付与客户确认来自原台账。旧 JSONL 赌注保留只读兼容。
+源码适配集中在 `strategic_portfolio*`、`retort_feedback_*` 和既有发布脚本；
+候选生成、优化求解、实验分流、检查点、TLS 代理均使用上述现成实现。
+仓库自行保留的胶水仅负责账号归属、审批摘要、预算/订单关联、固定发布身份和既有员工入口；
+这些产品合同没有可直接替代的通用上游实现。具体上游差异已核对固定版本源码：
+[GrowthBook 5.2.0](https://github.com/growthbook/growthbook/blob/v5.2.0/packages/back-end/src/services/experimentChanges/changeExperimentStatus.ts)
+停止并临时推广会将 coverage 设为 1，本地仍保留原批准 cohort；
+[LiteLLM 1.109.3](https://github.com/BerriAI/litellm/blob/v1.109.3/litellm/litellm_core_utils/streaming_handler.py)
+可能合成或补齐流式 usage，适配器在 Router 预读首块之前通过专属 SDK client 保留原始 chunk 中的两项 token 计数并核对最终值。
+CI 安装既有 `llm-router` extra，使用真实固定版 SDK 回归缺失、部分用量和取消场景。
+战略 Python 任务复用标准库 ZipFile/SourceFileLoader 与原员工解析器，从已批准归档字节创建执行快照；
+这项合同核验不代表新建 OS 沙箱，也不把宿主所有依赖声明为不可变。
+组件版本、配置可用性、测试、生产回执分别核验；接入组件不代表 L6 生产验收完成。
+
 ## 前端看板
 
 `XCAGI-Full-Pipeline.html` → `#s-gaps` / `#s-roadmap` 由 `docs/xcagi-dashboard/emp-wf-action-items.js` 拉取本栈 `:8788` API 动态渲染。
@@ -46,7 +79,9 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 
 GitHub 安装步骤不接收模型、网关、设备或 GitHub 凭据；使用 `runtime_tools/github_executor_deps` 中的完整性锁执行 `npm ci --ignore-scripts --include=optional`，禁止依赖生命周期脚本留下同用户后台进程。Ubuntu 22.04 x64 直接启动官方 `opencode-linux-x64-baseline@1.19.6` 的原生入口，不运行 npm 包的 postinstall stub；安装后无凭据核对 CLI 版本、固定沙箱及 seccomp、bubblewrap、socat、ripgrep。原 Codex 路径锁定当前已配置的 [openai/codex 0.153.4](https://github.com/openai/codex)（Apache-2.0）；`PARA_CODEX_VERSION` 改动须同时评审并更新对应 manifest 与 lock，版本不符会停止。只有随后的执行步骤注入授权并写入 Codex 配置，OpenCode 仍按获批分配选取凭据。
 
-每个任务使用独立配置、缓存和临时目录，只允许任务目录内的授权写入，网络限于受信网关和 npm 依赖源。只读任务不能写任务目录；原生会话权限拒绝未知工具，交互授权请求自动拒绝。Windows 的固定版沙箱尚不能保持本适配器的模型配置传递与原生会话校验合同，因此设备明确报告 OpenCode 不就绪；不会改走绕过校验的 CLI 路径。这些限制不构成模型凭据不可导出的保证，原 PR 与客户反馈自动修复均按[凭据迁移边界](../../FHD/docs/autonomy/CREDENTIAL_VAULT_MIGRATION.md)暂停，历史完成回执继续只读核对。
+每个任务使用独立配置、缓存和临时目录，只允许任务目录内的授权写入，网络限于受信网关和 npm 依赖源。只读任务不能写任务目录；原生会话权限拒绝未知工具，交互授权请求自动拒绝。Windows 的固定版沙箱尚不能保持本适配器的模型配置传递与原生会话校验合同，因此设备明确报告 OpenCode 不就绪。客户反馈修复仅在原生 Linux 隔离与 `srt-0.0.83-header-only-platform-v1` 准入同时满足时执行；原 PR repair 保持[凭据迁移边界](../../FHD/docs/autonomy/CREDENTIAL_VAULT_MIGRATION.md)中的暂停，历史完成回执继续只读核对。
+
+`opencode_sandbox_controller.mjs` 每任务嵌入一个固定版 SRT 实例，真实 key 捕获后从环境删除；隔离进程只收到无用占位符。官方 `filterRequest` 只允许获批模型的精确 HTTPS `POST /v1/responses` 与 `GET /v1/models`，并仅设置 Authorization 请求头；不启用会替换请求正文的通用 mask。CA 控制目录与任务可读写目录分离，启动模型前验证私钥不可读。发布器另核对 GitHub 执行 artifact 的 digest、原任务、run/source/candidate 身份，每次新增发布动作前重读授权。
 
 Linux 复用 [Ubuntu 22.04 的 bubblewrap 0.6.1 系列安全包](https://packages.ubuntu.com/jammy/bubblewrap)（LGPL-2.0-or-later）和固定 SRT 原生 seccomp helper，不附加能力或替换 bwrap 入口。[SRT 0.0.83 的 Linux 前提](https://github.com/anthropics/sandbox-runtime/blob/v0.0.83/README.md#linux)要求可用的用户命名空间；[Ubuntu 的 bwrap 子进程策略](https://documentation.ubuntu.com/release-notes/25.04/#apparmor-profile-for-bwrap)会拒绝该初始化链路需要的能力。因此其他 Linux 版本及受限宿主在安装／就绪／执行前明确拒绝，不修改 AppArmor、sysctl 或宿主权限。仅显式开启 OpenCode 的 GitHub execute/resume 任务选择 `ubuntu-22.04`，默认 Codex 与发布任务保持 `ubuntu-24.04`；无凭据准备步骤通过后才进入授权步骤。
 
@@ -54,7 +89,7 @@ Linux 复用 [Ubuntu 22.04 的 bubblewrap 0.6.1 系列安全包](https://package
 
 `DEVFLEET_FORCE_OPENCODE` 默认关闭；须先部署支持 OpenCode 的 DevFleet 协调服务（配套 `devfleet-private#17`）与工作设备，确认设备工具就绪后，再由运维在 MODstore、设备和 GitHub 仓库变量中显式设置为 `1`。未升级的设备保持等待，不将任务转给其他工具。首次派工遵循该可信策略，既有请求与 attempt 继续按原身份核对回执。
 
-GitHub Worker 还须启用下文的云端平台模型准入。客服与 Retort 先持久化同一次额度分配，再启动工作流；OpenCode 使用该分配的模型、受信 `PARA_PLATFORM_GATEWAY_URL` 和对应的专用 key，不使用独立的全局模型别名。它只接收本次选中模型的密钥；`MODSTORE_PARA_ARK_PLAN_FIRST=1` 的专用计划组合暂不兼容，明确等待，不交换凭据或改用其他模型。本地非池设备仍可显式配置网关、`PARA_OPENCODE_MODEL` 和 `OPENCODE_API_KEY`，并通过 `MODSTORE_CREDENTIAL_GRANT_SCOPES` 授予该模型凭据。平台请求沿用原生 `/v1/responses`，执行前回读有效模型、网关和认证配置。增量文字、工具活动与实际 token 用量经现有任务 WebSocket 回传。
+GitHub Worker 还须启用下文的云端平台模型准入。客服与 Retort 先持久化同一次额度分配，再启动工作流；可信控制进程使用该分配的模型、受信 `PARA_PLATFORM_GATEWAY_URL` 和对应专用 key，模型工作进程只接收占位符。`MODSTORE_PARA_ARK_PLAN_FIRST=1` 的专用计划组合暂不兼容，明确等待。本地非池设备仍可显式配置网关、`PARA_OPENCODE_MODEL` 和 `OPENCODE_API_KEY`，并通过 `MODSTORE_CREDENTIAL_GRANT_SCOPES` 授予控制进程该模型凭据。平台请求沿用原生 `/v1/responses`，执行前回读有效模型、网关和认证配置。增量文字、工具活动与实际 token 用量经现有任务 WebSocket 回传。
 
 ## 管理端小 C
 

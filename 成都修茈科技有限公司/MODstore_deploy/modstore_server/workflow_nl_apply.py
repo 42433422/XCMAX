@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+import time
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -48,6 +49,74 @@ async def apply_nl_workflow_graph(
     prov, mdl, err = resolve_llm_provider_model(db, user, provider, model)
     if err:
         return {"ok": False, "error": err}
+    from modstore_server.retort_experiment_runtime import (
+        begin_observation,
+        record_observation,
+        select_variant,
+    )
+    from modstore_server.retort_experiment_surfaces import WORKFLOW_NL_RESOURCE
+
+    system_prompt, assignment = select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=user.id,
+        workflow_id=workflow_id,
+        default_value=_facade().SYSTEM_PROMPT,
+    )
+    begin_observation(assignment)
+    started, result = time.perf_counter(), None
+
+    def observe(completed, *, session=None):
+        observed = dict(completed or {})
+        observed["ok"] = observed.get("ok") is True and observed.get("sandbox_ok") is True
+        record_observation(
+            assignment,
+            result=observed,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            session=session,
+        )
+
+    try:
+        result = await _generate_graph(
+            db,
+            user,
+            workflow_id=workflow_id,
+            workflow=wf,
+            brief=brief,
+            provider=prov,
+            model=mdl,
+            system_prompt=system_prompt,
+            target_employee_pack_id=target_employee_pack_id,
+            target_employee_label=target_employee_label,
+            status_hook=status_hook,
+            preset_eskill_nodes=preset_eskill_nodes,
+            record_result=lambda completed: observe(completed, session=db),
+        )
+        return result
+    finally:
+        # Successful graph writes and their static observation commit together.
+        # Failed attempts have no graph mutation and retain a separate observation.
+        if not result or result.get("ok") is not True:
+            observe(result)
+
+
+async def _generate_graph(
+    db,
+    user,
+    *,
+    workflow_id,
+    workflow,
+    brief,
+    provider,
+    model,
+    system_prompt,
+    target_employee_pack_id,
+    target_employee_label,
+    status_hook,
+    preset_eskill_nodes,
+    record_result,
+):
+    wf, prov, mdl = workflow, provider, model
     employee_pack_id = str(target_employee_pack_id or "").strip()
     employee_label = str(target_employee_label or "").strip()
     employee_node_requirements = ""
@@ -64,15 +133,13 @@ async def apply_nl_workflow_graph(
         ]
     if preset_nodes:
         lines = "\n".join(
-            (
-                f"  {i + 1}. skill_id={p['eskill_id']} name={p['name']!r} output_var={p.get('output_var', 'result')!r}"
-                for (i, p) in enumerate(preset_nodes)
-            )
+            f"  {i + 1}. skill_id={p['eskill_id']} name={p['name']!r} output_var={p.get('output_var', 'result')!r}"
+            for (i, p) in enumerate(preset_nodes)
         )
         preset_requirements = f'\n\n【重要约束】本次员工工作流已预先生成了以下真实可执行 ESkill（Python 脚本），你必须在画布中按顺序串接它们：\n{lines}\n规则：\n- 对每个预置 Skill，在 workflow.nodes 中生成一个 node_type="eskill" 节点，config.skill_id 填写对应数字，config.output_var 填写对应 output_var。\n- 这些节点已在数据库中，不需要在 skill_blueprints 中重复定义。\n- 可在这些节点前后增加 condition / variable_set / start / end，但不得删除任何预置节点。\n- 推荐链路：start -> eskill(1) -> eskill(2) -> … -> end。\n'
     user_msg = f"工作流名称: {wf.name}\n\n工作流说明与需求:\n{brief.strip()}\n\n{_facade()._eskill_catalog_lines(db, user)}\n\n{_facade()._catalog_lines(db, user)}\n\n{employee_node_requirements}{preset_requirements}请先生成 skill_blueprints（仅新增不在上面「重要约束」中的 Skill），再生成 workflow.nodes 与 workflow.edges JSON。"
     msgs = [
-        {"role": "system", "content": _facade().SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_msg},
     ]
     if status_hook:
@@ -231,7 +298,7 @@ async def apply_nl_workflow_graph(
                 chain = inserted_preset_tids
                 prev = start_tid
                 for tid in chain:
-                    if not any((e["target_temp_id"] == tid for e in edges_in)):
+                    if not any(e["target_temp_id"] == tid for e in edges_in):
                         edges_in.append(
                             {
                                 "source_temp_id": prev,
@@ -241,10 +308,7 @@ async def apply_nl_workflow_graph(
                         )
                     prev = tid
                 if not any(
-                    (
-                        e["source_temp_id"] == prev and e["target_temp_id"] == end_tid
-                        for e in edges_in
-                    )
+                    e["source_temp_id"] == prev and e["target_temp_id"] == end_tid for e in edges_in
                 ):
                     edges_in.append(
                         {
@@ -260,7 +324,7 @@ async def apply_nl_workflow_graph(
             "ok": False,
             "error": f"图中须有且仅有一个 start 与一个 end（当前 start={len(starts)} end={len(ends)}）",
         }
-    if employee_pack_id and any((n["temp_id"] == "target_employee" for n in nodes_in)):
+    if employee_pack_id and any(n["temp_id"] == "target_employee" for n in nodes_in):
         start_tid = next((n["temp_id"] for n in nodes_in if n["node_type"] == "start"), "")
         end_tid = next((n["temp_id"] for n in nodes_in if n["node_type"] == "end"), "")
         if start_tid and end_tid:
@@ -269,7 +333,7 @@ async def apply_nl_workflow_graph(
                 for e in edges_in
                 if not (e["source_temp_id"] == start_tid and e["target_temp_id"] == end_tid)
             ]
-            if not any((e["target_temp_id"] == "target_employee" for e in edges_in)):
+            if not any(e["target_temp_id"] == "target_employee" for e in edges_in):
                 edges_in.append(
                     {
                         "source_temp_id": start_tid,
@@ -277,7 +341,7 @@ async def apply_nl_workflow_graph(
                         "condition": "",
                     }
                 )
-            if not any((e["source_temp_id"] == "target_employee" for e in edges_in)):
+            if not any(e["source_temp_id"] == "target_employee" for e in edges_in):
                 edges_in.append(
                     {
                         "source_temp_id": "target_employee",
@@ -336,7 +400,7 @@ async def apply_nl_workflow_graph(
                 if str(bp.get("temp_skill_id") or "") not in preset_alias_refs
             ]
             blueprint_refs = {str(bp.get("temp_skill_id") or "") for bp in skill_blueprints}
-    missing_refs = sorted((x for x in skill_refs if x and x not in blueprint_refs))
+    missing_refs = sorted(x for x in skill_refs if x and x not in blueprint_refs)
     if missing_refs:
         return {
             "ok": False,
@@ -388,22 +452,23 @@ async def apply_nl_workflow_graph(
                     condition=e["condition"] or "",
                 )
             )
+        db.flush()
+        report = _facade().run_workflow_sandbox(
+            workflow_id, {}, mock_employees=True, validate_only=True, session=db
+        )
+        result = {
+            "ok": True,
+            "nodes_created": len(nodes_in),
+            "edges_created": len(edges_in),
+            "sandbox_ok": bool(report.get("ok")),
+            "validation_errors": [str(x) for x in report.get("errors") or []],
+            "llm_warnings": warnings,
+            "skills_created": len(temp_to_skill),
+            "skill_ids": temp_to_skill,
+        }
+        record_result(result)
         db.commit()
+        return result
     except RECOVERABLE_ERRORS as ex:
         db.rollback()
         return {"ok": False, "error": f"写入节点/边失败: {ex}"}
-    report = _facade().run_workflow_sandbox(
-        workflow_id, {}, mock_employees=True, validate_only=True
-    )
-    errs = [str(x) for x in report.get("errors") or []]
-    val_ok = bool(report.get("ok"))
-    return {
-        "ok": True,
-        "nodes_created": len(nodes_in),
-        "edges_created": len(edges_in),
-        "sandbox_ok": val_ok,
-        "validation_errors": errs,
-        "llm_warnings": warnings,
-        "skills_created": len(temp_to_skill),
-        "skill_ids": temp_to_skill,
-    }

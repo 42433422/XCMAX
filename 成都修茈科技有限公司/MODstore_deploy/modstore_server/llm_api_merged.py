@@ -162,6 +162,14 @@ async def resolve_default_llm_route(
         invalid(
             "BYOK 未提供可用聊天模型，请选择其他 BYOK 模型或明确恢复跟随平台", "NO_BYOK_CHAT_MODEL"
         )
+    # 统一网关配置后即代表平台模型池，不静默回落历史的单厂商默认配置。
+    if platform_credentials("litellm", state=state)[0]:
+        selected = await select("litellm", "", "platform_gateway", platform_only=True)
+        if selected:
+            return selected
+        invalid(
+            "统一网关没有可用的平台聊天模型，请联系管理员检查网关模型池", "NO_PLATFORM_CHAT_MODEL"
+        )
     configured = state["providers"].get(state.get("default_provider"))
     if configured:
         selected = await select(
@@ -218,6 +226,7 @@ def _require_byok_membership(db: _facade().Session, user: _facade().User) -> Non
 
 def _provider_labels() -> _facade().Dict[str, str]:
     return {
+        "litellm": "统一网关（LiteLLM）",
         "openai": "OpenAI",
         "deepseek": "DeepSeek",
         "anthropic": "Anthropic",

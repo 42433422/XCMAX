@@ -7,7 +7,7 @@ import os
 import socket
 from collections import deque
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Dict, List, Optional, Tuple
@@ -163,6 +163,24 @@ def _append_ledger(record: Dict[str, Any]) -> None:
         except (ImportError, OSError):
             pass
         fh.write(_dumps_ledger(record) + "\n")
+        if record.get("event") in {
+            "deploy_dispatch_intent",
+            "deploy_dispatch_bound",
+            "post_deploy_verified",
+            "merge_feedback_reconciled",
+        }:
+            fh.flush()
+            os.fsync(fh.fileno())
+    if (
+        record.get("event")
+        in {"deploy_dispatch_intent", "post_deploy_verified", "merge_feedback_reconciled"}
+        and os.name != "nt"
+    ):
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
 
 def _read_ledger(
@@ -219,9 +237,26 @@ def _ledger_row_timestamp(
         except ValueError:
             continue
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
     return None
+
+
+def merge_feedback_runs() -> List[Dict[str, Any]]:
+    """Reduce durable delivery state, retaining terminal records as replay fences."""
+    runs: Dict[str, Dict[str, Any]] = {}
+    for row in _read_ledger(limit=0):
+        if not isinstance(row, dict) or not (run_id := str(row.get("run_id") or "")):
+            continue
+        if runs.get(run_id, {}).get("status") in {"completed_merged", "completed_merge_failed"}:
+            continue
+        if row.get("event") == "merge_requested" and row.get("status") == "pending":
+            runs[run_id] = {**row, "status": "completed_merge_requested"}
+        elif row.get("event") == "merge_feedback_reconciled" or (
+            row.get("phase") == "complete" and row.get("status") == "completed_merge_requested"
+        ):
+            runs[run_id] = dict(row)
+    return list(runs.values())
 
 
 def _select_recent_milestone_rows(
@@ -240,7 +275,7 @@ def _select_recent_milestone_rows(
     excluded, and evidence expires after ``window_days`` so an old success can
     never prove current autonomy forever.
     """
-    current = (now or config._utc_now()).astimezone(timezone.utc)
+    current = (now or config._utc_now()).astimezone(UTC)
     bounded_days = max(1, min(int(window_days or config.DEFAULT_EVIDENCE_WINDOW_DAYS), 90))
     bounded_runs = max(1, min(int(run_limit or config.DEFAULT_EVIDENCE_RUN_LIMIT), 64))
     bounded_rows = max(1, min(int(row_limit or config.DEFAULT_EVIDENCE_ROW_LIMIT), 512))
@@ -392,4 +427,12 @@ def _write_loop_memory(memory: Dict[str, Any]) -> None:
     with tmp.open("w", encoding="utf-8") as fh:
         fh.write(_dumps_ledger(memory, indent=2))
         fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
     tmp.replace(path)
+    if os.name != "nt":
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
