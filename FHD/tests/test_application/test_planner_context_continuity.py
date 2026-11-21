@@ -308,6 +308,45 @@ async def test_unknown_alias_still_reports_missing_capability_without_paid_retry
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("requested,expected", [(None, 2048), (1024, 1024), (4096, None)])
+async def test_planner_default_output_fits_selected_model_without_changing_explicit_requests(
+    monkeypatch, streaming, requested, expected
+):
+    provider = RecordingProvider()
+    provider.model_info = {"context_window": 32768, "max_output_tokens": 2048}
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "4096")
+    monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **_: provider
+    )
+    context = {}
+    kwargs = {
+        "ai_service": None,
+        "context": context,
+        "messages": [{"role": "user", "content": "你好，请只回复收到"}],
+        "max_tokens": requested,
+    }
+
+    async def invoke():
+        if streaming:
+            return [chunk async for chunk in gateway.stream_planner_completion(**kwargs)]
+        return await asyncio.to_thread(gateway.request_planner_completion, **kwargs)
+
+    if expected is None:
+        with pytest.raises(windows.ContextWindowExceeded) as error:
+            await invoke()
+        assert error.value.reason == "model_output_limit_exceeded"
+        assert not provider.requests and not provider.summaries
+    else:
+        assert await invoke()
+        assert len(provider.requests) == 1
+        assert provider.requests[0]["max_tokens"] == expected
+        assert context["_context_budget"]["requested_output_tokens"] == expected
+        assert not provider.summaries
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
 async def test_account_change_during_summary_stops_the_original_primary_call(
     monkeypatch, streaming
 ):

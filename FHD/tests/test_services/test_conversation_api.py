@@ -52,6 +52,39 @@ class _ConcreteApi(ApiMixin):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("requested,expected", [(None, 1024), (512, 512), (2000, None)])
+async def test_conversation_default_output_fits_route_and_explicit_overflow_still_fails(
+    monkeypatch, requested, expected
+):
+    from app.application.agent_orchestrator import context_window_manager as windows
+
+    provider = SimpleNamespace(
+        provider_id="test",
+        model_name="small-output",
+        model_info={"context_window": 16384, "max_output_tokens": 1024},
+        chat_completion=AsyncMock(return_value={"choices": [{"message": {"content": "收到"}}]}),
+    )
+    manager = windows.ContextWindowManager()
+    compression = AsyncMock(wraps=manager.compress)
+    monkeypatch.setattr(manager, "compress", compression)
+    monkeypatch.setattr(windows, "get_context_window_manager", lambda: manager)
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **_: provider
+    )
+    result = await _ConcreteApi().call_llm_api(
+        [{"role": "user", "content": "你好，请只回复收到"}],
+        **({"max_tokens": requested} if requested is not None else {}),
+    )
+    if expected is None:
+        assert result["error"]["reason"] == "model_output_limit_exceeded"
+        provider.chat_completion.assert_not_awaited()
+    else:
+        assert result["choices"][0]["message"]["content"] == "收到"
+        assert provider.chat_completion.await_args.kwargs["max_tokens"] == expected
+        assert compression.await_args.kwargs["output_tokens"] == expected
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("requested_model", [None, "tiny"])
 async def test_budget_uses_selected_provider_or_explicit_model(monkeypatch, requested_model):
     from app.application.agent_orchestrator.context_window_manager import (

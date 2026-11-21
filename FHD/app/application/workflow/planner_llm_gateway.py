@@ -233,7 +233,6 @@ def stream_planner_completion(
     stream = getattr(provider, "stream_chat_completion", None) if provider is not None else None
     if stream is None:
         return None
-    output_limit = max_tokens or planner_max_tokens()
 
     async def generate():
         from app.infrastructure.llm.model_context_windows import resolve_model_limits
@@ -241,6 +240,11 @@ def stream_planner_completion(
         with model_rate_limit_scope(context):
             limits = await resolve_model_limits(
                 provider, extra.get("model"), extra.get("provider"), messages=messages
+            )
+            output_limit = (
+                max_tokens
+                if max_tokens is not None
+                else limits.default_output_tokens(planner_max_tokens())
             )
             outbound = await _prepare_model_messages(
                 provider, context, messages, output_limit, extra, model_limits=limits
@@ -280,11 +284,15 @@ def request_planner_completion(
         from app.infrastructure.llm.model_context_windows import resolve_model_limits
 
         with model_rate_limit_scope(context):
-            output_limit = max_tokens or planner_max_tokens()
 
             async def complete():
                 limits = await resolve_model_limits(
                     provider, extra.get("model"), extra.get("provider"), messages=messages
+                )
+                output_limit = (
+                    max_tokens
+                    if max_tokens is not None
+                    else limits.default_output_tokens(planner_max_tokens())
                 )
                 outbound = await _prepare_model_messages(
                     provider, context, messages, output_limit, extra, model_limits=limits

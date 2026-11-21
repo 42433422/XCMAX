@@ -30,7 +30,7 @@ class ConversationLlmMixin:
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000,
+        max_tokens: int | None = None,
         **kwargs,
     ) -> dict[str, Any] | None:
         """Call the active platform, direct, or legacy LLM provider."""
@@ -62,6 +62,9 @@ class ConversationLlmMixin:
             limits = await resolve_model_limits(
                 provider, kwargs.get("model"), kwargs.get("provider"), messages=messages
             )
+            output_limit = (
+                max_tokens if max_tokens is not None else limits.default_output_tokens(2000)
+            )
             compression = await get_context_window_manager().compress(
                 messages,
                 user_id=str(getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""),
@@ -69,14 +72,14 @@ class ConversationLlmMixin:
                 context=context,
                 model=limits.model,
                 model_limits=limits,
-                output_tokens=max_tokens,
+                output_tokens=output_limit,
                 external_tokens=schema_tokens,
             )
             limits.assert_current()
             result = await provider.chat_completion(
                 messages=compression.messages,
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=output_limit,
                 **{**kwargs, **limits.request_options},
             )
             limits.assert_current()

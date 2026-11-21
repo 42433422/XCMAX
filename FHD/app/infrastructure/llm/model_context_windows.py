@@ -61,6 +61,15 @@ class ModelLimits:
         if self.request_guard is not None:
             self.request_guard()
 
+    def default_output_tokens(self, default_tokens: int) -> int:
+        """Fit a system default to known output capacity; explicit values stay strict."""
+        _tokens(default_tokens, "default_tokens")
+        return (
+            min(default_tokens, self.max_output_tokens)
+            if self.max_output_tokens is not None
+            else default_tokens
+        )
+
     def input_budget(self, output_tokens: int = 0, external_tokens: int = 0) -> int:
         """Remaining message budget after actual output, tools and one safety margin.
 
