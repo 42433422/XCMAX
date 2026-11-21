@@ -62,10 +62,14 @@ def roundtrip(monkeypatch, tmp_path, trusted_actor):
     executor = Mock()
     executor.execute_with_deadline.return_value = {
         "success": True,
+        "dataset_id": "synthetic-purchases",
         "query": QUERY,
         "answer": ANSWER,
         "answer_grounded": True,
         "chunks": [{"text": ANSWER, "source_url": "synthetic-purchase-fixture.xlsx"}],
+        "citations": [
+            {"index": 1, "source": "synthetic-purchase-fixture.xlsx", "chunk_index": 0}
+        ],
     }
 
     def new_orchestrator():
@@ -229,6 +233,27 @@ def test_scope_choice_survives_restart_and_executes_once(roundtrip, reply):
     assert again["data"]["action"] == "clarification_required"
     assert roundtrip.executor.execute_with_deadline.call_count == 1
     assert len(roundtrip.repository.get(run_id).tool_calls) == 1
+
+
+def test_incomplete_knowledge_receipt_stays_unverified_after_clarification(roundtrip):
+    """A success-looking knowledge payload is not a verified completion without the contract fields."""
+    roundtrip.executor.execute_with_deadline.return_value = {
+        "success": True,
+        "query": QUERY,
+        "answer": ANSWER,
+        "answer_grounded": True,
+        "chunks": [{"text": ANSWER, "source_url": "synthetic-purchase-fixture.xlsx"}],
+    }
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    assert first["data"]["action"] == "clarification_required"
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["run_id"] == first["run_id"]
+    assert result["success"] is not True
+    assert result["execution_state"] == "blocked"
+    run = roundtrip.repository.get(first["run_id"])
+    assert run.status == "blocked"
+    assert "独立结果核验尚未通过" in (run.error or "")
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
 
 
 def test_cancelling_a_scope_question_is_durable(roundtrip):

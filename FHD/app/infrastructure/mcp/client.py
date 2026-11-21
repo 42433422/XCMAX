@@ -187,7 +187,7 @@ async def _with_session(
 
 def _read_only(tool: Any) -> bool:
     annotations = getattr(tool, "annotations", None)
-    hint = _sdk_field(annotations, "read_only_hint", "readOnlyHint")
+    hint = _field(annotations, "read_only_hint", "readOnlyHint")
     return hint is True
 
 
@@ -205,7 +205,7 @@ async def _list_all_tools(session: Any, *, max_pages: int = 10) -> list[Any]:
         params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
         result = await session.list_tools(params=params) if params else await session.list_tools()
         collected.extend(getattr(result, "tools", None) or [])
-        cursor = _sdk_field(result, "next_cursor", "nextCursor")
+        cursor = _field(result, "next_cursor", "nextCursor")
         if not cursor:
             break
     return collected
@@ -226,7 +226,7 @@ def list_tools(config: McpServerConfig) -> list[McpToolInfo]:
         name = str(getattr(tool, "name", "") or "").strip()
         if not name:
             continue
-        schema = _sdk_field(tool, "input_schema", "inputSchema")
+        schema = _field(tool, "input_schema", "inputSchema")
         tools.append(
             McpToolInfo(
                 name=name,
@@ -267,7 +267,7 @@ def _result_text(result: Any) -> str:
                 parts.append(text)
         if parts:
             return "\n".join(parts)
-    structured = _sdk_field(result, "structured_content", "structuredContent")
+    structured = _field(result, "structured_content", "structuredContent")
     return _serialize(structured) if structured is not None else ""
 
 
@@ -410,15 +410,15 @@ def call_tool(
                 retry_safe=safe_read,
             )
         text = _result_text(result)
-        is_error = bool(_sdk_field(result, "is_error", "isError", False))
-        structured = _sdk_field(result, "structured_content", "structuredContent")
+        is_error = bool(_field(result, "is_error", "isError", False))
+        structured = _field(result, "structured_content", "structuredContent")
         invalid = (
             isinstance(structured, dict)
             and "success" in structured
             and type(structured["success"]) is not bool
         )
         business_error = isinstance(structured, dict) and structured.get("success") is False
-        result_type = _sdk_field(result, "result_type", "resultType", "complete")
+        result_type = _field(result, "result_type", "resultType", "complete")
         derived_error = _result_error(result, tool_name)
         blocks = getattr(result, "content", None)
         evidence = {

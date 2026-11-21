@@ -363,7 +363,13 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 timeout_seconds=int(action_meta.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                 retry=dict(action_meta.get("retry") or DEFAULT_RETRY),
                 idempotent=bool(action_meta.get("idempotent", False)),
-                read_only=action_meta.get("read_only") is True,
+                read_only=(
+                    action_meta.get("read_only") is True
+                    or (
+                        str(tool_id) == "dataset_rag"
+                        and normalized_action in DATASET_RAG_READ_ACTIONS
+                    )
+                ),
                 required_params=required_params,
                 availability=str(
                     action_meta.get("availability") or tool_meta.get("availability") or "shared"

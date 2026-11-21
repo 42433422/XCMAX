@@ -511,12 +511,17 @@ class StepExecution:
                         "error_type": type(exc).__name__,
                         "message": "工具执行失败",
                     }
-            step.output = normalize_execution_result(
-                normalize_tool_execution_result(
-                    step,
-                    _confirm_customer_create(step, dict(output or {}), runtime_context),
-                    ctx,
-                )
+            admitted = normalize_tool_execution_result(
+                step,
+                _confirm_customer_create(step, dict(output or {}), runtime_context),
+                ctx,
+            )
+            # Verified child admission is already a completed host receipt.
+            # Generic unfinished-result normalization must not rewrite it.
+            step.output = (
+                admitted
+                if verified_plan_admission(step, admitted, ctx)
+                else normalize_execution_result(admitted)
             )
             if step.output.get("success") is not True:
                 step.output["success"] = False

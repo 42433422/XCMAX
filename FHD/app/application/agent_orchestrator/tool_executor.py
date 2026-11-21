@@ -740,9 +740,12 @@ class AgentToolExecutor:
                 "retryable": False,
                 "reconciliation_required": True,
             }
-        result = normalize_execution_result(
-            normalize_tool_execution_result(step, result, dict(runtime_context or {}))
-        )
+        result = normalize_tool_execution_result(step, result, dict(runtime_context or {}))
+        # Verified child admission is a completed host receipt that still awaits
+        # business approval. Generic unfinished-result normalization must not
+        # rewrite that success into a failed/unknown effect.
+        if not verified_plan_admission(step, result, dict(runtime_context or {})):
+            result = normalize_execution_result(result)
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)
@@ -848,10 +851,9 @@ def execute_with_tool_deadline(
         ):
             # A returned receipt can require reconciliation without a timeout.
             # Keep its durable artifacts and observed evidence visible to the run.
-            receipt = {**result, "success": False, "outcome": "unknown", "retryable": False}
-            if "reconciliation_evidence" not in receipt:
-                receipt["reconciliation_evidence"] = dict(result)
-            return receipt
+            # Timely receipts keep their own artifacts/evidence in place.
+            # Nested reconciliation_evidence is reserved for late/unknown-I/O wrapping.
+            return {**result, "success": False, "outcome": "unknown", "retryable": False}
         if (
             completed_in_time
             and isinstance(result, dict)

@@ -71,8 +71,16 @@ def test_browser_schema_reaches_planner_and_rejects_invalid_action(monkeypatch):
     ).ok
     from app.application.workflow.llm_plan_generation import _tool_specs
 
+    # Planner catalog is slim by contract (#3423): types, enums, required fields, and
+    # short names only. Official minLength / additionalProperties stay on the tool
+    # spec and are still enforced by validate_tool_call above.
     prompts = _tool_specs(catalog)
-    assert prompts[0]["actions"][0]["input_schema"] == schema
+    planner_schema = prompts[0]["actions"][0]["input_schema"]
+    assert planner_schema["type"] == schema["type"]
+    assert planner_schema["required"] == schema["required"]
+    assert planner_schema["properties"]["target"]["type"] == "string"
+    assert planner_schema["properties"]["button"]["enum"] == ["left", "right"]
+    assert "additionalProperties" not in planner_schema
 
 
 @pytest.mark.parametrize("context", [{}, {"tenant_id": "1", "run_id": "run-one"}])

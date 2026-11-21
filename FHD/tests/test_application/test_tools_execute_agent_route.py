@@ -51,16 +51,19 @@ def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    # The OCR event is published, but this write has no independent verifier.
+    # The run stays blocked so the route does not claim a completed receipt.
+    assert response.status_code == 202
     payload = response.json()
     assert payload["success"] is True
     assert payload["event"] == "ocr.requested"
     assert payload["agent_run_id"] == payload["run_id"]
+    assert payload["agent_status"] == "blocked"
 
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == "17"
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == "tools_execute_ocr_request"
     assert run.tool_calls[0].tool_id == "ocr"
     assert run.tool_calls[0].action == "request"
@@ -102,14 +105,15 @@ def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
     assert payload["success"] is True
     assert payload["agent_run_id"] == payload["run_id"]
+    assert payload["agent_status"] == "blocked"
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == "tools_execute_ocr_request"
     assert run.tool_calls[0].tool_id == "ocr"
     assert run.tool_calls[0].action == "request"

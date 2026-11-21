@@ -346,7 +346,14 @@ class TestExecuteWorkflowTool:
         ):
             result = self._call("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        # An exception after the employee adapter was entered is not proof that
+        # it had no effect. Do not invent a fallback receipt or call another impl.
+        assert data["success"] is False
+        assert data["error_code"] == "tool_execution_interrupted"
+        assert data["execution_state"] == "unknown"
+        assert data["outcome"] == "unknown"
+        assert data["reconciliation_required"] is True
+        assert "suggestions" not in data
 
     def test_template_preview_dispatched(self):
         with (
@@ -361,12 +368,18 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
-                return_value={"result": "ok"},
+                "app.application.tools.registered_capabilities.execute_registered_capability",
+                return_value='{"result": "ok"}',
             ) as dispatch,
         ):
             result = self._call("template_preview", {"action": "view"})
-            dispatch.assert_called_once_with("template_preview", "view", {"action": "view"})
+            dispatch.assert_called_once()
+            args, kwargs = dispatch.call_args
+            assert args[0] == {
+                "tool_id": "template_preview",
+                "action": "view",
+                "params": {"action": "view"},
+            }
         data = json.loads(result)
         assert "result" in data
 
