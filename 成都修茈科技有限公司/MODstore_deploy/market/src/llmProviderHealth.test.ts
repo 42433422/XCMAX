@@ -15,12 +15,14 @@ describe('llmProviderHealth', () => {
     expect(hasAnyLlmKey({ has_user_override: true })).toBe(true)
   })
 
-  it('walletTileKeyConfigured: magnetic lit on BYOK, or Xiaomi platform-only', () => {
+  it('walletTileKeyConfigured: magnetic lit on BYOK, or Xiaomi/LiteLLM platform-only', () => {
     expect(walletTileKeyConfigured('openai', { has_platform_key: true, has_user_override: false })).toBe(false)
 
     expect(walletTileKeyConfigured('minimax', { has_platform_key: true, has_user_override: false })).toBe(false)
 
     expect(walletTileKeyConfigured('xiaomi', { has_platform_key: true, has_user_override: false })).toBe(true)
+
+    expect(walletTileKeyConfigured('litellm', { has_platform_key: true, has_user_override: false })).toBe(true)
 
     expect(walletTileKeyConfigured('openai', { has_platform_key: false, has_user_override: true })).toBe(true)
 
