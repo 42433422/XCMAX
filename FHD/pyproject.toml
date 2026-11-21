@@ -466,6 +466,9 @@ exclude = [
 ]
 namespaces = false
 
+[tool.setuptools.package-data]
+"app.infrastructure.llm._vendor.openhands_condenser" = ["LICENSE", "PROVENANCE.json"]
+
 # Incremental contracts: scope only the migrated sync slice, not all legacy modules.
 [tool.importlinter]
 root_package = "app"

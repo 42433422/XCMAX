@@ -23,6 +23,54 @@ _VISION_HINT_RE = re.compile(
 )
 
 
+def public_model_capabilities(value: object) -> Payload:
+    """Accept only public limits from the authenticated route/catalog response."""
+    if not isinstance(value, dict):
+        return {}
+    limits: Payload = {
+        key: value[key]
+        for key in ("context_window", "max_input_tokens", "max_output_tokens")
+        if type(value.get(key)) is int and value[key] > 0
+    }
+    resolved = value.get("resolved_model")
+    if (
+        isinstance(resolved, str)
+        and "://" not in resolved
+        and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./:@+-]{0,254}", resolved)
+    ):
+        limits["resolved_model"] = resolved
+    if limits:
+        source = value.get("source")
+        limits["source"] = (
+            source
+            if isinstance(source, str)
+            and source in {"provider_metadata", "litellm_registry", "litellm_model_info"}
+            else "platform_catalog"
+        )
+    return limits
+
+
+def model_capabilities(value: Payload, provider: str, model: str) -> Payload:
+    """Look up an exact account-visible deployment, never a similarly named alias."""
+    nested = value.get("data")
+    payload = nested if isinstance(nested, dict) else value
+    providers = payload.get("providers")
+    if not isinstance(providers, list):
+        return {}
+    for block in providers:
+        if not isinstance(block, dict) or str(block.get("provider") or "").lower() != provider:
+            continue
+        rows = block.get("models_detailed")
+        if not isinstance(rows, list):
+            return {}
+        for row in rows:
+            if isinstance(row, dict) and row.get("id") == model:
+                return public_model_capabilities(
+                    row.get("model_capabilities") or row.get("provider_metadata")
+                )
+    return {}
+
+
 def cache_key(connection: Connection) -> CacheKey:
     fingerprint = hashlib.sha256(connection.auth_token.encode("utf-8")).hexdigest()[:16]
     return connection.platform_url, fingerprint
