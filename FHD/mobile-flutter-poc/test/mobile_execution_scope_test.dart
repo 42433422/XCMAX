@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
+import 'package:xcagi_flutter_poc/src/api/mobile_models.dart' show MobileEnvelope;
 import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 
 void main() {

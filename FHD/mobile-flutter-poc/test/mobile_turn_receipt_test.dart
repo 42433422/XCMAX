@@ -36,7 +36,8 @@ void main() {
           (await request.response.detachSocket(writeHeaders: false)).destroy();
           return;
         }
-        request.response.headers.contentType = ContentType('text', 'event-stream');
+        request.response.headers.contentType =
+            ContentType('text', 'event-stream', charset: 'utf-8');
         request.response.write('data: {"type":"token","text":"partial"}\n\n');
         if (doneState != null) {
           request.response.write('data: ${jsonEncode({'type': 'done', 'result': {

@@ -1095,11 +1095,18 @@ void main() {
         title: 'Trae', subtitle: '', timestampText: '');
     await expectLater(repository.streamMessage(conversation: conversation, body: '执行一次',
         idempotencyKey: 'original-lan-turn'), throwsA(isA<MobileApiException>()));
+    final dispatch = await (await repository.openOfflineStore())!
+        .turnDispatch(conversation.id, 'original-lan-turn');
+    expect(dispatch['base_url'], 'http://192.168.31.8:17500/');
+    expect(dispatch['connection_base'], 'http://192.168.31.8:17500/');
+    expect(dispatch['scope'], isNotEmpty);
     expect(await repository.streamMessage(conversation: conversation, body: '',
         idempotencyKey: 'original-lan-turn', resumeOnly: true), '原LAN结果');
     expect(api.streamCalls, 1);
     expect(api.readKeys, ['original-lan-turn']);
-    expect(api.readBases, ['http://192.168.31.8:5011/']);
+    expect(api.streamBases, ['http://192.168.31.8:17500/']);
+    expect(api.readBases, api.streamBases);
+    expect(api.readConnectionBases, ['http://192.168.31.8:17500/']);
     expect(api.postedBaseUrls, isEmpty);
     expect(api.createdRelayTasks, 0);
   });
@@ -2490,14 +2497,17 @@ class _UnboundRelayCreationApi extends _FreshPairedRelayApi {
 class _LostLanTurnApi extends _FreshPairedRelayApi {
   _LostLanTurnApi(super.store);
   int streamCalls = 0;
+  final streamBases = <String>[];
   final readKeys = <String>[];
   final readBases = <String>[];
+  final readConnectionBases = <String>[];
   @override
   Future<String> streamSuperEmployeeMessage(String tool, String body,
       {String baseUrl = '', String idempotencyKey = '', String conversationId = '',
       void Function(String)? onToken, void Function(String)? onStatus,
       bool Function()? isCancelled}) async {
     streamCalls++;
+    streamBases.add(baseUrl);
     throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
         message: '等待原回执', body: {'execution_state': 'unknown'});
   }
@@ -2507,6 +2517,7 @@ class _LostLanTurnApi extends _FreshPairedRelayApi {
       required String expectedConnectionBase}) async {
     readKeys.add(idempotencyKey);
     readBases.add(baseUrl);
+    readConnectionBases.add(expectedConnectionBase);
     return '原LAN结果';
   }
 }
