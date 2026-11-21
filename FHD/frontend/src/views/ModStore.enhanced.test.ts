@@ -180,7 +180,7 @@ describe('ModStore.vue – rendering', () => {
 
   it('renders store title', async () => {
     const wrapper = await mountModStore()
-    expect(wrapper.find('.store-title').text()).toContain('AI 员工市场')
+    expect(wrapper.find('.store-title').text()).toContain('AI 市场')
     wrapper.unmount()
   })
 

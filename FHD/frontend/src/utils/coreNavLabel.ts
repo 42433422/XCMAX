@@ -25,7 +25,7 @@ export type ModForNavLabel = {
 export const MENU_DEFAULT_NAMES: Record<string, string> = {
   'model-payment': '模型服务',
   'kitten-finance': '财务分析',
-  'mod-store': '能力库',
+  'mod-store': 'AI 市场',
   'materials-list': '资源库',
   'traditional-mode': '表格模式',
   'orders-create': '新建业务单据',
@@ -98,7 +98,7 @@ export const INDUSTRY_MENU_LABELS: Record<string, Record<string, string>> = {
     chat: '运维对话',
     im: '信息',
     'ai-ecosystem': '智能生态',
-    'mod-store': '能力库',
+    'mod-store': 'AI 市场',
     'employee-workflow': '编制工作台',
     'workflow-visualization': '流程可视化',
     'duty-roster-graph': '员工图谱',

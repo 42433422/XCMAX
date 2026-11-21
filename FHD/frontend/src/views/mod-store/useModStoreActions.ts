@@ -5,6 +5,7 @@ import { autoOnboardInstalledMarketItem } from '@/utils/workflowEmployeeOnboard'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 import type { useModsStore } from '@/stores/mods'
 import type { ModStoreState, StoreModRow } from './useModStoreState'
+import { isTemplateItem } from './useModStoreState'
 import type { ModStoreCatalog } from './useModStoreCatalog'
 import type { ModStoreMeta } from './useModStoreMeta'
 
@@ -39,6 +40,7 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
   }
 
   const installModSilent = async (mod: StoreModRow): Promise<{ success: boolean; message: string }> => {
+    if (isTemplateItem(mod)) return { success: false, message: '请在模板详情中使用工作流模板' }
     if (isHostFoundationEmployeePackId(mod.pkg_id || mod.id)) {
       const edition = readBuildEdition()
       const data = await installHostFoundation(edition === 'minimal' ? 'minimal' : 'generic')
@@ -72,6 +74,7 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
   }
 
   const installMod = async (mod: StoreModRow): Promise<void> => {
+    if (isTemplateItem(mod)) return
     mod.installationInProgress = true
     try {
       let data
@@ -122,6 +125,7 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
   }
 
   const uninstallMod = async (mod: StoreModRow): Promise<void> => {
+    if (isTemplateItem(mod)) return
     if (!(await appConfirm(`确定要卸载 MOD "${mod.name}" 吗？`, { danger: true }))) {
       return
     }
@@ -156,6 +160,7 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
   }
 
   const updateMod = async (mod: StoreModRow): Promise<void> => {
+    if (isTemplateItem(mod)) return
     mod.updateInProgress = true
     try {
       const payload = {
@@ -191,10 +196,11 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
   }
 
   const hasUpdate = (mod: StoreModRow): boolean | string | undefined => {
-    return mod.is_installed && mod.new_version && mod.new_version !== mod.version
+    return !isTemplateItem(mod) && mod.is_installed && mod.new_version && mod.new_version !== mod.version
   }
 
   const viewDetails = (mod: StoreModRow): void => {
+    if (isTemplateItem(mod)) return
     selectedMod.value = mod
   }
 

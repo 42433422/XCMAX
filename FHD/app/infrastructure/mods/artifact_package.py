@@ -44,6 +44,8 @@ def peek_manifest_from_zip(package_path: str) -> dict[str, Any]:
 
 def peek_artifact(package_path: str) -> str:
     data = peek_manifest_from_zip(package_path)
+    if str(data.get("artifact") or data.get("kind") or "").strip().lower() == "workflow_template":
+        return "workflow_template"
     return normalize_artifact(data)
 
 

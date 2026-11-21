@@ -1,6 +1,13 @@
 <script setup lang="ts">
 // 拆分自 CatalogDetailView.vue 模板（原第 6–59 行）；模板逐字迁移，事件改为 emits，行为不变。
-import { getArtifactLabel, complianceStatusLabel, ipRiskLabel, licenseScopeLabel, originTypeLabel, type CatalogItemDetail } from './catalogDetailTypes'
+import {
+  getArtifactLabel,
+  complianceStatusLabel,
+  ipRiskLabel,
+  licenseScopeLabel,
+  originTypeLabel,
+  type CatalogItemDetail,
+} from './catalogDetailTypes'
 
 defineProps<{
   item: CatalogItemDetail
@@ -61,13 +68,27 @@ defineEmits<{
       </div>
       <div class="detail-hero__buttons">
         <template v-if="item.purchased">
-          <button type="button" class="btn btn-success" @click="$emit('download')">下载</button>
+          <RouterLink
+            v-if="item.artifact === 'workflow_template'"
+            class="btn btn-success"
+            :to="{ name: 'template-detail', params: { id: String(item.id) } }"
+          >
+            使用模板
+          </RouterLink>
+          <button v-else type="button" class="btn btn-success" @click="$emit('download')">下载</button>
           <span class="owned-badge">已拥有</span>
         </template>
         <template v-else>
           <button type="button" class="btn btn-primary-solid btn-cta-buy" @click="$emit('buy')" :disabled="buying">
             {{ buying ? '购买中...' : '购买' }}
           </button>
+          <RouterLink
+            v-if="item.artifact === 'workflow_template'"
+            class="btn"
+            :to="{ name: 'template-detail', params: { id: String(item.id) } }"
+          >
+            查看模板
+          </RouterLink>
         </template>
         <button v-if="isAdmin" type="button" class="btn btn-danger" :disabled="delisting" @click="$emit('delist')">
           {{ delisting ? '下架中...' : '下架' }}

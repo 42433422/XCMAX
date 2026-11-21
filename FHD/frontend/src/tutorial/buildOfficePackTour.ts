@@ -1,7 +1,7 @@
 import type { TutorialStep } from './types'
 import { createStep } from './stepFactory'
 
-/** 进阶教程末尾：智能生态 → 员工商店 → 办公员工包（基础能力 + 教学演示） */
+/** 进阶教程末尾：智能生态 → AI 市场 → 员工 → 办公员工包 */
 export function buildOfficeEmployeePackSteps(): TutorialStep[] {
   return [
     createStep({
@@ -15,8 +15,8 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
     }),
     createStep({
       id: 'office-pack-open-modstore',
-      title: '员工商店',
-      description: '在智能生态首页点击「员工商店」，进入能力库浏览与安装本机/市场员工包（与侧栏「能力库」同页）。',
+      title: 'AI 市场',
+      description: '在智能生态首页点击「AI 市场」，在「员工」页浏览与安装办公员工；「模板」页可复用已有工作流。',
       routeName: 'ai-ecosystem',
       targetSelector: '[data-tour="ecosystem-launcher-modstore"]',
       highlightSelector: '[data-tour="ecosystem-launcher-modstore"]',
@@ -26,9 +26,9 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
     createStep({
       id: 'office-pack-nav-tab',
       title: '办公员工包',
-      description: '左侧选择「办公员工包」分类。装齐后 Planner 会自动加载对应工具（无需重启），可用于日常办公与教程演示。',
+      description: '在「员工」页选择「办公员工包」分类。装齐后即可在对话中使用对应工具，无需重启。',
       routeName: 'mod-store',
-      routeQuery: { tab: 'office' },
+      routeQuery: { type: 'employee', tab: 'office' },
       targetSelector: '[data-tour="store-nav-office"]',
       highlightSelector: '[data-tour="store-nav-office"]',
       actionType: 'click',
@@ -39,7 +39,7 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       title: '一键安装并入驻',
       description: '点击「一键安装并入驻」装齐 10 个办公员工。安装完成后系统会热加载 HTTP 路由与 Planner 工具注册表。',
       routeName: 'mod-store',
-      routeQuery: { tab: 'office' },
+      routeQuery: { type: 'employee', tab: 'office' },
       targetSelector: '[data-tour="store-one-click-install"]',
       highlightSelector: '[data-tour="store-one-click-install"]',
       actionType: 'click',
@@ -50,7 +50,7 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       title: '等待员工工具就绪',
       description: '正在安装并注册 Planner 工具… 装齐后可在智能对话中读取 CSV/Excel 等文件。',
       routeName: 'mod-store',
-      routeQuery: { tab: 'office' },
+      routeQuery: { type: 'employee', tab: 'office' },
       targetSelector: '[data-tour="store-shell"]',
       highlightSelector: '[data-tour="store-shell"]',
       actionType: 'observe',

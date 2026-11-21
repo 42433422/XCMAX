@@ -26,8 +26,10 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
+from modstore_server.market_shared import market_item_public
 from modstore_server.models import (
     CatalogItem,
+    Purchase,
     User,
     Workflow,
     WorkflowEdge,
@@ -77,6 +79,7 @@ def _serialize_template_summary(row: CatalogItem, *, with_graph: bool = False) -
         "author_id": row.author_id,
         "industry": row.industry or "通用",
         "is_public": bool(row.is_public),
+        "compliance_status": row.compliance_status,
         "template_category": row.template_category or "通用",
         "template_difficulty": row.template_difficulty or "intermediate",
         "difficulty_label": DIFFICULTY_LABELS.get(
@@ -103,6 +106,14 @@ def _serialize_template_summary(row: CatalogItem, *, with_graph: bool = False) -
     return payload
 
 
+def _public_templates(db: Session):
+    from modstore_server.market_catalog_api import _market_catalog_visibility_filters
+
+    return db.query(CatalogItem).filter(
+        CatalogItem.artifact == ARTIFACT_TEMPLATE, *_market_catalog_visibility_filters()
+    )
+
+
 @router.get("", summary="模板市场列表（按类别/难度/关键字过滤）")
 async def list_templates(
     q: str = Query("", max_length=128),
@@ -113,10 +124,7 @@ async def list_templates(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    query = db.query(CatalogItem).filter(
-        CatalogItem.artifact == ARTIFACT_TEMPLATE,
-        CatalogItem.is_public.is_(True),
-    )
+    query = _public_templates(db)
     if q.strip():
         kw = f"%{q.strip()}%"
         query = query.filter(or_(CatalogItem.name.ilike(kw), CatalogItem.description.ilike(kw)))
@@ -140,11 +148,8 @@ async def list_templates(
 @router.get("/categories", summary="模板类别清单（含计数）")
 async def list_template_categories(db: Session = Depends(get_db)):
     rows = (
-        db.query(CatalogItem.template_category, func.count(CatalogItem.id))
-        .filter(
-            CatalogItem.artifact == ARTIFACT_TEMPLATE,
-            CatalogItem.is_public.is_(True),
-        )
+        _public_templates(db)
+        .with_entities(CatalogItem.template_category, func.count(CatalogItem.id))
         .group_by(CatalogItem.template_category)
         .all()
     )
@@ -170,11 +175,20 @@ async def get_template(
         )
         .first()
     )
-    if not row:
+    if not row or not market_item_public(row):
         raise HTTPException(404, "模板不存在")
-    if not row.is_public:
-        raise HTTPException(404, "模板不存在")
-    return _serialize_template_summary(row, with_graph=True)
+    payload = _serialize_template_summary(row, with_graph=True)
+    # Public preview shows structure only; executable configuration stays behind install access.
+    for key, fields in (
+        ("nodes", ("local_id", "node_type", "name", "position_x", "position_y")),
+        ("edges", ("source_local_id", "target_local_id")),
+    ):
+        payload["graph"][key] = [
+            {field: entry.get(field) for field in fields}
+            for entry in payload["graph"][key]
+            if isinstance(entry, dict)
+        ]
+    return payload
 
 
 @router.post("/{template_id}/install", summary="一键安装：把模板克隆为当前用户的工作流")
@@ -191,8 +205,16 @@ async def install_template(
         )
         .first()
     )
-    if not row or not row.is_public:
+    if not row or not market_item_public(row):
         raise HTTPException(404, "模板不存在")
+    if float(row.price or 0) > 0 and not (user.is_admin or row.author_id == user.id):
+        purchased = (
+            db.query(Purchase)
+            .filter(Purchase.user_id == user.id, Purchase.catalog_id == row.id)
+            .first()
+        )
+        if not purchased:
+            raise HTTPException(403, "未购买此模板，请先购买后使用")
 
     try:
         snapshot = json.loads(row.graph_snapshot or "{}")
@@ -331,6 +353,7 @@ async def save_workflow_as_template(
         artifact=ARTIFACT_TEMPLATE,
         industry=(body.industry or "通用").strip(),
         is_public=bool(body.is_public),
+        compliance_status="under_review" if body.is_public else "approved",
         template_category=(body.template_category or "通用").strip(),
         template_difficulty=(body.template_difficulty or "intermediate").strip(),
         graph_snapshot=json.dumps(snapshot, ensure_ascii=False),

@@ -101,6 +101,7 @@ function openDetail(item: TemplateItem) {
 }
 
 async function quickInstall(item: TemplateItem) {
+  if (item.price > 0) return openDetail(item)
   if (!confirm(`一键安装 "${item.name}"？将在你的工作流列表创建一个副本。`)) return
   try {
     const r = (await api.templateInstall(item.id)) as { workflow_id?: number | string }
@@ -194,7 +195,9 @@ defineExpose({ difficultyLabel })
             </span>
             <span class="tpl-card__spacer" />
             <button class="tpl-card__btn" type="button" @click="openDetail(t)">查看</button>
-            <button class="tpl-card__btn tpl-card__btn--primary" type="button" @click="quickInstall(t)">一键安装</button>
+            <button class="tpl-card__btn tpl-card__btn--primary" type="button" @click="quickInstall(t)">
+              {{ t.price > 0 ? '查看与使用' : '一键安装' }}
+            </button>
           </footer>
         </li>
       </ul>

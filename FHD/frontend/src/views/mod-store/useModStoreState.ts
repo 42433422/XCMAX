@@ -9,6 +9,9 @@ export type StoreModRow = ModCatalogItemUi & {
   config?: { host_foundation_pack?: boolean }
 }
 
+export const isTemplateItem = (mod?: StoreModRow | null): boolean =>
+  String(mod?.artifact || '').trim().toLowerCase() === 'workflow_template'
+
 export interface ModStoreState {
   allMods: Ref<StoreModRow[]>
   filteredMods: Ref<StoreModRow[]>

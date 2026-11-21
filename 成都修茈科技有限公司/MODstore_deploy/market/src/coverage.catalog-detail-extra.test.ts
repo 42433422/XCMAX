@@ -39,7 +39,7 @@ import CatalogDetailView from './views/CatalogDetailView.vue'
 const globalMount = {
   global: {
     stubs: {
-      RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+      RouterLink: { name: 'RouterLink', props: ['to'], template: '<a><slot /></a>' },
       CatalogCreatorProfile: { template: '<div class="creator-profile" />' },
       EmployeeSixDimPanel: { template: '<div class="six-dim" />' },
       Teleport: true,
@@ -131,6 +131,23 @@ afterEach(() => {
 })
 
 describe('catalog detail coverage', () => {
+  it('reuses catalog checkout for paid templates and offers use instead of archive download', async () => {
+    apiMock.catalogDetail.mockResolvedValueOnce(catalogItem({ artifact: 'workflow_template', price: 29, purchased: true }))
+    const wrapper = mount(CatalogDetailView, globalMount)
+    await flushPromises()
+    const useTemplate = wrapper.findAllComponents({ name: 'RouterLink' }).find((link) => link.text().includes('使用模板'))
+    expect(useTemplate?.props('to')).toEqual({ name: 'template-detail', params: { id: '10' } })
+    expect(wrapper.findAll('button').some((button) => button.text() === '下载')).toBe(false)
+    expect(apiMock.downloadItem).not.toHaveBeenCalled()
+    ;(wrapper.vm as UnsafeTestValue).item.purchased = false
+    await wrapper.vm.$nextTick()
+    await wrapper.find('.btn-cta-buy').trigger('click')
+    await flushPromises()
+    expect(apiMock.paymentCheckout).toHaveBeenCalledWith({ item_id: 10, subject: 'Customer Agent' })
+    expect(routerMock.push).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'ord_1' } })
+    wrapper.unmount()
+  })
+
   it('covers mount, labels, author follow, quality and employee status paths', async () => {
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()

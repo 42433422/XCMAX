@@ -82,7 +82,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'batch-analyze': '批量分析',
   'kitten-finance': '财务分析',
   'chat-debug': '对话调试',
-  'mod-store': '能力库',
+  'mod-store': 'AI 市场',
 }
 
 /**

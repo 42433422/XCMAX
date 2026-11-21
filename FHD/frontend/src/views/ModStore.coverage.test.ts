@@ -1878,3 +1878,112 @@ describe('ModStore market discovery presentation', () => {
     } finally { wrapper.unmount() }
   })
 })
+
+describe('AI market templates and employees', () => {
+  const template = makeMod({ id: 'tmpl-report', catalog_id: 42, name: '日报模板', artifact: 'workflow_template',
+    template_category: '数据分析', template_difficulty: 'beginner', install_count: 8, price: 12.5 })
+  const employee = makeMod({ id: 'report-employee', name: '报表员工', artifact: 'employee_pack' })
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { available: [employee, template] } }) })
+    mockFetchMarketCatalog.mockResolvedValue({ items: [template, employee] })
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockFetchDeliverableStatus.mockResolvedValue({ deliverable: true, missing_mod_ids: [] })
+  })
+
+  it('loads workflow templates only and links to the existing template detail and install flow', async () => {
+    const { wrapper } = await mountModStore({ type: 'template', tab: 'all' })
+    try {
+      await waitForAsync()
+      expect(mockFetchMarketCatalog).toHaveBeenCalledWith({ artifact: 'workflow_template', q: undefined, limit: 200 })
+      expect(wrapper.findAll('.store-card')).toHaveLength(1)
+      expect(wrapper.get('.store-card').text()).toContain('日报模板')
+      expect(wrapper.get('.store-card').text()).toContain('数据分析')
+      expect(wrapper.get('.store-card').text()).toContain('新手')
+      expect(wrapper.get('.store-card').text()).toContain('¥ 12.50')
+      expect(wrapper.get('.store-card a').attributes()).toMatchObject({ href: 'https://xiu-ci.com/market/templates/42', target: '_blank', rel: 'noopener noreferrer' })
+      expect(wrapper.find('[data-tour="store-one-click-install"]').exists()).toBe(false)
+      expect(wrapper.find('.store-filter-check').exists()).toBe(false)
+      expect(wrapper.find('.store-hero-grid').exists()).toBe(false)
+      const vm = wrapper.vm as any
+      mockApiFetch.mockClear()
+      await vm.installMod(template)
+      await vm.uninstallMod(template)
+      await vm.updateMod(template)
+      await vm.onMobileUse(template)
+      expect(mockApiFetch).not.toHaveBeenCalled()
+      expect(mockAutoOnboardInstalledMarketItem).not.toHaveBeenCalled()
+    } finally { wrapper.unmount() }
+  })
+
+  it('preserves employee category and other deep-link query fields across both types', async () => {
+    const { wrapper, router } = await mountModStore({ tab: 'all', redirect: '/orders', onboarding: '1' })
+    try {
+      await waitForAsync()
+      expect(wrapper.findAll('.store-card').map(card => card.text()).join()).not.toContain('日报模板')
+      await wrapper.findAll('.el-segmented__item').find(item => item.text() === '模板')!.get('input').setValue()
+      await waitForAsync()
+      expect(router.currentRoute.value.query).toEqual({ type: 'template', tab: 'all', redirect: '/orders', onboarding: '1' })
+      expect(wrapper.find('.onboarding-banner').exists()).toBe(false)
+      await wrapper.findAll('.el-segmented__item').find(item => item.text() === '员工')!.get('input').setValue()
+      await waitForAsync()
+      expect(router.currentRoute.value.query).toEqual({ type: 'employee', tab: 'all', redirect: '/orders', onboarding: '1' })
+      expect(wrapper.get('.store-card').text()).toContain('报表员工')
+      expect(wrapper.find('.onboarding-banner').exists()).toBe(true)
+      await router.push({ query: { type: 'template' } })
+      await waitForAsync()
+      expect(wrapper.get('.store-card').text()).toContain('日报模板')
+    } finally { wrapper.unmount() }
+  })
+
+  it('never creates a template action link from a package id or malformed catalog id', async () => {
+    mockFetchMarketCatalog.mockResolvedValue({ items: [{ ...template, catalog_id: undefined, price: undefined }] })
+    const { wrapper } = await mountModStore({ type: 'template' })
+    try {
+      await waitForAsync()
+      expect(wrapper.get('.store-card').text()).toContain('价格以市场为准')
+      expect(wrapper.get('.store-card').text()).toContain('模板详情暂不可用')
+      expect(wrapper.find('.store-card a').exists()).toBe(false)
+      expect((wrapper.vm as any).templateMarketUrl({ ...template, catalog_id: '../admin' })).toBe('')
+    } finally { wrapper.unmount() }
+  })
+
+  it('ignores an earlier employee response after switching to templates', async () => {
+    let finish!: (value: unknown) => void
+    mockFetchMarketCatalog.mockImplementation(({ artifact }) => artifact === 'workflow_template'
+      ? Promise.resolve({ items: [template] }) : new Promise(resolve => { finish = resolve }))
+    const { wrapper } = await mountModStore({ tab: 'ai_employee' })
+    try {
+      await flushPromises()
+      await wrapper.findAll('.el-segmented__item').find(item => item.text() === '模板')!.get('input').setValue()
+      await waitForAsync()
+      finish({ items: [employee] })
+      await waitForAsync()
+      expect(wrapper.get('.store-card').text()).toContain('日报模板')
+      expect((wrapper.vm as any).loading).toBe(false)
+    } finally { wrapper.unmount() }
+  })
+
+  it('sends template searches to the template catalog and keeps errors visible', async () => {
+    const { wrapper } = await mountModStore({ type: 'template' })
+    try {
+      await waitForAsync()
+      await wrapper.get('.store-search__input').setValue('日报')
+      await wrapper.get('.store-search').trigger('submit')
+      await waitForAsync()
+      expect(mockFetchMarketCatalog).toHaveBeenLastCalledWith({ artifact: 'workflow_template', q: '日报', limit: 200 })
+      mockFetchMarketCatalog.mockRejectedValue(new Error('market unavailable'))
+      await (wrapper.vm as any).loadMods(true)
+      await waitForAsync()
+      expect(wrapper.get('.store-load-warn').text()).toContain('市场同步失败')
+      expect(wrapper.get('.store-card').text()).toContain('日报模板')
+      await wrapper.get('.store-search__input').setValue('采购')
+      await wrapper.get('.store-search').trigger('submit')
+      await waitForAsync()
+      expect(wrapper.find('.store-card').exists()).toBe(false)
+      expect(wrapper.find('.store-load-error').exists()).toBe(true)
+    } finally { wrapper.unmount() }
+  })
+})

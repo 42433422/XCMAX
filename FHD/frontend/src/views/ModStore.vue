@@ -7,20 +7,21 @@
           <span>返回 AI 生态</span>
         </button>
         <div class="store-brandline">
-          <h1 class="store-title">AI 员工市场</h1>
-          <p class="store-sub">像招聘一样挑选 AI 员工</p>
+          <h1 class="store-title">AI 市场</h1>
+          <p class="store-sub">发现业务模板，挑选 AI 员工</p>
         </div>
         <div class="store-hero__stats">
           <span><strong>{{ filteredMods.length }}</strong> 个结果</span>
-          <span><strong>{{ installedCount }}</strong> 已安装</span>
+          <span v-if="marketType === 'employee'"><strong>{{ installedCount }}</strong> 已安装</span>
         </div>
       </div>
+      <ElSegmented class="store-types" :model-value="marketType" :options="marketTypes" aria-label="市场类型" @change="switchMarketType" />
       <form class="store-search store-search--hero" @submit.prevent="searchMods">
         <i class="fa fa-search store-search__icon" aria-hidden="true"></i>
-        <input v-model="searchQuery" type="search" class="store-search__input" placeholder="搜索员工、岗位或包名" />
+        <input v-model="searchQuery" type="search" class="store-search__input" :placeholder="marketType === 'template' ? '搜索模板、场景或用途' : '搜索员工、岗位或包名'" />
         <button type="submit" class="btn btn-primary store-search__btn">搜索</button>
       </form>
-      <div class="store-hot">
+      <div v-if="marketType === 'employee'" class="store-hot">
         <span class="store-hot__label">热门搜索</span>
         <button v-for="kw in hotKeywords" :key="kw" type="button" class="store-hot__item" @click="applyQuickSearch(kw)">
           {{ kw }}
@@ -28,7 +29,7 @@
       </div>
     </header>
 
-    <div v-if="onboardingBanner" class="onboarding-banner">
+    <div v-if="marketType === 'employee' && onboardingBanner" class="onboarding-banner">
       <p>
         请先安装宿主基础员工包。
         <span v-if="missingModHint" class="mono">缺少：{{ missingModHint }}</span>
@@ -44,6 +45,7 @@
 
     <div class="store-toolbar">
       <button
+        v-if="marketType === 'employee'"
         type="button"
         class="btn btn-primary btn-sm store-toolbar__cta"
         data-tour="store-one-click-install"
@@ -53,7 +55,8 @@
         <i class="fa fa-bolt" :class="{ 'fa-spin': bootstrapBusy }" aria-hidden="true"></i>
         {{ oneClickCtaLabel }}
       </button>
-      <span v-if="oneClickProgress" class="store-toolbar__hint muted">{{ oneClickProgress }}</span>
+      <span v-if="marketType === 'template'" class="store-toolbar__hint muted">查看模板详情，在市场创建可编辑的工作流副本。</span>
+      <span v-else-if="oneClickProgress" class="store-toolbar__hint muted">{{ oneClickProgress }}</span>
       <span v-else-if="currentTab !== 'all' && oneClickPendingCount > 0" class="store-toolbar__hint muted">
         将装齐「{{ mainListTitle }}」全部 {{ oneClickPendingCount }} 个员工并入驻
       </span>
@@ -70,12 +73,13 @@
       </button>
     </div>
 
-    <nav class="store-tabs" aria-label="员工分类">
+    <nav v-if="marketType === 'employee'" class="store-tabs" aria-label="员工分类">
       <button
         v-for="tab in storeNavTabs"
         :key="tab.id"
         type="button"
         class="store-tab"
+        :data-tour="`store-nav-${tab.id}`"
         :class="{ active: currentTab === tab.id }"
         @click="switchTab(tab.id)"
       >
@@ -84,7 +88,7 @@
       </button>
     </nav>
 
-    <div class="store-hero-grid">
+    <div v-if="marketType === 'employee'" class="store-hero-grid">
       <section class="store-cats" aria-label="员工分类导航">
         <header class="store-cats__head">
           <h2>员工分类</h2>
@@ -133,20 +137,20 @@
           <div class="store-filterbar__left">
             <h2 id="store-results-heading" class="store-main__title">{{ mainListTitle }}</h2>
             <p class="store-main__meta">
-              共 {{ filteredMods.length }} 个员工
+              共 {{ filteredMods.length }} 个{{ marketType === 'template' ? '模板' : '员工' }}
               <span v-if="refreshing" class="store-sync-hint"> <i class="fa fa-refresh fa-spin" aria-hidden="true"></i> 同步中… </span>
               <span v-else-if="fromCache" class="store-cache-hint muted">已缓存</span>
             </p>
           </div>
           <div class="store-filterbar__right">
-            <label class="store-filter-check">
+            <label v-if="marketType === 'employee'" class="store-filter-check">
               <input type="checkbox" v-model="filterInstalled" @change="applyFilters" />
               仅看已安装
             </label>
             <select v-model="sortBy" class="store-sort" @change="applyFilters" aria-label="排序">
               <option value="name">按名称</option>
-              <option value="downloads">按下载量</option>
-              <option value="rating">按评分</option>
+              <option value="downloads">{{ marketType === 'template' ? '按使用量' : '按下载量' }}</option>
+              <option v-if="marketType === 'employee'" value="rating">按评分</option>
               <option value="created_at">最新上架</option>
             </select>
           </div>
@@ -155,7 +159,7 @@
         <div v-if="loading && !filteredMods.length" class="state-msg">
           <i class="fa fa-spinner fa-spin"></i> 加载中…
           <span v-if="isMarketCollectionTab(currentTab)" class="store-load-hint muted">
-            正在拉取修茈 AI 市场目录；若已有本地目录会先显示，后台继续同步。
+            正在同步修茈 AI 市场目录…
           </span>
         </div>
 
@@ -163,7 +167,7 @@
           <i class="fa fa-exclamation-triangle"></i> {{ loadError }}
         </div>
 
-        <div v-else-if="filteredMods.length === 0" class="state-msg muted">暂无商品，可切换左侧分类或调整搜索条件。</div>
+        <div v-else-if="filteredMods.length === 0" class="state-msg muted">暂无符合条件的{{ marketType === 'template' ? '模板' : '员工' }}，请调整搜索条件或切换分类。</div>
 
         <div v-if="loadError && filteredMods.length" class="state-msg store-load-warn">
           <i class="fa fa-info-circle"></i> {{ loadError }}
@@ -176,7 +180,29 @@
             class="store-card"
             :class="{ 'store-card--installed': mod.is_installed }"
           >
-            <template v-if="isMobileViewport">
+            <template v-if="isTemplateItem(mod)">
+              <header class="store-card__head">
+                <div class="store-card__avatar"><i class="fa fa-file-text-o" aria-hidden="true"></i></div>
+                <div class="store-card__titles">
+                  <h3 class="card-title">{{ mod.name }}</h3>
+                  <p class="card-meta">v{{ mod.version }} · {{ mod.install_count || 0 }} 次使用</p>
+                </div>
+              </header>
+              <p class="card-desc">{{ mod.description || '暂无描述' }}</p>
+              <div class="card-badges">
+                <span class="tag tag-employee-pack">工作流模板</span>
+                <span class="tag tag-industry">{{ collectionLabel(mod) }}</span>
+                <span v-if="templateDifficultyLabel(mod)" class="tag">{{ templateDifficultyLabel(mod) }}</span>
+                <span class="tag tag-free">{{ templatePriceLabel(mod) }}</span>
+              </div>
+              <footer class="card-footer">
+                <div v-if="templateMarketUrl(mod)" class="card-footer__actions">
+                  <a :href="templateMarketUrl(mod)" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">查看并使用模板</a>
+                </div>
+                <span v-else class="muted">模板详情暂不可用，请刷新目录</span>
+              </footer>
+            </template>
+            <template v-else-if="isMobileViewport">
               <div class="mod-card-compact">
                 <div class="store-card__avatar">
                   <i :class="modIconClass(mod)" aria-hidden="true"></i>
@@ -260,7 +286,10 @@
 </template>
 
 <script>
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { ElSegmented } from 'element-plus'
+import 'element-plus/theme-chalk/base.css'
+import 'element-plus/theme-chalk/el-segmented.css'
 import { useRoute, useRouter } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
 import Modal from '@/components/Modal.vue'
@@ -278,7 +307,7 @@ import {
   OFFICE_AUX_PACK_1_PKG_IDS,
   OFFICE_EMPLOYEE_PKG_IDS,
 } from '@/constants/officeEmployeePack'
-import { useModStoreState } from './mod-store/useModStoreState'
+import { isTemplateItem, useModStoreState } from './mod-store/useModStoreState'
 import { useModStoreMeta } from './mod-store/useModStoreMeta'
 import { useModStoreCatalog } from './mod-store/useModStoreCatalog'
 import { useModStoreActions } from './mod-store/useModStoreActions'
@@ -290,6 +319,7 @@ export default {
   components: {
     Modal,
     ModDetails,
+    ElSegmented,
   },
   setup() {
     const route = useRoute()
@@ -338,6 +368,9 @@ export default {
       isEmployeePackItem,
       marketItemKindLabel,
       marketModUrl,
+      templateMarketUrl,
+      templateDifficultyLabel,
+      templatePriceLabel,
       resolveEnterpriseStack,
     } = meta
 
@@ -349,8 +382,33 @@ export default {
       loadMods,
       searchMods,
       applyFilters,
-      switchTab,
     } = catalog
+
+    const marketTypes = [{ label: '模板', value: 'template' }, { label: '员工', value: 'employee' }]
+    const marketType = computed(() => currentTab.value === 'templates' ? 'template' : 'employee')
+    const allowedTabs = new Set(storeNavTabs.map((tab) => tab.id))
+    const employeeTabFromRoute = () => {
+      const tab = typeof route.query.tab === 'string' ? route.query.tab.trim() : ''
+      return allowedTabs.has(tab) ? tab : 'host_foundation'
+    }
+    const tabFromRoute = () => route.query.type === 'template' ? 'templates' : employeeTabFromRoute()
+    const switchTab = (tab) => {
+      const employeeTab = currentTab.value === 'templates' ? employeeTabFromRoute() : currentTab.value
+      void router.replace({ query: { ...route.query, type: tab === 'templates' ? 'template' : 'employee', tab: tab === 'templates' ? employeeTab : tab } })
+      selectedMod.value = null
+      return catalog.switchTab(tab)
+    }
+    const switchMarketType = (type) => {
+      if (type === 'template' && sortBy.value === 'rating') sortBy.value = 'name'
+      void switchTab(type === 'template' ? 'templates' : employeeTabFromRoute())
+    }
+    watch(() => [route.query.type, route.query.tab], () => {
+      const tab = tabFromRoute()
+      if (tab !== currentTab.value) {
+        selectedMod.value = null
+        void catalog.switchTab(tab)
+      }
+    })
 
     const {
       installMod,
@@ -435,19 +493,9 @@ export default {
     }
 
     onMounted(() => {
-      const tabQuery = typeof route.query.tab === 'string' ? route.query.tab.trim() : ''
-      const allowedTabs = new Set([
-        'all',
-        'host_foundation',
-        'office',
-        'office_aux',
-        'workflow',
-        'ai_employee',
-        'industry_mod',
-        'installed',
-      ])
-      currentTab.value = allowedTabs.has(tabQuery) ? tabQuery : 'host_foundation'
-      void warmCatalogSnapshot()
+      currentTab.value = tabFromRoute()
+      filterInstalled.value = currentTab.value === 'installed'
+      if (marketType.value === 'employee') void warmCatalogSnapshot()
       void loadMods(false)
       void refreshDeliverable()
       void resolveEnterpriseStack()
@@ -462,6 +510,13 @@ export default {
       route,
       modstoreWebUrl,
       marketBaseUrl,
+      marketType,
+      marketTypes,
+      switchMarketType,
+      isTemplateItem,
+      templateMarketUrl,
+      templateDifficultyLabel,
+      templatePriceLabel,
       onboardingBanner,
       missingModHint,
       deliverableOk,

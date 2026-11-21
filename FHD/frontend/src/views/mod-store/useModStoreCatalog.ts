@@ -22,6 +22,7 @@ import {
 } from '@/utils/marketCatalogCache'
 import { productErrorMessage } from '@/utils/productErrorMessage'
 import type { ModStoreState, StoreModRow } from './useModStoreState'
+import { isTemplateItem } from './useModStoreState'
 
 export interface ModStoreCatalog {
   storeNavTabs: Array<{ id: string; label: string; icon: string }>
@@ -38,7 +39,7 @@ export interface ModStoreCatalog {
   switchTab: (tab: string) => Promise<void>
 }
 
-/** 目录域（由 ModStore.vue 机械切出，行为不变）：分类查询、缓存预热、加载/搜索/筛选/切页 */
+/** AI 市场分类查询、缓存与搜索；模板浏览与可安装员工目录分别加载。 */
 export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   const {
     allMods,
@@ -67,6 +68,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
 
   // 宿主基础员工是随包预装的本地包，市场没有该分类；留在本地目录查询，否则该页永远为空。
   const MARKET_TAB_QUERY: Record<string, { collection?: string; artifact?: string; material_category?: string }> = {
+    templates: { artifact: 'workflow_template' },
     office: {
       collection: OFFICE_EMPLOYEE_COLLECTION,
       artifact: 'employee_pack',
@@ -89,6 +91,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   const isMarketCollectionTab = (tab: string): boolean => Boolean(MARKET_TAB_QUERY[tab])
 
   const mainListTitle = computed(() => {
+    if (currentTab.value === 'templates') return '工作流模板'
     if (currentTab.value === 'host_foundation') return '宿主基础能力（预装员工）'
     if (currentTab.value === 'office') return '办公员工包'
     if (currentTab.value === 'office_aux') return '办公员工附属包1'
@@ -100,6 +103,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   })
 
   const refineMarketItems = (items: StoreModRow[], tab: string): StoreModRow[] => {
+    items = items.filter((item) => isTemplateItem(item) === (tab === 'templates'))
     if (tab === 'workflow') {
       return items.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_WORKFLOW_EMPLOYEE)
     }
@@ -113,6 +117,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   }
 
   const filterByCollectionTab = (mods: StoreModRow[]): StoreModRow[] => {
+    mods = mods.filter((item) => isTemplateItem(item) === (currentTab.value === 'templates'))
     if (currentTab.value === 'host_foundation') {
       return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_HOST_FOUNDATION)
     }
@@ -174,7 +179,7 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     mods = filterByCollectionTab(mods)
 
     if (sortBy.value === 'downloads') {
-      mods.sort((a, b) => (b.total_downloads || b.download_count || 0) - (a.total_downloads || a.download_count || 0))
+      mods.sort((a, b) => (b.install_count || b.total_downloads || b.download_count || 0) - (a.install_count || a.total_downloads || a.download_count || 0))
     } else if (sortBy.value === 'rating') {
       mods.sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
     } else if (sortBy.value === 'created_at') {
@@ -186,185 +191,93 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     filteredMods.value = mods
   }
 
-  const applyCatalogWarmStart = (tab: string): boolean => {
-    if (!catalogSnapshot.value.length) return false
-    const warmed = refineMarketItems(filterByCollectionTab([...catalogSnapshot.value]), tab)
-    if (!warmed.length) return false
-    allMods.value = warmed
-    applyFilters()
-    if (filteredMods.value.length > 0) {
-      loading.value = false
-      refreshing.value = true
-      return true
+  // A late response from another type, category or search must never replace this view.
+  let requestVersion = 0
+  let activeQueryKey = ''
+  const loadMods = async (force = false): Promise<void> => {
+    const version = ++requestVersion
+    const tab = currentTab.value
+    const query = searchQuery.value.trim()
+    const current = () => version === requestVersion && tab === currentTab.value
+    const marketQuery = MARKET_TAB_QUERY[tab]
+    const cacheKey = buildMarketCatalogCacheKey(tab, query)
+    if (activeQueryKey !== cacheKey) {
+      allMods.value = []
+      filteredMods.value = []
+      activeQueryKey = cacheKey
     }
-    return false
-  }
-
-  const fetchMarketTabRemote = async (tab: string): Promise<boolean> => {
-    const query = MARKET_TAB_QUERY[tab]
-    if (!query) return false
-    const result = await fetchMarketCatalog({
-      ...query,
-      q: searchQuery.value.trim() || undefined,
-      limit: 200,
-    })
-    const items = refineMarketItems(result.items || [], tab)
-    allMods.value = items
-    writeMarketCatalogCache(buildMarketCatalogCacheKey(tab, searchQuery.value), tab, items)
-    fromCache.value = false
+    const cached = !force && marketQuery ? readMarketCatalogCache(cacheKey) : null
     loadError.value = ''
-    return true
-  }
-
-  const loadMarketTab = async (tab: string, { force = false } = {}): Promise<boolean> => {
-    const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value)
-    const cached = !force ? readMarketCatalogCache(cacheKey) : null
+    fromCache.value = false
 
     if (cached?.items?.length) {
-      allMods.value = cached.items
+      allMods.value = refineMarketItems(cached.items, tab)
       applyFilters()
       fromCache.value = true
-      if (isMarketCatalogCacheFresh(cached) && !force) {
-        loadError.value = ''
-        return true
+      if (isMarketCatalogCacheFresh(cached)) {
+        loading.value = refreshing.value = false
+        return
       }
-    } else {
+    } else if (marketQuery && tab !== 'templates' && !query && catalogSnapshot.value.length) {
+      allMods.value = refineMarketItems(filterByCollectionTab(catalogSnapshot.value), tab)
+      applyFilters()
+    }
+    loading.value = !filteredMods.value.length
+    refreshing.value = Boolean(filteredMods.value.length)
+
+    try {
+      if (marketQuery) {
+        const result = await fetchMarketCatalog({ ...marketQuery, q: query || undefined, limit: 200 })
+        if (!current()) return
+        allMods.value = refineMarketItems(result.items || [], tab)
+        writeMarketCatalogCache(cacheKey, tab, allMods.value)
+      } else {
+        const params = new URLSearchParams({ q: query, installed: String(filterInstalled.value), limit: '50' })
+        const response = await apiFetch(query ? `/api/mod-store/search?${params}` : '/api/mod-store/catalog', { timeoutMs: 90_000 })
+        const data = await response.json()
+        if (!current()) return
+        if (!data.success) throw new Error(data.message || data.error || '获取目录失败')
+        if (!query) catalogSnapshot.value = data.data.available || []
+        allMods.value = query ? data.data || [] : catalogSnapshot.value
+      }
       fromCache.value = false
-      await warmCatalogSnapshot()
-      applyCatalogWarmStart(tab)
-    }
-
-    try {
-      return await fetchMarketTabRemote(tab)
+      applyFilters()
     } catch (error) {
-      console.warn('[ModStore] market-catalog failed, fallback to /catalog:', error)
-      try {
-        await loadCatalogAvailable()
-        allMods.value = refineMarketItems(filterByCollectionTab([...catalogSnapshot.value]), tab)
-        if (allMods.value.length) {
-          loadError.value = '市场分类接口较慢或暂不可用，已显示本地目录。可点「刷新目录」重试。'
-          return true
-        }
-        throw error
-      } catch (fallbackError) {
-        if (filteredMods.value.length) {
-          loadError.value = '市场同步失败，当前为缓存/本地目录。可点「刷新目录」重试。'
-          return true
-        }
-        loadError.value = productErrorMessage(error ?? fallbackError, '加载市场目录失败，请检查网络后刷新。')
-        allMods.value = []
-        return false
+      if (!current()) return
+      // Templates have no local package catalog. Preserve a matching cache with an explicit warning.
+      if (marketQuery && tab !== 'templates') {
+        try {
+          const rows = await loadCatalogAvailable()
+          if (!current()) return
+          const matches = refineMarketItems(filterByCollectionTab(rows), tab).filter((item) =>
+            !query || [item.name, item.description, item.pkg_id].join(' ').toLowerCase().includes(query.toLowerCase()))
+          if (matches.length) {
+            allMods.value = matches
+            applyFilters()
+            loadError.value = '市场分类接口较慢或暂不可用，已显示本地目录。可点「刷新目录」重试。'
+            return
+          }
+        } catch { /* The original remote error remains the actionable failure. */ }
       }
-    }
-  }
-
-  const loadMods = async (force = false): Promise<void> => {
-    const tab = currentTab.value
-    const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value)
-    const cached = !force && isMarketCollectionTab(tab) ? readMarketCatalogCache(cacheKey) : null
-    const canShowInstant = Boolean(cached?.items?.length) || catalogSnapshot.value.length
-
-    loading.value = !canShowInstant
-    refreshing.value = canShowInstant as unknown as boolean
-    loadError.value = ''
-    if (force) fromCache.value = false
-
-    try {
-      if (isMarketCollectionTab(tab)) {
-        await loadMarketTab(tab, { force })
-        applyFilters()
-        return
-      }
-
-      const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 })
-      const data = await response.json()
-
-      if (data.success) {
-        catalogSnapshot.value = data.data.available || []
-        allMods.value = catalogSnapshot.value
-        applyFilters()
-      }
-    } catch (error) {
-      console.error('Failed to load mods:', error)
-      if (!filteredMods.value.length) {
-        loadError.value = error instanceof Error ? error.message : '加载目录失败'
+      if (!current()) return
+      if (marketQuery && filteredMods.value.length) {
+        loadError.value = '市场同步失败，当前为缓存/本地目录。可点「刷新目录」重试。'
+      } else if (!filteredMods.value.length) {
+        loadError.value = productErrorMessage(error, '加载市场目录失败，请检查网络后刷新。')
       }
     } finally {
-      loading.value = false
-      refreshing.value = false
+      if (current()) loading.value = refreshing.value = false
     }
   }
 
-  const searchMods = async (): Promise<void> => {
-    loading.value = true
-    refreshing.value = false
-    try {
-      const tab = currentTab.value
-      if (isMarketCollectionTab(tab)) {
-        await loadMarketTab(tab, { force: true })
-        applyFilters()
-        return
-      }
-
-      if (!searchQuery.value.trim()) {
-        await loadMods()
-        return
-      }
-
-      const params = new URLSearchParams({
-        q: searchQuery.value,
-        installed: filterInstalled.value,
-        limit: 50,
-      } as unknown as Record<string, string>)
-
-      const response = await apiFetch(`/api/mod-store/search?${params}`)
-      const data = await response.json()
-
-      if (data.success) {
-        allMods.value = data.data || []
-        applyFilters()
-      }
-    } catch (error) {
-      console.error('Search failed:', error)
-    } finally {
-      loading.value = false
-    }
-  }
+  const searchMods = (): Promise<void> => loadMods(true)
 
   const switchTab = async (tab: string): Promise<void> => {
     currentTab.value = tab
-    const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value)
-    const cached = isMarketCollectionTab(tab) ? readMarketCatalogCache(cacheKey) : null
-    const instant = Boolean(cached?.items?.length)
-    loading.value = !instant
-    refreshing.value = instant
-
-    try {
-      if (tab !== 'installed') {
-        filterInstalled.value = false
-      }
-      if (tab === 'installed') {
-        filterInstalled.value = true
-        if (!allMods.value.length) {
-          await loadMods(false)
-        } else {
-          const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 })
-          const data = await response.json()
-          if (data.success) {
-            catalogSnapshot.value = data.data.available || []
-            allMods.value = catalogSnapshot.value
-          }
-        }
-        applyFilters()
-      } else {
-        await loadMods(false)
-      }
-    } catch (error) {
-      console.error('Failed to switch tab:', error)
-    } finally {
-      loading.value = false
-      refreshing.value = false
-    }
+    filterInstalled.value = tab === 'installed'
+    allMods.value = []
+    filteredMods.value = []
+    await loadMods(false)
   }
 
   return {

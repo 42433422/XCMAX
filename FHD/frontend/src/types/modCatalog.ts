@@ -19,6 +19,11 @@ export interface ModCatalogItem {
   created_at?: string
   dependencies?: Record<string, string>
   artifact?: string
+  catalog_id?: number
+  template_category?: string
+  template_difficulty?: string
+  install_count?: number
+  price?: number
   sha256?: string
 }
 

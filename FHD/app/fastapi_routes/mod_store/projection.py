@@ -93,12 +93,14 @@ def remote_to_mod_info(
     name = str(d.get("name") or mid or "未命名").strip() or mid
     raw_commerce = d.get("commerce")
     commerce: dict[str, Any] = dict(raw_commerce) if isinstance(raw_commerce, dict) else {}
-    download_url = str(d.get("download_url") or "").strip()
+    is_template = str(d.get("artifact") or "").strip().lower() == "workflow_template"
+    download_url = "" if is_template else str(d.get("download_url") or "").strip()
     from app.mod_sdk.host_foundation import catalog_store_collection
 
     row_out = {
         "id": mid,
         "pkg_id": mid,
+        "catalog_id": d.get("catalog_id"),
         "name": name,
         "version": version,
         "author": str(
@@ -106,18 +108,22 @@ def remote_to_mod_info(
         ).strip()
         or "—",
         "description": str(d.get("description") or "").strip(),
-        "package_file": f"{mid}:{version}",
+        "package_file": None if is_template else f"{mid}:{version}",
         "download_url": download_url,
-        "is_installed": mid in installed_ids,
+        "is_installed": not is_template and mid in installed_ids,
         "download_count": int(d.get("download_count") or d.get("total_downloads") or 0),
         "total_downloads": int(d.get("total_downloads") or d.get("download_count") or 0),
         "avg_rating": float(d.get("avg_rating") or 0.0),
         "rating_count": int(d.get("rating_count") or 0),
         "created_at": d.get("created_at") or d.get("updated_at"),
-        "dependencies": d.get("dependencies") if isinstance(d.get("dependencies"), dict) else {},
+        "dependencies": (d.get("dependencies") if isinstance(d.get("dependencies"), dict) else {}),
         "artifact": d.get("artifact") or "mod",
         "sha256": d.get("sha256"),
         "commerce": commerce,
+        "price": float(d.get("price", commerce.get("price")) or 0),
+        "template_category": d.get("template_category") or "",
+        "template_difficulty": d.get("template_difficulty") or "",
+        "install_count": int(d.get("install_count") or 0),
         "license": d.get("license"),
         "source": "remote",
         "catalog_base_url": base_url(),
