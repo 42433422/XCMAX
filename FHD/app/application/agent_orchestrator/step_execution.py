@@ -28,11 +28,9 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.task_context import ensure_run_trace
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.application.agent_orchestrator.verification_cognition import (
-    normalize_tool_execution_result,
-    verified_plan_admission,
-)
+from app.application.agent_orchestrator.verification_cognition import verified_plan_admission
 from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
     execution_result_requires_reconciliation,
 )
 from app.infrastructure.observability.genai_spans import (
@@ -187,10 +185,11 @@ class StepExecution:
         run.metadata["runtime_context"] = absorb_tool_output(
             dict(run.metadata.get("runtime_context") or {}), step.output
         )
-        uncertain = execution_result_requires_reconciliation(
+        unresolved = execution_result_requires_reconciliation(
             step.output
         ) and not verified_plan_admission(step, step.output, ctx)
-        if uncertain or (
+        uncertain = unresolved and execution_result_outcome_unknown(step.output)
+        if unresolved or (
             step.output.get("retryable") is False
             and (
                 step.output.get("success") is not True
@@ -440,7 +439,9 @@ class StepExecution:
                         "error_type": type(exc).__name__,
                         "message": "工具执行失败",
                     }
-            step.output = normalize_tool_execution_result(step, dict(output or {}), ctx)
+            # The execution boundary has already normalized the result, including
+            # known waits and independently verified cognition-plan admissions.
+            step.output = dict(output or {})
             if step.output.get("success") is not True:
                 step.output["success"] = False
             record_tool_result(span, step.output)

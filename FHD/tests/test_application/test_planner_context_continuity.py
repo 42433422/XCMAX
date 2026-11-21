@@ -67,6 +67,82 @@ def long_history(count=180):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("overflow", ["catalog", "core", "request"])
+async def test_planner_catalog_overflow_preserves_request_core_tools_and_hard_budget(
+    monkeypatch, model_boundary, overflow
+):
+    from app.infrastructure.llm.model_context_windows import ModelLimits
+
+    provider, manager = model_boundary
+    limits = ModelLimits(
+        model="test/same-resolved-route",
+        context_window=8192,
+        max_input_tokens=4096,
+        max_output_tokens=512,
+        source="same-route-capabilities",
+    )
+    core = {
+        "tool_id": "conversation",
+        "description": "通用会话工具",
+        "actions": [{"name": "reply"}],
+    }
+    request = "列出客户，并保留当前请求原文。"
+    if overflow == "request":
+        request += "原始用户说明" * 4000
+    catalog = [
+        core,
+        {
+            "tool_id": "customers" if overflow == "core" else "warehouse_specialized_report",
+            "description": "仓库详细操作说明" * 4000,
+            "actions": [{"name": "report"}],
+        },
+    ]
+    messages = [
+        {"role": "system", "content": "SYSTEM_RULE_KEPT"},
+        {
+            "role": "user",
+            "content": json.dumps(
+                {"user_message": request, "conversation_history": [], "tool_registry": catalog},
+                ensure_ascii=False,
+            ),
+        },
+    ]
+    original = copy.deepcopy(messages)
+    attempts = []
+    compress = manager.compress
+
+    async def observe(*args, **kwargs):
+        attempts.append(copy.deepcopy(args[0]))
+        return await compress(*args, **kwargs)
+
+    monkeypatch.setattr(manager, "compress", observe)
+    context = {}
+    if overflow == "catalog":
+        result = await gateway._prepare_model_messages(
+            provider, context, messages, 128, {}, model_limits=limits
+        )
+        assert result[0] == messages[0]
+        assert json.loads(result[-1]["content"])["tool_registry"] == [core]
+        assert windows.estimate_messages_tokens(result) <= limits.input_budget(output_tokens=128)
+    else:
+        with pytest.raises(windows.ContextWindowExceeded) as error:
+            await gateway._prepare_model_messages(
+                provider, context, messages, 128, {}, model_limits=limits
+            )
+        assert error.value.reason == "fixed_context_overflow"
+    assert len(attempts) == (1 if overflow == "core" else 2)
+    for attempt in attempts:
+        assert attempt[0] == messages[0]
+        payload = json.loads(attempt[-1]["content"])
+        assert payload["user_message"] == request
+        assert core in payload["tool_registry"]
+        if overflow == "core":
+            assert payload["tool_registry"] == catalog
+    assert messages == original
+    assert not provider.requests and not provider.summaries
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("turn_count", [100, 220])
 async def test_conversation_provider_uses_full_owned_history_once(
     monkeypatch, model_boundary, turn_count
