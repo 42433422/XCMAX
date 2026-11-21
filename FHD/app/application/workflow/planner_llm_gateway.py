@@ -178,6 +178,33 @@ async def _prepare_model_messages(
     limits = model_limits or await resolve_model_limits(
         provider, extra.get("model"), extra.get("provider"), messages=messages
     )
+    if context is not None:
+        if state is None:
+            state = SimpleNamespace(
+                conversation_history=[],
+                summary=None,
+                summary_covered_until=-1,
+                summary_fingerprint="",
+            )
+        # Only local ownership/revision fields reach the compaction guard; the
+        # snapshot is never part of model messages or the persisted summary.
+        state.metadata = {
+            "request_context": {
+                key: context[key]
+                for key in (
+                    "local_user_id",
+                    "actor_id",
+                    "tenant_id",
+                    "mod_id",
+                    "conversation_id",
+                    "session_id",
+                    "_conversation_revision",
+                    "_chat_history_source",
+                    "_chat_history_revision",
+                )
+                if key in context
+            }
+        }
     diagnostics = {
         "model": limits.model,
         "capability_source": limits.source,
@@ -213,6 +240,8 @@ async def _prepare_model_messages(
         save_conversation_summary(
             context, history, result.summary_covered_count, result.summary_text
         )
+    if context is not None:
+        conversation_summary(context)  # Revalidate after routing/compression awaits, before IO.
     return result.messages
 
 
@@ -310,8 +339,9 @@ def request_planner_completion(
             result = _run_async(complete())
     except RECOVERABLE_ERRORS as exc:
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
 
-        if isinstance(exc, ContextWindowExceeded):
+        if isinstance(exc, (ContextWindowExceeded, ConversationRevisionError)):
             raise
         from .retry_policy import retry_manages_transport_error
         from .tool_calling import unsupported_tool_parameter

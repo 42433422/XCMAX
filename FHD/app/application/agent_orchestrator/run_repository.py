@@ -52,6 +52,7 @@ class AgentRunRepository(Protocol):
         mod_id: str | None = None,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]: ...
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
@@ -206,11 +207,14 @@ class InMemoryAgentRunRepository:
         mod_id: str | None = None,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]:
         with self._lock:
             runs = list(self._runs.values())
         if user_id is not None:
             runs = [run for run in runs if run.user_id == user_id]
+        if status is not None:
+            runs = [run for run in runs if run.status == status]
         if tenant_id is not None:
             runs = [run for run in runs if tenant_id_of_run(run) == tenant_id]
         if mod_id is not None:

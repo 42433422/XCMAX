@@ -161,6 +161,8 @@ def resume_and_enqueue(
             raise ApprovalGrantError("任务执行结果尚需人工核对，不能恢复执行")
         if any(step.status == "running" for step in run.steps):
             raise ApprovalGrantError("任务存在执行结果未确认的步骤，需要先核对")
+        if unresolved_effects(db, run, clear_confirmed=True):
+            raise ApprovalGrantError("任务仍有未确认的业务写入，需要人工核对")
         renew_approval_session(
             run,
             principal_id=principal_id,

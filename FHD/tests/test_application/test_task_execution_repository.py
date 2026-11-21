@@ -122,6 +122,40 @@ def test_expired_owner_cannot_renew_or_finish_before_replacement(tmp_path, monke
     engine.dispose()
 
 
+def test_rejected_worker_finish_preserves_recovery_evidence(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator import task_execution_sql_repository as sql_repo
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'receipt-fence.db'}")
+    factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    run = AgentRun(user_id="owner", message="receipt fence", status="queued")
+    SQLAlchemyAgentRunRepository(session_factory=factory).save(run)
+    queued = repository.enqueue(run)
+    now = datetime.fromisoformat(queued.available_at.replace("Z", "+00:00"))
+    assert repository.claim("old", lease_seconds=10, now=now.isoformat()) is not None
+    expired = (now + timedelta(seconds=10)).isoformat()
+    monkeypatch.setattr(sql_repo, "utc_now_iso", lambda: expired)
+
+    # An expired callback must not publish a transition even before replacement.
+    before = repository.lifecycle(run.run_id)
+    assert repository.finish(run.run_id, "old", "completed") is None
+    assert repository.lifecycle(run.run_id) == before
+
+    assert repository.claim("replacement", lease_seconds=60) is not None
+    repository.mark_open_effect(run.run_id, "unconfirmed-business-write")
+    before = repository.lifecycle(run.run_id)
+    assert repository.finish(run.run_id, "old", "completed") is None
+    assert repository.lifecycle(run.run_id) == before
+    assert repository.get(run.run_id).lease_owner == "replacement"
+    # Losing the new worker must still require reconciliation, never a new call.
+    monkeypatch.setattr(sql_repo, "utc_now_iso", lambda: (now + timedelta(seconds=70)).isoformat())
+    assert repository.claim("third", lease_seconds=60) is None
+    assert repository.get(run.run_id).last_error_code == "needs_verification"
+    assert repository.lifecycle(run.run_id)["effects"] == ["unconfirmed-business-write"]
+    engine.dispose()
+
+
 def test_repository_initialization_failure_never_silently_accepts_volatile_runs(monkeypatch):
     import pytest
 

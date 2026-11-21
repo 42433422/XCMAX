@@ -180,6 +180,15 @@ class ContextWindowManager:
             return self._explicit_budget
         return resolve_token_budget(model)
 
+    @staticmethod
+    def _validate_context(context) -> None:
+        metadata = getattr(context, "metadata", None)
+        request = metadata.get("request_context") if isinstance(metadata, dict) else None
+        if isinstance(request, dict):
+            from app.application.ai_chat.dialogue_memory import conversation_summary
+
+            conversation_summary(request)
+
     def _input_budget(
         self,
         model: str | None,
@@ -265,6 +274,7 @@ class ContextWindowManager:
         external_tokens=0,
     ) -> ContextCompressionResult:
         started = time.perf_counter()
+        self._validate_context(context)
         if model_limits is not None:
             model_limits.assert_current()
         pre_tokens = estimate_messages_tokens(messages)
@@ -337,7 +347,9 @@ class ContextWindowManager:
                 model=model,
                 model_limits=model_limits,
                 max_tokens=min(self._summarize_max_tokens, summary_room),
+                context=context,
             )
+            self._validate_context(context)
             if not summary_text:
                 raise ContextWindowExceeded(
                     "历史摘要生成失败，原文已保留，请重试或按历史引用分批读取。"
@@ -387,6 +399,7 @@ class ContextWindowManager:
         model=None,
         model_limits=None,
         max_tokens=None,
+        context=None,
     ) -> tuple[str, LLMCall | None]:
         """Delegate cumulative summaries to LangChain; never pre-trim covered text.
 
@@ -418,6 +431,7 @@ class ContextWindowManager:
         batch_count = 0
 
         async def invoke_summary(request):
+            self._validate_context(context)
             call = LLMCall(
                 metadata={
                     "source": "context_window_manager.summarize",
@@ -482,6 +496,7 @@ class ContextWindowManager:
         summary: list[AnyMessage] = []
         summary_runtime: Runtime[None] = Runtime(context=None)
         while pending:
+            self._validate_context(context)
 
             def request_size(rows):
                 text = get_buffer_string([*summary, *rows], format="xml")
