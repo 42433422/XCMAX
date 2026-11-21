@@ -146,6 +146,7 @@
  * Facade：侧边栏装配入口（实现拆分至 sidebar/ 子模块与 Sidebar.css，行为与拆分前一致）。
  */
 import { TransitionGroup, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
 import { useSidebarLayoutStore } from '@/stores/sidebarLayout'
 import { useModsStore } from '@/stores/mods'
@@ -173,6 +174,7 @@ const props = defineProps({
 
 const emit = defineEmits(['change-view'])
 
+const router = useRouter()
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
 const modsStore = useModsStore()
@@ -335,8 +337,12 @@ function onMenuItemKeydown(event, key) {
 onMounted(async () => {
   const root = document.getElementById('app')
   // Prefetch steals the six HTTP/1 connections from the page that is still starting.
-  if (!root || root.dataset.startupReady === 'true') prefetchShellRouteChunks(router)
-  else window.addEventListener('xcagi:startup-ready', () => prefetchShellRouteChunks(router), { once: true })
+  // Sidebar can be mounted without a router (component tests, embedded shells).
+  // Never schedule prefetch with an undefined router.
+  if (router) {
+    if (!root || root.dataset.startupReady === 'true') prefetchShellRouteChunks(router)
+    else window.addEventListener('xcagi:startup-ready', () => prefetchShellRouteChunks(router), { once: true })
+  }
   startHealthPolling()
   window.addEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
   sidebarLayoutStore.initialize(sidebarLayoutSeedKeys())
