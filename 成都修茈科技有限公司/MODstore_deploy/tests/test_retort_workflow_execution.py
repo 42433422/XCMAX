@@ -419,7 +419,14 @@ async def test_real_failures_stop_existing_treatment_graph_and_drive_remote_with
     await run["generate"](user_id)
     for _ in range(2):
         response = run["execute"](user_id, {"ready": False})
-        assert "did not reach end" in response.json()["detail"]
+        assert response.status_code == 500
+        assert response.json()["detail"] == "工作流执行失败，请查看执行记录"
+    with get_session_factory()() as db:
+        failed = db.query(WorkflowExecution).filter_by(workflow_id=run["workflows"][user_id]).all()
+        assert len(failed) == 2
+        assert all(
+            row.status == "failed" and "did not reach end" in row.error_message for row in failed
+        )
     assert len(observations(run)) == 2
     response = run["execute"](user_id, {"ready": True})
     assert response.json()["detail"] == "workflow_experiment_graph_no_longer_approved"

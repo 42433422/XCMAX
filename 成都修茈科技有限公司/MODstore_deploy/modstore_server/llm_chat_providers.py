@@ -143,8 +143,9 @@ async def stream_openai_compatible(
       {"type": "usage", "usage": {...}} when upstream provides stream_options.include_usage
     """
     from modstore_server.llm_litellm_router import fallback_receipt_from_headers
-    from modstore_server.strategic_portfolio_usage import require_call_reservation
+    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
 
+    budgeted = scope_active()
     require_call_reservation(provider=provider, model=model, start_transport=True)
     url = f"{base_url.rstrip('/')}/chat/completions"
     body = _facade()._openai_chat_body(
@@ -174,6 +175,7 @@ async def stream_openai_compatible(
             return
         fallback = fallback_receipt_from_headers(getattr(r, "headers", None))
         reported_model = None
+        usage_reported = False
         tool_calls_accum: dict[int, dict[str, Any]] = {}
         async for line in r.aiter_lines():
             if not line:
@@ -189,9 +191,17 @@ async def stream_openai_compatible(
                 data = redact_key(json.loads(raw), api_key)
             except json.JSONDecodeError:
                 continue
-            if data.get("model"):
+            # Preserve the first conflicting raw identity for this reservation;
+            # a later approved alias cannot make earlier consumption known.
+            if data.get("model") and reported_model in (None, model):
                 reported_model = data["model"]
+            if budgeted and usage_reported and reported_model not in (None, model):
+                # A usage event is only a snapshot. Invalidate an earlier valid
+                # snapshot if a later raw frame changes the execution identity.
+                yield {"type": "error", "error": "上游模型身份发生变化，原调用用量尚未核验"}
+                return
             if data.get("usage"):
+                usage_reported = True
                 yield {
                     "type": "usage",
                     "usage": data.get("usage") or {},

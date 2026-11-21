@@ -246,11 +246,9 @@ def append_cases(
                     "surface": surface,
                     "resource_id": resource,
                     **(
-                        {"employee_id": resource}
-                        if surface == "employee_prompt"
-                        else {
-                            "generation_context": sample["generation_context"],
-                        }
+                        {"generation_context": sample["generation_context"]}
+                        if surface == "workflow_nl_prompt"
+                        else {}
                     ),
                     "failure_reason": cluster["failure_reason"],
                     "task": sample.get("task") or cluster["failure_reason"],
@@ -710,7 +708,15 @@ def main(argv: list[str] | None = None) -> int:
         ledger = Path(args.ledger) if args.ledger else _default_ledger()
         clusters = mine(ledger, days=args.days, min_count=args.min_count)
         print(
-            json.dumps({"ledger": str(ledger), "clusters": clusters}, ensure_ascii=False, indent=2)
+            json.dumps(
+                {
+                    "cluster_count": len(clusters),
+                    "failure_count": sum(cluster["count"] for cluster in clusters),
+                    "sample_count": sum(len(cluster["samples"]) for cluster in clusters),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
         )
         return 0
     if args.command == "prepare":

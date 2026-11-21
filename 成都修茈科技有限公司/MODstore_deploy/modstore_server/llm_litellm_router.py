@@ -374,10 +374,14 @@ def _budgeted_stream_client(
     from openai.types.chat import ChatCompletionChunk
 
     def record(chunk):
-        if isinstance(chunk, ChatCompletionChunk) and (values := _usage_dict(chunk)):
-            reported.clear()
-            reported.update(values)
-            reported["upstream_model"] = chunk.model
+        if not isinstance(chunk, ChatCompletionChunk):
+            return
+        # LiteLLM rewrites chunk.model to its requested alias. Retain raw
+        # identity from every SDK frame; later aliases cannot erase a mismatch.
+        if chunk.model and reported.get("model", model) == model:
+            reported["model"] = chunk.model
+        if values := _usage_dict(chunk):
+            reported["usage"] = values
 
     class ReceiptStream(AsyncStream[ChatCompletionChunk]):
         async def __aiter__(self):
@@ -695,13 +699,13 @@ async def _stream_impl(
     outcome = "success"
     response = None
     client = None
-    reported_usage: Dict[str, Any] = {}
+    reported_receipt: Dict[str, Any] = {}
     try:
         if budgeted or (
             single_attempt and str(deployments[0]["litellm_params"]["model"]).startswith("openai/")
         ):
             client = _budgeted_stream_client(
-                provider, model, deployments[0]["litellm_params"], reported_usage
+                provider, model, deployments[0]["litellm_params"], reported_receipt
             )
         response = await router.acompletion(
             model=_PRIMARY_ALIAS,
@@ -734,16 +738,18 @@ async def _stream_impl(
                     **(
                         {
                             "provider": provider,
-                            "model": getattr(chunk, "model", None),
+                            "model": reported_receipt.get("model") or getattr(chunk, "model", None),
                             **_fallback_meta(chunk),
-                            "usage_estimated": not _reported_stream_usage(reported_usage, usage),
+                            "usage_estimated": not _reported_stream_usage(
+                                reported_receipt.get("usage", {}), usage
+                            ),
                             **(
                                 {
                                     "gateway_attempts_verified": (
                                         client is not None
                                         and client.gateway_attempts_verified is True
                                     ),
-                                    "model": reported_usage.get("upstream_model"),
+                                    "model": reported_receipt.get("model"),
                                 }
                                 if provider == "litellm"
                                 else {}

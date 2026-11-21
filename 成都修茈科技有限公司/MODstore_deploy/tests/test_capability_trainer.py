@@ -42,6 +42,38 @@ def test_append_cases_is_idempotent(tmp_path):
     assert second == []
     rows = (tmp_path / "daily-orchestrator.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(rows) == 1
+    persisted = json.loads(rows[0])
+    assert "employee_id" not in persisted
+    assert persisted["surface"] == "employee_prompt"
+    assert persisted["resource_id"] == "daily-orchestrator"
+    assert persisted["task"] == "任务正文"
+    assert persisted["case_id"] == first[0]["case_id"]
+    # Existing corpora keep their original identity/hash and are not rewritten.
+    legacy = {**persisted, "employee_id": "daily-orchestrator"}
+    path = tmp_path / "daily-orchestrator.jsonl"
+    path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    assert trainer.append_cases(tmp_path, clusters) == []
+    assert json.loads(path.read_text(encoding="utf-8")) == legacy
+
+
+def test_mine_cli_reports_counts_without_private_samples(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("MODSTORE_RETORT_GROWTHBOOK_URL", raising=False)
+    ledger = tmp_path / "private-ledger.jsonl"
+    record = _rec(employee="private-pack-sentinel", reason="private-reason-sentinel")
+    record["report_excerpt"] = "private-task-sentinel"
+    ledger.write_text("\n".join(json.dumps(record) for _ in range(2)), encoding="utf-8")
+    assert trainer.main(["mine", "--ledger", str(ledger)]) == 0
+    output = capsys.readouterr().out
+    assert json.loads(output) == {
+        "cluster_count": 1,
+        "failure_count": 2,
+        "sample_count": 2,
+    }
+    assert "private-" not in output
+    assert str(ledger) not in output
+    cluster = trainer.mine(ledger)[0]
+    assert trainer.training_identity(cluster) == ("employee_prompt", "private-pack-sentinel")
+    assert cluster["samples"][0]["task"] == "private-task-sentinel"
 
 
 def test_select_pack_prefers_latest_version(tmp_path):

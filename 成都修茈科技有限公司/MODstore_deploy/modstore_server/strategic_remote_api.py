@@ -183,14 +183,14 @@ async def responses(request_id: str, request: Request, authorization: str = Head
                         event = await anext(source)
                 except StopAsyncIteration:
                     return
-        except PortfolioError as exc:
+        except PortfolioError:
             yield (
                 "data: "
                 + json.dumps(
                     {
                         "type": "error",
                         "code": "strategic_budget_stopped",
-                        "message": str(exc),
+                        "message": "Model stream stopped because authorization or budget is no longer available.",
                     }
                 )
                 + "\n\n"

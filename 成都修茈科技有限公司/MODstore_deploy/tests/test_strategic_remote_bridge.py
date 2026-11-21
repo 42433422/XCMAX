@@ -339,6 +339,54 @@ def test_stop_rejects_further_model_calls_without_releasing_original_holds(remot
     assert len(remote.github.writes) == 1
 
 
+def test_stream_stop_keeps_internal_error_private_and_preserves_unknown_hold(remote, monkeypatch):
+    claim(remote)
+    seen = _http(monkeypatch, (remote.decision_id, remote.task, remote.factory))
+    authenticate = bridge.authenticate_model
+    checks = []
+    private_detail = "controlled-private-sentinel: /operator/private/config; credential-example"
+    reservation = {}
+
+    def authenticate_until_stopped(request_id, token):
+        binding = authenticate(request_id, token)
+        checks.append(request_id)
+        if len(checks) == 2:
+            saved = p.portfolio_status(remote.decision_id)["tasks"]["a"]
+            reservation.update(next(iter(saved["calls"].values())))
+            # Inject only at the internal error boundary, after a real admitted
+            # SDK call. This does not claim a provider credential leaked in use.
+            raise p.PortfolioError(private_detail)
+        return binding
+
+    monkeypatch.setattr(bridge, "authenticate_model", authenticate_until_stopped)
+    response = remote.client.post(
+        remote.control + "/v1/responses",
+        json=_payload(stream=True),
+        headers=remote.model_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert private_detail not in response.text
+    events = [
+        json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+    ]
+    assert [event["type"] for event in events] == ["response.created", "error"]
+    assert events[-1] == {
+        "type": "error",
+        "code": "strategic_budget_stopped",
+        "message": "Model stream stopped because authorization or budget is no longer available.",
+    }
+    assert len(checks) == 2 and len(seen["requests"]) == 1
+    assert all(client.is_closed() for client in seen["clients"])
+    assert all(upstream.is_closed for upstream in seen["responses"])
+    state = p.portfolio_status(remote.decision_id)
+    call = next(iter(state["tasks"]["a"]["calls"].values()))
+    assert state["halted"] and call["status"] == "unknown"
+    assert "actual_tokens" not in call and "accrued_cost_cents" not in call
+    assert call["reserved_tokens"] == reservation["reserved_tokens"] > 0
+    assert call["reserved_cost_cents"] == reservation["reserved_cost_cents"] > 0
+    assert usage._SCOPE.get() is None and len(remote.github.writes) == 1
+
+
 def test_only_same_native_artifact_can_finish_original_report(remote, monkeypatch):
     claim(remote)
     _http(monkeypatch, (remote.decision_id, remote.task, remote.factory))

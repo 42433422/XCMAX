@@ -174,6 +174,53 @@ async def test_gateway_real_wire_preserves_unknown_attempts(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mandate", ["litellm"], indirect=True)
+@pytest.mark.parametrize("route", ["direct", "router"])
+@pytest.mark.parametrize(
+    "pattern",
+    ["first_mismatch", "middle_mismatch", "late_mismatch", "all_approved", "only_first_model"],
+)
+async def test_gateway_stream_model_drift_keeps_original_reservation(
+    mandate, monkeypatch, route, pattern, real_router_runtime
+):
+    """A later alias cannot erase raw identity before the real SDK/SQL settlement."""
+    original_response = _response
+
+    def response(stream, _model):
+        assert stream is True
+        frames = [
+            json.loads(line[6:])
+            for line in original_response(True, "approved-model").splitlines()
+            if line.startswith("data: ") and line != "data: [DONE]"
+        ]
+        if pattern == "first_mismatch":
+            frames[0]["model"] = "different-upstream-model"
+        elif pattern == "middle_mismatch":
+            frames[1]["model"] = "different-upstream-model"
+        elif pattern == "only_first_model":
+            frames[1].pop("model")
+            frames[2].pop("model")
+        elif pattern == "late_mismatch":
+            frames[1]["model"] = "different-upstream-model"
+            frames = [frames[0], frames[2], frames[1]]
+        return (
+            "".join("data: " + json.dumps(frame) + "\n\n" for frame in frames) + "data: [DONE]\n\n"
+        )
+
+    monkeypatch.setitem(globals(), "_response", response)
+    # Reuse the original wire, approved tariff, SQL reservation, native headers,
+    # single transport and resource-cleanup assertions for both real adapters.
+    await test_gateway_real_wire_preserves_unknown_attempts(
+        mandate,
+        monkeypatch,
+        route,
+        True,
+        "alias" if pattern.endswith("mismatch") else "single",
+        real_router_runtime,
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("verified", [False, True], ids=["unknown", "single"])
 async def test_gateway_planning_receipt_settles_original_company_and_call_rows(
     configured, monkeypatch, verified
