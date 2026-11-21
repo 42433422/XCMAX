@@ -47,16 +47,16 @@ def test_write_gate_stages_canonical_run_and_returns_original_receipt(monkeypatc
     )
     context = {"user_id": "7", "tenant_id": 1, "turn_id": "turn"}
     gate = build_write_approval_gate("employee", runtime_context=context)
-    verdict = gate("import_excel_to_database", {"file_path": "upload.xlsx"})
+    verdict = gate("products", {"action": "batch_create", "products": [{"name": "test-product"}]})
     assert verdict["ok"] is False
     assert verdict["pending_approval"] is True
     assert verdict["execution_result"] == receipt
     assert verdict["agent_run_id"] == "run-original"
     execute.assert_called_once_with(
         {
-            "tool_id": "import_excel_to_database",
-            "action": "import",
-            "params": {"file_path": "upload.xlsx"},
+            "tool_id": "products",
+            "action": "batch_create",
+            "params": {"products": [{"name": "test-product"}]},
         },
         workspace_root=None,
         runtime_context=context,
