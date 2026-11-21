@@ -2,9 +2,142 @@
 
 from __future__ import annotations
 
-from typing import Any
+import re
+import sys
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
+from math import isfinite
+from typing import TYPE_CHECKING, Any
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
-from app.application.agent_orchestrator.run_models import AgentRun
+if TYPE_CHECKING:
+    from app.application.agent_orchestrator.run_models import AgentRun
+
+
+def ensure_run_trace(run: AgentRun, *, bind: bool = False, live: bool = True) -> dict[str, str]:
+    """Bind durable observations to server context, never caller-supplied task fields."""
+    from app.neuro_bus.tracer import NeuroTracer, get_trace_context
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
+    current = get_trace_context() if live else {}
+    if bind and not run.metadata.get("trace_id"):
+        if not current.get("trace_id"):
+            try:
+                anchor = NeuroTracer().start_span("agent.run.created", tags={"run_id": run.run_id})
+                try:
+                    with anchor.context():
+                        current = get_trace_context()
+                finally:
+                    anchor.finish()
+            except BOUNDARY_ERRORS:
+                # Business task creation remains available if optional SDK
+                # setup fails; a generated correlation is unsampled by default.
+                pass
+        run.metadata["trace_id"] = current.get("trace_id") or uuid4().hex
+        run.metadata["span_id"] = current.get("span_id") or uuid4().hex[:16]
+        for key in ("request_id", "trace_flags", "trace_state"):
+            if key in current:
+                run.metadata[key] = current[key]
+    context = {
+        key: str(run.metadata[key])
+        for key in ("trace_id", "span_id", "request_id", "trace_flags", "trace_state")
+        if run.metadata.get(key)
+    }
+    # Older persisted runs must keep exact CAS evidence. Canonicalize the
+    # observation view deterministically without rewriting their old snapshot.
+    for key, length in (("trace_id", 32), ("span_id", 16)):
+        raw = context.get(key, "")
+        if not re.fullmatch(rf"[0-9a-f]{{{length}}}", raw) or int(raw, 16) == 0:
+            context[key] = uuid5(NAMESPACE_URL, f"xcagi.{key}:{raw or run.run_id}").hex[:length]
+    if current.get("trace_id") == context["trace_id"]:
+        context.update(current)
+    context.setdefault("trace_flags", "00")
+    context["run_id"] = run.run_id
+    task = run.metadata.get("task_context")
+    task = task if isinstance(task, dict) else {}
+    context["task_id"] = str(task.get("task_id") or run.run_id)
+    return context
+
+
+@contextmanager
+def observe_run_phase(run: AgentRun, phase: str) -> Iterator[None]:
+    """Measure active segments; persisted totals never subtract clocks across restarts."""
+    from app.neuro_bus.tracer import NeuroTracer, SpanStatus, TraceContext, get_trace_context
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
+    with ExitStack() as scopes:
+        span = None
+        try:
+            context = ensure_run_trace(run)
+            scopes.enter_context(
+                TraceContext(
+                    trace_id=context["trace_id"],
+                    span_id=context.get("span_id"),
+                    request_id=get_trace_context().get("request_id") or context.get("request_id"),
+                    trace_flags=context.get("trace_flags"),
+                    trace_state=context.get("trace_state"),
+                )
+            )
+            span = NeuroTracer().start_span(f"agent.{phase}", tags={"run_id": run.run_id})
+            scopes.enter_context(span.context())
+        except BOUNDARY_ERRORS:
+            scopes.close()
+            span = None
+        phase_returned = False
+        try:
+            yield
+            phase_returned = True
+        finally:
+            exception_type = None if phase_returned else sys.exc_info()[0]
+            error_type = exception_type.__name__ if exception_type is not None else ""
+            try:
+                if span is not None:
+                    failed = bool(error_type) or run.status in {"failed", "blocked", "rejected"}
+                    cancelled = run.status == "cancelled" or error_type in {
+                        "CancelledError",
+                        "GeneratorExit",
+                    }
+                    span.finish(
+                        SpanStatus.CANCELLED
+                        if cancelled
+                        else SpanStatus.ERROR
+                        if failed
+                        else SpanStatus.OK
+                    )
+                    duration = span.duration_ms or 0.0
+                    previous = run.metadata.get("active_duration_ms")
+                    previous = (
+                        previous
+                        if isinstance(previous, (int, float))
+                        and not isinstance(previous, bool)
+                        and isfinite(previous)
+                        and previous >= 0
+                        else 0
+                    )
+                    total = round(previous + duration, 3)
+                    run.metadata["active_duration_ms"] = total
+                    details: dict[str, Any] = {
+                        "phase": phase,
+                        "phase_duration_ms": duration,
+                        "duration_ms": total,
+                        "duration_scope": "active",
+                        "status": run.status,
+                        "parent_span_id": span.parent_id or "",
+                    }
+                    if cancelled:
+                        details.update(error_code="agent_phase_cancelled", error_type=error_type)
+                    elif failed:
+                        details.update(
+                            error_code="agent_phase_failed"
+                            if error_type
+                            else "agent_run_" + run.status,
+                            error_type=error_type,
+                        )
+                    run.add_event("run.observed", "执行阶段观测已记录", details)
+            except BOUNDARY_ERRORS:
+                # Optional telemetry must not replace a business exception or
+                # cause a committed tool to be retried.
+                pass
 
 
 def _text(value: Any, *, limit: int = 512) -> str:
@@ -99,6 +232,7 @@ def apply_task_context(
     """Attach a durable task descriptor without recording secrets or tool tokens."""
     task_context = build_task_context(run, runtime_context)
     run.metadata["task_context"] = task_context
+    ensure_run_trace(run, bind=True)
     return task_context
 
 

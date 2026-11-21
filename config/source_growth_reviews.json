@@ -15,14 +15,14 @@
     },
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
-      "base_blob": "4bf0b175dade7d4b0fb2ccba238b9d9d06f706ed",
-      "head_blob": "01e7a819be5a25100ee8d47ca03c9f8ea0c2da1c",
-      "before_lines": 1709,
-      "after_lines": 1776,
-      "reason": "修复独立规划澄清被转为普通回复后丢失待办：在既有 AgentRun 上续接原问题及用户答复，复用现有 CAS、执行租约和计划准入。",
-      "boundary": "新增入口只允许尚未调用业务工具的单一规划提问图；检查原身份、计划指纹和完整快照，替换计划仍走原权限及审批闸门，不新建执行引擎或状态存储。",
-      "validation": "本地 14 个关联测试文件 333 项通过，其中真实 process_chat/SQL 整链 18 项覆盖重启恢复、并发 CAS、旧快照、身份隔离和审批；12 个生产文件 mypy 与变更 Python Ruff 通过。首轮 GitHub PostgreSQL 事务验收通过；新提交完整 CI 和用户现场验收仍待完成。本记录是审查请求，不代表批准。",
-      "follow_up": "由 @42433422 在 PR #3424 复核同任务续接边界和证据；本次保持编排器现有生命周期职责，不按行数拆分，后续新增阶段前再按任务生命周期边界评估。",
+      "base_blob": "01e7a819be5a25100ee8d47ca03c9f8ea0c2da1c",
+      "head_blob": "b18e78b649c0ec3915975cb6ce3341d9316dbef4",
+      "before_lines": 1776,
+      "after_lines": 1779,
+      "reason": "响应用户“完善执行链观测，统一 Trace、错误与耗时”请求，仅在原规划调用外加入 observe_run_phase 观测作用域并导入既有任务上下文适配，文件净增 3 行。",
+      "boundary": "编排器仍只调用既有规划服务；Trace 恢复、单调耗时和错误记录位于原 task_context 模块，不新增规划器、工具执行入口或权限规则。 同步 main@171418352d 的规划澄清持久化实现，保留原澄清等待、恢复和审批边界。",
+      "validation": "包含规划、执行、旧任务 CAS、恢复、实际 worker 与 SSE 的后端组合回归 515 通过、11 项可选跳过；前端相关 139 通过，最终类型检查通过。完整后端 mypy 本地曾被资源限制终止，远端必需 CI 和人工架构评审仍待完成。",
+      "follow_up": "由 @42433422 核对本次薄层调用与同任务回归证据；观测继续复用 OpenTelemetry 1.45.2。该条是精确变更的评审请求，不表示已获批准，不为体量指标机械拆分现有编排器。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {

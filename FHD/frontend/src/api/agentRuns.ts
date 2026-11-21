@@ -1,7 +1,24 @@
 import { api } from './core'
 import type { ApiResponse } from '@/types/api'
 
-export interface AgentRunEvent {
+/** Shared observation fields; identifiers are diagnostic, never authorization. */
+export interface ExecutionObservation {
+  trace_id?: string
+  span_id?: string
+  parent_span_id?: string
+  request_id?: string
+  task_id?: string
+  run_id?: string
+  step_id?: string
+  node_id?: string
+  call_id?: string
+  attempt?: number
+  duration_ms?: number
+  error_code?: string
+  error_type?: string
+}
+
+export interface AgentRunEvent extends ExecutionObservation {
   event_id: string
   run_id: string
   event_type: string

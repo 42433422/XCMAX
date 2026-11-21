@@ -489,7 +489,8 @@ def test_create_get_and_list_agent_run(local_tools, trusted_actor, monkeypatch) 
     assert events_response.status_code == 200
     events_payload = events_response.json()
     assert events_payload["count"] == len(run["events"])
-    assert events_payload["data"][-1]["event_type"] == "run.completed"
+    assert any(event["event_type"] == "run.completed" for event in events_payload["data"])
+    assert events_payload["data"][-1]["event_type"] == "run.observed"
 
     first_event_id = events_payload["data"][0]["event_id"]
     tail_response = client.get(

@@ -38,6 +38,8 @@ class StructuredLogFormatter(logging.Formatter):
         self.version = version
 
     def format(self, record: logging.LogRecord) -> str:
+        from app.neuro_bus.tracer import get_trace_context
+
         log_data: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
@@ -49,20 +51,32 @@ class StructuredLogFormatter(logging.Formatter):
             "service": self.service_name,
             "environment": self.environment,
             "version": self.version,
+            **get_trace_context(),
         }
 
-        if hasattr(record, "request_id"):
-            log_data["request_id"] = record.request_id
-        if hasattr(record, "user_id"):
-            log_data["user_id"] = record.user_id
         if hasattr(record, "duration"):
             log_data["duration_ms"] = record.duration
         if hasattr(record, "extra_data"):
             log_data.update(record.extra_data)
-        if hasattr(record, "error_code"):
-            log_data["error_code"] = record.error_code
-        if hasattr(record, "stack_id"):
-            log_data["stack_id"] = record.stack_id
+        for key in (
+            "request_id",
+            "user_id",
+            "trace_id",
+            "span_id",
+            "parent_span_id",
+            "run_id",
+            "task_id",
+            "step_id",
+            "node_id",
+            "call_id",
+            "attempt",
+            "duration_ms",
+            "error_code",
+            "error_type",
+            "stack_id",
+        ):
+            if hasattr(record, key):
+                log_data[key] = getattr(record, key)
 
         if record.exc_info:
             log_data["exception"] = {

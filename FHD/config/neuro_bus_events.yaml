@@ -33,6 +33,7 @@ streams:
         - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
         - { type: "approval.authorization_mismatch", const: APPROVAL_AUTHORIZATION_MISMATCH }
         - { type: "run.observation_interrupted", const: RUN_OBSERVATION_INTERRUPTED, payload_fields: [reason, worker_pending, business_outcome, replay_allowed] }
+        - { type: "run.observed", const: RUN_OBSERVED, payload_fields: [phase, status, duration_ms, duration_scope, parent_span_id] }
       task:
         - { type: "task.approval_required", const: TASK_APPROVAL_REQUIRED }
       orchestration:

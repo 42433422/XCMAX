@@ -333,7 +333,11 @@ def _xcagi_chat_timeout_error_payload(timeout: float) -> dict:
 
 
 def _sse_event_line(payload: dict) -> bytes:
-    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+    from app.fastapi_routes.domains.conversation.stream_helpers import (
+        _sse_event_line as encode_event,
+    )
+
+    return encode_event(payload)
 
 
 def _sse_chunk_reports_running_tool(item: object) -> bool:
