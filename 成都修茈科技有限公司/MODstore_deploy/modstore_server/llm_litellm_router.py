@@ -75,18 +75,33 @@ def model_registry_entry(provider: str, model: str) -> dict[str, Any]:
     module = _load_litellm()
     if module is None:
         return {}
-    namespace = {"google": "gemini", "xiaomi": "xiaomi_mimo", "together": "together_ai"}.get(
-        provider, provider
-    )
-    info = module.model_cost.get(f"{namespace}/{model}") or module.model_cost.get(model) or {}
-    return info if info.get("litellm_provider") == namespace else {}
+    namespace = {
+        "google": "gemini",
+        "xiaomi": "xiaomi_mimo",
+        "together": "together_ai",
+        "doubao": "volcengine",
+    }.get(provider, provider)
+    registry = getattr(module, "model_cost", {})
+    info = registry.get(f"{namespace}/{model}") or registry.get(model) or {}
+    if not isinstance(info, dict) or info.get("litellm_provider") != namespace:
+        return {}
+    lookup = getattr(module, "get_model_info", None)
+    if callable(lookup):
+        try:
+            resolved = lookup(model=model, custom_llm_provider=namespace)
+        except RECOVERABLE_ERRORS:
+            pass  # Unknown aliases have no inferred capacity; use the pinned registry only.
+        else:
+            if isinstance(resolved, dict) and resolved.get("litellm_provider") == namespace:
+                info = resolved
+    return info
 
 
 def model_limits(provider: str, model: str) -> dict[str, int]:
     info = model_registry_entry(provider, model)
     return {
         key: value
-        for key in ("max_input_tokens", "max_output_tokens")
+        for key in ("context_window", "max_input_tokens", "max_output_tokens")
         if type(value := info.get(key)) is int and value > 0
     }
 
@@ -164,7 +179,12 @@ def _deployment(
     return {
         "model_name": alias,
         "litellm_params": {**params, "model": litellm_model},
-        "model_info": {"id": alias, "provider": provider, "model": model},
+        "model_info": {
+            "id": alias,
+            "provider": provider,
+            "model": model,
+            **model_limits(provider, model),
+        },
     }
 
 
