@@ -286,3 +286,123 @@ def test_markdown_image_target_and_model_cannot_inject_markup():
     )
     assert summary.startswith("![生成图片](https://example.test/image%281%29.png)")
     assert "[link](https://other.test)" not in summary
+
+
+def _image_workflow_response(steps, status="completed"):
+    from app.application.agent_orchestrator.run_models import AgentArtifact, AgentRun
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(
+        plan_id="image-plan",
+        intent="image_workflow",
+        todo_steps=["查询资料后生成图片"],
+        nodes=[
+            WorkflowNode(node_id=step.node_id, tool_id=step.tool_id, action=step.action)
+            for step in steps
+        ],
+    )
+    run = AgentRun(
+        user_id="1",
+        message="查询资料后生成图片",
+        run_id="image-run",
+        status=status,
+        steps=steps,
+        metadata={"tool_call_count": len(steps), "cost_units_total": 3},
+        artifacts=[AgentArtifact(artifact_type="image", uri="https://example.test/saved.png")],
+    )
+    return AIChatWorkflowResponseMixin()._format_agent_run_response(plan, run)
+
+
+def _finished_image(node_id, **output):
+    from app.application.agent_orchestrator.run_models import AgentStep
+
+    return AgentStep(
+        node_id=node_id,
+        tool_id="image_generate",
+        action="generate",
+        status="completed",
+        output={
+            "success": True,
+            "images": [f"https://example.test/{node_id}.png"],
+            "billed": True,
+            **output,
+        },
+    )
+
+
+def test_multistep_response_keeps_summary_and_every_confirmed_image():
+    from app.application.agent_orchestrator.run_models import AgentStep
+
+    lookup = AgentStep(
+        node_id="lookup",
+        tool_id="customers",
+        action="query",
+        status="completed",
+        output={"success": True, "total": 1, "data": [{"customer_name": "客户甲"}]},
+    )
+    result = _image_workflow_response(
+        [
+            lookup,
+            _finished_image("first"),
+            _finished_image(
+                "second",
+                images=["https://example.test/image(2).png"],
+                model="[link](https://other.test)",
+            ),
+        ]
+    )
+    text = result["response"]
+    assert result["success"] is True and result["data"]["text"] == text
+    assert "工作流: image_workflow" in text and "客户甲" in text
+    assert "TODO:" in text and "工具调用: 3 次" in text
+    assert text.count("![生成图片](https://example.test/first.png)") == 1
+    assert text.count("![生成图片](https://example.test/image%282%29.png)") == 1
+    assert "[link](https://other.test)" not in text
+    assert result["data"]["data"]["artifacts"][0]["uri"] == "https://example.test/saved.png"
+
+
+@pytest.mark.parametrize("failure", ["failed", "unknown", "false_receipt"])
+def test_mixed_response_shows_confirmed_image_without_promoting_other_results(failure):
+    other = _finished_image("unconfirmed")
+    if failure == "failed":
+        other.status = "failed"
+        other.output = {"success": False, "message": "生成失败"}
+    elif failure == "unknown":
+        # A stale completed step cannot override an explicit uncertain receipt.
+        other.output.update(outcome="unknown", reconciliation_required=True)
+    else:
+        other.output["success"] = False
+    result = _image_workflow_response([_finished_image("confirmed"), other], status="failed")
+    text = result["response"]
+    assert result["success"] is False and result["data"]["text"] == text
+    assert "![生成图片](https://example.test/confirmed.png)" in text
+    assert "https://example.test/unconfirmed.png" not in text
+    assert result["execution"]["committed"] is True
+    if failure == "unknown":
+        assert result["execution_state"] == "unknown" and result["retryable"] is False
+        assert result["requires_reconciliation"] is True
+        assert "业务结果暂时无法核实" in text
+        assert result["execution"]["effect"] == result["execution"]["outcome"] == "unknown"
+    else:
+        assert "工作流: image_workflow" in text and "unconfirmed" in text
+        assert result["execution"]["effect"] == result["execution"]["outcome"] == "partial"
+
+
+def test_unknown_image_without_confirmed_result_does_not_claim_committed_effect():
+    result = _image_workflow_response(
+        [_finished_image("unconfirmed", outcome="unknown", reconciliation_required=True)],
+        status="failed",
+    )
+    assert result["success"] is False and result["requires_reconciliation"] is True
+    assert result["execution"]["committed"] is False
+    assert result["execution"]["effect"] == result["execution"]["outcome"] == "unknown"
+    assert "https://example.test/unconfirmed.png" not in result["response"]
+    assert result["data"]["text"] == result["response"]
+
+
+def test_single_image_response_still_displays_the_confirmed_image_once():
+    result = _image_workflow_response([_finished_image("single")])
+    assert result["success"] is True
+    assert result["response"] == "![生成图片](https://example.test/single.png)"
+    assert result["data"]["text"] == result["response"]

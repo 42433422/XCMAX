@@ -16,7 +16,11 @@ from app.application.agent_orchestrator.context_window_manager import (
 from app.application.facades.tools_facade import get_workflow_tool_registry
 from app.application.workflow import planner_prompt_profile as profile
 from app.application.workflow.llm_plan_generation import _tool_specs
-from app.application.workflow.planner_llm_gateway import _prepare_model_messages
+from app.application.workflow.planner_llm_gateway import (
+    _compact_tool_registry,
+    _prepare_model_messages,
+    _shrink_planner_prompt,
+)
 from app.application.workflow.planner_prompt_profile import _slim_schema
 
 
@@ -45,6 +49,28 @@ def test_real_employee_inputs_and_preview_result_paths_reach_model():
     assert preview["output_schema"]["properties"]["data"]["properties"]["run_id"] == {
         "type": "string"
     }
+
+
+@pytest.mark.parametrize("action_name", ["quote", "create_order"])
+def test_real_sales_catalog_requires_customer_through_budget_projection(action_name):
+    registry = get_workflow_tool_registry()
+    prompt = {"tool_registry": _tool_specs({"sales": registry["sales"]})}
+    _compact_tool_registry(prompt)
+    outbound = [{"role": "user", "content": json.dumps(prompt, ensure_ascii=False)}]
+    assert _shrink_planner_prompt(outbound)
+    for projected in (prompt, json.loads(outbound[-1]["content"])):
+        action = next(
+            item
+            for item in projected["tool_registry"][0]["actions"]
+            if item["action"] == action_name
+        )
+        schema = action.get("input_schema") or projected["tool_schemas"][action["input_schema_ref"]]
+        validator = Draft202012Validator(schema)
+        params = {"items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
+        errors = list(validator.iter_errors(params))
+        assert any(error.validator == "anyOf" and not error.path for error in errors)
+        validator.validate({**params, "customer_id": 1})
+        validator.validate({**params, "customer_name": "客户甲"})
 
 
 @pytest.mark.parametrize(

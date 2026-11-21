@@ -282,6 +282,7 @@ class AIChatWorkflowResponseMixin:
 
         from app.domain.task_lifecycle.results import (
             execution_result_envelopes,
+            execution_result_error,
             execution_result_outcome_unknown,
         )
 
@@ -315,12 +316,6 @@ class AIChatWorkflowResponseMixin:
             ):
                 # TODO 最后一步是「根据检索结果作答」，不能只回一行「成功」。
                 response_text = self._knowledge_answer(step, user_message) or response_text
-            elif (step.status, step.tool_id, step.action) == (
-                "completed",
-                "image_generate",
-                "generate",
-            ):
-                response_text = _image_generate_summary(step.output) or response_text
         if (
             success
             and steps
@@ -407,8 +402,27 @@ class AIChatWorkflowResponseMixin:
                 retryable=False,
             )
             payload["data"].update(text=text, requires_reconciliation=True)
+        image_results = [
+            rendered
+            for step in steps
+            if (step.status, step.tool_id, step.action)
+            == ("completed", "image_generate", "generate")
+            and isinstance(step.output, dict)
+            and step.output.get("success") is True
+            and not execution_result_error(step.output)
+            and (rendered := _image_generate_summary(step.output))
+        ]
+        if image_results:
+            images_text = "\n\n".join(image_results)
+            text = (
+                images_text
+                if success and len(steps) == 1
+                else f"{payload['response']}\n\n已确认生成的图片：\n\n{images_text}"
+            )
+            payload["response"] = text
+            payload["data"]["text"] = text
         write_actions = {"write", "create", "update", "delete", "batch_delete", "clear_dataset"}
-        wrote = any(
+        wrote = bool(image_results) or any(
             step.status == "completed"
             and step.action in write_actions
             or (step.tool_id, step.action) == ("elt_import", "execute")
