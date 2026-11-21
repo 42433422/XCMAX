@@ -1065,6 +1065,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             run.add_event("workflow.conversation_rejected", error, {"execution_started": False})
             self._repo.save(run)
             return
+        from app.application.agent_orchestrator.result_verification import verification_blocked
+
+        if verification_blocked(run):
+            run.status, run.error = "blocked", "独立结果核验尚未通过，请先核验原执行回执"
+            self._repo.save(run)
+            return
         node_outputs: dict[str, Any] = {
             step.node_id: dict(step.output or {})
             for step in run.steps
@@ -1510,6 +1516,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     self._mark_budget_exceeded(run, step, budget, node_outputs=outputs)
                     return {"success": False, "error_code": "budget_exceeded", "message": run.error}
                 self._execute_step(run, step, runtime_context=runtime_context, node_outputs=outputs)
+                from app.application.agent_orchestrator.result_verification import (
+                    step_verification_blocked,
+                )
+
+                if step_verification_blocked(run, step):
+                    stopped_for_interaction = True
+                    return {
+                        "success": False,
+                        "error_code": "result_verification_required",
+                        "message": run.error,
+                    }
                 decision = (
                     step.output.get("question")
                     if isinstance(step.output, dict)
@@ -1698,6 +1715,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "cost_units_total": run.metadata["cost_units_total"],
             "ai_cost_units_total": run.metadata["ai_cost_units_total"],
             "repair_count": run.metadata.get("repair_count", 0),
+            "verification": copy.deepcopy(run.metadata.get("verification") or {}),
         }
         browser = run.metadata.get("browser_loop")
         if isinstance(browser, dict) and browser.get("phase") == "verified":

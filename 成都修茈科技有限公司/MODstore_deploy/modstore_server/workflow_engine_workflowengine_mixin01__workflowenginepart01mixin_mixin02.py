@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
+from concurrent.futures import ThreadPoolExecutor
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -212,6 +214,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
         config: _facade().Dict[str, _facade().Any],
         *,
         user_id: int = 0,
+        execution_id: int | None = None,
     ) -> _facade().Dict[str, _facade().Any]:
         _facade().logger.info("执行员工节点: %s", node.name)
         employee_id = config.get("employee_id")
@@ -229,7 +232,22 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             from modstore_server.services.employee import get_default_employee_client
 
             result = None
-            for _ in range(max(1, retry_count + 1)):
+            handled = False
+            if execution_id is not None:
+                from modstore_server.workflow_customer_delivery import run_customer_delivery_node
+
+                with ThreadPoolExecutor(max_workers=1) as ex:
+                    future = ex.submit(
+                        run_customer_delivery_node,
+                        execution_id=execution_id,
+                        node_id=int(node.id),
+                        user_id=user_id,
+                        config=config,
+                        node_input=input_data,
+                        execute=get_default_employee_client().execute_task,
+                    )
+                    handled, result = future.result(timeout=timeout_seconds)
+            for _ in range(0 if handled else max(1, retry_count + 1)):
                 with _facade().ThreadPoolExecutor(max_workers=1) as ex:
                     future = ex.submit(
                         get_default_employee_client().execute_task,
@@ -258,6 +276,12 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             }
             if isinstance(mapped, dict):
                 base.update(mapped)
+            if handled and execution_id is not None:
+                from modstore_server.workflow_customer_delivery import record_customer_delivery_node
+
+                record_customer_delivery_node(
+                    execution_id=execution_id, node_id=int(node.id), output=base
+                )
             return base
         except RECOVERABLE_ERRORS as e:
             _facade().logger.error("员工执行失败: %s", e)

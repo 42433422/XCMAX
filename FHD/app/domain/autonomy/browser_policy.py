@@ -23,6 +23,9 @@ BROWSER_ACTIONS = frozenset(
         "browser_take_screenshot",
     }
 )
+BROWSER_OBSERVATIONS = frozenset(
+    {"browser_snapshot", "browser_wait_for", "browser_take_screenshot"}
+)
 
 
 def browser_action_allowed(action: str, params: dict[str, Any]) -> bool:

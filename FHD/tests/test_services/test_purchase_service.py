@@ -17,6 +17,9 @@ from app.domain.shared_services.purchase_service_supplier_mixin import as_date
 
 def _mock_get_db(mock_db):
     """Create a contextmanager mock for get_db generator."""
+    if mock_db.query.side_effect is None:
+        filtered = mock_db.query.return_value.filter.return_value
+        filtered.with_for_update.return_value = filtered
 
     @contextlib.contextmanager
     def _get_db():
@@ -440,11 +443,11 @@ class TestUpdatePurchaseOrder:
         mock_product = MagicMock()
         mock_product.name = "产品A"
         mock_db = MagicMock()
+        order_query = MagicMock()
+        order_query.filter.return_value.with_for_update.return_value.first.return_value = mock_order
         # First query returns order, second returns product
         mock_db.query.side_effect = [
-            MagicMock(
-                filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_order)))
-            ),
+            order_query,
             MagicMock(filter=MagicMock(return_value=MagicMock(delete=MagicMock(return_value=0)))),
             MagicMock(
                 filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_product)))
@@ -462,12 +465,18 @@ class TestUpdatePurchaseOrder:
 
 class TestApprovePurchaseOrder:
     def test_approves_draft_order(self, svc):
-        mock_item = MagicMock()
-        mock_order = MagicMock()
-        mock_order.status = "draft"
+        mock_item = MagicMock(quantity=10, unit_price=10)
+        mock_order = _make_mock_model(
+            id=1, status="draft", total_amount=100, supplier_id=1, tenant_id=7
+        )
         mock_order.items = [mock_item]
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_order
+        order_query, supplier_query = MagicMock(), MagicMock()
+        order_query.filter.return_value.with_for_update.return_value.first.return_value = mock_order
+        supplier_query.filter.return_value.with_for_update.return_value.first.return_value = (
+            MagicMock(status="active", credit_limit=0)
+        )
+        mock_db.query.side_effect = [order_query, supplier_query]
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.approve_purchase_order(1, "admin")
         assert result["success"] is True
@@ -495,8 +504,7 @@ class TestApprovePurchaseOrder:
 class TestCancelPurchaseOrder:
     def test_cancels_draft_order(self, svc):
         mock_item = MagicMock()
-        mock_order = MagicMock()
-        mock_order.status = "draft"
+        mock_order = _make_mock_model(id=1, status="draft")
         mock_order.items = [mock_item]
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
@@ -567,7 +575,12 @@ class TestCreatePurchaseInbound:
             )
             db.add(
                 PurchaseOrder(
-                    id=1, order_no="PO1", supplier_id=1, status="approved", order_date=date.today()
+                    id=1,
+                    order_no="PO1",
+                    supplier_id=1,
+                    warehouse_id=1,
+                    status="approved",
+                    order_date=date.today(),
                 )
             )
             db.add(
@@ -592,7 +605,7 @@ class TestCreatePurchaseInbound:
             patch("app.domain.shared_services.inventory_service.get_db", database),
             patch(
                 "app.domain.shared_services.accounting_services.create_journal_entry",
-                return_value={"success": True},
+                return_value={"success": True, "data": {"id": 1}},
             ),
             patch.object(svc, "_publish_event"),
         ):
@@ -646,7 +659,7 @@ class TestCreatePurchaseInbound:
             ),
             patch(
                 "app.domain.shared_services.accounting_services.create_journal_entry",
-                return_value={"success": journal_success, "data": {"entry_no": "JE-001"}},
+                return_value={"success": journal_success, "data": {"id": 1, "entry_no": "JE-001"}},
             ) as MockCreateEntry,
         ):
             MockInvSvc.return_value.inventory_in.return_value = {"success": True}
@@ -661,8 +674,14 @@ class TestCreatePurchaseInbound:
                     ],
                 }
             )
-        assert result["success"] is True
+        assert result["success"] is journal_success
         MockCreateEntry.assert_called_once()
+        assert MockCreateEntry.call_args.kwargs["db"] is mock_db
+        if journal_success:
+            mock_db.commit.assert_called_once()
+        else:
+            mock_db.commit.assert_not_called()
+            mock_db.rollback.assert_called_once()
         data = MockCreateEntry.call_args.args[0]
         assert data["description"] == "采购入库: PTEST"
         assert data["reference_type"] == "purchase_inbound"

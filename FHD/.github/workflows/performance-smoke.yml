@@ -9,8 +9,11 @@ on:
     paths:
       - "FHD/scripts/loadtest/**"
       - "FHD/frontend/e2e/sla-perf.spec.ts"
+      - "FHD/frontend/e2e/helpers.ts"
       - "FHD/frontend/e2e/performance-budget.ts"
       - "FHD/frontend/playwright.config.ts"
+      - "FHD/frontend/src/components/chat/ChatMessageList.vue"
+      - "FHD/frontend/src/components/chat/ChatMessageList.teleport.test.ts"
       - "FHD/frontend/tests/performance-budget.test.ts"
       - "FHD/tests/test_ci/test_performance_evidence.py"
       - "FHD/tests/test_sla_health_probe.py"

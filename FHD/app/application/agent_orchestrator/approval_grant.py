@@ -59,6 +59,32 @@ def _approval_digest(value: Any) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _enterprise_claims(run: AgentRun) -> dict[str, str]:
+    """Bind new business-goal approvals to the original complete frozen plan."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+    runtime = run.metadata.get("runtime_context") or {}
+    plan = run.metadata.get("plan") or {}
+    metadata = plan.get("metadata") or {}
+    if "enterprise_cognition" not in runtime and "enterprise_cognition" not in metadata:
+        return {}
+    binding = runtime.get("enterprise_cognition")
+    if (
+        not isinstance(binding, dict)
+        or not binding
+        or binding != metadata.get("enterprise_cognition")
+    ):
+        raise ApprovalGrantError("经营目标审批证据与原计划不匹配")
+    try:
+        digest = canonical_hash(plan)
+        binding_digest = canonical_hash(binding)
+    except (TypeError, ValueError) as exc:
+        raise ApprovalGrantError("经营目标审批计划无效") from exc
+    if not run.metadata.get("plan_sha256") or digest != run.metadata["plan_sha256"]:
+        raise ApprovalGrantError("经营目标审批计划摘要不匹配")
+    return {"plan_sha256": digest, "enterprise_binding_sha256": binding_digest}
+
+
 def _params_hash(step: AgentStep) -> str:
     return _approval_digest(step.params or {})
 
@@ -155,17 +181,22 @@ def execution_scope_claims(context: dict[str, Any], tool_id: str, action: str) -
         if spec is not None
         else None
     )
-    return {
+    claims = {
         "authorization_scope_sha256": authorization_scope_hash(context),
         "tool_contract_sha256": _approval_digest(contract),
         "tool_version": spec.version if spec is not None else "",
     }
+    if (tool_id, action) == ("kellai", "send"):
+        from app.application.kellai_binding_app_service import connection_identity_sha256
+
+        claims["kellai_connection_sha256"] = connection_identity_sha256()
+    return claims
 
 
 def approval_receipt_claims(
     run: AgentRun, step: AgentStep, *, claims: dict[str, Any] | None = None
 ) -> dict[str, str]:
-    expected = {"params_sha256": _params_hash(step)}
+    expected = {"params_sha256": _params_hash(step), **_enterprise_claims(run)}
     if step.tool_id != "catalog_products_v1":
         expected.update(_scope_claims(run, step))
     return expected if claims is None else {key: str(claims.get(key) or "") for key in expected}
@@ -203,6 +234,7 @@ def _action_claims(run: AgentRun, step: AgentStep, principal_id: str) -> dict[st
         "tool_id": step.tool_id,
         "action": step.action,
         "params_sha256": _params_hash(step),
+        **_enterprise_claims(run),
     }
     if step.tool_id != "catalog_products_v1":
         claims.update(_scope_claims(run, step))
@@ -314,7 +346,11 @@ def validate_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> 
 
     step = waiting_step(run)
     expected = _action_claims(run, step, principal_id) if step else {}
-    if step is None or any(str(claims.get(key) or "") != value for key, value in expected.items()):
+    if (
+        step is None
+        or ("enterprise_binding_sha256" in claims) != ("enterprise_binding_sha256" in expected)
+        or any(str(claims.get(key) or "") != value for key, value in expected.items())
+    ):
         raise ApprovalGrantError("approval_grant 与当前待审批步骤不匹配")
 
     return claims

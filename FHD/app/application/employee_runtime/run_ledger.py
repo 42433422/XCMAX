@@ -111,11 +111,14 @@ def finish_employee_run_log(
             code=error_code,
             actor=str(tenant_id),
         )
+        body["validation_scope"] = "execution_envelope"
         book.put("employee", str(tenant_id), str(run_id), body)
         row.output_json = json.dumps(output or {}, ensure_ascii=False)
         row.error_text = str(error or "")[:4000]
         row.attempts = max(1, int(attempts))
-        row.verified = 1 if verified else 0
+        # Retain the legacy argument for callers, but it is never independent proof.
+        # This ledger does not yet bind an original AgentRun/ToolCall readback.
+        row.verified = 0
         row.finished_at = (
             datetime.now(UTC).replace(tzinfo=None)
             if canonicalize("employee", row.status)
@@ -242,6 +245,30 @@ def expire_employee_approvals(*, tenant_id: int, timeout_seconds: float) -> int:
     return expired
 
 
+def employee_result_validation(
+    *, status: str, legacy_result_valid: bool | None = None
+) -> dict[str, Any]:
+    """Final server projection; never feed its unavailable verdict into execution retry."""
+    legacy = legacy_result_valid is not None
+    failed = status in {"failed", "rejected", "cancelled"}
+    result: dict[str, Any] = {
+        "validation_scope": "legacy_execution_envelope" if legacy else "execution_envelope",
+        "result_valid": status == "success" and (not legacy or legacy_result_valid is True),
+        "verified": False,
+        "independent_verified": False,
+        "verification": {
+            "status": "failed" if failed else "inconclusive",
+            "code": "employee_result_invalid" if failed else "result_verifier_unavailable",
+            "source": "employee_run_ledger",
+            "accepted": False,
+            "checks": [],
+        },
+    }
+    if legacy:
+        result["legacy_result_valid"] = legacy_result_valid
+    return result
+
+
 def list_employee_run_logs(
     employee_id: str, *, tenant_id: int | None = None, limit: int = 50
 ) -> list[dict[str, Any]]:
@@ -250,6 +277,8 @@ def list_employee_run_logs(
     if not eid:
         return []
     with get_db() as db:
+        from app.domain.task_lifecycle.control import SessionBook
+
         rows = (
             db.query(EmployeeRunLog)
             .filter(EmployeeRunLog.employee_id == eid, EmployeeRunLog.tenant_id == tenant_id)
@@ -257,19 +286,31 @@ def list_employee_run_logs(
             .limit(max(1, min(limit, 200)))
             .all()
         )
-        return [
-            {
-                "id": row.id,
-                "employee_id": row.employee_id,
-                "status": row.status,
-                "attempts": row.attempts,
-                "verified": bool(row.verified),
-                "error": row.error_text,
-                "created_at": row.created_at.isoformat() if row.created_at else "",
-                "finished_at": row.finished_at.isoformat() if row.finished_at else "",
-            }
-            for row in rows
-        ]
+        book = SessionBook(db)
+        records = []
+        for row in rows:
+            body = book.get("employee", str(tenant_id), str(row.id))
+            validation = employee_result_validation(
+                status=row.status,
+                legacy_result_valid=(
+                    None
+                    if body.get("validation_scope") == "execution_envelope"
+                    else bool(row.verified)
+                ),
+            )
+            records.append(
+                {
+                    "id": row.id,
+                    "employee_id": row.employee_id,
+                    "status": row.status,
+                    "attempts": row.attempts,
+                    **validation,
+                    "error": row.error_text,
+                    "created_at": row.created_at.isoformat() if row.created_at else "",
+                    "finished_at": row.finished_at.isoformat() if row.finished_at else "",
+                }
+            )
+        return records
 
 
 def _require_tenant(tenant_id: int | None) -> int:

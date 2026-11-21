@@ -1,6 +1,6 @@
 name: CI/CD Pipeline
 run-name: >-
-  CI/CD ${{ github.event_name == 'workflow_dispatch' && inputs.release_sha || github.sha }}
+  CI/CD ${{ github.event_name == 'workflow_dispatch' && inputs.release_sha || github.sha }}${{ inputs.delivery_request_id && format(' [delivery:{0}]', inputs.delivery_request_id) || '' }}
 
 on:
   push:
@@ -34,11 +34,6 @@ on:
         required: false
         default: false
         type: boolean
-      dispatch_evolution:
-        description: "Run the independent Evolution workflow after CVM upload"
-        required: false
-        default: true
-        type: boolean
       push_image_tar:
         description: "Also push the optional 600MB+ offline image archive"
         required: false
@@ -46,6 +41,11 @@ on:
         type: boolean
       release_sha:
         description: "Exact 40-character SHA to build/deploy; required when push_to_cvm=true"
+        required: false
+        default: ""
+        type: string
+      delivery_request_id:
+        description: "Original post-merge CI request identity; retained across observation retries"
         required: false
         default: ""
         type: string
@@ -171,12 +171,26 @@ jobs:
             tests/test_routes/test_mobile_super_employee_receipts.py \
             tests/test_services/test_mobile_relay_request_identity.py \
             -q -o addopts= --junitxml=agent-postgres-results.xml
+      - name: Verify backup snapshot counts on the disposable PostgreSQL service
+        working-directory: FHD
+        env:
+          FHD_TEST_PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          test -n "$FHD_TEST_PG_CONTAINER"
+          uv run --no-sync pytest tests/release_gate/test_postgres_backup_snapshot.py -q -o addopts= --junitxml=postgres-backup-snapshot-results.xml
+          uv run --no-sync python - <<'PY'
+          import xml.etree.ElementTree as ET
+          report = ET.parse("postgres-backup-snapshot-results.xml")
+          assert len(report.findall(".//testcase")) >= 5 and not report.findall(".//skipped"), "native backup scenarios must execute"
+          PY
       - name: Retain transaction test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: agent-postgres-transactions
-          path: FHD/agent-postgres-results.xml
+          path: |
+            FHD/agent-postgres-results.xml
+            FHD/postgres-backup-snapshot-results.xml
           if-no-files-found: warn
   # Guard against temporary scripts in business directories
   guard-temp-scripts:

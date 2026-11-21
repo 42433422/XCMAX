@@ -68,6 +68,9 @@ def _assert_reused_run_scope(
     )
     from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 
+    previous_context = run.metadata.get("runtime_context") or {}
+    previous_binding = previous_context.get("_mod_authorization") or {}
+    requested_binding = (runtime_context or {}).get("_mod_authorization") or {}
     scope = dict(runtime_context or {})
     if not isinstance(scope.get("_actor_authorization"), dict):
         scope["user_id"] = user_id
@@ -79,6 +82,9 @@ def _assert_reused_run_scope(
             actor_tool_denial(step.tool_id, step.action, scope, step.params) is not None
             for step in run.steps
         )
+        or previous_binding.get("mod_id", "") != requested_binding.get("mod_id", "")
+        or str(previous_context.get("mod_id") or "")
+        != str((runtime_context or {}).get("mod_id") or "")
     ):
         raise UnifiedTaskConflictError("task_id 已绑定到不同的账号或 Mod 范围")
 

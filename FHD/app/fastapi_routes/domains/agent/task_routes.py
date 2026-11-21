@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import threading
 import time
 from concurrent.futures import Future, wait
 from dataclasses import asdict, replace
 from typing import Any, Callable, Generic, TypeVar, cast
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import ValidationError
 
 from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_repository
 from app.application.agent_orchestrator.run_control import run_operation_lock
@@ -33,6 +35,8 @@ from app.application.agent_orchestrator.unified_task import (
     create_unified_task,
     task_capabilities,
 )
+from app.application.enterprise_cognition.service import get_cognition_service
+from app.domain.enterprise_cognition.contracts import CognitionRequest
 from app.fastapi_routes.domains.agent.route_support import (
     authenticated_runtime_context,
     internal_error_response,
@@ -43,11 +47,13 @@ from app.fastapi_routes.domains.agent.route_support import (
     success,
     task_scope_matches,
 )
+from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from app.infrastructure.auth.agent_stream import StreamAuthorizer, require_stream_authorizer
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["agent"])
 
 # 运行写入时会同步建任务记录，这里只需要为历史运行补建一次。
@@ -602,3 +608,32 @@ def archive_agent_task(
 
 
 __all__ = ["router"]
+
+
+@router.post("/api/enterprise/cognition", tags=["enterprise-cognition"])
+def cognition(
+    body: CognitionRequest,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any]:
+    context = authenticated_runtime_context({"source": "enterprise_cognition_api"}, principal)
+    try:
+        result = get_cognition_service().invoke(body.action, body.params, context=context)
+        if body.action == "plan":
+            return run_response(result, principal=principal)
+        verified = (
+            result.get("observation_verified") is True
+            if body.action == "evaluate"
+            else result.get("current_state_verified") is True
+            if body.action == "query"
+            else True
+        )
+        return {"success": verified, "data": result}
+    except (AgentModAuthorizationError, PermissionError) as exc:
+        raise HTTPException(403, "当前账号无权访问该企业状态或任务") from exc
+    except ValidationError as exc:
+        raise HTTPException(422, "企业认知请求参数无效") from exc
+    except ValueError as exc:
+        raise HTTPException(409, "实体、目标、指标或原任务请求不一致") from exc
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("enterprise cognition request unavailable")
+        raise HTTPException(503, "企业状态或原任务回执暂不可用，请保留原请求编号核对") from exc

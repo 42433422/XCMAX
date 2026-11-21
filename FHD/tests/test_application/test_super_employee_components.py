@@ -220,6 +220,10 @@ def test_result_projection_uses_repository_without_fetching_or_running_cli(tmp_p
         CODEX_PROFILE,
         repository,
         MessageSyncPorts(
+            read_rows=_unexpected,
+            reconcile_dispatch=_unexpected,
+            dispatch_reply=_unexpected,
+            task_reply=_unexpected,
             fetch_task=_unexpected,
             direct_reply=_unexpected,
             should_reply=_unexpected,
@@ -533,6 +537,11 @@ def test_public_development_isolation_failure_does_not_execute_in_git_root(
     monkeypatch.setattr(service, "_dev_loop_enabled", lambda: True)
     monkeypatch.setattr(service, "_prepare_worktree", lambda *args: None)
     monkeypatch.setattr(service, "_is_git_repo", lambda path: git_repo)
+    exists = Path.exists
+    # The test runner's temporary root may itself live inside a checkout.
+    monkeypatch.setattr(
+        Path, "exists", lambda path: git_repo if path.name == ".git" else exists(path)
+    )
     calls = []
 
     def execute(*args):

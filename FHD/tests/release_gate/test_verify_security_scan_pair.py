@@ -8,10 +8,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pytest
+import yaml
 
 SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "security" / "verify_security_scan_pair.py"
@@ -20,6 +24,8 @@ GATE_SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "security" / "security_release_gate.py"
 )
 RELEASE_SHA = "a" * 40
+ROOT = Path(__file__).resolve().parents[3]
+SCAN_WORKFLOW = ROOT / "FHD/.github/workflows/security-full-scan.yml"
 
 
 def _required_scanners() -> list[str]:
@@ -203,3 +209,106 @@ def test_cli_has_no_skip_switch() -> None:
     lowered = proc.stdout.lower()
     for word in ("skip", "bypass", "override", "force"):
         assert word not in lowered
+
+
+def _run_scan_gate(tmp_path: Path, *, event: str = "workflow_dispatch") -> tuple[int, dict]:
+    """Run the actual workflow command with real validators and synthetic reports."""
+    checkout = tmp_path / "checkout"
+    (checkout / "FHD/scripts").mkdir(parents=True, exist_ok=True)
+    security = checkout / "FHD/scripts/security"
+    if not security.exists():
+        security.symlink_to(SCRIPT.parent, target_is_directory=True)
+    config = checkout / "FHD/config"
+    config.mkdir(exist_ok=True)
+    (config / "security_baseline.json").write_text(
+        json.dumps(
+            {
+                "schema": "security-baseline/v1",
+                "entries": [
+                    {
+                        "scanner": "codeql",
+                        "id": "historical-high",
+                        "reason": "Synthetic historical risk for trend-only regression",
+                        "owner": "fixture-owner",
+                        "expires": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    steps = yaml.safe_load(SCAN_WORKFLOW.read_text(encoding="utf-8"))["jobs"]["scan-and-gate"][
+        "steps"
+    ]
+    gate = next(step for step in steps if step.get("id") == "release-gate")
+    command = gate["run"].replace("${{ steps.scan-source.outputs.sha }}", RELEASE_SHA)
+    result = subprocess.run(
+        ["bash", "-c", command],
+        cwd=checkout,
+        env={
+            **os.environ,
+            "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}",
+            "GITHUB_EVENT_NAME": event,
+            "RUNNER_TEMP": str(tmp_path),
+            "RELEASE_SHA": RELEASE_SHA,
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode in (0, 1), result.stderr
+    return result.returncode, json.loads(result.stdout)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "clear",
+        "baselined_high",
+        "cross_day",
+        "source_mismatch",
+        "release_mismatch",
+        "unavailable",
+        "missing",
+        "secret",
+        "stale",
+    ],
+)
+def test_manual_scan_and_deployment_make_identical_decisions(tmp_path: Path, case: str) -> None:
+    reports = tmp_path / "security-reports"
+    now = datetime.now(UTC)
+    _write_scan(reports, now, step=timedelta(0))
+    codeql = reports / "codeql.json"
+    payload = json.loads(codeql.read_text(encoding="utf-8"))
+    if case in {"baselined_high", "secret"}:
+        payload["findings"] = [
+            {
+                "id": "historical-high",
+                "severity": "high",
+                "status": "open",
+                "secret": case == "secret",
+            }
+        ]
+    elif case == "cross_day":
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        payload["scanned_at"] = (midnight - timedelta(seconds=1)).isoformat()
+    elif case in {"source_mismatch", "release_mismatch"}:
+        payload["source_sha" if case == "source_mismatch" else "release_sha"] = "b" * 40
+    elif case == "unavailable":
+        payload["available"] = False
+    elif case == "stale":
+        payload["scanned_at"] = (now - timedelta(days=2)).isoformat()
+    codeql.write_text(json.dumps(payload), encoding="utf-8")
+    if case == "missing":
+        codeql.unlink()
+
+    scan_code, scan = _run_scan_gate(tmp_path)
+    deploy_code, deploy = _run(reports)
+
+    assert scan_code == deploy_code == (0 if case == "clear" else 1)
+    assert scan["passed"] == deploy["passed"]
+    assert scan["blockers"] == deploy["blockers"]
+    if case == "baselined_high":
+        trend_code, trend = _run_scan_gate(tmp_path, event="schedule")
+        assert trend_code == 0
+        assert trend["suppressed"] == {"codeql": ["historical-high"]}

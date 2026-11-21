@@ -8,6 +8,15 @@ import threading
 import time
 from typing import Any, cast
 
+from app.application.agent_orchestrator.result_verification import (
+    bind_execution_receipt,
+    freeze_verification_contract,
+    latest_step_call,
+    project_verification,
+    restore_verified_artifacts,
+    step_verification_blocked,
+    verify_step_result,
+)
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall, utc_now_iso
 from app.application.agent_orchestrator.run_repository import AgentRunRepository
 from app.application.agent_orchestrator.run_usage import RunUsageLedger
@@ -19,6 +28,10 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.task_context import ensure_run_trace
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.application.agent_orchestrator.verification_cognition import (
+    normalize_tool_execution_result,
+    verified_plan_admission,
+)
 from app.domain.task_lifecycle.results import (
     execution_result_requires_reconciliation,
     normalize_execution_result,
@@ -32,84 +45,9 @@ from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 from app.infrastructure.observability.metrics import observe_tool_call
 from app.neuro_bus.tracer import get_trace_context
 from app.security.log_redaction import redact_log_text
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
-
-
-def _confirm_customer_create(
-    step: AgentStep, output: dict[str, Any], runtime_context: dict[str, Any]
-) -> dict[str, Any]:
-    """A child success payload is not proof the caller database contains the row."""
-    if step.tool_id != "customers" or step.action != "create" or output.get("success") is not True:
-        return output
-    name = str(
-        (step.params or {}).get("unit_name")
-        or (step.params or {}).get("customer_name")
-        or (step.params or {}).get("name")
-        or ""
-    ).strip()
-    claimed = output.get("id")
-    raw_data = output.get("data")
-    data = raw_data if isinstance(raw_data, dict) else {}
-    if claimed is None:
-        claimed = data.get("id")
-    unverified = {
-        **output,
-        "success": False,
-        "error_code": "customer_receipt_unverified",
-        "outcome": "unknown",
-        "retryable": False,
-        "reconciliation_required": True,
-        "message": "客户写入未在调用方数据库确认",
-    }
-    if not name or type(claimed) is not int:
-        return unverified
-    from sqlalchemy import select
-    from sqlalchemy.exc import SQLAlchemyError
-
-    from app.db.models.purchase_unit import PurchaseUnit
-
-    try:
-        from app.application.customer_app_service import get_customers_session
-
-        session = get_customers_session()
-    except RECOVERABLE_ERRORS:
-        return unverified
-    try:
-        rows = (
-            session.execute(
-                select(PurchaseUnit)
-                .where(PurchaseUnit.unit_name == name)
-                .execution_options(skip_tenant_filter=True)
-            )
-            .scalars()
-            .all()
-        )
-    except RECOVERABLE_ERRORS + (SQLAlchemyError,):
-        return unverified
-    finally:
-        session.close()
-    tenant = str((runtime_context or {}).get("tenant_id") or "")
-    matched = [
-        row
-        for row in rows
-        if row.unit_name == name
-        and int(row.id) == claimed
-        and (not tenant or str(row.tenant_id) == tenant)
-    ]
-    if len(matched) != 1:
-        return unverified
-    row = matched[0]
-    confirmed = dict(data)
-    confirmed.update(
-        {
-            "id": int(row.id),
-            "customer_name": row.unit_name,
-            "tenant_id": row.tenant_id,
-        }
-    )
-    return {**output, "success": True, "id": int(row.id), "data": confirmed}
 
 
 class StepExecution:
@@ -139,6 +77,29 @@ class StepExecution:
         runtime_context: dict[str, Any],
         node_outputs: dict[str, Any],
     ) -> None:
+        prior = latest_step_call(run, step)
+        if (
+            prior is not None
+            and prior.output.get("success") is True
+            and prior.metadata.get("verification_contract")
+            and prior.metadata.get("verification_output_sha256")
+        ):
+            # A receipt already exists. This path can only read evidence; neither
+            # verification failure nor a graph replay authorizes another effect.
+            context = {
+                **runtime_context,
+                "run_id": run.run_id,
+                "step_id": step.step_id,
+                "node_id": step.node_id,
+                **task_execution_context(run, step),
+            }
+            verify_step_result(run=run, step=step, call=prior, context=context)
+            restore_verified_artifacts(run, step, prior, self.attach_artifacts)
+            self._record_verification(run, step, prior)
+            if not step_verification_blocked(run, step):
+                node_outputs[step.node_id] = dict(step.output)
+            self.repository.save(run)
+            return
         started = time.perf_counter()
         step.attempt_count += 1
         step.status = "running"
@@ -204,7 +165,9 @@ class StepExecution:
             authorization_permission = getattr(spec, "permission", "")
             if tool_call.permission != authorization_permission:
                 tool_call.metadata["authorization_permission"] = authorization_permission
+            freeze_verification_contract(run, step, tool_call, spec, runtime_context)
             run.tool_calls.append(tool_call)
+            project_verification(run)
             self.usage.refresh_run_cost_metadata(run)
         ctx = dict(runtime_context or {})
         self._execute_call(run, step, tool_call, runtime_context, ctx, node_outputs, spec)
@@ -215,7 +178,10 @@ class StepExecution:
         )
         if step.output.get("retryable") is False:
             run.metadata["non_retryable"] = True
-        uncertain = execution_result_outcome_unknown(step.output)
+        uncertain = execution_result_outcome_unknown(step.output) or (
+            execution_result_requires_reconciliation(step.output)
+            and not verified_plan_admission(step, step.output, ctx)
+        )
         if execution_result_requires_reconciliation(step.output) or (
             step.output.get("retryable") is False
             and (
@@ -284,14 +250,16 @@ class StepExecution:
                 str(step.output.get("message") or step.output.get("error") or "tool failed")
             )[:1024]
             tool_call.error = step.error
-        # Persist the executed call before optional artifact/observation work.
+        # Persist the original executor receipt before independent readback.
+        bind_execution_receipt(tool_call)
+        project_verification(run)
         self.repository.save(run)
-        self.attach_artifacts(
-            run,
-            step.output,
-            source=f"{step.tool_id}.{step.action}",
-            extra_metadata={"step_id": step.step_id, "call_id": tool_call.call_id},
-        )
+        verify_step_result(run=run, step=step, call=tool_call, context=ctx)
+        restore_verified_artifacts(run, step, tool_call, self.attach_artifacts)
+        self._record_verification(run, step, tool_call)
+        self.repository.save(run)
+        if step_verification_blocked(run, step):
+            return
         observation = self.observe(run, step, tool_call=tool_call, success=success)
         event_data = self._trace(run, step, ctx, tool_call, spec, execution_status)
         event_data["observation_id"] = observation.get("observation_id")
@@ -309,10 +277,7 @@ class StepExecution:
             )
             self.repository.save(run)
             return
-        if (
-            str(step.output.get("error_code") or "") != "tool_billing_blocked"
-            and not requires_reconciliation
-        ):
+        if str(step.output.get("error_code") or "") != "tool_billing_blocked" and not uncertain:
             self.usage.record_tool_usage_refund(run, tool_call, reason=step.error)
         self.usage.refresh_run_cost_metadata(run)
         run.add_event(
@@ -402,6 +367,7 @@ class StepExecution:
                         "authorization_scope_sha256",
                         "tool_contract_sha256",
                         "tool_version",
+                        "kellai_connection_sha256",
                     )
                 }
             tool_call.metadata["idempotency_key"] = ctx["idempotency_key"]
@@ -471,11 +437,28 @@ class StepExecution:
                         "message": "工具执行失败",
                     }
             step.output = normalize_execution_result(
-                _confirm_customer_create(step, dict(output or {}), runtime_context)
+                normalize_tool_execution_result(
+                    step,
+                    _confirm_customer_create(step, dict(output or {}), runtime_context),
+                    ctx,
+                )
             )
             if step.output.get("success") is not True:
                 step.output["success"] = False
             record_tool_result(span, step.output)
+
+    @staticmethod
+    def _record_verification(run: AgentRun, step: AgentStep, call: ToolCall) -> None:
+        report = copy.deepcopy(call.metadata.get("verification") or {})
+        project_verification(run)
+        if step_verification_blocked(run, step):
+            run.status = "blocked"
+            run.error = "执行已返回，独立结果核验尚未通过；请核验原结果，勿重复执行业务"
+        run.add_event(
+            "verification." + str(report.get("status") or "inconclusive"),
+            "独立结果核验" if report.get("status") != "not_required" else "只读输出契约检查",
+            {"step_id": step.step_id, "call_id": call.call_id, "verification": report},
+        )
 
     @staticmethod
     def _redacted_params(params: dict[str, Any] | None) -> dict[str, Any]:

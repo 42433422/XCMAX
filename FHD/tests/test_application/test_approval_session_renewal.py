@@ -663,6 +663,7 @@ def test_real_actor_renewal_rolls_back_with_queue_failure(real_session_task, mon
     )
     assert renewed.status == "queued"
 
+
 @pytest.mark.parametrize("confirmed", [False, True])
 def test_resume_reconciles_durable_effects_before_requeue(waiting_task, confirmed):
     from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue

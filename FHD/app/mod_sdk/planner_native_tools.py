@@ -183,7 +183,7 @@ def try_execute_native_planner_tool(
                         "mod_id": mod_id,
                         "outcome": "unknown" if handler_started else "not_started",
                         "execution_status": ("unknown" if handler_started else "not_started"),
-                        "execution_state": "unknown" if handler_started else "blocked",
+                        "execution_state": ("unknown" if handler_started else "not_started"),
                         "retryable": False,
                         "reconciliation_required": handler_started,
                     },

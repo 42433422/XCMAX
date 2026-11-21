@@ -58,7 +58,7 @@ def _worker_loop(executor_type, folder, commands, control, start, stream, scope,
                 raise ValueError("browser worker scope changed")
             start.clear()
             boundary._worker(
-                executor_type,
+                _BrowserReadbackExecutor if request.get("readback") is True else executor_type,
                 request["payload"],
                 folder,
                 control,
@@ -227,7 +227,7 @@ class _BrowserWorker:
         if failed.is_set():
             raise OSError("browser worker request transport failed")
 
-    def call(self, step, context, deadline, business_url) -> dict[str, Any]:
+    def call(self, step, context, deadline, business_url, *, readback=False) -> dict[str, Any]:
         from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
         from app.infrastructure.llm.client import (
             capture_worker_llm_scope,
@@ -252,7 +252,13 @@ class _BrowserWorker:
                 allow_nan=False,
             )
             request = json.dumps(
-                {"payload": payload, "deadline": deadline, "llm_scope": llm_scope}, allow_nan=False
+                {
+                    "payload": payload,
+                    "deadline": deadline,
+                    "llm_scope": llm_scope,
+                    "readback": readback,
+                },
+                allow_nan=False,
             ).encode("utf-8")
             if len(request) > _PAYLOAD_LIMIT:
                 return _failure("tool_context_not_serializable", unknown=False)
@@ -323,20 +329,8 @@ def execute_browser_isolated(
     scope = mcp_session_scope(context)
     if not scope:
         return _failure("mcp_session_scope_required", unknown=False)
-    from app.db import HostSessionLocal
-
     try:
-        business_url = boundary._caller_business_db_url()
-        with HostSessionLocal() as db:
-            host_url = db.get_bind().url.render_as_string(hide_password=False)
-        identity = [
-            asdict(config),
-            context.get("_actor_authorization"),
-            context.get("_mod_authorization"),
-            host_url,
-            business_url,
-        ]
-        fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+        fingerprint, business_url = _connection_identity(config, context)
     except BOUNDARY_ERRORS:
         return _failure("tool_scope_unavailable", unknown=False)
     key = (config.name, scope)
@@ -372,6 +366,92 @@ def execute_browser_isolated(
             worker.close()
             return _failure("mcp_session_lost")
     return worker.call(step, context, deadline, business_url)
+
+
+def _connection_identity(config, context):
+    from app.db import HostSessionLocal
+
+    business_url = boundary._caller_business_db_url()
+    with HostSessionLocal() as db:
+        host_url = db.get_bind().url.render_as_string(hide_password=False)
+    identity = [
+        asdict(config),
+        context.get("_actor_authorization"),
+        context.get("_mod_authorization"),
+        host_url,
+        business_url,
+    ]
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(), business_url
+
+
+class _BrowserReadbackExecutor:
+    """A host-selected read port in the already owned worker, never an action replay."""
+
+    def execute(self, step, *, runtime_context):
+        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+        from app.application.agent_orchestrator.verification_readback import _scope_matches
+        from app.application.tools.mcp.registry import call_mcp_tool
+        from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+        context = runtime_context
+        _bound_actor(context)
+        run = get_agent_run_repository().get(str(context.get("run_id") or ""))
+        request = context.get("_surface_readback") or {}
+        call = (
+            next((item for item in run.tool_calls if item.call_id == request.get("call_id")), None)
+            if run
+            else None
+        )
+        spec = get_tool_action_spec(step.tool_id, "browser_snapshot")
+        if (
+            call is None
+            or not _scope_matches(run, step, call, context)
+            or (call.metadata.get("verification_contract") or {}).get("contract_sha256")
+            != request.get("contract_sha256")
+            or call.output.get("session_id") != request.get("session_id")
+            or not request.get("session_id")
+            or spec is None
+            or not spec.read_only
+            or actor_tool_denial(step.tool_id, step.action, context, step.params)
+            or actor_tool_denial(step.tool_id, "browser_snapshot", context, {})
+        ):
+            return _failure("surface_readback_not_authorized", unknown=False)
+        context = {**context, "node_outputs": {item.node_id: item.output for item in run.steps}}
+        result = call_mcp_tool(step.tool_id, "browser_snapshot", {}, runtime_context=context)
+        return {**result, "observed_at": time.time()}
+
+
+def read_browser_snapshot(run, step, call, context, config):
+    """Read only the same live browser generation; never start a replacement worker."""
+    from app.application.tools.mcp.registry import mcp_session_scope
+
+    with _LOCK:
+        worker = _WORKERS.get((config.name, mcp_session_scope(context)))
+    if worker is None or worker.lost:
+        return _failure("mcp_session_lost")
+    try:
+        fingerprint, business_url = _connection_identity(config, context)
+        if worker.fingerprint != fingerprint:
+            return _failure("surface_readback_scope_changed", unknown=False)
+        request_context = {
+            **context,
+            "_surface_readback": {
+                "call_id": call.call_id,
+                "contract_sha256": call.metadata["verification_contract"]["contract_sha256"],
+                "session_id": call.output.get("session_id"),
+            },
+        }
+        return worker.call(
+            step,
+            request_context,
+            time.monotonic() + min(15, config.timeout_seconds),
+            business_url,
+            readback=True,
+        )
+    except BOUNDARY_ERRORS:
+        return _failure("surface_readback_unavailable", unknown=False)
 
 
 def close_browser_worker_scope(scope: str) -> int:

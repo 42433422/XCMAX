@@ -49,6 +49,8 @@ class FakeBrowser:
         assert verification == {"kind": "url", "expected": "https://example.com/"}
 
     def execute(self, steps, verification, *, cancelled):
+        from app.domain.browser_receipt import observed_assertion
+
         # Read the actual persisted run while executing, rather than injecting
         # an approval-shaped object into ComputerUseService._approved.
         runs = self.repository.list_recent(user_id="7")
@@ -66,6 +68,10 @@ class FakeBrowser:
             "executed": True,
             "steps_completed": 1,
             "status": "verified" if self.verified else "needs_verification",
+            "verification": observed_assertion(
+                verification,
+                "https://example.com/" if self.verified else "https://example.com/unfinished",
+            ),
         }
 
 
@@ -171,7 +177,9 @@ def test_computer_use_runs_only_after_persisted_agent_approval(
         assert completed.steps[0].status == "failed"
         # The existing executor preserves uncertain physical effects in its
         # reconciliation envelope rather than reporting a completed step.
-        evidence = completed.steps[0].output["reconciliation_evidence"]
+        evidence = completed.steps[0].output.get(
+            "reconciliation_evidence", completed.steps[0].output
+        )
         assert evidence["verified"] is False
         assert evidence["status"] == "needs_verification"
         assert evidence["steps_completed"] == 1

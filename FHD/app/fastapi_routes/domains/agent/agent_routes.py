@@ -331,6 +331,87 @@ def get_agent_run(
         return _internal_error_response("get agent run")
 
 
+@router.get("/api/agent/runs/{run_id}/verification", response_model=None)
+def get_agent_run_verification(
+    run_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    from app.application.agent_orchestrator.verification_recovery import (
+        verification_report,
+    )
+
+    try:
+        run, error = _owned_run(AgentOrchestrator(), run_id, principal)
+        if error is not None:
+            return error
+        assert run is not None
+        return _success({"run_id": run.run_id, "verification": verification_report(run)})
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("get agent verification")
+
+
+@router.post("/api/agent/runs/{run_id}/verify", response_model=None)
+def verify_agent_run(
+    run_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    from app.application.agent_orchestrator.verification_recovery import (
+        reverify_run,
+        verification_can_finalize,
+        verification_report,
+    )
+
+    with run_operation_lock(run_id):
+        orchestrator = AgentOrchestrator()
+        run, error = _owned_run(orchestrator, run_id, principal)
+        if error is not None:
+            return error
+        try:
+            run = reverify_run(
+                get_agent_run_repository(),
+                run_id,
+                runtime_context=authenticated_runtime_context({}, principal),
+            )
+            if run is None:
+                return JSONResponse(
+                    {"success": False, "message": "原任务已不存在"}, status_code=404
+                )
+            report = verification_report(run)
+            if verification_can_finalize(run):
+                # All original actions already have receipts. The normal queue
+                # advances the original graph, skipping them, and settles its
+                # existing task state; verification never dispatches a new effect.
+                run = orchestrator.retry_run(
+                    run_id,
+                    requested_by=principal.user_id,
+                    auto_execute=False,
+                    authenticated_binding=principal.mod_authorization,
+                )
+                if run is not None and run.status == "queued":
+                    if isinstance(get_agent_run_repository(), SQLAlchemyAgentRunRepository):
+                        notify_agent_task_dispatcher()
+                    else:
+                        _enqueue_run(run, requested_by=principal.user_id)
+            if run is None:
+                return JSONResponse(
+                    {"success": False, "message": "原任务已不存在"}, status_code=404
+                )
+            response = _run_response(run, principal=principal)
+            response["verification"] = report
+            return response
+        except (ApprovalGrantError, ValueError):
+            logger.warning("agent verification recovery rejected", exc_info=True)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": "任务或授权状态已变化，核验未触发业务重做；请刷新后核对原任务",
+                },
+                status_code=409,
+            )
+        except RECOVERABLE_ERRORS:
+            return _internal_error_response("recheck agent verification")
+
+
 @router.post("/api/agent/runs/{run_id}/clarification", response_model=None)
 def answer_agent_clarification(
     run_id: str,

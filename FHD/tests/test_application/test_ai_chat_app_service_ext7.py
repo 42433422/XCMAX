@@ -570,7 +570,7 @@ def _active_model_service(completion):
 def _reply_completion(source):
     def respond(**kwargs):
         request = json.loads(kwargs["messages"][-1]["content"])
-        if request.get("task") == "audit_goal_coverage":
+        if request.get("task") == "audit_reply":
             return goal_review_response(
                 request, source=source, node_ids=["model_reply"], outcome="reply"
             )
@@ -595,7 +595,7 @@ def test_neuro_failure_does_not_replace_model_or_bypass_attachment_authority(eve
         assert rejected["data"]["error_code"] == "attachment_reupload_required"
     assert completion.call_count == 2
     assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
-        "audit_goal_coverage"
+        "audit_reply"
     )
 
 

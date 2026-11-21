@@ -418,7 +418,7 @@ def test_mcp_read_retry_preserves_original_nested_arguments(monkeypatch):
             arguments["filter"]["query"] = "changed by transport"
             if len(calls) == 1:
                 raise ConnectionError("lost read response")
-            return SimpleNamespace(isError=False, structuredContent={"items": []})
+            return SimpleNamespace(isError=False, structuredContent={"items": []}, content=[])
 
     async def with_session(config, action):
         return await action(Session())

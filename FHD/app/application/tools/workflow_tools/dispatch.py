@@ -99,6 +99,7 @@ class WorkflowToolDispatcher:
                     "error_code": "tool_execution_interrupted",
                     "execution_state": "unknown",
                     "outcome": "unknown",
+                    "execution_state": "unknown",
                     "retryable": False,
                     "reconciliation_required": True,
                     "message": "工具结果待核对，未继续调用其他实现",
@@ -137,6 +138,10 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
 
     params = dict(params or {})
     runtime_context = dict(params.pop("_runtime_context", None) or {})
+    if tool_id == "enterprise_cognition":
+        from app.application.tools.enterprise_cognition import execute_enterprise_cognition
+
+        return execute_enterprise_cognition(action, params, runtime_context)
     customer_scope: AbstractContextManager[object] = nullcontext()
     customer_tenant = None
     if tool_id == "customers" and action == "ensure_exists":

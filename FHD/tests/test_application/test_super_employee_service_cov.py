@@ -351,7 +351,7 @@ class TestDispatchToPara:
             health_resp = MagicMock()
             health_resp.status_code = 200
             health_resp.content = b"ok"
-            health_resp.json.return_value = {}
+            health_resp.json.return_value = {"task_request_recovery_version": 1}
             devices_resp = MagicMock()
             devices_resp.status_code = 200
             devices_resp.content = b"x"
@@ -366,6 +366,8 @@ class TestDispatchToPara:
         )
         assert result is not None
         assert result["queued"] is True
+        assert result["status"] == "queued"
+        assert reason == "para_no_online_codex_device"
 
     def test_general_exception_goes_to_outbox(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")
@@ -821,7 +823,6 @@ class TestCliReplyBody:
             assert svc._cli_reply_body("hi", {}) == ""
 
     def test_timeout_raises_explicit_failure(self, tmp_path):
-        from app.application.super_employee.cli import CliExecutionError
 
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
@@ -834,6 +835,7 @@ class TestCliReplyBody:
             svc._cli_reply_body("hi", {})
         assert error.value.receipt["error_code"] == "cli_timeout"
         assert error.value.payload()["reconciliation_required"] is True
+        assert error.value.receipt["reconciliation_required"] is True
 
     def test_os_error_raises_explicit_failure(self, tmp_path):
 
@@ -876,7 +878,6 @@ class TestCliReplyBody:
         assert "stdout answer" in result
 
     def test_returncode_nonzero_raises_explicit_failure(self, tmp_path):
-        from app.application.super_employee.cli import CliExecutionError
 
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")

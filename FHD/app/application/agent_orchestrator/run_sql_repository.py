@@ -174,7 +174,10 @@ def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
         return {
             key: item
             for key, item in (value.metadata.get("runtime_context") or {}).items()
-            if key not in {"run_id", "agent_run_id"}
+            # Tool observations are appended while registered child runs write
+            # their original parent links. They do not create a new authority
+            # generation or authorize discarding those concurrent receipts.
+            if key not in {"run_id", "agent_run_id", "untrusted_sources", "context_summary"}
         }
 
     return (run.run_id, run.user_id, run.created_at, context(run)) == (
@@ -231,6 +234,12 @@ def preserve_run_evidence(
     """Keep receipts across mutable context updates; only a verified CAS replaces a plan."""
     if previous is None:
         return
+    from app.application.agent_orchestrator.verification_integrity import (
+        preserve_verification_receipts,
+        unchanged_receipt_observation,
+    )
+
+    preserve_verification_receipts(run, previous)
     if (run.run_id, run.user_id, run.created_at, tenant_id_of_run(run), mod_id_of_run(run)) != (
         previous.run_id,
         previous.user_id,
@@ -240,9 +249,14 @@ def preserve_run_evidence(
     ):
         raise ValueError("run identity cannot change")
     generation, prior_generation = _planning_generation(run), _planning_generation(previous)
-    if generation != prior_generation:
-        if not allow_planning_replacement or not _valid_planning_replacement(run, previous):
-            raise ValueError("planning generation replacement requires the original snapshot CAS")
+    if generation or prior_generation:
+        if generation != prior_generation:
+            if not allow_planning_replacement or not _valid_planning_replacement(run, previous):
+                raise ValueError(
+                    "planning generation replacement requires the original snapshot CAS"
+                )
+            return
+    elif not same_run_generation(run, previous):
         return
     old = previous.metadata
     if old.get("non_retryable"):
@@ -332,7 +346,14 @@ def preserve_run_evidence(
             ) and getattr(replacement, "attempt_count", 0) <= getattr(item, "attempt_count", 0):
                 # Keep the executor's step/call object alive: repair and result
                 # processing retain this reference across repository checkpoints.
+                observation = (
+                    unchanged_receipt_observation(item, replacement)
+                    if field == "tool_calls"
+                    else None
+                )
                 replacement.__dict__.update(copy.deepcopy(item.__dict__))
+                if observation is not None:
+                    replacement.metadata["verification"] = observation
             combined[key] = replacement
         combined.update(incoming)
         setattr(run, field, list(combined.values()))
@@ -359,6 +380,12 @@ def preserve_run_evidence(
         or recovery.get("state") == "manual_reconciliation_required"
     ):
         run.error = "任务已停止继续执行；已有调用结果仍需人工核对"
+    if any(call.metadata.get("verification_contract") for call in run.tool_calls):
+        from app.application.agent_orchestrator.result_verification import project_verification
+
+        # The visible verdict follows the receipts actually retained above,
+        # including rejected attempts to rewrite an unknown execution.
+        project_verification(run)
 
 
 def valid_stream_interruption_update(run: AgentRun, previous: AgentRun) -> bool:

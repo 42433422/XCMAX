@@ -93,7 +93,11 @@ class SessionCallbacks(Protocol):
         self, user_id: str, pending: dict[str, Any], message: str
     ) -> dict[str, Any] | None: ...
     def _format_agent_run_response(
-        self, plan: PlanGraph, agent_run: AgentRun, thinking_steps: str = "", user_message: str = ""
+        self,
+        plan: PlanGraph,
+        agent_run: AgentRun,
+        thinking_steps: str = "",
+        user_message: str = "",
     ) -> dict[str, Any]: ...
     def _hydrate_pending_workflow(
         self, user_id: str, session_id: str, context: dict[str, Any] | None = None
@@ -350,9 +354,11 @@ class WorkflowSession:
 
                     detail = waiting.params.get("clarification")
                     entry.update(
-                        kind="clarification"
-                        if waiting.params.get("target_node_id")
-                        else "clarification_unbound",
+                        kind=(
+                            "clarification"
+                            if waiting.params.get("target_node_id")
+                            else "clarification_unbound"
+                        ),
                         clarification=detail if isinstance(detail, dict) else {},
                         clarify_node_id=waiting.node_id,
                         clarification_step_id=waiting.step_id,
@@ -441,7 +447,9 @@ class WorkflowSession:
             return True
         except RECOVERABLE_ERRORS:
             logger.warning(
-                "计划持久化失败 plan_id=%s status=%s", getattr(plan, "plan_id", "?"), status
+                "计划持久化失败 plan_id=%s status=%s",
+                getattr(plan, "plan_id", "?"),
+                status,
             )
             return False
 
@@ -549,9 +557,11 @@ class WorkflowSession:
                 "pending_id": uuid.uuid4().hex,
                 "agent_run_id": agent_run.run_id,
                 "thinking_steps": thinking_steps,
-                "kind": "clarification"
-                if waiting.params.get("target_node_id")
-                else "clarification_unbound",
+                "kind": (
+                    "clarification"
+                    if waiting.params.get("target_node_id")
+                    else "clarification_unbound"
+                ),
                 "clarify_node_id": waiting.node_id,
                 "clarification_step_id": waiting.step_id,
                 "target_node_id": str(waiting.params.get("target_node_id") or ""),
@@ -735,7 +745,11 @@ class WorkflowSession:
             return _control_reply(
                 precheck_error,
                 "workflow_not_executed",
-                {"run_id": agent_run.run_id, "plan_id": plan.plan_id, "execution_started": False},
+                {
+                    "run_id": agent_run.run_id,
+                    "plan_id": plan.plan_id,
+                    "execution_started": False,
+                },
                 success=False,
                 message="本轮未提交写入",
             )[1]
@@ -830,7 +844,9 @@ class WorkflowSession:
             actor = int(str(raw_actor).strip())
         except (TypeError, ValueError):
             logger.warning(
-                "auto approve actor unavailable user=%r ctx_actor=%r", user_id, raw_actor
+                "auto approve actor unavailable user=%r ctx_actor=%r",
+                user_id,
+                raw_actor,
             )
             return None
         from app.application.approval_workspace_app_service import (
@@ -889,7 +905,10 @@ class WorkflowSession:
             return None
         success = bool(result.get("success")) and bool(execution.get("success"))
         logger.info(
-            "auto approve finished request=%s last=%s success=%s", request_id, current_id, success
+            "auto approve finished request=%s last=%s success=%s",
+            request_id,
+            current_id,
+            success,
         )
         message = messages[-1] if messages else ""
         run_id = str(getattr(agent_run, "run_id", "") or "")
@@ -962,9 +981,7 @@ class WorkflowSession:
         else:
             text = f"自动审批未完成执行：{message or '请到任务中核对结果'}"
         if success and run_id:
-            from app.application.business_harness_projection import (
-                completed_deliverable_lines,
-            )
+            from app.application.business_harness_projection import completed_deliverable_lines
 
             deliverable_lines = completed_deliverable_lines(agent_run)
             if deliverable_lines:
@@ -974,9 +991,7 @@ class WorkflowSession:
             (
                 "workflow_done"
                 if success
-                else "workflow_waiting"
-                if waiting_decision or deferred
-                else "workflow_failed"
+                else ("workflow_waiting" if waiting_decision or deferred else "workflow_failed")
             ),
             {
                 "plan_id": str(getattr(plan, "plan_id", "") or ""),
@@ -990,20 +1005,24 @@ class WorkflowSession:
                     "effect": (
                         "unknown"
                         if unknown
-                        else "none"
-                        if wrote_nothing or (deferred and not partial)
-                        else "write"
-                        if success
-                        else "partial"
+                        else (
+                            "none"
+                            if wrote_nothing or (deferred and not partial)
+                            else "write"
+                            if success
+                            else "partial"
+                        )
                     ),
                     "outcome": (
                         "not_executed"
                         if wrote_nothing or (deferred and not partial)
-                        else "succeeded"
-                        if success
-                        else "partial"
-                        if partial and not unknown
-                        else "unknown"
+                        else (
+                            "succeeded"
+                            if success
+                            else "partial"
+                            if partial and not unknown
+                            else "unknown"
+                        )
                     ),
                 },
                 "artifacts": [
@@ -1014,11 +1033,13 @@ class WorkflowSession:
             message=(
                 "自动审批已完成"
                 if success
-                else "自动审批已通过，等待你确认"
-                if waiting_decision
-                else "导入待继续"
-                if deferred
-                else "自动审批执行未完成"
+                else (
+                    "自动审批已通过，等待你确认"
+                    if waiting_decision
+                    else "导入待继续"
+                    if deferred
+                    else "自动审批执行未完成"
+                )
             ),
         )[1]
         reply["run_id"] = run_id
@@ -1208,7 +1229,9 @@ class WorkflowSession:
                 )[1]
             self.pending.pop(user_id, None)
             return _control_reply(
-                "已取消本次工作流执行。", "workflow_cancelled", {"plan_id": plan.plan_id}
+                "已取消本次工作流执行。",
+                "workflow_cancelled",
+                {"plan_id": plan.plan_id},
             )[1]
 
         try:
@@ -1280,7 +1303,10 @@ class WorkflowSession:
             waiting = find_waiting_step(
                 run, approved_step_id=str(pending.get("clarification_step_id") or "")
             )
-            if waiting is None or (waiting.tool_id, waiting.action) != ("clarify", "ask"):
+            if waiting is None or (waiting.tool_id, waiting.action) != (
+                "clarify",
+                "ask",
+            ):
                 return _control_reply(
                     "原澄清步骤已变化，未执行任何操作；请重新发起。",
                     "workflow_confirmation_stale",
@@ -1383,16 +1409,22 @@ class WorkflowSession:
                     f"我还不能安全确定答案，请直接回答当前问题。\n{question}\n"
                     "如需处理新任务，请先回复「取消」，再提交新请求；原任务保持暂停。",
                     "clarification_required",
-                    {"requires_confirmation": True, "run_id": run_id, "plan_id": plan.plan_id},
+                    {
+                        "requires_confirmation": True,
+                        "run_id": run_id,
+                        "plan_id": plan.plan_id,
+                    },
                     message="需要补充信息",
                 )[1]
             parameters, confirmed, allowed_fields = answer
             parameters = {
-                key: int(value)
-                if (key == "id" or key.endswith(".id"))
-                and isinstance(value, str)
-                and value.isdigit()
-                else value
+                key: (
+                    int(value)
+                    if (key == "id" or key.endswith(".id"))
+                    and isinstance(value, str)
+                    and value.isdigit()
+                    else value
+                )
                 for key, value in parameters.items()
             }
             if isinstance(parameters.get("payload"), dict):
@@ -1509,10 +1541,7 @@ class WorkflowSession:
                 )
         invalid_plan = False
         if control and pending:
-            from app.application.workflow.workflow_types import (
-                PlanGraph,
-                validate_plan_graph,
-            )
+            from app.application.workflow.workflow_types import PlanGraph, validate_plan_graph
 
             try:
                 plan = pending.get("plan")

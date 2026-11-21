@@ -14,12 +14,23 @@ import stat
 import subprocess
 import tempfile
 import zipfile
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 SCHEMA = "para-github-candidate/v1"
 MAX_BUNDLE = 64 * 1024 * 1024
+ORIGINAL_PR_REPAIR = "original_pr_repair"
+REPAIR_CREDENTIAL_BLOCK = "original_pr_repair_requires_non_exportable_model_credentials"
+CUSTOMER_FEEDBACK_REPAIR = "customer_feedback_repair"
+TRAINING_CANDIDATE_REPAIR = "training_candidate_repair"
+LIFE_REFLECTION_REPAIR = "life_reflection_repair"
+CUSTOMER_CREDENTIAL_BLOCK = "customer_feedback_requires_non_exportable_model_credentials"
+HEADER_ONLY_PLATFORM_PROFILE = "srt-0.0.83-header-only-platform-v1"
+GITLEAKS_VERSION = "8.18.4"
 VERSION_SSOT_PATHS = {
     "VERSION.md",
     "FHD/VERSION.md",
@@ -28,11 +39,6 @@ VERSION_SSOT_PATHS = {
     "FHD/config/download_release.json",
     "FHD/config/release_train.json",
 }
-ORIGINAL_PR_REPAIR = "original_pr_repair"
-REPAIR_CREDENTIAL_BLOCK = "original_pr_repair_requires_non_exportable_model_credentials"
-CUSTOMER_FEEDBACK_REPAIR = "customer_feedback_repair"
-CUSTOMER_CREDENTIAL_BLOCK = "customer_feedback_requires_non_exportable_model_credentials"
-GITLEAKS_VERSION = "8.18.4"
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -73,7 +79,7 @@ def safe_artifact(data, digest):
     return manifest, bundle
 
 
-def validate_binding(manifest, state, run, env):
+def validate_binding(manifest, state, run, env, *, allow_finished=False):
     expected = state.get("publication_candidate")
     if not isinstance(expected, dict) or manifest != expected:
         raise ValueError("candidate_original_receipt_mismatch")
@@ -92,7 +98,7 @@ def validate_binding(manifest, state, run, env):
         or state.get("request_id") != request
         or str(state.get("run_id")) != run_id
         or state.get("repository") != repo
-        or state.get("finished") is True
+        or (state.get("finished") is True and not allow_finished)
         or type(state.get("issue_number")) is not int
         or state["issue_number"] < 1
         or manifest.get("schema") != SCHEMA
@@ -111,6 +117,7 @@ def validate_binding(manifest, state, run, env):
         or run.get("head_sha") != env["GITHUB_SHA"]
         or run.get("head_branch") != "main"
         or str(run.get("id")) != run_id
+        or type(run.get("run_attempt")) is not int
         or run.get("run_attempt") != 1
         or run.get("event") != "workflow_dispatch"
         or run.get("path") != ".github/workflows/fhd-para-github-worker.yml"
@@ -118,6 +125,202 @@ def validate_binding(manifest, state, run, env):
         or run.get("repository", {}).get("full_name") != repo
     ):
         raise ValueError("publication_dispatch_binding_mismatch")
+
+
+def validate_feedback_isolation(artifacts, state, manifest, env, download):
+    """Require the trusted execute job's immutable receipt, not candidate claims."""
+    allocation = state.get("model_allocation") or {}
+    rows = [
+        row
+        for row in artifacts.get("artifacts", [])
+        if row.get("name") == f"para-execution-{env['PARA_GITHUB_REQUEST_ID']}"
+    ]
+    if (
+        allocation.get("status") != "admitted"
+        or allocation.get("execution_isolation") != HEADER_ONLY_PLATFORM_PROFILE
+        or allocation.get("agent_plan_first")
+        or len(rows) != 1
+    ):
+        raise ValueError(CUSTOMER_CREDENTIAL_BLOCK)
+    artifact = rows[0]
+    if (
+        artifact.get("expired")
+        or type(artifact.get("id")) is not int
+        or artifact["id"] < 1
+        or artifact.get("size_in_bytes", 65537) > 65536
+        or str(artifact.get("workflow_run", {}).get("id")) != env["GITHUB_RUN_ID"]
+    ):
+        raise ValueError("feedback_isolation_artifact_binding_mismatch")
+    data = download(artifact["id"])
+    if len(data) > 65536 or artifact.get("digest") != "sha256:" + hashlib.sha256(data).hexdigest():
+        raise ValueError("feedback_isolation_artifact_digest_mismatch")
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        members = archive.infolist()
+        if (
+            len(members) != 1
+            or members[0].filename != "execution.json"
+            or members[0].file_size > 65536
+            or members[0].flag_bits & 1
+            or stat.S_IFMT(members[0].external_attr >> 16) not in {0, stat.S_IFREG}
+        ):
+            raise ValueError("feedback_isolation_artifact_invalid")
+        receipt = json.loads(archive.read("execution.json"))
+    repair = state.get("kind") == ORIGINAL_PR_REPAIR
+    expected = {
+        "request_id": env["PARA_GITHUB_REQUEST_ID"],
+        "run_id": env["GITHUB_RUN_ID"],
+        "status": "awaiting_publication",
+        "finished": False,
+        "execution_isolation": HEADER_ONLY_PLATFORM_PROFILE,
+        "source_sha": state.get("source_sha") if repair else env["GITHUB_SHA"],
+        **({"controller_sha": env["GITHUB_SHA"]} if repair else {}),
+        "candidate_sha": manifest["commit_sha"],
+    }
+    if receipt != expected:
+        raise ValueError("feedback_isolation_receipt_mismatch")
+    return artifact
+
+
+@dataclass(frozen=True)
+class VerifiedPrPublication:
+    authorization: object
+    manifest: object
+    artifact_id: int
+    artifact_digest: str
+    isolation_artifact_id: int
+    isolation_artifact_digest: str
+
+
+def require_live_publication(proof):
+    if not isinstance(proof, VerifiedPrPublication):
+        raise ValueError(REPAIR_CREDENTIAL_BLOCK)
+    gate = proof.authorization
+    try:
+        deadline = datetime.fromisoformat(gate["expires_at"].replace("Z", "+00:00"))
+        live = deadline.tzinfo is not None and deadline > datetime.now(UTC)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        live = False
+    if gate.get("authorized") is not True or gate.get("usage_complete") is not True or not live:
+        raise ValueError("original_pr_publication_authorization_expired_or_revoked")
+    return gate
+
+
+def candidate_artifact(artifacts, request, run_id):
+    rows = [
+        a for a in artifacts.get("artifacts", []) if a.get("name") == f"para-candidate-{request}"
+    ]
+    if artifacts.get("total_count", 0) > 100 or len(rows) != 1:
+        raise ValueError("ambiguous_publication_artifact")
+    artifact = rows[0]
+    if (
+        artifact.get("expired")
+        or type(artifact.get("id")) is not int
+        or artifact["id"] < 1
+        or artifact.get("size_in_bytes", MAX_BUNDLE + 1) > MAX_BUNDLE
+        or str(artifact.get("workflow_run", {}).get("id")) != str(run_id)
+    ):
+        raise ValueError("artifact_run_binding_mismatch")
+    return artifact
+
+
+def verify_original_publication(state, env, api, download, *, allow_finished=False):
+    """Read original GitHub evidence and the supplied fresh budget gate before a write."""
+    gate = state.get("publication_authorization") or {}
+    if state.get("kind") != ORIGINAL_PR_REPAIR or not gate:
+        raise ValueError(REPAIR_CREDENTIAL_BLOCK)
+    repo, run_id, request = (
+        env["GITHUB_REPOSITORY"],
+        env["GITHUB_RUN_ID"],
+        env["PARA_GITHUB_REQUEST_ID"],
+    )
+    run = api(f"/repos/{repo}/actions/runs/{run_id}")
+    artifacts = api(f"/repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100")
+    artifact = candidate_artifact(artifacts, request, run_id)
+    manifest, _bundle = safe_artifact(download(artifact["id"]), artifact.get("digest"))
+    validate_binding(manifest, state, run, env, allow_finished=allow_finished)
+    binding = state.get("strategic_budget") or {}
+    expected = {
+        "schema": "strategic-pr-publication/v1",
+        "request_id": request,
+        "binding_id": binding.get("binding_id"),
+        "repository": repo,
+        "pull_request": state.get("pull_request"),
+        "issue_number": state.get("issue_number"),
+        "source_sha": state.get("source_sha"),
+        "controller_sha": env["GITHUB_SHA"],
+        "source_run_id": state.get("source_run_id"),
+        "source_run_attempt": state.get("source_run_attempt"),
+        "run_id": int(run_id),
+        "run_attempt": 1,
+        "task_id": manifest.get("task_id"),
+        "subtask_id": manifest.get("subtask_id"),
+        "attempt_id": manifest.get("attempt_id"),
+        "candidate_commit_sha": manifest["commit_sha"],
+        "candidate_branch": manifest["branch"],
+        "execution_isolation": HEADER_ONLY_PLATFORM_PROFILE,
+        "candidate_sha256": hashlib.sha256(
+            json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+    if (
+        any(gate.get(key) != value for key, value in expected.items())
+        or state.get("controller_sha") != env["GITHUB_SHA"]
+        or binding.get("kind") != ORIGINAL_PR_REPAIR
+        or binding.get("schema") != "strategic-pr-repair/v1"
+        or binding.get("request_id") != request
+        or binding.get("source_sha") != state.get("source_sha")
+        or binding.get("controller_sha") != env["GITHUB_SHA"]
+        or not binding.get("binding_id")
+        or any(
+            type(gate.get(key)) is not int or gate[key] < 1
+            for key in (
+                "source_run_id",
+                "source_run_attempt",
+                "pull_request",
+                "issue_number",
+                "run_id",
+                "run_attempt",
+            )
+        )
+        or any(
+            not isinstance(gate.get(key), str) or not gate[key]
+            for key in ("task_id", "subtask_id", "attempt_id", "binding_id")
+        )
+        or not re.fullmatch(r"[0-9a-f]{40}", str(gate.get("controller_sha") or ""))
+        or any(
+            not isinstance(gate.get(key), str)
+            or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,96}", gate[key])
+            for key in ("decision_id", "opportunity_id")
+        )
+        or any(
+            not isinstance(gate.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", gate[key])
+            for key in ("proposal_sha256", "original_request_sha256")
+        )
+        or (
+            allow_finished
+            and (run.get("status") != "completed" or run.get("conclusion") != "success")
+        )
+    ):
+        raise ValueError("original_pr_publication_authorization_mismatch")
+    # Check refusal/expiry before fetching the isolated execution receipt.
+    proof = VerifiedPrPublication(
+        MappingProxyType(dict(gate)),
+        MappingProxyType(dict(manifest)),
+        artifact["id"],
+        artifact["digest"],
+        0,
+        "",
+    )
+    require_live_publication(proof)
+    isolation = validate_feedback_isolation(artifacts, state, manifest, env, download)
+    return VerifiedPrPublication(
+        proof.authorization,
+        proof.manifest,
+        artifact["id"],
+        artifact["digest"],
+        isolation["id"],
+        isolation["digest"],
+    )
 
 
 def clean_git_env(env):
@@ -269,6 +472,7 @@ def authorized_original_pr(state, repo, get):
         or target.number != state.get("pull_request")
         or target.old_sha != state.get("source_sha")
         or target.run_id != state.get("source_run_id")
+        or target.run_attempt != state.get("source_run_attempt")
     ):
         raise ValueError("original_pr_repair_target_changed")
     return target
@@ -327,23 +531,33 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
         state = json.load(response)
     run = api(f"/repos/{repo}/actions/runs/{run_id}")
     artifacts = api(f"/repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100")
-    expected_name = f"para-candidate-{request}"
-    matches = [a for a in artifacts.get("artifacts", []) if a.get("name") == expected_name]
-    if artifacts.get("total_count", 0) > 100 or len(matches) != 1:
-        raise ValueError("ambiguous_publication_artifact")
-    artifact = matches[0]
-    if (
-        artifact.get("expired")
-        or not isinstance(artifact.get("id"), int)
-        or artifact.get("size_in_bytes", MAX_BUNDLE + 1) > MAX_BUNDLE
-        or str(artifact.get("workflow_run", {}).get("id")) != run_id
-    ):
-        raise ValueError("artifact_run_binding_mismatch")
+    artifact = candidate_artifact(artifacts, request, run_id)
     data = gh("api", f"/repos/{repo}/actions/artifacts/{artifact['id']}/zip", binary=True)
     manifest, bundle = safe_artifact(data, artifact.get("digest"))
     validate_binding(manifest, state, run, env)
     branch, target = manifest["branch"], manifest["commit_sha"]
-    customer_repair = state.get("kind") == CUSTOMER_FEEDBACK_REPAIR
+    customer_repair = state.get("kind") in {
+        CUSTOMER_FEEDBACK_REPAIR,
+        TRAINING_CANDIDATE_REPAIR,
+        LIFE_REFLECTION_REPAIR,
+    }
+
+    def require_feedback_isolation():
+        if not customer_repair:
+            return
+        with opener(state_request, timeout=30) as response:
+            latest = json.load(response)
+        validate_binding(manifest, latest, run, env)
+        validate_feedback_isolation(
+            artifacts,
+            latest,
+            manifest,
+            env,
+            lambda artifact_id: gh(
+                "api", f"/repos/{repo}/actions/artifacts/{artifact_id}/zip", binary=True
+            ),
+        )
+
     original = None
     if state.get("kind") == ORIGINAL_PR_REPAIR:
         original = authorized_original_pr(state, repo, get)
@@ -366,12 +580,34 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
         if existing and existing != f"{target}\trefs/heads/{branch}":
             raise ValueError("publication_branch_already_diverged")
         if not existing:
-            if original or customer_repair:
-                raise ValueError(
-                    CUSTOMER_CREDENTIAL_BLOCK if customer_repair else REPAIR_CREDENTIAL_BLOCK
+            if original:
+                with opener(state_request, timeout=30) as response:
+                    latest = json.load(response)
+                proof = verify_original_publication(
+                    latest,
+                    env,
+                    api,
+                    lambda artifact_id: gh(
+                        "api", f"/repos/{repo}/actions/artifacts/{artifact_id}/zip", binary=True
+                    ),
                 )
+                if (
+                    dict(proof.manifest) != manifest
+                    or authorized_original_pr(latest, repo, get) != original
+                ):
+                    raise ValueError("original_pr_repair_target_changed")
+            require_feedback_isolation()
+            if original:
+                require_live_publication(proof)
             # No force update, no main branch writes. Ambiguous responses are reconciled by exact ref.
-            git("push", remote, f"{target}:refs/heads/{branch}")
+            try:
+                git("push", remote, f"{target}:refs/heads/{branch}")
+            except (OSError, subprocess.SubprocessError):
+                if (
+                    git("ls-remote", "--heads", remote, f"refs/heads/{branch}").strip()
+                    != f"{target}\trefs/heads/{branch}"
+                ):
+                    raise ValueError("publication_push_unconfirmed") from None
         if (
             git("ls-remote", "--heads", remote, f"refs/heads/{branch}").strip()
             != f"{target}\trefs/heads/{branch}"
@@ -413,8 +649,7 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
                 raise ValueError("publication_existing_pr_mismatch")
             pr = pulls[0]
         else:
-            if customer_repair:
-                raise ValueError(CUSTOMER_CREDENTIAL_BLOCK)
+            require_feedback_isolation()
             # Import only the helper checked out at the trusted workflow SHA; never artifact code.
             helper = Path(__file__).resolve().parent / "runtime_tools" / "pushed_branch_pr.mjs"
             script = """import {execFileSync} from 'node:child_process';

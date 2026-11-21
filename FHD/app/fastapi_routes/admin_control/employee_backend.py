@@ -128,14 +128,15 @@ class CanonicalEmployeeBackend:
         from app.application.employee_runtime.run_ledger import finish_employee_run_log
 
         # Preserve the success call shape for legacy adapters and patch consumers.
-        failure: _RunFailure = {} if verified else {"error": error}
+        failure: _RunFailure = {} if status == "success" else {"error": error}
         finish_employee_run_log(
             run_id,
             tenant_id=tenant_id,
             status=status,
             output=output,
             attempts=attempts,
-            verified=verified,
+            # An envelope check cannot establish an independent business result.
+            verified=False,
             error_code=error_code,
             approver=approver,
             **failure,

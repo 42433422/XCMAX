@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-governance = ["retort-engine[evolution]>=0.4.0,<0.5", "xcagi-common>=0.1.0,<0.2", "filelock>=3.16,<5"]
+governance = ["retort-engine[evolution]>=0.4.0,<0.5", "xcagi-common>=0.1.0,<0.2", "filelock>=3.16,<5", "ortools==9.15.6755", "growthbook==4.0.1"]
 web = [
     "fastapi>=0.115",
     # Model capabilities and routing are part of every web deployment.
@@ -71,6 +71,8 @@ aliyun-tts = [
 # Keep the existing extra compatible; the web runtime uses the same pinned Router.
 llm-router = [
     "litellm==1.109.3",
+    # The strategic stream adapter observes this SDK's raw chunks before routing normalization.
+    "openai==3.57.0",
 ]
 vibe = [
     # vibe-coding 接入：NL → 代码 → 沙盒 → 自愈 + 仓库级 patch / heal。

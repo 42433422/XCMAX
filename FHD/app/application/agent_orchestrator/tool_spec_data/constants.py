@@ -38,6 +38,8 @@ PERMISSION_OVERRIDES: dict[str, str] = {
     # Like the history API, current-conversation reads require a live owner binding,
     # enforced again by the adapter; they grant no access to other users' sessions.
     "conversation_history": "",
+    # Entity-specific RBAC and a live actor binding are checked by the adapter.
+    "enterprise_cognition": "",
     # Kellai applies its explicit per-account grants after validating the sealed host actor.
     "kellai": "",
     "memory_v2": "memory_v2.write",

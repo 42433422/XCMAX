@@ -29,7 +29,8 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             },
             _success(executed=True, verified=True, request_id="computer-example-1"),
         )
-    ],    ("browser", "observe"): [
+    ],
+    ("browser", "observe"): [
         _sample(
             "read_approved_site",
             {"url": "https://example.com"},
@@ -52,7 +53,8 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 verification=[{"kind": "text", "status": "passed"}],
             ),
         )
-    ],    ("sales", "create_order"): [
+    ],
+    ("sales", "create_order"): [
         _sample(
             "confirmed_named_order",
             {

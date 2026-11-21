@@ -19,9 +19,11 @@ CONVERSATION_CONTEXT_FIELDS = (
 
 
 def validate_conversation_context(stored: dict[str, Any], incoming: dict[str, Any]) -> None:
-    for key in CONVERSATION_CONTEXT_FIELDS:
+    for key in (*CONVERSATION_CONTEXT_FIELDS, "enterprise_cognition"):
         if key in incoming and stored.get(key) != incoming[key]:
-            raise RuntimeContextOwnershipError("不能更改任务绑定的会话、历史版本或持久用户")
+            raise RuntimeContextOwnershipError(
+                "不能更改任务绑定的会话、历史版本、持久用户或经营目标证据"
+            )
 
 
 def merge_runtime_context(run: AgentRun, updates: dict[str, Any] | None) -> dict[str, Any]:

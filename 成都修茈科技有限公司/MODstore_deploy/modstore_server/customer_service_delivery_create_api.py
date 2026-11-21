@@ -110,6 +110,17 @@ async def create_custom_delivery(
     purchase = _active_permanent_purchase(db, int(user.id))
     if purchase is None:
         raise HTTPException(403, "定制交付仅对已购买四个永久账户档位的客户开放")
+    prospect_binding = None
+    if body.landing_contact_id:
+        from modstore_server.production_line_business import (
+            MissingEvidence,
+            bind_prospect_to_customer,
+        )
+
+        try:
+            prospect_binding = bind_prospect_to_customer(db, user, body.landing_contact_id)
+        except MissingEvidence as exc:
+            raise HTTPException(409, str(exc)) from exc
     if body.source_mode == "versioned_main":
         from modstore_server.customer_delivery_versioned import (
             MOD_ID,
@@ -162,6 +173,11 @@ async def create_custom_delivery(
     now_iso = datetime.now(UTC).isoformat()
     if active_initial is not None:
         active_evidence = _custom_delivery_evidence(active_initial)
+        if prospect_binding:
+            previous = active_evidence.get("prospect_binding")
+            if previous and previous != prospect_binding:
+                raise HTTPException(409, "原交付需求已绑定另一份客户线索")
+            active_evidence["prospect_binding"] = prospect_binding
         if (
             body.source_mode == "versioned_main"
             or active_evidence.get("source_mode") == "versioned_main"
@@ -299,6 +315,7 @@ async def create_custom_delivery(
             "updated_at": now_iso,
         }
     evidence: dict[str, Any] = {
+        **({"prospect_binding": prospect_binding} if prospect_binding else {}),
         "schema_version": 3,
         "delivery_managed_by": "custom_delivery",
         "kind": body.kind,

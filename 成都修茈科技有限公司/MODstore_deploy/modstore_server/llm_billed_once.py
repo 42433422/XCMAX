@@ -214,6 +214,7 @@ async def _execute_billed_chat(
                 route, messages, max_tokens, hold, remaining_percent=remaining_percent
             ),
             max_tokens=max_tokens,
+            forbid_reasoning_fallback=True,
             total_timeout_s=upstream_timeout_s,
         )
         if not result.get("ok"):
@@ -250,6 +251,7 @@ async def _execute_billed_chat(
         receipt = {
             "ok": True,
             "content": content,
+            "finish_reason": result.get("finish_reason"),
             "conversation_id": conversation_id,
             "usage": usage.__dict__,
             "usage_details": reported_token_dimensions(result.get("usage")),

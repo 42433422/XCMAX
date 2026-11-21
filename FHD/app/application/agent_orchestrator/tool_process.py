@@ -307,7 +307,7 @@ def _limit_from_env(name: str, default: int) -> int:
 
 
 def _apply_resource_limits(*, browser: bool = False):
-    """设置子进程 POSIX 限制并保留继承的硬上限；设置失败记录告警，不阻断执行。"""
+    """Set child soft limits while preserving the inherited hard ceilings."""
     if not _sandbox_enabled():
         return
     log = logging.getLogger(__name__)
@@ -350,15 +350,15 @@ def _apply_resource_limits(*, browser: bool = False):
     return previous_as
 
 
-def _worker_start(control, start, deadline, *, monitored_memory=False, browser=False):
+def _worker_start(
+    control, start, deadline, *, monitored_memory=False, initialize=True, browser=False
+):
     # Startup still uses AS. Restore only the inherited AS limit after the
     # supervising parent has checked RSS and released this trusted handshake.
-    previous_as = (
-        _apply_resource_limits(browser=browser)
-        if multiprocessing.parent_process() is not None
-        else None
-    )
-    if os.name != "nt":
+    previous_as = None
+    if initialize and multiprocessing.parent_process() is not None:
+        previous_as = _apply_resource_limits(browser=True) if browser else _apply_resource_limits()
+    if initialize and os.name != "nt":
         os.setsid()
     control.send_bytes(b"r")
     if not start.wait(max(0, deadline - time.monotonic())):
@@ -418,19 +418,15 @@ def _worker(
     # 资源限制只属于 spawn 出的工具子进程。在原进程内调用
     # _worker（测试或误入父进程）时若施加 RLIMIT_CPU，累计 CPU
     # 已超过工具预算就会立即 SIGXCPU 杀死调用方。
-    if initialize:
-        if not _worker_start(
-            control,
-            start,
-            deadline,
-            monitored_memory=monitored_memory,
-            browser=browser,
-        ):
-            return
-    else:
-        control.send_bytes(b"r")
-        if not start.wait(max(0, deadline - time.monotonic())):
-            return
+    if not _worker_start(
+        control,
+        start,
+        deadline,
+        monitored_memory=monitored_memory,
+        initialize=initialize,
+        browser=browser,
+    ):
+        return
     route_metadata: dict[str, str | int] = {}
     worker_client: tuple[Any, str] | None = None
     finish_stream = None

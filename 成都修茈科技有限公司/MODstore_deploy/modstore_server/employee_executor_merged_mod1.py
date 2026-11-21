@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import importlib
+from io import BytesIO
+from pathlib import Path
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.employee_executor_policies import (
@@ -15,6 +17,8 @@ from modstore_server.employee_executor_policies import (
     _is_transient_llm_error as _is_transient_llm_error,
     execution_blocks_redispatch,
 )
+from modstore_server.xiaoc_life_chat import manual_life_scope_active
+from modstore_server.xiaoc_life_policy import LifePolicyError
 
 # --- from employee_executor_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -636,6 +640,7 @@ async def _cognition_real(
     cog_cfg = _facade()._get_section(config, "cognition")
     agent = cog_cfg.get("agent") if isinstance(cog_cfg.get("agent"), dict) else cog_cfg
     system_prompt = agent.get("system_prompt", "你是智能员工助手")
+    experiment_assignment = None
     if employee_id:
         try:
             from modstore_server.prompt_evolution_ab import get_effective_system_prompt
@@ -643,6 +648,14 @@ async def _cognition_real(
             system_prompt = get_effective_system_prompt(str(employee_id), str(system_prompt))
         except RECOVERABLE_ERRORS:
             pass
+        from modstore_server.retort_experiment_runtime import select_variant
+
+        system_prompt, experiment_assignment = select_variant(
+            surface="employee_prompt",
+            resource_id=str(employee_id),
+            subject_id=user_id,
+            default_value=str(system_prompt),
+        )
     if str(task or "").strip() and (
         not _facade()._is_all_hands_cognition_context(
             perceived.get("normalized_input") if isinstance(perceived, dict) else {}
@@ -795,6 +808,7 @@ async def _cognition_real(
         "items": [],
         "error": "",
     }
+    rag_chunks, rag_attempt = [], None
     if knowledge_cfg.get("enabled"):
         try:
             from modstore_server import rag_service
@@ -811,7 +825,7 @@ async def _cognition_real(
                 top_k=top_k,
                 min_score=min_score,
             )
-            messages = rag_service.inject_rag_into_messages(messages, chunks)
+            rag_chunks = chunks
             rag_meta = {
                 "enabled": True,
                 "items": [c.to_dict() for c in chunks],
@@ -820,9 +834,31 @@ async def _cognition_real(
         except RECOVERABLE_ERRORS as e:
             _facade().logger.warning("cognition.knowledge retrieve 失败: %s", e)
             rag_meta = {"enabled": True, "items": [], "error": str(e)}
+    if rag_chunks:
+        from modstore_server.rag_prompt_feedback import prepare
+
+        # This is outside the optional retrieval fallback: a failed exposure or
+        # changed source authorization must stop the actual model dispatch.
+        messages, rag_attempt = prepare(
+            messages,
+            rag_chunks,
+            user_id=user_id,
+            employee_id=employee_id,
+            task=user_input,
+            provider=provider,
+            model=model_name,
+            allow_experiment=experiment_assignment is None,
+        )
     from modstore_server.mod_employee_agent_runner import _llm_timeout_seconds
 
     llm_timeout_s = _llm_timeout_seconds()
+    import time
+
+    call_started, result = time.monotonic(), None
+    if experiment_assignment is not None:
+        from modstore_server.retort_experiment_runtime import begin_observation
+
+        begin_observation(experiment_assignment)
     try:
         if use_platform_dispatch:
             from modstore_server.services.llm import chat_dispatch_via_platform_only
@@ -850,6 +886,35 @@ async def _cognition_real(
             "ok": False,
             "error": f"employee cognition LLM timeout ({int(llm_timeout_s)}s)",
         }
+    finally:
+        if rag_attempt is not None:
+            from modstore_server.rag_prompt_feedback import complete
+
+            evidence = complete(
+                rag_attempt, result=result, duration_ms=(time.monotonic() - call_started) * 1000
+            )
+            rag_meta["verification"] = {
+                key: evidence[key]
+                for key in (
+                    "measurement_scope",
+                    "success",
+                    "reason",
+                    "business_verified",
+                    "metric_admitted",
+                )
+            }
+            if evidence["reason"] == "rag_source_authorization_changed":
+                result = {"ok": False, "error": "rag_source_authorization_changed"}
+                rag_meta["items"] = []
+                rag_meta["count"] = 0
+        if experiment_assignment is not None:
+            from modstore_server.retort_experiment_runtime import record_observation
+
+            record_observation(
+                experiment_assignment,
+                result=result,
+                duration_ms=(time.monotonic() - call_started) * 1000,
+            )
     if not result.get("ok"):
         err = str(result.get("error") or "llm call failed")
         if "missing api key" in err.lower():
@@ -1485,25 +1550,21 @@ def _action_agent_runner(
             if isinstance(tc, dict) and str(tc.get("tool") or "").strip()
         ][:50],
         "tool_call_success_count": sum(
-            (
-                1
-                for tc in tool_calls
-                if isinstance(tc, dict)
-                and isinstance(tc.get("result"), dict)
-                and (tc["result"].get("ok") is not False)
-                and (not str(tc["result"].get("error") or "").strip())
-            )
+            1
+            for tc in tool_calls
+            if isinstance(tc, dict)
+            and isinstance(tc.get("result"), dict)
+            and (tc["result"].get("ok") is not False)
+            and (not str(tc["result"].get("error") or "").strip())
         ),
         "tool_call_failure_count": sum(
-            (
-                1
-                for tc in tool_calls
-                if isinstance(tc, dict)
-                and isinstance(tc.get("result"), dict)
-                and (
-                    tc["result"].get("ok") is False
-                    or bool(str(tc["result"].get("error") or "").strip())
-                )
+            1
+            for tc in tool_calls
+            if isinstance(tc, dict)
+            and isinstance(tc.get("result"), dict)
+            and (
+                tc["result"].get("ok") is False
+                or bool(str(tc["result"].get("error") or "").strip())
             )
         ),
         "change_request_ids": sorted(cr_ids),
@@ -1518,7 +1579,12 @@ def _action_agent_runner(
 
 
 def _employee_pack_extract_root(
-    employee_id: str, manifest: _facade().Dict[str, _facade().Any]
+    employee_id: str,
+    manifest: _facade().Dict[str, _facade().Any],
+    *,
+    pack=None,
+    archive_bytes: bytes | None = None,
+    target_root=None,
 ) -> _facade().Path:
     """Extract the employee pack to a runtime directory so package-local Python files can run."""
     runtime_root = (
@@ -1528,20 +1594,21 @@ def _employee_pack_extract_root(
     )
     pack_id = str(manifest.get("id") or employee_id).strip() or employee_id
     version = str(manifest.get("version") or "dev").strip() or "dev"
-    target = runtime_root / "employee_packs" / pack_id / version
+    target = target_root or runtime_root / "employee_packs" / pack_id / version
     module_file = target / "backend" / "employees" / "taiyangniao_attendance.py"
-    sf = _facade().get_session_factory()
-    with sf() as session:
-        pack = _facade().load_employee_pack_resolved(session, employee_id)
+    if pack is None:
+        sf = _facade().get_session_factory()
+        with sf() as session:
+            pack = _facade().load_employee_pack_resolved(session, employee_id)
     stored = str(pack.get("stored_filename") or "").strip()
     if not stored:
         raise RuntimeError("employee pack missing stored_filename")
     zpath = _facade().files_dir() / stored
-    if not zpath.is_file():
+    if archive_bytes is None and not zpath.is_file():
         raise RuntimeError(f"employee pack file not found: {zpath}")
     marker = target / ".source_mtime"
-    source_mtime = str(zpath.stat().st_mtime_ns)
-    if module_file.is_file():
+    source_mtime = str(zpath.stat().st_mtime_ns) if archive_bytes is None else ""
+    if archive_bytes is None and module_file.is_file():
         try:
             if marker.read_text(encoding="utf-8").strip() == source_mtime:
                 return target
@@ -1552,7 +1619,8 @@ def _employee_pack_extract_root(
     if tmp.exists():
         _facade().shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, exist_ok=True)
-    with _facade().zipfile.ZipFile(zpath, "r") as zf:
+    source = BytesIO(archive_bytes) if archive_bytes is not None else zpath
+    with _facade().zipfile.ZipFile(source, "r") as zf:
         root_prefix = f"{pack_id}/"
         for info in zf.infolist():
             name = info.filename.replace("\\", "/")
@@ -1571,7 +1639,8 @@ def _employee_pack_extract_root(
     if target.exists():
         _facade().shutil.rmtree(target, ignore_errors=True)
     tmp.replace(target)
-    marker.write_text(source_mtime + "\n", encoding="utf-8")
+    if archive_bytes is None:
+        marker.write_text(source_mtime + "\n", encoding="utf-8")
     return target
 
 
@@ -1588,6 +1657,10 @@ def _action_direct_python(
         if isinstance(actions_cfg.get("direct_python"), dict)
         else {}
     )
+    from contextlib import ExitStack
+    from modstore_server.strategic_execution_contract import approved_python_module
+
+    resources = ExitStack()
     try:
         sf = _facade().get_session_factory()
         direct_input = (
@@ -1595,13 +1668,18 @@ def _action_direct_python(
             if isinstance(reasoning, dict) and isinstance(reasoning.get("input"), dict)
             else {}
         )
+        module = resources.enter_context(
+            approved_python_module(employee_id, user_id, actions_cfg, direct_input)
+        )
         reviewed_burn_in = _facade()._flag_enabled(
             direct_input.get("burn_in")
         ) and _facade()._flag_enabled(direct_input.get("burn_in_read_only"))
         reviewed_duty_execution = _facade()._flag_enabled(
             direct_input.get("_trusted_duty_contract_execution")
         )
-        if reviewed_burn_in or reviewed_duty_execution:
+        if module is not None:
+            root = Path(module.__file__).parents[2]
+        elif reviewed_burn_in or reviewed_duty_execution:
             from modstore_server.duty_workforce_contracts import (
                 resolve_reviewed_duty_employee_root,
             )
@@ -1623,18 +1701,19 @@ def _action_direct_python(
                 "ok": False,
                 "error": f"module not found: {module_path}",
             }
-        spec = _facade().importlib.util.spec_from_file_location(
-            f"_modstore_employee_pack_{employee_id.replace('-', '_')}_{module_name}",
-            str(module_path),
-        )
-        if spec is None or spec.loader is None:
-            return {
-                "handler": "direct_python",
-                "ok": False,
-                "error": f"cannot load module spec: {module_path}",
-            }
-        module = _facade().importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        if module is None:
+            spec = _facade().importlib.util.spec_from_file_location(
+                f"_modstore_employee_pack_{employee_id.replace('-', '_')}_{module_name}",
+                str(module_path),
+            )
+            if spec is None or spec.loader is None:
+                return {
+                    "handler": "direct_python",
+                    "ok": False,
+                    "error": f"cannot load module spec: {module_path}",
+                }
+            module = _facade().importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
         run_fn = getattr(module, "run", None)
         if not callable(run_fn):
             return {
@@ -1689,7 +1768,7 @@ def _action_direct_python(
         ctx = {
             "employee_id": employee_id,
             "user_id": user_id,
-            "workspace_root": payload.get("workspace_root") or "",
+            "workspace_root": payload.get("workspace_root") or payload.get("project_root") or "",
             "logger": _facade().logging.getLogger(f"employee.direct_python.{employee_id}"),
             "call_llm": _direct_call_llm,
         }
@@ -1710,6 +1789,8 @@ def _action_direct_python(
     except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("direct_python handler failed employee_id=%s", employee_id)
         return {"handler": "direct_python", "ok": False, "error": str(exc)[:1000]}
+    finally:
+        resources.close()
 
 
 def _prefer_para_with_local_fallback(
@@ -1772,9 +1853,9 @@ def _filter_handlers_vibe_coding_maintainer(
     multi_step = bool(inp.get("multi_step") or inp.get("handler_mode") == "agent")
     if delegate == "cursor" or priority == "P0" or inp.get("fallback_cursor"):
         selected: _facade().List[str] = []
-        if "cursor_delegate" in handlers:
-            selected.append("cursor_delegate")
-        elif _facade().os.environ.get("MODSTORE_CURSOR_DELEGATE_ENABLED", "1").strip().lower() in (
+        if "cursor_delegate" in handlers or _facade().os.environ.get(
+            "MODSTORE_CURSOR_DELEGATE_ENABLED", "1"
+        ).strip().lower() in (
             "1",
             "true",
             "yes",
@@ -1869,12 +1950,50 @@ def _actions_real(
     # 跳过规划 LLM 后 llm_md/echo 只会回显空文本，且台账把 llm_md 视为本地回退，不再产出。
     skip_echo = reasoning.get("skipped_cognition_reason") == "para_first"
     for handler in handlers:
+        from modstore_server.strategic_portfolio_usage import remaining_execution_seconds
+
+        try:
+            remaining_seconds = remaining_execution_seconds()
+        except LifePolicyError as exc:
+            if not manual_life_scope_active():
+                raise
+            from modstore_server.customer_issue_delivery_contract import (
+                execution_requires_reconciliation,
+            )
+
+            return {
+                "task": task,
+                "handlers": handlers,
+                "outputs": [
+                    *outputs,
+                    {
+                        "handler": str(handler),
+                        "ok": False,
+                        "status": "blocked",
+                        "outcome": "not_started",
+                        "executed": False,
+                        "error": str(exc),
+                    },
+                ],
+                "status": "blocked",
+                "blocked_by_life_policy": True,
+                "requires_reconciliation": execution_requires_reconciliation({"outputs": outputs}),
+                "error": str(exc),
+                "summary": f"已保留 {len(outputs)} 条原动作回执；授权变化后未启动后续动作。",
+            }
         if (skip_local_after_para_dispatch or para_only) and str(
             handler
         ) in _LOCAL_FALLBACK_HANDLERS:
             continue
         if skip_echo and str(handler) in ("llm_md", "echo"):
             continue
+        if handler in {"para_delegate", "cursor_delegate"}:
+            from modstore_server.strategic_portfolio_usage import unmetered_delegate_block
+
+            blocked = unmetered_delegate_block(str(handler), direct_input)
+            if blocked is not None:
+                outputs.append(blocked)
+                continue
         if handler == "echo":
             outputs.append({"handler": "echo", "output": reasoning.get("reasoning", "")})
         elif handler == "http_request":
@@ -1890,7 +2009,11 @@ def _actions_real(
                 continue
             try:
                 resp = _facade().httpx.request(
-                    method, url, headers=headers, content=body, timeout=30.0
+                    method,
+                    url,
+                    headers=headers,
+                    content=body,
+                    timeout=min(30.0, remaining_seconds) if remaining_seconds is not None else 30.0,
                 )
                 outputs.append(
                     {
@@ -1913,7 +2036,11 @@ def _actions_real(
                 "result": reasoning.get("reasoning", ""),
             }
             try:
-                resp = _facade().httpx.post(url, json=payload, timeout=30.0)
+                resp = _facade().httpx.post(
+                    url,
+                    json=payload,
+                    timeout=min(30.0, remaining_seconds) if remaining_seconds is not None else 30.0,
+                )
                 outputs.append({"handler": "webhook", "status_code": resp.status_code})
             except RECOVERABLE_ERRORS as e:
                 outputs.append({"handler": "webhook", "error": str(e)})
@@ -2026,7 +2153,9 @@ def _actions_real(
     try:
         _rep_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
         _rep_body = ""
-        if not _rep_input.get("im_reply_managed"):
+        if not _rep_input.get("im_reply_managed") and not _flag_enabled(
+            _rep_input.get("suppress_employee_im")
+        ):
             for _o in outputs:
                 if not isinstance(_o, dict):
                     continue
@@ -2240,12 +2369,14 @@ def _handlers_execution_ok(result: _facade().Dict[str, _facade().Any]) -> bool:
     用于 Para 离线后的本地回退：``para_delegate`` 失败但 ``agent``/``vibe_edit``
     成功时不应整单 handler_failed。
     """
+    if result.get("blocked_by_life_policy"):
+        return False
     outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
     if not outputs:
         return True
-    if any((isinstance(out, dict) and out.get("ok") is True for out in outputs)):
+    if any(isinstance(out, dict) and out.get("ok") is True for out in outputs):
         return True
-    if any((isinstance(out, dict) and out.get("ok") is False for out in outputs)):
+    if any(isinstance(out, dict) and out.get("ok") is False for out in outputs):
         return False
     return True
 

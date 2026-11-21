@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from app.application.agent_orchestrator.param_references import (
     UNRESOLVED_CODE,
+    host_reference_params,
     unresolved_placeholders,
 )
 from app.application.agent_orchestrator.run_models import AgentStep
@@ -19,6 +20,10 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_call,
     validate_tool_result,
 )
+from app.application.agent_orchestrator.verification_cognition import (
+    normalize_tool_execution_result,
+    verified_plan_admission,
+)
 from app.application.employee_runtime.result_verifier import (
     execution_result_requires_reconciliation,
 )
@@ -27,6 +32,9 @@ from app.application.tool_execution_deadline import (
     invocation_requires_reconciliation,
 )
 from app.application.workflow.retry_policy import is_transport_error
+from app.application.agent_orchestrator.verification_cognition import (
+    normalize_tool_execution_result,
+)
 from app.domain.task_lifecycle.results import normalize_execution_result
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -381,7 +389,9 @@ class AgentToolExecutor:
             params["user_id"] = str(context["user_id"])
         if "tenant_id" in required and context.get("tenant_id") not in (None, ""):
             params["tenant_id"] = context["tenant_id"]
-        leftover = unresolved_placeholders(params)
+        leftover = unresolved_placeholders(
+            host_reference_params(step.tool_id, step.action, params)[0]
+        )
         if leftover:
             return {
                 "success": False,
@@ -400,15 +410,18 @@ class AgentToolExecutor:
                 "action": validation.action,
             }
         if validation.spec is not None and validation.spec.availability == "aiopen":
-            # AIOPEN owns key scopes and live screen sessions in its async entry.
-            # Its catalog entry does not bind a handler in this process boundary.
-            return {
-                "success": False,
-                "error_code": "tool_entry_unsupported",
-                "execution_status": "not_started",
-                "retryable": False,
-                "message": "此工具需通过已授权的 AIOPEN 入口执行",
-            }
+            from app.application.aiopen.agent_bridge import supports_aiopen_step
+
+            # Only the bound screen bridge exists in this worker. Other AIOPEN
+            # catalog actions still require their separate authorized entry.
+            if validation.tool_id != "aiopen" or not supports_aiopen_step(validation.action):
+                return {
+                    "success": False,
+                    "error_code": "tool_entry_unsupported",
+                    "execution_status": "not_started",
+                    "retryable": False,
+                    "message": "此工具需通过已授权的 AIOPEN 入口执行",
+                }
         from app.application.chat_turn_guard import _is_mutation
 
         guard_policy = str((runtime_context or {}).get("mutation_policy") or "")
@@ -709,12 +722,15 @@ class AgentToolExecutor:
         # After entering a mutating handler, failure alone is not proof of no
         # effect (adapters may have caught an exception after commit). Genuine
         # pre-dispatch validation/authorization refusals returned before claim.
-        if (
-            invocation_requires_reconciliation()
-            or execution_result_requires_reconciliation(result)
-            or (
-                result.get("success") is not True
-                and (validation.spec is None or not validation.spec.read_only)
+        admitted_child = verified_plan_admission(step, result, dict(runtime_context or {}))
+        if invocation_requires_reconciliation() or (
+            not admitted_child
+            and (
+                execution_result_requires_reconciliation(result)
+                or (
+                    result.get("success") is not True
+                    and (validation.spec is None or not validation.spec.read_only)
+                )
             )
         ):
             result = {
@@ -724,7 +740,9 @@ class AgentToolExecutor:
                 "retryable": False,
                 "reconciliation_required": True,
             }
-        result = normalize_execution_result(result)
+        result = normalize_execution_result(
+            normalize_tool_execution_result(step, result, dict(runtime_context or {}))
+        )
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)
@@ -790,7 +808,9 @@ def execute_with_tool_deadline(
                     else executor.execute(step, runtime_context=context)
                 )
             record_result(
-                normalize_execution_result(result) if isinstance(result, dict) else result
+                normalize_tool_execution_result(step, result, context)
+                if isinstance(result, dict)
+                else result
             )
     except TimeoutError:
         pass
@@ -850,7 +870,7 @@ def execute_with_tool_deadline(
             )
             and not result.get("reconciliation_required")
         ):
-            result = normalize_execution_result(result)
+            result = normalize_tool_execution_result(step, result, context)
             if (
                 step.tool_id == "business_db"
                 and step.action == "write"

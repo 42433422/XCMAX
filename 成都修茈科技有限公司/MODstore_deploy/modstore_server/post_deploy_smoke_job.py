@@ -64,7 +64,11 @@ def run_post_deploy_smoke_job() -> Dict[str, Any]:
 def _failed_probe_names(out: Dict[str, Any]) -> list[str]:
     probes = out.get("probes")
     if isinstance(probes, list):
-        failed = [str(item.get("name") or "unknown") for item in probes if isinstance(item, dict) and not item.get("ok")]
+        failed = [
+            str(item.get("name") or "unknown")
+            for item in probes
+            if isinstance(item, dict) and not item.get("ok")
+        ]
         if failed:
             return failed
     return ["unknown"]

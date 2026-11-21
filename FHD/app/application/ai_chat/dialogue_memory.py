@@ -596,6 +596,7 @@ def _payload(
             attachments = [_safe_attachment(item) for item in raw if isinstance(item, dict)]
     body = {
         "success": status == "completed",
+        "execution_state": status,
         "message": {
             "completed": "处理完成",
             "processing": "处理中",

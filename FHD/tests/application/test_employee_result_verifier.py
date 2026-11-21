@@ -242,3 +242,64 @@ def test_result_envelopes_are_cycle_safe_and_bound_unknown_depth():
         deep = {"result": deep}
     assert execution_result_requires_reconciliation(deep) is True
     assert verify_employee_run_result("employee", deep, require_non_empty=False)[0] is False
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        {"verification": {"verified": False}},
+        {"verification": {"status": "failed", "verified": True}},
+        {"verification": {"status": "pending"}},
+        {"verification": {"status": "inconclusive"}},
+        {"verification": {"status": "unverified"}},
+        {"verification": {"verdict": "fail"}},
+        {"verification": {"passed": False}},
+        {"verification": {"accepted": False}},
+        {"verification": False},
+        {"artifact_postcondition": {"verified": False}},
+        {"business_result": {"status": "partial", "success": True}},
+        {"business_result": {"status": "completed", "success": False}},
+    ],
+)
+def test_success_wrapper_preserves_explicit_verification_and_business_failures(marker):
+    from app.domain.task_lifecycle.results import execution_result_error
+
+    result = {"success": True, "result": {"summary": "done", "outputs": [{"output": marker}]}}
+    assert execution_result_error(result)
+    assert verify_employee_run_result("employee", result)[0] is False
+
+
+def test_artifact_failure_reason_survives_success_wrapper():
+    result = {
+        "success": True,
+        "summary": "done",
+        "artifact_postcondition": {"verified": False, "reason": "输出文件不存在或为空"},
+    }
+    assert verify_employee_run_result("employee", result) == (False, "输出文件不存在或为空")
+
+
+@pytest.mark.parametrize("status", ["verified", "not_required"])
+def test_compatibility_check_keeps_verification_exemption_distinct_from_failure(status):
+    result = {
+        "success": True,
+        "summary": "read completed",
+        "verification": {"status": status, "verified": status == "verified"},
+        "items": [
+            {"employee_id": "other", "status": "pending", "verification": {"verified": False}}
+        ],
+    }
+    assert verify_employee_run_result("employee", result) == (True, "ok")
+    assert result["verification"]["status"] == status
+
+
+@pytest.mark.parametrize("key", [None, "result"])
+def test_declared_employee_identity_must_match_requested_employee(key):
+    payload = {"employee_id": "other", "summary": "done"}
+    result = {"success": True, key: payload} if key else {"success": True, **payload}
+    assert verify_employee_run_result("employee", result) == (False, "员工输出身份与执行员工不一致")
+
+
+def test_matching_employee_identity_preserves_legacy_and_delegated_result_compatibility():
+    result = {"success": True, "employee_id": "employee", "result": {"summary": "done"}}
+    result["result"]["outputs"] = [{"employee_id": "delegate", "success": True}]
+    assert verify_employee_run_result("employee", result) == (True, "ok")

@@ -12,7 +12,14 @@ import time
 
 from app.application.agent_orchestrator import artifact_files
 from app.application.agent_orchestrator import business_write_guard as guard
+from app.application.agent_orchestrator.result_verification import (
+    bind_execution_receipt,
+    freeze_verification_contract,
+    verify_step_result,
+)
+from app.application.agent_orchestrator.run_models import ToolCall
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 from tests.test_application.test_surface_worker import (
     _claim,
 )
@@ -80,6 +87,19 @@ def test_approved_agent_spawns_real_browser_and_reuses_durable_receipt(
             "verify": [verification],
         }
     )
+    call = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        tool_id=step.tool_id,
+        action=step.action,
+        params=step.params,
+        metadata={"idempotency_key": context["idempotency_key"]},
+    )
+    run.tool_calls.append(call)
+    freeze_verification_contract(
+        run, step, call, get_tool_action_spec(step.tool_id, step.action), context
+    )
+    surface.repository.save(run)
     execution = _claim(sessions, run)
     with guard.worker_claim_scope(surface.repository, execution, "surface-worker"):
         result = AgentToolExecutor().execute_with_deadline(
@@ -90,6 +110,12 @@ def test_approved_agent_spawns_real_browser_and_reuses_durable_receipt(
             step, runtime_context=context, deadline_monotonic=time.monotonic() + 60
         )
     assert replay.get("success") is True and replay["verified"] is True, replay
+    step.output = call.output = result
+    bind_execution_receipt(call)
+    for _ in range(2):
+        report = verify_step_result(run=run, step=step, call=call, context=context)
+        assert report["accepted"] is True, report
+        assert report["checks"][-1]["evidence"]["business_effect_verified"] is False
     assert result["run_id"] == replay["run_id"] == run.run_id
     assert result["artifacts"] == replay["artifacts"]
     assert surface.calls == []  # The parent's mocked runtime never supplied the receipt.

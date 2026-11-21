@@ -13,9 +13,15 @@ from app.domain.task_lifecycle.results import (
 
 
 def requires_retry_reconciliation(run: AgentRun) -> bool:
+    from app.application.agent_orchestrator.result_verification import verification_blocked
+
     recovery = run.metadata.get("recovery")
-    return bool(run.metadata.get("non_retryable")) or (
-        isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+    return (
+        verification_blocked(run)
+        or bool(run.metadata.get("non_retryable"))
+        or (
+            isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+        )
     )
 
 

@@ -277,5 +277,3 @@ def _patch_pyproject_dependency(rel_path: str, package: str, fix_version: str) -
         return None
 
     return new_content
-
-

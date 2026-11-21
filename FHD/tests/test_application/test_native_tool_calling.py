@@ -55,7 +55,7 @@ def _native(graph=None, *, name="SubmitWorkflowPlan", arguments=None):
                             },
                         }
                     ]
-                }
+                },
             }
         ]
     }
@@ -81,6 +81,71 @@ def test_native_and_json_use_identical_validation():
     native = _decode_completion(native_plan_payload(_native(graph)))
     text = _decode_completion({"choices": [{"message": {"content": json.dumps(graph)}}]})
     assert native == text
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "向量表示一组数值，可以用于比较语义相似度。",
+        "```python\nitems = [1, 2]\nprint(items[0])\n```",
+        "春风拂过窗前，远山渐渐明亮。",
+    ],
+)
+def test_native_auto_text_uses_typed_reply_without_shape_repair(content, monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    completion = Mock(
+        return_value={"choices": [{"finish_reason": "stop", "message": {"content": content}}]}
+    )
+    plan = _generator(completion).generate("p1", "u1", "请解释并给出示例", {}, {})
+    assert plan.metadata["response_mode"] == "reply"
+    assert plan.metadata["reply"] == content
+    assert len(plan.nodes) == 1
+    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("conversation", "reply")
+    assert plan.nodes[0].params == {"response": content}
+    completion.assert_called_once()
+    assert completion.call_args.kwargs["tool_choice"] == "auto"
+
+
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("prefix", ["", "```json\n", "```JSON\n", "```\n"])
+def test_native_text_does_not_reinterpret_structured_or_truncated_plans(
+    native, prefix, monkeypatch
+):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1" if native else "0")
+    completion = Mock(
+        return_value={
+            "choices": [{"message": {"content": prefix + '{"mode":"workflow","nodes":['}}]
+        }
+    )
+    assert _generator(completion).generate("p1", "u1", "查询并导出", {}, {}) is None
+
+
+def test_plain_text_is_not_native_when_tools_were_not_offered(monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "0")
+    completion = Mock(return_value={"choices": [{"message": {"content": "普通文本"}}]})
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    assert "tools" not in completion.call_args.kwargs
+
+
+def test_legacy_completion_without_tool_parameters_keeps_json_contract(monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    plain = {"choices": [{"message": {"content": "普通文本"}}]}
+    completion = Mock(side_effect=[TypeError("unexpected keyword argument 'tools'"), plain, plain])
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    assert completion.call_count == 3
+    assert "tools" not in completion.call_args_list[1].kwargs
+
+
+@pytest.mark.parametrize("finish_reason", ["length", "tool_calls", "content_filter"])
+def test_incomplete_native_text_is_rejected(finish_reason, monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    completion = Mock(
+        return_value={
+            "choices": [{"finish_reason": finish_reason, "message": {"content": "未完整的回答"}}]
+        }
+    )
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    completion.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -148,12 +213,15 @@ def test_native_arguments_require_json_text(arguments):
 
 @pytest.mark.parametrize("transport", ["tool_calls", "function_call"])
 @pytest.mark.parametrize("mode", ["full", "light", "repair"])
-def test_native_actions_never_reinterpret_shadow_text_or_request_a_new_plan(mode, transport):
+@pytest.mark.parametrize("plain_text", [False, True])
+def test_native_actions_never_reinterpret_shadow_text_or_request_a_new_plan(
+    mode, transport, plain_text
+):
     response = _native(name="unknown__write")
     message = response["choices"][0]["message"]
     if transport == "function_call":
         message["function_call"] = message.pop("tool_calls")[0]["function"]
-    message["content"] = json.dumps(_graph())
+    message["content"] = "已经完成" if plain_text else json.dumps(_graph())
     completion = Mock(return_value=response)
     generator = _generator(completion)
     if mode == "repair":
@@ -286,7 +354,9 @@ def test_default_gateway_legacy_provider_signature_really_falls_back(monkeypatch
     class Provider:
         async def chat_completion(self, *, messages, temperature, max_tokens):
             provider_calls.append(messages)
-            return {"choices": [{"message": {"content": json.dumps(_graph())}}]}
+            return {
+                "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(_graph())}}]
+            }
 
     monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
     monkeypatch.setattr(
@@ -493,6 +563,7 @@ def test_full_catalog_reaches_real_budget_gateway_without_losing_contracts(
     response = (
         _native(payload) if native else {"choices": [{"message": {"content": json.dumps(payload)}}]}
     )
+    response["choices"][0]["finish_reason"] = "tool_calls" if native else "stop"
     provider = SimpleNamespace(
         _adapter=SimpleNamespace(model_name="gpt-4o"),
         chat_completion=AsyncMock(return_value=response),

@@ -651,7 +651,14 @@ def run_employee_agent_loop(
                             tool_name,
                             args,
                             workspace_root,
-                            runtime_context=call_context,
+                            runtime_context={
+                                **(call_context if isinstance(call_context, dict) else {}),
+                                **(runtime_context or {}),
+                                "employee_id": employee_id,
+                                "source": "employee_runtime",
+                                "call_id": tc_id,
+                                "tool_call_id": tc_id,
+                            },
                         )
                     )
                 if time.monotonic() >= deadline or budget.uncertain:
@@ -688,6 +695,10 @@ def run_employee_agent_loop(
                     "error": "工具返回不是有效 JSON 对象",
                 }
             pending = pending_employee_result(result_payload)
+            from app.domain.task_lifecycle.results import execution_result_states
+
+            if not pending and execution_result_states(result_payload) & {"timeout", "timed_out"}:
+                pending = {"execution_state": "unknown", "reconciliation_required": True, "retryable": False}
             tool_success, tool_error, verified = _tool_result_state(str(result_raw))
             if tool_success:
                 for previous in reversed(tool_trace):

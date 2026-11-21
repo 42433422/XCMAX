@@ -690,8 +690,12 @@ def _validate_input_schema_with_references(
     allow_references_from: set[str] | frozenset[str] | None,
     allow_missing_fields: set[str] | frozenset[str] | None = None,
 ) -> tuple[bool, str]:
-    from app.application.agent_orchestrator.param_references import unresolved_placeholders
+    from app.application.agent_orchestrator.param_references import (
+        host_reference_params,
+        unresolved_placeholders,
+    )
 
+    params = host_reference_params(spec.tool_id, spec.action, params)[0]
     has_references = bool(unresolved_placeholders(params))
     if has_references and allow_references_from is None:
         return False, "参数含有尚未解析的前序结果引用"

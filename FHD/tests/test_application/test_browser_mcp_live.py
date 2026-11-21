@@ -29,7 +29,12 @@ from app.application.agent_orchestrator.approval_grant import (
     consume_approval_grant,
     issue_approval_grant,
 )
-from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+from app.application.agent_orchestrator.result_verification import (
+    bind_execution_receipt,
+    freeze_verification_contract,
+    verify_step_result,
+)
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.run_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.task_background import (
     apply_approved_step,
@@ -221,7 +226,15 @@ def browser_runtime(tmp_path, monkeypatch):
         engine.dispose()
 
 
-def _dispatch(runtime: LiveRuntime, run_index: int, action: str, arguments: dict) -> dict:
+def _dispatch(
+    runtime: LiveRuntime,
+    run_index: int,
+    action: str,
+    arguments: dict,
+    *,
+    verify=False,
+    assertion="",
+) -> dict:
     # Reopen the persisted run for every step; do not pass a browser/client handle
     # between calls or replace the production facade, authorization or worker.
     run = runtime.repository.get(runtime.run_ids[run_index])
@@ -248,23 +261,56 @@ def _dispatch(runtime: LiveRuntime, run_index: int, action: str, arguments: dict
         consume_approval_grant(grant["grant"], run=run, principal_id=run.user_id)
         apply_approved_step(run, step, approved_by=run.user_id)
     run.status, step.status = "running", "running"
+    context = {
+        **run.metadata["runtime_context"],
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+        "node_outputs": {prior.node_id: prior.output for prior in run.steps if prior.output},
+        **task_execution_context(run, step),
+    }
+    call = None
+    if verify:
+        if assertion:
+            before = next(
+                item
+                for item in reversed(run.steps)
+                if item.action == "browser_snapshot" and item.status == "completed"
+            )
+            run.metadata.setdefault("browser_loop", {}).setdefault("postconditions", {})[
+                step.node_id
+            ] = {
+                "kind": "text",
+                "expected": assertion,
+                "before_snapshot_node_id": before.node_id,
+            }
+        call = ToolCall(
+            step_id=step.step_id,
+            node_id=step.node_id,
+            tool_id=tool_id,
+            action=action,
+            params=arguments,
+            metadata={"idempotency_key": context["idempotency_key"]},
+        )
+        run.tool_calls.append(call)
+        freeze_verification_contract(run, step, call, spec, context)
     runtime.repository.save(run)
     result = execute_with_tool_deadline(
         AgentToolExecutor(),
         step,
-        runtime_context={
-            **run.metadata["runtime_context"],
-            "run_id": run.run_id,
-            "step_id": step.step_id,
-            "node_id": step.node_id,
-            "node_outputs": {prior.node_id: prior.output for prior in run.steps if prior.output},
-            **task_execution_context(run, step),
-        },
+        runtime_context=context,
         timeout_seconds=30,
     )
     step.output = result
     step.status = "completed" if result.get("success") is True else "failed"
+    if call is not None:
+        call.output = result
+        bind_execution_receipt(call)
     runtime.repository.save(run)
+    if call is not None:
+        report = verify_step_result(run=run, step=step, call=call, context=context)
+        assert report["accepted"] is True, report
+        runtime.repository.save(run)
     stored = runtime.repository.get(run.run_id)
     assert stored is not None and stored.steps[-1].output == result
     return stored.steps[-1].output
@@ -386,3 +432,47 @@ def test_live_worker_rechecks_revoked_actor_before_next_browser_action(
     )
     assert denied["success"] is False and denied["error_code"] == "tool_identity_required"
     assert submissions == []
+
+
+def test_live_host_verifier_reads_original_worker_without_resubmitting(
+    browser_runtime, fixture_site
+):
+    runtime = browser_runtime
+    url, submissions = fixture_site
+    _dispatch(runtime, 0, "browser_navigate", {"url": url}, verify=True)
+    snapshot = _call(runtime, 0, "browser_snapshot", {})["content"]
+    reference = f"VERIFY-{uuid.uuid4().hex}"
+    _dispatch(
+        runtime,
+        0,
+        "browser_type",
+        {"target": _target(snapshot, "textbox", "Fixture reference"), "text": reference},
+        verify=True,
+        assertion=reference,
+    )
+    snapshot = _call(runtime, 0, "browser_snapshot", {})["content"]
+    _dispatch(
+        runtime,
+        0,
+        "browser_click",
+        {"target": _target(snapshot, "button", "Submit fixture")},
+        verify=True,
+        assertion=f"Submitted: {reference}",
+    )
+    run = runtime.repository.get(runtime.run_ids[0])
+    step, call = run.steps[-1], run.tool_calls[-1]
+    context = {
+        **run.metadata["runtime_context"],
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        **task_execution_context(run, step),
+    }
+    for _ in range(2):
+        report = verify_step_result(run=run, step=step, call=call, context=context)
+        assert report["accepted"] is True, report
+        assert report["checks"][0]["evidence"]["business_effect_verified"] is False
+    assert submissions == [reference]
+    assert runtime.close(0) >= 1
+    report = verify_step_result(run=run, step=step, call=call, context=context)
+    assert report["status"] == "inconclusive"
+    assert call.output["success"] is True and submissions == [reference]

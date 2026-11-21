@@ -389,18 +389,15 @@ def test_codeql_provenance_requires_fresh_exact_sha_for_each_language() -> None:
         },
     ]
 
-    assert (
-        normalizer._validate_codeql_provenance(
-            analyses,
-            release_sha=sha,
-            required_categories=[
-                "/language:python",
-                "/language:javascript-typescript",
-            ],
-            now=now,
-        )
-        == (sha, "exact")
-    )
+    assert normalizer._validate_codeql_provenance(
+        analyses,
+        release_sha=sha,
+        required_categories=[
+            "/language:python",
+            "/language:javascript-typescript",
+        ],
+        now=now,
+    ) == (sha, "exact")
 
     analyses[1]["commit_sha"] = "b" * 40
     with pytest.raises(ValueError, match="SHA mismatch"):
@@ -510,7 +507,7 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
         in workflow
     )
     assert "Normalize all scanner reports\n        if: always()" in workflow
-    assert "Enforce all-source zero critical/high gate\n        if: always()" in workflow
+    assert "Check scheduled trend or enforce release clearance\n        if: always()" in workflow
     assert (
         "Upload auditable security evidence even when gate fails\n        if: always()" in workflow
     )

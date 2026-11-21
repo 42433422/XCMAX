@@ -6,8 +6,10 @@ from __future__ import annotations
 import os
 import re
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from fractions import Fraction
 from typing import Any, Optional
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from sqlalchemy import case, func
@@ -332,6 +334,118 @@ async def fetch_xiaomi_token_plan_quota(api_key: str, *, base_url: str) -> dict[
         return {**unavailable, "error": "Xiaomi Token Plan quota unavailable"}
 
 
+def parse_litellm_proxy_budget(
+    user_payload: Any, global_payload: Any, *, now: datetime | None = None
+) -> dict[str, Any]:
+    """Read the same budget-window aggregate as LiteLLM 1.109.3 admission.
+
+    ``/global/spend.spend`` is a rolling report, not this budget window. Only
+    its running ``max_budget`` is used to check the aggregate's configured cap.
+    This measures gateway USD headroom, never upstream subscription credits.
+    """
+    identity = "litellm-proxy-budget"
+    if not isinstance(user_payload, dict) or user_payload.get("user_id") != identity:
+        raise ValueError("invalid LiteLLM proxy budget identity")
+    row = user_payload.get("user_info")
+    if (
+        not isinstance(row, dict)
+        or row.get("user_id") != identity
+        or not isinstance(global_payload, dict)
+    ):
+        raise ValueError("missing LiteLLM proxy budget aggregate")
+    values = [row.get("spend"), row.get("max_budget"), global_payload.get("max_budget")]
+    if any(type(value) not in (int, float) for value in values):
+        raise ValueError("missing LiteLLM budget amounts")
+    spend, budget, live_budget = (Decimal(str(value)) for value in values)
+    if (
+        not all(value.is_finite() for value in (spend, budget, live_budget))
+        or budget <= 0
+        or spend < 0
+        or budget != live_budget
+    ):
+        raise ValueError("unlimited or inconsistent LiteLLM budget")
+    duration, reset_raw = row.get("budget_duration"), row.get("budget_reset_at")
+    if (
+        not isinstance(duration, str)
+        or not re.fullmatch(r"[1-9]\d*(?:s|m|h|d|w|mo)", duration)
+        or not isinstance(reset_raw, str)
+    ):
+        raise ValueError("missing LiteLLM budget window")
+    reset = datetime.fromisoformat(reset_raw)
+    if reset.tzinfo is None or reset <= (now or datetime.now(UTC)):
+        raise ValueError("LiteLLM budget window not current")
+    # Floor the percentage: 19.999% must never pass a 20% admission threshold.
+    percent = max(0, (Fraction(budget) - Fraction(spend)) * 100 // Fraction(budget))
+    state = _quota_state(percent)
+    return {
+        "state": state,
+        "visibility": "exact",
+        "remaining_percent": percent,
+        "resources": [
+            {
+                "resource": "general",
+                "state": state,
+                "remaining_percent": percent,
+                "scope": "gateway_budget",
+                "unit": "USD",
+                "max_budget": str(budget),
+                "spend": str(spend),
+                "budget_duration": duration,
+                "budget_reset_at": reset.isoformat(),
+            }
+        ],
+        "source": "litellm_proxy_budget_api",
+        "error": "",
+    }
+
+
+async def fetch_litellm_proxy_budget(api_key: str, *, base_url: str) -> dict[str, Any]:
+    """Read the configured gateway only; no generation or budget mutation."""
+    unavailable: dict[str, Any] = {
+        "state": "unknown",
+        "visibility": "usage_only",
+        "remaining_percent": None,
+        "resources": [],
+        "source": "litellm_proxy_budget_api",
+    }
+    if isinstance(api_key, PlatformApiKey):
+        base_url = api_key.configuration["base_url"]
+    try:
+        base = urlsplit(base_url)
+        if (
+            not api_key
+            or base.scheme not in {"http", "https"}
+            or not base.hostname
+            or base.username
+            or base.password
+            or base.query
+            or base.fragment
+        ):
+            raise ValueError("missing LiteLLM budget endpoint")
+        path = base.path.rstrip("/").removesuffix("/v1")
+        root = urlunsplit((base.scheme, base.netloc, path, "", ""))
+        payloads = []
+        for endpoint in ("/global/spend", "/user/info?user_id=litellm-proxy-budget"):
+            async with llm_http_response(
+                root + endpoint,
+                api_key,
+                {"Authorization": f"Bearer {api_key}"},
+                {},
+                timeout=8,
+                limits=httpx.Limits(),
+                method="GET",
+            ) as response:
+                if not response.is_success:
+                    return {
+                        **unavailable,
+                        "error": f"LiteLLM proxy budget http {response.status_code}",
+                    }
+                payloads.append(response.json())
+        return parse_litellm_proxy_budget(payloads[1], payloads[0])
+    except (ValueError, TypeError, KeyError, OSError, httpx.HTTPError):
+        return {**unavailable, "error": "LiteLLM proxy budget unavailable or incomplete"}
+
+
 def classify_probe_result(result: dict[str, Any]) -> str:
     if result.get("ok"):
         return "healthy"
@@ -405,7 +519,11 @@ async def platform_quota_snapshot(
         provider = str(block.get("provider") or "")
         key = platform_api_key(provider) or ""
         quota: dict[str, Any]
-        if provider == "minimax" and is_minimax_token_plan_key(key):
+        if provider == "litellm":
+            quota = await fetch_litellm_proxy_budget(
+                key, base_url=platform_base_url(provider) or ""
+            )
+        elif provider == "minimax" and is_minimax_token_plan_key(key):
             options: dict[str, Any] = {"base_url": platform_base_url(provider)}
             if isolated_http:
                 options["isolated_http"] = True
@@ -488,7 +606,9 @@ async def platform_quota_snapshot(
 
 __all__ = [
     "classify_probe_result",
+    "fetch_litellm_proxy_budget",
     "fetch_minimax_token_plan_quota",
+    "parse_litellm_proxy_budget",
     "parse_minimax_token_plan_remains",
     "platform_quota_snapshot",
     "scrub_llm_error",

@@ -89,7 +89,12 @@ def _uploads(plan: dict, owner_id: int, tenant_id: str) -> None:
 
 
 def _persist_artifacts(
-    result: dict, root: Path, run_id: str, owner_id: int, tenant_id: str
+    result: dict,
+    root: Path,
+    run_id: str,
+    owner_id: int,
+    tenant_id: str,
+    binding: dict | None = None,
 ) -> None:
     from app.application.agent_orchestrator.artifact_files import (
         RUN_FILE_MIME_TYPES,
@@ -97,6 +102,22 @@ def _persist_artifacts(
     )
 
     persisted: list[dict] = []
+    binding = binding or {}
+
+    def store(content: bytes, name: str) -> dict:
+        artifact = store_run_file(
+            run_id, content, name=name, owner_user_id=owner_id, tenant_id=tenant_id
+        )
+        artifact["metadata"].update(
+            run_id=run_id,
+            owner_user_id=str(owner_id),
+            tenant_id=tenant_id,
+            step_id=binding.get("step_id"),
+            call_id=binding.get("call_id"),
+            params_sha256=binding.get("input_sha256"),
+        )
+        return artifact
+
     unsaved = []
     for item in result.pop("artifacts", []):
         evidence: dict = {"name": Path(item["name"]).name, "status": "not_saved"}
@@ -115,11 +136,7 @@ def _persist_artifacts(
                 error_code = "browser_artifact_format_unsupported"
                 raise ValueError("unsupported run file format")
             error_code = "browser_artifact_storage_failed"
-            persisted.append(
-                store_run_file(
-                    run_id, content, name=item["name"], owner_user_id=owner_id, tenant_id=tenant_id
-                )
-            )
+            persisted.append(store(content, item["name"]))
         except RECOVERABLE_ERRORS:
             unsaved.append({**evidence, "error_code": error_code})
     result["artifacts"] = persisted
@@ -128,15 +145,16 @@ def _persist_artifacts(
         mark_delivery_incomplete(result, "browser_artifact_persistence_failed")
     # An attachment failure must not discard evidence of completed browser effects.
     receipt = {k: v for k, v in result.items() if k not in {"artifacts", "snapshot"}}
-    receipt.update(run_id=run_id, artifacts=persisted)
+    from app.domain.browser_receipt import evidence_hash
+
+    receipt.update(run_id=run_id, artifacts=persisted, binding=binding)
+    if "snapshot" in result:
+        receipt["snapshot_sha256"] = evidence_hash(result["snapshot"])
     try:
         persisted.append(
-            store_run_file(
-                run_id,
+            store(
                 json.dumps(receipt, ensure_ascii=False, allow_nan=False).encode(),
-                name="browser-receipt.json",
-                owner_user_id=owner_id,
-                tenant_id=tenant_id,
+                "browser-receipt.json",
             )
         )
     except RECOVERABLE_ERRORS:
@@ -188,7 +206,18 @@ def execute_browser(action: str, params: dict, context: dict) -> dict:
                     before_action=recheck_authority,
                 )
             )
-            _persist_artifacts(result, root, run.run_id, int(actor.id), str(context["tenant_id"]))
+            from app.application.agent_orchestrator.verification_surface import (
+                execution_surface_binding,
+            )
+
+            _persist_artifacts(
+                result,
+                root,
+                run.run_id,
+                int(actor.id),
+                str(context["tenant_id"]),
+                execution_surface_binding(run, params, context),
+            )
         return {**result, "run_id": run.run_id, "untrusted_page_content": True}
     except RECOVERABLE_ERRORS:
         return {

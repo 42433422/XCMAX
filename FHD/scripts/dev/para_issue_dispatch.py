@@ -23,11 +23,13 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -75,6 +77,8 @@ class DispatchResult:
     pr_number: int = 0
     llm_used: bool = False
     original_sha: str = ""
+    source_run_id: int = 0
+    source_run_attempt: int = 0
     ci_run_id: int = 0
     github_run_id: int = 0
 
@@ -120,7 +124,7 @@ class DispatchClient:
                 "Accept": "application/json",
             },
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with repair.publication.read_management(req, timeout=30) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
         if not isinstance(payload, dict):
             raise ValueError("invalid dispatch response")
@@ -133,6 +137,10 @@ class DispatchClient:
     def get(self, task_id: str) -> dict:
         path = "/api/service/mac-control/tasks/" + urllib.parse.quote(task_id, safe="")
         return self._task(self._call("GET", path))
+
+    def publication(self, task_id: str) -> dict:
+        request = str(uuid.UUID(task_id))
+        return self._call("GET", f"/api/service/mac-control/github-runs/{request}")
 
     @staticmethod
     def _task(response: dict) -> dict:
@@ -217,7 +225,15 @@ def _receipt(result: DispatchResult, token: str) -> None:
         "issue_number": result.issue_number,
         "base_branch": result.base_branch,
         "control_task_id": result.control_task_id,
-        **({"source_sha": result.original_sha} if result.original_sha else {}),
+        **(
+            {
+                "source_sha": result.original_sha,
+                "source_run_id": result.source_run_id,
+                "source_run_attempt": result.source_run_attempt,
+            }
+            if result.original_sha
+            else {}
+        ),
     }
     pending = result.status == "timeout"
     outcome = (
@@ -261,12 +277,31 @@ def _receipt(result: DispatchResult, token: str) -> None:
 
 
 def _validated_resume(
-    args: argparse.Namespace, comments: list[dict[str, Any]], *, source_sha: str = ""
+    args: argparse.Namespace,
+    comments: list[dict[str, Any]],
+    *,
+    source_sha: str = "",
+    source_run_id: int = 0,
+    source_run_attempt: int = 0,
 ) -> str:
     """Only resume an identity previously receipted by this repository's workflow."""
     task_id = str(getattr(args, "control_task_id", "") or "").strip()
     if not task_id:
         return ""
+    proof = getattr(args, "_worker_resume_proof", None)
+    if proof is not None:
+        gate = repair.publication.require_live_publication(proof)
+        expected = {
+            "request_id": str(uuid.UUID(task_id)),
+            "repository": args.repo,
+            "issue_number": int(args.issue_number),
+            "source_sha": source_sha,
+            "source_run_id": source_run_id,
+            "source_run_attempt": source_run_attempt,
+        }
+        if all(gate.get(key) == value for key, value in expected.items()):
+            return task_id
+        raise ValueError("worker completion differs from its original approved request")
     for comment in comments:
         user = comment.get("user") or {}
         if user.get("login") != "github-actions[bot]" or user.get("type") != "Bot":
@@ -284,7 +319,15 @@ def _validated_resume(
                 "issue_number": int(args.issue_number),
                 "base_branch": args.base_branch,
                 "control_task_id": task_id,
-                **({"source_sha": source_sha} if source_sha else {}),
+                **(
+                    {
+                        "source_sha": source_sha,
+                        "source_run_id": source_run_id,
+                        "source_run_attempt": source_run_attempt,
+                    }
+                    if source_sha
+                    else {}
+                ),
             }
             if isinstance(identity, dict) and all(
                 identity.get(k) == v for k, v in expected.items()
@@ -341,6 +384,53 @@ def _read_github(token: str):
     return get
 
 
+def resolve_worker_resume(args, event=None) -> bool:
+    """Resolve a native completion to its original task; names only locate evidence."""
+    if (
+        os.environ.get("GITHUB_ACTIONS") != "true"
+        or os.environ.get("GITHUB_EVENT_NAME") != "workflow_run"
+        or os.environ.get("GITHUB_REF") != "refs/heads/main"
+        or os.environ.get("GITHUB_REPOSITORY") != args.repo
+        or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.repo)
+    ):
+        raise ValueError("worker_resume_requires_trusted_main_event")
+    if event is None:
+        event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+    token = os.environ.get("MODSTORE_PARA_DISPATCH_TOKEN", "").strip()
+    if not token:
+        raise ValueError("worker_resume_dispatch_token_missing")
+    client = DispatchClient(args.dispatch_base, token)
+    deadline = time.monotonic() + args.timeout_minutes * 60
+
+    def read(fetch, task_id):
+        while True:
+            try:
+                return fetch(task_id)
+            except urllib.error.HTTPError as exc:
+                if exc.code not in {429, 500, 502, 503, 504}:
+                    raise
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                raise ValueError("original_worker_receipt_unavailable")
+            time.sleep(args.poll_seconds)
+
+    resolved = repair.worker_resume(
+        args.repo,
+        event,
+        _read_github(args.token),
+        lambda task_id: read(client.publication, task_id),
+        lambda task_id: read(client.get, task_id),
+        token=args.token,
+    )
+    if resolved is None:
+        return False
+    # Completion can precede the scheduler's report projection. The original
+    # producer waits on this exact task after native same-Issue concurrency.
+    vars(args).update(resolved)
+    return True
+
+
 def _observe_update(result: DispatchResult, target: repair.Target, head: str, get) -> bool:
     repo = result.repo
     for attempt in range(7):
@@ -372,6 +462,107 @@ def _finish_update(result: DispatchResult, target: repair.Target, head: str, get
     if observed:
         _finish(result, "pr_updated_ci_observed", "已回读原 PR 新 HEAD 与 CI 运行", 0)
     _finish(result, "pr_updated_ci_pending", "原 PR 新 HEAD 已确认，暂未读到 CI 运行", 6)
+
+
+def _advance_original(result, target, task, client, args, intent):
+    get = _read_github(args.token)
+    if not repair.candidate_belongs_to_task(result.branch, task.get("execution") or {}, target):
+        _finish(
+            result, "pr_repair_blocked", "candidate_original_task_branch_mismatch", 6, args.token
+        )
+    token = os.environ.get("PR_CREATE_TOKEN", "").strip()
+    if not token:
+        _finish(
+            result,
+            "pr_repair_blocked",
+            "PR_CREATE_TOKEN 未配置，原 PR CI 无法可靠触发",
+            6,
+            args.token,
+        )
+    intent_saved = bool(intent)
+
+    def verify():
+        state = client.publication(result.control_task_id)
+        if repair.publication.authorized_original_pr(state, result.repo, get) != target:
+            raise ValueError("original_pr_repair_target_changed")
+        proof = repair.verify_publication(
+            state,
+            target,
+            result.head_sha,
+            repo=result.repo,
+            control_task_id=result.control_task_id,
+            para_task_id=result.para_task_id,
+            github_run_id=result.github_run_id,
+            token=args.token,
+        )
+        if proof.authorization.get("issue_number") != result.issue_number:
+            raise ValueError("original_pr_publication_issue_mismatch")
+        return proof
+
+    def before_write():
+        nonlocal intent_saved
+        if not intent_saved:
+            body = repair.intent_body(
+                result.repo,
+                result.issue_number,
+                target,
+                result.head_sha,
+                control_task_id=result.control_task_id,
+                para_task_id=result.para_task_id,
+                github_run_id=result.github_run_id,
+            )
+            response = impl._gh_post(
+                f"https://api.github.com/repos/{result.repo}/issues/{result.issue_number}/comments",
+                args.token,
+                {"body": body},
+            )
+            if not isinstance(response, dict) or response.get("_error") or not response.get("id"):
+                raise ValueError("original_pr_intent_write_unconfirmed")
+            comments = list(
+                freshness.pages(get, f"/repos/{result.repo}/issues/{result.issue_number}/comments")
+            )
+            recorded = repair.prior_intent(
+                result.repo, result.issue_number, target.branch, comments
+            )
+            if recorded != (
+                target,
+                result.head_sha,
+                result.control_task_id,
+                result.para_task_id,
+                result.github_run_id,
+            ):
+                raise ValueError("original_pr_intent_readback_unconfirmed")
+            intent_saved = True
+        return verify()
+
+    try:
+        proof = verify()
+        result.changed_files = repair.advance(
+            f"https://github.com/{result.repo}.git",
+            target,
+            result.head_sha,
+            token,
+            before_write=before_write,
+            authorization=proof,
+        )
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        freshness.LookupFailed,
+        subprocess.SubprocessError,
+    ):
+        if intent_saved:
+            _finish_update(result, target, result.head_sha, get)
+        _finish(
+            result,
+            "pr_repair_blocked",
+            "original_pr_publication_authorization_or_write_unconfirmed",
+            6,
+            args.token,
+        )
+    _finish_update(result, target, result.head_sha, get)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -432,6 +623,9 @@ def run(args: argparse.Namespace) -> None:
                     intent
                 )
                 result.original_sha = target.old_sha
+                result.source_run_id = target.run_id
+                result.source_run_attempt = target.run_attempt
+                result.executor = GITHUB_REPAIR
                 result.head_sha = head
                 result.pr_number = target.number
                 result.pr_url = f"https://github.com/{repo}/pull/{target.number}"
@@ -443,15 +637,13 @@ def run(args: argparse.Namespace) -> None:
                 raise ValueError("original PR source changed after the write intent")
             target = selected
             if target:
-                result.tool = "codex"
+                result.tool = "opencode"
+                result.executor = GITHUB_REPAIR
                 result.original_sha = target.old_sha
+                result.source_run_id = target.run_id
+                result.source_run_attempt = target.run_attempt
                 result.pr_number = target.number
                 result.pr_url = f"https://github.com/{repo}/pull/{target.number}"
-                finish(
-                    "pr_repair_blocked",
-                    "原 PR 自动修复暂停：尚无不可导出的任务模型凭据；仅可回读已应用结果",
-                    6,
-                )
         except (
             OSError,
             ValueError,
@@ -462,7 +654,11 @@ def run(args: argparse.Namespace) -> None:
             finish("pr_repair_blocked", f"原 PR 更新身份未确认：{type(exc).__name__}", 6)
     try:
         requested_task = _validated_resume(
-            args, comments, source_sha=target.old_sha if target else ""
+            args,
+            comments,
+            source_sha=target.old_sha if target else "",
+            source_run_id=target.run_id if target else 0,
+            source_run_attempt=target.run_attempt if target else 0,
         )
         if result.control_task_id and requested_task and requested_task != result.control_task_id:
             raise ValueError("resume task differs from the durable original PR write intent")
@@ -484,7 +680,7 @@ def run(args: argparse.Namespace) -> None:
     run_id = os.environ.get("GITHUB_RUN_ID", "local")
     # Rerunning the same workflow must recover the same idempotent dispatch.
     result.request_key = (
-        f"gh-issue-{number}-ci-{target.run_id}-{target.old_sha}"
+        f"gh-issue-{number}-ci-{target.run_id}-attempt-{target.run_attempt}-{target.old_sha}"
         if target
         else f"gh-issue-{number}-run-{run_id}"
     )
@@ -502,6 +698,7 @@ def run(args: argparse.Namespace) -> None:
                         {
                             "source_sha": target.old_sha,
                             "source_run_id": target.run_id,
+                            "source_run_attempt": target.run_attempt,
                             "pull_request": target.number,
                         }
                         if target
@@ -537,6 +734,13 @@ def run(args: argparse.Namespace) -> None:
             task = client.get(result.control_task_id)
             if target and task.get("executor") != GITHUB_REPAIR:
                 finish("pr_repair_blocked", "原任务没有 GitHub 云端修复授权回执", 6)
+            proof = getattr(args, "_worker_resume_proof", None)
+            if proof is not None and (
+                task.get("id") != result.control_task_id
+                or task.get("github_run_id") != proof.authorization["run_id"]
+                or task.get("para_task_id") != proof.authorization["task_id"]
+            ):
+                finish("pr_repair_blocked", "worker_completion_original_task_changed", 6)
             if intent and (
                 task.get("id") != intent[2]
                 or task.get("para_task_id") != intent[3]
@@ -549,6 +753,8 @@ def run(args: argparse.Namespace) -> None:
                 result.github_run_id = task["github_run_id"]
             result.final_state = state
             _write_report(result)
+            if target and state == "awaiting_approval":
+                finish("awaiting_approval", "original_pr_company_budget_required", 2)
             if state in TERMINAL_STATES:
                 break
         except (OSError, ValueError, KeyError) as exc:
@@ -590,7 +796,7 @@ def run(args: argparse.Namespace) -> None:
         if reported_head and reported_head != remote_head:
             finish("head_mismatch", "回报提交与远端分支不一致，拒绝创建 PR", 6)
         if target:
-            finish("pr_repair_blocked", repair.REPAIR_CREDENTIAL_BLOCK, 6)
+            _advance_original(result, target, task, client, args, intent)
         result.changed_files = _checked_diff(repo, args.base_branch, remote_head, args.token)
         if result.changed_files > impl.MAX_CHANGED_FILES:
             finish(
@@ -657,7 +863,7 @@ def run(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Dispatch an ai-implement issue to Para")
-    parser.add_argument("--issue-number", required=True)
+    parser.add_argument("--issue-number")
     parser.add_argument("--repo", required=True)
     parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""))
     parser.add_argument("--base-branch", default="main")
@@ -675,7 +881,34 @@ def main() -> None:
     )
     parser.add_argument("--poll-seconds", type=int, default=30)
     parser.add_argument("--timeout-minutes", type=int, default=75)
-    run(parser.parse_args())
+    parser.add_argument("--resume-worker-event", action="store_true")
+    parser.add_argument(
+        "--resolve-only",
+        action="store_true",
+        help="Read the original identity for native job concurrency",
+    )
+    args = parser.parse_args()
+    try:
+        if args.resume_worker_event and not resolve_worker_resume(args):
+            print("[para-dispatch] worker completion belongs to another existing workflow")
+            return
+        number = int(args.issue_number)
+        if number < 1:
+            raise ValueError("issue_number_must_be_positive")
+        if os.environ.get("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                output.write(f"issue_number={number}\n")
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        freshness.LookupFailed,
+        subprocess.SubprocessError,
+    ) as exc:
+        raise SystemExit(f"Dispatch identity rejected ({type(exc).__name__})") from None
+    if not args.resolve_only:
+        run(args)
 
 
 if __name__ == "__main__":

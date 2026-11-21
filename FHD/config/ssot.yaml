@@ -91,6 +91,7 @@ domains:
     derived:
       - FHD/CHANGELOG.md
       - FHD/docs/architecture/AIOPEN_FULL_SURFACE.md
+      - FHD/docs/architecture/PROCESS_FLOW_SSOT.md
       - FHD/docs/aiopen.md
       - FHD/docs/security/CREDENTIAL_INCIDENT_CLOSEOUT.md
       - FHD/XCAGI/README.md

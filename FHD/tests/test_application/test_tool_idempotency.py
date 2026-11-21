@@ -395,6 +395,18 @@ def test_valid_receipt_cannot_release_or_complete_an_uncertain_effect(claims, mo
     assert replay["retryable"] is False and replay["reconciliation_required"]
     assert calls == [failure] and _effect_count(claims) == 1
 
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        {"requires_reconciliation": True},
+        {"outcome_unknown": True},
+        {"execution_status": "unknown"},
+        {"result": {"execution_status": "timeout"}},
+        {"result": {"outputs": [{"execution_state": "unknown"}]}},
+        {"payload": {"final_output": {"node_outputs": {"job": {"status": "accepted"}}}}},
+    ],
+)
 def test_first_executor_receipt_matches_durable_unknown_replay(claims, monkeypatch, marker):
     def dispatch(*_args, **_kwargs):
         with sqlite3.connect(claims) as conn:

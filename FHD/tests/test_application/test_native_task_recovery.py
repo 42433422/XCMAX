@@ -133,7 +133,9 @@ def _repositories(actor):
     )
 
 
-def _finish_with_startup(monkeypatch, repository, queue, execute, run_id):
+def _finish_with_startup(
+    monkeypatch, repository, queue, execute, run_id, *, expected_status="completed"
+):
     dispatcher = task_dispatcher.AgentTaskDispatcher(
         execution_repository=queue,
         run_repository=repository,
@@ -155,8 +157,10 @@ def _finish_with_startup(monkeypatch, repository, queue, execute, run_id):
         }:
             time.sleep(0.02)
         stored = repository.get(run_id)
-        assert stored.status == "completed", stored.to_dict()
-        assert queue.get(run_id).state == "succeeded"
+        assert stored.status == expected_status, stored.to_dict()
+        assert queue.get(run_id).state == (
+            "succeeded" if expected_status == "completed" else expected_status
+        )
         return stored
     finally:
         dispatcher.stop()
@@ -617,7 +621,17 @@ os._exit(23)
         finally:
             set_agent_run_repository_for_tests(None)
     else:
-        stored = _finish_with_startup(monkeypatch, repository, queue, execute, run.run_id)
+        # This executor proves the original approval/lease transfer and returns
+        # only an execution count. It creates no native import/source receipt.
+        stored = _finish_with_startup(
+            monkeypatch, repository, queue, execute, run.run_id, expected_status="blocked"
+        )
+        assert stored.steps[0].output == {"success": True, "data": {"executed_rows": 1}}
+        assert (
+            stored.tool_calls[-1].metadata["verification"]["code"] == "result_verifier_unavailable"
+        )
+        with pytest.raises(ValueError, match="人工核对"):
+            AgentOrchestrator(repository=repository).retry_run(run.run_id)
     assert (
         approved.metadata["approval_receipt"].items() <= stored.metadata["approval_receipt"].items()
     )
@@ -739,7 +753,14 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     assert new.run_id == old.run_id and new.execution_count == old.execution_count + 1
     dispatcher._execute_claim(new, "replacement")
     stored = repository.get(run.run_id)
-    assert stored.status == "completed" and queue.get(run.run_id).state == "succeeded"
+    # cleanup_verified refers to reaping the exited process, not import-result
+    # verification. The synthetic table below proves exact-once fixture writes;
+    # its bare count cannot certify a real ELT business result.
+    assert stored.status == "blocked" and queue.get(run.run_id).state == "blocked"
+    assert stored.tool_calls[-1].metadata["verification"]["code"] == "result_verifier_unavailable"
+    assert queue.claim("third-worker", lease_seconds=60, run_id=run.run_id) is None
+    with pytest.raises(ValueError, match="人工核对"):
+        AgentOrchestrator(repository=repository).retry_run(run.run_id)
     assert stored.steps[0].output == {"success": True, "data": {"executed_rows": 2}}
     with sqlite3.connect(fixture) as db:
         assert db.execute("select file from elt_checkpoint_test order by file").fetchall() == [

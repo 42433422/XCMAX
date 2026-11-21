@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 import os
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -14,11 +14,26 @@ def _facade():
 
 
 def _register_scheduler_phase_04():
+    from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
 
     from modstore_server.retort_evolution import tick as retort_tick
-    from modstore_server.workflow_scheduler import _run_tracked_scheduler_job, _scheduler
+    from modstore_server.strategic_portfolio_scheduler import tick as portfolio_tick
+    from modstore_server.workflow_scheduler import (
+        _business_misfire_grace_time,
+        _run_tracked_scheduler_job,
+        _scheduler,
+        logger,
+    )
 
+    _scheduler.add_job(
+        lambda: _run_tracked_scheduler_job("strategic_portfolio", portfolio_tick),
+        IntervalTrigger(seconds=60),
+        id="strategic_portfolio",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
     _scheduler.add_job(
         lambda: _run_tracked_scheduler_job("retort_evolution", retort_tick),
         IntervalTrigger(seconds=30),
@@ -30,8 +45,6 @@ def _register_scheduler_phase_04():
     if os.environ.get("MODSTORE_RETORT_FEEDBACK_ACTOR_ID") and os.environ.get(
         "MODSTORE_RETORT_FEEDBACK_TEMPLATE"
     ):
-        from apscheduler.triggers.cron import CronTrigger
-
         from modstore_server.retort_customer_feedback import scheduled_create
 
         _scheduler.add_job(
@@ -157,63 +170,64 @@ def _register_scheduler_phase_04():
         _facade().logger.exception("register self evolution metrics job failed")
 
     def _strategy_bet_review_job() -> None:
+        from modstore_server.workflow_scheduler import _run_tracked_scheduler_job, logger
+
         try:
             from modstore_server.strategy_bets import run_review
 
-            out = _facade()._run_tracked_scheduler_job("strategy_bet_review", run_review)
-            _facade().logger.info(
+            out = _run_tracked_scheduler_job("strategy_bet_review", run_review)
+            logger.info(
                 "strategy bet review: reviewed=%s verdicts=%s",
                 out.get("reviewed"),
                 out.get("verdicts"),
             )
         except RECOVERABLE_ERRORS:
-            _facade().logger.exception("strategy bet review job failed")
+            logger.exception("strategy bet review job failed")
 
     try:
-        _facade()._scheduler.add_job(
+        _scheduler.add_job(
             _strategy_bet_review_job,
-            _facade().CronTrigger(hour=21, minute=40, timezone="Asia/Shanghai"),
+            CronTrigger(hour=21, minute=40, timezone="Asia/Shanghai"),
             id="strategy_bet_review",
             replace_existing=True,
-            next_run_time=_facade().datetime.now(_facade().timezone.utc)
-            + _facade().timedelta(seconds=115),
-            misfire_grace_time=_facade()._business_misfire_grace_time(),
+            next_run_time=datetime.now(UTC) + timedelta(seconds=115),
+            misfire_grace_time=_business_misfire_grace_time(),
             coalesce=True,
             max_instances=1,
         )
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception("register strategy bet review job failed")
+        logger.exception("register strategy bet review job failed")
 
     def _strategy_planner_job() -> None:
+        from modstore_server.workflow_scheduler import _run_tracked_scheduler_job, logger
+
         try:
             from modstore_server.strategy_planner import plan_strategy
 
-            out = _facade()._run_tracked_scheduler_job("strategy_planner", plan_strategy)
-            _facade().logger.info(
-                "strategy plan: candidates=%s registered=%s evidence=%s",
-                out.get("candidates"),
-                out.get("registered"),
-                out.get("evidence"),
+            out = _run_tracked_scheduler_job("strategy_planner", plan_strategy)
+            logger.info(
+                "strategy plan: status=%s candidates=%s registered=%s dispatched=%s",
+                out.get("status"),
+                len(out.get("candidates") or []),
+                len(out.get("registered") or []),
+                len(out.get("dispatched") or []),
             )
         except RECOVERABLE_ERRORS:
-            _facade().logger.exception("strategy planner job failed")
+            logger.exception("strategy planner job failed")
 
     try:
-        _facade()._scheduler.add_job(
+        _scheduler.add_job(
             _strategy_planner_job,
-            _facade().CronTrigger(
-                day_of_week="mon", hour=21, minute=50, timezone="Asia/Shanghai"
-            ),
+            CronTrigger(day_of_week="mon", hour=21, minute=50, timezone="Asia/Shanghai"),
             id="strategy_planner",
             replace_existing=True,
-            next_run_time=_facade().datetime.now(_facade().timezone.utc)
-            + _facade().timedelta(seconds=140),
-            misfire_grace_time=_facade()._business_misfire_grace_time(),
+            next_run_time=datetime.now(UTC) + timedelta(seconds=140),
+            misfire_grace_time=_business_misfire_grace_time(),
             coalesce=True,
             max_instances=1,
         )
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception("register strategy planner job failed")
+        logger.exception("register strategy planner job failed")
 
     def _telemetry_backlog_scan_job() -> None:
         try:

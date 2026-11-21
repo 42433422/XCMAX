@@ -33,7 +33,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Sequence
 
 StepExecutor = Literal['fhd', 'craft', 'ci', 'external', 'admin']
 logger = logging.getLogger(__name__)
-_STATIC_SKIP_STEP_IDS = frozenset({'P4', 'O1', 'O3', 'O4', 'O5', 'O6', 'O8', 'O9', 'O10'})
+_STATIC_SKIP_STEP_IDS = frozenset({'P4'})
 from modstore_server.production_line_orchestrator_merged import ApprovalGate as ApprovalGate
 from modstore_server.production_line_orchestrator_merged import (
     FiveLineDefinition as FiveLineDefinition,

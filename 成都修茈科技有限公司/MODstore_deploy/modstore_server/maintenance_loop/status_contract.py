@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List
 
-from . import config, deployment, merge_policy, review, risk, store
+from . import config, merge_policy, review, risk, store
 
 
 def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -437,6 +437,13 @@ def _build_runtime_status_result(
     runtime_source,
     latest_event_at,
 ) -> Dict[str, Any]:
+    deploy_enabled = config._env_bool("MODSTORE_SELF_MAINTENANCE_DEPLOY_RECEIPTS_ENABLED", False)
+    production_enabled = deploy_enabled and config._env_bool(
+        "MODSTORE_SELF_MAINTENANCE_PRODUCTION_DEPLOY_ENABLED", False
+    )
+    deploy_envs = (
+        (["staging"] + (["production"] if production_enabled else [])) if deploy_enabled else []
+    )
     return {
         "ok": True,
         "cron": {
@@ -524,17 +531,17 @@ def _build_runtime_status_result(
             "focused_test_command": review._focused_test_command(),
             "threshold": config._env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
             "cooldown_minutes": config._env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
-            "auto_dispatch_deploy": config._auto_dispatch_deploy_enabled(),
-            "auto_dispatch_deploy_envs": deployment._auto_dispatch_deploy_envs(),
-            "auto_dispatch_deploy_dry_run": config._env_flag_enabled(
-                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"
-            ),
+            "auto_dispatch_deploy": deploy_enabled,
+            "auto_dispatch_deploy_envs": deploy_envs,
+            "auto_dispatch_deploy_dry_run": False,
+            "deployment_receipts_enabled": deploy_enabled,
+            "production_deploy_enabled": production_enabled,
         },
         "l4_closure": {
             "target": "L4",
-            "auto_dispatch_deploy": config._auto_dispatch_deploy_enabled(),
-            "auto_dispatch_deploy_envs": deployment._auto_dispatch_deploy_envs(),
-            "half_closed_without_deploy": not config._auto_dispatch_deploy_enabled(),
+            "auto_dispatch_deploy": deploy_enabled,
+            "auto_dispatch_deploy_envs": deploy_envs,
+            "half_closed_without_deploy": not production_enabled,
             "open_items_count": len(state["open_items"][-20:]),
         },
     }

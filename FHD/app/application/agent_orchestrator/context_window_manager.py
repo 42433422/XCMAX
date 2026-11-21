@@ -209,15 +209,6 @@ class ContextWindowManager:
             return self._explicit_budget
         return resolve_token_budget(model)
 
-    @staticmethod
-    def _validate_context(context) -> None:
-        metadata = getattr(context, "metadata", None)
-        request = metadata.get("request_context") if isinstance(metadata, dict) else None
-        if isinstance(request, dict):
-            from app.application.ai_chat.dialogue_memory import conversation_summary
-
-            conversation_summary(request)
-
     def _input_budget(
         self,
         model: str | None,
@@ -243,6 +234,16 @@ class ContextWindowManager:
             if self._explicit_budget is not None:
                 budget = min(budget, self._explicit_budget - output_tokens - external_tokens)
         return budget - max(0, int(reserved_tokens))
+
+
+    @staticmethod
+    def _validate_context(context) -> None:
+        metadata = getattr(context, "metadata", None)
+        request = metadata.get("request_context") if isinstance(metadata, dict) else None
+        if isinstance(request, dict):
+            from app.application.ai_chat.dialogue_memory import conversation_summary
+
+            conversation_summary(request)
 
     async def compress(
         self,
@@ -307,9 +308,10 @@ class ContextWindowManager:
         external_tokens=0,
     ) -> ContextCompressionResult:
         started = time.perf_counter()
-        self._validate_context(context)
         if model_limits is not None:
             model_limits.assert_current()
+
+        self._validate_context(context)
         pre_tokens = estimate_messages_tokens(messages)
         budget = self._input_budget(
             model, model_limits, output_tokens, external_tokens, reserved_tokens

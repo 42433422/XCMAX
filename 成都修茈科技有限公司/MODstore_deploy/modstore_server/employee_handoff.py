@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from modstore_server.xiaoc_life_chat import require_manual_life_capability
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +245,7 @@ def perform_handoff(
         "skip_reason": str,
       }
     """
+    require_manual_life_capability()
     src = str(source_employee_id or "").strip()
     tgt = str(target_employee_id or "").strip()
     reason_s = str(reason or "").strip()[:500]

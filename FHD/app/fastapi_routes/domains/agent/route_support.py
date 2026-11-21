@@ -43,21 +43,24 @@ def project_execution_failure(
     """Expose a stopped lease without rewriting business receipts or stored state."""
     if (
         execution is None
-        or canonical_execution_state(execution.state) != "failed"
+        or canonical_execution_state(execution.state) not in {"failed", "unknown"}
         or result.status not in {"queued", "planning", "running", "retrying"}
     ):
         return result
     code = execution.last_error_code
-    status = "blocked" if code == "needs_verification" else "failed"
+    uncertain = (
+        canonical_execution_state(execution.state) == "unknown" or code == "needs_verification"
+    )
+    status = "blocked" if uncertain else "failed"
     metadata = dict(result.metadata)
-    if code in {"needs_verification", "retries_exhausted"}:
+    if uncertain or code == "retries_exhausted":
         metadata["non_retryable"] = True
-    if code == "needs_verification":
+    if uncertain:
         recovery = metadata.get("recovery")
         metadata["recovery"] = {
             **(recovery if isinstance(recovery, dict) else {}),
             "state": "manual_reconciliation_required",
-            "error_code": code,
+            "error_code": code or "needs_verification",
         }
     updated_at = execution.finished_at or execution.updated_at or result.updated_at
     changes: dict[str, Any] = {
@@ -73,7 +76,7 @@ def project_execution_failure(
         metadata["progress"] = {
             **progress,
             "status": status,
-            "stage": "执行结果待人工核对" if code == "needs_verification" else stage,
+            "stage": "执行结果待人工核对" if uncertain else stage,
             "updated_at": updated_at,
         }
         changes["attention_state"] = attention_for_status(status)

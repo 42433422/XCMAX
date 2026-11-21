@@ -152,11 +152,11 @@ def test_short_scope_answer_supplies_authorized_history_to_independent_review():
         request = json.loads(kwargs["messages"][-1]["content"])
         calls.append(request)
         assert request["user_message"] == "全部的"
-        if request["task"] == "audit_goal_coverage":
-            assert request["context"]["prior_conversation"] == history
-            return goal_review_response(
-                request, source="全部的", node_ids=["model_reply"], outcome="unsupported"
-            )
+        if request["task"] == "audit_reply":
+            assert request["conversation_history"] == history
+            assert "prior_conversation" not in request["context"]
+            assert request["reply"] == reply
+            return _response({"violations": []})
         assert request["recent_messages"] == history
         assert "prior_conversation" not in request["context"]
         assert any("整库重置" in rule for rule in request["rules"])
@@ -176,7 +176,8 @@ def test_short_scope_answer_supplies_authorized_history_to_independent_review():
     )
     assert len(calls) == 2
     assert plan.metadata["reply"] == reply
-    assert plan.metadata["goal_coverage"]["goals"][0]["outcome"] == "unsupported"
+    assert plan.metadata["goal_coverage"]["goals"][0]["outcome"] == "reply"
+    assert [(node.tool_id, node.action) for node in plan.nodes] == [("conversation", "reply")]
 
 
 def test_rejected_business_plan_preserves_a_durable_question_without_business_nodes():

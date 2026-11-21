@@ -179,7 +179,7 @@ def test_sync_service_and_persisted_messages_remain_failed(failed_service, monke
     assert service.list_messages(user_id=1)[-1]["status"] == "failed" and len(calls) == 1
 
 
-def test_message_backfill_records_failure_once(failed_service):
+def test_message_history_never_starts_a_cli_backfill(failed_service):
     service, calls = failed_service
     service._append_messages(
         [
@@ -193,8 +193,10 @@ def test_message_backfill_records_failure_once(failed_service):
             )
         ]
     )
-    assert service.list_messages(user_id=1)[-1]["status"] == "failed"
-    assert service.list_messages(user_id=1)[-1]["status"] == "failed" and len(calls) == 1
+    first = service.list_messages(user_id=1)
+    assert len(first) == 1 and first[0]["status"] == "sent"
+    assert service.list_messages(user_id=1) == first
+    assert calls == []
 
 
 @pytest.mark.parametrize("missing_receipt", [False, True])
@@ -249,6 +251,8 @@ def test_failed_coding_does_not_verify_retry_or_publish(child, tmp_path):
             hard_cap=lambda: 20,
         ),
     )
-    with pytest.raises(CliExecutionError):
+    with pytest.raises(CliExecutionError) as failed:
         workflow.run_dev_task_loop(sys.executable, "task", str(tmp_path))
-    assert effects == ["cleanup"]
+    assert effects == []
+    assert failed.value.receipt["workspace_preserved"] is True
+    assert failed.value.receipt["workspace"] == str(tmp_path)

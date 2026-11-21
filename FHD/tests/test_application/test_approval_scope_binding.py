@@ -273,9 +273,13 @@ def test_queued_approval_and_retry_do_not_execute_after_scope_drift(monkeypatch,
         monkeypatch.setattr(orchestrator, "_prepare_repair_or_retry", repair)
     finished = orchestrator.execute_dispatched_run(run.run_id)
     if drift is None:
-        assert finished.status == "completed" and len(calls) == 1, (
+        assert finished.status == "blocked" and len(calls) == 1, (
             finished.error,
             [step.output for step in finished.steps],
+        )
+        assert finished.steps[0].output["success"] is True
+        assert (
+            finished.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
         )
     else:
         assert finished.status == "waiting_user", (
@@ -436,7 +440,11 @@ def test_trusted_mutation_policy_and_preview_reach_the_real_executor(
             is not None
         )
     if policy == "allow_once":
-        assert finished.status == "completed", finished.steps[0].output
+        assert finished.status == "blocked", finished.steps[0].output
+        assert finished.steps[0].output["success"] is True
+        assert (
+            finished.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
+        )
         assert exists is False
     else:
         assert finished.steps[0].output["error_code"] == "mutation_blocked"

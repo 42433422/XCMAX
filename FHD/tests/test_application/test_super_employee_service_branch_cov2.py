@@ -1414,7 +1414,11 @@ class TestPrepareWorktree:
 class TestRunDevTaskLoop:
     def test_worktree_fail_falls_back_to_cli_once(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("cli answer"))
-        with patch.object(svc, "_prepare_worktree", return_value=None):
+        with (
+            patch.object(svc, "_prepare_worktree", return_value=None),
+            patch.object(svc, "_is_git_repo", return_value=False),
+            patch("app.application.super_employee.development.Path.exists", return_value=False),
+        ):
             result = svc._run_dev_task_loop("/fake/cli", "do task", str(tmp_path))
             assert "cli answer" in result
 

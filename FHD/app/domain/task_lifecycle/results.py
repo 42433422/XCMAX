@@ -208,6 +208,31 @@ def execution_result_error(data: dict[str, Any]) -> str:
     for result in execution_result_envelopes(data):
         if result.get("error"):
             return str(result["error"])
+        for key in ("verification", "artifact_postcondition"):
+            report = result.get(key)
+            if report is False:
+                return "任务结果未通过核验"
+            if not isinstance(report, dict):
+                continue
+            states = execution_result_states(report)
+            verdict = str(report.get("verdict") or "").strip().lower()
+            states.add(_STATE_ALIASES.get(verdict, verdict))
+            # This only rejects explicit negative receipts. A claimed pass is
+            # not independent evidence; its collection belongs to the verifier.
+            if (
+                report.get("error")
+                or states & (_UNFINISHED_STATES | {"unverified", "not_verified", "inconclusive"})
+                or any(
+                    report.get(flag) is False for flag in ("success", "ok", "passed", "accepted")
+                )
+                or (report.get("verified") is False and "not_required" not in states)
+            ):
+                return str(
+                    report.get("error")
+                    or report.get("reason")
+                    or report.get("message")
+                    or "任务结果未通过核验"
+                )
         if (
             execution_result_states(result) & _UNFINISHED_STATES
             or result.get("reconciliation_required")

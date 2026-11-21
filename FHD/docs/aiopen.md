@@ -253,14 +253,17 @@ uv run --frozen --extra server-api --extra computer-use python -m playwright ins
 
 ### 入口与复用边界
 
-现有 Agent 的工具目录提供两条入口，继续使用现有模型网关和规划器：
+现有 Agent 的工具目录提供三条入口，继续使用现有模型网关和规划器：
 
 | 入口 | 执行位置 | 完成依据 |
 |---|---|---|
 | `aiopen.ui_*` | 当前账号和租户的 XCAGI 页面 | 写操作只说明动作已执行；批准计划必须包含同屏幕、依赖于写操作的 `ui_verify` 回读 |
 | `browser.observe` / `browser.execute` | 每任务新建的 Playwright Chromium context | observe 返回未信任页面快照；execute 必须执行 `verify`，核验全通过才能 `verified=true` |
+| 本地已配置的 Playwright MCP | 原账号、租户、任务所属的持久 worker 与浏览器代次 | 写前冻结具体后置条件，写后只读新快照；整体目标仍由原循环末端等待与快照核验 |
 
-两条入口均从 `AgentToolExecutor` 到现有 dispatcher，验证签名会话、运行归属、完整存储计划、当前步骤、标准幂等键、租约与审批记录。spawn 通过独立服务端参数传递租约代次，并恢复调用方 workflow 数据库，模型字段不能冒充租约。写操作先落现有幂等账本，未知结果保留原任务待核对；手工调用 dispatcher、模型自带身份字段或页面文字都不能授权。内部光标由 HTTP 进程持有，因此隔离 Agent 子进程通过仅限 loopback 的 HTTP 桥接调用原有 `/api/aiopen/invoke`，使用按账号/租户、单动作、单次配额、短期有效的临时 Key，调用结束撤销。原任务编号不被 HTTP 子轨迹覆盖。
+三条入口均从 `AgentToolExecutor` 到现有 dispatcher，验证签名会话、运行归属、完整存储计划、当前步骤、标准幂等键、租约与审批记录。spawn 通过独立服务端参数传递租约代次，并恢复调用方 workflow 数据库，模型字段不能冒充租约。写操作先落现有幂等账本，未知结果保留原任务待核对；手工调用 dispatcher、模型自带身份字段或页面文字都不能授权。内部光标由 HTTP 进程持有，因此隔离 Agent 子进程通过仅限 loopback 的 HTTP 桥接调用原有 `/api/aiopen/invoke`，使用按账号/租户、单动作、单次配额、短期有效的临时 Key，调用结束撤销。原任务编号不被 HTTP 子轨迹覆盖。
+
+独立核验接入原 `result_verification`：执行前冻结原调用身份、参数和具体断言，执行后先持久化原回执再回查。原生浏览器与 `computer_execute` 读取原制品或效果记录，核对观察摘要、时间及文件字节，只证明记录时的 DOM、像素或文件完整性，不宣称当前页面仍相同。AIOPEN 通过原屏幕的 `ui_verify`、MCP 通过原 worker 的只读快照核对新状态；会话丢失不新建浏览器。点击等动作没有可区分的后置条件、权限已撤销或回查失败时保持 `inconclusive`。所有这些证据均明确 `business_effect_verified=false`，业务交易仍需原业务来源核验；重新核验不会重放输入。
 
 内部 Agent 的 `ui_*` 写操作 Schema 要求非空白 `session_id`，计划只接受不含 `branches` 的依赖图；后续同屏幕 `ui_verify` 必须同时存在于尚可执行的持久化步骤中。外部 REST/MCP 原有定义不受这项 Agent 约束修改。
 
@@ -321,7 +324,7 @@ export XCAGI_AIOPEN_INTERNAL_URL='http://127.0.0.1:5000'
 | 已执行写入在失败后可能重放 | 任务写前占用；异常回执 unknown 且不重试 | 外部站点不提供原子事务，不能宣称恰好一次 |
 | 点击完成等同业务成功 | 当前页面要求依赖回读；外站必填 verify 与可选步骤断言 | 断言内容需要与业务目标相关 |
 | 无外站浏览器执行层 | 薄适配复用 Playwright 1.65.1 | 操作限批准来源和固定动作，不支持任意脚本 |
-| 逐调用 MCP 会话丢失页面状态 | 外站多步在一次 BrowserContext 内执行 | 通用 MCP 长连接/恢复池仍未实现 |
+| 逐调用 MCP 会话丢失页面状态 | Playwright MCP 按原账号、租户和任务保留同一 worker/会话代次；原生 browser.execute 在一次 context 内执行 | 原浏览器丢失后禁止替换会话继续，未实现跨宿主页面恢复 |
 | 上传路径与下载临时文件缺乏归属，附件失败丢失原核验 | 复用现有摘要校验与产物下载权限；逐附件保存并保留原执行证据，公共执行器传递可下载回执 | 未支持格式标记未保存；交付不完整时保留待核对并禁止重放 |
 | Cookie/profile 跨任务污染 | 每任务独立 context，禁止共享 profile | 登录持久化、MFA/验证码及人工接管尚未实现 |
 | 脱敏仅覆盖日志，快照/截图仍可泄露输入 | 内部光标与外站表单快照/截图分别处理 | 任意网页文本不能自动证明无敏感信息 |

@@ -71,7 +71,6 @@ class CliExecutionError(RuntimeError):
         if not started and reason != "unavailable" and stage == "cli":
             detail = "启动失败"
             code = "cli_launch_failed"
-        diagnostic = stderr[:4096] + ("\n[stderr truncated]" if len(stderr) > 4096 else "")
         message = f"{tool}{' CLI' if stage == 'cli' else ''} {detail}。"
         if started:
             message += "任务效果尚未确认，请核对已有变更；不会自动重放。"
@@ -89,12 +88,29 @@ class CliExecutionError(RuntimeError):
             "execution_state": "failed" if started else "not_started",
             "stage": stage,
             "exit_code": exit_code,
+            "returncode": exit_code,
             "termination_reason": reason,
             "partial_text": partial_text,
-            "stderr": diagnostic,
+            "partial_output": partial_text,
+            # CLI diagnostics can contain provider keys and local credentials.
+            "stderr_present": bool(stderr),
             "retryable": False,
             "reconciliation_required": started,
         }
+
+    @property
+    def returncode(self) -> int | None:
+        return self.receipt["exit_code"]
+
+    @property
+    def partial_output(self) -> str:
+        return self.receipt["partial_text"]
+
+    def payload(self) -> dict[str, Any]:
+        return {**self.receipt, "returncode": self.returncode, "partial_output": self.partial_output}
+
+    def reply_body(self) -> str:
+        return self.body
 
     @property
     def body(self) -> str:
@@ -102,7 +118,7 @@ class CliExecutionError(RuntimeError):
         return str(self) + (f"\n\n未确认的部分输出：\n{partial}" if partial else "")
 
     def event(self) -> dict[str, Any]:
-        return {"type": "error", **self.receipt}
+        return {"type": "error", **self.payload()}
 
     def payload(self) -> dict[str, Any]:
         receipt = dict(self.receipt)
@@ -131,7 +147,7 @@ def require_cli_success(
 ) -> str:
     reason = killed_reason or (
         "exit_unknown"
-        if returncode is None
+        if type(returncode) is not int
         else "nonzero_exit"
         if returncode != 0
         else "empty_response"
@@ -140,7 +156,11 @@ def require_cli_success(
     )
     if reason:
         raise CliExecutionError(
-            tool, reason, exit_code=returncode, partial_text=text, stderr=stderr
+            tool,
+            reason,
+            exit_code=returncode if type(returncode) is int else None,
+            partial_text=text,
+            stderr=stderr,
         )
     return text
 

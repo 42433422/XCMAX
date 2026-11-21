@@ -1306,7 +1306,9 @@ class TestRunConversationTurn:
         ):
             svc._run_conversation_turn("/cli", "hello", {})
         assert error.value.receipt["exit_code"] == 2
-        assert error.value.receipt["stderr"] == "stderr text"
+        assert error.value.receipt["stderr_present"] is True
+        assert "stderr text" not in str(error.value)
+        assert "stderr" not in error.value.payload()
 
     def test_resume_without_success_receipt_is_not_replayed(self, tmp_path):
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)

@@ -91,6 +91,8 @@ class AgentTaskDispatcher:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._coordinator: threading.Thread | None = None
+        self._outcome_worker: threading.Thread | None = None
+        self._last_outcome_recovery = float("-inf")
 
     @property
     def instance_id(self) -> str:
@@ -121,6 +123,8 @@ class AgentTaskDispatcher:
             if remaining <= 0:
                 break
             worker.join(timeout=remaining)
+        if self._outcome_worker is not None:
+            self._outcome_worker.join(timeout=max(0.0, deadline - time.monotonic()))
 
     def notify(self) -> None:
         self._wake.set()
@@ -158,6 +162,7 @@ class AgentTaskDispatcher:
 
     def _dispatch_available(self) -> None:
         self._prune_and_heartbeat()
+        self._recover_outcomes()
         while not self._stop.is_set() and self._active_count() < self._max_workers:
             owner_id = f"{self._instance_id}:{uuid.uuid4().hex}"
             execution = self._execution_repo.claim(
@@ -180,6 +185,40 @@ class AgentTaskDispatcher:
                     last_heartbeat=time.monotonic(),
                 )
             worker.start()
+
+    def _recover_outcomes(self) -> None:
+        """Reconcile evidence independently so readback cannot delay worker leases."""
+        now = time.monotonic()
+        if (
+            self._stop.is_set()
+            or (self._outcome_worker is not None and self._outcome_worker.is_alive())
+            or now - self._last_outcome_recovery < 30.0
+        ):
+            return
+        self._last_outcome_recovery = now
+
+        def recover() -> None:
+            from app.application.agent_orchestrator.verification_recovery import (
+                reconcile_pending_verifications,
+            )
+            from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
+
+            try:
+                reconcile_pending_verifications(
+                    repository=self._run_repo, stopped=self._stop.is_set
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("original result verification remains pending", exc_info=True)
+            try:
+                reconcile_pending_outcomes(repository=self._run_repo, stopped=self._stop.is_set)
+            except RECOVERABLE_ERRORS:
+                logger.warning("enterprise outcome reconciliation remains pending", exc_info=True)
+            self._wake.set()
+
+        self._outcome_worker = threading.Thread(
+            target=recover, name=f"{self._instance_id}-outcomes", daemon=True
+        )
+        self._outcome_worker.start()
 
     def _active_count(self) -> int:
         with self._active_lock:
@@ -308,12 +347,18 @@ class AgentTaskDispatcher:
         finally:
             _open_effect.reset(effect_token)
             if not abandon:
-                self._execution_repo.finish(
+                finished = self._execution_repo.finish(
                     execution.run_id,
                     owner_id,
                     state,
                     error_code=error_code,
                 )
+                if finished is not None and finished.state == "succeeded":
+                    from app.application.enterprise_cognition.outcomes import (
+                        recover_terminal_outcome,
+                    )
+
+                    recover_terminal_outcome(execution.run_id, repository=self._run_repo)
             with self._active_lock:
                 self._active.pop(execution.run_id, None)
             self._wake.set()

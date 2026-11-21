@@ -1,5 +1,6 @@
 import { api } from './core'
 import type { ApiResponse } from '@/types/api'
+import { getActiveExtensionModHeaders } from '@/utils/apiBase'
 
 /** Shared observation fields; identifiers are diagnostic, never authorization. */
 export interface ExecutionObservation {
@@ -144,11 +145,23 @@ export interface AgentApprovalGrant {
   expires_at: number
 }
 
+export type AgentVerificationStatus = 'verified' | 'failed' | 'inconclusive' | 'pending' | 'not_required' | 'not_verified'
+
+export interface AgentVerificationReport {
+  protocol?: string
+  status: AgentVerificationStatus
+  accepted: boolean
+  independently_verified_steps?: number
+  contract_only_steps?: number
+  steps: Array<Record<string, unknown>>
+}
+
 export interface AgentRunResponse extends ApiResponse<AgentRun> {
   approval?: AgentApprovalGrant
   capabilities?: AgentTaskCapabilities
   control_command?: AgentTaskControlCommand
   execution?: AgentTaskExecution
+  verification?: AgentVerificationReport
   deduplicated?: boolean
 }
 
@@ -330,6 +343,11 @@ export const agentRunsApi = {
 
   retryRun(runId: string): Promise<ApiResponse<AgentRunReference>> {
     return api.post<ApiResponse<AgentRunReference>>(`/api/agent/runs/${encodeURIComponent(runId)}/retry`, {}, { timeoutMs: 15000 })
+  },
+
+  verifyRun(runId: string): Promise<AgentRunResponse> {
+    const url = `/api/agent/runs/${encodeURIComponent(runId)}/verify`
+    return api.post<AgentRunResponse>(url, {}, { timeoutMs: 30_000, quiet: true, headers: getActiveExtensionModHeaders(url) })
   },
 
   getRun(runId: string): Promise<AgentRunResponse> {

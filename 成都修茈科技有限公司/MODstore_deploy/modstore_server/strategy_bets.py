@@ -1,10 +1,8 @@
-"""策略赌注账本：预注册、预算信封、到期结果判定。
+"""Hypothesis evidence adapted from PR #3396 (a0cf41c3), with one SQL control plane.
 
-复用 ``evolution_ledger``（append-only JSONL）与 ``StrategicDecision``（战略库），
-不新增表、不新增存储。所有状态都可由 ledger 重算，进程重启不丢。
-
-闭环：注册（含预注册阈值）→ 预算扣减 → 到期回读指标 → hit/miss/inconclusive
-→ 写回战略决策执行结果，供事后审计复算。
+The original metric adapters and threshold semantics remain reusable. Historical
+JSONL is read-only; approvals, actual usage and outcome snapshots live exclusively
+in StrategicDecision/StrategicActionItem through strategic_portfolio.
 """
 
 from __future__ import annotations
@@ -12,16 +10,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from modstore_server import evolution_ledger
 
-UTC = timezone.utc
+UTC = UTC
 BET_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 DEFAULT_BUDGET: Dict[str, int] = {
     "proposals": 4,
@@ -39,12 +40,38 @@ METRIC_SOURCES: Dict[str, str] = {
     "legacy_ratio": "FHD/metrics/legacy-usage-168h.json",
 }
 REVENUE_METRIC = "revenue_monthly"
+CUSTOMER_ACCEPTANCE_METRIC = "customer_acceptance_ratio"
 DOMAIN_METRIC = "domain_rated_ratio"
 DEFAULT_DOMAIN_AUDIT = "FHD/config/domain_audit.json"
 
 REGISTERED = "strategy_bet_registered"
 SPEND = "strategy_bet_spend"
 OUTCOME = "strategy_outcome"
+
+
+class BetHypothesis(BaseModel):
+    """An approved, falsifiable target; no model-generated spending authority."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    hypothesis: str = Field(min_length=1, max_length=2000)
+    metric_id: str = Field(min_length=1, max_length=64)
+    threshold: float = Field(allow_inf_nan=False)
+    direction: str
+    window_days: int = Field(ge=1, le=365)
+    kill_criteria: list[str] = Field(min_length=1, max_length=16)
+    kill_on_miss: bool = True
+
+    @model_validator(mode="after")
+    def valid_metric(self):
+        if (
+            self.metric_id
+            not in {*METRIC_SOURCES, REVENUE_METRIC, DOMAIN_METRIC, CUSTOMER_ACCEPTANCE_METRIC}
+            or self.direction not in DIRECTIONS
+        ):
+            raise ValueError("unsupported strategy metric or direction")
+        if self.metric_id == CUSTOMER_ACCEPTANCE_METRIC and not 0 <= self.threshold <= 1:
+            raise ValueError("customer acceptance threshold must be between zero and one")
+        return self
 
 
 class BudgetExceeded(ValueError):
@@ -84,64 +111,9 @@ def _positive_int(budget: Dict[str, Any], key: str) -> int:
     return raw
 
 
-def register_bet(
-    *,
-    bet_id: str,
-    title: str,
-    hypothesis: str,
-    metric_id: str,
-    threshold: float,
-    direction: str,
-    window_days: int,
-    kill_criteria: List[str],
-    budget: Optional[Dict[str, int]] = None,
-    scope: str = "global",
-) -> Dict[str, Any]:
-    """登记一个赌注（幂等）。返回账本里的预注册记录。"""
-    if not BET_ID_RE.match(bet_id or ""):
-        raise ValueError("bet_id 必须为 3-64 位小写字母/数字/._-")
-    if metric_id not in METRIC_SOURCES and metric_id not in {REVENUE_METRIC, DOMAIN_METRIC}:
-        raise ValueError(f"未支持的 metric_id: {metric_id}")
-    if direction not in DIRECTIONS:
-        raise ValueError("direction 只能是 max 或 min")
-    if isinstance(window_days, bool) or not isinstance(window_days, int):
-        raise ValueError("window_days 必须是整数")
-    if not 1 <= window_days <= 365:
-        raise ValueError("window_days 必须在 1-365 之间")
-    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
-        raise ValueError("threshold 必须是数字")
-    if not title.strip() or not hypothesis.strip():
-        raise ValueError("title 和 hypothesis 不能为空")
-    if not kill_criteria:
-        raise ValueError("kill_criteria 不能为空")
-
-    budget_in = budget or {}
-    envelope = {key: _positive_int(budget_in, key) for key in DEFAULT_BUDGET}
-    registered_at = _now()
-    payload: Dict[str, Any] = {
-        "bet_id": bet_id,
-        "title": title.strip(),
-        "hypothesis": hypothesis.strip(),
-        "metric_id": metric_id,
-        "threshold": float(threshold),
-        "direction": direction,
-        "window_days": window_days,
-        "kill_criteria": [str(item) for item in kill_criteria],
-        "budget": envelope,
-        "scope": scope,
-        "registered_at": _iso(registered_at),
-        "review_at": _iso(registered_at + timedelta(days=window_days)),
-    }
-    payload["payload_sha256"] = _digest(payload)
-
-    for event in evolution_ledger.list_events(event_type=REGISTERED):
-        existing = event.get("bet") or {}
-        if existing.get("bet_id") == bet_id:
-            return existing
-
-    evolution_ledger.append_event({"event_type": REGISTERED, "bet": payload})
-    _sync_decision(payload)
-    return payload
+def register_bet(**_kwargs: Any) -> Dict[str, Any]:
+    """Legacy writes cannot create an executable budget or a second ledger."""
+    raise ValueError("Use strategic_portfolio.create_portfolio_proposal and authenticated approval")
 
 
 def _bets() -> Dict[str, Dict[str, Any]]:
@@ -159,7 +131,7 @@ def _spend_totals() -> Dict[str, Dict[str, int]]:
         bet_id = event.get("bet_id")
         if not bet_id:
             continue
-        bucket = totals.setdefault(bet_id, {key: 0 for key in DEFAULT_BUDGET})
+        bucket = totals.setdefault(bet_id, dict.fromkeys(DEFAULT_BUDGET, 0))
         for key in DEFAULT_BUDGET:
             bucket[key] += int(event.get(key) or 0)
     return totals
@@ -177,10 +149,8 @@ def bet_state(bet_id: str) -> Dict[str, Any]:
     bet = _bets().get(bet_id)
     if not bet:
         raise ValueError(f"未登记的赌注: {bet_id}")
-    spent = _spend_totals().get(bet_id, {key: 0 for key in DEFAULT_BUDGET})
-    remaining = {
-        key: int(bet["budget"][key]) - int(spent.get(key, 0)) for key in DEFAULT_BUDGET
-    }
+    spent = _spend_totals().get(bet_id, dict.fromkeys(DEFAULT_BUDGET, 0))
+    remaining = {key: int(bet["budget"][key]) - int(spent.get(key, 0)) for key in DEFAULT_BUDGET}
     review_at = _parse(bet.get("review_at"))
     return {
         "bet": bet,
@@ -191,37 +161,8 @@ def bet_state(bet_id: str) -> Dict[str, Any]:
     }
 
 
-def record_spend(
-    bet_id: str,
-    *,
-    proposals: int = 0,
-    tokens: int = 0,
-    ci_minutes: int = 0,
-    human_hours: int = 0,
-    source: str = "",
-) -> Dict[str, Any]:
-    """扣减预算；不足则抛 ``BudgetExceeded``，调用方不得继续执行。"""
-    state = bet_state(bet_id)
-    delta = {
-        "proposals": proposals,
-        "tokens": tokens,
-        "ci_minutes": ci_minutes,
-        "human_hours": human_hours,
-    }
-    for key, amount in delta.items():
-        if amount < 0:
-            raise ValueError("预算扣减不能为负")
-        if amount > state["remaining"][key]:
-            raise BudgetExceeded(f"赌注 {bet_id} 的 {key} 预算不足")
-    event = {
-        "event_type": SPEND,
-        "bet_id": bet_id,
-        "payload_sha256": state["bet"]["payload_sha256"],
-        "source": source,
-        **delta,
-    }
-    evolution_ledger.append_event(event)
-    return bet_state(bet_id)
+def record_spend(*_args: Any, **_kwargs: Any) -> Dict[str, Any]:
+    raise BudgetExceeded("Usage must be reserved and settled by strategic_portfolio_usage")
 
 
 def repo_root() -> Path:
@@ -259,56 +200,48 @@ def _read_json_report(env_var: str) -> Optional[Dict[str, Any]]:
 
 
 def _number(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         return None
     return float(value)
 
 
 def _revenue_monthly() -> Optional[float]:
-    """过去 30 天已开票金额；数据库不可用返回 None（判定为 inconclusive）。"""
-    try:
-        from sqlalchemy import func
-        from modstore_server.db.billing import Invoice
-        from modstore_server.db.db_base import get_session_factory
-
-        with get_session_factory()() as db:
-            total = (
-                db.query(func.coalesce(func.sum(Invoice.amount), 0))
-                .filter(Invoice.issued_at >= _now() - timedelta(days=30))
-                .scalar()
-            )
-        return float(total or 0)
-    except Exception:
-        return None
+    # Global invoices are neither collected revenue nor attributable business outcomes.
+    # Portfolio review supplies its authoritative, goal-linked payment outcome.
+    return None
 
 
 def read_metric(metric_id: str) -> Optional[float]:
     apply_evidence_defaults()
     if metric_id == REVENUE_METRIC:
         return _revenue_monthly()
+    env_var = {
+        "slo_availability": "MODSTORE_SLO_REPORT_PATH",
+        "slo_error_rate": "MODSTORE_SLO_REPORT_PATH",
+        "intent_accuracy": "MODSTORE_INTENT_REPORT_PATH",
+        "legacy_ratio": "MODSTORE_LEGACY_REPORT_PATH",
+        DOMAIN_METRIC: "MODSTORE_DOMAIN_AUDIT_PATH",
+    }.get(metric_id, "")
+    return _metric_from_report(metric_id, _read_json_report(env_var) or {})
+
+
+def _metric_from_report(metric_id: str, report: Dict[str, Any]) -> Optional[float]:
+    """Evaluate the exact evidence snapshot whose hash is frozen in SQL."""
     if metric_id in {"slo_availability", "slo_error_rate"}:
-        report = _read_json_report("MODSTORE_SLO_REPORT_PATH")
-        if not report:
-            return None
         reading = (report.get("readings") or {}).get(METRIC_SOURCES[metric_id]) or {}
         return _number(reading.get("reading_numeric"))
     if metric_id == "intent_accuracy":
-        report = _read_json_report("MODSTORE_INTENT_REPORT_PATH")
-        if not report:
-            return None
         direct = _number(report.get("accuracy"))
         if direct is not None:
             return direct
-        counts = ((report.get("rule") or {}).get("counts") or {})
+        counts = (report.get("rule") or {}).get("counts") or {}
         correct = sum(int((row or {}).get("correct") or 0) for row in counts.values())
         total = sum(int((row or {}).get("total") or 0) for row in counts.values())
         return correct / total if total else None
     if metric_id == "legacy_ratio":
-        report = _read_json_report("MODSTORE_LEGACY_REPORT_PATH")
-        return _number((report or {}).get("legacy_ratio"))
+        return _number(report.get("legacy_ratio"))
     if metric_id == DOMAIN_METRIC:
-        report = _read_json_report("MODSTORE_DOMAIN_AUDIT_PATH")
-        domains = (report or {}).get("domains") or []
+        domains = report.get("domains") or []
         if not isinstance(domains, list) or not domains:
             return None
         rated = [
@@ -322,11 +255,120 @@ def read_metric(metric_id: str) -> Optional[float]:
 
 def judge(metric_id: str, value: Optional[float], threshold: float, direction: str) -> str:
     """hit / miss / inconclusive（缺证据不算失败，也不算通过）。"""
-    if value is None:
+    if _number(value) is None or _number(threshold) is None or direction not in DIRECTIONS:
         return "inconclusive"
+    assert value is not None
     if direction == "max":
         return "hit" if value >= threshold else "miss"
     return "hit" if value <= threshold else "miss"
+
+
+def capture_metric(
+    metric_id: str, *, start: datetime, end: datetime, business: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Read only in-window source evidence; preserve the exact bytes' identity."""
+    if metric_id == CUSTOMER_ACCEPTANCE_METRIC:
+        outcome = business or {}
+        ratio = _number(outcome.get("acceptance_ratio"))
+        if outcome.get("status") == "verified" and ratio is not None and 0 <= ratio <= 1:
+            return {
+                "value": ratio,
+                "source": outcome.get("source"),
+                "evidence_sha256": outcome.get("evidence_sha256"),
+                "accepted_goals": outcome.get("accepted_goals"),
+                "target_goals": outcome.get("target_goals"),
+                "basis": "approved_goals_with_completed_artifact_and_customer_acceptance",
+            }
+        return {"value": None, "reason": "customer_delivery_evidence_unavailable"}
+    if metric_id == REVENUE_METRIC:
+        outcome = business or {}
+        cents = outcome.get("revenue_cents")
+        if outcome.get("status") == "verified" and type(cents) is int:
+            return {
+                "value": cents / 100,
+                "source": outcome.get("source"),
+                "evidence_sha256": outcome.get("order_refs_sha256"),
+                "basis": "attributed_verified_payments_in_approved_window",
+            }
+        return {"value": None, "reason": "attributed_payment_evidence_unavailable"}
+    apply_evidence_defaults()
+    env_var = {
+        "slo_availability": "MODSTORE_SLO_REPORT_PATH",
+        "slo_error_rate": "MODSTORE_SLO_REPORT_PATH",
+        "intent_accuracy": "MODSTORE_INTENT_REPORT_PATH",
+        "legacy_ratio": "MODSTORE_LEGACY_REPORT_PATH",
+        DOMAIN_METRIC: "MODSTORE_DOMAIN_AUDIT_PATH",
+    }.get(metric_id, "")
+    path = Path(os.environ.get(env_var, ""))
+    try:
+        raw = path.read_bytes()
+        report = json.loads(raw)
+    except (OSError, ValueError):
+        return {"value": None, "reason": "metric_source_unavailable"}
+    if not isinstance(report, dict):
+        return {"value": None, "reason": "metric_source_invalid"}
+    observed_at = _parse(
+        report.get("generated_at") or report.get("measured_at") or report.get("built_at")
+    )
+    if observed_at is None or not start <= observed_at <= end:
+        return {
+            "value": None,
+            "reason": "metric_source_outside_observation_window",
+            "evidence_sha256": hashlib.sha256(raw).hexdigest(),
+        }
+    return {
+        "value": _metric_from_report(metric_id, report),
+        "source": str(path),
+        "observed_at": _iso(observed_at),
+        "evidence_sha256": hashlib.sha256(raw).hexdigest(),
+    }
+
+
+def review_hypotheses(
+    proposal: Dict[str, Any],
+    state: Dict[str, Any],
+    business_by_op: Dict[str, Any],
+    now: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    """Store immutable metric snapshots in the existing SQL portfolio transaction."""
+    moment = now or _now()
+    outcomes = state.setdefault("hypothesis_outcomes", {})
+    results = []
+    for item in proposal["opportunities"]:
+        raw = item.get("hypothesis")
+        task = state.get("tasks", {}).get(item["opportunity_id"])
+        if not raw or not task:
+            continue
+        key = item["opportunity_id"]
+        if key in outcomes:
+            results.append(outcomes[key])
+            continue
+        target = BetHypothesis.model_validate(raw)
+        start = _parse(task["started_at"])
+        assert start is not None
+        end = start + timedelta(days=target.window_days)
+        if moment < end or task["status"] not in {"completed", "failed"}:
+            results.append({"opportunity_id": key, "verdict": "pending", "review_at": _iso(end)})
+            continue
+        evidence = capture_metric(
+            target.metric_id, start=start, end=end, business=business_by_op.get(key)
+        )
+        verdict = judge(target.metric_id, evidence.get("value"), target.threshold, target.direction)
+        snapshot = {
+            "opportunity_id": key,
+            "hypothesis": target.model_dump(),
+            "evidence": evidence,
+            "verdict": verdict,
+            "window_start": _iso(start),
+            "window_end": _iso(end),
+            "reviewed_at": _iso(moment),
+        }
+        snapshot["snapshot_sha256"] = _digest(snapshot)
+        outcomes[key] = snapshot
+        results.append(snapshot)
+        if verdict == "miss" and target.kill_on_miss:
+            state.update(halted=True, stop_reason=f"hypothesis_missed:{key}")
+    return results
 
 
 def active_bets(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
@@ -353,121 +395,33 @@ def active_bet_id() -> str:
 
 
 def review_due(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
-    """对到期且未判定的赌注回读指标并落结论；只读已有数据源。"""
-    moment = now or _now()
-    outcomes = _outcomes()
-    reviewed: List[Dict[str, Any]] = []
-    for bet in _bets().values():
-        bet_id = bet["bet_id"]
-        if bet_id in outcomes:
-            continue
-        review_at = _parse(bet.get("review_at"))
-        if not review_at or review_at > moment:
-            continue
-        value = read_metric(bet["metric_id"])
-        verdict = judge(bet["metric_id"], value, bet["threshold"], bet["direction"])
-        event = {
-            "event_type": OUTCOME,
-            "bet_id": bet_id,
-            "payload_sha256": bet["payload_sha256"],
-            "metric_id": bet["metric_id"],
-            "value": value,
-            "threshold": bet["threshold"],
-            "direction": bet["direction"],
-            "verdict": verdict,
-            "reason": "evidence_missing" if value is None else "",
-            "reviewed_at": _iso(moment),
-            "final_status": verdict,
-        }
-        evolution_ledger.append_event(event)
-        _sync_outcome(bet, event)
-        reviewed.append(event)
-    return reviewed
-
-
-def _sync_decision(payload: Dict[str, Any]) -> None:
-    """把赌注登记到战略库；数据库不可用时只留 ledger。"""
-    try:
-        from modstore_server.db.db_base import get_session_factory
-        from modstore_server.db.strategic import StrategicDecision
-
-        review_at = _parse(payload.get("review_at"))
-        with get_session_factory()() as db:
-            existing = (
-                db.query(StrategicDecision)
-                .filter_by(decision_id=payload["bet_id"])
-                .first()
-            )
-            if existing:
-                return
-            db.add(
-                StrategicDecision(
-                    decision_id=payload["bet_id"],
-                    title=payload["title"],
-                    rationale=payload["hypothesis"],
-                    proposed_by="evolution-strategy",
-                    decision_type="strategy_bet",
-                    scope=payload["scope"],
-                    status="proposed",
-                    decision_payload_json=_canonical(payload),
-                    review_at=review_at.replace(tzinfo=None) if review_at else None,
-                )
-            )
-            db.commit()
-    except Exception:
-        return
-
-
-def _sync_outcome(bet: Dict[str, Any], event: Dict[str, Any]) -> None:
-    try:
-        from modstore_server.db.db_base import get_session_factory
-        from modstore_server.db.strategic import StrategicDecision
-
-        with get_session_factory()() as db:
-            row = (
-                db.query(StrategicDecision)
-                .filter_by(decision_id=bet["bet_id"])
-                .first()
-            )
-            if not row:
-                return
-            row.status = "reviewed"
-            row.execution_result_json = _canonical(event)
-            db.commit()
-    except Exception:
-        return
+    """Read the imported ledger; execution and review writes belong to SQL portfolios."""
+    return list(_outcomes().values())
 
 
 def audit_outcomes() -> Dict[str, int]:
-    """独立复算已落结论的事件；不采信当初的判定，只看当前数据源。"""
-    verified = mismatched = 0
+    """Verify the recorded threshold calculation without reading a later time window."""
     bets = _bets()
-    for event in evolution_ledger.list_events(event_type=OUTCOME):
-        if (event.get("owner_audit") or {}).get("audited"):
-            continue
-        bet = bets.get(event.get("bet_id"))
-        if not bet:
-            continue
-        recomputed = judge(
-            bet["metric_id"], read_metric(bet["metric_id"]), bet["threshold"], bet["direction"]
+    valid = sum(
+        event.get("verdict")
+        == judge(
+            bets[key]["metric_id"],
+            event.get("value"),
+            bets[key]["threshold"],
+            bets[key]["direction"],
         )
-        verdict = "verified" if recomputed == event.get("verdict") else "mismatch"
-        if evolution_ledger.mark_audited(event["event_id"], verdict):
-            if verdict == "verified":
-                verified += 1
-            else:
-                mismatched += 1
-    return {"verified": verified, "mismatched": mismatched}
+        for key, event in _outcomes().items()
+        if key in bets
+    )
+    return {"calculation_verified": valid, "source_evidence_verified": 0}
 
 
 def run_review() -> Dict[str, Any]:
-    reviewed = review_due()
-    audit = audit_outcomes()
     return {
         "ok": True,
-        "reviewed": len(reviewed),
-        "verdicts": [{"bet_id": item["bet_id"], "verdict": item["verdict"]} for item in reviewed],
-        "audit": audit,
+        "legacy_read_only": True,
+        "outcomes": review_due(),
+        "audit": audit_outcomes(),
     }
 
 

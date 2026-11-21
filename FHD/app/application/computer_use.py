@@ -329,6 +329,13 @@ class ComputerUseService:
                 "step_id": context.get("step_id"),
                 "started_at": time.time(),
             }
+            from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+            from app.application.agent_orchestrator.verification_surface import (
+                execution_surface_binding,
+            )
+
+            run = get_agent_run_repository().get(str(context.get("run_id") or ""))
+            record["binding"] = execution_surface_binding(run, params, context) if run else {}
             self._write(path, record)
             if expected is not None:
                 self._write(observed_path, {**expected, "used_by": request_id})

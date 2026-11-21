@@ -57,6 +57,7 @@ def test_registered_send_is_approval_required_and_not_auto_retryable():
     assert validate_tool_call("kellai", "send", PARAMS).ok
     assert not validate_tool_call("kellai", "send", {**PARAMS, "approved": True}).ok
     assert not validate_tool_call("kellai", "send", {**PARAMS, "user_id": "9"}).ok
+    assert not validate_tool_call("kellai", "send", {**PARAMS, "content": "x" * 8001}).ok
     assert not validate_tool_call(
         "kellai", "receipt", {"client_request_id": "../../another/request"}
     ).ok
@@ -116,6 +117,7 @@ def test_persisted_approval_binds_exact_recipient_content_and_consumption(monkey
                 "action": "send",
                 "approved_by": "9",
                 "params_sha256": _params_hash(step),
+                "kellai_connection_sha256": kellai.binding.connection_identity_sha256(),
             },
         },
     )
@@ -147,6 +149,24 @@ def test_persisted_approval_binds_exact_recipient_content_and_consumption(monkey
     run.metadata["approval_receipt"]["grant_id"] = "not-consumed"
     with pytest.raises(PermissionError):
         kellai._approved_request_id(PARAMS, authorized)
+    run.metadata["approval_receipt"]["grant_id"] = "approved-grant"
+    from app.domain.shared_services import kellai_binding_store as store
+
+    store.start_pairing(
+        actor=9, tenant_id="tenant-a", requested_scopes=[row["id"] for row in store.ALLOWED_SCOPES]
+    )
+    pending = store.pending_for_kellai()
+    store.approve_pairing(
+        request_id=pending["request_id"],
+        authorization_secret=pending["authorization_secret"],
+        accepted_scopes=[row["id"] for row in pending["requested_scopes"]],
+        access_token="different-team-token-" + "x" * 40,
+        authorized_by={"id": "another-kellai-owner"},
+    )
+    monkeypatch.setattr(
+        kellai, "request_kellai", lambda *_args: pytest.fail("old approval sent to new team")
+    )
+    assert kellai.execute_kellai("send", PARAMS, authorized)["error_code"] == "approval_required"
 
 
 def test_accepted_is_not_delivered_and_unknown_keeps_reconciliation_id(monkeypatch, authorized):
@@ -168,8 +188,8 @@ def test_accepted_is_not_delivered_and_unknown_keeps_reconciliation_id(monkeypat
     monkeypatch.setattr(kellai, "request_kellai", accepted)
     result = kellai.execute_kellai("send", PARAMS, authorized)
     assert result["success"] is True
-    assert result["data"]["status"] == "accepted"
-    assert result["data"]["persisted"] is False
+    assert result["data"]["delivery_receipt"]["status"] == "accepted"
+    assert result["data"]["delivery_receipt"]["persisted"] is False
     assert result["message"] == "渠道已受理，尚无送达确认"
 
     def lost_response(*_args):
@@ -208,7 +228,7 @@ def test_receipt_reports_provider_outcome_without_rewriting_dispatch_state(
     result = kellai.execute_kellai("receipt", {"client_request_id": request_id}, authorized)
     assert result["success"] is success
     assert result["message"] == message
-    assert result["data"] == data and result["retryable"] is False
+    assert result["data"]["delivery_receipt"] == data and result["retryable"] is False
     assert calls == [(f"messages/requests/{request_id}", None)]
     if status == "unknown":
         assert result["outcome"] == "unknown" and result["reconciliation_required"] is True

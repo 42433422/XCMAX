@@ -78,9 +78,10 @@ class ConversationLlmMixin:
                 output_tokens=output_limit,
                 external_tokens=schema_tokens,
             )
+            limits.assert_current()
+
             if isinstance(request_context, dict):
                 conversation_summary(request_context)
-            limits.assert_current()
             result = await provider.chat_completion(
                 messages=compression.messages,
                 temperature=temperature,

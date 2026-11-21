@@ -34,6 +34,8 @@ def response(payload: dict) -> dict:
 
 @pytest.fixture
 def harness(monkeypatch, tmp_path):
+    import time
+
     config = McpServerConfig(
         name="browser_test",
         command="controlled",
@@ -99,6 +101,16 @@ def harness(monkeypatch, tmp_path):
         lambda *a, **k: None,
     )
     monkeypatch.setattr(
+        "app.infrastructure.auth.agent_mod_scope._bound_actor",
+        lambda context: SimpleNamespace(
+            id=context["user_id"],
+            tenant_id=context["tenant_id"],
+            role="browser_test_member",
+            tier="enterprise",
+            market_user_id=None,
+        ),
+    )
+    monkeypatch.setattr(
         "app.application.workflow.tool_profile.resolve_tool_execution_profile",
         lambda *_: "pro_default",
     )
@@ -119,6 +131,26 @@ def harness(monkeypatch, tmp_path):
     model_requests = []
     page = {"saved": False, "session": "generation-1", "echo_only": False}
 
+    def read_page():
+        text = f'- button "保存" [ref={page.get("target", "e1")}]\n- generic: 首页'
+        if page["saved"]:
+            text += "\n- generic: 保存成功 #42"
+        content = "### Snapshot\n```yaml\n" + text + "\n```"
+        if page["echo_only"]:
+            content = '### Ran Playwright code\n```js\nawait page.getByText("保存成功 #42")\n```\n### Snapshot\n```yaml\n- generic: 首页\n```'
+        return {
+            "success": True,
+            "content": content,
+            "server": "browser_test",
+            "session_id": page["session"],
+            "observed_at": time.time(),
+        }
+
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.browser_tool_process.read_browser_snapshot",
+        lambda *_args: read_page(),
+    )
+
     def execute(_tool_id, action, params):
         params = dict(params)
         runtime_context = params.pop("_runtime_context")
@@ -130,12 +162,7 @@ def harness(monkeypatch, tmp_path):
         if action == "browser_wait_for":
             assert page["saved"] and params.get("text") == "保存成功 #42"
         if action == "browser_snapshot":
-            text = f'- button "保存" [ref={page.get("target", "e1")}]\n- generic: 首页'
-            if page["saved"]:
-                text += "\n- generic: 保存成功 #42"
-            content = "### Snapshot\n```yaml\n" + text + "\n```"
-            if page["echo_only"]:
-                content = '### Ran Playwright code\n```js\nawait page.getByText("保存成功 #42")\n```\n### Snapshot\n```yaml\n- generic: 首页\n```'
+            content = read_page()["content"]
         else:
             content = "action acknowledged"
         return {
@@ -222,7 +249,12 @@ def test_natural_language_run_keeps_approval_observation_verification_and_one_ru
     h = harness
     h.decisions.extend(
         [
-            {"mode": "action", "action": "browser_click", "params": {"target": "e1"}},
+            {
+                "mode": "action",
+                "action": "browser_click",
+                "assertion": "保存成功 #42",
+                "params": {"target": "e1"},
+            },
             {"mode": "verify", "assertion": "保存成功 #42"},
             finish,
         ]
@@ -264,6 +296,23 @@ def test_model_finish_without_browser_evidence_is_blocked(harness):
     assert run.status == "blocked" and run.error == "browser_finish_unverified"
     assert len(harness.calls) == 1
     assert harness.closed
+
+
+@pytest.mark.parametrize("assertion", ["", "首页"])
+def test_write_without_a_distinguishable_postcondition_hands_off_before_input(harness, assertion):
+    harness.decisions.append(
+        {
+            "mode": "action",
+            "action": "browser_click",
+            "params": {"target": "e1"},
+            "assertion": assertion,
+        }
+    )
+    run = start(harness)
+    assert run.status == "waiting_user"
+    assert run.steps[-1].tool_id == "clarify"
+    assert [call[0] for call in harness.calls] == ["browser_snapshot"]
+    assert not harness.page["saved"]
 
 
 def test_login_handoff_is_a_real_resumable_clarification(harness):
@@ -368,8 +417,18 @@ def test_planning_scope_answer_reaches_browser_decisions_on_the_original_run(har
             "params": {"function": "fetch('x')"},
         },
         {"mode": "verify", "params": {"time": 1}},
-        {"mode": "action", "action": "browser_click", "params": {"target": 7}},
-        {"mode": "action", "action": "browser_click", "params": {"target": "e999"}},
+        {
+            "mode": "action",
+            "action": "browser_click",
+            "assertion": "保存成功 #42",
+            "params": {"target": 7},
+        },
+        {
+            "mode": "action",
+            "action": "browser_click",
+            "assertion": "保存成功 #42",
+            "params": {"target": "e999"},
+        },
         {
             "mode": "action",
             "action": "browser_snapshot",
@@ -396,7 +455,16 @@ def test_invalid_or_out_of_scope_decision_executes_no_extra_tool(harness, decisi
 
 def test_new_browser_generation_cannot_continue_old_page(harness):
     h = harness
-    h.decisions.extend([{"mode": "action", "action": "browser_click", "params": {"target": "e1"}}])
+    h.decisions.extend(
+        [
+            {
+                "mode": "action",
+                "action": "browser_click",
+                "assertion": "保存成功 #42",
+                "params": {"target": "e1"},
+            }
+        ]
+    )
     run = start(h)
     h.page["session"] = "generation-2"
     run = h.agent.continue_run(
@@ -410,7 +478,15 @@ def test_ref_from_an_older_snapshot_cannot_select_the_next_action(harness):
     h = harness
     h.page["target_after_click"] = "e2"
     h.decisions.extend(
-        [{"mode": "action", "action": "browser_click", "params": {"target": "e1"}}] * 2
+        [
+            {
+                "mode": "action",
+                "action": "browser_click",
+                "assertion": "保存成功 #42",
+                "params": {"target": "e1"},
+            }
+        ]
+        * 2
     )
     run = start(h)
     resumed = h.agent.continue_run(
@@ -429,7 +505,12 @@ def test_preexisting_text_cannot_certify_the_new_effect(harness):
     h = harness
     h.decisions.extend(
         [
-            {"mode": "action", "action": "browser_click", "params": {"target": "e1"}},
+            {
+                "mode": "action",
+                "action": "browser_click",
+                "assertion": "保存成功 #42",
+                "params": {"target": "e1"},
+            },
             {"mode": "verify", "assertion": "首页"},
         ]
     )
@@ -511,7 +592,14 @@ def test_snapshot_evidence_excludes_echoed_javascript(harness):
 
 def test_deadline_is_checked_before_resuming_approved_write(harness):
     h = harness
-    h.decisions.append({"mode": "action", "action": "browser_click", "params": {"target": "e1"}})
+    h.decisions.append(
+        {
+            "mode": "action",
+            "action": "browser_click",
+            "assertion": "保存成功 #42",
+            "params": {"target": "e1"},
+        }
+    )
     run = start(h)
     run.metadata["browser_loop"]["deadline_at"] = 0
     h.repo.save(run)
@@ -536,7 +624,14 @@ def test_model_reservation_uses_original_task_budget(harness):
 
 def test_cancelled_waiting_run_never_executes_model_selected_click(harness):
     h = harness
-    h.decisions.append({"mode": "action", "action": "browser_click", "params": {"target": "e1"}})
+    h.decisions.append(
+        {
+            "mode": "action",
+            "action": "browser_click",
+            "assertion": "保存成功 #42",
+            "params": {"target": "e1"},
+        }
+    )
     run = start(h)
     cancelled = h.agent.cancel_run(run.run_id, requested_by="71")
     assert cancelled is not None and cancelled.status == "cancelled"
@@ -554,7 +649,12 @@ def test_parked_terminal_control_releases_the_same_sealed_actor_session(harness,
     decision = (
         {"mode": "wait", "reason": "请完成登录后确认继续。"}
         if control == "decline_handoff"
-        else {"mode": "action", "action": "browser_click", "params": {"target": "e1"}}
+        else {
+            "mode": "action",
+            "action": "browser_click",
+            "assertion": "保存成功 #42",
+            "params": {"target": "e1"},
+        }
     )
     h.decisions.append(decision)
     context = {

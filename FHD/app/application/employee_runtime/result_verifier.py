@@ -1,4 +1,4 @@
-"""AI 员工执行结果验收。"""
+"""AI 员工结果包兼容检查；通过不代表已独立核验业务事实。"""
 
 from __future__ import annotations
 
@@ -53,6 +53,12 @@ def verify_employee_run_result(
         return False, error
     nested = data.get("result")
     payload = nested if isinstance(nested, dict) else data
+    for envelope in (data, payload):
+        if (
+            "employee_id" in envelope
+            and str(envelope["employee_id"]).strip() != employee_id.strip()
+        ):
+            return False, "员工输出身份与执行员工不一致"
     outputs = payload.get("outputs")
     if require_non_empty:
         if not payload and not payload.get("items") and not payload.get("summary"):

@@ -22,6 +22,10 @@ def browser_api(monkeypatch):
         pass
 
     locator = Mock()
+    locator.input_value.return_value = "张三"
+    locator.text_content.return_value = "张三"
+    locator.is_visible.return_value = True
+    locator.is_checked.return_value = True
     locator.aria_snapshot.return_value = '- textbox "姓名": 张三'
     page = Mock(url="about:blank")
     page.goto.side_effect = lambda url, **kwargs: setattr(page, "url", url)

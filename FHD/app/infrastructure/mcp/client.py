@@ -74,11 +74,6 @@ class McpClientError(RuntimeError):
         self.retryable = retryable
 
 
-def _sdk_field(value: Any, name: str, alias: str, default: Any = None) -> Any:
-    """MCP 2 uses Python snake_case fields; older clients expose wire aliases."""
-    return getattr(value, name, getattr(value, alias, default))
-
-
 def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) -> T:
     """在独立线程运行协程，避免与请求所在事件循环互相阻塞。"""
     timeout = remaining_invocation_seconds(timeout)
@@ -376,9 +371,13 @@ def call_tool(
     try:
         if config.session_mode == "persistent":
             operation = (
-                (lambda session: _run_synthetic(session, tool_name, arguments or {}))
+                (
+                    lambda session: _run_synthetic(
+                        session, tool_name, copy.deepcopy(frozen_arguments)
+                    )
+                )
                 if tool_name in RESOURCE_ACTIONS
-                else (lambda session: session.call_tool(tool_name, arguments or {}))
+                else (lambda session: session.call_tool(tool_name, copy.deepcopy(frozen_arguments)))
             )
             result, session_id = call_persistent(
                 config,
@@ -420,6 +419,7 @@ def call_tool(
         )
         business_error = isinstance(structured, dict) and structured.get("success") is False
         result_type = _sdk_field(result, "result_type", "resultType", "complete")
+        derived_error = _result_error(result, tool_name)
         blocks = getattr(result, "content", None)
         evidence = {
             **({"result_type": result_type} if result_type != "complete" else {}),

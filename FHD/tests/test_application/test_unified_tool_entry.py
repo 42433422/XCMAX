@@ -406,3 +406,47 @@ def test_schema_only_registered_tool_never_reports_business_success(tmp_path):
         assert runtime_result["success"] is False
     finally:
         service.reset_for_tests(None)
+
+def test_capability_wrapper_keeps_unknown_receipt_so_employee_cannot_replay(
+    monkeypatch,
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.unified_task import UnifiedTaskResult
+    from app.application.tools.registered_capabilities import (
+        execute_registered_capability,
+    )
+
+    receipt = {
+        "success": False,
+        "outcome": "unknown",
+        "retryable": False,
+        "reconciliation_required": True,
+        "error_code": "tool_timeout_unknown",
+    }
+    run = AgentRun(
+        user_id="17",
+        message="Read the original result",
+        run_id="original-run",
+        status="blocked",
+        error="pending reconciliation",
+        steps=[],
+        final_output={"node_outputs": {"registered_capability": receipt}},
+    )
+    monkeypatch.setattr(AgentOrchestrator, "start_run_from_plan", lambda *a, **kw: run)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.unified_task.publish_task_run",
+        lambda **kw: UnifiedTaskResult(run=run, deduplicated=True),
+    )
+    with patch.object(AgentOrchestrator, "execute_dispatched_run") as execute:
+        result = json.loads(
+            execute_registered_capability(
+                {"tool_id": "print", "action": "list", "params": {}},
+                runtime_context={"user_id": "17"},
+            )
+        )
+    execute.assert_not_called()
+    assert result["agent_run_id"] == "original-run"
+    assert result["deduplicated"] is True
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert result["reconciliation_required"] is True and result["success"] is False

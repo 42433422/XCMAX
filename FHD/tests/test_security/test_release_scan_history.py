@@ -46,6 +46,24 @@ def test_full_scan_history_contract_and_generated_mirror():
     assert mirror.splitlines(keepends=True)[2:] == source_lines
 
 
+def test_trend_artifacts_cannot_be_downloaded_as_release_clearance():
+    job = yaml.safe_load(SOURCE.read_text(encoding="utf-8"))["jobs"]["scan-and-gate"]
+    assert job["name"] == (
+        "${{ github.event_name == 'schedule' && 'security-trend-check' || 'security-release-gate' }}"
+    )
+    uploads = [
+        step for step in job["steps"] if step.get("uses", "").startswith("actions/upload-artifact@")
+    ]
+    for kind, upload in zip(("reports", "native"), uploads, strict=True):
+        assert upload["with"]["name"] == (
+            "${{ github.event_name == 'schedule' && 'xcagi-security-trend-"
+            + kind
+            + "' || 'xcagi-security-release-"
+            + kind
+            + "' }}"
+        )
+
+
 @pytest.mark.parametrize(
     "depth,case",
     [
@@ -89,11 +107,7 @@ def test_release_checkout_guard_rejects_untrusted_history(tmp_path, depth, case)
         _git(clone, "update-ref", "-d", "refs/remotes/origin/main")
     head = _git(clone, "rev-parse", "HEAD")
     lock = next(s for s in _steps() if s.get("name") == "Lock scan checkout to exact SHA")
-    release_sha = (
-        ""
-        if case == "auto"
-        else (ancestor if case == "wrong_sha" else head)
-    )
+    release_sha = "" if case == "auto" else (ancestor if case == "wrong_sha" else head)
     if case == "invalid_sha":
         release_sha = "$(touch guard-injection)"
     evidence = tmp_path / "evidence"

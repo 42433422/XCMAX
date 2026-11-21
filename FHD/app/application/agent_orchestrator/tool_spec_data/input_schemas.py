@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.domain.browser_contract import BROWSER_INPUT_SCHEMAS
+from app.domain.enterprise_cognition.contracts import ENTERPRISE_INPUT_SCHEMAS
 from app.domain.shared_services.kellai_tool_contract import KELLAI_INPUT_SCHEMAS
 
 from .report_input_schemas import REPORT_INPUT_SCHEMAS
@@ -1144,6 +1145,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("sales", "create_order"): _SALES_QUOTE_INPUT,
+    **ENTERPRISE_INPUT_SCHEMAS,
 }
 
 # Computer Use stays in the existing desktop tool catalog; adapters validate the

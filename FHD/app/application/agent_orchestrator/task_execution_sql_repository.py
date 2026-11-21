@@ -503,7 +503,6 @@ class SQLAlchemyTaskExecutionRepository:
                 body["approval_requested_at"] = now
             if available_at:
                 body["available_at"] = available_at
-
             query = db.query(AgentTaskExecutionRecord).filter(
                 AgentTaskExecutionRecord.run_id == str(run_id or ""),
                 AgentTaskExecutionRecord.state == existing.state,
@@ -537,6 +536,7 @@ class SQLAlchemyTaskExecutionRepository:
             # The lifecycle and open-effect log belong to the winning transition.
             # A rejected/expired worker must not publish lifecycle history or
             # erase the replacement worker's unresolved business effects.
+            # A stale owner must not clear receipts even when its row CAS fails.
             book.put("agent", str(existing.tenant_id or ""), str(existing.run_id), body)
         return self.get(run_id)
 

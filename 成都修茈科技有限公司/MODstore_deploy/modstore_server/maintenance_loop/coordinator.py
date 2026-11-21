@@ -135,6 +135,21 @@ class MaintenanceRuntime:
         gate = self.policy.admit(force=force, triggered_by=triggered_by)
         self.state.ensure_baseline()
         if not gate.get("should_run"):
+            # Admission throttles new code work, not the exact already accepted
+            # merge's readback. Disabled/provenance/metrics gates still stop it.
+            recovery = {}
+            if gate.get("reason") in {"cooldown", "below_threshold"}:
+                memory = self.state.load_memory()
+                try:
+                    candidate = resume._pending_execution_candidate(
+                        memory, self.policy.actor_user_id()
+                    )
+                except ValueError:
+                    candidate = None
+                final = self._recover_final_outcome(memory, candidate)
+                if final is not None:
+                    return final
+                recovery = self._recover_memory(memory)
             record = {
                 "created_at": config._iso(started_at),
                 "force": force,
@@ -144,6 +159,7 @@ class MaintenanceRuntime:
                 "run_id": run_id,
                 "status": f"skipped_{gate.get('reason')}",
                 "triggered_by": triggered_by,
+                **recovery,
             }
             record.update(lineage.remediation_lineage_fields(remediation_context))
             self.state.append(record)
@@ -166,12 +182,9 @@ class MaintenanceRuntime:
             }
             self.state.append(record)
             return record
-        if pending_candidate and pending_candidate.get("final_outcome"):
-            final: Dict[str, Any] = pending_candidate["final_outcome"]
-            if pending_candidate["outcome_recorded"]:
-                self._clear_execution_checkpoint(memory)
-                return final
-            return self._record_final_outcome(memory, final)
+        final = self._recover_final_outcome(memory, pending_candidate)
+        if final is not None:
+            return final
         reconciliations = self._recover_memory(memory)
         candidate = pending_candidate or (
             lineage.resume_candidate_from_context(memory, remediation_context)
@@ -234,6 +247,42 @@ class MaintenanceRuntime:
         except RECOVERABLE_ERRORS as exc:
             config.logger.exception("self-maintenance loop failed")
             return self._finish(context, status="failed", extra={"error": str(exc)})
+
+    def _recover_final_outcome(self, memory: dict, candidate: Optional[dict]) -> Optional[dict]:
+        if candidate and candidate.get("final_outcome"):
+            final = candidate["final_outcome"]
+            if not isinstance(final, dict):
+                raise ValueError("pending_finalization_requires_reconciliation")
+            if candidate["outcome_recorded"]:
+                self._clear_execution_checkpoint(memory)
+                return final
+            return self._record_final_outcome(memory, final)
+        if candidate and candidate.get("reason") == "resume_finalizing_execution":
+            pending = memory["pending_execution"]
+            try:
+                if self.policy.recover is None:
+                    raise ValueError("final_policy_recovery_unavailable")
+                policy = self.policy.recover(
+                    pending=pending,
+                    checkpoint=lambda progress: self._checkpoint_final_policy(memory, progress),
+                )
+                final = self._final_policy_record(pending["final_record"], policy)
+                pending.update(state="finalized", final_outcome=final)
+                self.state.write_memory(memory)
+                return self._record_final_outcome(memory, final)
+            except RECOVERABLE_ERRORS as exc:
+                record = {
+                    "created_at": config._iso(self.now()),
+                    "phase": "skip",
+                    "run_id": pending["final_run_id"],
+                    "status": "waiting_reconciliation",
+                    "reason": "pending_finalization_requires_reconciliation",
+                    "reconciliation_error_type": type(exc).__name__,
+                    "requires_reconciliation": True,
+                }
+                self.state.append(record)
+                return record
+        return None
 
     def _recover_memory(self, memory: Dict[str, Any]) -> Dict[str, Any]:
         merge = self.recovery.requested_merges(memory)
@@ -383,11 +432,35 @@ class MaintenanceRuntime:
     ) -> Dict[str, Any]:
         pending = memory["pending_execution"]
         pending["state"] = "recording_outcome"
+        pending["outcome_recoverable"] = self.state.outcome_recoverable
         self.state.write_memory(memory)
-        self.state.append(final)
+        if self.state.recorded_outcome is None or not self.state.recorded_outcome(final):
+            self.state.append(final)
         self.state.record_outcome(final, pending["final_gate"])
         self._clear_execution_checkpoint(memory)
         return final
+
+    def _checkpoint_final_policy(self, memory: Dict[str, Any], progress: dict) -> None:
+        pending = memory["pending_execution"]
+        pending["final_policy_progress"] = {
+            **progress,
+            "binding": {
+                key: pending.get(key)
+                for key in ("final_run_id", "user_id", "request_id", "code_task_id", "branch")
+            },
+        }
+        self.state.write_memory(memory)
+
+    @staticmethod
+    def _final_policy_record(final: dict, policy: dict) -> dict:
+        status = final["status"]
+        if status == "completed":
+            status = {
+                "auto_merged_low_risk": "completed_merged",
+                "auto_merge_requested_low_risk": "completed_merge_requested",
+                "hold_for_automated_remediation": "completed_held_for_remediation",
+            }.get(str(policy.get("action") or ""), status)
+        return {**final, "policy_decision": policy, "status": status}
 
     def _retort_stop(self, context: _RunContext, employee_id: str) -> Optional[Dict[str, Any]]:
         gate = self.execution.retort_before_review(
@@ -500,7 +573,7 @@ class MaintenanceRuntime:
             "code_fix_retry_rounds": code_retries,
             "marker_retry_rounds": marker_retries,
             "run_id": context.run_id,
-            "status": "waiting_reconciliation" if uncertain else ("success" if ok else "failed"),
+            "status": ("waiting_reconciliation" if uncertain else ("success" if ok else "failed")),
             "requires_reconciliation": uncertain,
             "step": step_name,
             "timestamp": config._iso(self.now()),
@@ -553,14 +626,37 @@ class MaintenanceRuntime:
         terminal = pending.get("state") == "settled" and (
             status == "completed" or (context.steps and context.steps[-1].get("ok") is False)
         )
+        final = {
+            "branch": context.branch,
+            "completed_at": config._iso(self.now()),
+            "para_task_id": context.para_task_id,
+            "phase": "complete",
+            "run_id": context.run_id,
+            "started_at": config._iso(context.started_at),
+            "status": status,
+            "steps": context.steps,
+            "triggered_by": context.triggered_by,
+            **(extra or {}),
+        }
+        if context.resume_candidate:
+            final["resume_candidate"] = context.resume_candidate
+        preparation = (
+            self.policy.prepare(gate=context.gate, policy_override=policy_override)
+            if terminal and self.policy.recover is not None and self.policy.prepare is not None
+            else None
+        )
         if terminal:
             pending.update(
                 state="finalizing",
                 final_run_id=context.run_id,
                 final_gate=context.gate,
                 final_steps=list(context.steps),
+                final_record=final,
             )
-            self.state.write_memory(context.memory)
+            if preparation is None:
+                self.state.write_memory(context.memory)
+            else:
+                self._checkpoint_final_policy(context.memory, preparation)
         policy = (
             policy_override
             if policy_override is not None
@@ -571,30 +667,23 @@ class MaintenanceRuntime:
                 run_id=context.run_id,
                 status=status,
                 steps=context.steps,
+                **(
+                    {"frozen_scope": preparation["policy"]["deployment_scope"]}
+                    if preparation is not None
+                    else {}
+                ),
+                **(
+                    {
+                        "checkpoint": lambda progress: self._checkpoint_final_policy(
+                            context.memory, progress
+                        )
+                    }
+                    if terminal and self.policy.recover is not None
+                    else {}
+                ),
             )
         )
-        final_status = status
-        if status == "completed":
-            final_status = {
-                "auto_merged_low_risk": "completed_merged",
-                "auto_merge_requested_low_risk": "completed_merge_requested",
-                "hold_for_automated_remediation": "completed_held_for_remediation",
-            }.get(str(policy.get("action") or ""), status)
-        final = {
-            "branch": context.branch,
-            "completed_at": config._iso(self.now()),
-            "para_task_id": context.para_task_id,
-            "phase": "complete",
-            "policy_decision": policy,
-            "run_id": context.run_id,
-            "started_at": config._iso(context.started_at),
-            "status": final_status,
-            "steps": context.steps,
-            "triggered_by": context.triggered_by,
-            **(extra or {}),
-        }
-        if context.resume_candidate:
-            final["resume_candidate"] = context.resume_candidate
+        final = self._final_policy_record(final, policy)
         if terminal:
             pending.update(state="finalized", final_outcome=final)
             self.state.write_memory(context.memory)

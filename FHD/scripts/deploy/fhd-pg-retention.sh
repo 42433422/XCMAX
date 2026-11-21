@@ -41,7 +41,7 @@ fi
 [[ -n "$PG_CONTAINER" ]] || fail "找不到 MODstore Postgres 容器，请设置 FHD_MODSTORE_PG_CONTAINER"
 
 psql_db() {
-  docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "$1"
+  docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -Atc "$1"
 }
 
 [[ "$(psql_db 'SELECT 1' 2>/dev/null || echo 0)" == "1" ]] || fail "无法连接数据库 $PG_DB"
@@ -49,6 +49,7 @@ psql_db() {
 log "===== 行级保留开始（mode=$MODE db=$PG_DB） ====="
 TOTAL_DELETED=0
 TOTAL_TABLES=0
+FAILED_TABLES=0
 
 while IFS='|' read -r TABLE COLUMN DAYS BATCH; do
   TABLE="$(echo "${TABLE:-}" | xargs)"
@@ -63,12 +64,20 @@ while IFS='|' read -r TABLE COLUMN DAYS BATCH; do
     continue
   fi
 
-  EXISTS=$(psql_db "SELECT to_regclass('public.$TABLE') IS NOT NULL" 2>/dev/null || echo f)
+  if ! EXISTS=$(psql_db "SELECT to_regclass('public.$TABLE') IS NOT NULL"); then
+    log "ERROR: 表存在性查询失败: $TABLE"
+    FAILED_TABLES=$((FAILED_TABLES + 1))
+    continue
+  fi
   if [[ "$EXISTS" != "t" ]]; then
     log "WARN: 表不存在，跳过: $TABLE"
     continue
   fi
-  HAS_COL=$(psql_db "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='$TABLE' AND column_name='$COLUMN')" 2>/dev/null || echo f)
+  if ! HAS_COL=$(psql_db "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='$TABLE' AND column_name='$COLUMN')"); then
+    log "ERROR: 列存在性查询失败: $TABLE.$COLUMN"
+    FAILED_TABLES=$((FAILED_TABLES + 1))
+    continue
+  fi
   if [[ "$HAS_COL" != "t" ]]; then
     log "WARN: 列不存在，跳过: $TABLE.$COLUMN"
     continue
@@ -76,24 +85,36 @@ while IFS='|' read -r TABLE COLUMN DAYS BATCH; do
 
   TOTAL_TABLES=$((TOTAL_TABLES + 1))
   if [[ "$MODE" == "dry" ]]; then
-    PENDING=$(psql_db "SELECT count(*) FROM $TABLE WHERE $COLUMN < now() - interval '$DAYS days'" 2>/dev/null || echo 0)
+    if ! PENDING=$(psql_db "SELECT count(*) FROM $TABLE WHERE $COLUMN < now() - interval '$DAYS days'") || ! [[ "$PENDING" =~ ^[0-9]+$ ]]; then
+      log "ERROR: 过期行查询失败: $TABLE"
+      FAILED_TABLES=$((FAILED_TABLES + 1))
+      continue
+    fi
     log "  [dry-run] $TABLE.$COLUMN 超过 $DAYS 天: $PENDING 行"
     continue
   fi
 
   DELETED=0
+  TABLE_FAILED=0
   while :; do
-    N=$(psql_db "WITH d AS (DELETE FROM $TABLE WHERE ctid IN (SELECT ctid FROM $TABLE WHERE $COLUMN < now() - interval '$DAYS days' LIMIT $BATCH) RETURNING 1) SELECT count(*) FROM d" 2>/dev/null || echo 0)
-    [[ "$N" =~ ^[0-9]+$ ]] || { log "WARN: 删除失败，停止本表: $TABLE"; break; }
+    if ! N=$(psql_db "WITH d AS (DELETE FROM $TABLE WHERE ctid IN (SELECT ctid FROM $TABLE WHERE $COLUMN < now() - interval '$DAYS days' LIMIT $BATCH) RETURNING 1) SELECT count(*) FROM d") || ! [[ "$N" =~ ^[0-9]+$ ]]; then
+      log "ERROR: 删除失败，停止本表: $TABLE"
+      TABLE_FAILED=1
+      break
+    fi
     DELETED=$((DELETED + N))
     [[ "$N" -lt "$BATCH" ]] && break
   done
   if [[ "$DELETED" -gt 0 ]]; then
-    docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "VACUUM (ANALYZE) $TABLE" >/dev/null \
-      || log "WARN: VACUUM 失败: $TABLE"
+    if ! docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -c "VACUUM (ANALYZE) $TABLE" >/dev/null; then
+      log "ERROR: VACUUM 失败: $TABLE"
+      TABLE_FAILED=1
+    fi
   fi
   log "  $TABLE.$COLUMN 删除 $DELETED 行（保留 $DAYS 天）"
   TOTAL_DELETED=$((TOTAL_DELETED + DELETED))
+  FAILED_TABLES=$((FAILED_TABLES + TABLE_FAILED))
 done < "$CONF"
 
+[[ "$FAILED_TABLES" == "0" ]] || fail "行级保留失败：$FAILED_TABLES 张表异常，已删除 $TOTAL_DELETED 行"
 log "===== 行级保留完成：$TOTAL_TABLES 张表，删除 $TOTAL_DELETED 行 ====="

@@ -83,6 +83,17 @@ def execute_planner_tool(body: dict[str, Any] | None) -> dict[str, Any]:
     return execute_planner_tool_from_body(body)
 
 
+def execute_planner_tool_request(
+    request: Request, body: dict[str, Any] | None
+) -> tuple[dict[str, Any], int]:
+    """Keep Mod HTTP execution on the host's authenticated original-task boundary."""
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
+
+    return run_tools_execute_agent(
+        request=request, body=body or {}, route_path=str(request.url.path)
+    )
+
+
 __all__ = [
     "PLANNER_FACADE_MOD_ID",
     "chat",
@@ -95,4 +106,5 @@ __all__ = [
     "list_planner_tools_registry",
     "execute_planner_tool",
     "run_planner_tool_agent",
+    "execute_planner_tool_request",
 ]

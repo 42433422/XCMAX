@@ -194,6 +194,8 @@ async def execute_browser_plan(
         return page
 
     async def verify(checks: list[dict[str, Any]]) -> list[dict[str, str]]:
+        from app.domain.browser_receipt import observed_assertion
+
         receipts = []
         for check in checks:
             active_page = check_network()
@@ -201,6 +203,7 @@ async def execute_browser_plan(
             kind = check["kind"]
             if kind == "url":
                 await expect(active_page).to_have_url(check["expected"], timeout=timeout)
+                actual = active_page.url
             else:
                 locator = _locator(active_page, check["locator"], check.get("frame"))
                 if kind == "visible":
@@ -208,12 +211,19 @@ async def execute_browser_plan(
                         "to_be_hidden" if check.get("expected") == "false" else "to_be_visible"
                     )
                     await getattr(expect(locator), visibility)(timeout=timeout)
+                    actual = await locator.is_visible(timeout=timeout)
                 else:
                     await getattr(expect(locator), f"to_have_{kind}")(
                         check["expected"],
                         timeout=timeout,
                     )
-            receipts.append({"kind": kind, "status": "passed"})
+                    actual = await getattr(
+                        locator, "text_content" if kind == "text" else "input_value"
+                    )(timeout=timeout)
+            receipt = observed_assertion(check, actual)
+            if receipt["status"] != "passed":
+                raise AssertionError("browser postcondition changed during observation")
+            receipts.append(receipt)
         return receipts
 
     async def route_request(route: Any) -> None:

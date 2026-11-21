@@ -46,7 +46,9 @@ from .super_employee.common import _SUBTASK_LABELS as _SUBTASK_LABELS
 from .super_employee.common import _TASK_MARKERS as _TASK_MARKERS
 from .super_employee.common import DEFAULT_PARA_API_URL as DEFAULT_PARA_API_URL
 from .super_employee.common import DISPATCHER_MESSAGE_KIND, _chunk_text, _utc_now
-from .super_employee.common import PARA_TERMINAL_TASK_STATUSES as PARA_TERMINAL_TASK_STATUSES
+from .super_employee.common import (
+    PARA_TERMINAL_TASK_STATUSES as PARA_TERMINAL_TASK_STATUSES,
+)
 from .super_employee.common import TASK_ID_RE as TASK_ID_RE
 from .super_employee.common import _coerce_list as _coerce_list
 from .super_employee.common import _relay_wt_lock as _relay_wt_lock
@@ -192,6 +194,10 @@ class SuperEmployeeService:
             profile,
             self._messages,
             MessageSyncPorts(
+                read_rows=lambda: self._read_all_message_rows(),
+                reconcile_dispatch=lambda request: self._dispatching.reconcile(request),
+                dispatch_reply=lambda receipt: self._dispatch_reply(receipt),
+                task_reply=lambda task: self._para_task_status_reply(task),
                 fetch_task=lambda task: self._fetch_para_task(task),
                 direct_reply=lambda text: self._direct_reply_body(text),
                 should_reply=lambda text, ctx: self._should_reply_with_cli(text, ctx),
@@ -278,41 +284,13 @@ class SuperEmployeeService:
         ]
         return rows[-max(1, min(int(limit), 200)) :]
 
-    def _record_direct_reply(
-        self,
-        user_msg: dict[str, Any],
-        body: str,
-        dispatch: dict[str, Any],
-        failure: CliExecutionError | None = None,
-    ) -> dict[str, Any]:
-        status = "failed" if failure else "completed"
-        details = failure.payload() if failure else {}
-        assistant_msg = self._message_row(
-            user_id=user_msg["user_id"],
-            role="assistant",
-            body=body,
-            created_at=_utc_now(),
-            request_id=user_msg["dispatch_request_id"],
-            status=status,
-            extra={"kind": self._p.direct_kind, **details},
+    def read_dispatch_receipt(
+        self, *, user_id: int, request_id: str, task_id: str
+    ) -> dict[str, Any] | None:
+        """Read one persisted dispatch; never run message-list CLI backfills."""
+        return self._sync.read_dispatch_receipt(
+            user_id=user_id, request_id=request_id, task_id=task_id
         )
-        self._append_messages([user_msg, assistant_msg])
-        return {
-            "employee": {
-                "id": self._p.employee_id,
-                "name": self._p.employee_name,
-                "device_scope": "all_devices",
-            },
-            "dispatch": {
-                **dispatch,
-                "status": status,
-                **details,
-                **({"accepted": False, "queued": False} if failure else {}),
-            },
-            "message": self._public_message(user_msg),
-            "assistant_message": self._public_message(assistant_msg),
-            "messages": self.list_messages(user_id=user_msg["user_id"]),
-        }
 
     def read_dispatch_receipt(
         self, *, user_id: int, request_id: str, task_id: str
@@ -467,7 +445,14 @@ class SuperEmployeeService:
             for key in ("task", "scope", "workspace_id", "mode", "target_devices"):
                 if previous_request.get(key) != dispatch_request.get(key):
                     raise ValueError(f"request_id 已绑定其他任务参数：{key}")
-            for key in ("branch", "repo_url", "para_tier", "tier", "escalate", "max_devices"):
+            for key in (
+                "branch",
+                "repo_url",
+                "para_tier",
+                "tier",
+                "escalate",
+                "max_devices",
+            ):
                 if previous_request.get("raw_context", {}).get(key) != ctx.get(key):
                     raise ValueError(f"request_id 已绑定其他任务参数：{key}")
             dispatch_request = previous_request
@@ -498,6 +483,7 @@ class SuperEmployeeService:
                         "dispatcher": fallback_dispatcher,
                         "fallback": fallback_dispatcher,
                         "response": {"text": fallback_body},
+                        **(failure.payload() if failure else {}),
                     },
                 )
                 return self._record_direct_reply(
@@ -530,9 +516,9 @@ class SuperEmployeeService:
                 "workspace_id": self._grant.workspace_id or "",
                 "para_tier": dispatch.get("para_tier"),
                 "reconciliation_required": dispatch.get("reconciliation_required", False),
-                "devices": dispatch.get("devices")
-                if isinstance(dispatch.get("devices"), list)
-                else [],
+                "devices": (
+                    dispatch.get("devices") if isinstance(dispatch.get("devices"), list) else []
+                ),
             },
         )
         existing_rows = self._read_all_message_rows() if previous_request else []
@@ -579,7 +565,7 @@ class SuperEmployeeService:
         dispatch: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         uid = int(user_msg["user_id"])
-        receipt = failure.receipt if failure else {}
+        receipt = failure.payload() if failure else {}
         status = "failed" if failure else "completed"
         assistant = self._message_row(
             user_id=uid,
@@ -588,7 +574,10 @@ class SuperEmployeeService:
             created_at=_utc_now(),
             request_id=user_msg["dispatch_request_id"],
             status=status,
-            extra={"kind": self._p.direct_kind, **({"cli_execution": receipt} if failure else {})},
+            extra={
+                "kind": self._p.direct_kind,
+                **({"cli_execution": receipt} if failure else {}),
+            },
         )
         self._append_messages([user_msg, assistant])
         result_dispatch = {
@@ -674,7 +663,10 @@ class SuperEmployeeService:
                 for chunk in _chunk_text(body):
                     yield {"type": "token", "text": chunk}
                     await asyncio.sleep(0.03)
-                yield {"type": "done", "result": {"response": body, "dispatcher": "dev_loop"}}
+                yield {
+                    "type": "done",
+                    "result": {"response": body, "dispatcher": "dev_loop"},
+                }
             except CliExecutionError as exc:
                 yield exc.event()
             except RECOVERABLE_ERRORS as exc:
@@ -696,23 +688,23 @@ class SuperEmployeeService:
                     elif event["type"] == "done":
                         completed = True
                         final_text = event.get("text", final_text)
-                        completed = True
                     elif event["type"] == "error":
                         yield event
                         return
-            if not completed:
-                raise CliExecutionError(
-                    f"{self._p.display_tool} CLI 未返回完成回执；请先核对原任务。",
-                    partial_output=final_text,
-                )
             body = final_text.strip()
             require_cli_success(self._p.display_tool, 0 if completed else None, body)
-            yield {"type": "done", "result": {"response": body, "dispatcher": "cli_stream"}}
+            yield {
+                "type": "done",
+                "result": {"response": body, "dispatcher": "cli_stream"},
+            }
         except CliExecutionError as exc:
             yield exc.event()
         except RECOVERABLE_ERRORS as exc:
             logger.exception("invoke_stream cli failed: %s", exc)
-            yield {"type": "error", "message": f"{self._p.display_tool} CLI 调用失败：{exc}"}
+            yield {
+                "type": "error",
+                "message": f"{self._p.display_tool} CLI 调用失败：{exc}",
+            }
 
     def _cli_reply_body(self, text: str, context: dict[str, Any]) -> str:
         if str(
@@ -748,7 +740,11 @@ class SuperEmployeeService:
         env.setdefault("GIT_TERMINAL_PROMPT", "0")
         env.setdefault("GIT_ASKPASS", "true")
         return subprocess.run(
-            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=timeout, env=env
+            ["git", "-C", cwd, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
         )
 
     def _is_git_repo(self, cwd: str) -> bool:

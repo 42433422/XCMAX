@@ -349,7 +349,6 @@ class TestCliReplyBodyBoundary:
         assert "cli answer" in result or isinstance(result, str)
 
     def test_cli_execution_oserror(self, tmp_path, monkeypatch):
-        from app.application.super_employee.cli import CliExecutionError
 
         monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "1")
         svc = _make_svc(tmp_path, cli_runner=_error_runner(OSError("boom")))

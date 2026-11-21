@@ -82,9 +82,7 @@ def test_bump_release_train_persists(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert st["day_index"] == 1
 
 
-def test_bump_requires_timeline_closure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_bump_requires_timeline_closure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from modstore_server.release_train import bump_release_train, load_state
     from modstore_server.time_rail_runtime import record_node_run
 

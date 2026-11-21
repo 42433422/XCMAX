@@ -28,14 +28,13 @@ from app.application.workflow.workflow_types import (
 from app.domain.autonomy.browser_evidence import snapshot_text, targets_observed
 from app.domain.autonomy.browser_policy import (
     BROWSER_ACTIONS,
+    BROWSER_OBSERVATIONS,
     MAX_BROWSER_DECISIONS,
     MAX_BROWSER_SECONDS,
     MAX_BROWSER_STEPS,
     browser_action_allowed,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-_OBSERVATIONS = frozenset({"browser_snapshot", "browser_wait_for", "browser_take_screenshot"})
 
 
 def initialize_browser_run(run: AgentRun, plan: PlanGraph) -> str:
@@ -277,16 +276,36 @@ def advance_browser_run(run: AgentRun, context: dict[str, Any], usage: RunUsageL
             state["verification"] = {"text": decision.assertion, "node_id": node_id}
             state["phase"] = "verify"
             return True
+        if (
+            decision.action not in BROWSER_ACTIONS
+            or not browser_action_allowed(decision.action, decision.params)
+            or not validate_tool_call(str(state["tool_id"]), decision.action, decision.params).ok
+        ):
+            return _block(
+                run, "browser_action_schema_invalid", "浏览器动作或参数未通过原工具合同校验"
+            )
         if not targets_observed(decision.params, snapshot[:24_000]):
             return _block(
                 run,
                 "browser_target_unobserved",
                 "模型选择的目标不在本次可见页面快照中，未执行新动作",
             )
-        if decision.action not in _OBSERVATIONS:
+        if decision.action not in BROWSER_OBSERVATIONS:
+            if decision.action != "browser_navigate" and (
+                not decision.assertion or decision.assertion in snapshot
+            ):
+                return _handoff(
+                    run, "请提供本次动作完成后可区分的新页面结果；未声明可核验条件时不执行输入。"
+                )
             state.update(before_mutation=snapshot[:24_000], mutated=True)
         state.pop("verification", None)
-        _append(run, decision.action, decision.params)
+        node_id = _append(run, decision.action, decision.params)
+        if decision.assertion and decision.action not in BROWSER_OBSERVATIONS:
+            state.setdefault("postconditions", {})[node_id] = {
+                "kind": "text",
+                "expected": decision.assertion,
+                "before_snapshot_node_id": last.node_id,
+            }
         state["phase"] = "execute"
         return True
     except RECOVERABLE_ERRORS as exc:

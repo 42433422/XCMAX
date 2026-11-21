@@ -134,11 +134,15 @@ class EmployeeRunner:
             status=status,
             output=result,
             error=error,
-            verified=success,
+            verified=False,
             attempts=attempts,
             error_code=error_code,
             approver=str(work.user_id) if status == "awaiting_approval" else "",
         )
+        from app.application.employee_runtime.run_ledger import employee_result_validation
+
+        # Project verification only after retry classification and ledger completion.
+        # Keep the original receipt intact; this route has no independent readback.
         response: JsonObject = {
             "success": success,
             "source": "local",
@@ -147,6 +151,7 @@ class EmployeeRunner:
             "data": result,
             "execution_state": "completed" if success else status,
             **{key: value for key, value in pending.items() if key != "run_id"},
+            **employee_result_validation(status=status),
         }
         if not success:
             response["message"] = error

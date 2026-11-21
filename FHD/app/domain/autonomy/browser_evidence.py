@@ -21,7 +21,7 @@ class BrowserDecision(BaseModel):
     @model_validator(mode="after")
     def valid_mode(self) -> BrowserDecision:
         if self.mode == "action":
-            if not self.action or self.assertion or self.evidence_node_id:
+            if not self.action or self.evidence_node_id:
                 raise ValueError("action requires exactly one registered action")
         elif self.action or self.params:
             raise ValueError("only action accepts tool parameters")
@@ -39,6 +39,16 @@ def snapshot_text(output: dict[str, Any]) -> str:
     content = str(output.get("content") or "")
     match = re.search(r"### Snapshot\s*\n```(?:yaml)?\s*\n(.*?)\n```", content, re.S)
     return match.group(1) if match else ""
+
+
+def snapshot_url(output: dict[str, Any]) -> str:
+    """Read only the page header, excluding code echoes and arbitrary page text."""
+    content = str(output.get("content") or "")
+    content = re.sub(r"```.*?```", "", content, flags=re.S)
+    match = re.search(r"^### Page\s*\n(.*?)(?=^### |\Z)", content, re.S | re.M)
+    page = match.group(1) if match else ""
+    url = re.search(r"^- Page URL: (https?://[^\r\n]+)$", page, re.M)
+    return url.group(1).strip() if url else ""
 
 
 def targets_observed(params: dict[str, Any], snapshot: str) -> bool:

@@ -299,6 +299,18 @@ def _registered_router_inventory(
 def _registered_router_purchase(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    if action in {"create_order", "create_inbound"} and runtime_context.get("run_id"):
+        from app.domain.shared_services.purchase_service import purchase_execution_number
+
+        number = purchase_execution_number(
+            action,
+            str(runtime_context["run_id"]),
+            str(runtime_context.get("step_id") or ""),
+            str(runtime_context.get("tenant_id") or ""),
+        )
+        if action == "create_inbound" and not params.get("order_id"):
+            return {"success": False, "message": "自治采购入库需要原已审批订单"}
+        params = {**params, "inbound_no" if action == "create_inbound" else "order_no": number}
     if str(runtime_context.get("service_source") or "") == "fastapi_purchase_route":
         from app.fastapi_routes import purchase as purchase_route
 

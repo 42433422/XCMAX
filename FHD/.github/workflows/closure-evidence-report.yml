@@ -9,11 +9,9 @@ on:
         required: true
         type: string
       product_version:
-        description: Visible product version
-        required: true
-        default: "1.0.0.3"
-        type: choice
-        options: ["1.0.0.3", "1.0.0.2", "1.0.0.1"]
+        description: Catalog version under observation; blank selects the catalog's current version
+        required: false
+        type: string
       convergence_run_id:
         description: Fresh successful release-convergence-readback workflow run ID
         required: true
@@ -23,11 +21,11 @@ on:
         required: true
         type: string
       previous_security_scan_run_id:
-        description: Prior UTC-day zero-finding scan run ID for the same SHA
-        required: true
+        description: Optional extra scan for the same SHA; blank reuses the required current scan
+        required: false
         type: string
       upgrade_rollback_run_id:
-        description: Successful upgrade-and-rollback-evidence workflow run ID
+        description: Registered upgrade/rollback evidence run; submitted claims do not certify acceptance
         required: true
         type: string
 
@@ -37,65 +35,63 @@ permissions:
 
 jobs:
   build-reports:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Validate requested identity
+        id: identity
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
         run: |
           set -euo pipefail
           printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
           git merge-base --is-ancestor "$RELEASE_SHA" HEAD
-      - uses: actions/download-artifact@v8
-        with:
-          name: xcagi-release-convergence
-          path: ${{ runner.temp }}/convergence
-          run-id: ${{ inputs.convergence_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/download-artifact@v8
-        with:
-          name: xcagi-security-release-reports
-          path: ${{ runner.temp }}/security/current
-          run-id: ${{ inputs.security_scan_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/download-artifact@v8
-        with:
-          name: xcagi-security-release-reports
-          path: ${{ runner.temp }}/security/previous
-          run-id: ${{ inputs.previous_security_scan_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/download-artifact@v8
-        with:
-          name: xcagi-upgrade-rollback-evidence
-          path: ${{ runner.temp }}/rollback
-          run-id: ${{ inputs.upgrade_rollback_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          version="$(python scripts/release/build_closure_reports.py version --product-version "$PRODUCT_VERSION")"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - name: Read original successful workflow attempts and immutable artifact bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          SOURCE_RUNS_JSON: >-
+            {"convergence":"${{ inputs.convergence_run_id }}",
+            "security/current":"${{ inputs.security_scan_run_id }}",
+            "security/previous":"${{ inputs.previous_security_scan_run_id || inputs.security_scan_run_id }}",
+            "rollback":"${{ inputs.upgrade_rollback_run_id }}"}
+        run: |
+          python scripts/release/build_closure_reports.py collect \
+            --release-sha "$RELEASE_SHA" --output-dir "${RUNNER_TEMP}/closure-sources"
       - name: Re-verify current security, SLO and rollback evidence
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
-          RELEASE_ID: xcagi-${{ inputs.product_version }}-${{ inputs.release_sha }}
+          RELEASE_ID: xcagi-${{ steps.identity.outputs.version }}-${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-          python FHD/scripts/security/verify_security_scan_pair.py \
-            --previous-dir "${RUNNER_TEMP}/security/previous" \
-            --current-dir "${RUNNER_TEMP}/security/current" \
+          python scripts/security/verify_security_scan_pair.py \
+            --previous-dir "${RUNNER_TEMP}/closure-sources/security/previous" \
+            --current-dir "${RUNNER_TEMP}/closure-sources/security/current" \
             --release-sha "$RELEASE_SHA" \
-            --output "${RUNNER_TEMP}/security-verification.json"
-          python FHD/scripts/observability/verify_production_slo_window.py \
-            --evidence-dir FHD/metrics/slo-production \
+            --output "${RUNNER_TEMP}/security-verification.json" || echo 'Security verification did not pass; retain its blockers.'
+          python scripts/observability/verify_production_slo_window.py \
+            --evidence-dir metrics/slo-production \
             --release-id "$RELEASE_ID" \
             --required-days 90 \
-            --output "${RUNNER_TEMP}/slo-verification.json"
-          python FHD/scripts/release/verify_upgrade_rollback_evidence.py \
-            --evidence "${RUNNER_TEMP}/rollback/upgrade-rollback-raw.json" \
+            --output "${RUNNER_TEMP}/slo-verification.json" || echo 'SLO verification did not pass; retain its blockers.'
+          python scripts/release/verify_upgrade_rollback_evidence.py \
+            --evidence "${RUNNER_TEMP}/closure-sources/rollback/upgrade-rollback-raw.json" \
             --release-sha "$RELEASE_SHA" \
-            --output "${RUNNER_TEMP}/rollback-verification.json"
+            --output "${RUNNER_TEMP}/rollback-verification.json" || echo 'Rollback verification did not pass; retain its scope and blockers.'
       - name: Fetch fresh redacted customer lifecycle evidence
         env:
           ADMIN_API_BASE: ${{ secrets.MODSTORE_ADMIN_API_BASE }}
@@ -112,24 +108,27 @@ jobs:
       - name: Build four hashed redacted reports
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ steps.identity.outputs.version }}
         run: |
           set -euo pipefail
-          convergence="$(find "${RUNNER_TEMP}/convergence" -type f -name 'release-convergence.json' -print -quit)"
-          test -n "$convergence"
-          python FHD/scripts/release/build_closure_reports.py \
+          convergence="${RUNNER_TEMP}/closure-sources/convergence/release-convergence.json"
+          test -s "$convergence"
+          python scripts/release/build_closure_reports.py \
             --release-convergence "$convergence" \
             --security "${RUNNER_TEMP}/security-verification.json" \
             --slo "${RUNNER_TEMP}/slo-verification.json" \
             --upgrade-rollback "${RUNNER_TEMP}/rollback-verification.json" \
             --customer-value "${RUNNER_TEMP}/customer-value.json" \
             --release-sha "$RELEASE_SHA" \
-            --product-version "${{ inputs.product_version }}" \
+            --product-version "$PRODUCT_VERSION" \
             --output-dir "${RUNNER_TEMP}/closure-reports"
       - name: Upload final closure reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: xcagi-closure-reports-${{ inputs.release_sha }}
-          path: ${{ runner.temp }}/closure-reports
+          path: |
+            ${{ runner.temp }}/closure-reports
+            ${{ runner.temp }}/closure-sources/provenance.json
           retention-days: 120
           if-no-files-found: error

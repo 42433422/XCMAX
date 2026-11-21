@@ -51,6 +51,8 @@ def apply_approved_step(
     approval_claims: dict[str, Any] | None = None,
 ) -> None:
     """Apply an already validated approval without performing storage I/O."""
+    from app.application.agent_orchestrator.approval_grant import _params_hash
+
     context = merge_runtime_context(run, runtime_context)
     run.metadata["runtime_context"] = context
     from app.application.agent_orchestrator.approval_grant import (
@@ -85,6 +87,9 @@ def apply_approved_step(
         "step.approved",
         f"步骤 {step.node_id} 已确认继续",
         {
+            "task_id": str((run.metadata.get("task_context") or {}).get("task_id") or run.run_id),
+            "params_sha256": _params_hash(step),
+            "plan_sha256": str(run.metadata.get("plan_sha256") or ""),
             "step_id": step.step_id,
             "node_id": step.node_id,
             "tool_id": step.tool_id,
@@ -266,6 +271,21 @@ class BackgroundTaskExecutionMixin:
         if run is None:
             return None
         if requires_retry_reconciliation(run):
+            from app.application.agent_orchestrator.result_verification import verification_blocked
+
+            if (
+                recovered
+                and verification_blocked(run)
+                and run.status in {"queued", "running", "retrying"}
+            ):
+                run.status, run.error = "blocked", "原执行回执已保存，等待独立结果核验"
+                run.metadata["execution"] = {
+                    **(run.metadata.get("execution") or {}),
+                    "state": "idle",
+                    "finished_at": utc_now_iso(),
+                }
+                run.add_event("verification.recovery_parked", run.error)
+                return cast("AgentRun | None", self._repo.save(run))
             return cast("AgentRun | None", run)
         if run.status not in {"queued", "running", "retrying"}:
             return cast("AgentRun | None", run)

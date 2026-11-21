@@ -344,19 +344,28 @@ class PlaywrightComputer:
                             raise _OriginDenied
                     assertion = plan.verification
                     if assertion:
+                        from app.domain.browser_receipt import observed_assertion
+
                         timeout = budget()
                         if assertion.kind == "url":
                             assert isinstance(assertion.expected, str)
                             expect(page).to_have_url(assertion.expected, timeout=timeout)
+                            actual = page.url
                         else:
                             assert assertion.target is not None
-                            check = expect(_locator(page, assertion.target))
+                            locator = _locator(page, assertion.target)
+                            check = expect(locator)
                             if assertion.kind in {"text", "value"}:
                                 assert isinstance(assertion.expected, str)
                                 if assertion.kind == "text":
                                     check.to_have_text(assertion.expected, timeout=timeout)
                                 else:
                                     check.to_have_value(assertion.expected, timeout=timeout)
+                                actual = (
+                                    locator.text_content(timeout=timeout)
+                                    if assertion.kind == "text"
+                                    else locator.input_value(timeout=timeout)
+                                )
                             else:
                                 assert isinstance(assertion.expected, bool)
                                 if assertion.kind == "visible":
@@ -367,6 +376,16 @@ class PlaywrightComputer:
                                     )(timeout=timeout)
                                 else:
                                     check.to_be_checked(checked=assertion.expected, timeout=timeout)
+                                actual = (
+                                    locator.is_visible(timeout=timeout)
+                                    if assertion.kind == "visible"
+                                    else locator.is_checked(timeout=timeout)
+                                )
+                        result["verification"] = observed_assertion(
+                            assertion.model_dump(exclude_none=True), actual
+                        )
+                        if result["verification"]["status"] != "passed":
+                            raise AssertionError("computer browser postcondition changed")
                     result["observation"] = observe(page)
                     budget()
                     result.update(

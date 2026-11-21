@@ -6,6 +6,9 @@
 from __future__ import annotations
 
 import importlib
+import os
+from datetime import datetime, timezone
+from typing import Any
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -281,7 +284,7 @@ def mark_backup_guard_probe_escalated(
 TIMELINE_NODES = ("ASM", "P", "M", "PPTX", "SW", "SS", "SA", "V")
 
 
-def sync_version_ssot(version: str) -> _facade().Dict[str, _facade().Any]:
+def sync_version_ssot(version: str) -> dict[str, Any]:
     """把 release_train 的新版本写进 VERSION.md 并同步 25 个锚点（SSOT 唯一更新入口）。
 
     默认 ``ci``：服务器只产出状态，由 ``version-ssot-sync`` workflow 读状态后
@@ -290,14 +293,12 @@ def sync_version_ssot(version: str) -> _facade().Dict[str, _facade().Any]:
     import subprocess
     import sys
 
-    mode = (
-        (_facade().os.environ.get("MODSTORE_RELEASE_TRAIN_SSOT_SYNC", "ci") or "")
-        .strip()
-        .lower()
-    )
+    from modstore_server.release_train import logger, ssot_path
+
+    mode = (os.environ.get("MODSTORE_RELEASE_TRAIN_SSOT_SYNC", "ci") or "").strip().lower()
     if mode != "local":
         return {"ok": True, "deferred": True, "owner": "ci", "version": version}
-    root = _facade().ssot_path().parent.parent
+    root = ssot_path().parent.parent
     script = root / "scripts" / "dev" / "version_sync.py"
     if not script.is_file():
         return {"ok": False, "reason": "version_sync_script_missing", "root": str(root)}
@@ -310,7 +311,7 @@ def sync_version_ssot(version: str) -> _facade().Dict[str, _facade().Any]:
             timeout=120,
         )
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception("release_train: version_sync 执行失败 version=%s", version)
+        logger.exception("release_train: version_sync 执行失败 version=%s", version)
         return {"ok": False, "reason": "version_sync_exec_error", "root": str(root)}
     if done.returncode != 0:
         return {
@@ -322,7 +323,7 @@ def sync_version_ssot(version: str) -> _facade().Dict[str, _facade().Any]:
     return {"ok": True, "version": version, "root": str(root)}
 
 
-def _record_day(value: _facade().Any) -> str:
+def _record_day(value: Any) -> str:
     """把节点 last_run（UTC ISO）折算成北京日历日。"""
     raw = str(value or "").strip()
     if not raw:
@@ -330,20 +331,20 @@ def _record_day(value: _facade().Any) -> str:
     try:
         from zoneinfo import ZoneInfo
 
-        dt = _facade().datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=_facade().timezone.utc)
+            dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
     except RECOVERABLE_ERRORS:
         return raw[:10]
 
 
-def timeline_closure_gaps(day: str) -> list[_facade().Dict[str, _facade().Any]]:
+def timeline_closure_gaps(day: str) -> list[dict[str, Any]]:
     """返回当日时间线未闭环的节点；空列表表示真实闭环。"""
     from modstore_server.time_rail_runtime import all_node_records
 
     records = all_node_records()
-    gaps: list[_facade().Dict[str, _facade().Any]] = []
+    gaps: list[dict[str, Any]] = []
     for node_id in TIMELINE_NODES:
         row = records.get(node_id) or {}
         if not row:
@@ -351,9 +352,7 @@ def timeline_closure_gaps(day: str) -> list[_facade().Dict[str, _facade().Any]]:
         elif row.get("ok") is not True:
             gaps.append({"node": node_id, "reason": "not_ok"})
         elif _record_day(row.get("last_run")) != day:
-            gaps.append(
-                {"node": node_id, "reason": "stale", "last_run": row.get("last_run")}
-            )
+            gaps.append({"node": node_id, "reason": "stale", "last_run": row.get("last_run")})
     return gaps
 
 
@@ -369,6 +368,8 @@ def bump_release_train(
     传 ``force=True`` 或环境 ``MODSTORE_RELEASE_TRAIN_FORCE_BUMP=1`` 可绕过。
     每次成功 bump 前会把旧 state 快照到 ``release_train_history/``（容灾 + 回滚 SSOT）。
     """
+    from modstore_server.release_train import attach_release_train_to_digest, logger
+
     enabled = (
         (_facade().os.environ.get("MODSTORE_RELEASE_TRAIN_ENABLED", "1") or "").strip().lower()
     )
@@ -391,15 +392,12 @@ def bump_release_train(
         "MODSTORE_RELEASE_TRAIN_FORCE_BUMP", "0"
     ).strip().lower() in ("1", "true", "yes", "on")
     require_closure = (
-        (_facade().os.environ.get("MODSTORE_RELEASE_TRAIN_REQUIRE_TIMELINE_CLOSURE", "1") or "")
-        .strip()
-        .lower()
-        not in ("0", "false", "no", "off")
-    )
+        os.environ.get("MODSTORE_RELEASE_TRAIN_REQUIRE_TIMELINE_CLOSURE", "1") or ""
+    ).strip().lower() not in ("0", "false", "no", "off")
     if require_closure and (not force):
         gaps = timeline_closure_gaps(day)
         if gaps:
-            _facade().logger.warning(
+            logger.warning(
                 "release_train bump skipped (timeline not closed): day=%s gaps=%s",
                 day,
                 gaps,
@@ -418,7 +416,7 @@ def bump_release_train(
                 "push_major": False,
             }
             if record_id and int(record_id) > 0:
-                _facade().attach_release_train_to_digest(int(record_id), result)
+                attach_release_train_to_digest(int(record_id), result)
             return result
     guard = _facade().active_backup_guard(day=day, state=st)
     if guard and (not force):
@@ -481,9 +479,7 @@ def bump_release_train(
     _facade()._snapshot_state_to_history(st, reason="post_bump", path=_facade().ssot_path())
     ssot = sync_version_ssot(after)
     if not ssot.get("ok"):
-        _facade().logger.error(
-            "release_train: 版本 SSOT 同步失败 after=%s detail=%s", after, ssot
-        )
+        logger.error("release_train: 版本 SSOT 同步失败 after=%s detail=%s", after, ssot)
     result: _facade().Dict[str, _facade().Any] = {
         "ok": True,
         "skipped": False,
