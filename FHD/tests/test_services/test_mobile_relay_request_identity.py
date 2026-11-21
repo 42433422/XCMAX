@@ -14,9 +14,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.schema import CreateSchema, DropSchema
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
+from sqlalchemy.schema import CreateSchema, DropSchema
 
 from app.application.desktop_relay import e2ee
 from app.application.mobile_relay_ports import RelayTaskConflict
