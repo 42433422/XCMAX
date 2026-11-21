@@ -15,6 +15,7 @@ from ipaddress import ip_address
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.domain.aiopen.inprocess import inprocess_admitted
 from app.security.lan_config import get_lan_config, lan_guard_path_is_bypassed
 from app.security.lan_ip import get_client_ip
 from app.security.license_store import is_ip_explicitly_allowed, touch_allowed_client
@@ -141,6 +142,13 @@ class LanCidrGuard:
         path = scope.get("path") or "/"
 
         if method == "OPTIONS" or lan_guard_path_is_bypassed(path, cfg):
+            await self.app(scope, receive, send)
+            return
+
+        # AIOPEN already authenticated this call at /api/aiopen/*. The follow-up
+        # is in-process. Headers cannot set this flag, and it does not grant
+        # lan_is_admin or trust a forwarded address.
+        if inprocess_admitted(scope):
             await self.app(scope, receive, send)
             return
 

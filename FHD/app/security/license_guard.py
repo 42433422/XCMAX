@@ -14,6 +14,7 @@ import os
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.domain.aiopen.inprocess import inprocess_admitted
 from app.security.lan_config import (
     LAN_LICENSE_SECRET_MIN_LENGTH,
     get_lan_config,
@@ -107,6 +108,12 @@ class LanLicenseGuard:
         # host and a live market-admin session.  Preserve that narrowly scoped
         # decision instead of demanding a second, unrelated LAN activation key.
         if bool((scope.get("state") or {}).get("lan_public_admin_session")):
+            await self.app(scope, receive, send)
+            return
+
+        # Same in-process admission as the CIDR guard. Do not mark the call as
+        # a LAN admin host, and do not accept a client-supplied address.
+        if inprocess_admitted(scope):
             await self.app(scope, receive, send)
             return
 

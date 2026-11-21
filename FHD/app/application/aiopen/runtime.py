@@ -411,6 +411,50 @@ class ApiKeyRegistry:
         return {"ok": True, "code": "", "message": "", "key_preview": preview, "env": False}
 
     @_shared_keys
+    def dispatch_ticket(self, provided: str | None) -> dict[str, Any] | None:
+        """Identity for one in-process follow-up. Invalid keys return None.
+
+        The ticket never contains the secret. A restricted client key does not
+        gain knowledge reads, and a tenant-bound key does not become platform-wide.
+        """
+        got = (provided or "").strip()
+        if not got:
+            return None
+        env_key = self._env_key()
+        if env_key and compare_digest(got.encode("utf-8"), env_key.encode("utf-8")):
+            return _dispatch_ticket(
+                actor_id="", tenant_id="", knowledge_read=False, platform_read=False
+            )
+        entry = self._entries().get(_storage_key(got))
+        if not isinstance(entry, dict) or _entry_expired(entry, self._clock()):
+            return None
+        scopes = entry.get("scopes")
+        allowed = (
+            {str(item).strip() for item in scopes if str(item).strip()}
+            if isinstance(scopes, list)
+            else set()
+        )
+        restricted = bool(allowed) and "*" not in allowed
+        tenant = str(entry.get("tenant_id") or "").strip()
+        actor = str(entry.get("principal_id") or "").strip()
+        can_call = (not restricted) or bool({"api_call", "operation_call", "*"} & allowed)
+        if not can_call:
+            return _dispatch_ticket(
+                actor_id=actor, tenant_id=tenant, knowledge_read=False, platform_read=False
+            )
+        if tenant:
+            return _dispatch_ticket(
+                actor_id=actor, tenant_id=tenant, knowledge_read=True, platform_read=False
+            )
+        if not restricted:
+            return _dispatch_ticket(
+                actor_id=actor, tenant_id="", knowledge_read=True, platform_read=True
+            )
+        return _dispatch_ticket(
+            actor_id=actor, tenant_id=tenant, knowledge_read=False, platform_read=False
+        )
+
+    @_shared_keys
     def record_use(
         self,
         provided: str | None,
@@ -465,3 +509,30 @@ class ApiKeyRegistry:
     @staticmethod
     def _deny(code: str, message: str, key_preview: str = "") -> dict[str, Any]:
         return {"ok": False, "code": code, "message": message, "key_preview": key_preview}
+
+
+def _entry_expired(entry: dict[str, Any], now: float) -> bool:
+    expires_at = entry.get("expires_at")
+    if expires_at is None:
+        return False
+    try:
+        return now >= float(expires_at)
+    except (TypeError, ValueError):
+        return False
+
+
+def _dispatch_ticket(
+    *,
+    actor_id: str,
+    tenant_id: str,
+    knowledge_read: bool,
+    platform_read: bool,
+) -> dict[str, Any]:
+    return {
+        "v": 1,
+        "authenticated": True,
+        "actor_id": actor_id,
+        "tenant_id": tenant_id,
+        "knowledge_read": knowledge_read,
+        "platform_read": platform_read and knowledge_read and not tenant_id,
+    }

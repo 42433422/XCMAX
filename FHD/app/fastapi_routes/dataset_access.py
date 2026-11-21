@@ -7,10 +7,12 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 from app.application.dataset_rag_app_service import (
+    DATASET_ADMIN_PERMISSION,
     DATASET_READ_PERMISSION,
     DATASET_WRITE_PERMISSION,
     DatasetAccessContext,
 )
+from app.domain.aiopen.inprocess import read_inprocess_ticket
 from app.infrastructure.auth.dependencies import get_logged_in_user, resolve_session_user
 from app.infrastructure.auth.tenant_context import resolve_tenant_id
 from app.mod_sdk.product_skus import resolve_product_sku
@@ -32,6 +34,38 @@ _CLIENT_ACCESS_KEYS = frozenset(
         "dataset_tenant_id",
     }
 )
+
+
+def _inprocess_knowledge_context(request: Request) -> DatasetAccessContext | None:
+    """Read context for a verified in-process AIOPEN call.
+
+    GET/HEAD only. Tenant-bound keys stay on their tenant. An unscoped runtime
+    key may read the admin overview. Client-supplied tenant headers are ignored,
+    and write methods do not receive this context.
+    """
+
+    ticket = read_inprocess_ticket(request.scope)
+    if ticket is None or ticket.get("knowledge_read") is not True:
+        return None
+    if request.method not in {"GET", "HEAD"}:
+        return DatasetAccessContext()
+    tenant = str(ticket.get("tenant_id") or "").strip()
+    actor = str(ticket.get("actor_id") or "").strip()
+    if tenant:
+        return DatasetAccessContext(
+            actor_id=actor,
+            tenant_id=tenant,
+            permissions=frozenset({DATASET_READ_PERMISSION}),
+            is_admin=False,
+        )
+    if ticket.get("platform_read") is True:
+        return DatasetAccessContext(
+            actor_id=actor or "aiopen",
+            tenant_id="platform",
+            permissions=frozenset({DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}),
+            is_admin=True,
+        )
+    return DatasetAccessContext()
 
 
 def dataset_access_context_from_request(
@@ -106,6 +140,10 @@ def dataset_access_context_from_request(
             is_admin=is_admin,
             mod_id=_session_mod_id(request),
         )
+
+    inprocess = _inprocess_knowledge_context(request)
+    if inprocess is not None:
+        return inprocess
 
     if not _trusted_dataset_headers_enabled(request):
         if allow_local_default_read and _local_default_access_enabled(request):

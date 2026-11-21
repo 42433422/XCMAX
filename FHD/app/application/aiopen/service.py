@@ -117,7 +117,10 @@ def _aiopen_storage_path(name: str) -> Path | None:
 def _api_client(app: ASGIApp) -> InternalHttpClient:
     from starlette.testclient import TestClient
 
-    return TestClient(app, follow_redirects=False)
+    from app.domain.aiopen.inprocess import InProcessDispatch, current_dispatch_ticket
+
+    # The wrapper is outside the network edge. A header cannot stamp this ticket.
+    return TestClient(InProcessDispatch(app, current_dispatch_ticket()), follow_redirects=False)
 
 
 def _upstream_open(
@@ -275,6 +278,10 @@ def api_key_usage_recent(limit: int = 100) -> list[dict[str, Any]]:
 
 def resolve_api_key_principal(provided: str | None) -> ScreenPrincipal | None:
     return _keys.resolve_principal(provided)
+
+
+def resolve_dispatch_ticket(provided: str | None) -> dict[str, Any] | None:
+    return _keys.dispatch_ticket(provided)
 
 
 def revoke_api_key(key: str | None) -> bool:
