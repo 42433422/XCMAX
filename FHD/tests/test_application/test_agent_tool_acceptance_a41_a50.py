@@ -295,7 +295,7 @@ def test_thirty_real_calls_match_sqlite_and_do_not_replay_side_effects(
             assert run is not None and run.tool_calls
             call = run.tool_calls[0]
             started = next(item for item in run.events if item.event_type == "tool.started")
-            assert started.data["trace_id"] == run.run_id
+            assert started.data["trace_id"] == run.metadata["trace_id"]
             assert started.data["tool_id"] == "ocr"
             assert started.data["user_id"] == "50"
             assert started.data["tenant_id"] == "50"

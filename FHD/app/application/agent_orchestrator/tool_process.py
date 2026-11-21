@@ -383,6 +383,7 @@ def _worker(
         restore_worker_llm_client,
         scoped_route_metadata,
     )
+    from app.neuro_bus.tracer import TraceContext
 
     # 真正执行工具前先收敛子进程能力：环境清洗 + POSIX 资源软限制。
     # 失败只告警，调度语义仍由父进程 deadline 与进程回收保证。
@@ -454,6 +455,13 @@ def _worker(
 
         restore_catalog_worker_profile(catalog_profile)
         with (
+            TraceContext(
+                context.get("trace_id"),
+                context.get("span_id"),
+                request_id=context.get("request_id"),
+                trace_flags=context.get("trace_flags"),
+                trace_state=context.get("trace_state"),
+            ),
             restore_catalog_claim(catalog_claim),
             restore_worker_claim(elt_claim, elt_step_id=step.step_id if elt_claim else ""),
             restore_worker_claim(surface_claim),
@@ -494,11 +502,6 @@ def _worker(
                         "outcome": "unknown",
                         "error_code": "tool_result_transport_failed",
                         "exception_type": type(exc).__name__,
-                        "exception_hint": (
-                            str(exc.args[0])[:120]
-                            if exc.args and isinstance(exc.args[0], str)
-                            else ""
-                        ),
                         "retryable": False,
                     },
                     "uncertain": [],

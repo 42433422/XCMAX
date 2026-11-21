@@ -184,6 +184,8 @@ class TestAiChatProjectsRunState:
         assert run.status == "completed", (run.error, run.final_output)
         assert run.steps[0].status == "completed"
         events = orchestrator.list_events(run.run_id)
-        assert events[-1].event_type == "run.completed"
+        assert any(event.event_type == "run.completed" for event in events)
+        assert events[-1].event_type == "run.observed"
+        assert events[-1].data["status"] == "completed"
         assert all(event.run_id == run.run_id for event in events)
         assert repository.get(run.run_id).final_output["response"] == "说明"

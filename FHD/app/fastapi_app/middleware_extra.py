@@ -151,11 +151,9 @@ def register_extra_middleware(app: FastAPI) -> None:
         finally:
             reset_request_active_mod_id(am_token)
 
-    @app.middleware("http")
-    async def neuro_http_trace_outer(request: Request, call_next):
-        from app.middleware.neuro_http_trace import neuro_http_trace_middleware
+    from app.middleware.neuro_http_trace import NeuroHttpTraceMiddleware
 
-        return await neuro_http_trace_middleware(request, call_next)
+    app.add_middleware(NeuroHttpTraceMiddleware)
 
 
 def register_prometheus_metrics(app: FastAPI) -> None:

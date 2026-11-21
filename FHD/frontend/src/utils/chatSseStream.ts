@@ -1,8 +1,9 @@
 import { resolvePlannerChatStreamPath } from '@/utils/plannerChatPaths'
 import { createParser } from 'eventsource-parser'
 import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
+import type { ExecutionObservation } from '@/api/agentRuns'
 
-export type PlannerSseEvent =
+export type PlannerSseEvent = ExecutionObservation & (
   | { type: 'route_metadata'; route_metadata: unknown }
   /** 正文之前的工具执行轨迹（附件工件取数），由气泡「附件读取」展示 */
   | { type: 'trace'; items?: ChatTraceItem[]; turn_id?: string }
@@ -35,6 +36,7 @@ export type PlannerSseEvent =
   | { type: 'done'; result?: unknown }
   | { type: 'error'; result?: unknown; code?: string; message?: string; status_code?: number; run_id?: string; route_metadata?: unknown; execution_outcome?: string; requires_reconciliation?: boolean }
   | { type: 'requires_token'; token_name?: string; token_description?: string; run_id?: string }
+)
 
 export class IncompletePlannerSseError extends Error {
   constructor() {

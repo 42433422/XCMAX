@@ -149,3 +149,22 @@ class TestSampling:
     def test_trace_disabled(self, monkeypatch):
         monkeypatch.setenv("XCAGI_GENAI_TRACE_ENABLED", "0")
         assert gt.trace_enabled() is False
+
+
+def test_duration_uses_monotonic_clock_and_error_finish_is_idempotent(monkeypatch):
+    from types import SimpleNamespace
+
+    ticks = [100_000_000]
+    monkeypatch.setattr(
+        gt, "time", SimpleNamespace(time=lambda: 1.0, perf_counter_ns=lambda: ticks[0])
+    )
+    span = gt.GenAISpan("s", "t", None, "chat", start_time=200.0)
+    span._started_ns = ticks[0]
+    ticks[0] += 25_000_000
+    gt.record_error(span, ValueError("Bearer private-secret api_key=secret-key"))
+    ticks[0] += 80_000_000
+    span.finish()
+    assert span.to_dict()["duration_ms"] == 25
+    assert span.status == "error"
+    assert "private-secret" not in str(span.attributes)
+    assert "secret-key" not in str(span.attributes)

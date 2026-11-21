@@ -4,13 +4,13 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "01e7a819be5a25100ee8d47ca03c9f8ea0c2da1c",
-      "head_blob": "e84de2be08fbea59905c492bb1a33ff0ff26c5c8",
+      "head_blob": "83575ec1a5e00801b91446f96107151ca5aa8238",
       "before_lines": 1776,
-      "after_lines": 1785,
-      "reason": "本记录是评审请求，不是审批证据。集成树纳入 #3433 等已登记编排增量后，本文件相对当前 main 的独特结果需按精确 blob 重新登记。",
-      "boundary": "仅保留已纳入来源 PR 对编排入口的独特合并结果，不引入未批准的 #3398/+18、#3447/+33 或 draft 工作。",
-      "validation": "将在集成工作树对规划/澄清相关回归做本地批次验证；远端完整 CI 待本集成 PR 保护检查，本说明不是通过证明。",
-      "follow_up": "合入前必须用当前 main 与本 head 的精确 identity 复核；未纳入项见集成 PR 正文。",
+      "after_lines": 1833,
+      "reason": "本记录是评审请求，不是审批证据。集成树对该文件保留各来源已登记增量的独特合并结果；不把任一来源评审请求视为已批准，也不合成新的批准记录。最终将按与当前 main 的 merge-base 重算精确 identity 后再提交。",
+      "boundary": "仅保留已纳入来源 PR 对编排入口的独特合并结果，不引入未批准的 #3398/+18、#3447/+33 或 draft 工作。 编排器仍只调用既有规划服务；Trace 恢复、单调耗时和错误记录位于原 task_context 模块，不新增规划器、工具执行入口或权限规则。 同步 main@171418352d 的规划澄清持久化实现，保留原澄清等待、恢复和审批边界。",
+      "validation": "各来源已登记回归范围保留，待集成后按真实调用链复验；远端完整 CI 与未完成验收仍待进行。本说明不是通过证明。",
+      "follow_up": "合入前必须用当前 main 与本 head 的精确 identity 复核；未纳入项见集成 PR 正文。 由 @42433422 核对本次薄层调用与同任务回归证据；观测继续复用 OpenTelemetry 1.45.2。该条是精确变更的评审请求，不表示已获批准，不为体量指标机械拆分现有编排器。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {

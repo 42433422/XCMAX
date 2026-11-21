@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.task_context import observe_run_phase
 
 
 class DurableExecutionLeaseMixin:
@@ -39,24 +40,19 @@ class DurableExecutionLeaseMixin:
         run.metadata["execution"] = execution
         self._repo.save(run)
         try:
-            self._execute_ready_steps(
-                run,
-                runtime_context=runtime_context,
-                approved_step_id=approved_step_id,
-            )
+            with observe_run_phase(run, "execution"):
+                self._execute_ready_steps(
+                    run,
+                    runtime_context=runtime_context,
+                    approved_step_id=approved_step_id,
+                )
         finally:
             try:
                 self._apply_requested_control(run)
             finally:
                 now = utc_now_iso()
                 execution = dict(run.metadata.get("execution") or {})
-                execution.update(
-                    {
-                        "state": "idle",
-                        "updated_at": now,
-                        "finished_at": now,
-                    }
-                )
+                execution.update(state="idle", updated_at=now, finished_at=now)
                 run.metadata["execution"] = execution
                 self._repo.save(run)
 
