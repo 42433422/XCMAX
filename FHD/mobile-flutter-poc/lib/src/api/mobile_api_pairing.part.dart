@@ -137,16 +137,36 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
     required String relayId,
     required String kind,
     required Map<String, Object?> payload,
+    String clientRequestId = '',
+    String? baseUrl,
+    String? expectedConnectionBase,
   }) async {
+    final generation = _authGeneration;
+    final scopeBase = expectedConnectionBase ?? await resolveSessionBaseUrl();
+    final requestBase = baseUrl ?? scopeBase;
     final desktopPublicKey = await _relayDesktopPublicKey(relayId);
     final sealed = await RelayE2ee.sealPayload(payload, desktopPublicKey);
     await RelayE2ee.rememberTask(sealed);
-    final json = await postJson(XcagiMobileEndpoints.relayTasks, {
+    final json = await _sendJsonRequest(method: 'POST', path: XcagiMobileEndpoints.relayTasks, body: {
       'relay_id': relayId.trim(),
       'kind': kind.trim(),
       'payload': sealed.envelope,
-    });
+      if (clientRequestId.isNotEmpty) 'client_request_id': clientRequestId,
+    }, baseUrl: requestBase, expectedConnectionBase: scopeBase,
+      expectedAuthGeneration: generation);
     return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> relayTaskByRequest({
+    required String relayId, required String clientRequestId,
+    required String baseUrl, required String expectedConnectionBase,
+  }) async {
+    final json = await _sendJsonRequest(method: 'GET', path: XcagiMobileEndpoints.relayTasks,
+        query: {'relay_id': relayId, 'client_request_id': clientRequestId},
+        baseUrl: baseUrl, expectedConnectionBase: expectedConnectionBase);
+    final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
+    await _decryptRelayResult(envelope);
+    return envelope;
   }
 
   Future<String> _relayDesktopPublicKey(String relayId) async {
@@ -172,9 +192,10 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(
-    String taskId,
+    String taskId, {String? baseUrl, String? expectedConnectionBase}
   ) async {
-    final json = await getJson(XcagiMobileEndpoints.relayTaskStatus(taskId));
+    final json = await _sendJsonRequest(method: 'GET', path: XcagiMobileEndpoints.relayTaskStatus(taskId),
+        baseUrl: baseUrl, expectedConnectionBase: expectedConnectionBase);
     final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
     await _decryptRelayResult(envelope);
     return envelope;

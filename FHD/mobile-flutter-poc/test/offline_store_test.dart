@@ -192,6 +192,20 @@ void main() {
     expect(cached['status'], 'pending');
   });
 
+  test('dispatch identity is stored separately for every original turn', () async {
+    await store.saveTurnDispatch('pinned:codex', 'first', {
+      'client_request_id': 'first', 'relay_id': 'original-relay',
+      'base_url': 'https://original.example/', 'connection_base': 'https://original.example/',
+      'scope': 'original-account', 'channel': 'relay',
+    });
+    await store.saveTurnDispatch('pinned:codex', 'second', {'client_request_id': 'second'});
+    final original = await store.turnDispatch('pinned:codex', 'first');
+    expect(original['relay_id'], 'original-relay');
+    expect(original['base_url'], 'https://original.example/');
+    expect(original['client_request_id'], 'first');
+    expect(await store.turnDispatch('other-conversation', 'first'), isEmpty);
+  });
+
   test('手动重发后可按内容清除排队记录', () async {
     await store.enqueueMessage(
       conversationId: 'c1',

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:wolt_modal_sheet/wolt_modal_sheet.dart';
-import '../../api/mobile_api.dart' show MobileChatAttachment;
+import '../../api/mobile_api.dart' show MobileApiException, MobileChatAttachment;
 import '../../api/mobile_session_store.dart' show MobileSessionData;
 import '../../policy/pinned_ids.dart';
 import 'package:flutter/services.dart';

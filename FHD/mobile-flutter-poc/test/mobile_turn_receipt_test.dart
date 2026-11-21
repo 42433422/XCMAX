@@ -5,16 +5,19 @@ import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
   late HttpServer server;
   late HttpClient http;
   late MobileApiClient api;
   final methods = <String>[];
   Map<String, Object?> receipt = {};
   String? doneState;
+  String expectedReadPath = '/api/conversations/session-1';
+  bool losePostResponse = false;
   setUp(() async {
     methods.clear();
     doneState = null;
+    expectedReadPath = '/api/conversations/session-1';
+    losePostResponse = false;
     receipt = {'turn_id': 'original-turn', 'run_id': 'original-run',
       'status': 'completed', 'message': '已核对原结果'};
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -29,6 +32,10 @@ void main() {
         final context = body['context'] ?? body;
         expect(context['turn_id'], 'original-turn');
         expect(context['idempotency_key'], 'original-turn');
+        if (losePostResponse) {
+          (await request.response.detachSocket(writeHeaders: false)).destroy();
+          return;
+        }
         request.response.headers.contentType = ContentType('text', 'event-stream');
         request.response.write('data: {"type":"token","text":"partial"}\n\n');
         if (doneState != null) {
@@ -37,7 +44,7 @@ void main() {
           }})}\n\n');
         }
       } else {
-        expect(request.uri.path, '/api/conversations/session-1');
+        expect(request.uri.path, expectedReadPath);
         expect(request.uri.queryParameters['turn_id'], 'original-turn');
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode({'success': true, 'turn_receipt': receipt}));
@@ -67,6 +74,59 @@ void main() {
     expect(await api.streamEmployeeChat(message: '执行员工任务', employeeId: 'worker',
         modId: 'mod-1', conversationId: 'session-1', idempotencyKey: 'original-turn'), '已核对原结果');
     expect(methods, ['POST', 'GET']);
+  });
+
+  test('LAN super stream EOF reads the original tool turn without JSON fallback', () async {
+    expectedReadPath = '/${XcagiMobileEndpoints.superEmployeeMessages('codex')}';
+    expect(await api.streamSuperEmployeeMessage('codex', '执行',
+        conversationId: 'session-1', idempotencyKey: 'original-turn'), '已核对原结果');
+    expect(methods, ['POST', 'GET']);
+  });
+
+  test('LAN JSON response loss uses its original turn GET and never repeats POST', () async {
+    expectedReadPath = '/${XcagiMobileEndpoints.superEmployeeMessages('codex')}';
+    losePostResponse = true;
+    final result = await api.postSuperEmployeeMessage('codex', '执行',
+        conversationId: 'session-1', idempotencyKey: 'original-turn');
+    expect(result.data?['response'], '已核对原结果');
+    expect(result.data?['execution_state'], 'completed');
+    expect(methods, ['POST', 'GET']);
+  });
+
+  test('LAN readback stays on the stored endpoint and does not submit text', () async {
+    expectedReadPath = '/${XcagiMobileEndpoints.superEmployeeMessages('codex')}';
+    final base = 'http://127.0.0.1:${server.port}/';
+    expect(await api.readSuperEmployeeTurn(tool: 'codex', conversationId: 'session-1',
+        idempotencyKey: 'original-turn', baseUrl: base, expectedConnectionBase: base), '已核对原结果');
+    expect(methods, ['GET']);
+  });
+
+  test('relay request lookup is a GET carrying the original relay and request key', () async {
+    final relayServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final base = 'http://127.0.0.1:${relayServer.port}/';
+    final relayMethods = <String>[];
+    relayServer.listen((request) async {
+      relayMethods.add(request.method);
+      expect(request.uri.path, '/${XcagiMobileEndpoints.relayTasks}');
+      expect(request.uri.queryParameters, {'relay_id': 'original-relay', 'client_request_id': 'original-turn'});
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({'success': true, 'data': {'task': {
+        'task_id': 'original-task', 'relay_id': 'original-relay',
+        'client_request_id': 'original-turn', 'status': 'unknown', 'result': {},
+      }}}));
+      await request.response.close();
+    });
+    final relayApi = MobileApiClient(config: MobileApiConfig(baseUrl: base),
+        sessionStore: MemoryMobileSessionStore());
+    try {
+      final result = await relayApi.relayTaskByRequest(relayId: 'original-relay',
+          clientRequestId: 'original-turn', baseUrl: base, expectedConnectionBase: base);
+      expect((result.data?['task'] as Map)['task_id'], 'original-task');
+      expect(relayMethods, ['GET']);
+    } finally {
+      relayApi.dispose();
+      await relayServer.close(force: true);
+    }
   });
 
   for (final status in ['queued', 'waiting_approval', 'waiting_input', 'waiting_auth', 'blocked', 'unknown']) {

@@ -489,3 +489,22 @@ def test_replaying_original_plan_after_clarification_returns_the_original_run(ro
     assert [row[0] for row in effects] == [waiting.run_id]
     assert len(completed.tool_calls) == 1
     assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+def test_late_preclarification_sql_save_cannot_replace_completed_generation(roundtrip):
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["success"] is True
+    completed = roundtrip.repository.get(waiting.run_id)
+    writer = SQLAlchemyAgentRunRepository(
+        session_factory=roundtrip.actor.factory, auto_create=False
+    )
+    with pytest.raises(ValueError, match="planning generation"):
+        writer.save(waiting)
+    stored = roundtrip.repository.get(waiting.run_id)
+    assert stored.status == "completed"
+    assert stored.metadata["runtime_context"] == completed.metadata["runtime_context"]
+    assert stored.steps == completed.steps and stored.tool_calls == completed.tool_calls
+    assert stored == completed
+    assert roundtrip.executor.execute_with_deadline.call_count == 1

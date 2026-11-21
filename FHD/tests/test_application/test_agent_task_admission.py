@@ -191,6 +191,86 @@ def test_late_run_saves_cannot_reopen_or_replace_a_terminal_outcome(tmp_path, te
 
 
 @pytest.mark.parametrize("durable", [False, True])
+def test_planning_generation_requires_cas_and_rejects_late_saves(tmp_path, durable):
+    import copy
+
+    from app.application.agent_orchestrator import AgentStep, InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'planning-generation.db'}")
+    factory = sessionmaker(bind=engine)
+    repo = (
+        SQLAlchemyAgentRunRepository(session_factory=factory)
+        if durable
+        else InMemoryAgentRunRepository()
+    )
+    waiting = _scope_run("owner", "planning-task", "mod")
+    question = {"question": "Which scope?", "clarification": {"reason": "planning_scope"}}
+    plan = PlanGraph(
+        plan_id="planning-original",
+        intent="query",
+        metadata={"planning_clarification": True},
+        nodes=[WorkflowNode("scope", "clarify", "ask", params=question)],
+    )
+    waiting.status, waiting.plan_id = "waiting_user", plan.plan_id
+    waiting.steps = [AgentStep("scope", "clarify", "ask", params=question, status="waiting_user")]
+    waiting.metadata["plan"] = plan_to_dict(plan)
+    previous = repo.save(waiting)
+    replacement = copy.deepcopy(previous)
+    replacement.status = "running"
+    replacement.steps = [AgentStep("read", "print", "list", idempotent=True)]
+    replacement.metadata["plan"] = plan_to_dict(
+        PlanGraph(
+            plan_id=plan.plan_id, intent="query", nodes=[WorkflowNode("read", "print", "list")]
+        )
+    )
+    replacement.metadata["runtime_context"]["_planning_clarification_snapshot"] = canonical_hash(
+        previous.to_dict()
+    )
+    replacement.add_event(
+        "run.clarification_resumed",
+        "scope answered",
+        {
+            "kind": "planning_scope",
+            "step_id": previous.steps[0].step_id,
+        },
+    )
+    try:
+        with pytest.raises(ValueError, match="planning generation"):
+            repo.save(copy.deepcopy(replacement))
+        invalid = copy.deepcopy(replacement)
+        invalid.metadata["runtime_context"]["_planning_clarification_snapshot"] = "wrong-snapshot"
+        with pytest.raises(ValueError, match="planning generation"):
+            repo.save_if_unchanged(invalid, previous)
+        assert repo.get(previous.run_id) == previous
+        assert repo.save_if_unchanged(replacement, previous)
+        current = repo.get(previous.run_id)
+        assert [step.tool_id for step in current.steps] == ["print"]
+        current.status, current.steps[0].status = "completed", "completed"
+        current.steps[0].output = {"success": True, "receipt": "committed"}
+        completed = repo.save(current)
+        writer = (
+            SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+            if durable
+            else repo
+        )
+        with pytest.raises(ValueError, match="planning generation"):
+            writer.save(previous)
+        assert repo.get(previous.run_id) == completed
+        # Mutable context changes within the committed generation cannot bypass terminal receipts.
+        late = copy.deepcopy(completed)
+        late.metadata["runtime_context"]["turn_id"] = "late-observer"
+        late.status, late.steps[0].status = "waiting_user", "waiting_user"
+        late.steps[0].output = {}
+        saved = writer.save(late)
+        assert saved.status == "completed"
+        assert saved.steps[0].output == completed.steps[0].output
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("durable", [False, True])
 def test_task_read_acknowledgement_cannot_replace_a_new_attempt(tmp_path, durable):
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
 

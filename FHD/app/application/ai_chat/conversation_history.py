@@ -194,6 +194,16 @@ def persist_chat_turn(
         or inner.get("run_id")
         or inner.get("agent_run_id"),
     }
+    if context.get("_execution_identity") and context.get("execution_tool"):
+        summary["execution_identity"] = str(context["_execution_identity"])
+        summary["execution_tool"] = str(context["execution_tool"])
+        dispatch = response_data.get("dispatch")
+        if isinstance(dispatch, dict):
+            summary["dispatch"] = {
+                key: str(dispatch[key])
+                for key in ("request_id", "task_id", "status")
+                if dispatch.get(key) is not None
+            }
     from app.application.agent_orchestrator.business_harness import (
         extract_payload_business_result,
     )

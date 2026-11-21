@@ -116,6 +116,24 @@ abstract class _RepoChatBase extends _RepoRelayBase {
 
     if (tool != null) {
       if (resumeOnly) {
+        final dispatch = await _turnDispatch(conversation.id, idempotencyKey);
+        await requireScope();
+        if (dispatch.isNotEmpty) {
+          final reply = dispatch['channel'] == 'relay'
+              ? await _readRelayTurn(conversationId: conversation.id, dispatch: dispatch,
+                  requireScope: requireScope, onToken: onToken, onStatus: onStatus,
+                  isCancelled: isCancelled)
+              : await _client.readSuperEmployeeTurn(tool: tool, conversationId: conversation.id,
+                  idempotencyKey: idempotencyKey, baseUrl: '${dispatch['base_url']}',
+                  expectedConnectionBase: '${dispatch['connection_base']}');
+          await cache(ChatRole.assistant, reply);
+          return reply;
+        }
+        if (idempotencyKey.isNotEmpty) {
+          throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+              message: '当前账号或连接没有这条原任务的派发记录，请恢复原连接后核对，未重新派发。',
+              body: {'turn_id': idempotencyKey, 'execution_state': 'unknown', 'requires_reconciliation': true});
+        }
         final reply = await resumeRelayTask(conversationId: conversation.id,
             onToken: onToken, onStatus: onStatus, isCancelled: isCancelled);
         if (reply != null) return reply;
@@ -129,6 +147,8 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       await requireScope();
       if (localBaseUrl.isNotEmpty) {
+        await _saveTurnDispatch(conversation.id, idempotencyKey, channel: 'super',
+            baseUrl: localBaseUrl, requireScope: requireScope);
         // 第 1 级：LAN SSE 流式（逐 token 输出，体验最佳）
         try {
           final reply = await _client.streamSuperEmployeeMessage(
@@ -136,6 +156,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
             text,
             baseUrl: localBaseUrl,
             idempotencyKey: idempotencyKey,
+            conversationId: conversation.id,
             onToken: (token) {
               if (isCancelled != null && isCancelled()) return;
               onToken?.call(token);
@@ -159,6 +180,8 @@ abstract class _RepoChatBase extends _RepoRelayBase {
               tool,
               text,
               baseUrl: localBaseUrl,
+              conversationId: conversation.id,
+              idempotencyKey: idempotencyKey,
             );
             _throwIfCancelled(isCancelled);
             await cache(ChatRole.assistant, reply);
@@ -173,12 +196,15 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       final relayId = await _relayIdForSuperEmployeeDispatch();
       await requireScope();
       if (relayKind != null && relayId.isNotEmpty) {
+        final dispatch = await _saveTurnDispatch(conversation.id, idempotencyKey,
+            channel: 'relay', baseUrl: base, relayId: relayId, requireScope: requireScope);
         // 第 3 级：relay 中继轮询（跨网络，状态轮询模拟流式）
         final reply = await _streamRelaySuperEmployeeTask(
           relayId: relayId,
           relayKind: relayKind,
           conversationId: conversation.id,
           message: text,
+          dispatch: dispatch,
           onToken: onToken,
           onStatus: onStatus,
           isCancelled: isCancelled,
@@ -191,7 +217,10 @@ abstract class _RepoChatBase extends _RepoRelayBase {
         await requireScope();
         return reply.ifEmpty('已收到，我会继续处理。');
       }
-      final reply = await _postSuperEmployeeMessage(tool, text);
+      await _saveTurnDispatch(conversation.id, idempotencyKey, channel: 'super',
+          baseUrl: base, requireScope: requireScope);
+      final reply = await _postSuperEmployeeMessage(tool, text, baseUrl: base,
+          conversationId: conversation.id, idempotencyKey: idempotencyKey);
       _throwIfCancelled(isCancelled);
       await cache(ChatRole.assistant, reply);
       return reply;

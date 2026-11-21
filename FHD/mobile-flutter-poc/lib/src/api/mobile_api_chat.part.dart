@@ -276,28 +276,40 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     } catch (error) {
       await _requireStreamScope(generation, streamBase);
       if (error is MobileApiException &&
-          error.statusCode >= 400 && error.statusCode < 500) rethrow;
+          error.statusCode >= 400 && error.statusCode < 500) {
+        rethrow;
+      }
     }
     return _readChatTurn(sessionId ?? '', turnId, generation, streamBase);
   }
 
   Future<String> _readChatTurn(String conversationId, String turnId,
-      int generation, String base) async {
-    await _requireStreamScope(generation, base);
+      int generation, String base, {String? connectionBase, String? tool}) async {
+    final scopeBase = connectionBase ?? base;
+    await _requireStreamScope(generation, scopeBase);
     Map<String, Object?> receipt = {};
     if (conversationId.isNotEmpty) {
       try {
         final history = await _sendJsonRequest(method: 'GET',
-            path: 'api/conversations/${Uri.encodeComponent(conversationId)}',
-            query: {'turn_id': turnId}, baseUrl: base, expectedConnectionBase: base);
-        await _requireStreamScope(generation, base);
-        final candidate = _asObjectMap(history['turn_receipt'] ?? history['active_turn']);
+            path: tool == null ? 'api/conversations/${Uri.encodeComponent(conversationId)}'
+                : XcagiMobileEndpoints.superEmployeeMessages(tool),
+            query: {'turn_id': turnId, if (tool != null) 'conversation_id': conversationId},
+            baseUrl: base, expectedConnectionBase: scopeBase,
+            expectedAuthGeneration: generation);
+        await _requireStreamScope(generation, scopeBase);
+        final data = _asObjectMap(history['data']);
+        final candidate = _asObjectMap(history['turn_receipt'] ?? history['active_turn'] ??
+            data['turn_receipt'] ?? data['active_turn']);
         if (candidate['turn_id'] == turnId &&
             ((candidate['run_id']?.toString().trim().isNotEmpty ?? false) ||
-                (candidate['receipt_kind'] == 'turn' && candidate['durable'] == true))) receipt = candidate;
+                (candidate['receipt_kind'] == 'turn' && candidate['durable'] == true))) {
+          receipt = candidate;
+        }
       } catch (error) {
-        await _requireStreamScope(generation, base);
-        if (error is MobileApiException && [401, 403].contains(error.statusCode)) rethrow;
+        await _requireStreamScope(generation, scopeBase);
+        if (error is MobileApiException && [401, 403].contains(error.statusCode)) {
+          rethrow;
+        }
       }
     }
     final state = receipt['execution_state'] ?? receipt['status'] ?? 'unknown';
@@ -320,7 +332,9 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     final turnId = idempotencyKey.trim().isEmpty
         ? 'mobile-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
         : idempotencyKey.trim();
-    if (resumeOnly) return _readChatTurn(conversationId, turnId, generation, base);
+    if (resumeOnly) {
+      return _readChatTurn(conversationId, turnId, generation, base);
+    }
     final body = <String, Object?>{
       'message': message,
       'conversation_id': conversationId,
@@ -409,7 +423,9 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     } catch (error) {
       await _requireStreamScope(generation, base);
       if (error is MobileApiException &&
-          error.statusCode >= 400 && error.statusCode < 500) rethrow;
+          error.statusCode >= 400 && error.statusCode < 500) {
+        rethrow;
+      }
     }
     return _readChatTurn(conversationId, turnId, generation, base);
   }
@@ -429,17 +445,48 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     String tool,
     String body, {
     String baseUrl = '',
+    String conversationId = '',
+    String idempotencyKey = '',
   }) async {
-    final json = await postJson(
-      XcagiMobileEndpoints.superEmployeeMessages(tool),
-      {
+    final generation = _authGeneration;
+    final scopeBase = await resolveSessionBaseUrl();
+    final base = baseUrl.trim().isEmpty ? scopeBase : baseUrl.trim();
+    try {
+      final json = await _sendJsonRequest(method: 'POST',
+      path: XcagiMobileEndpoints.superEmployeeMessages(tool),
+      body: {
         'body': body,
         'message': body,
-        'context': const {'source': 'mobile', 'client_surface': 'mobile'},
+        'context': {'source': 'mobile', 'client_surface': 'mobile',
+          if (conversationId.isNotEmpty) 'conversation_id': conversationId,
+          if (idempotencyKey.isNotEmpty) ...{
+            'turn_id': idempotencyKey, 'idempotency_key': idempotencyKey,
+          }},
       },
-      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
-    );
-    return MobileEnvelope.fromJson(json, _asObjectMap);
+      baseUrl: base, expectedConnectionBase: scopeBase,
+      expectedAuthGeneration: generation);
+      return MobileEnvelope.fromJson(json, _asObjectMap);
+    } catch (error) {
+      await _requireStreamScope(generation, scopeBase);
+      if (error is MobileApiException && error.statusCode >= 400 && error.statusCode < 500) {
+        rethrow;
+      }
+      if (conversationId.isEmpty || idempotencyKey.isEmpty) {
+        rethrow;
+      }
+      final reply = await _readChatTurn(conversationId, idempotencyKey, generation, base,
+          connectionBase: scopeBase, tool: tool);
+      return MobileEnvelope(success: true, message: '', data: {
+        'execution_state': 'completed', 'response': reply, 'turn_id': idempotencyKey,
+      }, raw: const {});
+    }
+  }
+
+  Future<String> readSuperEmployeeTurn({required String tool, required String conversationId,
+      required String idempotencyKey, required String baseUrl,
+      required String expectedConnectionBase}) {
+    return _readChatTurn(conversationId, idempotencyKey, _authGeneration, baseUrl,
+        connectionBase: expectedConnectionBase, tool: tool);
   }
 
   /// LAN SSE 流式调用超级员工。逐 token 返回，与 streamChat 同样的 SSE 协议。
@@ -449,6 +496,7 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     String body, {
     String baseUrl = '',
     String idempotencyKey = '',
+    String conversationId = '',
     void Function(String token)? onToken,
     void Function(String status)? onStatus,
     bool Function()? isCancelled,
@@ -466,7 +514,10 @@ abstract class _ApiChatBase extends _ApiWorkBase {
         'body': body,
         'message': body,
         'context': {'source': 'mobile', 'client_surface': 'mobile',
-          if (idempotencyKey.isNotEmpty) 'idempotency_key': idempotencyKey},
+          if (conversationId.isNotEmpty) 'conversation_id': conversationId,
+          if (idempotencyKey.isNotEmpty) ...{
+            'turn_id': idempotencyKey, 'idempotency_key': idempotencyKey,
+          }},
       }),
     );
     request.contentLength = bytes.length;
@@ -486,6 +537,7 @@ abstract class _ApiChatBase extends _ApiWorkBase {
               errBody['error']?.toString() ??
               'HTTP ${response.statusCode}',
           body: errBody,
+          errorCode: _errorCodeFromBody(errBody),
         );
       }
 
@@ -534,7 +586,13 @@ abstract class _ApiChatBase extends _ApiWorkBase {
     } catch (error) {
       await _requireStreamScope(generation, sessionBase);
       if (error is MobileApiException &&
-          error.statusCode >= 400 && error.statusCode < 500) rethrow;
+          error.statusCode >= 400 && error.statusCode < 500) {
+        rethrow;
+      }
+    }
+    if (conversationId.isNotEmpty && idempotencyKey.isNotEmpty) {
+      return _readChatTurn(conversationId, idempotencyKey, generation, effectiveBaseUrl,
+          connectionBase: sessionBase, tool: tool);
     }
     throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
         message: '原任务回执待核对，请在任务工作区查看；未重新派发。',

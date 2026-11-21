@@ -1014,6 +1014,96 @@ void main() {
     expect(await repository.hasInflightRelay('pinned:trae'), isTrue);
   });
 
+  test('lost relay creation response resumes by the persisted original key after repository restart', () async {
+    final api = _LostRelayCreationApi(MemoryMobileSessionStore(const MobileSessionData(
+        userId: 71, accessToken: 'relay-user', serverMode: 'cloud', relayDesktopId: 'fresh-relay')));
+    var repository = MobileRepository(client: api);
+    addTearDown(api.dispose);
+    const conversation = ConversationItem(id: 'pinned:trae', type: ConversationType.pinnedTrae,
+        title: 'Trae', subtitle: '', timestampText: '');
+    api.beforeCreate = () async => (await repository.openOfflineStore())!
+        .turnDispatch(conversation.id, 'original-relay-turn');
+    await expectLater(repository.streamMessage(conversation: conversation, body: '执行一次',
+        idempotencyKey: 'original-relay-turn'), throwsA(isA<MobileApiException>()
+        .having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')));
+    expect(api.savedBeforePost['client_request_id'], 'original-relay-turn');
+    expect(api.savedBeforePost['relay_id'], 'fresh-relay');
+    expect(api.savedBeforePost['scope'], isNotEmpty);
+    expect(api.savedBeforePost['base_url'], api.readBases.single);
+    await repository.dispose();
+    api.beginLoginAttempt(); // A new client/login generation must not invalidate the same owner.
+    repository = MobileRepository(client: api);
+    addTearDown(repository.dispose);
+    expect(await repository.streamMessage(conversation: conversation, body: '',
+        idempotencyKey: 'original-relay-turn', resumeOnly: true), '原中继任务完成');
+    expect(api.createdRelayTasks, 1);
+    expect(api.readKeys, ['original-relay-turn', 'original-relay-turn']);
+    expect(api.readBases[0], api.readBases[1]);
+  });
+
+  test('missing original dispatch cannot attach to another inflight task in the same conversation', () async {
+    final api = _LostRelayCreationApi(MemoryMobileSessionStore(const MobileSessionData(
+        userId: 71, serverMode: 'cloud', relayDesktopId: 'fresh-relay')));
+    final repository = MobileRepository(client: api);
+    addTearDown(repository.dispose);
+    addTearDown(api.dispose);
+    await (await repository.openOfflineStore())!.setInflightTaskId('pinned:trae', 'different-task');
+    await expectLater(repository.streamMessage(conversation: const ConversationItem(
+        id: 'pinned:trae', type: ConversationType.pinnedTrae, title: 'Trae', subtitle: '', timestampText: ''),
+        body: '', idempotencyKey: 'unrecorded-original-turn', resumeOnly: true),
+        throwsA(isA<MobileApiException>().having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')));
+    expect(await repository.hasInflightRelay('pinned:trae'), isTrue);
+    expect(api.readKeys, isEmpty);
+    expect(api.createdRelayTasks, 0);
+  });
+
+  for (final field in ['client_request_id', 'relay_id', 'kind']) {
+    for (final conflict in [false, true]) {
+      test('relay admission checks $field before polling (conflict: $conflict)', () async {
+        final api = _UnboundRelayCreationApi(
+            MemoryMobileSessionStore(const MobileSessionData(
+                userId: 71, serverMode: 'cloud', relayDesktopId: 'fresh-relay')),
+            field, conflict);
+        final repository = MobileRepository(client: api);
+        addTearDown(repository.dispose);
+        addTearDown(api.dispose);
+        final result = repository.streamMessage(conversation: const ConversationItem(
+            id: 'pinned:trae', type: ConversationType.pinnedTrae,
+            title: 'Trae', subtitle: '', timestampText: ''),
+            body: '执行一次', idempotencyKey: 'original-bound-turn');
+        if (conflict) {
+          await expectLater(result, throwsA(isA<MobileApiException>()
+              .having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')));
+          expect(api.readKeys, isEmpty);
+        } else {
+          expect(await result, '已读取原任务');
+          expect(api.readKeys, ['original-bound-turn']);
+        }
+        expect(api.createdRelayTasks, 1);
+        expect(api.pollCalls, 0);
+      });
+    }
+  }
+
+  test('LAN original turn readback keeps the pre-dispatch connection and key', () async {
+    final api = _LostLanTurnApi(MemoryMobileSessionStore(const MobileSessionData(
+        userId: 71, serverMode: 'lan', localBaseUrl: 'http://192.168.31.8:17500/')));
+    final repository = MobileRepository(client: api);
+    addTearDown(repository.dispose);
+    addTearDown(api.dispose);
+    const conversation = ConversationItem(id: 'pinned:trae', type: ConversationType.pinnedTrae,
+        title: 'Trae', subtitle: '', timestampText: '');
+    await expectLater(repository.streamMessage(conversation: conversation, body: '执行一次',
+        idempotencyKey: 'original-lan-turn'), throwsA(isA<MobileApiException>()));
+    expect(await repository.streamMessage(conversation: conversation, body: '',
+        idempotencyKey: 'original-lan-turn', resumeOnly: true), '原LAN结果');
+    expect(api.streamCalls, 1);
+    expect(api.readKeys, ['original-lan-turn']);
+    expect(api.readBases, ['http://192.168.31.8:5011/']);
+    expect(api.postedBaseUrls, isEmpty);
+    expect(api.createdRelayTasks, 0);
+  });
+
   test(
     'MobileRepository clears stale inflight relay without paired desktop',
     () async {
@@ -1672,6 +1762,8 @@ class _CancelAwareSuperEmployeeApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    String conversationId = '',
+    String idempotencyKey = '',
   }) async {
     return const MobileEnvelope<Map<String, Object?>>(
       success: true,
@@ -1729,6 +1821,8 @@ class _SuperEmployeeDirectApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    String conversationId = '',
+    String idempotencyKey = '',
   }) async {
     postedTools.add(tool);
     final data = <String, Object?>{
@@ -1790,6 +1884,9 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
     required String relayId,
     required String kind,
     required Map<String, Object?> payload,
+    String clientRequestId = '',
+    String? baseUrl,
+    String? expectedConnectionBase,
   }) async {
     createdRelayTasks += 1;
     return const MobileEnvelope<Map<String, Object?>>(
@@ -1806,7 +1903,7 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
 
   @override
   Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(
-    String taskId,
+    String taskId, {String? baseUrl, String? expectedConnectionBase}
   ) async {
     statusCalls += 1;
     return const MobileEnvelope<Map<String, Object?>>(
@@ -1834,6 +1931,8 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    String conversationId = '',
+    String idempotencyKey = '',
   }) async {
     postedTools.add(tool);
     postedBaseUrls.add(baseUrl);
@@ -1887,7 +1986,7 @@ class _FreshPairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
 
   @override
   Future<String> streamSuperEmployeeMessage(String tool, String body,
-      {String baseUrl = '', String idempotencyKey = '',
+      {String baseUrl = '', String idempotencyKey = '', String conversationId = '',
       void Function(String)? onToken, void Function(String)? onStatus,
       bool Function()? isCancelled}) async {
     throw const MobileApiException(statusCode: 404, message: 'route missing', body: {});
@@ -1927,26 +2026,31 @@ class _FreshPairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
     required String relayId,
     required String kind,
     required Map<String, Object?> payload,
+    String clientRequestId = '',
+    String? baseUrl,
+    String? expectedConnectionBase,
   }) async {
     createdRelayTasks += 1;
     lastRelayId = relayId;
     lastKind = kind;
     lastPayload = payload;
-    return const MobileEnvelope<Map<String, Object?>>(
+    return MobileEnvelope<Map<String, Object?>>(
       success: true,
       message: '',
       data: {
-        'task': {'task_id': 'fresh-task'},
+        'task': {'task_id': 'fresh-task', 'client_request_id': clientRequestId,
+          'relay_id': relayId, 'kind': kind},
       },
       raw: {
-        'task': {'task_id': 'fresh-task'},
+        'task': {'task_id': 'fresh-task', 'client_request_id': clientRequestId,
+          'relay_id': relayId, 'kind': kind},
       },
     );
   }
 
   @override
   Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(
-    String taskId,
+    String taskId, {String? baseUrl, String? expectedConnectionBase}
   ) async {
     return const MobileEnvelope<Map<String, Object?>>(
       success: true,
@@ -1977,6 +2081,8 @@ class _LanFailFreshRelayApi extends _FreshPairedRelayApi {
     String tool,
     String body, {
     String baseUrl = '',
+    String conversationId = '',
+    String idempotencyKey = '',
   }) async {
     postedTools.add(tool);
     postedBaseUrls.add(baseUrl);
@@ -1988,7 +2094,8 @@ class _LanFailFreshRelayApi extends _FreshPairedRelayApi {
         raw: {'success': false, 'message': 'lan unavailable'},
       );
     }
-    return super.postSuperEmployeeMessage(tool, body, baseUrl: baseUrl);
+    return super.postSuperEmployeeMessage(tool, body, baseUrl: baseUrl,
+        conversationId: conversationId, idempotencyKey: idempotencyKey);
   }
 }
 
@@ -2292,7 +2399,7 @@ class _UnknownLanReceiptApi extends _FreshPairedRelayApi {
   _UnknownLanReceiptApi(super.store);
   @override
   Future<String> streamSuperEmployeeMessage(String tool, String body,
-      {String baseUrl = '', String idempotencyKey = '', void Function(String)? onToken,
+      {String baseUrl = '', String idempotencyKey = '', String conversationId = '', void Function(String)? onToken,
       void Function(String)? onStatus, bool Function()? isCancelled}) async {
     throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
         message: '原任务待核对', body: {'execution_state': 'unknown'});
@@ -2302,7 +2409,104 @@ class _UnknownLanReceiptApi extends _FreshPairedRelayApi {
 class _BlockedRelayReceiptApi extends _FreshPairedRelayApi {
   _BlockedRelayReceiptApi(super.store);
   @override
-  Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(String taskId) async =>
+  Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(String taskId, {String? baseUrl, String? expectedConnectionBase}) async =>
       MobileEnvelope(success: true, message: '',
           data: {'task': {'task_id': taskId, 'status': 'blocked'}}, raw: {});
+}
+
+class _LostRelayCreationApi extends _FreshPairedRelayApi {
+  _LostRelayCreationApi(super.store);
+  Future<Map<String, Object?>> Function()? beforeCreate;
+  Map<String, Object?> savedBeforePost = {};
+  final readKeys = <String>[];
+  final readBases = <String>[];
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayCreateTask({required String relayId,
+      required String kind, required Map<String, Object?> payload, String clientRequestId = '',
+      String? baseUrl, String? expectedConnectionBase}) async {
+    createdRelayTasks++;
+    savedBeforePost = await beforeCreate!();
+    throw const SocketException('response lost after the server accepted the task');
+  }
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayTaskByRequest({required String relayId,
+      required String clientRequestId, required String baseUrl,
+      required String expectedConnectionBase}) async {
+    readKeys.add(clientRequestId);
+    readBases.add(baseUrl);
+    return MobileEnvelope(success: true, message: '', raw: {}, data: {'task': {
+      'task_id': 'original-server-task', 'client_request_id': clientRequestId,
+      'relay_id': relayId, 'kind': 'trae.invoke',
+      'status': readKeys.length == 1 ? 'unknown' : 'completed',
+      'result': readKeys.length == 1 ? <String, Object?>{} : {'reply': '原中继任务完成'},
+    }});
+  }
+}
+
+class _UnboundRelayCreationApi extends _FreshPairedRelayApi {
+  _UnboundRelayCreationApi(super.store, this.field, this.conflict);
+  final String field;
+  final bool conflict;
+  final readKeys = <String>[];
+  int pollCalls = 0;
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayCreateTask({required String relayId,
+      required String kind, required Map<String, Object?> payload, String clientRequestId = '',
+      String? baseUrl, String? expectedConnectionBase}) async {
+    final original = await super.relayCreateTask(relayId: relayId, kind: kind,
+        payload: payload, clientRequestId: clientRequestId, baseUrl: baseUrl,
+        expectedConnectionBase: expectedConnectionBase);
+    final task = Map<String, Object?>.from(original.data!['task'] as Map);
+    if (conflict) {
+      task[field] = 'different-task-identity';
+    } else {
+      task.remove(field);
+    }
+    return MobileEnvelope(success: true, message: '', raw: {}, data: {'task': task});
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayTaskByRequest({required String relayId,
+      required String clientRequestId, required String baseUrl,
+      required String expectedConnectionBase}) async {
+    readKeys.add(clientRequestId);
+    return MobileEnvelope(success: true, message: '', raw: {}, data: {'task': {
+      'task_id': 'original-server-task', 'client_request_id': clientRequestId,
+      'relay_id': relayId, 'kind': 'trae.invoke', 'status': 'completed',
+      'result': {'reply': '已读取原任务'},
+    }});
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(String taskId,
+      {String? baseUrl, String? expectedConnectionBase}) async {
+    pollCalls++;
+    return super.relayTaskStatus(taskId, baseUrl: baseUrl,
+        expectedConnectionBase: expectedConnectionBase);
+  }
+}
+
+class _LostLanTurnApi extends _FreshPairedRelayApi {
+  _LostLanTurnApi(super.store);
+  int streamCalls = 0;
+  final readKeys = <String>[];
+  final readBases = <String>[];
+  @override
+  Future<String> streamSuperEmployeeMessage(String tool, String body,
+      {String baseUrl = '', String idempotencyKey = '', String conversationId = '',
+      void Function(String)? onToken, void Function(String)? onStatus,
+      bool Function()? isCancelled}) async {
+    streamCalls++;
+    throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+        message: '等待原回执', body: {'execution_state': 'unknown'});
+  }
+  @override
+  Future<String> readSuperEmployeeTurn({required String tool, required String conversationId,
+      required String idempotencyKey, required String baseUrl,
+      required String expectedConnectionBase}) async {
+    readKeys.add(idempotencyKey);
+    readBases.add(baseUrl);
+    return '原LAN结果';
+  }
 }

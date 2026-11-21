@@ -264,10 +264,13 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     String tool,
     String text, {
     String baseUrl = '',
+    String conversationId = '',
+    String idempotencyKey = '',
   }) async {
     late final MobileEnvelope<Map<String, Object?>> response;
     try {
-      response = await _client.postSuperEmployeeMessage(tool, text, baseUrl: baseUrl);
+      response = await _client.postSuperEmployeeMessage(tool, text, baseUrl: baseUrl,
+          conversationId: conversationId, idempotencyKey: idempotencyKey);
     } catch (error) {
       if (error is MobileApiException && error.statusCode >= 400 && error.statusCode < 500) rethrow;
       throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
@@ -304,6 +307,7 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     required String relayKind,
     required String conversationId,
     required String message,
+    required Map<String, Object?> dispatch,
     required Future<void> Function() requireScope,
     void Function(String token)? onToken,
     void Function(RelayTaskProgress progress)? onStatus,
@@ -313,26 +317,33 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     late final MobileEnvelope<Map<String, Object?>> created;
     try {
       created = await _client.relayCreateTask(relayId: relayId, kind: relayKind,
+        clientRequestId: '${dispatch['client_request_id']}', baseUrl: '${dispatch['base_url']}',
+        expectedConnectionBase: '${dispatch['connection_base']}',
         payload: {'message': message,
           'context': _superEmployeeRelayContext(conversationId: conversationId)});
     } catch (error) {
       if (error is MobileApiException && error.statusCode >= 400 && error.statusCode < 500) rethrow;
-      throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
-          message: '原中继任务是否受理尚待核对，请在任务工作区查看，勿重复提交。',
-          body: {'execution_state': 'unknown', 'requires_reconciliation': true});
+      return _readRelayTurn(conversationId: conversationId, dispatch: dispatch,
+          requireScope: requireScope, onToken: onToken, onStatus: onStatus, isCancelled: isCancelled);
     }
     await requireScope();
     if (!created.success) {
-      throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
-          message: created.message.ifEmpty('原中继任务受理回执未确认，请核对后再操作。'),
-          body: {'execution_state': 'unknown', 'requires_reconciliation': true});
+      return _readRelayTurn(conversationId: conversationId, dispatch: dispatch,
+          requireScope: requireScope, onToken: onToken, onStatus: onStatus, isCancelled: isCancelled);
     }
     final task = _objectMap(created.data?['task']);
     final taskId = _stringField(task, 'task_id');
-    if (taskId.isEmpty) {
+    if ((task['client_request_id'] != null && task['client_request_id'] != dispatch['client_request_id']) ||
+        (task['relay_id'] != null && task['relay_id'] != relayId) ||
+        (task['kind'] != null && task['kind'] != relayKind)) {
       throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
-          message: '中继受理回执缺少原任务标识，请核对原任务，勿重复提交。',
+          message: '中继受理回执与原任务不匹配，请核对原任务。',
           body: {'execution_state': 'unknown', 'requires_reconciliation': true});
+    }
+    if (taskId.isEmpty || task['client_request_id'] != dispatch['client_request_id'] ||
+        task['relay_id'] != relayId || task['kind'] != relayKind) {
+      return _readRelayTurn(conversationId: conversationId, dispatch: dispatch,
+          requireScope: requireScope, onToken: onToken, onStatus: onStatus, isCancelled: isCancelled);
     }
     await _setInflightRelayTask(conversationId, taskId,
         requireScope: requireScope);
@@ -350,7 +361,44 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
       onStatus: onStatus,
       isCancelled: isCancelled,
       requireScope: requireScope,
+      baseUrl: '${dispatch['base_url']}', expectedConnectionBase: '${dispatch['connection_base']}',
     );
+  }
+
+  Future<String> _readRelayTurn({required String conversationId,
+      required Map<String, Object?> dispatch, required Future<void> Function() requireScope,
+      void Function(String)? onToken, void Function(RelayTaskProgress)? onStatus,
+      bool Function()? isCancelled}) async {
+    await requireScope();
+    final key = '${dispatch['client_request_id'] ?? ''}';
+    final relay = '${dispatch['relay_id'] ?? ''}';
+    final base = '${dispatch['base_url'] ?? ''}';
+    final connection = '${dispatch['connection_base'] ?? ''}';
+    late final MobileEnvelope<Map<String, Object?>> status;
+    try {
+      status = await _client.relayTaskByRequest(relayId: relay, clientRequestId: key,
+          baseUrl: base, expectedConnectionBase: connection);
+      await requireScope();
+    } catch (error) {
+      if (error is MobileApiException && [401, 403].contains(error.statusCode)) rethrow;
+      throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+          message: '原中继任务回执暂不可读，请稍后核对，未重新派发。',
+          body: {'turn_id': key, 'execution_state': 'unknown', 'requires_reconciliation': true});
+    }
+    final task = _objectMap(status.data?['task']);
+    final taskId = _stringField(task, 'task_id');
+    if (!status.success || key.isEmpty || relay.isEmpty || taskId.isEmpty ||
+        task['client_request_id'] != key || task['relay_id'] != relay ||
+        task['kind'] != relayKindForConversation(conversationId)) {
+      throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+          message: '回执未匹配原中继任务，请核对原任务，未重新派发。',
+          body: {'turn_id': key, 'execution_state': 'unknown', 'requires_reconciliation': true});
+    }
+    await _setInflightRelayTask(conversationId, taskId, requireScope: requireScope);
+    return _pollRelayTask(taskId: taskId, toolLabel: toolLabelForRelayKind('${task['kind'] ?? ''}'),
+        conversationId: conversationId, requireScope: requireScope,
+        onToken: onToken, onStatus: onStatus, isCancelled: isCancelled,
+        baseUrl: base, expectedConnectionBase: connection, initialStatus: status);
   }
 
   Future<String> _pollRelayTask({
@@ -361,20 +409,25 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     void Function(String token)? onToken,
     void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
+    String? baseUrl,
+    String? expectedConnectionBase,
+    MobileEnvelope<Map<String, Object?>>? initialStatus,
   }) async {
     var lastStatus = '';
     for (var attempt = 0; attempt < 150; attempt += 1) {
       _throwIfCancelled(isCancelled);
-      await Future<void>.delayed(const Duration(seconds: 2));
+      if (initialStatus == null) await Future<void>.delayed(const Duration(seconds: 2));
       await requireScope();
       _throwIfCancelled(isCancelled);
       late final MobileEnvelope<Map<String, Object?>> status;
       try {
-        status = await _relayTaskStatusWithBackoff(
+        status = initialStatus ?? await _relayTaskStatusWithBackoff(
           taskId,
           isCancelled: isCancelled,
           requireScope: requireScope,
+          baseUrl: baseUrl, expectedConnectionBase: expectedConnectionBase,
         );
+        initialStatus = null;
       } catch (error) {
         if (error is MobileApiException && [401, 403].contains(error.statusCode)) rethrow;
         throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
@@ -459,12 +512,15 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     String taskId, {
     required Future<void> Function() requireScope,
     bool Function()? isCancelled,
+    String? baseUrl,
+    String? expectedConnectionBase,
   }) async {
     while (true) {
       _throwIfCancelled(isCancelled);
       await requireScope();
       try {
-        return await _client.relayTaskStatus(taskId);
+        return await _client.relayTaskStatus(taskId, baseUrl: baseUrl,
+            expectedConnectionBase: expectedConnectionBase);
       } on MobileApiException catch (error) {
         if (error.statusCode != 429) rethrow;
         await Future<void>.delayed(

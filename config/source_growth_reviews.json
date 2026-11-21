@@ -21,19 +21,19 @@
       "after_lines": 1800,
       "reason": "旧计划入口先查后写可在普通、续接和子任务场景重复执行；改为复用现有仓储原子发布完整原run。",
       "boundary": "保留原计划run ID、task attempt与父子投影；只有准入赢家执行，败选者只读，不增加执行引擎。",
-      "validation": "独立SQLite并发副作用计数验证唯一准入；与新main持久澄清交叉四文件88项通过，另一个真实SQL原请求重放用例通过，确认同run、单次副作用。澄清原快照CAS败选不执行。待远端CI及生产数据库验收。",
+      "validation": "独立SQLite并发副作用计数证明唯一准入；50个后台相关文件组合2145项通过、9项因本地缺少PostgreSQL条件跳过，包含旧入口、续接、子任务及澄清往返；最终提交完整CI及部署验收仍待完成。",
       "follow_up": "后续入口继续调用统一发布接口；生产PostgreSQL并发与实机验收需独立取得证据。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
       "base_blob": "9301b7ae2900583d16d97608221a0bdf671c1bc6",
-      "head_blob": "b52a201daa6f01ca617a104ebef44deef41b32b8",
+      "head_blob": "925cbf0e633203728627727208a1b8e071c4952e",
       "before_lines": 1124,
-      "after_lines": 1189,
+      "after_lines": 1257,
       "reason": "统一初始任务与旧计划的原子准入，阻止迟到run/task快照覆盖活动attempt和确认终态。",
-      "boundary": "复用SQLAlchemy现有任务唯一键、事务和条件更新，不新增表；事务失败回滚准入产生的所有记录。",
-      "validation": "内存及真实SQLite仓储覆盖并发去重、同键内容冲突、不同作用域拒绝、回滚、子任务和下一attempt；待远端完整CI。",
+      "boundary": "复用SQLAlchemy现有任务唯一键、事务和快照条件更新，不新增表；事务失败整体回滚，普通save不可替换规划代次，合法澄清只由原快照CAS换代。",
+      "validation": "真实SQLite独立仓储覆盖并发准入、事务回滚、旧规划换代快照不能复活新代终态；内存与SQL同契约。纳入50文件2145通过/9项PostgreSQL跳过的组合回归，最终提交PostgreSQL及完整CI待完成。",
       "follow_up": "保持状态和副作用账本在同一事务边界；跨节点数据库故障演练不以本地测试替代。",
       "review_owner": "@42433422"
     },
@@ -112,12 +112,12 @@
     "FHD/app/application/ai_chat/dialogue_memory.py": {
       "base_file": "FHD/app/application/ai_chat/dialogue_memory.py",
       "base_blob": "5ff72fc8f56d3af5c34f7d58b5ec9af97f6c899a",
-      "head_blob": "70e1ed744d2461bea01ad6e7e8e557f90442b6b1",
+      "head_blob": "e2a248152994edae86d523a3a94d4fb98a4bef7e",
       "before_lines": 959,
-      "after_lines": 971,
+      "after_lines": 990,
       "reason": "为普通文本和员工轮次保存可只读恢复的原turn回执，并为SQL历史补充服务端授权范围证明。",
       "boundary": "复用现有会话准入与持久化结构，按owner/tenant/Mod/conversation/revision核验；历史读取不执行工具。",
-      "validation": "原turn回执回归覆盖真实SQL恢复、纯文本、原run丢失和跨范围拒绝；四个存储与恢复文件105项通过。",
+      "validation": "真实SQL清空JSON后恢复原turn、执行工具、上下文和派工绑定；LAN七文件145项通过，最终50文件组合2145通过/9项PostgreSQL跳过。纯文本回执、无证明旧记录、跨工具/范围冲突均验证。",
       "follow_up": "旧无范围证明的记录保持待核对，未来协议迁移须保留历史身份，不能由新任务替代。",
       "review_owner": "@42433422"
     },
@@ -129,7 +129,7 @@
       "after_lines": 1641,
       "reason": "工作流续接必须区分受理、审批、输入和未知状态，避免把未完成任务报成功或在持久化失败后再次执行。",
       "boundary": "调用公共结果分类和原run读取；完成投影先保存再清理pending，未决回执保留原plan/run和等待原因。",
-      "validation": "与新main持久规划澄清、查询原答案和证据保留逻辑手工整合；五个会话、确认、状态和澄清往返测试文件119项通过，两处工作流生产文件mypy通过。待完整CI和实机验收。",
+      "validation": "保留main持久澄清与RAG答案证据；原快照CAS败选不执行，完成回执先落盘。最终50后台文件2145项通过、9项PostgreSQL跳过，定点mypy通过；最终完整CI及实机验收待完成。",
       "follow_up": "后续状态投影继续归并公共结果分类；保持回执恢复只读，不建立另一套工作流账本。",
       "review_owner": "@42433422"
     },
@@ -429,7 +429,7 @@
       "after_lines": 1025,
       "reason": "JSON和batch断线与SSE共用原turn恢复，保留等待和未知回执，避免网络中断后的第二次提交。",
       "boundary": "只扩展现有聊天编排的读取分支与公共状态消费，不新增执行接口；原task/run身份保持稳定。",
-      "validation": "按package-lock安装的本地纯JS验证环境中，七个Web测试文件147项及CI同名type-check通过；完整npm ci仍因ONNX原生二进制代理下载失败，未记为构建通过。远端CI继续保留完整安装与构建门禁。",
+      "validation": "按package-lock安装的本地纯JS验证环境中，最终9个相关Web文件325项和完整type-check通过；npm ci原生ONNX下载受代理限制，本地未宣称完整构建通过。远端CI保留完整安装与构建门禁。",
       "follow_up": "服务端旧协议无请求身份的历史不能自动恢复；后续变更须提供版本兼容和原回执证据。",
       "review_owner": "@42433422"
     },
@@ -753,7 +753,7 @@
       "after_lines": 896,
       "reason": "旧注册能力的审批ID未绑定独立调用，可能冲突或在升级重试时重复派发；复用原审批表只读核对绑定。",
       "boundary": "新任务的审批身份随原子准入保存；旧main记录只在owner/tenant/Mod/session/call/完整计划和参数证明齐全时复用，缺证明不新建任务。",
-      "validation": "最终受影响三套102项通过、3项PostgreSQL环境跳过；新增26个真实SQLite反例覆盖独立调用、重启、旧main记录及绑定冲突。Ruff0.15.21和两个改动生产文件mypy通过。",
+      "validation": "旧main审批真实SQLite反例覆盖独立调用、进程重建、缺失元数据及范围/计划/参数冲突；相关定点mypy通过，最终50后台文件2145项通过、9项PostgreSQL环境跳过。最终CI与架构审核仍待完成。",
       "follow_up": "后续审批身份变更继续按旧持久记录兼容，不猜测缺失字段；生产数据库验证和架构审核仍由原CI及评审流程完成。",
       "review_owner": "@42433422"
     }

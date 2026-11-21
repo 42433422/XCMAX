@@ -152,7 +152,13 @@ class InMemoryAgentRunRepository:
             self._save(run, allow_safe_retry=True)
             return True
 
-    def _save(self, run: AgentRun, *, allow_safe_retry: bool = False) -> AgentRun:
+    def _save(
+        self,
+        run: AgentRun,
+        *,
+        allow_safe_retry: bool = False,
+        allow_planning_replacement: bool = False,
+    ) -> AgentRun:
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
         )
@@ -160,7 +166,12 @@ class InMemoryAgentRunRepository:
 
         with self._lock:
             previous = self._runs.get(run.run_id)
-            preserve_run_evidence(run, previous, allow_safe_retry=allow_safe_retry)
+            preserve_run_evidence(
+                run,
+                previous,
+                allow_safe_retry=allow_safe_retry,
+                allow_planning_replacement=allow_planning_replacement,
+            )
             ensure_terminal_business_result(run)
             run.touch()
             self._runs[run.run_id] = copy.deepcopy(run)
@@ -209,7 +220,7 @@ class InMemoryAgentRunRepository:
                 or current.to_dict() != previous.to_dict()
             ):
                 return False
-            self.save(run)
+            self._save(run, allow_planning_replacement=True)
             return True
 
     def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:

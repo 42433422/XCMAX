@@ -107,9 +107,14 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
         data = _read(key, context)
         prior = _user_turn(data, turn_id)
         if prior is not None and not _same_input(prior, text, context):
-            return _payload(
-                "这一轮编号已经对应另一条消息，没有覆盖它，也没有再次执行。", "failed", replay=True
-            )
+            return {
+                **_payload(
+                    "这一轮编号已经对应另一条消息，没有覆盖它，也没有再次执行。",
+                    "failed",
+                    replay=True,
+                ),
+                "error_code": "TURN_INPUT_CONFLICT",
+            }
         if turn_id and _turn_is_live(key, turn_id):
             return _payload("这一轮正在处理，不会重复执行。", "processing", replay=True)
         _close_abandoned(key, data)
@@ -727,13 +732,16 @@ def _input_fingerprint(text: str, context: Mapping[str, Any]) -> str:
         )
     if secret.startswith("process-local:"):
         raise RuntimeError("durable conversation identity key is unavailable")
+    identity_parts: list[Any] = [
+        "xcmax.turn-input.v1",
+        conversation_key(context),
+        str(context.get("turn_id") or "").strip()[:160],
+        text,
+    ]
+    if context.get("_execution_identity"):
+        identity_parts.append(["execution", str(context["_execution_identity"])])
     identity = json.dumps(
-        [
-            "xcmax.turn-input.v1",
-            conversation_key(context),
-            str(context.get("turn_id") or "").strip()[:160],
-            text,
-        ],
+        identity_parts,
         ensure_ascii=False,
     ).encode("utf-8")
     return hmac.new(secret.encode("utf-8"), identity, hashlib.sha256).hexdigest()
@@ -853,6 +861,17 @@ def _restore_snapshot(snapshot: Mapping[str, Any], *, key: str) -> dict[str, Any
             payload = _payload(content, status)
             payload["execution_state"] = status
             payload["run_id"] = harness.get("run_id") or summary.get("run_id")
+            if scope_key and summary.get("execution_identity") and summary.get("execution_tool"):
+                payload["execution_identity"] = summary["execution_identity"]
+                payload["execution_tool"] = summary["execution_tool"]
+                dispatch = summary.get("dispatch")
+                if isinstance(dispatch, dict):
+                    payload["dispatch"] = {
+                        key: str(dispatch[key])
+                        for key in ("request_id", "task_id", "status")
+                        if dispatch.get(key) is not None
+                    }
+                    payload["task_id"] = dispatch.get("task_id")
             item["payload"] = payload
             prior = _user_turn({"turns": turns, "receipts": receipts}, turn_id)
             if turn_id:

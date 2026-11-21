@@ -49,7 +49,7 @@ LangGraph 处理 AND 依赖、条件分支、未选分支、澄清/审批暂停�
 | 缺口 | 当前实现 | 验证入口 |
 |---|---|---|
 | 同一 task 的并发创建和旧 plan 先查后写导致重复执行 | 现有 SQL 事务原子登记 task/run；败选者只读；失败整体回滚 | `test_agent_task_admission.py`：独立 session、真实副作用计数、普通/续接/子任务 |
-| 迟到保存抢占 active_run 或复活终态 | task 投影检查 attempt/run/version；旧快照拒绝覆盖 | 同上，内存与 SQLite |
+| 迟到保存抢占 active_run 或复活终态 | task 投影检查 attempt/run/version；规划澄清换代须通过原快照 CAS，普通迟到保存不能替换新代或终态 | 同上及 `test_planning_clarification_roundtrip.py`，内存与独立 SQLite 仓储 |
 | 失效 worker 写入副作用账本、过期租约把未知写入重试 | 认领、状态及副作用登记使用同一 owner/版本条件；未知写结果保留 `unknown` | `test_task_execution_repository.py`、`test_native_task_recovery.py` |
 | paused/blocked/input 被压成失败或审批，接受回执被当完成 | 共用 `domain/task_lifecycle` 归一化与嵌套回执判定，等待态没有 finished_at | `test_task_dispatcher.py`、`test_task_lifecycle_acceptance.py` |
 | 注册能力绕开统一登记，重复模型调用创建新 run | 复用统一发布和可信 turn/call 身份；只有原子赢家调用原执行器 | `test_registered_capabilities.py` |
@@ -58,17 +58,20 @@ LangGraph 处理 AND 依赖、条件分支、未选分支、澄清/审批暂停�
 | 执行回执保存失败后提前清理 pending plan | 完成回执持久化后再清理；恢复读取原 run，不重执行 | `test_workflow_plan_store.py`、`test_chat_component_boundaries.py` |
 | 模型继续解释待审批/未知结果，并记作员工成功或失败 | 未完成回执立即退出工具循环；指标单列 pending，账本不填完成时间 | `test_agent_loop.py`、`test_employee_runtime_metrics.py` |
 | 扩展调用异常或内部 TypeError 后回退再次执行 | 调用前识别签名；已调用异常返回待核对，只有明确未注册才选下一适配器 | `test_workflow_tool_components.py` |
-| 手机员工入口没有持久 turn，断线后可能重新调用 | 复用聊天轮次准入、保存和结算；相同 turn 返回原回执 | `test_mobile_component_boundaries.py` |
+| 手机员工及 LAN 超级员工没有持久 turn，断线后可能重新调用 | 复用聊天轮次准入、保存和结算；相同 turn 返回原回执；服务端绑定实际工具与执行上下文，断线继续保存原调用结果 | `test_mobile_component_boundaries.py`、`test_mobile_super_employee_receipts.py` |
 | 普通回复/员工历史不能恢复，SQL 历史范围混用 | 保存只读 turn 回执；带 run 的记录读取原运行并复核 owner/tenant/Mod/conversation/revision | `test_conversation_turn_receipts.py`、`test_conversation_lifecycle.py` |
 | Web 暂存任务重复创建、JSON/SSE 断线错标失败 | 复用原 task/run；断线只查原 turn；未知和等待保留原因 | `useCanonicalChatTaskBridge.test.ts`、聊天编排回归 |
 | 手机 EOF、自动切服、离线 outbox 导致第二次 POST | 持久 turn/请求键；已发送记录只查原服务器；未完成气泡按自身身份核对 | `mobile_turn_receipt_test.dart`、`offline_store_test.dart` |
-| Codex 中继超时重排、认领败选仍派发、晚回执覆盖终态 | 现有 relay 表 CAS 认领；超时 unknown 不重放；已运行取消等待原回执；过期密文删除但保留待核对身份 | `test_mobile_relay_queue_components.py` |
+| Codex 中继首次响应丢失、超时重排、认领败选仍派发、晚回执覆盖终态 | 原表按授权 owner/relay/客户端请求键唯一准入并支持只读查询；CAS 认领；超时 unknown 不重放；运行中取消等待原回执；密文过期仍保留带键任务的最小身份与状态 | `test_mobile_relay_queue_components.py`、中继 HTTP 回归 |
 | 父子回执使用过时快照或跨 owner/Mod 绑定 | 绑定核对完整授权范围；读取已绑定原 child 的当前回执，丢失或越界显示 unknown | `test_employee_handoff_durability.py`、任务路由投影回归 |
+| 管理端员工独立 POST 缺少请求身份，重试建立新审计 run | 新请求键接入同一 `publish_task_run`；仅赢家调用原员工执行器，同键冲突拒绝，查询按原键只读回执；Web 保留原键恢复 | `test_admin_employee_admission.py`、管理端员工 Web 回归 |
+| 超级员工的已受理回执长期停在 queued，消息列表读取隐含补回复执行 | 精确读取原 turn，并按原 owner/request/task 读取原派工结果；普通消息查询也不再启动 CLI 补回复，只允许静态展示重建和原派工结果查询 | `test_mobile_super_employee_receipts.py`、超级员工组件回归 |
 
 剩余边界必须继续公开：
 
-- 普通聊天和手机员工可按原 turn 查询；旧 LAN 超级员工/中继协议在首次 POST 回执完全丢失、客户端没有 task_id 时，尚无按客户端请求键找回的接口。客户端停止重发并保留待核对，不能声称已自动恢复。旧 outbox 没有稳定身份的历史记录同样不能凭空重建原任务。
-- 旧管理端员工 POST 仍为每次调用建立审计 run；它不承诺跨独立 POST 的请求幂等。注册能力的同步路径只保证原子准入的执行归属，不冒充后台 SQL 队列租约；`_execute_with_durable_lease` 的 metadata 也不是分布式锁。
+- 普通聊天、手机员工和新 LAN 超级员工请求可按原 turn 查询；新中继请求可按原 relay 与客户端请求键查询。旧客户端未携带稳定键、旧 outbox 未保存原身份、或历史回执已按旧策略删除时，不能凭空找回或自动重建任务；只能停止重发并保留待核对。
+- 管理端员工仅在提供稳定请求键时保证跨 POST 幂等；旧无键调用保留兼容语义。注册能力及管理端同步路径的原子准入不冒充后台 SQL 队列租约；`_execute_with_durable_lease` 的 metadata 也不是分布式锁。
+- Web 管理端不再自动切换到缺少原键回读契约的 market 或旧 Mod HTTP 执行口；新本机入口不可用时明确阻断。已有员工执行器和 Mod 组件仍由新本机入口调用，部署须保持前后端同版。
 - 通用 unknown 状态仍需要原工具/执行端的确定回执或人工核对。没有业务供应方的幂等接口和读回凭证，LangGraph 检查点、数据库事务及客户端去重不能证明外部副作用恰好一次。
 - Codex 的 thread/turn/item 协议是本次状态对照来源；本仓既有超级员工与中继适配不因此自动获得完整 app-server 协议、所有模型能力或生产成熟度。
 - 本地 SQLite/内存并发和 Web 定向测试属于代码、自动测试证据。真实 PostgreSQL、多进程长时间故障演练、项目固定 Flutter 工具链、真实模型/设备及部署同版验收须分别取得证据；未执行项不能记作通过。合入、部署和运行身份以 PR/CI/发布回执为准。

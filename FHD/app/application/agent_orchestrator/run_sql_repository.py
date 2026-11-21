@@ -185,11 +185,69 @@ def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
     )
 
 
+def _planning_generation(run: AgentRun) -> str:
+    context = run.metadata.get("runtime_context") or {}
+    return str(context.get("_planning_clarification_snapshot") or "") or next(
+        (
+            event.event_id
+            for event in reversed(run.events)
+            if event.event_type == "run.clarification_resumed"
+            and event.data.get("kind") == "planning_scope"
+        ),
+        "",
+    )
+
+
+def _valid_planning_replacement(run: AgentRun, previous: AgentRun) -> bool:
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.clarification import (
+        find_waiting_step,
+        is_planning_clarification,
+    )
+
+    waiting = find_waiting_step(previous)
+    event = run.events[-1] if run.events else None
+    return bool(
+        waiting is not None
+        and is_planning_clarification(previous, waiting)
+        and run.plan_id == previous.plan_id
+        and not run.tool_calls
+        and (run.metadata.get("runtime_context") or {}).get("_planning_clarification_snapshot")
+        == canonical_hash(previous.to_dict())
+        and event is not None
+        and event.event_type == "run.clarification_resumed"
+        and event.data.get("kind") == "planning_scope"
+        and event.data.get("step_id") == waiting.step_id
+    )
+
+
 def preserve_run_evidence(
-    run: AgentRun, previous: AgentRun | None, *, allow_safe_retry: bool = False
+    run: AgentRun,
+    previous: AgentRun | None,
+    *,
+    allow_safe_retry: bool = False,
+    allow_planning_replacement: bool = False,
 ) -> None:
-    """Same-generation saves cannot erase an unknown outcome or returned receipt."""
-    if previous is None or not same_run_generation(run, previous):
+    """Keep receipts across mutable context updates; only a verified CAS replaces a plan."""
+    if previous is None:
+        return
+    generation, prior_generation = _planning_generation(run), _planning_generation(previous)
+    if generation or prior_generation:
+        if (run.run_id, run.user_id, run.created_at, tenant_id_of_run(run), mod_id_of_run(run)) != (
+            previous.run_id,
+            previous.user_id,
+            previous.created_at,
+            tenant_id_of_run(previous),
+            mod_id_of_run(previous),
+        ):
+            raise ValueError("planning generation identity cannot change")
+        if generation != prior_generation:
+            if not allow_planning_replacement or not _valid_planning_replacement(run, previous):
+                raise ValueError(
+                    "planning generation replacement requires the original snapshot CAS"
+                )
+            return
+    elif not same_run_generation(run, previous):
         return
     old = previous.metadata
     if old.get("non_retryable"):
@@ -534,7 +592,7 @@ class SQLAlchemyAgentRunRepository:
         )
         if matched != 1:
             return False
-        self.save_in_session(db, run)
+        self.save_in_session(db, run, allow_planning_replacement=True)
         return True
 
     def save_claimed(self, run: AgentRun, *, owner_id: str, execution_count: int) -> AgentRun:
@@ -563,7 +621,12 @@ class SQLAlchemyAgentRunRepository:
         return copy.deepcopy(run)
 
     def save_in_session(
-        self, db: Session, run: AgentRun, *, allow_safe_retry: bool = False
+        self,
+        db: Session,
+        run: AgentRun,
+        *,
+        allow_safe_retry: bool = False,
+        allow_planning_replacement: bool = False,
     ) -> None:
         """Lock then persist in the caller's transaction, preserving concurrent receipts."""
         from app.application.agent_orchestrator.business_harness import (
@@ -587,7 +650,12 @@ class SQLAlchemyAgentRunRepository:
         )
 
         preserve_catalog_run_authority(db, run, previous)
-        preserve_run_evidence(run, previous, allow_safe_retry=allow_safe_retry)
+        preserve_run_evidence(
+            run,
+            previous,
+            allow_safe_retry=allow_safe_retry,
+            allow_planning_replacement=allow_planning_replacement,
+        )
         ensure_terminal_business_result(run)
         run_terminal_metrics.record_terminal_transition(run, previous, db)
         run.touch()

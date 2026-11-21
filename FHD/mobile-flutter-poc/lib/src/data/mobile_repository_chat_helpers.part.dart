@@ -88,6 +88,30 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     return scope == await _offlineScope() ? task : '';
   }
 
+  Future<Map<String, Object?>> _turnDispatch(String conversationId, String turnId) async {
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    final dispatch = await store?.turnDispatch(conversationId, turnId) ?? const <String, Object?>{};
+    return scope == await _offlineScope() && dispatch['scope'] == scope.split(':').last ? dispatch : const {};
+  }
+
+  Future<Map<String, Object?>> _saveTurnDispatch(String conversationId, String turnId,
+      {required String channel, required String baseUrl, String relayId = '',
+      required Future<void> Function() requireScope}) async {
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    await requireScope();
+    if (store == null || scope != await _offlineScope() || turnId.isEmpty) {
+      throw const MobileRepositoryException('原任务标识暂不能保存，请恢复本机存储后再发送。');
+    }
+    final dispatch = <String, Object?>{'scope': scope.split(':').last, 'channel': channel,
+      'base_url': baseUrl, 'connection_base': await _client.resolveSessionBaseUrl(),
+      'relay_id': relayId, 'client_request_id': turnId};
+    await store.saveTurnDispatch(conversationId, turnId, dispatch);
+    await requireScope();
+    return dispatch;
+  }
+
   Future<void> _setInflightRelayTask(String conversationId, String taskId,
       {required Future<void> Function() requireScope}) async {
     final id = conversationId.trim();

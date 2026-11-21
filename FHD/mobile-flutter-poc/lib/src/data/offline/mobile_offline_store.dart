@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -193,6 +194,21 @@ class MobileOfflineStore {
   }
 
   // ── 进行中的中继任务 ────────────────────────────────────────
+
+  Future<void> saveTurnDispatch(String conversationId, String turnId,
+      Map<String, Object?> dispatch) async {
+    await _db.customUpdate('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+        variables: [Variable<String>('turn-dispatch:${jsonEncode([conversationId, turnId])}'),
+          Variable<String>(jsonEncode(dispatch))]);
+  }
+
+  Future<Map<String, Object?>> turnDispatch(String conversationId, String turnId) async {
+    final rows = await _db.customSelect('SELECT value FROM meta WHERE key = ?',
+        variables: [Variable<String>('turn-dispatch:${jsonEncode([conversationId, turnId])}')]).get();
+    if (rows.isEmpty) return const {};
+    final value = jsonDecode('${rows.first.data['value']}');
+    return value is Map ? Map<String, Object?>.from(value) : const {};
+  }
 
   Future<String> inflightTaskId(String conversationId) async {
     final rows = await _db.customSelect(
