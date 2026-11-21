@@ -52,16 +52,6 @@
     </nav>
     <div class="sidebar-menu-bottom" role="navigation" aria-label="系统">
       <button
-        v-if="hasLocalWorkspace()"
-        class="menu-item"
-        type="button"
-        data-view="local-workspace"
-        @click="router.push({ name: 'local-workspace' })"
-      >
-        <span class="menu-item-icon" aria-hidden="true"><i class="fa fa-hdd-o"></i></span>
-        <span>本地工作区</span>
-      </button>
-      <button
         class="menu-item"
         type="button"
         :class="{
@@ -156,12 +146,10 @@
  * Facade：侧边栏装配入口（实现拆分至 sidebar/ 子模块与 Sidebar.css，行为与拆分前一致）。
  */
 import { TransitionGroup, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
 import { useSidebarLayoutStore } from '@/stores/sidebarLayout'
 import { useModsStore } from '@/stores/mods'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
-import { hasLocalWorkspace } from '@/api/localWorkspace'
 import { SETTINGS_MENU_ITEM, sidebarLayoutSeedKeys } from '@/constants/coreMenuCatalog'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
@@ -184,7 +172,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['change-view'])
-const router = useRouter()
 
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
