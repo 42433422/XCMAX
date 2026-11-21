@@ -14,6 +14,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.schema import CreateSchema, DropSchema
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -299,7 +300,7 @@ def test_existing_relay_schema_gains_request_identity_without_rewriting_rows(tmp
             pytest.skip("requires CI PostgreSQL service")
         admin_engine = create_engine(url)
         with admin_engine.begin() as connection:
-            connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+            connection.execute(CreateSchema(schema))
         engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
     else:
         engine = create_engine(f"sqlite:///{tmp_path / 'legacy-relay.db'}")
@@ -343,5 +344,5 @@ def test_existing_relay_schema_gains_request_identity_without_rewriting_rows(tmp
         engine.dispose()
         if admin_engine is not None:
             with admin_engine.begin() as connection:
-                connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+                connection.execute(DropSchema(schema, cascade=True))
             admin_engine.dispose()
