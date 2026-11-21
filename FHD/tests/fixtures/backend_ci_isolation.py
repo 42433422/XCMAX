@@ -180,14 +180,14 @@ def conversation_storage(tmp_path, monkeypatch):
 
 
 def retry_throttled_fetch(fetch, *, sleep=time.sleep):
-    """Retry only 429, honor Retry-After, and still fail when retries exhaust."""
+    """Retry 429/503, honor Retry-After, and still fail when retries exhaust."""
 
     def wrapped(path):
         for attempt in range(3):
             try:
                 return fetch(path)
             except HTTPError as exc:
-                if exc.code != 429 or attempt == 2:
+                if exc.code not in (429, 503) or attempt == 2:
                     raise
                 raw = exc.headers.get("Retry-After", "") if exc.headers else ""
                 try:
