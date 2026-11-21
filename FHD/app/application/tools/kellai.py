@@ -10,7 +10,16 @@ from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, 
 from app.infrastructure.kellai_client import KellaiRequestError, request_kellai
 
 
-def _approved_request_id(params: dict[str, Any], context: dict[str, Any]) -> str:
+def delivery_request_id(run_id: str, step_id: str) -> str:
+    """Stable original action identity; this grants no permission to send."""
+    return "agent_" + hashlib.sha256(f"{run_id}:{step_id}".encode()).hexdigest()[:48]
+
+
+def _approved_request_id(
+    params: dict[str, Any],
+    context: dict[str, Any],
+    connection: dict[str, Any] | None = None,
+) -> str:
     """Revalidate the persisted approved action, never model-supplied approval flags."""
     from app.application.agent_orchestrator.approval_grant import _params_hash
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
@@ -21,6 +30,7 @@ def _approved_request_id(params: dict[str, Any], context: dict[str, Any]) -> str
     stored_context = run.metadata.get("runtime_context") or {}
     step = next((item for item in run.steps if item.step_id == context.get("step_id")), None)
     receipt = run.metadata.get("approval_receipt") or {}
+    connection_digest = binding.connection_identity_sha256(connection)
     if (
         run.status not in {"running", "queued", "retrying"}
         or str(stored_context.get("tenant_id") or "") != str(context.get("tenant_id") or "")
@@ -29,6 +39,8 @@ def _approved_request_id(params: dict[str, Any], context: dict[str, Any]) -> str
         or (receipt.get("step_id"), receipt.get("tool_id"), receipt.get("action"))
         != (step.step_id, "kellai", "send")
         or not receipt.get("approved_by")
+        or not connection_digest
+        or receipt.get("kellai_connection_sha256") != connection_digest
     ):
         raise PermissionError("发送内容或收件人与已批准任务不一致")
     if receipt.get("grant_id"):
@@ -72,7 +84,7 @@ def _approved_request_id(params: dict[str, Any], context: dict[str, Any]) -> str
             raise PermissionError("发送审批计划已变化")
     else:
         raise PermissionError("缺少发送审批凭据")
-    return "agent_" + hashlib.sha256(f"{run.run_id}:{step.step_id}".encode()).hexdigest()[:48]
+    return delivery_request_id(run.run_id, step.step_id)
 
 
 def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
@@ -100,7 +112,7 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
         )
         body = None
         if action == "send":
-            request_id = _approved_request_id(params, context)
+            request_id = _approved_request_id(params, context, connection)
             body = {**params, "client_request_id": request_id}
             path = "messages/send"
         elif action == "receipt":
@@ -127,7 +139,10 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
             )
             return {
                 "success": status in {"accepted", "delivered"} and visible_status != "failed",
-                "data": data,
+                # Provider acceptance/delivery is a domain receipt, not an
+                # execution envelope. Keep the full original receipt for the
+                # host's independent readback; acceptance alone cannot pass it.
+                "data": {"request_id": data.get("request_id"), "delivery_receipt": data},
                 "message": {
                     "accepted": "渠道已受理，尚无送达确认",
                     "sent": "渠道已发送，尚无送达确认",
@@ -164,7 +179,10 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
                 {
                     "outcome": "unknown",
                     "reconciliation_required": True,
-                    "data": {"request_id": request_id, "status": "unknown"},
+                    "data": {
+                        "request_id": request_id,
+                        "delivery_receipt": {"request_id": request_id, "status": "unknown"},
+                    },
                 }
                 if request_id
                 else {}

@@ -15,6 +15,7 @@ from modstore_server import strategic_customer_delivery as delivery
 from modstore_server import strategic_customer_outcomes as outcomes
 from modstore_server import strategic_portfolio as portfolio
 from modstore_server import strategic_portfolio_runtime as runtime
+from modstore_server import workflow_customer_delivery_api as workflow_delivery
 from modstore_server.api.deps import get_current_user
 from modstore_server.db.customer_value import CustomerValueReceipt
 from modstore_server.db.identity import User
@@ -29,6 +30,7 @@ customer = market_fixtures.customer
 @pytest.fixture
 def completed_delivery(database, csv_employee, customer, monkeypatch):
     monkeypatch.setattr(delivery, "get_session_factory", lambda: database)
+    monkeypatch.setattr(workflow_delivery, "get_session_factory", lambda: database)
     goal = customer["goal"]
     bindings = outcomes.load_customer_goal_bindings(8, goal["order_no"], [goal["customer_goal_id"]])
     decision = portfolio_fixtures.proposal(

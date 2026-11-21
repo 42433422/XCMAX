@@ -26,6 +26,7 @@ from modstore_server import xiaoc_life_reconciliation as reconciliation
 from modstore_server import xiaoc_life_store as life
 from modstore_server.db.identity import User
 from modstore_server.db.mac_control import MacControlTask
+from modstore_server.db.xiaoc_life import XiaoCLifeState
 from modstore_server.xiaoc_life_policy import LifeUpdate
 from modstore_server.xiaoc_life_runtime import CyclePorts
 from tests import test_strategic_remote_bridge as report_tests
@@ -239,7 +240,8 @@ def test_approved_long_task_survives_queue_and_renews_only_the_original_native_p
 
 
 @pytest.mark.parametrize(
-    "change", ["pause", "revision", "owner_revoked", "portfolio_stop", "company_stop", "expiry"]
+    "change",
+    ["pause", "revision", "owner_revoked", "portfolio_stop", "company_stop", "expiry", "next_day"],
 )
 def test_explicit_long_lease_revocation_stops_calls_but_keeps_readonly_known_settlement(
     long_remote, monkeypatch, change
@@ -248,10 +250,9 @@ def test_explicit_long_lease_revocation_stops_calls_but_keeps_readonly_known_set
     start_after_queue(state)
     short.native_model(state, monkeypatch)
     before = short.saved_task(state)
-    if change == "expiry":
-        state.clock.now = portfolio._date(
-            remote.read_request(state.request_id)[0]["deadline"]
-        ) + timedelta(seconds=1)
+    if change in {"expiry", "next_day"}:
+        deadline = portfolio._date(remote.read_request(state.request_id)[0]["deadline"])
+        state.clock.now = deadline + timedelta(days=1 if change == "next_day" else 0, seconds=1)
     elif change == "owner_revoked":
         with state.factory() as session:
             session.get(User, 7).is_admin = False
@@ -290,7 +291,15 @@ def test_explicit_long_lease_revocation_stops_calls_but_keeps_readonly_known_set
     assert life.read_state()["budget"]["reserved_tokens"] == 200000
     finish_original(state)
     assert reconciliation.reconcile_usage()["resolved"] == 1
-    assert life.read_state()["budget"]["used_tokens"] == 13
+    with state.factory() as session:
+        persisted = json.loads(session.get(XiaoCLifeState, life.IDENTITY_ID).state_json)
+    assert persisted["budget"]["used_tokens"] == 13
+    # The original cycle settles even across Shanghai midnight. The public
+    # daily allowance then projects the new day, while SQL retains that receipt.
+    same_day = persisted["budget"]["date"] == life._day()
+    assert life.read_state()["budget"]["used_tokens"] == (13 if same_day else 0)
+    if change == "next_day":
+        assert not same_day
     assert life.read_state()["budget"]["reserved_tokens"] == 0
     if change == "portfolio_stop":
         assert (

@@ -25,6 +25,10 @@ def _step(action="read", **params):
 
 class FixtureExecutor(AgentToolExecutor):
     def execute(self, step, *, runtime_context):
+        if step.action == "trace_context":
+            from app.neuro_bus.tracer import get_trace_context
+
+            return {"success": True, "pid": os.getpid(), **get_trace_context()}
         if step.action in {"route_receipt", "route_receipt_async"}:
             from app.infrastructure.llm.client import get_llm_client
 
@@ -73,6 +77,8 @@ class FixtureExecutor(AgentToolExecutor):
             return {"success": True, "price": Decimal("99.50"), "date": date(2026, 10, 21)}
         if step.action == "invalid_result":
             return {"success": True, "live_object": object()}
+        if step.action == "raised_error":
+            raise RuntimeError("password=do-not-export-this-secret")
         if step.action == "hang":
             script = (
                 "import os,time,json;from pathlib import Path;"
@@ -114,6 +120,26 @@ assert "app.db.models" not in sys.modules
         check=True,
         timeout=5,
     )
+
+
+def test_spawn_restores_the_attempt_trace_without_leaking_into_caller():
+    from app.neuro_bus.tracer import get_trace_context
+
+    before = get_trace_context()
+    context = {
+        "trace_id": "a" * 32,
+        "span_id": "b" * 16,
+        "request_id": "request-worker",
+        "trace_flags": "00",
+        "trace_state": "vendor=opaque",
+    }
+    result = execute_with_tool_deadline(
+        FixtureExecutor(), _step("trace_context"), runtime_context=context, timeout_seconds=10
+    )
+    assert result["success"] is True
+    assert result["pid"] != os.getpid()
+    assert all(result[key] == value for key, value in context.items())
+    assert get_trace_context() == before
 
 
 @pytest.mark.parametrize("budget", [2, 8])
@@ -369,7 +395,8 @@ def test_idempotency_payload_encodes_decimal_prices():
     assert json.loads(encoded) == {"price": 100.0, "quantity": 2}
 
 
-def test_real_adapter_transports_database_scalars_and_reports_unsupported_result():
+@pytest.mark.parametrize("failure_action", ["invalid_result", "raised_error"])
+def test_real_adapter_transports_database_scalars_and_reports_unsupported_result(failure_action):
     executor = FixtureExecutor()
     result = execute_with_tool_deadline(
         executor,
@@ -382,13 +409,15 @@ def test_real_adapter_transports_database_scalars_and_reports_unsupported_result
     started = time.monotonic()
     invalid = execute_with_tool_deadline(
         executor,
-        _step("invalid_result"),
+        _step(failure_action),
         runtime_context={},
         timeout_seconds=20,
     )
     assert time.monotonic() - started < 10
     assert invalid["outcome"] == "unknown" and invalid["retryable"] is False
     assert "tool_result_transport_failed" in str(invalid)
+    assert "exception_hint" not in str(invalid)
+    assert "do-not-export-this-secret" not in str(invalid)
 
 
 @pytest.mark.parametrize("cleanup_error", [FileNotFoundError, PermissionError])

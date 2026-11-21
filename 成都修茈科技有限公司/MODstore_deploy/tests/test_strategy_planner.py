@@ -1,8 +1,14 @@
+import asyncio
 import json
 import logging
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
+from apscheduler.schedulers.background import BackgroundScheduler
+from pydantic import ValidationError
 
 from modstore_server import strategic_portfolio as portfolio
 from modstore_server import strategic_portfolio_runtime as runtime
@@ -121,6 +127,85 @@ def test_plan_strategy_without_operator_template_does_not_self_authorize(monkeyp
     result = strategy_planner.plan_strategy()
     assert result["status"] == "not_configured"
     assert result["registered"] == result["dispatched"] == []
+
+
+@pytest.fixture(params=["input_data", "goal", "expires_at"])
+def invalid_private_template(request, tmp_path, monkeypatch):
+    private = "private-template-sentinel"
+    template = {
+        "owner_user_id": 7,
+        "goal": "Improve delivery",
+        "limits": limits(),
+        "period_days": 7,
+        "use_llm": False,
+    }
+    if request.param == "input_data":
+        template["input_data"] = {str(index): private for index in range(65)}
+        location, error_type = ("input_data",), "too_long"
+    elif request.param == "goal":
+        template["goal"] = private * 200
+        location, error_type = ("goal",), "string_too_long"
+    else:
+        template["limits"]["expires_at"] = private
+        location, error_type = ("limits",), "value_error"
+    path = tmp_path / "strategy-template.json"
+    path.write_text(json.dumps(template), encoding="utf-8")
+    monkeypatch.setenv("MODSTORE_STRATEGY_DISCOVERY_TEMPLATE", str(path))
+    return template, private, location, error_type
+
+
+def test_scheduled_discovery_rejects_private_invalid_template_without_echo(
+    invalid_private_template,
+):
+    template, private, location, error_type = invalid_private_template
+    with pytest.raises(ValidationError) as failure:
+        asyncio.run(strategy_planner.run_scheduled_discovery(template=template))
+    diagnostic = str(failure.value)
+    assert private not in diagnostic and location[0] in diagnostic
+    errors = failure.value.errors(include_input=False)
+    assert len(errors) == 1
+    assert errors[0]["loc"] == location and errors[0]["type"] == error_type
+    if location == ("limits",):
+        assert "invalid ISO timestamp" in diagnostic
+
+
+def test_strategy_cli_keeps_validation_failure_without_private_input(invalid_private_template):
+    _, private, location, _ = invalid_private_template
+    result = subprocess.run(
+        [sys.executable, "-m", "modstore_server.strategy_planner", "plan"],
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "ValidationError" in result.stderr and location[0] in result.stderr
+    assert private not in result.stdout + result.stderr
+
+
+def test_registered_strategy_job_records_safe_validation_failure(
+    database, invalid_private_template, monkeypatch, caplog
+):
+    from modstore_server import models, workflow_scheduler
+    from modstore_server.db.scheduler_ops import JobRun
+    from modstore_server.workflow_scheduler_startup_phase04 import _register_scheduler_phase_04
+
+    _, private, location, error_type = invalid_private_template
+    monkeypatch.setattr(models, "get_session_factory", lambda: database)
+    scheduler = BackgroundScheduler()
+    monkeypatch.setattr(workflow_scheduler, "_scheduler", scheduler)
+    _register_scheduler_phase_04()
+    with caplog.at_level(logging.ERROR, logger=workflow_scheduler.logger.name):
+        scheduler.get_job("strategy_planner").func()
+    assert "strategy planner job failed" in caplog.text
+    assert "ValidationError" in caplog.text and location[0] in caplog.text
+    assert private not in caplog.text
+    with database() as session:
+        run = session.query(JobRun).filter_by(job_id="strategy_planner").one()
+        assert run.status == "failed" and run.finished_at
+        assert location[0] in run.error and f"type={error_type}" in run.error
+        assert private not in run.error
 
 
 def test_scheduled_plan_is_sql_proposal_then_authenticated_approval_and_execution(

@@ -60,7 +60,11 @@ class ApprovalDecisions:
             self.effects.project(str(execution["agent_run_id"]), str(req.request_no or ""))
 
     def approve_request(
-        self, request_id: int, http_request: Request, body: JsonObject, x_user_id: str | None
+        self,
+        request_id: int,
+        http_request: Request,
+        body: JsonObject,
+        x_user_id: str | None,
     ) -> WorkspaceResponse:
         actor = self.access.actor(http_request, x_user_id)
         if actor is None:
@@ -73,7 +77,10 @@ class ApprovalDecisions:
                 return JSONResponse(
                     {"success": False, "message": "审批请求不存在"}, status_code=404
                 )
-            if req.status not in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value):
+            if req.status not in (
+                ApprovalStatus.PENDING.value,
+                ApprovalStatus.IN_PROGRESS.value,
+            ):
                 return JSONResponse(
                     {"success": False, "message": f"当前状态不可审批：{req.status}"},
                     status_code=400,
@@ -82,14 +89,20 @@ class ApprovalDecisions:
             if current_node is None:
                 if self.access.is_workflow(req):
                     return self.approve_without_node(
-                        db, req=req, actor=actor, approver_name=approver_name, opinion=opinion
+                        db,
+                        req=req,
+                        actor=actor,
+                        approver_name=approver_name,
+                        opinion=opinion,
                     )
                 return JSONResponse(
-                    {"success": False, "message": "审批请求缺少当前节点"}, status_code=400
+                    {"success": False, "message": "审批请求缺少当前节点"},
+                    status_code=400,
                 )
             if not self.access.node_reviewer(current_node, actor):
                 return JSONResponse(
-                    {"success": False, "message": "当前用户不在审批人列表中"}, status_code=403
+                    {"success": False, "message": "当前用户不在审批人列表中"},
+                    status_code=403,
                 )
             status_before = req.status
             node_id_before = current_node.id
@@ -112,7 +125,9 @@ class ApprovalDecisions:
                 # Restore before any destination write; then reattach the request and history.
                 list(req.records)
                 restore_execution = self.workflows.resume(
-                    request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
+                    request_no=str(req.request_no or ""),
+                    opinion=opinion,
+                    approved_by=str(actor),
                 )
                 if execution_outcome(restore_execution)["success"]:
                     db.expunge_all()
@@ -171,51 +186,29 @@ class ApprovalDecisions:
                     )
                 outcome = execution_outcome(workflow_execution)
                 handed_off = execution_handed_off(workflow_execution)
-                if handed_off:
-                    waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
-                    waiting_decision = bool((workflow_execution or {}).get("waiting_user_decision"))
-                    if waiting_approval:
-                        handoff_message = "当前步骤已获批，后续步骤等待审批"
-                    elif waiting_decision:
-                        handoff_message = (
-                            str((workflow_execution or {}).get("message") or "").strip()
-                            or "审批已通过，还需要你确认后才能继续导入。"
-                        )
-                    else:
-                        handoff_message = "审批已通过，执行已交给调度器"
-                    persist_outcome(
-                        req,
-                        status=req.status,
-                        success=False,
-                        code=(
-                            "waiting_approval"
-                            if waiting_approval
-                            else "waiting_user_decision"
-                            if waiting_decision
-                            else "queued"
-                        ),
-                        message=handoff_message,
-                        workflow_executed=False,
+                persist_outcome(req, **outcome)
+                if (
+                    not handed_off
+                    and not outcome["success"]
+                    and outcome["code"] != "outcome_unknown"
+                ):
+                    req.status = ApprovalStatus.CANCELLED.value
+                    req.rejection_reason = outcome["code"]
+                    self.effects.audit(
+                        db,
+                        actor=actor,
+                        action="approval.execute_ai_workflow_failed",
+                        payload={
+                            "request_no": req.request_no,
+                            "code": outcome["code"],
+                            "message": outcome["message"],
+                        },
                     )
-                else:
-                    persist_outcome(req, **outcome)
-                    if not outcome["success"]:
-                        req.status = ApprovalStatus.CANCELLED.value
-                        req.rejection_reason = outcome["code"]
-                        self.effects.audit(
-                            db,
-                            actor=actor,
-                            action="approval.execute_ai_workflow_failed",
-                            payload={
-                                "request_no": req.request_no,
-                                "code": outcome["code"],
-                                "message": outcome["message"],
-                            },
-                        )
             db.commit()
             db.refresh(req)
             self.project_workflow(workflow_execution, req)
-            if final_workflow and handed_off:
+            if final_workflow and (handed_off or outcome["code"] == "outcome_unknown"):
+                handoff_message = outcome["message"]
                 data = self.view(req, include_records=False)
                 data["workflow_execution"] = workflow_execution
                 return JSONResponse(
@@ -247,7 +240,11 @@ class ApprovalDecisions:
             return {"success": True, "data": data}
 
     def reject_request(
-        self, request_id: int, http_request: Request, body: JsonObject, x_user_id: str | None
+        self,
+        request_id: int,
+        http_request: Request,
+        body: JsonObject,
+        x_user_id: str | None,
     ) -> WorkspaceResponse:
         actor = self.access.actor(http_request, x_user_id)
         if actor is None:
@@ -262,7 +259,10 @@ class ApprovalDecisions:
                 return JSONResponse(
                     {"success": False, "message": "审批请求不存在"}, status_code=404
                 )
-            if req.status not in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value):
+            if req.status not in (
+                ApprovalStatus.PENDING.value,
+                ApprovalStatus.IN_PROGRESS.value,
+            ):
                 return JSONResponse(
                     {"success": False, "message": f"当前状态不可拒绝：{req.status}"},
                     status_code=400,
@@ -272,7 +272,8 @@ class ApprovalDecisions:
             if node is None:
                 if not workflow_without_node:
                     return JSONResponse(
-                        {"success": False, "message": "审批请求缺少当前节点"}, status_code=400
+                        {"success": False, "message": "审批请求缺少当前节点"},
+                        status_code=400,
                     )
                 if not self.access.workflow_reviewer(db, req, actor):
                     return JSONResponse(
@@ -287,7 +288,8 @@ class ApprovalDecisions:
                     )
             elif not self.access.node_reviewer(node, actor):
                 return JSONResponse(
-                    {"success": False, "message": "当前用户不在审批人列表中"}, status_code=403
+                    {"success": False, "message": "当前用户不在审批人列表中"},
+                    status_code=403,
                 )
             status_before = req.status
             db.add(
@@ -322,9 +324,9 @@ class ApprovalDecisions:
             self.effects.audit(
                 db,
                 actor=actor,
-                action="approval.reject_ai_workflow"
-                if workflow_without_node
-                else "approval.reject",
+                action=(
+                    "approval.reject_ai_workflow" if workflow_without_node else "approval.reject"
+                ),
                 payload=payload,
             )
             # Reject expired workflows too. Runtime cleanup follows the durable rejection.
@@ -420,7 +422,8 @@ class ApprovalDecisions:
         """审批由 AI workflow 持久化、没有传统审批节点的请求。"""
         if not self.access.workflow_reviewer(db, req, actor):
             return JSONResponse(
-                {"success": False, "message": "当前用户无权审批这条 AI 工作流"}, status_code=403
+                {"success": False, "message": "当前用户无权审批这条 AI 工作流"},
+                status_code=403,
             )
         pending = self.workflows.pending(req.request_no)
         if pending is None:
@@ -439,7 +442,8 @@ class ApprovalDecisions:
         audit_node = self.nodes.audit_node(db, req)
         if audit_node is None:
             return JSONResponse(
-                {"success": False, "message": "AI 审批流程缺少合法留痕节点"}, status_code=409
+                {"success": False, "message": "AI 审批流程缺少合法留痕节点"},
+                status_code=409,
             )
         try:
             business = json.loads(req.business_data) if isinstance(req.business_data, str) else {}
@@ -463,15 +467,23 @@ class ApprovalDecisions:
                 )
             db.refresh(req)
         workflow_execution = self.workflows.resume(
-            request_no=str(req.request_no or ""), opinion=opinion, approved_by=str(actor)
+            request_no=str(req.request_no or ""),
+            opinion=opinion,
+            approved_by=str(actor),
         )
         if (workflow_execution or {}).get("approval_claim_conflict"):
             db.rollback()
             return JSONResponse(
-                {"success": False, "message": "该审批正在处理或结果待核对，请刷新任务状态。"},
+                {
+                    "success": False,
+                    "message": "该审批正在处理或结果待核对，请刷新任务状态。",
+                },
                 status_code=409,
             )
-        if isinstance(business, dict) and (business.get("tool_id"), business.get("action")) in {
+        if isinstance(business, dict) and (
+            business.get("tool_id"),
+            business.get("action"),
+        ) in {
             ("customers", "batch_delete"),
             ("products", "batch_delete"),
             ("data_docking", "auto_ingest"),
@@ -490,43 +502,11 @@ class ApprovalDecisions:
         # 工具超时但结果未知：审批放行有效，不能报「执行失败、审批已取消」。
         uncertain = safe_code == "outcome_unknown" and not _execution_success
         if handed_off:
-            waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
-            waiting_decision = bool((workflow_execution or {}).get("waiting_user_decision"))
-            if waiting_approval:
-                handoff_message = "当前步骤已获批，后续步骤等待审批"
-            elif waiting_decision:
-                handoff_message = str((workflow_execution or {}).get("message") or "").strip() or (
-                    "审批已通过，还需要你确认后才能继续导入。"
-                )
-            else:
-                handoff_message = "审批已通过，执行已交给调度器"
-            handoff_code = (
-                "waiting_approval"
-                if waiting_approval
-                else "waiting_user_decision"
-                if waiting_decision
-                else "queued"
-            )
-            persist_outcome(
-                req,
-                status=ApprovalStatus.APPROVED.value,
-                success=False,
-                code=handoff_code,
-                message=handoff_message,
-                workflow_executed=False,
-            )
+            handoff_message = bounded_outcome["message"]
+            persist_outcome(req, **bounded_outcome)
             req.status = ApprovalStatus.APPROVED.value
-            safe_code, safe_message = handoff_code, handoff_message
-            bounded_outcome = {
-                "status": ApprovalStatus.APPROVED.value,
-                "success": False,
-                "code": handoff_code,
-                "message": safe_message,
-                "workflow_executed": False,
-                "nodes_executed": 0,
-                "nodes_total": 1,
-            }
-            include_waiting_decision = waiting_decision
+            safe_code, safe_message = bounded_outcome["code"], handoff_message
+            include_waiting_decision = bool((workflow_execution or {}).get("waiting_user_decision"))
         else:
             persist_outcome(req, **bounded_outcome)
             req.status = bounded_outcome["status"]
@@ -597,6 +577,15 @@ class ApprovalDecisions:
             **bounded_outcome,
             **({"waiting_user_decision": True} if include_waiting_decision else {}),
         }
+        for key in (
+            "agent_run_id",
+            "execution_state",
+            "plan_id",
+            "requires_reconciliation",
+            "retryable",
+        ):
+            if key in (workflow_execution or {}):
+                data["workflow_execution"][key] = (workflow_execution or {})[key]
         if handed_off:
             data["workflow_execution"]["execution_accepted"] = True
             if (workflow_execution or {}).get("waiting_approval"):
@@ -627,7 +616,8 @@ class ApprovalDecisions:
             if safe_code in SETUP_GUIDANCE_CODES:
                 failure_message = f"{failure_message}：{safe_message}"
             return JSONResponse(
-                {"success": False, "data": data, "message": failure_message}, status_code=409
+                {"success": False, "data": data, "message": failure_message},
+                status_code=409,
             )
         return {"success": True, "data": data}
 

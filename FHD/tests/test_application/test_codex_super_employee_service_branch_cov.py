@@ -22,6 +22,7 @@ import httpx
 import pytest
 
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.super_employee.cli import CliExecutionError
 from app.application.super_employee_service import (
     _PARA_TOKEN_CACHE,
     CLAUDE_PROFILE,
@@ -350,9 +351,15 @@ class TestCliReplyBodyBoundary:
     def test_cli_execution_oserror(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "1")
         svc = _make_svc(tmp_path, cli_runner=_error_runner(OSError("boom")))
-        with patch.object(svc, "_cli_path", return_value=str(tmp_path / "codex")):
-            result = svc._cli_reply_body("你好", {})
-        assert result == "" or isinstance(result, str)
+        with (
+            patch.object(svc, "_cli_path", return_value=str(tmp_path / "codex")),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._cli_reply_body("你好", {})
+        assert error.value.receipt["error_code"] == "cli_launch_failed"
+        assert "boom" not in str(error.value)
+        assert "boom" not in error.value.body
+        assert "boom" not in str(error.value.event())
 
 
 # ─────────────── _direct_reply_body 边界 ─────────────────────────
@@ -2494,6 +2501,7 @@ class TestInvokeBoundary:
     def test_code_mode_dispatch(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
         svc = _make_svc(tmp_path)
+        monkeypatch.setattr(svc, "_cli_path", lambda: "")
         result = svc.invoke(user_id=1, message="修复 bug", context={"mode": "code"})
         assert result["dispatch"]["queued"] is True
 

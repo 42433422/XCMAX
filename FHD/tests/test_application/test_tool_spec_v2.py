@@ -70,6 +70,33 @@ def test_stock_in_contract_requires_destination_and_valid_quantity(params, accep
     )
 
 
+@pytest.mark.parametrize(
+    "action, read_only, permission",
+    [
+        ("query", True, "dataset.read"),
+        ("ingest_document", False, "dataset.write"),
+        ("clear_dataset", False, "dataset.write"),
+        ("delete_document", False, "dataset.write"),
+        ("rollback_version", False, "dataset.write"),
+        ("update_document_acl", False, "dataset.write"),
+        ("rebuild_index", False, "dataset.write"),
+    ],
+)
+def test_dataset_query_read_only_contract_comes_from_authoritative_registry(
+    action, read_only, permission
+):
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    metadata = get_workflow_tool_registry()["dataset_rag"]["actions"][action]
+    spec = get_tool_action_spec("dataset_rag", action)
+    assert spec is not None
+    assert (metadata.get("read_only") is True) is read_only
+    assert spec.read_only is read_only
+    assert spec.permission == permission
+    assert spec.risk == metadata["risk"]
+    assert spec.idempotent is metadata["idempotent"]
+
+
 def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> None:
     specs = build_tool_specs_v2()
 
@@ -469,10 +496,15 @@ def test_build_tool_specs_v2_exposes_aiopen_mcp_contracts() -> None:
     assert chat_spec.idempotent is False
     assert chat_spec.required_params == ["message"]
 
+    click = specs[("aiopen", "ui_click")]
+    assert click.risk == "high" and click.idempotent is False and click.read_only is False
+    snapshot = specs[("aiopen", "ui_snapshot")]
+    assert snapshot.risk == "low" and snapshot.idempotent is True and snapshot.read_only is True
+
     valid_ui_type = validate_tool_call(
         "aiopen",
         "ui_type",
-        {"selector": "#message", "text": "hello"},
+        {"session_id": "screen-session-1", "selector": "#message", "text": "hello"},
     )
     assert valid_ui_type.ok is True
 
@@ -488,7 +520,9 @@ def test_build_tool_specs_v2_exposes_aiopen_mcp_contracts() -> None:
         "type": "text/plain",
     }
     assert validate_tool_call("aiopen", "ui_upload", upload).ok
-    invalid_upload = validate_tool_call("aiopen", "ui_upload", {"files": [{"text": "sample"}]})
+    invalid_upload = validate_tool_call(
+        "aiopen", "ui_upload", {"session_id": "screen-session-1", "files": [{"text": "sample"}]}
+    )
     assert not invalid_upload.ok
     assert "name" in invalid_upload.message
 
@@ -711,18 +745,29 @@ def test_schema_failure_only_releases_a_certain_read_claim(
         result = execute_with_tool_deadline(
             executor, step, runtime_context=context, timeout_seconds=60
         )
-        evidence = result["reconciliation_evidence"] if unknown else result
+        evidence = result["reconciliation_evidence"] if unknown_io else result
         assert evidence["error_code"] == "output_schema_validation_failed"
+        assert evidence["raw_error_code"] == raw_output.get("error_code")
         assert result["success"] is False
+        if unknown_io:
+            assert result["error_code"] == "tool_timeout_unknown"
+            assert result["io_reconciliation"] == [{"kind": "http_timeout", "method": "GET"}]
         if unknown:
             assert result["outcome"] == "unknown" and result["retryable"] is False
             assert result["reconciliation_required"] is True
+            if not unknown_io:
+                assert result["error_code"] == "output_schema_validation_failed"
             tool_permission.drop_process_idempotency_memory()
             replay = execute_with_tool_deadline(
                 executor, step, runtime_context=context, timeout_seconds=60
             )
             assert replay["outcome"] == "unknown" and replay["retryable"] is False
             assert replay["reconciliation_required"] is True
+            assert replay["error_code"] == "output_schema_validation_failed"
+            assert replay["raw_error_code"] == evidence["raw_error_code"]
+            if "reconciliation_evidence" in replay:
+                assert replay["reconciliation_evidence"]["error_code"] == evidence["error_code"]
+                assert replay["reconciliation_evidence"] is not replay
         else:
             assert result["message"] == "工具输出 缺少字段：data"
             assert not result.get("reconciliation_required") and result.get("outcome") != "unknown"

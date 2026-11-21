@@ -15,7 +15,7 @@ import pytest
 
 from app.application.message_repository import MessageRepository
 from app.application.super_employee import cli as cli_module
-from app.application.super_employee.cli import CliExecutor
+from app.application.super_employee.cli import CliExecutionError, CliExecutor
 from app.application.super_employee.devices import DeviceSelection
 from app.application.super_employee.messages import MessageSynchronizer
 from app.application.super_employee.profiles import CODEX_PROFILE
@@ -304,3 +304,380 @@ def test_closing_the_public_stream_propagates_cleanup_before_returning(
 
 def _unexpected(*args: object, **kwargs: object) -> NoReturn:
     pytest.fail("The component crossed an unrelated effect boundary")
+
+
+@pytest.mark.parametrize("profile", [CODEX_PROFILE, CLAUDE_PROFILE])
+def test_public_stream_rejects_nonzero_exit_even_with_final_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, profile
+) -> None:
+    service = SuperEmployeeService(profile, storage_root=tmp_path)
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+
+    class FailedProcess(_StreamingProcess):
+        async def wait(self) -> int:
+            self.waited = True
+            self.returncode = 23
+            return 23
+
+    async def consume() -> tuple[list[dict], FailedProcess]:
+        process = FailedProcess()
+
+        async def launch(*args, **kwargs):
+            if "--output-last-message" in args:
+                Path(args[args.index("--output-last-message") + 1]).write_text("partial file")
+            return process
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", launch)
+        return await _collect(
+            service.invoke_stream(user_id=1, message="描述当前任务", context={"mode": "chat"})
+        ), process
+
+    events, process = asyncio.run(consume())
+    assert all(event["type"] != "done" for event in events)
+    assert events[-1]["error_code"] == "cli_nonzero_exit"
+    assert events[-1]["exit_code"] == 23
+    assert events[-1]["partial_text"] == ("hello" if profile.cli_stream_json else "partial file")
+    assert events[-1]["outcome"] == "unknown"
+    assert events[-1]["retryable"] is False
+    assert process.waited
+
+
+def test_public_stream_requires_a_terminal_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+
+    async def incomplete(*args):
+        yield {"type": "token", "text": "unfinished output"}
+
+    monkeypatch.setattr(service, "_run_cli_streaming", incomplete)
+    events = asyncio.run(
+        _collect(service.invoke_stream(user_id=1, message="描述当前任务", context={"mode": "chat"}))
+    )
+    assert events[-1]["type"] == "error"
+    assert events[-1]["termination_reason"] == "exit_unknown"
+    assert events[-1]["partial_text"] == "unfinished output"
+    assert not any(event["type"] == "done" for event in events)
+
+
+@pytest.mark.parametrize(
+    "failure_stage",
+    ["initial", "repair", "repair_launch", "verification", "publication", "success"],
+)
+@pytest.mark.parametrize("streaming", [False, True])
+def test_public_development_stages_preserve_failed_work_and_only_clean_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_stage: str, streaming: bool
+) -> None:
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+    monkeypatch.setattr(service, "_dev_loop_enabled", lambda: True)
+    monkeypatch.setattr(service, "_prepare_worktree", lambda *args: (str(tmp_path), "fixture"))
+    calls, verifications, publications, cleanups = [], [], [], []
+    monkeypatch.setenv("XCMAX_DEV_LOOP_MAX_FIX", "1")
+
+    def execute(*args):
+        calls.append(args)
+        if failure_stage == "repair_launch" and len(calls) > 1:
+            raise CliExecutionError("Codex", "launch_failed", started=False)
+        if failure_stage == "initial" or (failure_stage == "repair" and len(calls) > 1):
+            return (7, "partial work", "fixture failure", "")
+        return (0, "generated output", "", "")
+
+    def verify(*args):
+        verifications.append(args)
+        return (
+            failure_stage not in {"repair", "repair_launch", "verification"},
+            "verification fixture",
+        )
+
+    def publish(*args):
+        publications.append(args)
+        return (failure_stage != "publication", "publication fixture")
+
+    monkeypatch.setattr(service, "_run_cli_idle", execute)
+    monkeypatch.setattr(service, "_verify_workspace", verify)
+    monkeypatch.setattr(service, "_commit_and_push", publish)
+    monkeypatch.setattr(service, "_remove_worktree", lambda *args: cleanups.append(args))
+    kwargs = {
+        "user_id": 1,
+        "message": "修复登录问题",
+        "context": {"mode": "code", "force_cli_direct": True},
+    }
+    success = failure_stage == "success"
+    if streaming:
+        events = asyncio.run(_collect(service.invoke_stream(**kwargs)))
+        assert events[-1]["type"] == ("done" if success else "error")
+        assert any("开发任务完成" in event.get("text", "") for event in events) is success
+        result = events[-1]
+    else:
+        result = service.invoke(**kwargs)
+        assert result["assistant_message"]["status"] == ("completed" if success else "failed")
+    if not success:
+        assert result["error_code"] == (
+            "cli_nonzero_exit"
+            if failure_stage in {"initial", "repair"}
+            else "cli_launch_failed"
+            if failure_stage == "repair_launch"
+            else f"development_{failure_stage}_failed"
+        )
+        assert result["partial_text"] == (
+            "partial work" if failure_stage in {"initial", "repair"} else "generated output"
+        )
+        assert result["workspace"] == str(tmp_path)
+        assert result["branch"] == "fixture"
+        assert result["workspace_preserved"] is True
+        assert result["outcome"] == "unknown"
+        assert result["retryable"] is False
+        assert result["execution_started"] is True
+        if not streaming:
+            assert result["dispatch"]["accepted"] is True
+    assert len(calls) == (2 if failure_stage in {"repair", "repair_launch", "verification"} else 1)
+    assert len(verifications) == {"initial": 0, "verification": 2}.get(failure_stage, 1)
+    assert len(publications) == int(failure_stage in {"publication", "success"})
+    assert len(cleanups) == int(success)
+
+
+def test_public_conversation_failure_never_replays_or_changes_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = SuperEmployeeService(CLAUDE_PROFILE, storage_root=tmp_path)
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+    monkeypatch.setattr(service, "_conversation_mode_enabled", lambda: True)
+    monkeypatch.setattr(service, "_session_get", lambda key: {"session_id": "existing"})
+    monkeypatch.setattr(service, "_session_set", _unexpected)
+    calls = []
+
+    def execute(*args):
+        calls.append(args)
+        return (23, '{"type":"result","result":"partial","session_id":"unconfirmed"}', "", "")
+
+    monkeypatch.setattr(service, "_run_cli_idle", execute)
+    result = service.invoke(user_id=1, message="描述当前任务", context={"mode": "chat"})
+    assert result["assistant_message"]["status"] == "failed"
+    assert result["partial_text"] == "partial"
+    assert result["retryable"] is False
+    assert len(calls) == 1
+
+
+def test_public_stream_preserves_successful_stdout_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+
+    class StdoutProcess(_StreamingProcess):
+        async def readline(self) -> bytes:
+            if self._read:
+                return b""
+            self._read = True
+            return b"codex\nvalid final output\ntokens used\n42\n"
+
+    async def launch(*args, **kwargs):
+        return StdoutProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", launch)
+    events = asyncio.run(
+        _collect(service.invoke_stream(user_id=1, message="描述当前任务", context={"mode": "chat"}))
+    )
+    assert events[-1]["type"] == "done"
+    assert events[-1]["result"]["response"] == "valid final output"
+
+
+def test_public_stream_io_failure_preserves_partial_text_and_unknown_effects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = SuperEmployeeService(CLAUDE_PROFILE, storage_root=tmp_path)
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+
+    class BrokenPipeProcess(_StreamingProcess):
+        async def readline(self) -> bytes:
+            if self._read:
+                raise OSError("fixture read failure")
+            return await super().readline()
+
+    async def consume():
+        process = BrokenPipeProcess()
+
+        async def launch(*args, **kwargs):
+            return process
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", launch)
+        return await _collect(
+            service.invoke_stream(user_id=1, message="描述当前任务", context={"mode": "chat"})
+        ), process
+
+    events, process = asyncio.run(consume())
+    assert all(event["type"] != "done" for event in events)
+    assert events[-1]["termination_reason"] == "process_error"
+    assert events[-1]["execution_started"] is True
+    assert events[-1]["partial_text"] == "hello"
+    assert events[-1]["outcome"] == "unknown"
+    assert events[-1]["retryable"] is False
+    assert process.killed and process.waited
+
+
+@pytest.mark.parametrize(("git_repo", "branch"), [(True, ""), (True, "feature/task"), (False, "")])
+def test_public_development_isolation_failure_does_not_execute_in_git_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_repo: bool, branch: str
+) -> None:
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+    monkeypatch.setattr(service, "_dev_loop_enabled", lambda: True)
+    monkeypatch.setattr(service, "_prepare_worktree", lambda *args: None)
+    monkeypatch.setattr(service, "_is_git_repo", lambda path: git_repo)
+    exists = Path.exists
+    # The test runner's temporary root may itself live inside a checkout.
+    monkeypatch.setattr(
+        Path, "exists", lambda path: git_repo if path.name == ".git" else exists(path)
+    )
+    calls = []
+
+    def execute(*args):
+        calls.append(args)
+        return 0, "non-git task output", "", ""
+
+    monkeypatch.setattr(service, "_run_cli_idle", execute)
+    result = service.invoke(
+        user_id=1,
+        message="修复登录问题",
+        context={
+            "mode": "code",
+            "force_cli_direct": True,
+            "branch_context": branch,
+        },
+    )
+    assert len(calls) == (0 if git_repo else 1)
+    if git_repo:
+        assert result["error_code"] == "development_workspace_unavailable"
+        assert result["execution_state"] == "not_started"
+        assert result["dispatch"]["accepted"] is False
+        assert result["assistant_message"]["status"] == "failed"
+    else:
+        assert result["assistant_message"]["status"] == "completed"
+
+
+@pytest.mark.parametrize("inspection_failed", [False, True])
+def test_public_development_never_resets_persistent_unconfirmed_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, inspection_failed: bool
+) -> None:
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
+    wt = tmp_path / "retained-worktree"
+    (wt / ".git").mkdir(parents=True)
+    evidence = wt / "evidence.txt"
+    evidence.write_text("unconfirmed changes")
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+    monkeypatch.setattr(service, "_dev_loop_enabled", lambda: True)
+    monkeypatch.setattr(service, "_is_git_repo", lambda path: True)
+    monkeypatch.setattr(service, "_relay_persistent_worktree_path", lambda: str(wt))
+    monkeypatch.setattr(service, "_run_cli_idle", _unexpected)
+    calls = []
+
+    def git(cwd, *args, **kwargs):
+        calls.append(args)
+        if args == ("rev-parse", "HEAD"):
+            return subprocess.CompletedProcess(args, 0, "base-head", "")
+        assert args == ("status", "--porcelain", "--untracked-files=all")
+        return subprocess.CompletedProcess(
+            args,
+            1 if inspection_failed else 0,
+            "" if inspection_failed else "?? evidence.txt\n",
+            "inspection unavailable" if inspection_failed else "",
+        )
+
+    monkeypatch.setattr(service, "_git", git)
+    result = service.invoke(
+        user_id=1,
+        message="修复登录问题",
+        context={
+            "mode": "code",
+            "force_cli_direct": True,
+        },
+    )
+    assert result["error_code"] == (
+        "development_workspace_unavailable" if inspection_failed else "development_workspace_dirty"
+    )
+    assert result["execution_state"] == "not_started"
+    assert result["workspace"] == str(wt)
+    assert result["workspace_preserved"] is True
+    assert result["reconciliation_required"] is True
+    assert evidence.read_text() == "unconfirmed changes"
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("stage", ["add", "status"])
+def test_public_git_publication_stops_at_first_failed_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
+) -> None:
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
+    calls = []
+
+    def git(cwd, *args, **kwargs):
+        calls.append(args[0])
+        assert args[0] in {"add", "status"}
+        return subprocess.CompletedProcess(
+            args, 7 if args[0] == stage else 0, "", "fixture failure"
+        )
+
+    monkeypatch.setattr(service, "_git", git)
+    ok, diagnostic = service._commit_and_push(str(tmp_path), "fixture", "task")
+    assert ok is False
+    assert "fixture failure" in diagnostic
+    assert calls == (["add"] if stage == "add" else ["add", "status"])
+
+
+@pytest.mark.parametrize("kind", [CODEX_PROFILE.direct_kind, CODEX_PROFILE.result_kind])
+def test_explicit_reply_kinds_never_reenter_legacy_dispatcher_migration(
+    tmp_path: Path, kind: str
+) -> None:
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
+    row = {"role": "assistant", "kind": kind, "status": "failed", "body": "调用队列 partial"}
+    assert not service._sync.upgrade_legacy_dispatcher_row(row)
+    assert row["role"] == "assistant"
+    assert row["kind"] == kind
+
+
+@pytest.mark.parametrize("marker_type", ["directory", "file"])
+def test_public_git_probe_failure_cannot_downgrade_a_repository_to_raw_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, marker_type: str
+) -> None:
+    root = tmp_path / "repository"
+    cwd = root / "subdir"
+    cwd.mkdir(parents=True)
+    marker = root / ".git"
+    if marker_type == "directory":
+        marker.mkdir()
+    else:
+        marker.write_text("gitdir: /fixture/worktree-metadata")
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-cli")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(cwd))
+    monkeypatch.setattr(service, "_dev_loop_enabled", lambda: True)
+    monkeypatch.setattr(
+        service,
+        "_git",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args, 128, "", "inspection unavailable"
+        ),
+    )
+    monkeypatch.setattr(service, "_run_cli_idle", _unexpected)
+    result = service.invoke(
+        user_id=1,
+        message="修复登录问题",
+        context={
+            "mode": "code",
+            "force_cli_direct": True,
+        },
+    )
+    assert result["error_code"] == "development_workspace_unavailable"
+    assert result["execution_state"] == "not_started"
+    assert result["dispatch"]["accepted"] is False
+    assert result["workspace"] == str(cwd)

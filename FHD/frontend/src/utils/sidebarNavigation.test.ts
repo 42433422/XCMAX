@@ -32,7 +32,7 @@ vi.mock('@/stores/mods', () => ({
   }),
 }))
 
-function makeRouter(hasRoutes: string[] = ['print', 'workflow-employee-space', 'customers'], currentName = 'chat') {
+function makeRouter(hasRoutes: string[] = ['print', 'employee-workbench', 'workflow-employee-space', 'customers'], currentName = 'chat') {
   const currentRoute = { value: { name: currentName, path: `/${currentName}` } }
   const push = vi.fn(async (loc: { name?: string; path?: string } | string) => {
     if (typeof loc === 'string') {
@@ -62,10 +62,10 @@ describe('sidebarNavigation', () => {
     vi.restoreAllMocks()
   })
 
-  it('employee-workflow maps to workflow-employee-space host route', async () => {
+  it('employee-workflow maps to the task workbench host route', async () => {
     const router = makeRouter()
     await navigateFromSidebarKey(router, 'employee-workflow')
-    expect(router.push).toHaveBeenCalledWith({ name: 'workflow-employee-space' })
+    expect(router.push).toHaveBeenCalledWith({ name: 'employee-workbench' })
   })
 
   it('print prefers host print route on Enterprise desktop', async () => {
@@ -89,7 +89,7 @@ describe('sidebarNavigation', () => {
 
     expect(getSidebarNavigationGeneration()).toBe(2)
     expect(router.push).toHaveBeenCalledTimes(1)
-    expect(router.push).toHaveBeenCalledWith({ name: 'workflow-employee-space' })
+    expect(router.push).toHaveBeenCalledWith({ name: 'employee-workbench' })
   })
 
   it('settles each coalesced call according to its own navigation', async () => {

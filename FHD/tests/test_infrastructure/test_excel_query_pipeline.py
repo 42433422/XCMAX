@@ -73,6 +73,125 @@ def test_detect_header_row_skips_title_rows_when_model_unavailable(
     assert detect_header_row_1based(path) == 4
 
 
+def test_unreadable_workbook_returns_no_header_without_model_call(tmp_path, monkeypatch):
+    from zipfile import ZipFile
+
+    path = tmp_path / "damaged.xlsx"
+    with ZipFile(path, "w") as archive:
+        archive.writestr("unrelated.txt", "not a workbook")
+    provider = MagicMock(side_effect=AssertionError("unreadable bytes cannot reach a model"))
+    monkeypatch.setattr("app.infrastructure.excel.header_detection.get_active_provider", provider)
+    assert detect_header_row_1based(path) is None
+    provider.assert_not_called()
+
+
+@pytest.mark.parametrize("layout", ["blank-column", "titled-blank-column", "metadata"])
+@pytest.mark.parametrize("native_enabled", [True, False])
+def test_ambiguous_header_requires_confirmation_before_reading_or_querying(
+    tmp_path, monkeypatch, unconfigured_header_registry, layout, native_enabled
+):
+    from openpyxl import Workbook
+
+    from app.application.tools.workflow import execute_workflow_tool
+    from app.application.tools.workflow_excel_paths import _parse_excel_header_row_1based
+
+    path = tmp_path / "blank-header.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    header = 1
+    if layout == "titled-blank-column":
+        sheet.append(["月度业务明细"])
+        sheet.append([])
+        header = 3
+    if layout == "metadata":
+        sheet.append(["客户", "甲公司"])
+        sheet.append(["日期", "产品", "数量", "金额"])
+        sheet.append(["2026/11/21", "床垫", 1, 100])
+        sheet.append(["2026/11/22", "沙发", 2, 200])
+        header = 2
+    else:
+        sheet.append(["客户", "地区", "备注", "金额", None])
+        sheet.append(["客户甲", "华东", "新增订单", "100", "额外业务说明"])
+        sheet.append(["客户乙", "华南", "续订订单", "200", "其他业务说明"])
+    workbook.save(path)
+    assert unconfigured_header_registry.get_active_provider(profile="excel_header") is None
+    read = MagicMock(wraps=read_excel_dataframe)
+    query = MagicMock(
+        side_effect=lambda frame, *_args, **_kwargs: {
+            "success": True,
+            "row_count": len(frame),
+            "total": int(pd.to_numeric(frame["金额"]).sum()),
+        }
+    )
+    analysis = ExcelAnalysis(
+        ExcelIO(lambda _root, _path: path, read, _parse_excel_header_row_1based),
+        query,
+        lambda frame, _expression: frame,
+        lambda *_args: "",
+        logging.getLogger(__name__),
+    )
+    args = {"file_path": str(path), "action": "excel_query", "natural_language": "金额合计"}
+    with pytest.raises(ValueError, match="确认表头"):
+        detect_header_row_1based(path)
+    blocked = analysis.analyze(args, str(tmp_path))
+    assert blocked["success"] is False
+    assert blocked["error"] == "header_confirmation_required"
+    assert blocked["required_field"] == "header_row"
+    assert header in blocked["header_candidates"]
+    assert len(blocked["header_candidates"]) > 1
+    assert all(type(row) is int for row in blocked["header_candidates"])
+    read.assert_not_called()
+    query.assert_not_called()
+    with patch(
+        "app.application.tools.workflow_tools.excel_analysis.auto_header_row",
+        side_effect=AssertionError("explicit headers and raw read do not infer a header"),
+    ):
+        result = analysis.analyze({**args, "header_row": header}, str(tmp_path))
+        assert result["success"] is True and result["row_count"] == 2
+        assert result["total"] == 300 and result["header_row"] == header
+        read.assert_called_once_with(path, sheet_name=None, header_row_1based=header)
+        raw = analysis.analyze({"file_path": str(path), "action": "read"}, str(tmp_path))
+        assert raw["success"] is True
+        assert read.call_args.kwargs["header_row_1based"] is None
+    query.assert_called_once()
+    monkeypatch.setenv("XCAGI_DISABLE_PLANNER_NATIVE_TOOLS", "0" if native_enabled else "1")
+    with patch(
+        "app.application.tools.workflow._read_excel_dataframe", wraps=read_excel_dataframe
+    ) as schema_read:
+        schema_args = {"file_path": str(path)}
+        schema_blocked = json.loads(
+            execute_workflow_tool(
+                "excel_schema_understand", schema_args, workspace_root=str(tmp_path)
+            )
+        )
+        assert {key: schema_blocked.get(key) for key in blocked} == blocked
+        schema_read.assert_not_called()
+        with patch(
+            "app.application.tools.workflow_tools.excel_analysis.auto_header_row",
+            side_effect=AssertionError("an explicit schema header must not be inferred"),
+        ):
+            schema_result = json.loads(
+                execute_workflow_tool(
+                    "excel_schema_understand",
+                    {**schema_args, "header_row": header},
+                    workspace_root=str(tmp_path),
+                )
+            )
+        assert schema_result["success"] is True and schema_result["header_row"] == header
+        assert schema_result["structure"]["row_count"] == 2
+        snapshot = schema_result["snapshot"]
+        expected_columns = (
+            ["日期", "产品", "数量", "金额"]
+            if layout == "metadata"
+            else ["客户", "地区", "备注", "金额"]
+        )
+        assert snapshot["columns"][:4] == expected_columns
+        assert sum(int(row["金额"]) for row in snapshot["sample_rows"]) == 300
+        schema_read.assert_called_once_with(path, sheet_name=None, header_row_1based=header)
+        if native_enabled:
+            assert schema_result["source"] == "mod:xcagi-planner-excel-tools"
+
+
 @pytest.mark.parametrize("decision", ["failure", "unknown"])
 @pytest.mark.parametrize("scoped", [True, False])
 def test_real_sdk_header_failure_does_not_become_no_model_fallback(

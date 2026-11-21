@@ -80,6 +80,7 @@ _COMMON = (
     "ensure_ai_conversation_bootstrap",
     "ensure_mobile_push_bootstrap",
     "ensure_local_file_bootstrap",
+    "ensure_enterprise_cognition_bootstrap",
 )
 
 

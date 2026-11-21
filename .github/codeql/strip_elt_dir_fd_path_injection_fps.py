@@ -49,8 +49,10 @@ SAFE_LINES_BY_SUFFIX = {
 # any semantic change disables the suppression (fail closed).
 _REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
     "FHD/app/application/agent_orchestrator/artifact_files.py": (
-        "0ac15ca38895f00655ebb7e624e269312ff301558aff702d863f69903324c7da",
-        frozenset({73, 96, 97, 105, 107, 129}),
+        # Independently re-reviewed 2026-11-21: blob 1e08583497b88ed7a49f58d1c51a97f310fb1e25.
+        # PNG/JSON/TXT retain owner/content validation; the six path guards are unchanged.
+        "f3e6a48d4b317c41dacca52cb16cbffdd55565d70ffea424ca79d24f13e67bdd",
+        frozenset({95, 118, 119, 127, 129, 151}),
     ),
     "FHD/app/application/employee_runtime/workspace_io.py": (
         "bf00f63ee9fe4b98ec9ba6c30b344c8919a6c103c8d0431fe64794cbd53490db",

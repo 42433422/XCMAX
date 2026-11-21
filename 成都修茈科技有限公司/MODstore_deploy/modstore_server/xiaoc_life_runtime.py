@@ -46,6 +46,7 @@ class LifeCycle(TypedDict, total=False):
     facts: list[dict[str, Any]]
     decision: dict[str, Any]
     portfolio: dict[str, Any]
+    evolution: dict[str, Any]
     goals: list[dict[str, Any]]
     interests: list[dict[str, Any]]
     self_model: dict[str, Any]
@@ -178,6 +179,13 @@ def _cycle_reservation(state: dict[str, Any], domain: str) -> int:
             )
             return min(1_000_000, requested)
         return 0  # An existing completed execution needs only receipt/outcome reads.
+    if domain == "reflection" and any(
+        goal.get("retort_request_id")
+        and not goal.get("decision_id")
+        and goal.get("status") == "awaiting_engineering_budget"
+        for goal in state.get("goals", [])
+    ):
+        return 0  # Reading the original approval into a proposal makes no model call.
     return 32768
 
 
@@ -229,15 +237,64 @@ class CyclePorts:
         portfolio = self.approved_portfolio()
         if portfolio is not None:
             return {"portfolio": portfolio, "facts": []}
+        from modstore_server import xiaoc_life_evolution as evolution
+
+        pending = evolution.pending_budget(self.state, self.domain)
+        if pending is not None:
+            return {"evolution": pending, "facts": []}
         from modstore_server.strategy_planner import collect_context
 
         context = await asyncio.to_thread(collect_context)
-        facts = feedback_facts(self.state)
-        for key in ("assets", "repo", "domains"):
+        facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
+        for key in ("customer_value", "assets", "repo", "domains"):
             value = context.get(key)
             if isinstance(value, dict):
                 # No raw customer text, account-private memory or local path is
                 # copied into the shared persona or sent as a public query.
+                if key == "customer_value":
+                    value = {
+                        name: value.get(name)
+                        for name in (
+                            "status",
+                            "source_owner",
+                            "observed_at",
+                            "window_days",
+                            "value_ledger_ready",
+                            "interpretation",
+                            "desktop_release_source_available",
+                        )
+                        if name in value
+                    }
+                    original = context[key]
+                    if value.get("status") == "ok":
+                        for name in (
+                            "verified_paid_count",
+                            "verified_paid_amount_cents",
+                            "customer_goal_count",
+                            "paid_delivery_count",
+                            "paid_acceptance_count",
+                            "complete_customer_count",
+                        ):
+                            if type(original.get(name)) is int and original[name] >= 0:
+                                value[name] = original[name]
+                        for name in ("six_stage_counts", "lifecycle_gaps"):
+                            value[name] = {
+                                stage: count
+                                for stage, count in original.get(name, {}).items()
+                                if stage
+                                in {
+                                    "payment",
+                                    "installation",
+                                    "first_use",
+                                    "outcome",
+                                    "acceptance",
+                                    "reuse",
+                                    "sequence",
+                                    "enterprise_subject",
+                                }
+                                and type(count) is int
+                                and count >= 0
+                            }
                 if key == "domains":
                     value = {
                         "status": value.get("status"),
@@ -314,7 +371,7 @@ class CyclePorts:
 
     async def decide(self, state: LifeCycle) -> LifeCycle:
         self.active()
-        if state.get("portfolio"):
+        if state.get("portfolio") or state.get("evolution"):
             return {}
         from fastapi import HTTPException
 
@@ -396,6 +453,19 @@ class CyclePorts:
         self.active()
         if state.get("portfolio"):
             return await self.advance_portfolio(state["portfolio"])
+        if state.get("evolution"):
+            from modstore_server.xiaoc_life_evolution import propose_budget
+
+            goal = await asyncio.to_thread(propose_budget, self.claim, state["evolution"])
+            self.evidence = [
+                "retort:" + goal["retort_request_id"],
+                "portfolio:" + goal["decision_id"],
+            ]
+            return {
+                "goals": [goal],
+                "status": "completed",
+                "summary": "已将原改进批准接入公司工程预算提案，等待原审批。",
+            }
         decision = state["decision"]
         if decision["action"] == "wait":
             return {
@@ -403,7 +473,13 @@ class CyclePorts:
                 "summary": "已核对当前观察，本轮没有新增行动。",
             }
         goals = []
-        if suggestion := decision.get("goal"):
+        suggestion = decision.get("goal") or (
+            decision.get("self_assessment")
+            if self.domain == "reflection"
+            and self.state.get("policy", {}).get("retort_template_id")
+            else None
+        )
+        if suggestion:
             goal_id = (
                 "xiaoc-goal-"
                 + _digest(
@@ -434,12 +510,23 @@ class CyclePorts:
                     "status": "blocked",
                     "summary": "当前目标已达容量上限，未创建新目标或提案。",
                 }
+            if (
+                self.domain == "reflection"
+                and self.state.get("policy", {}).get("retort_template_id")
+                and not goal.get("decision_id")
+            ):
+                from modstore_server.xiaoc_life_evolution import propose
+
+                self.active()
+                goal = await asyncio.to_thread(propose, self.claim, goal)
+                self.details["retort_request_id"] = goal["retort_request_id"]
             limits = self.state.get("policy", {}).get("portfolio_limits")
             employee = self.state.get("policy", {}).get("employee_id")
             if (
                 limits
                 and employee
                 and not goal.get("decision_id")
+                and not goal.get("retort_request_id")
                 and goal.get("status") == "proposed"
             ):
                 from modstore_server.strategic_portfolio import (

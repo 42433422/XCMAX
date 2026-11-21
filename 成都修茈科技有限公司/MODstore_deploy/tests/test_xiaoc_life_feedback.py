@@ -15,6 +15,7 @@ from modstore_server import strategic_portfolio_usage as usage
 from modstore_server import xiaoc_life_reconciliation as reconciliation
 from modstore_server import xiaoc_life_runtime as runtime
 from modstore_server import xiaoc_life_store as life
+from modstore_server.strategic_customer_outcomes import VERIFIED_DELIVERY_ATTRIBUTION
 from modstore_server.xiaoc_life_cognition import (
     SYSTEM_PROMPT,
     cognition_messages,
@@ -97,6 +98,50 @@ def test_feedback_preserves_actual_measurement_stage_and_filters_private_text(ch
     assert "/private/" not in serialized and "PRIVATE_" not in serialized
 
 
+@pytest.mark.parametrize(
+    "attribution,status,revenue,expected",
+    [
+        (VERIFIED_DELIVERY_ATTRIBUTION, "verified", 0, True),
+        (
+            "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
+            "verified",
+            0,
+            True,
+        ),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "unknown", None, False),
+        (
+            "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
+            "unknown",
+            100,
+            False,
+        ),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "verified", True, False),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "verified", -1, False),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "verified", "0", False),
+        (VERIFIED_DELIVERY_ATTRIBUTION + " ", "verified", 0, False),
+        ({"attribution": VERIFIED_DELIVERY_ATTRIBUTION}, "verified", 0, False),
+    ],
+)
+def test_attribution_requires_verified_measurement_and_exact_contract(
+    attribution, status, revenue, expected
+):
+    record = reviewed_record()
+    record["reviews"][0]["business"].update(
+        attribution=attribution,
+        status=status,
+        revenue_cents=revenue,
+        verified_attributed_cents=100,
+        paid_order_count=1,
+    )
+    metrics = portfolio_feedback(record)["metrics"]
+    assert metrics["verified_attributed_cents"] == 100
+    assert metrics["attribution"] == (
+        "artifact_acceptance_and_order_outcome_not_incremental_causality"
+        if expected
+        else "unverified"
+    )
+
+
 def test_business_and_stop_feedback_survives_prompt_bound_and_enters_next_model(ports):
     store, calls, *_ = ports
     feedback = portfolio_feedback(reviewed_record())
@@ -141,6 +186,44 @@ def test_business_and_stop_feedback_survives_prompt_bound_and_enters_next_model(
     assert "not incremental" in SYSTEM_PROMPT and "model-weight training" in SYSTEM_PROMPT
 
 
+@pytest.mark.parametrize(
+    "attribution,recognized",
+    [
+        (
+            "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
+            True,
+        ),
+        (
+            "approved_customer_goal_order_completed_artifact_and_verified_acceptance_not_incremental_causality",
+            True,
+        ),
+        ("incremental_causal_profit", False),
+        (None, False),
+        ({"verified": True}, False),
+        (["verified"], False),
+    ],
+)
+def test_feedback_accepts_known_delivery_contracts_and_rejects_unknown_claims(
+    attribution, recognized
+):
+    record = reviewed_record()
+    record["reviews"][0]["business"]["attribution"] = attribution
+    metrics = portfolio_feedback(record)["metrics"]
+    assert metrics["attribution"] == (
+        "artifact_acceptance_and_order_outcome_not_incremental_causality"
+        if recognized
+        else "unverified"
+    )
+
+
+def test_delivery_contract_label_alone_does_not_verify_an_unknown_measurement():
+    record = reviewed_record()
+    record["reviews"][0]["business"].update(status="unknown", revenue_cents=None)
+    feedback = portfolio_feedback(record)
+    assert feedback["outcome_status"] == "business_measurement_unknown"
+    assert feedback["metrics"]["attribution"] == "unverified"
+
+
 @pytest.fixture
 def approved_life_portfolio(database, monkeypatch):
     for module in (life, reconciliation):
@@ -162,7 +245,7 @@ def approved_life_portfolio(database, monkeypatch):
         goal="Measure real delivery",
         period="xiaoc-life:g1",
         limits=limits(observation_hours=1),
-        opportunities=[opportunity()],
+        opportunities=[opportunity(customer_goal_ids=["goal-a"])],
         idempotency_key="life-feedback-g1",
     )
     decision_id = made["decision"]["decision_id"]
@@ -194,8 +277,9 @@ def approved_life_portfolio(database, monkeypatch):
     return decision_id
 
 
+@pytest.mark.parametrize("completed_artifact", [True, False])
 def test_original_business_review_updates_goal_during_pause_without_replaying(
-    approved_life_portfolio, monkeypatch
+    approved_life_portfolio, monkeypatch, completed_artifact
 ):
     from modstore_server import customer_value_payment_source
 
@@ -211,7 +295,16 @@ def test_original_business_review_updates_goal_during_pause_without_replaying(
             )
         workers._finish(
             task,
-            {"ok": True, "status": "completed", "output": "actual worker output"},
+            {
+                "ok": True,
+                "status": "completed",
+                "output": "actual worker output",
+                **(
+                    {"artifact_id": "delivered-output", "artifact_sha256": "b" * 64}
+                    if completed_artifact
+                    else {}
+                ),
+            },
             1,
         )
     life.finish_cycle(
@@ -246,20 +339,40 @@ def test_original_business_review_updates_goal_during_pause_without_replaying(
         owner_user_id=7,
     )
     review = workers.review_portfolio(decision_id, owner_user_id=7)
-    assert review["business"]["status"] == "verified" and review["observation_complete"]
-    assert review["attributed_roi_bps"] == -10000 and review["decision"] == "stop"
+    assert review["business"]["attribution"] == VERIFIED_DELIVERY_ATTRIBUTION
+    assert review["business"]["status"] == ("verified" if completed_artifact else "unknown")
+    assert review["business"]["revenue_cents"] == (0 if completed_artifact else None)
+    assert review["observation_complete"] and review["usage_complete"]
+    assert review["attributed_roi_bps"] == (-10000 if completed_artifact else None)
+    assert review["decision"] == ("stop" if completed_artifact else "wait_for_measurement")
     assert reconciliation.reconcile_goals() == {"observed": 1}
     assert reconciliation.reconcile_goals() == {"observed": 0}
     after = life.read_state()
     goal = after["goals"][0]
     assert after["paused"] and after["budget"] == before["budget"]
-    assert goal["status"] == "stopped" and goal["outcome_status"] == "business_verified"
-    assert goal["outcome_feedback"]["attributed_roi_bps"] == -10000
+    assert goal["status"] == ("stopped" if completed_artifact else "execution_verified")
+    assert goal["outcome_status"] == (
+        "business_verified" if completed_artifact else "business_measurement_unknown"
+    )
+    assert goal["outcome_feedback"]["attributed_roi_bps"] == (
+        -10000 if completed_artifact else None
+    )
     assert goal["outcome_ref"] != before["goals"][0]["outcome_ref"]
     observation = feedback_facts(after)[0]
     assert observation["ref"] == goal["outcome_ref"]
-    assert observation["business_feedback"]["stop_reason"] == "business_roi_guardrail"
+    assert observation["business_feedback"]["stop_reason"] == (
+        "business_roi_guardrail" if completed_artifact else ""
+    )
     assert "/private/" not in json.dumps(observation)
+    messages, refs = cognition_messages(after, "reflection", [observation])
+    next_feedback = json.loads(messages[1]["content"])["observations"][0]
+    assert next_feedback["ref"] == goal["outcome_ref"] and next_feedback["ref"] in refs
+    assert next_feedback["business_feedback"] == observation["business_feedback"]
+    assert next_feedback["business_feedback"]["attribution"] == (
+        "artifact_acceptance_and_order_outcome_not_incremental_causality"
+        if completed_artifact
+        else "unverified"
+    )
 
 
 @pytest.mark.parametrize("raced_worker", [False, True])

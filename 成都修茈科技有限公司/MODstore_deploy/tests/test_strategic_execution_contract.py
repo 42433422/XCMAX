@@ -312,6 +312,7 @@ def test_python_hashes_bytes_read_after_archive_path_validation(archived_python,
 @pytest.fixture
 def csv_employee(database, monkeypatch, tmp_path):
     from modstore_server import catalog_store, employee_executor, employee_runtime
+    from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
     from modstore_server.db.catalog import CatalogItem
 
     employee = "csv-generate-employee"
@@ -371,9 +372,11 @@ def csv_employee(database, monkeypatch, tmp_path):
 
     monkeypatch.setattr(employee_executor, "_employee_pack_extract_root", capture_snapshot)
     monkeypatch.setattr(sys, "path", list(sys.path))
-    # The real employee imports the shared host SDK; include it when this suite
-    # is run independently from the market checkout instead of the host runtime.
-    monkeypatch.syspath_prepend(str(root.parents[2]))
+    # Direct action tests skip the production risk phase that initializes the
+    # real FHD SDK host before loading the approved employee archive.
+    monkeypatch.setenv("XCAGI_FHD_RUNTIME_ROOT", str(Path(__file__).resolve().parents[3] / "FHD"))
+    monkeypatch.setenv("XCAGI_AUTONOMY_DATA_DIR", str(tmp_path / "autonomy"))
+    ensure_fhd_on_path()
     vendor_names = {name for name in sys.modules if name.startswith("csv_generate")}
     try:
         yield {

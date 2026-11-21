@@ -1,6 +1,7 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { AgentMessage, ButlerMode, OrchestrationSession, PendingAction } from '../types/agent'
+import { useAuthStore } from './auth'
 
 const STORAGE_KEYS = {
   consent: 'xc_butler_consent',
@@ -51,6 +52,7 @@ export const useAgentStore = defineStore('agent', () => {
   const pendingAction = ref<PendingAction | null>(null)
   const isLoading = ref(false)
   const currentConversationId = ref<number | null>(null)
+  const conversationGeneration = ref(0)
   const orchestrationSession = ref<OrchestrationSession | null>(null)
 
   /** 未读消息（面板关闭时积累）*/
@@ -138,10 +140,43 @@ export const useAgentStore = defineStore('agent', () => {
     messages.value = [...arr.slice(0, -1), { ...arr[arr.length - 1], ...patch }]
   }
 
+  function updateMessage(id: string, patch: Partial<AgentMessage>) {
+    messages.value = messages.value.map((message) => (message.id === id ? { ...message, ...patch } : message))
+  }
+
+  function stopRequest() {
+    conversationGeneration.value += 1
+    pendingAction.value?.resolve(false)
+    pendingAction.value = null
+    messages.value = messages.value.map((message) =>
+      message.isLoading ? { ...message, content: '已停止接收本轮回复。原请求的结果尚未确认。', isLoading: false } : message,
+    )
+    isLoading.value = false
+    mode.value = 'idle'
+  }
+
   function clearMessages() {
+    stopRequest()
     messages.value = []
     currentConversationId.value = null
+    unreadCount.value = 0
   }
+
+  const auth = useAuthStore()
+  watch(
+    () => auth.user?.id,
+    () => {
+      clearMessages()
+      orchestrationSession.value = null
+      // Historical action logs have no owner; never transfer them to another account.
+      try {
+        sessionStorage.removeItem('xc_butler_action_log')
+      } catch {
+        // Storage can be unavailable in private browsing.
+      }
+    },
+    { flush: 'sync', immediate: true },
+  )
 
   function setPendingAction(action: PendingAction | null) {
     pendingAction.value = action
@@ -170,6 +205,7 @@ export const useAgentStore = defineStore('agent', () => {
     pendingAction,
     isLoading,
     currentConversationId,
+    conversationGeneration,
     orchestrationSession,
     unreadCount,
     focusFilesDrawer,
@@ -185,6 +221,8 @@ export const useAgentStore = defineStore('agent', () => {
     savePosition,
     addMessage,
     updateLastMessage,
+    updateMessage,
+    stopRequest,
     clearMessages,
     setPendingAction,
     clearOrchestration,

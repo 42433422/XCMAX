@@ -19,52 +19,61 @@ import {
 } from 'element-plus'
 import agentRunsApi from '@/api/agentRuns'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
-import { fetchEmployeeSsot } from '@/utils/platformShellApi'
-import { dutyEmployeesFromEmployeeSsot, type EmployeeSsotPayload } from '@/utils/employeeSsotContacts'
-import { taskStatusLabel } from '@/utils/taskWorkspacePresentation'
+import { employeeDirectoryScope, fetchEmployeeDirectory, type DirectoryEmployee } from '@/api/employeeDirectory'
+import { taskStatusLabel, taskStatusOf } from '@/utils/taskWorkspacePresentation'
 import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 import AgentTaskRuntimePanel from '@/components/chat/AgentTaskRuntimePanel.vue'
 import TaskExecutionGraph from './TaskExecutionGraph.vue'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+import { employeeIdOfTask, taskEmployeeIds } from '@/utils/workflowEmployeeTaskState'
 
 const props = withDefaults(defineProps<{ initialPane?: string; archiveOnly?: boolean }>(), { initialPane: 'flow', archiveOnly: false })
 const store = useAgentTaskCenterStore()
-const { tasks, selectedTask, selectedTaskId, loading, error, runtime, actionPending } = storeToRefs(store)
+const { tasks, selectedTask, selectedTaskId, loading, error, runtime, actionPending, connected, stale } = storeToRefs(store)
 const route = useRoute()
 const router = useRouter()
 const pane = ref(props.initialPane)
 const search = ref('')
 const filter = ref('all')
 const compose = ref(false)
-const employees = ref<ReturnType<typeof dutyEmployeesFromEmployeeSsot>>([])
+const employees = ref<DirectoryEmployee[]>([])
 const employeeId = ref('')
 const employeeError = ref('')
 const taskText = ref('')
 const submitting = ref(false)
 const submitError = ref('')
 const pendingSubmission = ref<{ taskId: string; fingerprint: string } | null>(null)
+let scopeVersion = 0
+let directoryRequest = 0
 const canSubmit = computed(
-  () => !submitting.value && !!taskText.value.trim() && employees.value.some((e) => e.id === employeeId.value && e.runnable),
+  () => !submitting.value && !employeeError.value && !!taskText.value.trim() && employees.value.some((e) => e.pack_id === employeeId.value && e.runtime_ok),
 )
+const employeeFilter = computed(() => typeof route.query.employee === 'string' ? route.query.employee.trim() : '')
+const employeeFilterLabel = computed(() => employees.value.find(e => e.pack_id === employeeFilter.value)?.label || employeeFilter.value)
 const selected = computed(() => (selectedTask.value?.task_id === selectedTaskId.value ? selectedTask.value : null))
+const selectedStatus = computed(() => taskStatusOf(selected.value))
+const selectedUncertain = computed(() => selectedStatus.value === 'unknown')
 const activeRun = computed(
   () => selected.value?.active_run || selected.value?.runs?.find((r) => r.run_id === selected.value?.active_run_id),
 )
 const assignedEmployee = computed(() => {
-  const id = String(activeRun.value?.steps?.find((step) => step.params?.employee_id)?.params?.employee_id || '')
-  return employees.value.find((employee) => employee.id === id)?.display_name || id
+  const id = selected.value ? employeeIdOfTask(selected.value) : ''
+  return employees.value.find((employee) => employee.pack_id === id)?.label || id
 })
 const taskItem = computed(() => (selected.value ? taskSummariesToTaskItems([selected.value])[0] : null))
 const visibleTasks = computed(() =>
   tasks.value.filter((task) => {
+    if (employeeFilter.value && !taskEmployeeIds(task).includes(employeeFilter.value)) return false
     const matches = `${task.title} ${task.task_id}`.toLowerCase().includes(search.value.trim().toLowerCase())
-    const active = ['queued', 'planning', 'running', 'retrying'].includes(task.status)
-    const attention = ['blocked', 'failed', 'waiting_user', 'paused'].includes(task.status)
+    const status = taskStatusOf(task)
+    const active = ['queued', 'planning', 'running', 'retrying'].includes(status)
+    const attention = ['blocked', 'failed', 'waiting_user', 'paused', 'unknown'].includes(status)
     return (
       matches &&
       (filter.value === 'all' ||
         (filter.value === 'active' && active) ||
         (filter.value === 'attention' && attention) ||
-        (filter.value === 'completed' && task.status === 'completed'))
+        (filter.value === 'completed' && status === 'completed'))
     )
   }),
 )
@@ -80,7 +89,7 @@ const actions = [
 function statusType(status: string): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
   if (status === 'completed') return 'success'
   if (status === 'failed') return 'danger'
-  if (['blocked', 'waiting_user', 'paused'].includes(status)) return 'warning'
+  if (['blocked', 'waiting_user', 'paused', 'unknown'].includes(status)) return 'warning'
   if (['running', 'planning', 'retrying'].includes(status)) return 'primary'
   return 'info'
 }
@@ -90,31 +99,46 @@ function time(value?: string) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false })
 }
 async function selectTask(id: string) {
+  const version = scopeVersion
   selectedTaskId.value = id
   selectedTask.value = null
   await router.replace({ query: { ...route.query, task: id } })
+  if (version !== scopeVersion) return
   await store.refreshDetail()
+}
+function openEmployeeSurface(name: string) {
+  const employee = (selected.value ? employeeIdOfTask(selected.value) : '') || employeeFilter.value
+  void router.push({ name, query: { employee: employee || undefined } })
 }
 async function refresh() {
   await store.refresh()
   if (selectedTaskId.value) await store.refreshDetail()
 }
 async function loadEmployees() {
+  const version = scopeVersion
+  const request = ++directoryRequest
   employeeError.value = ''
+  employees.value = []
   try {
-    employees.value = dutyEmployeesFromEmployeeSsot((await fetchEmployeeSsot()) as EmployeeSsotPayload)
+    const rows = await fetchEmployeeDirectory({ force: true })
+    if (version !== scopeVersion || request !== directoryRequest) return
+    employees.value = rows
     const requested = String(route.query.employee || '')
-    if (employees.value.some((e) => e.id === requested && e.runnable)) employeeId.value = requested
+    if (!pendingSubmission.value && employees.value.some((e) => e.pack_id === requested && e.runtime_ok)) employeeId.value = requested
   } catch {
+    if (version !== scopeVersion || request !== directoryRequest) return
+    employees.value = []
     employeeError.value = '员工目录读取失败'
   }
 }
 function openCompose() {
   compose.value = true
   void loadEmployees()
+  if (route.query.compose) void router.replace({ query: { ...route.query, compose: undefined } })
 }
 async function submit() {
   if (!canSubmit.value) return
+  const version = scopeVersion
   const params = { employee_id: employeeId.value, task: taskText.value.trim() }
   const fingerprint = JSON.stringify(params)
   if (pendingSubmission.value && pendingSubmission.value.fingerprint !== fingerprint) {
@@ -132,21 +156,27 @@ async function submit() {
       tool_id: 'employee',
       action: 'execute',
       params,
-      runtime_context: { source: 'admin_employee_workspace', client_surface: 'admin_console' },
+      runtime_context: {
+        source: isAdminConsoleSpa() ? 'admin_employee_workspace' : 'desktop_employee_workbench',
+        client_surface: isAdminConsoleSpa() ? 'admin_console' : 'enterprise_desktop',
+      },
     })
+    if (version !== scopeVersion) return
     if (response.success === false || !response.data?.run_id) throw new Error(response.message || '任务提交未确认')
     const id = pendingSubmission.value.taskId
     pendingSubmission.value = null
     compose.value = false
     taskText.value = ''
     await store.refresh()
+    if (version !== scopeVersion) return
     await selectTask(id)
   } catch (reason) {
+    if (version !== scopeVersion) return
     const status = Number((reason as { status?: number })?.status || 0)
     if ([400, 401, 403, 404, 422].includes(status)) pendingSubmission.value = null
     submitError.value = `${reason instanceof Error ? reason.message : '提交未确认'}${pendingSubmission.value ? '。再次提交将核对同一任务。' : ''}`
   } finally {
-    submitting.value = false
+    if (version === scopeVersion) submitting.value = false
   }
 }
 function backToList() {
@@ -178,36 +208,59 @@ watch(
     }
   },
 )
+watch(() => route.query.compose, (value) => { if (value === '1') openCompose() })
+watch(employeeDirectoryScope, () => {
+  scopeVersion += 1
+  pendingSubmission.value = null
+  compose.value = false
+  employeeId.value = ''
+  taskText.value = ''
+  submitting.value = false
+  submitError.value = ''
+  void loadEmployees()
+}, { flush: 'sync' })
+watch(employeeFilter, () => {
+  if (route.query.task || route.query.compose === '1') return
+  const next = visibleTasks.value[0]?.task_id
+  if (next) void selectTask(next)
+  else { selectedTaskId.value = ''; selectedTask.value = null }
+})
 onMounted(async () => {
   store.start()
   void loadEmployees()
   await refresh()
-  const id = String(route.query.task || selectedTaskId.value || tasks.value[0]?.task_id || '')
+  const previous = visibleTasks.value.some(task => task.task_id === selectedTaskId.value) ? selectedTaskId.value : ''
+  const id = String(route.query.task || previous || visibleTasks.value[0]?.task_id || '')
   if (id) await selectTask(id)
+  else { selectedTaskId.value = ''; selectedTask.value = null }
+  if (route.query.compose === '1') openCompose()
 })
 onActivated(() => void refresh())
 </script>
 
 <template>
-  <section class="employee-workspace" aria-label="员工任务工作空间" data-page-ready="true">
+  <section class="employee-workspace" aria-label="员工任务工作台" data-page-ready="true">
     <header class="workspace-toolbar">
       <div>
-        <h2>员工工作空间</h2>
+        <h2>员工工作台</h2>
         <span class="workspace-runtime"
           ><i :class="{ online: runtime.running }" />{{ runtime.running ? '执行服务已启动' : '执行服务未启动'
-          }}<template v-if="executor"> · {{ executor.host }}</template></span
+          }}<template v-if="executor"> · {{ executor.host }}</template> · {{ stale ? '状态待核对' : connected ? '实时同步' : '定时核对' }}</span
         >
       </div>
       <div class="workspace-toolbar-actions">
-        <el-button @click="router.push({ name: 'duty-roster-graph' })">员工图谱</el-button>
+        <el-button @click="openEmployeeSurface('workflow-employee-space')">员工空间</el-button>
+        <el-button @click="openEmployeeSurface(isAdminConsoleSpa() ? 'duty-roster-graph' : 'workflow-employee-stitch-full')">员工图谱</el-button>
         <el-button :loading="loading" @click="refresh">刷新</el-button>
         <el-button v-if="!archiveOnly" type="primary" @click="openCompose">新建任务</el-button>
       </div>
     </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+    <el-alert v-else-if="stale" title="正在核对最新任务状态；连接恢复后自动同步。" type="warning" :closable="false" show-icon />
     <div class="workspace-layout" :class="{ 'has-selection': selectedTaskId }">
       <aside class="workspace-list" aria-label="任务列表">
         <div class="workspace-list-tools">
+          <el-button v-if="employeeFilter" text @click="router.replace({ query: { ...route.query, employee: undefined, task: undefined } })">{{ employeeFilterLabel }} · 查看全部员工</el-button>
           <el-input v-model="search" placeholder="搜索任务" clearable aria-label="搜索任务" />
           <el-select v-model="filter" aria-label="任务状态筛选">
             <el-option label="全部任务" value="all" /><el-option label="进行中" value="active" />
@@ -225,8 +278,8 @@ onActivated(() => void refresh())
           >
             <strong>{{ task.title }}</strong>
             <span
-              ><el-tag :type="statusType(task.status)" size="small" effect="light">{{
-                task.status === 'completed' ? '执行完成' : taskStatusLabel(task.status)
+              ><el-tag :type="statusType(taskStatusOf(task))" size="small" effect="light">{{
+                taskStatusOf(task) === 'completed' ? '执行完成' : taskStatusLabel(taskStatusOf(task))
               }}</el-tag
               ><small>{{ time(task.updated_at) }}</small></span
             >
@@ -237,7 +290,7 @@ onActivated(() => void refresh())
             :image-size="64"
           />
         </div>
-        <footer>{{ tasks.length }} 个任务 · {{ runtime.active_count }} 个执行中</footer>
+        <footer>{{ visibleTasks.length }} 个可见任务 · {{ runtime.active_count }} 个执行中</footer>
       </aside>
       <main class="workspace-detail">
         <template v-if="selected">
@@ -250,8 +303,8 @@ onActivated(() => void refresh())
             >
             <div class="workspace-task-heading">
               <h3>{{ selected.title }}</h3>
-              <el-tag :type="statusType(selected.status)">{{
-                selected.status === 'completed' ? '执行完成' : taskStatusLabel(selected.status)
+              <el-tag :type="statusType(selectedStatus)">{{
+                selectedStatus === 'completed' ? '执行完成' : taskStatusLabel(selectedStatus)
               }}</el-tag>
             </div>
             <div class="workspace-facts">
@@ -267,7 +320,7 @@ onActivated(() => void refresh())
                 ><el-button
                   v-if="selected.capabilities?.[action.key] && (!archiveOnly || action.key === 'cancel')"
                   :loading="actionPending === action.key"
-                  :disabled="!!actionPending || !!error"
+                  :disabled="!!actionPending || !!error || stale || selectedUncertain"
                   size="small"
                   @click="store.controlTask(selected.task_id, action.key)"
                   >{{ action.label }}</el-button
@@ -298,7 +351,7 @@ onActivated(() => void refresh())
                 <AgentTaskRuntimePanel
                   v-if="taskItem"
                   :task="taskItem"
-                  :control-state="{ needsVerification: Boolean(archiveOnly || error || actionPending) }"
+                  :control-state="{ needsVerification: Boolean(archiveOnly || error || actionPending || stale || selectedUncertain) }"
                   @open="openConversation"
                   @refresh="refresh"
                   @approve="store.controlTask(selected.task_id, 'approve')"
@@ -336,12 +389,12 @@ onActivated(() => void refresh())
             :disabled="submitting || !!pendingSubmission"
             ><el-option
               v-for="employee in employees"
-              :key="employee.id"
-              :value="employee.id"
-              :label="employee.display_name"
-              :disabled="!employee.runnable"
-              ><span>{{ employee.display_name }}</span
-              ><small class="employee-option-area">{{ employee.runnable ? employee.area : '未安装' }}</small></el-option
+              :key="employee.pack_id"
+              :value="employee.pack_id"
+              :label="employee.label"
+              :disabled="!employee.runtime_ok"
+              ><span>{{ employee.label }}</span
+              ><small class="employee-option-area">{{ employee.runtime_ok ? employee.department : (employee.prompt_only ? '仅对话' : '不可执行') }}</small></el-option
             ></el-select
           ></label
         >

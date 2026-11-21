@@ -400,7 +400,9 @@ def private_execution_context(db, event_id, payload):
     run = db.get(RetortEvolutionRun, run_id) if run_id else None
     context = _selected_execution_context(db, run)
     if context is None:
-        return None
+        from modstore_server.xiaoc_life_evolution import private_execution_context as life_context
+
+        return life_context(db, event_id, payload)
     if not authorized_incident(db, payload, event_id, read_only=True):
         raise ValueError("feedback_execution_not_authorized")
     effects = json_loads(run.effects_json, {})

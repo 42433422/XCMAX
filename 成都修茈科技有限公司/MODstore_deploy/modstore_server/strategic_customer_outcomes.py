@@ -18,6 +18,14 @@ from sqlalchemy import select
 
 from modstore_server.db.customer_value import CustomerValueReceipt
 
+VERIFIED_DELIVERY_ATTRIBUTION = "approved_customer_goal_order_completed_artifact_and_verified_acceptance_not_incremental_causality"
+KNOWN_DELIVERY_ATTRIBUTIONS = frozenset(
+    {
+        VERIFIED_DELIVERY_ATTRIBUTION,
+        "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
+    }
+)
+
 
 class CustomerGoalBinding(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)

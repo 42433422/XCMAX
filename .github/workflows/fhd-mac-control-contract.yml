@@ -75,7 +75,7 @@ jobs:
         env:
           SECRET_KEY: isolated-elt-output-contract-not-production
           DATABASE_URL: sqlite://
-      - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs scripts/autonomy/runtime_tools/pushed_branch_pr.test.mjs scripts/autonomy/runtime_tools/codex_model_gateway.test.mjs
+      - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs scripts/autonomy/runtime_tools/pushed_branch_pr.test.mjs scripts/autonomy/runtime_tools/codex_model_gateway.test.mjs scripts/autonomy/runtime_tools/cli_output_stream.test.mjs scripts/autonomy/runtime_tools/para_codex_execution.test.mjs
       - name: Verify OpenCode host admission and native isolation
         if: matrix.os != 'windows-2022'
         env:

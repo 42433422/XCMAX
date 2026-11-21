@@ -1,6 +1,5 @@
 """Actual registered inventory writes across host and two isolated Mod databases."""
 
-import multiprocessing
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
@@ -60,7 +59,14 @@ def _child_dispatch(run_id, results):
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             execution = queue.get(run_id)
-            if execution.state in {"succeeded", "failed", "rejected", "cancelled", "timed_out"}:
+            if execution.state in {
+                "succeeded",
+                "failed",
+                "rejected",
+                "cancelled",
+                "timed_out",
+                "blocked",
+            }:
                 run = runs.get(run_id)
                 assert run is not None
                 expected_run_state = (
@@ -74,6 +80,7 @@ def _child_dispatch(run_id, results):
                         "state": execution.state,
                         "recovery_count": execution.recovery_count,
                         "error_code": (output or {}).get("error_code", ""),
+                        "execution_status": (output or {}).get("execution_status", ""),
                     }
                 )
                 return
@@ -96,7 +103,7 @@ def _child_claim_and_exit(run_id):
 
 @pytest.mark.parametrize("worker_kind", ["thread", "process", "dispatcher", "dispatcher_recovery"])
 def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
-    tmp_path, monkeypatch, worker_kind
+    tmp_path, monkeypatch, worker_kind, spawn_context
 ):
     urls = {name: f"sqlite:///{tmp_path / (name + '.db')}" for name in ("host", "a", "b")}
     monkeypatch.setenv("DATABASE_URL", urls["host"])
@@ -129,7 +136,7 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
         if worker_kind == "thread":
             with ThreadPoolExecutor(max_workers=1) as pool:
                 return pool.submit(_stock_in, binding).result(timeout=20)
-        ctx = multiprocessing.get_context("spawn")
+        ctx = spawn_context
         results = ctx.Queue()
         if worker_kind.startswith("dispatcher"):
             from app.application.agent_orchestrator.run_models import AgentRun
@@ -225,6 +232,10 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
             ).one().entitled_mod_ids_json = "[]"
         denied = execute()
         assert denied["error_code"] == "mod_authorization_invalid"
+        assert denied["success"] is False
+        if worker_kind.startswith("dispatcher"):
+            assert denied["state"] == "blocked"
+            assert denied["execution_status"] == "not_started"
         for name, factory in factories.items():
             with tenant_scope(1), factory() as db:
                 movements = db.query(InventoryTransaction).all()

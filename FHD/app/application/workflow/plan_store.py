@@ -29,7 +29,11 @@ CATALOG_HEAD_PREFIX = "catalog-price-active-v1:"
 CATALOG_RECEIPT_PREFIX = "catalog-price-receipt-v1:"
 OWNED_KNOWLEDGE_CONTROL_KEY = "elt-owned-knowledge-v1"
 _RESERVED_PLAN_KEYS = (OWNED_KNOWLEDGE_CONTROL_KEY,)
-_RESERVED_PLAN_PREFIXES = (CATALOG_OPERATION_PREFIX, CATALOG_HEAD_PREFIX, CATALOG_RECEIPT_PREFIX)
+_RESERVED_PLAN_PREFIXES = (
+    CATALOG_OPERATION_PREFIX,
+    CATALOG_HEAD_PREFIX,
+    CATALOG_RECEIPT_PREFIX,
+)
 
 
 def reserved_workflow_plan_id(value: str) -> bool:
@@ -53,7 +57,18 @@ STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"
 
 # 可视为「待续跑」的终态/非终态集合。
-_ACTIVE_STATUSES = {STATUS_RUNNING, STATUS_PENDING}
+_ACTIVE_STATUSES = {
+    STATUS_RUNNING,
+    STATUS_PENDING,
+    "queued",
+    "planning",
+    "retrying",
+    "paused",
+    "blocked",
+    "unknown",
+    "waiting_user",
+    "waiting_approval",
+}
 
 
 def _dump_json(value: Any) -> str:
@@ -174,7 +189,7 @@ class WorkflowPlanStore:
     def list_active(
         self, user_id: str, limit: int = 10, *, session_id: str | None = None
     ) -> list[dict[str, Any]]:
-        """列出某用户的可续跑计划（running / pending_awaiting），按最近更新倒序。"""
+        """列出未完成计划供回读；列出本身不授予重新执行权限。"""
         session = self._get_session()
         try:
             from app.db.models.workflow import WorkflowPlan

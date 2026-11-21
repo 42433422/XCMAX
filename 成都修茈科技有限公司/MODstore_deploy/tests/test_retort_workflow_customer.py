@@ -268,10 +268,14 @@ def test_rollout_new_graph_keeps_provenance_without_new_experimental_samples(cus
     with get_session_factory()() as db:
         failed = db.scalars(
             select(WorkflowExecution)
-            .where(WorkflowExecution.user_id == env["customer_id"])
+            .where(
+                WorkflowExecution.user_id == env["customer_id"],
+                WorkflowExecution.workflow_id == workflow_id,
+            )
             .order_by(WorkflowExecution.id.desc())
         ).first()
-        assert failed.status == "failed" and "approved" in failed.error_message
+        assert failed.status == "failed" and failed.completed_at
+        assert failed.error_message == "workflow_customer_experiment_no_longer_approved"
         assert failed.error_message not in denied.text
     assert env["run"]["advance"]()["status"] == "awaiting_rollout_readback"
     assert env["run"]["advance"]()["decision"] == "rollback"

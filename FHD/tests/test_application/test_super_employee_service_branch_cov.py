@@ -32,6 +32,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from app.application.super_employee.cli import CliExecutionError
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -50,7 +51,11 @@ from app.application.super_employee_service import (
     _trae_cli_command,
     _utc_now,
 )
-from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant, ExecutionScope
+from app.domain.app_pure.execution_scope import (
+    CONTEXT_TOKEN_KEY,
+    CapabilityGrant,
+    ExecutionScope,
+)
 from tests.pure_builders import error_runner as _error_runner
 from tests.pure_builders import super_employee_request as _make_request
 
@@ -171,11 +176,11 @@ class TestInvokeStream:
 
     def test_no_cli_path_falls_back_to_text(self, tmp_path):
         svc = _make_svc(tmp_path)
-        # 非 FAQ 且 CLI 不可用 → 走派工兜底文案
+        # 非 FAQ 且 CLI 不可用不能以占位文案结束成功。
         with patch.object(svc, "_cli_path", return_value=""):
             events = _run_agen(svc.invoke_stream(user_id=1, message="你好呀普通对话"))
-        assert events[-1]["type"] == "done"
-        assert events[-1]["result"]["dispatcher"] in ("codex_cli", "codex_direct")
+        assert events[-1]["type"] == "error"
+        assert events[-1]["error_code"] == "cli_unavailable"
 
     def test_dev_loop_task_yields_progress(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_DEV_LOOP", "1")
@@ -206,7 +211,10 @@ class TestInvokeStream:
                 svc.invoke_stream(user_id=1, message="修复 bug", context={"mode": "code"})
             )
         assert events[-1]["type"] == "error"
-        assert "boom" in events[-1]["message"]
+        assert "boom" not in json.dumps(events)
+        assert events[-1]["error_code"] == "development_execution_failed"
+        assert events[-1]["outcome"] == "unknown"
+        assert events[-1]["reconciliation_required"] is True
 
     def test_cli_streaming_flow(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_DEV_LOOP", "0")
@@ -269,8 +277,8 @@ class TestInvokeStream:
             events = _run_agen(
                 svc.invoke_stream(user_id=1, message="讲讲天气", context={"mode": "chat"})
             )
-        assert events[-1]["type"] == "done"
-        assert "暂时没有返回内容" in events[-1]["result"]["response"]
+        assert events[-1]["type"] == "error"
+        assert events[-1]["error_code"] == "cli_empty_response"
 
 
 # ───────────────────── _run_cli_streaming ─────────────────────
@@ -512,7 +520,8 @@ class TestInvoke:
             patch.object(svc, "_compose_direct_chat_reply", return_value=("兜底答案", "codex_cli")),
         ):
             result = svc.invoke(user_id=1, message="修复 bug", context={"mode": "code"})
-        assert result["dispatch"]["accepted"] is False
+        assert result["dispatch"]["accepted"] is True
+        assert result["dispatch"]["queued"] is False
         assert result["dispatch"]["fallback"] == "codex_cli"
         assert "兜底答案" in result["assistant_message"]["body"]
 
@@ -524,11 +533,11 @@ class TestInvoke:
             patch.object(
                 svc,
                 "_compose_direct_chat_reply",
-                return_value=(f"{svc._p.display_tool} CLI 暂时没有返回内容 xxx", "codex_cli"),
+                return_value=("", "codex_cli"),
             ),
         ):
             result = svc.invoke(user_id=1, message="修复 bug", context={"mode": "code"})
-        # body starts with placeholder → 不落 assistant 兜底，走 dispatcher 消息
+        # CLI 不可用的空结果保留原派工状态。
         assert result["assistant_message"]["kind"] == DISPATCHER_MESSAGE_KIND
 
     def test_factory_token_rejected_logs_warning(self, tmp_path, caplog):
@@ -1132,7 +1141,7 @@ class TestUpsertDirectReplyMessages:
         assert changed is False
         assert len(rows) == 2
 
-    def test_cli_backfill_once(self, tmp_path):
+    def test_missing_reply_does_not_start_a_cli_call(self, tmp_path):
         svc = _make_svc(tmp_path)
         rows = [
             {"user_id": 1, "role": "user", "dispatch_request_id": "r1", "body": "随便聊点什么"},
@@ -1140,10 +1149,11 @@ class TestUpsertDirectReplyMessages:
         ]
         with patch.object(
             svc, "_compose_direct_chat_reply", return_value=("cli 回填", "codex_cli")
-        ):
+        ) as compose:
             changed = svc._upsert_direct_reply_messages(user_id=1, rows=rows)
-        assert changed is True
-        assert len(rows) == 3  # 只回填一条（cli_backfills < 1）
+        compose.assert_not_called()
+        assert changed is False
+        assert len(rows) == 2
 
 
 # ───────────────────── _direct_reply_body 各类提示 ─────────────────────
@@ -1197,7 +1207,7 @@ class TestComposeDirectChatReply:
             patch.object(svc, "_cli_reply_body", return_value=""),
         ):
             body, dispatcher = svc._compose_direct_chat_reply("随意", {})
-        assert "暂时没有返回内容" in body
+        assert body == ""
         assert dispatcher == "codex_cli"
 
 
@@ -1279,24 +1289,36 @@ class TestRunConversationTurn:
 
     def test_idle_killed(self, tmp_path):
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
-        with patch.object(svc, "_run_cli_idle", return_value=(0, "", "", "idle:180")):
-            result = svc._run_conversation_turn("/cli", "hello", {})
-        assert "静默" in result
+        with (
+            patch.object(svc, "_run_cli_idle", return_value=(0, "", "", "idle:180")),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._run_conversation_turn("/cli", "hello", {})
+        assert error.value.receipt["termination_reason"] == "idle:180"
 
     def test_hardcap_killed(self, tmp_path):
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
-        with patch.object(svc, "_run_cli_idle", return_value=(0, "", "", "hardcap:3600")):
-            result = svc._run_conversation_turn("/cli", "hello", {})
-        assert "超过上限" in result
+        with (
+            patch.object(svc, "_run_cli_idle", return_value=(0, "", "", "hardcap:3600")),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._run_conversation_turn("/cli", "hello", {})
+        assert error.value.receipt["termination_reason"] == "hardcap:3600"
 
     def test_returncode_failure(self, tmp_path):
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
-        with patch.object(svc, "_run_cli_idle", return_value=(2, "", "stderr text", "")):
-            result = svc._run_conversation_turn("/cli", "hello", {})
-        assert "返回失败" in result
-        assert "stderr text" in result
+        with (
+            patch.object(svc, "_run_cli_idle", return_value=(2, "", "stderr text", "")),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._run_conversation_turn("/cli", "hello", {})
+        assert error.value.receipt["exit_code"] == 2
+        assert error.value.receipt["stderr"] == ""
+        assert error.value.receipt["outcome"] == "unknown"
+        assert "stderr text" not in error.value.body
+        assert "stderr text" not in json.dumps(error.value.event())
 
-    def test_resume_fail_retries(self, tmp_path):
+    def test_resume_without_success_receipt_is_not_replayed(self, tmp_path):
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
         with (
             patch.object(svc, "_session_get", return_value={"session_id": "old-sess"}),
@@ -1307,18 +1329,22 @@ class TestRunConversationTurn:
                     (0, "no conversation found", "", ""),
                     (0, '{"type":"result","result":"retried","session_id":"new"}', "", ""),
                 ],
-            ),
+            ) as run,
             patch.object(svc, "_session_set") as sset,
+            pytest.raises(CliExecutionError),
         ):
-            result = svc._run_conversation_turn("/cli", "hello", {})
-        assert result == "retried"
-        sset.assert_called()
+            svc._run_conversation_turn("/cli", "hello", {})
+        run.assert_called_once()
+        sset.assert_not_called()
 
     def test_cli_oserror(self, tmp_path):
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
-        with patch.object(svc, "_run_cli_idle", side_effect=OSError("no cli")):
-            result = svc._run_conversation_turn("/cli", "hello", {})
-        assert "CLI 调用失败" in result
+        with (
+            patch.object(svc, "_run_cli_idle", side_effect=OSError("no cli")),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._run_conversation_turn("/cli", "hello", {})
+        assert error.value.receipt["success"] is False
 
 
 # ───────────────────── _cli_workspace 相关 ─────────────────────
@@ -1521,15 +1547,13 @@ class TestPreparePersistentWorktree:
         (wt / ".git").mkdir(parents=True)
         base_ref = MagicMock()
         base_ref.stdout = "sha123\n"
-        reset = MagicMock()
-        reset.returncode = 0
-        clean = MagicMock()
-        clean.returncode = 0
+        state = subprocess.CompletedProcess([], 0, "", "")
         checkout = MagicMock()
         checkout.returncode = 0
-        with patch.object(svc, "_git", side_effect=[base_ref, reset, clean, checkout]):
+        with patch.object(svc, "_git", side_effect=[base_ref, state, checkout]) as git:
             result = svc._prepare_persistent_worktree(str(tmp_path), str(wt), "branch")
         assert result == (str(wt), "branch")
+        assert all(call.args[1] not in {"reset", "clean"} for call in git.call_args_list)
 
     def test_create_new_worktree(self, tmp_path):
         svc = _make_svc(tmp_path)

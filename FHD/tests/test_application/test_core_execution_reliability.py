@@ -320,7 +320,7 @@ def test_rejection_survives_reload_and_blocks_another_write(tmp_path, monkeypatc
         assert stored is not None and stored.status == "rejected"
         stored.status = "waiting_user"
         fresh.save(stored)
-        assert fresh.get(run_id).status == "waiting_user"
+        assert fresh.get(run_id).status == "rejected"
         projected = project_rejected_approval(fresh.get(run_id))
         assert projected.status == "rejected"
         assert fresh.get(run_id).status == "rejected"

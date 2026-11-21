@@ -36,6 +36,7 @@ class LifePolicy(BaseModel):
     portfolio_limits: dict[str, Any] | None = None
     employee_id: str = Field(default="", max_length=128)
     task_input: dict[str, Any] = Field(default_factory=dict)
+    retort_template_id: str = Field(default="", max_length=100, pattern=r"^[A-Za-z0-9_.:-]*$")
 
     @field_validator("task_input")
     @classmethod

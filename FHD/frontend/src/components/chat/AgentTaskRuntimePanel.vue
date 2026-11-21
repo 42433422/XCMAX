@@ -36,7 +36,18 @@
       结果证据：{{ payload.eventCount || 0 }} 条事件 · {{ payload.completedToolCount || 0 }} 次已完成工具调用 ·
       {{ payload.artifactCount || 0 }} 个产物
     </div>
-    <div v-if="resultSummary" class="agent-result-summary">
+    <section v-if="verification" class="agent-result-verification" :data-status="verificationStatus" aria-label="独立结果核验">
+      <strong>独立结果核验</strong>
+      <span>{{ verificationLabels[verificationStatus] }}</span>
+      <small>独立通过 {{ verificationCount(verification.independently_verified_steps) }} 步 · 仅契约检查 {{ verificationCount(verification.contract_only_steps) }} 步</small>
+      <p v-if="includesArtifactIntegrity">文件核验涵盖完整性与可读结构；业务语义仍需按任务要求验收。</p>
+      <button v-if="canReverify" type="button" class="btn btn-secondary btn-sm agent-verification-action" :disabled="verificationPending || !!controlState?.pending" @click="reverify">
+        {{ verificationPending ? '正在核验…' : '重新核验结果' }}
+      </button>
+      <p v-if="verificationMessage" role="status" aria-live="polite">{{ verificationMessage }}</p>
+      <p v-if="verificationError" role="alert">{{ verificationError }}</p>
+    </section>
+    <div v-if="resultSummary" class="agent-result-summary" :class="{ 'agent-result-summary--unverified': rawRunStatus === 'unknown' || (verification && !verificationAccepted) }">
       <strong>业务结果</strong>
       <p>{{ resultSummary }}</p>
     </div>
@@ -54,6 +65,7 @@
     </div>
     <details v-if="hasResultEvidence" class="agent-result-evidence">
       <summary>技术明细（高级）</summary>
+      <pre v-if="verificationDetailsText" class="agent-verification-details">{{ verificationDetailsText }}</pre>
       <pre v-if="finalOutputText">{{ finalOutputText }}</pre>
       <ul v-if="artifacts.length">
         <li v-for="artifact in artifacts" :key="artifact.artifact_id">
@@ -89,12 +101,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AgentClarificationForm, { type ClarificationQuestion } from './AgentClarificationForm.vue'
 import { activeRunIdOfTask } from '@/utils/agentTaskWorkspaceModel'
-import type { AgentArtifact, AgentRunStep, AgentToolCall } from '@/api/agentRuns'
+import type { AgentArtifact, AgentRunStep, AgentToolCall, AgentVerificationReport, AgentVerificationStatus } from '@/api/agentRuns'
 import agentRunsApi from '@/api/agentRuns'
 import { downloadBlob } from '@/utils'
+import { readActiveModIdFromStorage } from '@/utils/chatStorageKeys'
+import { productReadScopeKey } from '@/utils/productReadAccountScope'
 import type { TaskControlState } from '@/composables/useAgentTaskWorkspace'
 import type { TaskItem } from '@/composables/useChatPersistence'
 
@@ -121,7 +135,7 @@ type AgentTaskPayload = {
 }
 
 const props = defineProps<{ task: TaskItem; controlState?: TaskControlState }>()
-defineEmits<{ refresh: []; open: []; approve: []; retry: []; pause: []; resume: []; cancel: [] }>()
+const emit = defineEmits<{ refresh: []; open: []; approve: []; retry: []; pause: []; resume: []; cancel: [] }>()
 
 const controlLabels = { pause: '暂停', resume: '恢复', cancel: '取消', retry: '重试', approve: '审批' }
 const runId = computed(() => activeRunIdOfTask(props.task))
@@ -133,6 +147,78 @@ const payload = computed(() => (props.task.payload ?? {}) as AgentTaskPayload)
 const steps = computed(() => (Array.isArray(payload.value.steps) ? payload.value.steps : []))
 const toolCalls = computed(() => (Array.isArray(payload.value.toolCalls) ? payload.value.toolCalls : []))
 const artifacts = computed(() => (Array.isArray(payload.value.artifacts) ? payload.value.artifacts : []))
+const verificationLabels: Record<AgentVerificationStatus, string> = {
+  verified: '独立核验通过',
+  failed: '核验未通过',
+  inconclusive: '结果待核验，证据暂不可确认',
+  pending: '等待核验',
+  not_required: '已完成输出契约检查，无需独立读回',
+  not_verified: '尚无独立核验证据',
+}
+const verification = computed(() => {
+  const report = payload.value.finalOutput?.verification
+  return report && typeof report === 'object' && !Array.isArray(report) ? report as AgentVerificationReport : null
+})
+const rawRunStatus = computed(() => String(payload.value.rawRunStatus || props.task.status))
+const verificationAccepted = computed(() => rawRunStatus.value !== 'unknown' &&
+  verification.value?.accepted === true && ['verified', 'not_required'].includes(verification.value.status),
+)
+const verificationStatus = computed<AgentVerificationStatus>(() => {
+  const status = verification.value?.status
+  if (!status || !Object.prototype.hasOwnProperty.call(verificationLabels, status)) return 'not_verified'
+  if (['verified', 'not_required'].includes(status) && !verificationAccepted.value) return 'inconclusive'
+  return status
+})
+const includesArtifactIntegrity = computed(() => Array.isArray(verification.value?.steps) && verification.value.steps.some((step) =>
+  Array.isArray(step?.checks) && step.checks.some((check) => check?.evidence?.verification_scope === 'artifact_integrity'),
+))
+const canReverify = computed(() => Boolean(
+  runId.value && ['blocked', 'failed'].includes(rawRunStatus.value) &&
+  verification.value?.protocol === 'xcagi.result-verification.v1' &&
+  Array.isArray(verification.value.steps) && verification.value.steps.some((step) => typeof step?.call_id === 'string' && step.call_id),
+))
+const verificationPending = ref(false)
+const verificationMessage = ref('')
+const verificationError = ref('')
+let verificationEpoch = 0
+const verificationScope = () => JSON.stringify([props.task.id, runId.value, productReadScopeKey(readActiveModIdFromStorage())])
+function retireVerification(): void {
+  verificationEpoch++
+  verificationPending.value = false
+  verificationMessage.value = ''
+  verificationError.value = ''
+}
+watch([verificationScope, rawRunStatus], retireVerification, { flush: 'sync' })
+onBeforeUnmount(retireVerification)
+function verificationCount(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+}
+async function reverify(): Promise<void> {
+  if (!canReverify.value || verificationPending.value || props.controlState?.pending) return
+  const requestedRun = runId.value
+  const requestedScope = verificationScope()
+  const requestedEpoch = ++verificationEpoch
+  const isCurrent = () => requestedEpoch === verificationEpoch && requestedScope === verificationScope()
+  verificationPending.value = true
+  verificationMessage.value = ''
+  verificationError.value = ''
+  try {
+    const response = await agentRunsApi.verifyRun(requestedRun)
+    if (!isCurrent()) return
+    if (response.success !== true) throw new Error('verification_request_failed')
+    const report = response.verification
+    verificationMessage.value = report?.accepted === true && ['verified', 'not_required'].includes(report.status)
+      ? (report.status === 'verified' ? '结果核验已通过，正在更新任务状态。' : '输出契约检查已完成，正在更新任务状态。')
+      : '结果仍待核验，请查看核验明细。'
+    emit('refresh')
+  } catch {
+    if (!isCurrent()) return
+    verificationError.value = '重新核验失败，请刷新核对任务状态后再试。'
+    emit('refresh')
+  } finally {
+    if (requestedEpoch === verificationEpoch) verificationPending.value = false
+  }
+}
 const downloadingId = ref('')
 const downloadError = ref('')
 const downloadableArtifacts = computed(() =>
@@ -159,6 +245,8 @@ async function downloadArtifact(artifact: AgentArtifact): Promise<void> {
 const resultSummary = computed(() => {
   const output = payload.value.finalOutput
   if (!output || typeof output !== 'object') return ''
+  if (rawRunStatus.value === 'unknown') return '结果待核对，请核对原始回执后再确认。'
+  if (verification.value && !verificationAccepted.value) return '结果尚未完成核验。'
   const businessResult =
     output.business_result && typeof output.business_result === 'object' ? (output.business_result as Record<string, unknown>) : null
   const projectedSummary = businessResult?.summary
@@ -199,12 +287,13 @@ const resultSummary = computed(() => {
   return lastOutput.success === true ? `业务操作执行成功${idEntry ? `；${idEntry[0]}：${String(idEntry[1])}` : ''}` : ''
 })
 const finalOutputText = computed(() => {
-  const output = payload.value.finalOutput
+  const output = Object.fromEntries(Object.entries(payload.value.finalOutput || {}).filter(([key]) => key !== 'verification'))
   if (!output || !Object.keys(output).length) return ''
   const rendered = JSON.stringify(output, null, 2)
   return rendered.length > 4000 ? `${rendered.slice(0, 4000)}\n…` : rendered
 })
-const hasResultEvidence = computed(() => Boolean(finalOutputText.value || artifacts.value.length))
+const verificationDetailsText = computed(() => verification.value ? JSON.stringify(verification.value, null, 2) : '')
+const hasResultEvidence = computed(() => Boolean(verificationDetailsText.value || finalOutputText.value || artifacts.value.length))
 function can(action: string): boolean {
   if (action === 'approve' && clarification.value) return false
   if (payload.value.capabilities && action in payload.value.capabilities) {
@@ -330,6 +419,35 @@ function stepStatus(status: string | undefined): string {
 .agent-result-summary p {
   margin: 3px 0 0;
   line-height: 1.45;
+}
+.agent-result-verification {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 7px 8px;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 11px;
+}
+.agent-result-verification[data-status='verified'] {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #14532d;
+}
+.agent-result-verification[data-status='failed'] {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.agent-result-verification p {
+  margin: 0;
+}
+.agent-result-summary--unverified {
+  background: #fffbeb;
+  color: #92400e;
 }
 .agent-result-evidence summary {
   cursor: pointer;

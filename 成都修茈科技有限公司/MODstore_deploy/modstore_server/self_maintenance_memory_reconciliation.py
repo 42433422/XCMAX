@@ -42,9 +42,27 @@ def reconcile_completed_loop_memory_from_ledger() -> dict[str, Any]:
     before the scheduler selects another remediation and converts the durable
     ``merge_completed`` ledger receipt into memory closure.
     """
+    with _maintenance_store._exclusive_loop_lease() as acquired:
+        if not acquired:
+            return {
+                "ok": False,
+                "status": "skipped_active_lease",
+                "changed": False,
+                "closed_count": 0,
+            }
+        return _reconcile_completed_loop_memory_unlocked()
 
+
+def _reconcile_completed_loop_memory_unlocked() -> dict[str, Any]:
     rows = _maintenance_store._read_ledger(limit=5000)
     memory = _maintenance_store._load_loop_memory()
+    if memory.get("execution_state_unavailable"):
+        return {
+            "ok": False,
+            "status": "waiting_reconciliation",
+            "changed": False,
+            "closed_count": 0,
+        }
     recent_runs = memory.get("recent_runs")
     if not isinstance(recent_runs, list):
         recent_runs = []

@@ -131,6 +131,10 @@ def promote_goal(
     goal = next((item for item in state["goals"] if item["id"] == goal_id), None)
     if goal is None:
         raise HTTPException(404, "目标不存在")
+    if goal.get("retort_request_id") and not goal.get("decision_id"):
+        raise HTTPException(
+            409, "原改进目标须先完成原派工审批，由 L6 循环生成绑定原任务的工程预算提案"
+        )
     if goal.get("decision_id"):
         return {"decision_id": goal["decision_id"], "life": state}
     if body.employee_id not in {item.get("id") for item in _load_all_employee_profiles()}:

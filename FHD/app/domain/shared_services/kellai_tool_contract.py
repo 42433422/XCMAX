@@ -32,7 +32,7 @@ KELLAI_INPUT_SCHEMAS = {
             "content": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 10000,
+                "maxLength": 8000,
                 "pattern": r"[\s\S]*\S[\s\S]*",
             },
         },

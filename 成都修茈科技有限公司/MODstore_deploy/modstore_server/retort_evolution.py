@@ -72,7 +72,15 @@ def run_lock(request_id):
             connection.execute(text("SELECT " + release), {"key": key})
 
 
-def create_run(request, actor_id, *, customer_feedback=None, training_candidate=None):
+def create_run(
+    request,
+    actor_id,
+    *,
+    customer_feedback=None,
+    training_candidate=None,
+    life_reflection=None,
+    _session=None,
+):
     contract = load_repository_module("retort_engine.evolution_contract")
     protocol = contract.freeze_request(request, catalog())
     from modstore_server.customer_ticket_github import configuration
@@ -88,7 +96,10 @@ def create_run(request, actor_id, *, customer_feedback=None, training_candidate=
         if lifecycle
         else nullcontext()
     )
-    with surface_lock, get_session_factory()() as db:
+    with (
+        surface_lock,
+        nullcontext(_session) if _session is not None else get_session_factory()() as db,
+    ):
         previous = db.get(RetortEvolutionRun, protocol["request_id"])
         if previous:
             if (
@@ -98,6 +109,7 @@ def create_run(request, actor_id, *, customer_feedback=None, training_candidate=
                 != customer_feedback
                 or json_loads(previous.effects_json, {}).get("training_candidate")
                 != training_candidate
+                or json_loads(previous.effects_json, {}).get("life_reflection") != life_reflection
             ):
                 raise ValueError("相同请求编号已绑定其他任务")
             return previous.id
@@ -121,12 +133,18 @@ def create_run(request, actor_id, *, customer_feedback=None, training_candidate=
                     for key, value in {
                         "customer_feedback": customer_feedback,
                         "training_candidate": training_candidate,
+                        "life_reflection": life_reflection,
                     }.items()
                     if value
                 }
             ),
         )
         db.add(row)
+        if _session is not None:
+            # The life state CAS and this original Retort row commit together.
+            # Integrity errors belong to that caller's transaction/retry.
+            db.flush()
+            return row.id
         try:
             db.commit()
         except IntegrityError:
@@ -140,6 +158,7 @@ def create_run(request, actor_id, *, customer_feedback=None, training_candidate=
                 != customer_feedback
                 or json_loads(previous.effects_json, {}).get("training_candidate")
                 != training_candidate
+                or json_loads(previous.effects_json, {}).get("life_reflection") != life_reflection
             ):
                 raise ValueError("相同请求编号已绑定其他任务") from None
             return previous.id
@@ -176,7 +195,11 @@ class ComponentPorts:
         from modstore_server.retort_training_candidates import training_plan
 
         training = training_plan(self.request_id)
+        from modstore_server.xiaoc_life_evolution import private_source
+
+        reflection = private_source(self.request_id)
         return {
+            **({"private_life_reflection": reflection} if reflection else {}),
             **({"private_customer_feedback": feedback} if feedback else {}),
             **({"feedback_policy": policy} if policy else {}),
             "prior_outcomes": outcome_knowledge(limit=5),
@@ -194,6 +217,14 @@ class ComponentPorts:
         }
 
     def optimize(self, protocol, plan):
+        if plan.get("private_life_reflection"):
+            # Optional RSI has no approved engineering lease yet. The original
+            # frozen plan can be reviewed without starting another paid model.
+            return {
+                "engine": "gepa",
+                "status": "awaiting_approved_experiment_budget",
+                "automatically_applied": False,
+            }
         path = os.environ.get("MODSTORE_RETORT_RSI_PROTOCOL", "")
         if not path:
             return {
@@ -219,8 +250,10 @@ class ComponentPorts:
     def dispatch(self, state):
         from modstore_server.retort_customer_feedback import check_dispatch
         from modstore_server.retort_github_workspace import begin_dispatch
+        from modstore_server.xiaoc_life_evolution import check_dispatch as check_life_dispatch
 
         check_dispatch(self.request_id, state)
+        check_life_dispatch(self.request_id, state)
         return begin_dispatch(self.request_id, state)
 
     def collect(self, state):

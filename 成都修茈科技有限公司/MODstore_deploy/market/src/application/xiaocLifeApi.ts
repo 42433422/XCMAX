@@ -51,6 +51,7 @@ export interface XiaoCLifePolicy {
   portfolio_limits?: XiaoCPortfolioLimits | null
   employee_id?: string
   task_input?: Record<string, unknown>
+  retort_template_id?: string
 }
 
 export interface XiaoCLifeEvent {
@@ -72,6 +73,7 @@ export interface XiaoCLifeGoal {
   status: string
   evidence_refs: string[]
   decision_id?: number | string | null
+  retort_request_id?: string
 }
 
 export interface XiaoCLifeState {
@@ -159,6 +161,15 @@ export function xiaocStateLabel(status: string): string {
     failed: '本轮失败',
     error: '本轮失败',
     completed: '已完成',
+    awaiting_engineering_budget: '等待公司工程预算',
+    evolution_delivery_verified: '改进发布已核验',
+    evolution_evidence_incomplete: '改进证据待核对',
+    evolution_failed: '改进未通过',
+    waiting_recovery: '等待恢复核验',
+    awaiting_dispatch_approval: '等待改进派工审批',
+    awaiting_acceptance: '等待独立验收审批',
+    waiting_execution: '等待原工程执行',
+    waiting_delivery: '等待正式发布',
     verified: '已核验',
     proposed: '已提出',
     pending: '待处理',

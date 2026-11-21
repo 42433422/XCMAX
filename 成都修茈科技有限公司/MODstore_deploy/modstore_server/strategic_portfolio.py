@@ -108,7 +108,10 @@ class Opportunity(BaseModel):
 
 
 def _date(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise PortfolioError("invalid ISO timestamp") from None
     if parsed.tzinfo is None:
         raise PortfolioError("timestamp must include timezone")
     return parsed.astimezone(UTC)

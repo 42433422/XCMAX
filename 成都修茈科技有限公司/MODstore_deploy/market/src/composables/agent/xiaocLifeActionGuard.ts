@@ -3,12 +3,15 @@ import { xiaocLifeApi } from '../../application/xiaocLifeApi'
 import type { SkillResult } from '../../types/agent'
 
 /** Fresh server read immediately before a management-side action; never a UI-cache permission. */
-export async function checkXiaoCLifeAction(requiredLevel = 2): Promise<SkillResult | null> {
+export async function checkXiaoCLifeAction(requiredLevel = 2, isCurrent = () => true): Promise<SkillResult | null> {
+  const cancelled = { success: false, message: '原会话已停止或变化，本次工具未执行。' }
+  if (!isCurrent()) return cancelled
   const auth = useAuthStore()
   if (!auth.isAdmin && auth.currentMode !== 'admin') return null
   const actor = auth.user?.id
   try {
     const state = await xiaocLifeApi.read()
+    if (!isCurrent()) return cancelled
     if (actor !== auth.user?.id || !auth.isAdmin) {
       return { success: false, message: '管理账号已变化，请重新提出操作请求。' }
     }

@@ -18,7 +18,7 @@ from app.application.workspaces import WorkspaceRegistry
 from app.domain.app_pure.execution_scope import CapabilityGrant
 
 JsonObject = dict[str, Any]
-CliResult = tuple[int, str, str, str]
+CliResult = tuple[int | None, str, str, str]
 CliRunner = Callable[..., subprocess.CompletedProcess[str]]
 IdleRunner = Callable[[list[str], str, float, float], CliResult]
 

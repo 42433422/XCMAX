@@ -11,7 +11,7 @@ vi.mock('./Sidebar.vue', () => ({
     template: `
       <nav class="sidebar-stub">
         <button class="sidebar-chat" type="button" @click="$emit('change-view', 'chat')">智能对话</button>
-        <button class="sidebar-workflow" type="button" @click="$emit('change-view', 'employee-workflow')">员工工作台</button>
+        <button class="sidebar-workflow" type="button" @click="$emit('change-view', 'employee-workflow')">编制工作台</button>
       </nav>
     `,
     props: ['activeView'],
@@ -41,6 +41,7 @@ describe('MainLayout.vue', () => {
       routes: [
         { path: '/', name: 'chat', component: { template: '<div>Chat</div>' } },
         { path: '/settings', name: 'settings', component: { template: '<div>Settings</div>' } },
+        { path: '/employee-workbench', name: 'employee-workbench', component: { template: '<div>Workbench</div>' } },
         {
           path: '/workflow-employee-space',
           name: 'workflow-employee-space',
@@ -110,7 +111,7 @@ describe('MainLayout.vue', () => {
 
     await wrapper.find('.sidebar-workflow').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.name).toBe('workflow-employee-space')
+    expect(router.currentRoute.value.name).toBe('employee-workbench')
     wrapper.unmount()
   })
 
@@ -230,7 +231,7 @@ describe('MainLayout.vue', () => {
       await flushPromises()
       expect(wrapper.find('[role="alert"]').exists()).toBe(false)
       await vi.advanceTimersByTimeAsync(280)
-      expect(wrapper.get('[role="status"]').text()).toContain('正在打开「员工工作台」')
+      expect(wrapper.get('[role="status"]').text()).toContain('正在打开「编制工作台」')
       pending.get('employee-workflow')!.resolve(true)
       await flushPromises()
     } finally {

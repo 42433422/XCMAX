@@ -94,6 +94,11 @@ def test_http_run_history_is_scoped_even_for_admin(ledger, monkeypatch):
         ({"success": False, "status": "unknown", "error": "receipt lost"}, "unknown"),
         ({"success": False, "result": {"outputs": [{"execution_state": "unknown"}]}}, "unknown"),
         ({"success": False, "pending_approval": True}, "awaiting_approval"),
+        ({"success": True, "result": {"status": "paused"}}, "paused"),
+        ({"success": True, "result": {"needs_user_input": True}}, "waiting_input"),
+        ({"success": True, "result": {"status": "queued"}}, "running"),
+        ({"success": True, "execution_accepted": True}, "running"),
+        ({"success": True, "result": {"status": "blocked"}}, "blocked"),
         (None, "unknown"),
         ({"success": True, "summary": "done", "outcome": "unknown"}, "unknown"),
         ({"success": True, "summary": "done", "requires_reconciliation": True}, "unknown"),
@@ -170,6 +175,8 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
 
     record = ledger.list_employee_run_logs("same", tenant_id=1)[0]
     assert record["status"] == expected and not record["verified"]
+    if expected != "failed":
+        assert not record["finished_at"]
     payload = execute.call_args.args[2]
     assert payload["user_id"] == 7 and payload["session_id"] == "trusted-session"
     assert payload["tenant_id"] == 1 and "_runtime_context" not in payload

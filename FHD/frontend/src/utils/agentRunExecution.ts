@@ -1,4 +1,4 @@
-import type { AgentRun } from '@/api/agentRuns'
+import type { AgentRun, AgentTaskSummary } from '@/api/agentRuns'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
 const EXECUTION_EVENT_TYPES = new Set(['tool.started', 'tool.completed', 'tool.failed', 'step.waiting_user', 'step.blocked'])
@@ -27,14 +27,15 @@ export function runHasUncertainReceipt(run: AgentRun): boolean {
     run.status === 'unknown' ||
     recovery?.state === 'manual_reconciliation_required' ||
     outputs.some((output) => {
-      const signals = [output?.outcome, output?.execution_state, output?.status].map((value) =>
+      const signals = [output?.outcome, output?.execution_outcome, output?.execution_state, output?.status,
+        output?.agent_status, output?.run_status, asRecord(output?.data).agent_status, asRecord(output?.data).run_status].map((value) =>
         String(value || '')
           .trim()
           .toLowerCase(),
       )
       return (
-        output?.reconciliation_required === true ||
-        signals.some((value) => ['unknown', 'pending', 'accepted', 'inflight', 'in_progress'].includes(value)) ||
+        output?.reconciliation_required === true || output?.requires_reconciliation === true || output?.outcome_unknown === true ||
+        signals.some((value) => ['unknown', 'outcome_unknown'].includes(value)) ||
         (completed &&
           (output?.success === false ||
             output?.pending_approval === true ||
@@ -42,8 +43,14 @@ export function runHasUncertainReceipt(run: AgentRun): boolean {
             signals.some((value) =>
               [
                 'waiting',
+                'pending',
+                'accepted',
+                'inflight',
+                'in_progress',
                 'waiting_approval',
                 'waiting_user',
+                'waiting_input',
+                'waiting_auth',
                 'pending_approval',
                 'approval_required',
                 'failed',
@@ -56,9 +63,18 @@ export function runHasUncertainReceipt(run: AgentRun): boolean {
                 'running',
                 'queued',
                 'retrying',
+                'paused',
               ].includes(value),
             )))
       )
     })
   )
+}
+
+/** Lightweight task streams retain the same receipt boundary as full run details. */
+export function taskHasUncertainReceipt(task: AgentTaskSummary): boolean {
+  const activeRun = task.active_run && (!task.active_run_id || task.active_run.run_id === task.active_run_id)
+    ? task.active_run
+    : task.runs?.find(run => run.run_id === task.active_run_id)
+  return task.status === 'unknown' || task.metadata?.reconciliation_required === true || Boolean(activeRun && runHasUncertainReceipt(activeRun))
 }

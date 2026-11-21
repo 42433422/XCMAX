@@ -340,6 +340,8 @@ class ExcelAnalysis:
     logger: logging.Logger
 
     def analyze(self, args: Payload, workspace_root: str | None = None) -> Payload:
+        from app.infrastructure.excel.header_detection import HeaderConfirmationRequired
+
         file_path = str(args.get("file_path") or "")
         action = str(args.get("action") or "read")
         sheet = args.get("sheet_name")
@@ -370,6 +372,14 @@ class ExcelAnalysis:
             if header is None and action in _AUTO_HEADER_ACTIONS:
                 header = auto_header_row(path, str(sheet).strip() if sheet else None)
             df = self.io.read(path, sheet_name=sheet, header_row_1based=header)
+        except HeaderConfirmationRequired as exc:
+            return {
+                "success": False,
+                "error": "header_confirmation_required",
+                "message": str(exc),
+                "required_field": "header_row",
+                "header_candidates": list(exc.candidate_rows),
+            }
         except RECOVERABLE_ERRORS:
             return {
                 "success": False,

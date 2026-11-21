@@ -25,16 +25,26 @@ def _assert_material_run(repo: InMemoryAgentRunRepository, run_id: str, action: 
     run = repo.get(run_id)
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == f"materials_{action}"
     assert run.tool_calls[0].tool_id == "materials"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.materials.{action}"
     assert run.tool_calls[0].metadata["authorization_permission"] == "material.edit"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-        event.event_type for event in run.events
-    }
+    assert run.tool_calls[0].output["success"] is True
+    verification = run.tool_calls[0].metadata["verification"]
+    assert verification["status"] == "inconclusive"
+    assert verification["code"] == "result_verifier_unavailable"
+    assert verification["accepted"] is False
+    events = {event.event_type for event in run.events}
+    assert {
+        "step.waiting_user",
+        "step.approved",
+        "tool.started",
+        "verification.inconclusive",
+    } <= events
+    assert "run.completed" not in events and "tool.completed" not in events
 
 
 def test_material_mutation_routes_execute_through_agent_orchestrator(
@@ -131,7 +141,16 @@ def test_material_create_failure_is_recorded_on_agent_run(
     assert payload["message"] == "duplicate"
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.status == "failed"
+    assert run.status == "blocked"
     assert run.tool_calls[0].tool_id == "materials"
     assert run.tool_calls[0].action == "create"
     assert run.tool_calls[0].status == "failed"
+    assert run.error == "duplicate"
+    assert run.tool_calls[0].output["success"] is False
+    verification = run.tool_calls[0].metadata["verification"]
+    assert verification["status"] == "failed"
+    assert verification["code"] == "execution_receipt_not_successful"
+    assert verification["accepted"] is False
+    events = {event.event_type for event in run.events}
+    assert {"tool.failed", "verification.failed"} <= events
+    assert "run.completed" not in events

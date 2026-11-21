@@ -15,6 +15,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.employee_executor_policies import (
     _flag_enabled as _flag_enabled,
     _is_transient_llm_error as _is_transient_llm_error,
+    execution_blocks_redispatch,
 )
 
 # --- from employee_executor_part01.py ---
@@ -1899,7 +1900,7 @@ def _actions_real(
     if employee_id == "vibe-coding-maintainer" and not para_only:
         handlers = _facade()._filter_handlers_vibe_coding_maintainer(handlers, reasoning, task)
     outputs: _facade().List[_facade().Dict[str, _facade().Any]] = []
-    skip_local_after_para_ok = False
+    skip_local_after_para_dispatch = False
     _LOCAL_FALLBACK_HANDLERS = {
         "agent",
         "vibe_edit",
@@ -1914,7 +1915,9 @@ def _actions_real(
         from modstore_server.strategic_portfolio_usage import remaining_execution_seconds
 
         remaining_seconds = remaining_execution_seconds()
-        if (skip_local_after_para_ok or para_only) and str(handler) in _LOCAL_FALLBACK_HANDLERS:
+        if (skip_local_after_para_dispatch or para_only) and str(
+            handler
+        ) in _LOCAL_FALLBACK_HANDLERS:
             continue
         if skip_echo and str(handler) in ("llm_md", "echo"):
             continue
@@ -2024,8 +2027,10 @@ def _actions_real(
             cog_in = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
             para_out = dispatch_para_delegate(task=task, input_data=cog_in, employee_id=employee_id)
             outputs.append(para_out)
-            if isinstance(para_out, dict) and para_out.get("ok") is True:
-                skip_local_after_para_ok = True
+            if isinstance(para_out, dict) and (
+                para_out.get("ok") is True or execution_blocks_redispatch(para_out)
+            ):
+                skip_local_after_para_dispatch = True
         elif handler == "cursor_delegate":
             from modstore_server.cursor_delegate_handler import dispatch_cursor_delegate
 

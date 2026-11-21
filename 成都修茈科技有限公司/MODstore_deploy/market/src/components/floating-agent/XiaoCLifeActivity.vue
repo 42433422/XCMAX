@@ -246,6 +246,17 @@ async function promote(goalId: string) {
                 v-bind="{ ariaLabel: '唤醒间隔秒数' }"
               />
             </ElFormItem>
+            <ElFormItem label="L6 自身改进验收方案">
+              <input
+                v-model="draft.retort_template_id"
+                type="text"
+                maxlength="100"
+                aria-label="自身改进验收方案编号"
+                :disabled="life.saving"
+                placeholder="已配置的改进验收方案编号"
+              />
+              <p class="xiaoc-muted">有来源的反思将进入这个方案的原审核流程；工程执行继续使用已批准的公司预算。</p>
+            </ElFormItem>
             <ElFormItem label="授权到期时间（本地时间，最多 31 天）">
               <input v-model="expiresAt" type="datetime-local" aria-label="授权到期时间" :disabled="life.saving" />
             </ElFormItem>
@@ -274,13 +285,20 @@ async function promote(goalId: string) {
           <span class="xiaoc-muted">{{ domainLabel(goal.domain) }} · {{ xiaocStateLabel(goal.status) }}</span>
           <p>{{ goal.title }}</p>
           <p v-if="goal.description" class="xiaoc-muted">{{ goal.description }}</p>
+          <p v-if="goal.retort_request_id" class="xiaoc-muted">
+            原改进任务：{{ goal.retort_request_id }} · 可在改进闭环中审核与查看发布回执。
+          </p>
           <div class="xiaoc-toolbar">
             <button v-if="goal.decision_id" type="button" @click="reviewing = String(goal.decision_id)">
               查看企业提案 {{ goal.decision_id }}
             </button>
-            <button v-else type="button" :disabled="!canPromote || life.saving" @click="promote(goal.id)">转为企业提案</button>
+            <button v-else-if="!goal.retort_request_id" type="button" :disabled="!canPromote || life.saving" @click="promote(goal.id)">
+              转为企业提案
+            </button>
           </div>
-          <small v-if="!goal.decision_id && !canPromote" class="xiaoc-muted">由预算授权管理员设置有效的企业任务模板后，可转为提案。</small>
+          <small v-if="!goal.decision_id && !goal.retort_request_id && !canPromote" class="xiaoc-muted"
+            >由预算授权管理员设置有效的企业任务模板后，可转为提案。</small
+          >
           <details v-if="goal.evidence_refs?.length">
             <summary>依据</summary>
             <ul>

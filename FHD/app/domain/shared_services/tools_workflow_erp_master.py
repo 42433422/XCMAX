@@ -7,9 +7,27 @@ import uuid
 from typing import Any, cast
 
 from app.domain.product.entities import TRIVIAL_MEASURE_UNITS
+from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _materials_delete_unknown(ids: list[int], runtime_context: dict) -> dict:
+    return {
+        "success": False,
+        "message": "删除结果暂时无法核实，请核对原任务和原材料记录，勿重复提交。",
+        "error_code": "materials_delete_outcome_unknown",
+        "outcome": "unknown",
+        "reconciliation_required": True,
+        "retryable": False,
+        "data": {"material_ids": ids},
+        **{
+            key: runtime_context[key]
+            for key in ("run_id", "task_id", "request_id")
+            if runtime_context.get(key)
+        },
+    }
 
 
 def _registered_router_products(
@@ -240,15 +258,11 @@ def _registered_router_materials(
             result = svc.batch_delete_materials(ids)
         except RECOVERABLE_ERRORS as err:
             logger.error("批量删除原材料时 service 执行异常：%s", err)
-            return {
-                "success": True,
-                "message": f"已删除 {len(ids)} 条记录",
-                "deleted_count": len(ids),
-                "warning": str(err),
-            }
+            return _materials_delete_unknown(ids, runtime_context)
         if isinstance(result, dict):
             result.setdefault("success", True)
-            result.setdefault("deleted_count", len(ids))
+            if result["success"] is True and not execution_result_outcome_unknown(result):
+                result.setdefault("deleted_count", len(ids))
             return result
         return {"success": True, "message": f"已删除 {len(ids)} 条记录", "deleted_count": len(ids)}
     if action == "clear":
@@ -270,14 +284,11 @@ def _registered_router_materials(
             result = svc.batch_delete_materials(ids)
         except RECOVERABLE_ERRORS as err:
             logger.error("清空原材料时 service 执行异常：%s", err)
-            return {
-                "success": True,
-                "message": f"已清空 {len(ids)} 条记录",
-                "deleted_count": len(ids),
-            }
+            return _materials_delete_unknown(ids, runtime_context)
         if isinstance(result, dict):
             result.setdefault("success", True)
-            result.setdefault("deleted_count", len(ids))
+            if result["success"] is True and not execution_result_outcome_unknown(result):
+                result.setdefault("deleted_count", len(ids))
             return result
         return {"success": True, "message": f"已清空 {len(ids)} 条记录", "deleted_count": len(ids)}
     if action == "export":

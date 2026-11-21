@@ -2,8 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
+const account = vi.hoisted(() => ({ admin: false, enterprise: false, userRole: '' }))
+// Match adminConsole.vite.config.js: test the real admin module, not the host stub.
+vi.mock('@/constants/adminOperatorNav', () => import('../../../admin-console/src/constants/adminOperatorNav'))
+
 vi.mock('@/stores/industry', () => ({
-  useIndustryStore: () => ({ currentIndustryId: ref('generic') }),
+  useIndustryStore: () => ({ currentIndustryId: account.admin ? '管理端' : '通用' }),
 }))
 vi.mock('@/stores/sidebarLayout', () => ({
   useSidebarLayoutStore: () => ({
@@ -29,10 +33,12 @@ vi.mock('@/stores/mods', async () => {
 vi.mock('@/stores/accountProfile', () => ({
   useAccountProfileStore: () => ({
     isLoggedIn: true,
-    isAdminAccount: false,
-    accountKind: 'personal',
-    marketIsAdmin: false,
-    marketIsEnterprise: false,
+    isAdminAccount: account.admin,
+    accountKind: account.admin ? 'admin' : account.enterprise ? 'enterprise' : 'personal',
+    marketIsAdmin: account.admin,
+    marketIsEnterprise: account.enterprise,
+    userRole: account.userRole,
+    permissions: [],
   }),
 }))
 vi.mock('@/composables/useModRoutes', async () => {
@@ -57,20 +63,7 @@ vi.mock('@/constants/customerServiceNav', async (importOriginal) => {
   return { ...actual, isCustomerServiceNavVisible: () => true }
 })
 vi.mock('@/utils/adminConsoleUrl', () => ({
-  isAdminConsoleSpa: () => false,
-}))
-vi.mock('@/utils/roleMenuProfile', () => ({
-  buildRoleMenuProfile: () => ({
-    role: 'personal',
-    canSeeAdminMenus: false,
-    canSeeSettings: true,
-  }),
-  canShowCoreMenuKey: () => true,
-}))
-vi.mock('@/constants/attendanceIndustryMod', () => ({
-  shouldHideAttendanceModSidebarMenu: () => false,
-  ADMIN_OPERATOR_ATTENDANCE_MOD_IDS: new Set<string>(),
-  ADMIN_OPERATOR_HIDDEN_MOD_IDS: new Set<string>(),
+  isAdminConsoleSpa: () => account.admin,
 }))
 
 import { useVisibleNavItems } from './useVisibleNavItems'
@@ -79,6 +72,7 @@ describe('useVisibleNavItems deep', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    Object.assign(account, { admin: false, enterprise: false, userRole: '' })
   })
 
   it('returns visible nav items array', () => {
@@ -103,5 +97,23 @@ describe('useVisibleNavItems deep', () => {
       expect(item.routeName).toBeTruthy()
       expect(item.source).toBeTruthy()
     }
+  })
+
+  it.each(['admin', 'enterprise'])('keeps all three employee surfaces after %s menu filtering', (surface) => {
+    account.admin = surface === 'admin'
+    account.enterprise = surface === 'enterprise'
+    const { visibleNavItems } = useVisibleNavItems()
+    const children = visibleNavItems.value.filter(item => item.parentKey === 'employee-workflow')
+    expect(children.map(({ routeName, name }) => ({ routeName, name }))).toEqual([
+      { routeName: 'employee-workbench', name: '员工工作台' },
+      { routeName: 'workflow-employee-space', name: '员工工作空间' },
+      { routeName: 'workflow-employee-stitch-full', name: '员工图谱' },
+    ])
+  })
+
+  it('preserves tenant-member permission filtering for employee surfaces', () => {
+    Object.assign(account, { enterprise: true, userRole: 'tenant:3:member' })
+    const { visibleNavItems } = useVisibleNavItems()
+    expect(visibleNavItems.value.some(item => item.key === 'employee-workflow' || item.parentKey === 'employee-workflow')).toBe(false)
   })
 })

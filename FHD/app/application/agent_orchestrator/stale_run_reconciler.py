@@ -2,8 +2,8 @@
 
 后端进程退出（正常退出、崩溃、被强杀）时不会为在途任务补写终态，于是
 ``agent_runs`` / ``agent_tasks`` 会永久停留在 running，界面显示「进行中」而存储
-侧再无任何状态写入（M15）。启动时恢复可证明安全的完整计划，其余在途状态收敛为
-failed，并同步 ``agent_tasks``，使界面口径与存储口径一致。
+侧再无任何状态写入（M15）。启动时恢复可证明安全的完整计划；未决副作用保留为
+unknown，其余不可恢复状态收敛为 failed，并同步 ``agent_tasks``。
 
 边界（不得越权）：
 - 只收敛 planning/running/retrying 等在途状态。``queued`` 属于可恢复的持久队列，
@@ -255,8 +255,6 @@ def reconcile_stale_running_runs(
                 queue.enqueue_in_session(db, interrupted, requested_by="startup")
                 reconciled += 1
                 continue
-            payload["status"] = "failed"
-            payload["error"] = str(payload.get("error") or "") or INTERRUPTED_MESSAGE
             payload["updated_at"] = current
             metadata = payload.get("metadata")
             metadata = dict(metadata) if isinstance(metadata, dict) else {}
@@ -291,7 +289,14 @@ def reconcile_stale_running_runs(
                     "step_ids": sorted(set(uncertain_steps) | set(unknown_effects)),
                 }
             payload["metadata"] = metadata
-            record.status = "failed"
+            status = "unknown" if metadata.get("non_retryable") else "failed"
+            payload["status"] = status
+            payload["error"] = str(payload.get("error") or "") or (
+                "运行被中断：执行结果未知，已保留原任务待核对，禁止自动重放"
+                if status == "unknown"
+                else INTERRUPTED_MESSAGE
+            )
+            record.status = status
             record.payload_json = json.dumps(payload, ensure_ascii=False, default=str)
             record.updated_at = current
             task_id, tenant_id = _task_identity(payload, record.run_id)
@@ -305,8 +310,8 @@ def reconcile_stale_running_runs(
                 .one_or_none()
             )
             if task_record is not None and str(task_record.status or "") in IN_FLIGHT_RUN_STATUSES:
-                task_record.status = "failed"
-                task_record.attention_state = "failed"
+                task_record.status = status
+                task_record.attention_state = status
                 task_record.updated_at = current
             if (
                 desktop
@@ -314,11 +319,14 @@ def reconcile_stale_running_runs(
                 and str(execution.state or "") in {"queued", "claimed", "running"}
             ):
                 # 桌面没有第二个 worker。先关掉执行行，dispatcher 不能把这条租约再认领。
-                execution.state = "failed"
-                execution.last_error_code = INTERRUPTED_ERROR_CODE
-                execution.lease_owner = ""
-                execution.lease_expires_at = current
-                execution.finished_at = current
+                execution.state = status
+                execution.last_error_code = (
+                    "needs_verification" if status == "unknown" else INTERRUPTED_ERROR_CODE
+                )
+                execution.lease_owner = execution.lease_expires_at = execution.heartbeat_at = None
+                # Match the queue's fenced unknown transition: it is parked,
+                # not a finished business result or a surviving worker lease.
+                execution.finished_at = None if status == "unknown" else current
                 execution.updated_at = current
             reconciled += 1
     if reconciled:

@@ -62,10 +62,12 @@ def roundtrip(monkeypatch, tmp_path, trusted_actor):
     executor = Mock()
     executor.execute_with_deadline.return_value = {
         "success": True,
+        "dataset_id": "synthetic-purchases",
         "query": QUERY,
         "answer": ANSWER,
         "answer_grounded": True,
         "chunks": [{"text": ANSWER, "source_url": "synthetic-purchase-fixture.xlsx"}],
+        "citations": [],
     }
 
     def new_orchestrator():
@@ -85,11 +87,41 @@ def roundtrip(monkeypatch, tmp_path, trusted_actor):
         requests.append(request)
         if request["task"] == "audit_goal_coverage":
             assert [node["node_id"] for node in request["plan"]["nodes"]] == ["business"]
+            if len(request["user_message"]) > 2000:
+                # A real review cites bounded source spans, never the entire
+                # long transcript in one GoalDisposition.source (max 2000).
+                assert ORIGINAL in request["user_message"]
+                return _model_response(
+                    {
+                        "goals": [
+                            {
+                                "goal_id": "purchase",
+                                "source": ORIGINAL,
+                                "outcome": "execute",
+                                "node_ids": ["business"],
+                            },
+                            {
+                                "goal_id": "no_write",
+                                "source": "禁止写入",
+                                "outcome": "negated",
+                                "node_ids": [],
+                            },
+                        ],
+                        "violations": [],
+                    }
+                )
             return goal_review_response(
                 request, source=request["user_message"], node_ids=["business"], outcome="execute"
             )
         if state.fail_once:
+            failure = state.fail_once
             state.fail_once = False
+            if failure == "context":
+                from app.application.agent_orchestrator.context_window_manager import (
+                    ContextWindowExceeded,
+                )
+
+                raise ContextWindowExceeded("当前模型窗口不足，原任务范围不能裁剪")
             raise MarketModelError({"status": 402})
         if len([item for item in requests if item["task"] != "audit_goal_coverage"]) == 1:
             node = {
@@ -271,11 +303,15 @@ def test_restart_after_write_plan_replacement_recovers_the_approval_wait(roundtr
     roundtrip.executor.execute_with_deadline.assert_not_called()
 
 
-def test_replanning_failure_preserves_the_question_for_retry(roundtrip):
+@pytest.mark.parametrize("failure", ["model", "context"])
+def test_replanning_failure_preserves_the_question_for_retry(roundtrip, failure):
     first = roundtrip.send(roundtrip.service(), ORIGINAL)
-    roundtrip.state.fail_once = True
+    roundtrip.state.fail_once = failure
     failed = roundtrip.send(roundtrip.service(), "A")
     assert failed["success"] is False
+    assert failed["run_id"] == failed["agent_run_id"] == first["run_id"]
+    if failure == "context":
+        assert failed["data"]["error_code"] == "context_window_exceeded"
     original = roundtrip.repository.get(first["run_id"])
     assert original.status == "waiting_user" and original.tool_calls == []
     assert roundtrip.store.load(original.plan_id)["status"] == "pending_awaiting"
@@ -283,6 +319,79 @@ def test_replanning_failure_preserves_the_question_for_retry(roundtrip):
     retried = roundtrip.send(roundtrip.service(), "A")
     assert retried["run_id"] == first["run_id"] and retried["success"] is True
     assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("rejection", "code"),
+    [
+        ("binding", "elt_attachment_binding_failed"),
+        ("prohibited", "workflow_action_prohibited"),
+        ("malformed_risk", "workflow_risk_denied"),
+        ("denied", "workflow_risk_denied"),
+        ("missing_plan", "workflow_confirmation_stale"),
+        ("cas", "workflow_confirmation_stale"),
+        ("recent_record", "missing_recent_database_target"),
+    ],
+)
+def test_replanning_rejection_keeps_the_verified_run(roundtrip, monkeypatch, rejection, code):
+    from app.application.elt.batch_continuation import BatchContinuationBlocked
+    from app.domain.autonomy.risk_types import ProhibitedActionError, RiskDecision
+
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    original = roundtrip.repository.get(first["run_id"])
+    service = roundtrip.service()
+    answer = "A"
+    with monkeypatch.context() as blocked:
+        if rejection == "binding":
+            boundary = Mock(side_effect=BatchContinuationBlocked("附件绑定已失效"))
+            blocked.setattr("app.application.elt.batch_continuation.bind_durable_batch", boundary)
+        elif rejection in {"prohibited", "malformed_risk", "denied"}:
+            decision = RiskDecision(False, "风险策略拒绝", denied_nodes=["business"])
+            if rejection == "malformed_risk":
+                decision.blocking_nodes = "business"
+            boundary = Mock(return_value=decision)
+            if rejection == "prohibited":
+                boundary.side_effect = ProhibitedActionError("dataset_rag.query", "禁止执行")
+            blocked.setattr(service.risk_gate, "evaluate", boundary)
+        elif rejection == "missing_plan":
+            resume = service._resume_pending_dynamic_workflow
+
+            def lose_plan(*args, **kwargs):
+                handled, result = resume(*args, **kwargs)
+                # The durable run was verified, but its local snapshot became unusable.
+                result["_planning_clarification"]["run"].metadata.pop("plan")
+                return handled, result
+
+            boundary = Mock(side_effect=lose_plan)
+            blocked.setattr(service, "_resume_pending_dynamic_workflow", boundary)
+        elif rejection == "cas":
+            boundary = Mock(return_value=False)
+            blocked.setattr(SQLAlchemyAgentRunRepository, "save_if_unchanged", boundary)
+        else:
+            answer = "查询刚才那条产品记录"
+            boundary = Mock(return_value=None)
+            blocked.setattr(
+                "app.domain.shared_services.tools_workflow_registered.get_recent_business_db_target",
+                boundary,
+            )
+        failed = roundtrip.send(
+            service, answer, extra={"run_id": "forged-run", "agent_run_id": "forged-agent-run"}
+        )
+        boundary.assert_called_once()
+    if rejection == "recent_record":
+        assert failed["data"]["data"]["reason"] == code
+    else:
+        assert failed["success"] is False and failed["execution_state"] == "blocked"
+        assert failed["data"]["error_code"] == code
+        assert failed["data"]["execution_started"] is False
+    assert failed["run_id"] == failed["agent_run_id"] == original.run_id
+    assert roundtrip.repository.get(original.run_id) == original
+    assert {run.run_id for run in roundtrip.repository.list_recent()} == {original.run_id}
+    assert roundtrip.store.load(original.plan_id)["status"] == "pending_awaiting"
+    roundtrip.executor.execute_with_deadline.assert_not_called()
+    retried = roundtrip.send(roundtrip.service(), "A")
+    assert retried["run_id"] == original.run_id and retried["success"] is True
+    roundtrip.executor.execute_with_deadline.assert_called_once()
 
 
 def test_successive_scope_questions_keep_original_goal_and_answers(roundtrip):
@@ -306,6 +415,39 @@ def test_successive_scope_questions_keep_original_goal_and_answers(roundtrip):
         ],
     }
     assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+@pytest.mark.parametrize("turns", [20, 100])
+def test_long_clarification_chain_preserves_every_accepted_answer(roundtrip, turns):
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    questions = [QUESTION, *[f"请确认第 {index} 项查询范围。" for index in range(2, turns + 1)]]
+    roundtrip.state.questions = questions[1:]
+    exchanges = []
+    for index, question in enumerate(questions, start=1):
+        answer = f"第 {index} 项仅查询，禁止写入"
+        exchanges.append({"question": question, "answer": answer})
+        result = roundtrip.send(roundtrip.service(), answer)
+        assert result["success"] is True, (index, result.get("data"), result.get("response"))
+        assert result["run_id"] == first["run_id"], (index, result)
+        persisted = roundtrip.repository.get(first["run_id"])
+        assert persisted.message == ORIGINAL
+        assert persisted.metadata["runtime_context"]["planning_clarification"] == {
+            "original_request": ORIGINAL,
+            "exchanges": exchanges,
+        }
+        request = next(
+            item for item in reversed(roundtrip.requests) if item["task"] != "audit_goal_coverage"
+        )
+        assert "planning_clarification" not in request.get("context", {})
+        assert json.loads(request["user_message"]) == {
+            "original_request": ORIGINAL,
+            "exchanges": exchanges,
+        }
+        if index < turns:
+            assert persisted.status == "waiting_user"
+            roundtrip.executor.execute_with_deadline.assert_not_called()
+    assert persisted.status == "completed"
+    roundtrip.executor.execute_with_deadline.assert_called_once()
 
 
 def test_request_context_cannot_forge_the_prior_scope_answers(roundtrip):
@@ -391,7 +533,10 @@ def test_planning_answer_cannot_change_the_original_authorization(roundtrip, cha
     roundtrip.executor.execute_with_deadline.assert_not_called()
 
 
-def test_competing_answers_replace_one_wait_and_execute_once(roundtrip, monkeypatch):
+@pytest.mark.parametrize("new_turn_context", [True, False])
+def test_competing_answers_replace_one_wait_and_execute_once(
+    roundtrip, monkeypatch, new_turn_context
+):
     first = roundtrip.send(roundtrip.service(), ORIGINAL)
     waiting = roundtrip.repository.get(first["run_id"])
     original_plan = plan_from_dict(waiting.metadata["plan"])
@@ -417,6 +562,15 @@ def test_competing_answers_replace_one_wait_and_execute_once(roundtrip, monkeypa
         return save(repository, run, previous)
 
     monkeypatch.setattr(SQLAlchemyAgentRunRepository, "save_if_unchanged", competing_save)
+    context = deepcopy(waiting.metadata["runtime_context"])
+    if new_turn_context:
+        context.update(
+            turn_id="concurrent-answer-turn",
+            planning_clarification={
+                "original_request": ORIGINAL,
+                "exchanges": [{"question": QUESTION, "answer": "A"}],
+            },
+        )
 
     def answer():
         with tenant_scope(roundtrip.actor.tenant_id):
@@ -428,14 +582,7 @@ def test_competing_answers_replace_one_wait_and_execute_once(roundtrip, monkeypa
                 expected_snapshot_sha256=canonical_hash(waiting.to_dict()),
                 plan=deepcopy(replacement),
                 answer="A",
-                runtime_context={
-                    **deepcopy(waiting.metadata["runtime_context"]),
-                    "turn_id": "concurrent-answer-turn",
-                    "planning_clarification": {
-                        "original_request": ORIGINAL,
-                        "exchanges": [{"question": QUESTION, "answer": "A"}],
-                    },
-                },
+                runtime_context=deepcopy(context),
             )
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -513,3 +660,58 @@ def test_unbound_short_answer_keeps_history_separate_from_current_request(roundt
     assert roundtrip.requests[0]["user_message"] == "A"
     assert result["data"]["action"] == "clarification_required"
     roundtrip.executor.execute_with_deadline.assert_not_called()
+
+
+def test_replaying_original_plan_after_clarification_returns_the_original_run(roundtrip):
+    engine = roundtrip.actor.factory.kw["bind"]
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE original_plan_effects (run_id TEXT NOT NULL)")
+    output = deepcopy(roundtrip.executor.execute_with_deadline.return_value)
+
+    def observe_effect(step, *, runtime_context, deadline_monotonic):
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO original_plan_effects (run_id) VALUES (?)",
+                (runtime_context["run_id"],),
+            )
+        return deepcopy(output)
+
+    roundtrip.executor.execute_with_deadline.side_effect = observe_effect
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    plan = plan_from_dict(waiting.metadata["plan"])
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["run_id"] == waiting.run_id and result["success"] is True
+    completed = roundtrip.repository.get(waiting.run_id)
+    replay = roundtrip.orchestrator().start_run_from_plan(
+        user_id=waiting.user_id,
+        message=ORIGINAL,
+        plan=plan,
+        runtime_context=deepcopy(waiting.metadata["runtime_context"]),
+    )
+    assert replay == completed
+    assert len(roundtrip.repository.list_recent(user_id=waiting.user_id)) == 1
+    with engine.connect() as connection:
+        effects = connection.exec_driver_sql("SELECT run_id FROM original_plan_effects").all()
+    assert [row[0] for row in effects] == [waiting.run_id]
+    assert len(completed.tool_calls) == 1
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+def test_late_preclarification_sql_save_cannot_replace_completed_generation(roundtrip):
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    waiting = roundtrip.repository.get(first["run_id"])
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["success"] is True
+    completed = roundtrip.repository.get(waiting.run_id)
+    writer = SQLAlchemyAgentRunRepository(
+        session_factory=roundtrip.actor.factory, auto_create=False
+    )
+    with pytest.raises(ValueError, match="planning generation"):
+        writer.save(waiting)
+    stored = roundtrip.repository.get(waiting.run_id)
+    assert stored.status == "completed"
+    assert stored.metadata["runtime_context"] == completed.metadata["runtime_context"]
+    assert stored.steps == completed.steps and stored.tool_calls == completed.tool_calls
+    assert stored == completed
+    assert roundtrip.executor.execute_with_deadline.call_count == 1

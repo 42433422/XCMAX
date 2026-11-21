@@ -24,6 +24,7 @@ ORIGINAL_PR_REPAIR = "original_pr_repair"
 REPAIR_CREDENTIAL_BLOCK = "original_pr_repair_requires_non_exportable_model_credentials"
 CUSTOMER_FEEDBACK_REPAIR = "customer_feedback_repair"
 TRAINING_CANDIDATE_REPAIR = "training_candidate_repair"
+LIFE_REFLECTION_REPAIR = "life_reflection_repair"
 CUSTOMER_CREDENTIAL_BLOCK = "customer_feedback_requires_non_exportable_model_credentials"
 HEADER_ONLY_PLATFORM_PROFILE = "srt-0.0.83-header-only-platform-v1"
 GITLEAKS_VERSION = "8.18.4"
@@ -379,7 +380,11 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
     manifest, bundle = safe_artifact(data, artifact.get("digest"))
     validate_binding(manifest, state, run, env)
     branch, target = manifest["branch"], manifest["commit_sha"]
-    customer_repair = state.get("kind") in {CUSTOMER_FEEDBACK_REPAIR, TRAINING_CANDIDATE_REPAIR}
+    customer_repair = state.get("kind") in {
+        CUSTOMER_FEEDBACK_REPAIR,
+        TRAINING_CANDIDATE_REPAIR,
+        LIFE_REFLECTION_REPAIR,
+    }
     def require_feedback_isolation():
         if not customer_repair:
             return

@@ -205,7 +205,10 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
         assert not output["data"].get("work_order_id")
         assert "暂未自动建单" in text
     elif guide["state"] == "OWNER_ROUTE_UNAVAILABLE":
-        assert "业务结果未知" in output["message"]
+        assert "暂时无法确认受理结果" in output["message"]
+        assert "避免重复提交" in output["message"]
+        assert output["reconciliation_evidence"]["message"] == output["message"]
+        assert output["reconciliation_evidence"]["reconciliation_required"] is True
         assert result["execution_state"] == "unknown"
         assert result["requires_reconciliation"] is True
         assert "勿重复提交" in result["response"]
@@ -217,8 +220,16 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
     else:
         assert "WO-fixed-path" in text
         assert output["data"]["owner_ticket_no"] == "CI-fixed-path"
-        assert run.status == "completed"
-        assert result["success"] is True
+        # This intake fixture returns a routed acknowledgement only. Its strings
+        # are not independent evidence that the remote owner accepted the issue.
+        assert output["success"] is True
+        assert run.tool_calls[0].output == output
+        verification = run.tool_calls[0].metadata["verification"]
+        assert verification["status"] == "inconclusive"
+        assert verification["code"] == "result_verifier_unavailable"
+        assert verification["accepted"] is False
+        assert run.status == "blocked"
+        assert result["success"] is False
 
 
 @pytest.mark.parametrize(

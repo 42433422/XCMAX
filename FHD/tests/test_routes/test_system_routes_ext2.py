@@ -27,7 +27,7 @@ from app.fastapi_routes.system_routes import (
     router,
     set_industry_endpoint,
 )
-from app.infrastructure.auth.dependencies import require_admin_user, require_identified_user
+from app.infrastructure.auth.dependencies import get_logged_in_user, require_admin_user
 from tests.pure_builders import tenant_profile as _make_profile
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ def client() -> TestClient:
     )
     # workflow-employee-catalog / duty-roster 走严格登录依赖且只对平台管理员返回宿主数据；
     # 用平台管理员身份覆盖，避免测试绕过鉴权。
-    app.dependency_overrides[require_identified_user] = lambda: SimpleNamespace(
+    app.dependency_overrides[get_logged_in_user] = lambda: SimpleNamespace(
         id=1, username="admin", tier="admin", role="admin"
     )
     return TestClient(app, raise_server_exceptions=False)

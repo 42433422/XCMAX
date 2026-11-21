@@ -233,8 +233,9 @@ def test_delete_material_string_id_returns_404_or_422(client: TestClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_batch_delete_success(client: TestClient) -> None:
+def test_batch_delete_success(client: TestClient, fake_service: MagicMock, local_tools) -> None:
     r = client.post("/api/materials/batch-delete", json={"ids": [1, 2, 3]})
+    fake_service.batch_delete_materials.assert_called_once_with([1, 2, 3])
     assert r.status_code == 200
     body = r.json()
     assert body["success"] is True
@@ -254,11 +255,14 @@ def test_batch_delete_missing_ids(client: TestClient) -> None:
     assert "已删除 0 条记录" in r.json()["message"]
 
 
-def test_batch_delete_with_non_numeric_ids_are_filtered(client: TestClient) -> None:
+def test_batch_delete_with_non_numeric_ids_are_filtered(
+    client: TestClient, fake_service: MagicMock, local_tools
+) -> None:
     r = client.post(
         "/api/materials/batch-delete",
         json={"ids": [1, "abc", None, 2, 2]},
     )
+    fake_service.batch_delete_materials.assert_called_once_with([1, 2, 2])
     assert r.status_code == 200
     assert r.json().get("deleted_count") == 3
 

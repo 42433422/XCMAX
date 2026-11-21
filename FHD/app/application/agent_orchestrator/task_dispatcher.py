@@ -16,6 +16,7 @@ from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
+from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
 from app.application.agent_orchestrator.task_execution_repository import (
     AgentTaskExecution,
     TaskExecutionRepository,
@@ -24,17 +25,24 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_open_effect: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+_open_effect: contextvars.ContextVar[tuple[object, str, str] | None] = contextvars.ContextVar(
     "task_open_effect", default=None
 )
 
 
 def note_open_effect(run_id: str, effect_id: str) -> None:
     """Record a side effect only while a worker is inside a real tool call."""
-    repo = _open_effect.get()
+    claim = _open_effect.get()
+    if claim is None:
+        return
+    repo, claimed_run_id, owner_id = claim
     marker = getattr(repo, "mark_open_effect", None)
     if marker is not None:
-        marker(run_id, effect_id)
+        effect = effect_id if run_id == claimed_run_id else f"child:{run_id}:{effect_id}"
+        if marker(claimed_run_id, effect, owner_id=owner_id) is False:
+            from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+
+            raise WorkerLeaseLost("worker lease expired before opening a side effect")
 
 
 @dataclass
@@ -83,6 +91,8 @@ class AgentTaskDispatcher:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._coordinator: threading.Thread | None = None
+        self._outcome_worker: threading.Thread | None = None
+        self._last_outcome_recovery = float("-inf")
 
     @property
     def instance_id(self) -> str:
@@ -113,6 +123,8 @@ class AgentTaskDispatcher:
             if remaining <= 0:
                 break
             worker.join(timeout=remaining)
+        if self._outcome_worker is not None:
+            self._outcome_worker.join(timeout=max(0.0, deadline - time.monotonic()))
 
     def notify(self) -> None:
         self._wake.set()
@@ -150,6 +162,7 @@ class AgentTaskDispatcher:
 
     def _dispatch_available(self) -> None:
         self._prune_and_heartbeat()
+        self._recover_outcomes()
         while not self._stop.is_set() and self._active_count() < self._max_workers:
             owner_id = f"{self._instance_id}:{uuid.uuid4().hex}"
             execution = self._execution_repo.claim(
@@ -172,6 +185,40 @@ class AgentTaskDispatcher:
                     last_heartbeat=time.monotonic(),
                 )
             worker.start()
+
+    def _recover_outcomes(self) -> None:
+        """Reconcile evidence independently so readback cannot delay worker leases."""
+        now = time.monotonic()
+        if (
+            self._stop.is_set()
+            or (self._outcome_worker is not None and self._outcome_worker.is_alive())
+            or now - self._last_outcome_recovery < 30.0
+        ):
+            return
+        self._last_outcome_recovery = now
+
+        def recover() -> None:
+            from app.application.agent_orchestrator.verification_recovery import (
+                reconcile_pending_verifications,
+            )
+            from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
+
+            try:
+                reconcile_pending_verifications(
+                    repository=self._run_repo, stopped=self._stop.is_set
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("original result verification remains pending", exc_info=True)
+            try:
+                reconcile_pending_outcomes(repository=self._run_repo, stopped=self._stop.is_set)
+            except RECOVERABLE_ERRORS:
+                logger.warning("enterprise outcome reconciliation remains pending", exc_info=True)
+            self._wake.set()
+
+        self._outcome_worker = threading.Thread(
+            target=recover, name=f"{self._instance_id}-outcomes", daemon=True
+        )
+        self._outcome_worker.start()
 
     def _active_count(self) -> int:
         with self._active_lock:
@@ -220,7 +267,7 @@ class AgentTaskDispatcher:
         error_code = ""
         state = "failed"
         abandon = False
-        effect_token = _open_effect.set(self._execution_repo)
+        effect_token = _open_effect.set((self._execution_repo, execution.run_id, owner_id))
         try:
             orchestrator = self._orchestrator_factory(repository)
             preview = self._run_repo.get(execution.run_id)
@@ -264,22 +311,7 @@ class AgentTaskDispatcher:
             if run is None:
                 error_code = "worker_run_unavailable"
             else:
-                state = {
-                    "completed": "succeeded",
-                    "succeeded": "succeeded",
-                    "failed": "failed",
-                    "timed_out": "timed_out",
-                    "cancelled": "cancelled",
-                    "paused": "waiting_approval",
-                    "waiting_approval": "waiting_approval",
-                    "blocked": "failed",
-                    "waiting_user": "waiting_approval",
-                    "rejected": "rejected",
-                }.get(run.status, "failed")
-                if run.status == "blocked":
-                    error_code = "needs_verification"
-                elif state == "failed" and run.status != "failed":
-                    error_code = "worker_incomplete_state"
+                state, error_code = dispatched_run_state(run)
         except EltCheckpointWorkerExited:
             abandon = True
             try:
@@ -305,18 +337,28 @@ class AgentTaskDispatcher:
             logger.exception("agent task worker failed for run %s", execution.run_id)
             error_code = "worker_execution_failed"
             try:
-                self._orchestrator_factory(repository).fail_dispatched_run(execution.run_id)
+                failed_run = self._orchestrator_factory(repository).fail_dispatched_run(
+                    execution.run_id
+                )
+                if failed_run is not None:
+                    state, error_code = dispatched_run_state(failed_run)
             except RECOVERABLE_ERRORS:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:
             _open_effect.reset(effect_token)
             if not abandon:
-                self._execution_repo.finish(
+                finished = self._execution_repo.finish(
                     execution.run_id,
                     owner_id,
                     state,
                     error_code=error_code,
                 )
+                if finished is not None and finished.state == "succeeded":
+                    from app.application.enterprise_cognition.outcomes import (
+                        recover_terminal_outcome,
+                    )
+
+                    recover_terminal_outcome(execution.run_id, repository=self._run_repo)
             with self._active_lock:
                 self._active.pop(execution.run_id, None)
             self._wake.set()

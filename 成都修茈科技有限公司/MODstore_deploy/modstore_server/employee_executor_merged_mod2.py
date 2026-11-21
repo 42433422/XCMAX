@@ -749,25 +749,30 @@ def _execute_employee_phase_02(state):
             }
             _handoff_target = ""
         if _handoff_target:
+            from modstore_server.db.identity import User
+            from modstore_server.xiaoc_life_chat import manual_life_scope
+
             _ctx_parts = []
             if _handoff_context:
                 _ctx_parts.append(_handoff_context[:500])
             if isinstance(_parsed_llm, dict) and _parsed_llm.get("summary"):
                 _ctx_parts.append(f"LLM 摘要：{str(_parsed_llm.get('summary'))[:300]}")
             _handoff_ctx_str = " | ".join(_ctx_parts)[:1500]
-            _handoff_out = perform_handoff(
-                source_employee_id=state["employee_id"],
-                target_employee_id=_handoff_target,
-                reason=_handoff_reason,
-                context=_handoff_ctx_str,
-                original_task=str(state["task"] or ""),
-                extra_payload={
-                    "source_employee_id": state["employee_id"],
-                    "parsed_llm_excerpt": (
-                        str(_llm_out_raw)[:500] if isinstance(_llm_out_raw, str) else ""
-                    ),
-                },
-            )
+            source_user = state["session"].get(User, state["user_id"])
+            with manual_life_scope(source_user, 3):
+                _handoff_out = perform_handoff(
+                    source_employee_id=state["employee_id"],
+                    target_employee_id=_handoff_target,
+                    reason=_handoff_reason,
+                    context=_handoff_ctx_str,
+                    original_task=str(state["task"] or ""),
+                    extra_payload={
+                        "source_employee_id": state["employee_id"],
+                        "parsed_llm_excerpt": (
+                            str(_llm_out_raw)[:500] if isinstance(_llm_out_raw, str) else ""
+                        ),
+                    },
+                )
             if isinstance(state["reasoning"], dict):
                 state["reasoning"]["_handoff"] = _handoff_out
     except RECOVERABLE_ERRORS as _ho_exc:

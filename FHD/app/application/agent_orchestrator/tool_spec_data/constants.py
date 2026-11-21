@@ -10,6 +10,9 @@ from __future__ import annotations
 
 # --- dataclass / build defaults -------------------------------------------
 DEFAULT_TIMEOUT_SECONDS = 60
+# 0 preserves the legacy RunRepair policy. Positive integers bound all calls of
+# one step, including its first call: 1 forbids retries, 3 permits at most two.
+# RunRepair applies this ceiling without bypassing its safety or repair limits.
 DEFAULT_RETRY: dict[str, int] = {"max_attempts": 0}
 
 # --- cost units -----------------------------------------------------------
@@ -38,6 +41,8 @@ PERMISSION_OVERRIDES: dict[str, str] = {
     # Like /conversation/image, the tool requires a live owner-bound market
     # session; market routing and the wallet still enforce model authorization.
     "image_generate": "",
+    # Entity-specific RBAC and a live actor binding are checked by the adapter.
+    "enterprise_cognition": "",
     # Kellai applies its explicit per-account grants after validating the sealed host actor.
     "kellai": "",
     "memory_v2": "memory_v2.write",

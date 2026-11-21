@@ -1354,3 +1354,56 @@ if __name__ == "__main__":
     # 独立手动入口：python tests/langgraph_absorption/test_langgraph_runtime_contract.py
     path = regenerate_fixture()
     print(f"fixture regenerated -> {path}")
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        {"requires_reconciliation": True},
+        {"outcome_unknown": True},
+        {"execution_outcome": "unknown"},
+        {"result": {"execution_status": "timed_out"}},
+        {"result": {"outputs": [{"execution_state": "unknown"}]}},
+        {"payload": {"final_output": {"node_outputs": {"job": {"status": "queued"}}}}},
+    ],
+)
+def test_unknown_tool_receipt_stops_graph_before_dependent_effect(monkeypatch, marker):
+    calls, events = [], []
+
+    def dispatch(tool_id, action, params):
+        calls.append(tool_id)
+        return {
+            "success": True,
+            "retryable": True,
+            "error_code": "tool_unavailable",
+            "request_id": "original-request",
+            **marker,
+        }
+
+    monkeypatch.setattr(
+        "app.infrastructure.workflow.langgraph_execution._publish_tool_event",
+        events.append,
+    )
+    result = _make_runtime(dispatch).run(_sequential_plan(2), max_retries=5)
+    assert result.success is False and calls == ["t1"]
+    assert "n2" not in result.final_context["node_outputs"]
+    receipt = result.node_results[0]
+    assert receipt.success is False and receipt.retryable is False and receipt.retries == 0
+    assert receipt.output["outcome"] == "unknown"
+    assert receipt.output["request_id"] == "original-request"
+    assert events[-1]["success"] is False and events[-1]["requires_reconciliation"] is True
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"success": "false"},
+        {"success": 1},
+        {"success": True, "result": {"success": False, "message": "child failed"}},
+    ],
+)
+def test_graph_requires_confirmed_success_before_dispatching_dependents(output):
+    calls = []
+    result = _make_runtime(lambda t, a, p: calls.append(t) or output).run(_sequential_plan(2))
+    assert result.success is False and calls == ["t1"]
+    assert "n2" not in result.final_context["node_outputs"]

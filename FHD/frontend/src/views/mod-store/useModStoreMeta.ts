@@ -1,4 +1,5 @@
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
+import { employeeDirectoryScope } from '@/api/employeeDirectory'
 import { resolveEnterpriseOrgLayerForCatalogItem } from '@/constants/enterpriseWorkflowEstablishment'
 import {
   catalogStoreCollection,
@@ -90,8 +91,13 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
   }
 
   const resolveEnterpriseStack = async (): Promise<void> => {
-    const stack = await resolveEnterpriseModStack()
-    state.enterpriseStackLabel.value = stack.stackLabel
+    const scope = employeeDirectoryScope()
+    try {
+      const stack = await resolveEnterpriseModStack()
+      if (scope === employeeDirectoryScope()) state.enterpriseStackLabel.value = stack.stackLabel
+    } catch (reason) {
+      if (scope === employeeDirectoryScope()) state.loadError.value = reason instanceof Error ? reason.message : '企业分区读取失败，请重试'
+    }
   }
 
   return {

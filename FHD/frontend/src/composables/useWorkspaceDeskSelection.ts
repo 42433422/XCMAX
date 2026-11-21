@@ -58,7 +58,7 @@ export function useWorkspaceDeskSelection(workspaceDesks: Ref<Array<{ empId: str
     { immediate: true },
   )
 
-  function selectDesk(empId: string) {
+  function selectDesk(empId: string | null) {
     selectedEmpId.value = empId
     syncWorkspaceEmployeeQuery(empId)
   }

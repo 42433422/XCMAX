@@ -611,8 +611,10 @@ def test_staged_receipt_waits_for_exact_remote_branch_and_pr(monkeypatch):
         "original_pr_repair",
         "customer_feedback_repair",
         "training_candidate_repair",
+        "life_reflection_repair",
         "isolated_customer_feedback_repair",
         "isolated_training_candidate_repair",
+        "isolated_life_reflection_repair",
     ],
 )
 def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
@@ -621,7 +623,11 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     kind,
 ):
     original_pr = kind == "original_pr_repair"
-    customer_repair = kind in {"customer_feedback_repair", "training_candidate_repair"}
+    customer_repair = kind in {
+        "customer_feedback_repair",
+        "training_candidate_repair",
+        "life_reflection_repair",
+    }
     isolated = bool(kind and kind.startswith("isolated_"))
     value = manifest()
     if original_pr:

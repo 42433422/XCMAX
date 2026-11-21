@@ -236,4 +236,6 @@ def reconcile_goals() -> dict[str, Any]:
 
     if updates:
         _mutate(apply)
-    return {"observed": len(updates)}
+    from modstore_server.xiaoc_life_evolution import reconcile
+
+    return {"observed": len(updates) + reconcile()}

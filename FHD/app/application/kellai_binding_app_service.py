@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from app.domain.shared_services import kellai_binding_store, kellai_customer_copilot
@@ -13,6 +15,20 @@ class KellaiAuthorizationError(ValueError):
     def __init__(self, message: str, status_code: int = 403):
         super().__init__(message)
         self.status_code = status_code
+
+
+def connection_identity_sha256(connection: dict[str, Any] | None = None) -> str:
+    """Bind original approvals and observations to one server-owned pairing."""
+    current = connection if connection is not None else connection_credentials()
+    if not current or not current.get("connection_id"):
+        return ""
+    identity = {
+        key: current.get(key) for key in ("connection_id", "xcmax_user_id", "xcmax_tenant_id")
+    }
+    identity["authorized_by"] = str((current.get("authorized_by") or {}).get("id") or "")
+    return hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def scoped_connection(*, actor: int | None, tenant_id: str, scope: str) -> dict[str, Any]:

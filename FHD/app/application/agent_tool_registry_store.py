@@ -36,7 +36,7 @@ _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _LOCK = threading.Lock()
 
 
-_SCHEMA_READY = False
+_SCHEMA_READY: tuple[str, int, int] | None = None
 
 
 _DB_OVERRIDE: str | None = None
@@ -134,7 +134,7 @@ def reset_for_tests(path: str | None = None) -> None:
     global _SCHEMA_READY, _DB_OVERRIDE, _GENERATION
     with _LOCK:
         _DB_OVERRIDE = path
-        _SCHEMA_READY = False
+        _SCHEMA_READY = None
         _GENERATION += 1
         _CACHE.clear()
 
@@ -157,17 +157,21 @@ def _now() -> tuple[str, str]:
 
 
 def _connect() -> sqlite3.Connection:
-    global _SCHEMA_READY
+    global _SCHEMA_READY, _GENERATION
     path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=30, isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=5000")
     with _LOCK:
-        if not _SCHEMA_READY:
+        stat = path.stat()
+        identity = (str(path.resolve()), stat.st_dev, stat.st_ino)
+        if identity != _SCHEMA_READY:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_DDL)
-            _SCHEMA_READY = True
+            _SCHEMA_READY = identity
+            _GENERATION += 1
+            _CACHE.clear()
     return conn
 
 

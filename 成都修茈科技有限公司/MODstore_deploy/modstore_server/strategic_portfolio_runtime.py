@@ -636,7 +636,10 @@ def _business_outcome(
         parse_datetime,
     )
     from modstore_server.customer_value_payment_source import load_authoritative_payment_orders
-    from modstore_server.strategic_customer_outcomes import customer_delivery_evidence
+    from modstore_server.strategic_customer_outcomes import (
+        VERIFIED_DELIVERY_ATTRIBUTION,
+        customer_delivery_evidence,
+    )
 
     start, now = window_start or _date(status["started_at"]), window_end or datetime.now(UTC)
     source = load_authoritative_payment_orders(max(1, (datetime.now(UTC) - start).days + 1))
@@ -674,7 +677,7 @@ def _business_outcome(
         ),
         "window_start": start.isoformat(),
         "window_end": now.isoformat(),
-        "attribution": "approved_customer_goal_order_completed_artifact_and_verified_acceptance_not_incremental_causality",
+        "attribution": VERIFIED_DELIVERY_ATTRIBUTION,
     }
 
 

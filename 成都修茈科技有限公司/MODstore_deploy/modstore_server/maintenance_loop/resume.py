@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Dict, Optional, Tuple
 
 from modstore_server import (
@@ -14,6 +15,114 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config
 from . import memory as memory_domain
+
+
+def _pending_execution_candidate(memory: Dict[str, Any], user_id: int) -> Optional[Dict[str, Any]]:
+    """Resume the original durable step, never a fresh task after a lost acknowledgement."""
+    pending = memory.get("pending_execution")
+    if memory.get("execution_state_unavailable"):
+        raise ValueError("execution_state_unavailable")
+    if pending is None:
+        return None
+    employees = {
+        "code": "vibe-coding-maintainer",
+        "review": "change-request-auditor",
+        "qa": "test-qa-runner",
+    }
+    if not isinstance(pending, dict) or pending.get("user_id") != user_id:
+        raise ValueError("pending_execution_actor_mismatch")
+    step = pending.get("step")
+    steps = pending.get("steps")
+    scope = pending.get("scope_steps")
+    final_states = {"finalizing", "finalized", "recording_outcome"}
+    settled = pending.get("state") == "settled" or pending.get("state") in final_states
+    order = list(employees)
+    if (
+        step not in order
+        or scope not in [order[index:] for index in range(len(order))]
+        or pending.get("employee_id") != employees[step]
+        or not re.fullmatch(r"[0-9a-f]{32}", str(pending.get("request_id") or ""))
+        or not str(pending.get("run_id") or "").strip()
+        or pending.get("state")
+        not in {"dispatching", "waiting_reconciliation", "settled"} | final_states
+        or not isinstance(steps, list)
+        or not all(isinstance(row, dict) and isinstance(row.get("para", {}), dict) for row in steps)
+    ):
+        raise ValueError("pending_execution_identity_unavailable")
+    if step not in scope:
+        raise ValueError("pending_execution_scope_mismatch")
+    expected = scope[: scope.index(step) + int(settled)]
+    if [row.get("step") for row in steps] != expected or any(
+        row.get("ok") is not True for row in (steps[:-1] if settled else steps)
+    ):
+        raise ValueError("pending_execution_predecessor_mismatch")
+    if (not settled or steps[-1].get("ok") is True) and not str(
+        pending.get("task_id") or ""
+    ).strip():
+        raise ValueError("pending_execution_task_unavailable")
+    code_step = next((row for row in steps if row.get("step") == "code"), None)
+    if code_step is not None:
+        code = code_step.get("para") or {}
+        if not isinstance(code, dict) or (
+            pending.get("code_task_id") != code.get("task_id")
+            or pending.get("branch") != code.get("branch")
+        ):
+            raise ValueError("pending_execution_code_identity_mismatch")
+    if step != "code" and (not pending.get("code_task_id") or not pending.get("branch")):
+        raise ValueError("pending_execution_code_identity_unavailable")
+    if settled and (
+        type(steps[-1].get("ok")) is not bool
+        or steps[-1].get("requires_reconciliation")
+        or (steps[-1].get("para") or {}).get("task_id") != (pending.get("task_id") or None)
+    ):
+        raise ValueError("pending_execution_terminal_mismatch")
+    if pending.get("state") in final_states:
+        final = pending.get("final_outcome")
+        last = memory.get("last_run")
+        if (
+            pending["state"] == "finalizing"
+            or not isinstance(final, dict)
+            or not isinstance(pending.get("final_gate"), dict)
+            or not pending.get("final_run_id")
+            or final.get("run_id") != pending.get("final_run_id")
+            or final.get("phase") != "complete"
+            or final.get("para_task_id") != pending.get("code_task_id")
+            or final.get("branch") != pending.get("branch")
+            or not isinstance(pending.get("final_steps"), list)
+            or pending["final_steps"][: len(steps)] != steps
+            or final.get("steps") != pending["final_steps"]
+            or not isinstance(final.get("policy_decision"), dict)
+        ):
+            raise ValueError("pending_finalization_requires_reconciliation")
+        recorded = (
+            isinstance(last, dict)
+            and all(
+                last.get(key) == final.get(key)
+                for key in ("run_id", "branch", "para_task_id", "status")
+            )
+            and last.get("action") == final["policy_decision"].get("action")
+        )
+        if pending["state"] == "recording_outcome" and not recorded:
+            raise ValueError("pending_outcome_requires_reconciliation")
+        return {
+            "reason": "resume_finalized_execution",
+            "final_outcome": final,
+            "outcome_recorded": recorded,
+        }
+    remaining = scope[scope.index(step) + int(settled) :]
+    if settled and steps[-1]["ok"] is False:
+        remaining = []  # Persist the observed failure before allowing a new repair.
+    return {
+        "reason": "resume_pending_execution",
+        "failed_run_id": pending["run_id"],
+        "failed_steps": remaining,
+        "branch": pending.get("branch"),
+        "para_task_id": pending.get("code_task_id"),
+        "confirmed_steps": steps,
+        "scope_steps": scope,
+        "pending_execution": None if settled else pending,
+        "settled_execution": settled,
+    }
 
 
 def _resume_review_qa_candidate(
@@ -337,7 +446,7 @@ def _resume_dispatch_context(
         return (None, None)
     para_task_id = str(resume_candidate.get("para_task_id") or "").strip() or None
     code_branch = str(resume_candidate.get("branch") or "").strip() or None
-    if "code" not in steps_to_run:
+    if "code" not in steps_to_run or resume_candidate.get("reason") == "resume_pending_execution":
         return (para_task_id, code_branch)
     if resume_candidate.get("continue_existing_code_task"):
         return (None, code_branch)

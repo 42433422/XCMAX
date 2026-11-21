@@ -9,7 +9,11 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from modstore_server.script_agent.sandbox_runner import (
+    sandbox_replay_block_reason,
+    sandbox_verification_error,
+)
 
 logger = logging.getLogger("modstore_server.workbench_script_runner")
 StatusHook = Callable[[str], Awaitable[None]]
@@ -81,6 +85,8 @@ async def run_script_job(
     last_outputs: List[Dict[str, Any]] = []
     last_work_dir = ""
     last_sdk_calls: List[Dict[str, Any]] = []
+    last_timed_out: bool | None = None
+    replay_blocked = ""
     for iteration in range(1, _facade().MAX_AGENT_ITERATIONS + 1):
         await _notify(f"第 {iteration} 轮：静态检查")
         static_errors = _facade().validate_script(code)
@@ -127,35 +133,57 @@ async def run_script_job(
             await _notify(f"第 {iteration} 轮静态修复完成，继续下一轮检查")
             continue
         await _notify(f"第 {iteration} 轮：沙箱运行")
-        result = await _facade()._sandbox.run_in_sandbox(
-            user_id=user_id,
-            session_id=f"{session_id}_iter{iteration}",
-            script_text=code,
-            files=files or [],
-            provider=provider,
-            model=model,
-            api_key=api_key,
-            base_url=base_url,
-            script_root=_facade().SCRIPT_ROOT,
-        )
-        ok = bool(result.ok and result.outputs)
+        try:
+            result = await _facade()._sandbox.run_in_sandbox(
+                user_id=user_id,
+                session_id=f"{session_id}_iter{iteration}",
+                script_text=code,
+                files=files or [],
+                provider=provider,
+                model=model,
+                api_key=api_key,
+                base_url=base_url,
+                script_root=_facade().SCRIPT_ROOT,
+            )
+        except BOUNDARY_ERRORS:
+            logger.exception("quick script sandbox execution interrupted")
+            replay_blocked = sandbox_replay_block_reason(None)
+            last_errors = [replay_blocked]
+            repair_trace.append(
+                {
+                    "phase": "run",
+                    "iteration": iteration,
+                    "ok": False,
+                    "errors": last_errors,
+                    "outcome": "unverified",
+                    "retryable": False,
+                }
+            )
+            break
+        verification_error = sandbox_verification_error(result)
+        ok = not verification_error
         last_stdout = result.stdout[-4000:]
         last_stderr = result.stderr[-4000:]
         last_returncode = result.returncode
         last_outputs = result.outputs
         last_work_dir = result.work_dir
         last_sdk_calls = result.sdk_calls
-        last_errors = result.errors or []
+        last_timed_out = result.timed_out
+        last_errors = list(result.errors or [])
         if result.ok and (not result.outputs):
             last_errors = ["脚本运行成功但 outputs/ 下没有生成任何结果文件"]
         elif not result.ok and (not last_errors):
             last_errors = [result.stderr[-1000:] or "脚本沙箱运行失败"]
+        elif verification_error and not last_errors:
+            last_errors = [verification_error]
         repair_trace.append(
             {
                 "phase": "run",
                 "iteration": iteration,
                 "ok": ok,
                 "returncode": result.returncode,
+                "timed_out": result.timed_out,
+                "sdk_calls": result.sdk_calls,
                 "errors": last_errors,
                 "outputs": result.outputs,
                 "stdout_tail": last_stdout[-1000:],
@@ -174,8 +202,14 @@ async def run_script_job(
                 "outputs": last_outputs,
                 "errors": [],
                 "sdk_calls": last_sdk_calls,
+                "timed_out": last_timed_out,
                 "repair_trace": repair_trace,
             }
+        replay_blocked = sandbox_replay_block_reason(result)
+        if replay_blocked:
+            last_errors.append(replay_blocked)
+            repair_trace[-1].update(outcome="unverified", retryable=False)
+            break
         if not api_key:
             break
         no_output = result.ok and (not result.outputs)
@@ -225,5 +259,7 @@ async def run_script_job(
         "outputs": last_outputs,
         "errors": final_errors,
         "sdk_calls": last_sdk_calls,
+        "timed_out": last_timed_out,
         "repair_trace": repair_trace,
+        **({"outcome": "unverified", "retryable": False} if replay_blocked else {}),
     }

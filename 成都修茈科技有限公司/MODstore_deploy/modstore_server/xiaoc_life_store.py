@@ -276,7 +276,23 @@ def _settled_owner_goals(
         return None
     settled = []
     for goal in data["goals"]:
+        reflection_status = None
+        if goal.get("retort_request_id"):
+            from modstore_server.xiaoc_life_evolution import feedback
+
+            owner = goal.get("evolution_owner_user_id", data["owner_user_id"])
+            if type(owner) is not int:
+                return None
+            try:
+                observed = feedback(session, goal, owner)
+            except (LifePolicyError, PortfolioError, KeyError):
+                return None
+            if observed["metrics"].get("terminal_verified") is not True:
+                return None
+            reflection_status = observed["status"]
         if not (decision_id := goal.get("decision_id")):
+            if reflection_status:
+                settled.append((goal, reflection_status))
             continue
         try:
             row, proposal, state = _row(session, decision_id)
@@ -317,7 +333,7 @@ def _settled_owner_goals(
             status = "stopped"
         elif any(task["status"] == "failed" for task in tasks.values()):
             status = "failed"
-        settled.append((goal, status))
+        settled.append((goal, reflection_status or status))
     return settled
 
 
@@ -341,6 +357,12 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
                     # Old approvals must not keep prioritizing the enterprise lane
                     # after its original owner and execution ledger are settled.
                     goal["status"] = status
+                    if goal.get("retort_request_id"):
+                        goal.setdefault("evolution_owner_user_id", previous_owner)
+            if policy.retort_template_id:
+                from modstore_server.xiaoc_life_evolution import reflection_template
+
+                reflection_template(policy.retort_template_id, actor_user_id)
             data["policy"] = policy.model_dump()
             data["owner_user_id"] = actor_user_id
         for name in ("level", "paused", "mission"):
@@ -441,34 +463,35 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
     return _mutate(claim)
 
 
-def cycle_active(claim: dict[str, Any]) -> bool:
+def _claim_active(data: dict[str, Any], session: Session, claim: dict[str, Any]) -> bool:
     from modstore_server.strategic_remote_life import execution_deadline
 
+    current = data.get("active_cycle") or {}
+    return bool(
+        all(
+            current.get(key) == claim.get(key)
+            for key in (
+                "lease_token",
+                "cycle_id",
+                "owner_user_id",
+                "domain",
+                "reserved_tokens",
+                "policy_revision",
+            )
+        )
+        and current.get("lease_token")
+        and current.get("policy_revision") == data["revision"]
+        and execution_deadline(data, claim) > utcnow()
+        and not data["paused"]
+        and data["level"] >= MINIMUM_LEVEL[claim["domain"]]
+        and not _blockers(data, session)
+    )
+
+
+def cycle_active(claim: dict[str, Any]) -> bool:
     with get_session_factory()() as session:
         row = session.get(XiaoCLifeState, IDENTITY_ID)
-        if row is None:
-            return False
-        data = json.loads(row.state_json)
-        current = data.get("active_cycle") or {}
-        return bool(
-            all(
-                current.get(key) == claim.get(key)
-                for key in (
-                    "lease_token",
-                    "cycle_id",
-                    "owner_user_id",
-                    "domain",
-                    "reserved_tokens",
-                    "policy_revision",
-                )
-            )
-            and current.get("lease_token")
-            and current.get("policy_revision") == data["revision"]
-            and execution_deadline(data, claim) > utcnow()
-            and not data["paused"]
-            and data["level"] >= MINIMUM_LEVEL[claim["domain"]]
-            and not _blockers(data, session)
-        )
+        return row is not None and _claim_active(json.loads(row.state_json), session, claim)
 
 
 def _merge(
@@ -487,6 +510,11 @@ def _merge(
             and item.get("decision_id", previous["decision_id"]) != previous["decision_id"]
         ):
             raise LifePolicyError("an existing goal cannot change its portfolio binding")
+        for binding in ("retort_request_id", "evolution_source_sha256", "evolution_owner_user_id"):
+            if previous.get(binding) and item.get(binding, previous[binding]) != previous[binding]:
+                raise LifePolicyError(
+                    "an existing goal cannot change its original evolution binding"
+                )
         if item[key] not in values and len(values) >= maximum:
             continue
         values[item[key]] = {**previous, **item}

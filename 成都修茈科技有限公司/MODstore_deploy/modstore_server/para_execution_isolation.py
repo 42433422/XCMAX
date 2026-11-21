@@ -10,6 +10,8 @@ def feedback_execution_kind(effects):
         return "customer_feedback_repair"
     if "training_candidate" in effects:
         return "training_candidate_repair"
+    if "life_reflection" in effects:
+        return "life_reflection_repair"
     return None
 
 

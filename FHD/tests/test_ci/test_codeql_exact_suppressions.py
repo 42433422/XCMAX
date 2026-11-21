@@ -213,11 +213,11 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
     assert fingerprint(legacy) != fingerprint(modern)
 
 
-# artifact_files was reviewed 2026-11-13; the other modules were re-reviewed
+# artifact_files was re-reviewed 2026-11-21; the other modules were re-reviewed
 # 2026-11-16 on the final PR #3245 sources. These single-component / dir_fd
 # sinks have guards that CodeQL cannot model.
 _REVIEWED_FILE_SINKS = {
-    "FHD/app/application/agent_orchestrator/artifact_files.py": (73, 96, 97, 105, 107, 129),
+    "FHD/app/application/agent_orchestrator/artifact_files.py": (95, 118, 119, 127, 129, 151),
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
     "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
     "FHD/app/application/shipment_excel_elt_security.py": (459, 460, 461, 831, 971, 972, 973),
@@ -274,7 +274,17 @@ def test_file_suppression_fails_closed_after_semantic_change(tmp_path):
     )
     assert changed != source
     root = _sink_source_tree(tmp_path, path, changed)
-    assert keep_result(_finding(uri=path, line=73), source_root=root) is True
+    for line in _REVIEWED_FILE_SINKS[path]:
+        assert keep_result(_finding(uri=path, line=line), source_root=root) is True
+
+
+@pytest.mark.parametrize("line", [73, 96, 97, 105, 107])
+def test_moved_artifact_sinks_do_not_suppress_stale_locations(line):
+    # Old line 129 now contains another explicitly reviewed sink; the other
+    # original locations must not inherit their previous suppression.
+    path = "FHD/app/application/agent_orchestrator/artifact_files.py"
+    assert line not in _REVIEWED_FILE_SINKS[path]
+    assert keep_result(_finding(uri=path, line=line)) is True
 
 
 @pytest.mark.parametrize(

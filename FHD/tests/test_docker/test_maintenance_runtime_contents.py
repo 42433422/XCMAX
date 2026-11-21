@@ -14,19 +14,23 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 
 def test_image_can_register_admin_maintenance_without_source_checkout(tmp_path: Path) -> None:
     image = tmp_path / "image"
-    shutil.copytree(FHD_ROOT / "app", image / "app", ignore=shutil.ignore_patterns("__pycache__"))
     dockerfile = (FHD_ROOT / "ops/docker/Dockerfile.fhd-api").read_text()
     production = dockerfile.split(" AS production", 1)[1]
     for line in production.splitlines():
         if not line.startswith("COPY "):
             continue
         tokens = [token for token in shlex.split(line)[1:] if not token.startswith("--")]
-        if tokens[-1] != "/app/scripts/autonomy/":
+        if tokens[-1] not in {"/app/app", "/app/resources", "/app/scripts/autonomy/"}:
             continue
-        target = image / "scripts/autonomy"
-        target.mkdir(parents=True)
+        target = image / Path(tokens[-1]).relative_to("/app")
+        target.parent.mkdir(parents=True, exist_ok=True)
         for source in tokens[:-1]:
-            shutil.copy2(FHD_ROOT / source, target / Path(source).name)
+            source_path = FHD_ROOT / source
+            if source_path.is_dir():
+                shutil.copytree(source_path, target, ignore=shutil.ignore_patterns("__pycache__"))
+            else:
+                target.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, target / source_path.name)
     env = {**os.environ, "XCAGI_DATA_DIR": str(tmp_path / "data")}
     env["XCAGI_DESKTOP_DATA_DIR"] = env["XCAGI_DATA_DIR"]
     env["DATABASE_URL"] = f"sqlite:///{tmp_path / 'runtime.db'}"

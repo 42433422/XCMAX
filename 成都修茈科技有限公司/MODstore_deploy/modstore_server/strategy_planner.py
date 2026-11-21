@@ -1,6 +1,6 @@
 """战略规划器：复用 PR #3396 (a0cf41c3) 的资产、信号与 18 域候选逻辑。
 
-输入三份证据，输出可结算的赌注（交给 ``strategy_bets`` 登记）：
+输入权威经营聚合与三份研发证据，输出可结算的赌注（交给 ``strategy_bets`` 登记）：
 1. 模型资产：``llm_runtime_route.platform_model_catalog``（拿不到则标 unknown）
 2. 仓库信号：``evolution_signal_collector.aggregate_signals``
 3. 18 域：``MODSTORE_DOMAIN_AUDIT_PATH`` 指向的结构化审计 JSON
@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server import strategy_bets
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.strategy_business_context import customer_value_context
 
 MAX_NEW_BETS = 1
 DEFAULT_ENVELOPE = {
@@ -77,6 +78,7 @@ def _digest(payload: Any) -> str:
 def collect_context() -> Dict[str, Any]:
     strategy_bets.apply_evidence_defaults()
     return {
+        "customer_value": customer_value_context(),
         "assets": _model_assets(),
         "repo": _repo_signals(),
         "domains": _domain_status(),
@@ -448,7 +450,7 @@ async def run_scheduled_discovery(
     from modstore_server.strategic_portfolio_runtime import discover_portfolio_opportunities
 
     class Template(BaseModel):
-        model_config = ConfigDict(extra="forbid", strict=True)
+        model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
         owner_user_id: int = Field(gt=0)
         goal: str = Field(min_length=1, max_length=4000)
         limits: PortfolioLimits

@@ -12,7 +12,7 @@ HELPER_TARGET="$TARGET_DIR/trae_failover.mjs"
 QUEUE_POLICY_TARGET="$TARGET_DIR/para_queue_policy.mjs"
 RUNTIME_POLICY_TARGET="$TARGET_DIR/e2e_agent_runtime_policy.mjs"
 WATCHDOG_TARGET="$TARGET_DIR/run-watchdog.sh"
-CONTROL_HELPERS=(tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs github_para_candidate.mjs credential_vault.mjs codex_model_gateway.mjs pushed_branch_pr.mjs opencode_agent.mjs opencode_sandbox_controller.mjs cli_output_stream.mjs report_only_patch.mjs)
+CONTROL_HELPERS=(tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs github_para_candidate.mjs credential_vault.mjs codex_model_gateway.mjs pushed_branch_pr.mjs opencode_agent.mjs opencode_sandbox_controller.mjs cli_output_stream.mjs report_only_patch.mjs strategic_workspace_controller.mjs strategic_report_controller.mjs)
 LAUNCH_LABEL="${DEVFLEET_PARA_MAIN_AGENT_LABEL:-com.xcmax.para-main-agent.watchdog}"
 BACKUP_SUFFIX="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 
@@ -29,6 +29,7 @@ if [[ -f "$WATCHDOG_TARGET" ]]; then
   SNAPSHOT_TARGETS+=("$WATCHDOG_TARGET")
 fi
 node --test "$SCRIPT_DIR/e2e_agent_runtime_policy.test.mjs"
+node --test "$SCRIPT_DIR/cli_output_stream.test.mjs" "$SCRIPT_DIR/codex_model_gateway.test.mjs"
 node --test "$SCRIPT_DIR/report_only_target_branch.test.mjs"
 node --test "$SCRIPT_DIR/workspace_base_refresh.test.mjs"
 mkdir -p "$TARGET_DIR"

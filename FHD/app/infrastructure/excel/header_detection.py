@@ -18,11 +18,17 @@ try:  # openpyxl 对损坏文件抛 InvalidFileException，不属于 OSError 族
     from openpyxl.utils.exceptions import InvalidFileException
 
     _OPENPYXL_ERRORS: tuple[type[Exception], ...] = (InvalidFileException,)
-except ImportError:  # pragma: no cover - openpyxl 是必装依赖
+except ImportError:
     _OPENPYXL_ERRORS = ()
 
 _MAX_SCAN_ROWS = 20
 _NUMERIC_LIKE = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "-", "+", ".")
+
+
+class HeaderConfirmationRequired(ValueError):
+    def __init__(self, candidate_rows: list[int]) -> None:
+        super().__init__("表头候选不唯一，请确认表头所在行。")
+        self.candidate_rows = tuple(candidate_rows)
 
 
 def _cell_text(value: Any) -> str:
@@ -52,7 +58,7 @@ def detect_header_row_1based(
     *,
     max_scan_rows: int = _MAX_SCAN_ROWS,
 ) -> int | None:
-    """返回 1-based 表头行号；无法判断时返回 ``None``。"""
+    """返回 1-based 表头行号；无候选返回 None，多候选要求明确确认。"""
     if path.suffix.lower() not in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
         return None
     if not zipfile.is_zipfile(path):
@@ -61,7 +67,7 @@ def detect_header_row_1based(
         from openpyxl import load_workbook
 
         workbook = load_workbook(str(path), data_only=True, read_only=True)
-    except _OPENPYXL_ERRORS + RECOVERABLE_ERRORS:  # pragma: no cover
+    except _OPENPYXL_ERRORS + RECOVERABLE_ERRORS:
         logger.debug("header detection skipped: workbook unreadable", exc_info=True)
         return None
     try:
@@ -116,15 +122,14 @@ def detect_header_row_1based(
             if type(header) is not int or not 1 <= header <= len(rows):
                 raise ValueError("header model did not identify a valid header row")
             return header
-        best_row: int | None = None
-        best_score = 0.0
-        for index, row in enumerate(rows, start=1):
-            score = _row_score(row)
-            if score > best_score:
-                best_score, best_row = score, index
-        return best_row if best_score >= 2 else None
+        # Text-rich business rows and report metadata can both resemble headers.
+        # Neither a denser nor an earlier row is proof when several qualify.
+        candidates = [index for index, row in enumerate(rows, start=1) if _row_score(row) >= 2]
+        if len(candidates) > 1:
+            raise HeaderConfirmationRequired(candidates)
+        return candidates[0] if candidates else None
     finally:
         workbook.close()
 
 
-__all__ = ["detect_header_row_1based"]
+__all__ = ["HeaderConfirmationRequired", "detect_header_row_1based"]

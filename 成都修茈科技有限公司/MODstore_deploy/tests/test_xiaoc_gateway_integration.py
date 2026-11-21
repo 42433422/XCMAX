@@ -82,10 +82,10 @@ def gateway_life(database, monkeypatch, tmp_path):
                     "data": [
                         {
                             "model_name": MODEL,
-                            "litellm_params": {"model": "openai/synthetic-life-model"},
                             "model_info": {
+                                "mode": "chat",
                                 "max_input_tokens": 131072,
-                                "max_output_tokens": 4096,
+                                "max_output_tokens": 16384,
                             },
                         }
                     ]
@@ -118,8 +118,7 @@ def gateway_life(database, monkeypatch, tmp_path):
         body = json.loads(request.content)
         assert body["model"] == MODEL
         observations = json.loads(body["messages"][1]["content"])["observations"]
-        ref = observations[0]["ref"]
-        assert ref.startswith("company:assets:")
+        ref = next(row["ref"] for row in observations if row["ref"].startswith("company:assets:"))
         # Both durable reservations must already exist before outbound HTTP.
         with database() as session:
             pending = session.scalars(

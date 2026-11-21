@@ -32,7 +32,7 @@ def _installed(relative):
 
 def test_host_navigation_uses_desktop_catalog_without_uninstalled_business_pages():
     menu = _menu()
-    assert menu["employee-workflow"]["path"] == "/workflow-employee-space"
+    assert menu["employee-workflow"]["path"] == "/employee-workbench"
     assert menu["persy-knowledge"]["path"] == "/persy/knowledge"
     assert menu["business-docking"]["mobile_group"] == "data"
     assert menu["ai-ecosystem"]["path"] == "/ai-ecosystem"
@@ -56,7 +56,7 @@ def test_personal_and_admin_roles_remain_distinct():
 
 def test_employee_child_alias_uses_the_existing_workspace_entry():
     menu = _menu([{"id": "office", "frontend_menu": [{"id": "workflow-employee-space"}]}])
-    assert menu["employee-workflow"]["path"] == "/workflow-employee-space"
+    assert menu["employee-workflow"]["path"] == "/employee-workbench"
     assert "mod-workflow-employee-space" not in menu
 
 

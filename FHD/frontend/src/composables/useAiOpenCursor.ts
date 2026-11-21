@@ -21,6 +21,8 @@ const SNAPSHOT_MAX_SCAN = 3000
 const CURSOR_MOVE_MS = 480
 const WAIT_POLL_MS = 100
 const WAIT_MAX_MS = 15000
+// Match the longest server action budget, and bound every incoming envelope locally.
+const COMMAND_MAX_MS = 30000
 const SCREENSHOT_MAX_WIDTH = 1280
 // Agent 操作时不应触发虚拟光标动画的指令
 const SILENT_ACTIONS = new Set(['snapshot', 'wait', 'verify', 'screenshot'])
@@ -47,6 +49,7 @@ let routerRef: Router | null = null
 let reconnectTimer: number | null = null
 let agentIdleTimer: number | null = null
 let stopSessionWatch: (() => void) | null = null
+let abortConnectionCommands: (() => void) | null = null
 
 /** Agent 活动窗口：收到指令即点亮，静默一段时间后自动收起。 */
 function markAgentActive() {
@@ -128,6 +131,7 @@ function buildSelector(el: Element): string {
 }
 
 function elementText(el: Element): string {
+  if (isSensitiveElement(el)) return '[REDACTED]'
   // 不用 innerText：它会强制布局，在超大页面上逐个读取会让快照卡到超时。
   const raw =
     (el as HTMLInputElement).value ||
@@ -136,6 +140,12 @@ function elementText(el: Element): string {
     el.textContent ||
     ''
   return raw.replace(/\s+/g, ' ').trim().slice(0, 80)
+}
+
+function isSensitiveElement(el: Element): boolean {
+  return Boolean(el.closest('[data-aiopen-private]')) ||
+    (el instanceof HTMLInputElement && (el.type === 'password' ||
+      /(?:^|\s)(?:current-password|new-password|one-time-code)(?:\s|$)/.test(el.autocomplete)))
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +158,7 @@ let refSeq = 0
 
 function resetRefs() {
   refRegistry = new Map()
-  refSeq = 0
+  // Never recycle a ref: a delayed command must not select another snapshot's e1.
 }
 
 function assignRef(el: HTMLElement): string {
@@ -255,7 +265,7 @@ function nodeState(el: Element): Record<string, unknown> {
   if (ariaExpanded !== null) state.expanded = ariaExpanded === 'true'
   const ariaSelected = el.getAttribute('aria-selected')
   if (ariaSelected !== null) state.selected = ariaSelected === 'true'
-  if (typeof input.value === 'string' && input.value && el.tagName === 'INPUT' && input.type !== 'file') {
+  if (!isSensitiveElement(el) && typeof input.value === 'string' && input.value && el.tagName === 'INPUT' && input.type !== 'file') {
     state.value = input.value.slice(0, 80)
   }
   return state
@@ -265,7 +275,7 @@ function findElement(ref?: string, selector?: string, text?: string): HTMLElemen
   if (ref) {
     const el = refRegistry.get(ref.trim())
     // 页面重渲染后节点会脱离文档，直接视为失效，提示重新快照
-    if (el && el.isConnected) return el
+    return el?.isConnected ? el : null
   }
   if (selector) {
     try {
@@ -289,7 +299,7 @@ function describeTarget(params: Record<string, unknown>): string {
   const ref = String(params.ref || '').trim()
   const selector = String(params.selector || '').trim()
   const text = String(params.text || '').trim()
-  return [ref && `ref=${ref}`, selector && `selector=${selector}`, text && `text=${text}`]
+  return [ref && `ref=${ref}`, selector && `selector=${selector}`, text && 'text=[已提供]']
     .filter(Boolean)
     .join(' ') || '(空)'
 }
@@ -348,7 +358,7 @@ async function execSnapshot(): Promise<Record<string, unknown>> {
     }
     // 不做 setTimeout 让出：后台标签页的定时器会被浏览器节流到秒级甚至分钟级，
     // 反而把快照拖过回执超时；同步执行由 deadline 兜底。
-    if (!isVisible(el)) continue
+    if (!isVisible(el) || el.closest('[data-aiopen-private]')) continue
     if (elements.length >= SNAPSHOT_MAX_ELEMENTS) {
       truncated = true
       break
@@ -382,12 +392,14 @@ async function execSnapshot(): Promise<Record<string, unknown>> {
   }
 }
 
-async function execNavigate(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execNavigate(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
   const path = String(params.path || '').trim()
   if (!path) return { success: false, message: 'path 不能为空' }
   if (!routerRef) return { success: false, message: 'router 未就绪' }
+  assertCommandCurrent(isCurrent)
   await routerRef.push(path)
   await sleep(400)
+  assertCommandCurrent(isCurrent)
   return { success: true, route: routerRef.currentRoute.value.fullPath }
 }
 
@@ -445,11 +457,12 @@ async function execType(params: Record<string, unknown>, isCurrent: () => boolea
   }
   dispatchInputChange(input, isCurrent)
   const target = ref || selector || ''
-  pushLog(`type → ${target}（${text.slice(0, 30)}）`)
-  return { success: true, ref: ref || undefined, selector, typed: text }
+  pushLog(`type → ${target}`)
+  return { success: true, ref: ref || undefined, selector, typed: isSensitiveElement(el) ? '[REDACTED]' : text }
 }
 
-async function execScroll(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execScroll(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
+  assertCommandCurrent(isCurrent)
   const ref = params.ref ? String(params.ref) : ''
   const selector = params.selector ? String(params.selector) : ''
   if (ref || selector) {
@@ -457,12 +470,14 @@ async function execScroll(params: Record<string, unknown>): Promise<Record<strin
     if (!el) return { success: false, message: `未找到元素：${describeTarget(params)}` }
     el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     await sleep(320)
+    assertCommandCurrent(isCurrent)
     return { success: true, scrolled_to: ref || selector }
   }
   const deltaY = Number(params.delta_y || 0) || 300
   const scroller = document.querySelector('.route-view-shell, .main-content, main') || document.scrollingElement
   if (scroller) scroller.scrollBy({ top: deltaY, behavior: 'smooth' })
   await sleep(320)
+  assertCommandCurrent(isCurrent)
   return { success: true, delta_y: deltaY }
 }
 
@@ -529,7 +544,7 @@ function decodeBase64(source: string): ArrayBuffer {
   return bytes.buffer as ArrayBuffer
 }
 
-async function execUpload(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
+async function execUpload(params: Record<string, unknown>, isCurrent: () => boolean, signal: AbortSignal): Promise<Record<string, unknown>> {
   let el = findElement(
     params.ref ? String(params.ref) : undefined,
     params.selector ? String(params.selector) : undefined,
@@ -562,7 +577,7 @@ async function execUpload(params: Record<string, unknown>, isCurrent: () => bool
         }
         // The fixed download route checks run ownership and the stored file digest.
         // Keep remote input in encoded IDs; never use it as a request URL or route.
-        const response = await fetch(`/api/agent/runs/${encodeURIComponent(artifact[1])}/artifacts/${encodeURIComponent(artifact[2])}`, { credentials: 'same-origin', mode: 'same-origin', redirect: 'error' })
+        const response = await fetch(`/api/agent/runs/${encodeURIComponent(artifact[1])}/artifacts/${encodeURIComponent(artifact[2])}`, { credentials: 'same-origin', mode: 'same-origin', redirect: 'error', signal })
         assertCommandCurrent(isCurrent)
         if (!response.ok) return { success: false, message: `读取文件失败：${spec.url} → HTTP ${response.status}` }
         blob = await response.blob()
@@ -670,7 +685,7 @@ async function execVerify(params: Record<string, unknown>): Promise<Record<strin
     checks.push({
       check: '控件值',
       ok: Boolean(element) && actual === expected,
-      detail: `期望「${expected}」，实际「${actual}」`,
+      detail: element && isSensitiveElement(element) ? '敏感控件值已隐藏' : `期望「${expected}」，实际「${actual}」`,
     })
   }
   if (params.text) {
@@ -700,6 +715,7 @@ async function execScreenshot(params: Record<string, unknown>, isCurrent: () => 
   const selector = params.selector ? String(params.selector) : ''
   const targetEl = ref || selector ? findElement(ref || undefined, selector || undefined) : document.body
   if (!targetEl) return { success: false, message: `未找到截图区域：${describeTarget(params)}` }
+  if (isSensitiveElement(targetEl)) return { success: false, code: 'SENSITIVE_TARGET', message: '敏感控件不允许截图' }
   const maxWidth = Math.min(Math.max(Number(params.max_width) || SCREENSHOT_MAX_WIDTH, 320), 4096)
   const rect = targetEl.getBoundingClientRect()
   const naturalWidth = Math.max(
@@ -715,6 +731,7 @@ async function execScreenshot(params: Record<string, unknown>, isCurrent: () => 
     const { toPng } = await import('html-to-image')
     if (!isCurrent()) return { success: false, message: '截图已取消' }
     const dataUrl = await toPng(targetEl as HTMLElement, {
+      filter: (node) => !(node instanceof Element) || !isSensitiveElement(node),
       pixelRatio,
       cacheBust: true,
       backgroundColor: window.getComputedStyle(document.body).backgroundColor || '#ffffff',
@@ -745,12 +762,12 @@ async function execScreenshot(params: Record<string, unknown>, isCurrent: () => 
   }
 }
 
-async function executeCommand(action: string, params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
+async function executeCommand(action: string, params: Record<string, unknown>, isCurrent: () => boolean, signal: AbortSignal): Promise<Record<string, unknown>> {
   switch (action) {
     case 'snapshot':
       return execSnapshot()
     case 'navigate':
-      return execNavigate(params)
+      return execNavigate(params, isCurrent)
     case 'click':
       return execClick(params, isCurrent)
     case 'type':
@@ -758,7 +775,7 @@ async function executeCommand(action: string, params: Record<string, unknown>, i
     case 'select':
       return execSelect(params, isCurrent)
     case 'upload':
-      return execUpload(params, isCurrent)
+      return execUpload(params, isCurrent, signal)
     case 'wait':
       return execWait(params, isCurrent)
     case 'verify':
@@ -766,7 +783,7 @@ async function executeCommand(action: string, params: Record<string, unknown>, i
     case 'screenshot':
       return execScreenshot(params, isCurrent)
     case 'scroll':
-      return execScroll(params)
+      return execScroll(params, isCurrent)
     default:
       return { success: false, message: `未知指令：${action}` }
   }
@@ -788,6 +805,9 @@ function connect() {
   const connection = ws
   const sessionCurrent = captureAuthSession()
   const isCurrent = () => aiopenCursorEnabled.value && ws === connection && sessionCurrent()
+  let commandQueue = Promise.resolve()
+  const commands = new Map<string, AbortController>()
+  abortConnectionCommands = () => { for (const command of commands.values()) command.abort() }
   stopSessionWatch = watch(sessionCurrent, () => {
     disconnect()
     scheduleReconnect()
@@ -811,31 +831,58 @@ function connect() {
       pushLog(`会话登记：${aiopenCursorSessionId.value}`)
       return
     }
+    if (msg.type === 'cancel') {
+      commands.get(String(msg.id || ''))?.abort()
+      return
+    }
     if (msg.type === 'command') {
+      const id = String(msg.id || '')
+      if (!id || commands.has(id)) return
+      const command = new AbortController()
+      commands.set(id, command)
+      const timeout = msg.timeout_ms === undefined ? COMMAND_MAX_MS : msg.timeout_ms
+      let ttl = typeof timeout === 'number' && Number.isFinite(timeout) ? timeout : 0
+      if (ttl < 0) ttl = 0
+      if (ttl > COMMAND_MAX_MS) ttl = COMMAND_MAX_MS
+      const deadline = performance.now() + ttl
+      const deadlineTimer = window.setTimeout(() => command.abort(), ttl)
+      const commandCurrent = () => isCurrent() && !command.signal.aborted && performance.now() < deadline
       const action = String(msg.action || '')
       const params = (msg.params && typeof msg.params === 'object' ? msg.params : {}) as Record<string, unknown>
-      markAgentActive()
-      pushLog(`收到指令：${action}`)
-      let result: Record<string, unknown>
-      try {
-        result = await executeCommand(action, params, isCurrent)
-      } catch (err) {
-        result = { success: false, message: String((err as Error)?.message || err) }
-      }
-      if (!isCurrent()) return
-      if (!SILENT_ACTIONS.has(action)) {
-        // 快照/等待/校验/截图不收光标；操作类指令完成后短暂保留再淡出
-        window.setTimeout(() => {
-          if (!isCurrent()) return
+      commandQueue = commandQueue.then(async () => {
+        let result: Record<string, unknown>
+        try {
+          assertCommandCurrent(commandCurrent)
+          markAgentActive()
+          pushLog(`收到指令：${action}`)
+          result = await executeCommand(action, params, commandCurrent, command.signal)
+        } catch (err) {
+          result = { success: false, message: String((err as Error)?.message || err) }
+        } finally {
+          commands.delete(id)
+          window.clearTimeout(deadlineTimer)
+        }
+        if (!isCurrent()) return
+        if (!commandCurrent()) {
+          result = { success: false, code: 'COMMAND_CANCELLED', message: '指令已取消或超时，需读取页面确认结果' }
+          cursorClicking.value = false
           cursorVisible.value = false
           cursorActionLabel.value = ''
-        }, 4000)
-      }
-      try {
-        connection.send(JSON.stringify({ type: 'result', id: msg.id, result }))
-      } catch {
-        /* 连接已断，无法回执 */
-      }
+        } else if (!SILENT_ACTIONS.has(action)) {
+          // 快照/等待/校验/截图不收光标；操作类指令完成后短暂保留再淡出
+          window.setTimeout(() => {
+            if (!isCurrent()) return
+            cursorVisible.value = false
+            cursorActionLabel.value = ''
+          }, 4000)
+        }
+        try {
+          connection.send(JSON.stringify({ type: 'result', id, result }))
+        } catch {
+          /* 连接已断，无法回执 */
+        }
+      })
+      await commandQueue
     }
   }
   ws.onclose = () => {
@@ -860,6 +907,8 @@ function scheduleReconnect() {
 }
 
 function disconnect() {
+  abortConnectionCommands?.()
+  abortConnectionCommands = null
   stopSessionWatch?.()
   stopSessionWatch = null
   if (reconnectTimer != null) {

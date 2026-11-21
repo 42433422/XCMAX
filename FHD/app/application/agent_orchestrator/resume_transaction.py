@@ -1,6 +1,7 @@
 """Resume a paused run, its session and its queue in one host transaction."""
 
 import json
+import time
 from typing import Any
 
 from app.application.agent_orchestrator.approval_grant import (
@@ -44,6 +45,10 @@ def retry_and_enqueue(
     principal_id: str,
     runtime_context: dict[str, Any],
     authenticated_binding: dict[str, Any] | None = None,
+    authenticated_actor_binding: dict[str, Any] | None = None,
+    verification_lease_token: str = "",
+    expected_execution: Any = None,
+    verification_time: float | None = None,
 ) -> AgentRun | None:
     """CAS a safe continuation and its queue without changing run/step identities."""
     from app.application.agent_orchestrator.run_lifecycle import (
@@ -61,17 +66,31 @@ def retry_and_enqueue(
             .with_for_update()
             .one_or_none()
         )
+        if verification_lease_token and (
+            execution is None
+            or expected_execution is None
+            or queue._to_model(execution).to_dict() != expected_execution.to_dict()
+            or execution.state not in {"blocked", "failed"}
+            or execution.lease_owner
+            or execution.lease_expires_at
+        ):
+            raise ApprovalGrantError("原执行队列已变化或仍有未知结果，不能自动确认")
         if execution is not None:
             if not execution_requeue_allowed(str(execution.state), retryable=True):
                 raise ApprovalGrantError("执行器仍在运行或任务已经结束，不能重入队列")
-            if (
-                db.query(AgentTaskExecutionRecord)
-                .filter(
-                    AgentTaskExecutionRecord.run_id == run_id,
-                    AgentTaskExecutionRecord.state == execution.state,
-                    AgentTaskExecutionRecord.execution_count == execution.execution_count,
+            fence = db.query(AgentTaskExecutionRecord).filter(
+                AgentTaskExecutionRecord.run_id == run_id,
+                AgentTaskExecutionRecord.state == execution.state,
+                AgentTaskExecutionRecord.execution_count == execution.execution_count,
+            )
+            if verification_lease_token:
+                from app.application.agent_orchestrator.verification_recovery import (
+                    _stopped_queue_conditions,
                 )
-                .update(
+
+                fence = fence.filter(*_stopped_queue_conditions(expected_execution))
+            if (
+                fence.update(
                     {AgentTaskExecutionRecord.updated_at: execution.updated_at},
                     synchronize_session=False,
                 )
@@ -87,15 +106,54 @@ def retry_and_enqueue(
             return run
         if error := safe_continuation_error(run):
             raise ApprovalGrantError(error)
-        if unresolved_effects(db, run, clear_confirmed=True):
-            raise ApprovalGrantError("任务仍有未确认的业务写入，需要人工核对")
-        renew_approval_session(
-            run,
-            principal_id=principal_id,
-            authenticated_binding=authenticated_binding,
-            operation="retry",
-        )
-        run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
+        if verification_lease_token:
+            from app.application.agent_orchestrator.task_execution_models import _task_id_of
+            from app.application.agent_orchestrator.task_models import tenant_id_of_run
+            from app.application.agent_orchestrator.verification_recovery import (
+                VERIFICATION_RECOVERY_KEY,
+                verification_can_finalize,
+            )
+            from app.domain.task_lifecycle.control import SessionBook
+            from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
+            recovery = run.metadata.get(VERIFICATION_RECOVERY_KEY) or {}
+            now = time.time() if verification_time is None else verification_time
+            if (
+                recovery.get("lease_token") != verification_lease_token
+                or float(recovery.get("lease_until") or 0) <= now
+                or principal_id != run.user_id
+                or execution is None
+                or (execution.task_id, execution.user_id, execution.tenant_id)
+                != (_task_id_of(run), run.user_id, tenant_id_of_run(run))
+                or runtime_context
+                or authenticated_binding is not None
+                or authenticated_actor_binding is not None
+                or not verification_can_finalize(run)
+                or validate_actor_context(run.metadata.get("runtime_context") or {}) is not None
+            ):
+                raise ApprovalGrantError("原回执或授权未满足自动最终确认条件")
+            # Observation is not effect reconciliation. Even a successful readback
+            # cannot clear an outstanding effect, nor renew a login/approval.
+            if SessionBook(db).get("agent", tenant_id_of_run(run), run.run_id).get("effects"):
+                raise ApprovalGrantError("原任务仍有未结清副作用，核验只能更新观察")
+            run.metadata[VERIFICATION_RECOVERY_KEY] = {
+                **recovery,
+                "status": "queued",
+                "lease_until": 0,
+                "next_attempt_at": 0,
+                "reason_code": "verified_completed_receipts",
+            }
+        else:
+            if unresolved_effects(db, run, clear_confirmed=True):
+                raise ApprovalGrantError("任务仍有未确认的业务写入，需要人工核对")
+            renew_approval_session(
+                run,
+                principal_id=principal_id,
+                authenticated_binding=authenticated_binding,
+                authenticated_actor_binding=authenticated_actor_binding,
+                operation="retry",
+            )
+            run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
         if (
             db.query(AgentRunRecord)
             .filter(
@@ -106,7 +164,11 @@ def retry_and_enqueue(
             != 1
         ):
             raise ApprovalGrantError("任务状态已变化，请刷新后重试")
-        prepare_safe_continuation(run, requested_by=principal_id, reason="explicit_retry")
+        prepare_safe_continuation(
+            run,
+            requested_by=principal_id,
+            reason="verified_completed_receipts" if verification_lease_token else "explicit_retry",
+        )
         runs.save_in_session(db, run, allow_safe_retry=True)
         queue.enqueue_in_session(db, run, requested_by=principal_id, retryable=True)
     return run
@@ -120,6 +182,7 @@ def resume_and_enqueue(
     principal_id: str,
     runtime_context: dict[str, Any],
     authenticated_binding: dict[str, Any] | None = None,
+    authenticated_actor_binding: dict[str, Any] | None = None,
 ) -> AgentRun | None:
     with runs.transaction() as db:
         with queue.transaction(read_only=True) as queue_db:
@@ -161,10 +224,13 @@ def resume_and_enqueue(
             raise ApprovalGrantError("任务执行结果尚需人工核对，不能恢复执行")
         if any(step.status == "running" for step in run.steps):
             raise ApprovalGrantError("任务存在执行结果未确认的步骤，需要先核对")
+        if unresolved_effects(db, run, clear_confirmed=True):
+            raise ApprovalGrantError("任务仍有未确认的业务写入，需要人工核对")
         renew_approval_session(
             run,
             principal_id=principal_id,
             authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
             operation="resume",
         )
         context = merge_runtime_context(run, runtime_context)

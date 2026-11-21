@@ -87,6 +87,7 @@ def _timestamp(value: Any) -> str:
 
 def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
     """Project original review evidence, never customer text or a model's verdict."""
+    from modstore_server.strategic_customer_outcomes import KNOWN_DELIVERY_ATTRIBUTIONS
     from modstore_server.strategy_bets import (
         CUSTOMER_ACCEPTANCE_METRIC,
         DOMAIN_METRIC,
@@ -101,6 +102,7 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
     observed = review.get("observation_complete") is True
     revenue = _number(business.get("revenue_cents"), integer=True)
     verified = business.get("status") == "verified" and revenue is not None and revenue >= 0
+    attribution = business.get("attribution")
     status, summary = "business_measurement_unknown", "原经营测量仍有缺失证据。"
     if not review:
         status, summary = (
@@ -198,8 +200,9 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
         "window_end": _timestamp(business.get("window_end")),
         "attribution": (
             "artifact_acceptance_and_order_outcome_not_incremental_causality"
-            if business.get("attribution")
-            == "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality"
+            if verified
+            and isinstance(attribution, str)
+            and attribution in KNOWN_DELIVERY_ATTRIBUTIONS
             else "unverified"
         ),
         "decision": (
