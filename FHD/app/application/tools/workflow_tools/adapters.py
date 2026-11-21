@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 from typing import Literal, Protocol
 
@@ -110,13 +109,30 @@ def crud_tools() -> dict[str, JsonTool]:
 
 
 class PandasTranslator(Protocol):
-    def translate(self, natural_language: str, df: pd.DataFrame) -> str | None: ...
+    def translate(
+        self,
+        natural_language: str,
+        df: pd.DataFrame,
+        *,
+        error_feedback: str | None = None,
+    ) -> str | None: ...
 
 
-def translate_pandas(natural_language: str, df: pd.DataFrame) -> str | None:
-    legacy = importlib.import_module("app.legacy.excel_text_to_pandas")
-    translator: PandasTranslator = legacy.ExcelTextToPandas()
-    return translator.translate(natural_language, df)
+_TRANSLATOR: PandasTranslator | None = None
+
+
+def translate_pandas(
+    natural_language: str,
+    df: pd.DataFrame,
+    *,
+    error_feedback: str | None = None,
+) -> str | None:
+    global _TRANSLATOR
+    if _TRANSLATOR is None:
+        from app.infrastructure.excel.pandas_translator import LLMPandasTranslator
+
+        _TRANSLATOR = LLMPandasTranslator()
+    return _TRANSLATOR.translate(natural_language, df, error_feedback=error_feedback)
 
 
 def customer_hint(path: str, sheet: str | None) -> str:
