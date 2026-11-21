@@ -534,6 +534,7 @@ def test_waiting_run_overrides_stale_completed_interaction():
     assert result["run_id"] == result["agent_run_id"] == run.run_id
     assert result["status"] == result["execution_state"] == "waiting_user"
     assert result["needs_user_input"] is True
+    assert result["data"]["action"] == "workflow_waiting"
     orchestrator.return_value.get_run.assert_called_once_with(run.run_id)
 
 def test_write_intent_requires_natural_key_instead_of_query_first():
