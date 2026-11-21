@@ -133,8 +133,19 @@ def test_voice_command_preserves_unknown_write_receipt(client):
     assert receipt["result"]["retryable"] is False
 
 
-@pytest.mark.parametrize("kind", ["failed", "unknown", "nested_partial", "not_executed"])
-def test_voice_command_hides_tool_exception_without_reporting_execution(client, kind):
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "failed",
+        "unknown",
+        "nested_partial",
+        "not_executed",
+        "workflow_partial",
+        "workflow_unknown",
+        "workflow_not_executed",
+    ],
+)
+def test_voice_command_sanitizes_failure_and_preserves_execution_receipt(client, kind):
     private = "Traceback /private/tool.db token=private-voice-failure"
     result = {"success": False, "response": private, "message": private, "run_id": "existing-run"}
     if kind == "unknown":
@@ -152,6 +163,51 @@ def test_voice_command_hides_tool_exception_without_reporting_execution(client, 
                 },
             }
         }
+    if kind.startswith("workflow_"):
+        from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+        from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+        from app.application.workflow.workflow_types import PlanGraph
+
+        outcome = kind.removeprefix("workflow_")
+        steps = [
+            AgentStep(
+                node_id="failed",
+                tool_id="customers",
+                action="create",
+                status="failed",
+                error=private,
+                output={
+                    "success": False,
+                    **({"outcome": "unknown"} if outcome == "unknown" else {}),
+                },
+            )
+        ]
+        if outcome == "partial":
+            steps.insert(
+                0,
+                AgentStep(
+                    node_id="written",
+                    tool_id="customers",
+                    action="create",
+                    status="completed",
+                    output={"success": True, "message": private},
+                ),
+            )
+        run = AgentRun(
+            user_id="user-7",
+            message="新增客户",
+            run_id="existing-run",
+            status="failed",
+            steps=steps,
+        )
+        result = AIChatWorkflowResponseMixin()._format_agent_run_response(
+            PlanGraph(plan_id="existing-plan", intent="customer_write"),
+            run,
+        )
+        assert result["execution"]["outcome"] == outcome
+        assert "execution" not in result["data"]["data"]
+        result["data"]["data"]["approval_request_id"] = "existing-approval"
+        result["execution"]["error"] = private
     with (
         patch(
             "app.fastapi_routes.voice_routes._platform_transcribe",
@@ -175,18 +231,27 @@ def test_voice_command_hides_tool_exception_without_reporting_execution(client, 
         )
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["executed"] is False and data["result"]["success"] is False
+    committed = kind in {"nested_partial", "workflow_partial"}
+    assert data["executed"] is committed and data["result"]["success"] is False
     assert private not in response.text
-    if kind in {"unknown", "nested_partial"}:
+    if kind in {"unknown", "nested_partial", "workflow_partial", "workflow_unknown"}:
+        assert data["reason"] == "requires_reconciliation"
         assert data["result"]["requires_reconciliation"] and data["result"]["retryable"] is False
         assert data["result"]["run_id"] == "existing-run"
-    if kind in {"nested_partial", "not_executed"}:
+        assert "勿重复提交" in data["result"]["message"]
+    if kind in {"nested_partial", "not_executed"} or kind.startswith("workflow_"):
         assert data["result"]["approval_request_id"] == "existing-approval"
         assert data["result"]["plan_id"] == "existing-plan"
         receipt = data["result"]["data"]["data"]["execution"]
-        assert receipt["committed"] is (kind == "nested_partial")
-        assert receipt["outcome"] == ("partial" if kind == "nested_partial" else "not_executed")
-    if kind == "not_executed":
+        assert receipt["committed"] is committed
+        outcome = kind.removeprefix("workflow_").removeprefix("nested_")
+        assert receipt == {
+            "committed": committed,
+            "effect": "none" if outcome == "not_executed" else outcome,
+            "outcome": outcome,
+        }
+        assert data["result"]["execution"] == receipt
+    if kind in {"not_executed", "workflow_not_executed"}:
         assert data["result"]["execution_state"] == "not_executed"
         assert data["result"].get("requires_reconciliation") is not True
 

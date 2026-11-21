@@ -60,7 +60,9 @@ def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload.get("data")
     details = data.get("data") if isinstance(data, dict) else None
     details = details if isinstance(details, dict) else {}
-    raw_execution = details.get("execution")
+    raw_execution = payload.get("execution")
+    if not isinstance(raw_execution, dict):
+        raw_execution = details.get("execution")
     execution: dict[str, Any] = {}
     if isinstance(raw_execution, dict):
         if type(raw_execution.get("committed")) is bool:
@@ -87,9 +89,13 @@ def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
     run_id = identity.get("agent_run_id") or identity.get("run_id")
     if run_id:
         identity.update(run_id=run_id, agent_run_id=run_id)
-    receipt = {"data": {"data": {**identity, "execution": execution}}} if execution else {}
+    receipt = (
+        {"execution": execution, "data": {"data": {**identity, "execution": execution}}}
+        if execution
+        else {}
+    )
     # Waiting for confirmation is a successful control reply; only failed replies
-    # use the nested execution receipt to decide whether writes need reconciliation.
+    # use the workflow execution receipt to decide whether writes need reconciliation.
     if execution_result_outcome_unknown(payload) or (
         not payload.get("success")
         and (execution_result_outcome_unknown(execution) or execution.get("committed") is True)
