@@ -594,7 +594,16 @@ def _main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     result = collect_context() if args.command == "context" else plan_strategy(dry_run=args.dry_run)
-    print(json.dumps(result, ensure_ascii=False, sort_keys=True, default=str))
+    summary = {
+        "ok": bool(result.get("ok", True)),
+        "status": result.get("status", "observed" if args.command == "context" else "planned"),
+        "dry_run": bool(result.get("dry_run", False)),
+        "candidate_count": len(result.get("candidates") or []),
+        "registered_count": len(result.get("registered") or []),
+        "dispatched_count": len(result.get("dispatched") or []),
+        "active_bet_count": len(result.get("active_bets") or []),
+    }
+    print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
     return 0 if result.get("ok", True) else 1
 
 

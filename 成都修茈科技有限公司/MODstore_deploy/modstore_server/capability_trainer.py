@@ -244,7 +244,6 @@ def append_cases(
                 row = {
                     "case_id": case_id,
                     "surface": surface,
-                    "resource_id": resource,
                     **(
                         {"generation_context": sample["generation_context"]}
                         if surface == "workflow_nl_prompt"
