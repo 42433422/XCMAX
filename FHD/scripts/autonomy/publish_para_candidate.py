@@ -126,6 +126,17 @@ def validate_binding(manifest, state, run, env):
 def validate_feedback_isolation(artifacts, state, manifest, env, download):
     """Require the trusted execute job's immutable receipt, not candidate claims."""
     allocation = state.get("model_allocation") or {}
+    repair = state.get("kind") == ORIGINAL_PR_REPAIR
+    budget = state.get("strategic_budget") or {}
+    if repair and (
+        budget.get("kind") != "github_opencode_workspace"
+        or budget.get("original_request_kind") != ORIGINAL_PR_REPAIR
+        or budget.get("original_request_id") != env["PARA_GITHUB_REQUEST_ID"]
+        or budget.get("source_sha") != env["GITHUB_SHA"]
+        or budget.get("model") != allocation.get("model")
+        or budget.get("provider") != allocation.get("provider")
+    ):
+        raise ValueError(REPAIR_CREDENTIAL_BLOCK)
     rows = [row for row in artifacts.get("artifacts", [])
             if row.get("name") == f"para-execution-{env['PARA_GITHUB_REQUEST_ID']}"]
     if (allocation.get("status") != "admitted"
@@ -386,7 +397,7 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
         LIFE_REFLECTION_REPAIR,
     }
     def require_feedback_isolation():
-        if not customer_repair:
+        if not customer_repair and not original:
             return
         with opener(state_request, timeout=30) as response:
             latest = json.load(response)
@@ -417,8 +428,6 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
         if existing and existing != f"{target}\trefs/heads/{branch}":
             raise ValueError("publication_branch_already_diverged")
         if not existing:
-            if original:
-                raise ValueError(REPAIR_CREDENTIAL_BLOCK)
             require_feedback_isolation()
             # No force update, no main branch writes. Ambiguous responses are reconciled by exact ref.
             git("push", remote, f"{target}:refs/heads/{branch}")
@@ -428,6 +437,7 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
         ):
             raise ValueError("publication_push_unconfirmed")
         if original:
+            require_feedback_isolation()
             return _publication_receipt(
                 env,
                 artifact,

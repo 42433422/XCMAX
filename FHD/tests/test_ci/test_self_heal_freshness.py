@@ -631,6 +631,128 @@ def test_unknown_dispatch_is_not_blindly_reissued(status) -> None:
     assert writes == dispatches == []
 
 
+class LostDispatchGitHub(RecoveryGitHub):
+    """The intent survives a lost POST response; Actions later exposes the run."""
+
+    def __init__(self, status="unknown", **changes):
+        self.identity = "f73394e0-4971-40dd-bf81-f4fb0af99b71"
+        record = {
+            "repo": REPO,
+            "issue_number": 1,
+            "base_branch": "feat/x",
+            "control_task_id": "",
+            "status": status,
+            "dispatch_run_id": 0,
+            "dispatch_request_id": self.identity,
+            "requested_at": 1_790_000_000,
+        }
+        super().__init__(
+            comments=[
+                {
+                    "id": 31,
+                    "user": BOT,
+                    "body": heal.recovery.receipt_body(record),
+                }
+            ],
+            implementation_run={
+                "status": "in_progress",
+                "conclusion": None,
+                "repository": {"full_name": REPO},
+                "head_sha": NEW,
+                "display_title": f"AI Issue Implement #1 [dispatch:{self.identity}]",
+                **changes,
+            },
+        )
+        self.runs = [self.implementation_run]
+
+    def __call__(self, path, params):
+        if path.endswith("/actions/workflows/fhd-ai-issue-implement.yml/runs"):
+            assert params["event"] == "workflow_dispatch" and params["branch"] == "main"
+            assert params["created"].startswith(">=2026-")
+            return 200, {"workflow_runs": self.runs, "total_count": len(self.runs)}
+        return super().__call__(path, params)
+
+
+@pytest.mark.parametrize("status", ["unknown", "pending", "accepted_unknown_run"])
+def test_lost_dispatch_readback_persists_original_run_without_reposting(status):
+    gh = LostDispatchGitHub(status)
+    result, writes, dispatches = _recover(gh)
+    assert result["reason"] == "dispatch_run_recovered" and result["dispatch_run_id"] == 9
+    assert dispatches == [] and len(writes) == 1
+    assert writes[0][:2] == ("PATCH", f"/repos/{REPO}/issues/comments/31")
+    gh.comments[0]["body"] = writes[0][2]["body"]
+    # A fresh observer now follows the exact run; no new control task is created.
+    result, writes, dispatches = _recover(gh)
+    assert result["reason"] == "implementation_run_active"
+    assert writes == dispatches == []
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"repository": {"full_name": "someone/else"}},
+        {"path": ".github/workflows/unrelated.yml"},
+        {"run_attempt": 0},
+        {"event": "pull_request"},
+    ],
+)
+def test_lost_dispatch_requires_original_native_identity(changes):
+    result, writes, dispatches = _recover(LostDispatchGitHub(**changes))
+    assert result["reason"] == "dispatch_run_identity_mismatch"
+    assert writes == dispatches == []
+
+
+def test_lost_dispatch_ambiguous_missing_and_dry_observations_never_mutate():
+    gh = LostDispatchGitHub()
+    gh.runs.append({**gh.implementation_run, "id": 10})
+    result, writes, dispatches = _recover(gh)
+    assert result["reason"] == "dispatch_run_identity_ambiguous"
+    assert writes == dispatches == []
+    gh.runs.clear()
+    result, writes, dispatches = _recover(gh)
+    assert result["reason"] == "dispatch_run_not_yet_visible"
+    assert writes == dispatches == []
+    result, writes, dispatches = _recover(LostDispatchGitHub(), dry_run=True)
+    assert result["reason"] == "dispatch_run_recovered"
+    assert writes == dispatches == []
+
+
+def test_truncated_actions_inventory_never_adopts_a_run():
+    gh = LostDispatchGitHub()
+
+    def incomplete(path, params):
+        status, data = gh(path, params)
+        if path.endswith("/actions/workflows/fhd-ai-issue-implement.yml/runs"):
+            data["total_count"] = len(data["workflow_runs"]) + 1
+        return status, data
+
+    with pytest.raises(fr.LookupFailed, match="incomplete collection"):
+        heal.recovery.reconcile_one(
+            gh.issues[0],
+            repo=REPO,
+            get=incomplete,
+            dry_run=False,
+            write=lambda *args: pytest.fail("incomplete inventory wrote a receipt"),
+            dispatch=lambda *args, **kwargs: pytest.fail("incomplete inventory redispatched"),
+        )
+
+
+def test_full_last_page_is_complete_at_exact_inventory_limit():
+    pages = []
+
+    def get(path, params):
+        page = params["page"]
+        pages.append(page)
+        return 200, {
+            "total_count": 1000,
+            "workflow_runs": [{"id": n} for n in range((page - 1) * 100 + 1, page * 100 + 1)],
+        }
+
+    rows = list(fr.pages(get, "/actions/runs", key="workflow_runs"))
+    assert len(rows) == 1000 and rows[-1]["id"] == 1000
+    assert pages == list(range(1, 11))
+
+
 def test_failed_exact_run_reuses_original_request_key_by_rerunning_it() -> None:
     result, writes, dispatches = _recover(
         RecoveryGitHub(comments=[_dispatch_receipt("accepted", 9)])

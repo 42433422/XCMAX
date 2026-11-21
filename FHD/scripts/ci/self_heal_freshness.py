@@ -110,6 +110,7 @@ def _get(get: Getter, path: str, params: dict[str, Any] | None = None) -> Any:
 
 def pages(get: Getter, path: str, params: dict[str, Any] | None = None, *, key: str = ""):
     """One bounded REST pagination policy; a truncated read never proves absence."""
+    count, expected, ids = 0, None, set()
     for page in range(1, 11):
         status, data = get(path, {**(params or {}), "per_page": 100, "page": page})
         rows = data.get(key) if key and isinstance(data, dict) else data
@@ -119,8 +120,22 @@ def pages(get: Getter, path: str, params: dict[str, Any] | None = None, *, key: 
             or any(not isinstance(r, dict) for r in rows)
         ):
             raise LookupFailed(f"GET {path} page {page} -> {status}: invalid collection")
+        if key == "workflow_runs":
+            for row in rows:
+                identity = row.get("id")
+                if type(identity) is not int or identity < 1 or identity in ids:
+                    raise LookupFailed(f"GET {path}: invalid or duplicate run IDs")
+                ids.add(identity)
+        total = data.get("total_count") if key and isinstance(data, dict) else None
+        if total is not None:
+            if type(total) is not int or total < 0 or (expected is not None and expected != total):
+                raise LookupFailed(f"GET {path}: collection changed during pagination")
+            expected = total
+        count += len(rows)
+        if expected is not None and (count > expected or (len(rows) < 100 and count != expected)):
+            raise LookupFailed(f"GET {path}: incomplete collection")
         yield from rows
-        if len(rows) < 100:
+        if len(rows) < 100 or (expected is not None and count == expected):
             return
     raise LookupFailed(f"GET {path}: pagination limit reached")
 

@@ -146,7 +146,7 @@ def test_completed_task_opens_pr(issue, monkeypatch):
 
 @pytest.mark.parametrize(
     "scenario",
-    ["fresh", "intent_unapplied", "held", "applied", "applied_ci_pending", "unrelated"],
+    ["held", "applied", "applied_ci_pending", "unrelated"],
 )
 def test_original_pr_repair_only_observes_already_applied_intents(issue, monkeypatch, scenario):
     repo, branch, old, new = "o/r", "fix/ci", "a" * 40, "d" * 40

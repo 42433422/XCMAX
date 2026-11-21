@@ -101,7 +101,20 @@ def reconcile(db, task, client):
             state = "reconciling"
     if state == "running" and any(s.get("result_pending") for s in raw.get("subTasks", [])):
         state, reason = "reconciling", "executor_result_pending_no_automatic_replay"
-    transition(db, task, state, reason, snapshot=execution_view(raw))
+    snapshot = execution_view(raw)
+    if stop_requested:
+        from modstore_server.mac_control_receipts import (
+            awaiting_cancellation_receipt,
+            confirmed_cancellation,
+        )
+
+        proof = confirmed_cancellation(db, task, raw)
+        if proof:
+            state, reason = "cancelled", "executor_stop_confirmed_usage_not_settled"
+            snapshot["cancellation"] = proof
+        elif awaiting_cancellation_receipt(db, task, raw):
+            state, reason = "cancel_requested", "waiting_for_original_device_stop_receipt"
+    transition(db, task, state, reason, snapshot=snapshot)
 
 
 def _ticket_dispatch_blocked(db, request, *, lock=False):

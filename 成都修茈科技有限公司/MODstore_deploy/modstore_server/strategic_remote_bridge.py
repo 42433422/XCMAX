@@ -329,7 +329,12 @@ def native_run(request: dict[str, Any], run_id: Any) -> dict[str, Any]:
 
     if type(run_id) is not int or run_id < 1:
         raise PortfolioError("remote report requires its native GitHub run")
-    run = _worker_run(github, request["repository"], run_id, request["binding"]["receipt_id"])
+    dispatch_id = (
+        request["original_request_id"]
+        if request.get("kind") == "github_opencode_workspace"
+        else request["binding"]["receipt_id"]
+    )
+    run = _worker_run(github, request["repository"], run_id, dispatch_id)
     if run.get("head_sha") != request["source_sha"]:
         raise PortfolioError("remote controller differs from the approved source SHA")
     return dict(run)

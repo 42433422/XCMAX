@@ -12,7 +12,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
+import subprocess
+import sys
+import zipfile
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +31,165 @@ REPORT_FILENAMES = (
     "customer-value-report.json",
 )
 STAGES = ("payment", "installation", "first_use", "outcome", "acceptance", "reuse")
+SOURCE_WORKFLOWS = {
+    "convergence": ("fhd-release-convergence-readback.yml", "xcagi-release-convergence"),
+    "security/current": ("fhd-security-full-scan.yml", "xcagi-security-release-reports"),
+    "security/previous": ("fhd-security-full-scan.yml", "xcagi-security-release-reports"),
+    "rollback": ("fhd-upgrade-rollback-evidence.yml", "xcagi-upgrade-rollback-evidence"),
+}
+MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
+
+
+def resolve_product_version(value: str | None = None) -> str:
+    """Resolve names from the existing catalog; this does not promote a release."""
+    catalog = json.loads(
+        (Path(__file__).resolve().parents[2] / "config/download_release.json").read_text()
+    )
+    version = value or catalog["download_version"]
+    versions = {row["version"] for row in catalog["release_history"]}
+    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+){3}", version) or version not in versions:
+        raise ValueError("product version is not registered in download_release.json")
+    return version
+
+
+def _github_api(path: str) -> dict:
+    response = subprocess.run(
+        ["gh", "api", path], capture_output=True, check=True, timeout=60,
+    )
+    if len(response.stdout) > MAX_ARCHIVE_BYTES:
+        raise ValueError("GitHub response exceeds the evidence limit")
+    data = json.loads(response.stdout)
+    if not isinstance(data, dict):
+        raise ValueError("GitHub returned an invalid evidence object")
+    return data
+
+
+def _download(path: str, destination: Path) -> None:
+    with destination.open("xb") as stream:
+        subprocess.run(
+            ["gh", "api", path], stdout=stream, stderr=subprocess.PIPE,
+            check=True, timeout=180,
+        )
+
+
+def _ancestor(sha: str) -> bool:
+    return subprocess.run(
+        ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+        capture_output=True, check=False, timeout=15,
+    ).returncode == 0
+
+
+def _stamp(value: Any) -> datetime:
+    result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if result.tzinfo is None:
+        raise ValueError("evidence timestamps must include a timezone")
+    return result.astimezone(UTC)
+
+
+def collect_sources(
+    *, repository: str, release_sha: str, runs: dict[str, str], output_dir: Path,
+    api=_github_api, download=_download, ancestor=_ancestor,
+) -> dict[str, Any]:
+    """Read original Actions artifacts; never trust a downloaded PASS by name alone.
+
+    The controller SHA may be newer than the release under observation.  Both
+    must belong to main; the report validators bind the measured release SHA.
+    Artifact creation is bounded by the exact current run attempt, so evidence
+    from a previous attempt cannot satisfy a successful rerun.
+    """
+    if (not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
+            or not FULL_SHA.fullmatch(release_sha) or not ancestor(release_sha)):
+        raise ValueError("invalid repository or release outside main")
+    if set(runs) != set(SOURCE_WORKFLOWS):
+        raise ValueError("all original closure evidence sources are required")
+    output_dir.mkdir(parents=True, exist_ok=False)
+    proof: dict[str, Any] = {"release_sha": release_sha, "repository": repository, "sources": {}}
+    for label, (workflow, name) in SOURCE_WORKFLOWS.items():
+        run_id = str(runs[label])
+        if not re.fullmatch(r"[1-9][0-9]*", run_id):
+            raise ValueError(f"{label}: invalid original run ID")
+        route = f"repos/{repository}/actions/runs/{run_id}"
+        run = api(route)
+        attempt = run.get("run_attempt")
+        controller = run.get("head_sha", "")
+        if not (
+            str(run.get("id")) == run_id
+            and type(attempt) is int and attempt > 0
+            and run.get("repository", {}).get("full_name") == repository
+            and run.get("head_repository", {}).get("full_name") == repository
+            and run.get("path") == f".github/workflows/{workflow}"
+            and run.get("head_branch") == "main"
+            and run.get("event") == "workflow_dispatch"
+            and run.get("status") == "completed" and run.get("conclusion") == "success"
+            and FULL_SHA.fullmatch(controller) and ancestor(controller)
+        ):
+            raise ValueError(f"{label}: original workflow provenance mismatch")
+        original = api(f"{route}/attempts/{attempt}")
+        if any(original.get(key) != run.get(key) for key in (
+            "id", "run_attempt", "head_sha", "path", "status", "conclusion",
+        )):
+            raise ValueError(f"{label}: original attempt changed")
+        start, end = _stamp(original["run_started_at"]), _stamp(original["updated_at"])
+        artifacts: list[dict] = []
+        total: int | None = None
+        for page in range(1, 101):
+            data = api(f"{route}/artifacts?per_page=100&page={page}")
+            count, rows = data.get("total_count"), data.get("artifacts")
+            if (type(count) is not int or count < 0 or count > 10000
+                    or not isinstance(rows, list) or (total is not None and count != total)):
+                raise ValueError(f"{label}: incomplete artifact listing")
+            total = count
+            artifacts.extend(rows)
+            if len(artifacts) == total:
+                break
+            if not rows or len(artifacts) > total:
+                raise ValueError(f"{label}: incomplete artifact listing")
+        else:
+            raise ValueError(f"{label}: artifact listing limit exceeded")
+        ids = [row.get("id") for row in artifacts]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"{label}: duplicate artifact IDs")
+        matches = [row for row in artifacts if row.get("name") == name]
+        if len(matches) != 1:
+            raise ValueError(f"{label}: original artifact missing or ambiguous")
+        artifact = matches[0]
+        identity = artifact.get("workflow_run", {})
+        artifact_id, size = artifact.get("id"), artifact.get("size_in_bytes")
+        if not (
+            type(artifact_id) is int and artifact_id > 0
+            and artifact.get("expired") is False
+            and type(size) is int and 0 < size <= MAX_ARCHIVE_BYTES
+            and identity.get("id") == run["id"] and identity.get("head_sha") == controller
+            and start <= _stamp(artifact.get("created_at")) <= end
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.get("digest", ""))
+        ):
+            raise ValueError(f"{label}: original artifact/attempt identity mismatch")
+        archive = output_dir / (label.replace("/", "-") + ".zip")
+        download(f"repos/{repository}/actions/artifacts/{artifact_id}/zip", archive)
+        if archive.stat().st_size != size or "sha256:" + _digest(archive) != artifact["digest"]:
+            raise ValueError(f"{label}: original artifact byte digest mismatch")
+        with zipfile.ZipFile(archive) as bundle:
+            members = bundle.infolist()
+            names = [member.filename for member in members]
+            if (len(names) != len(set(names)) or len(members) > 1000
+                    or sum(member.file_size for member in members) > MAX_ARCHIVE_BYTES
+                    or any(Path(name).is_absolute() or ".." in Path(name).parts
+                           or "\\" in name or Path(name).as_posix() != name.rstrip("/")
+                           for name in names)
+                    or any(stat.S_ISLNK(member.external_attr >> 16) for member in members)):
+                raise ValueError(f"{label}: unsafe artifact contents")
+            bundle.extractall(output_dir / label)
+        latest = api(route)
+        if any(latest.get(key) != run.get(key) for key in (
+            "id", "run_attempt", "head_sha", "status", "conclusion", "updated_at",
+        )):
+            raise ValueError(f"{label}: run changed during evidence readback")
+        proof["sources"][label] = {
+            "run_id": run["id"], "run_attempt": attempt, "controller_sha": controller,
+            "workflow": workflow, "artifact_id": artifact_id, "artifact_digest": artifact["digest"],
+        }
+    (output_dir / "provenance.json").write_bytes(_canonical(proof))
+    return proof
 
 
 def _canonical(value: Any) -> bytes:
@@ -72,14 +236,13 @@ def build_reports(
     customer_path: Path,
     output_dir: Path,
     release_sha: str,
-    product_version: str = "1.0.0.1",
+    product_version: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     release_sha = release_sha.strip().lower()
     if not FULL_SHA.fullmatch(release_sha):
         raise ValueError("release_sha must be an exact lowercase 40-character Git SHA")
-    if product_version != "1.0.0.1":
-        raise ValueError("the closure contract keeps product_version at 1.0.0.1")
+    product_version = resolve_product_version(product_version)
     generated_at = (now or datetime.now(UTC)).astimezone(UTC)
     release_id = f"xcagi-{product_version}-{release_sha}"
 
@@ -131,7 +294,8 @@ def build_reports(
         "schema": "xcagi.closure.security/v1",
         "passed": security_passed,
         "summary": {
-            "two_consecutive_daily_scans": security.get("passed") is True,
+            "required_same_sha_scan": security.get("passed") is True,
+            "scan_mode": security.get("mode", "unknown"),
             "applicable_open": security.get("applicable_open", {}),
             "scanners": security.get("scanners", {}),
             "blockers": security_blockers,
@@ -141,11 +305,15 @@ def build_reports(
 
     slo_blockers = list(slo.get("blockers") or [])
     rollback_blockers = list(rollback.get("blockers") or [])
+    if (rollback.get("verification_scope") != "measured_native_acceptance"
+            and "independent_native_measurements_missing" not in rollback_blockers):
+        rollback_blockers.append("independent_native_measurements_missing")
     reliability_passed = bool(
         slo.get("passed") is True
         and slo.get("release_id") == release_id
         and int(slo.get("continuous_days") or 0) >= 90
         and rollback.get("passed") is True
+        and rollback.get("verification_scope") == "measured_native_acceptance"
         and rollback.get("release_sha") == release_sha
         and not slo_blockers
         and not rollback_blockers
@@ -163,6 +331,7 @@ def build_reports(
             "server_rpo_minutes": rollback.get("server_rpo_minutes"),
             "slo_blockers": slo_blockers,
             "upgrade_rollback_blockers": rollback_blockers,
+            "upgrade_rollback_scope": rollback.get("verification_scope", "unverified"),
         },
         "source_evidence": [
             _source("production_slo_window", slo_path, slo),
@@ -231,6 +400,21 @@ def build_reports(
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] in {"collect", "version"}:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("command", choices=("collect", "version"))
+        parser.add_argument("--product-version")
+        parser.add_argument("--release-sha")
+        parser.add_argument("--output-dir", type=Path)
+        args = parser.parse_args()
+        if args.command == "version":
+            print(resolve_product_version(args.product_version))
+        else:
+            print(json.dumps(collect_sources(
+                repository=os.environ["GITHUB_REPOSITORY"], release_sha=args.release_sha,
+                runs=json.loads(os.environ["SOURCE_RUNS_JSON"]), output_dir=args.output_dir,
+            ), indent=2))
+        return 0
     parser = argparse.ArgumentParser()
     parser.add_argument("--release-convergence", type=Path, required=True)
     parser.add_argument("--security", type=Path, required=True)
@@ -238,7 +422,7 @@ def main() -> int:
     parser.add_argument("--upgrade-rollback", type=Path, required=True)
     parser.add_argument("--customer-value", type=Path, required=True)
     parser.add_argument("--release-sha", required=True)
-    parser.add_argument("--product-version", default="1.0.0.1")
+    parser.add_argument("--product-version")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     manifest = build_reports(

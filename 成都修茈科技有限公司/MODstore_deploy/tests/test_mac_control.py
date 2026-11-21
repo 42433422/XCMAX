@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from datetime import UTC, datetime
 
@@ -14,8 +15,8 @@ from modstore_server import mac_control_worker as worker
 from modstore_server.api.deps import get_db, require_admin
 from modstore_server.db.mac_control import MacControlEvent, MacControlTask
 from modstore_server.mac_control_api import router
-from modstore_server.mac_control_store import accept, acquire, view
-from modstore_server.mac_control_transport import ParaUnavailable, choose_device
+from modstore_server.mac_control_store import accept, acquire, digest, encoded, view
+from modstore_server.mac_control_transport import ParaUnavailable, choose_device, execution_view
 from modstore_server.models import Base, User
 
 
@@ -426,3 +427,316 @@ def test_windows_requires_durable_control_report_protocol():
     assert reason == "waiting_for_control_report_protocol"
     row["capabilities"]["control_reports"] = True
     assert choose_device([row], {"target": "windows"}, time.time()) == (row, "")
+
+
+@pytest.fixture
+def cancellation(factory, para, monkeypatch):
+    from modstore_server.mac_control_receipts import router as receipts_router
+
+    monkeypatch.setenv("MODSTORE_MAC_CONTROL_DEVICE_TOKENS", '{"mac":"fixture-token"}')
+    app = FastAPI()
+    app.include_router(router)
+    app.include_router(receipts_router)
+    app.dependency_overrides[require_admin] = lambda: User(id=1, is_admin=True)
+
+    def database():
+        with factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = database
+    raw = {
+        "id": "para-1",
+        "status": "running",
+        "reports": [],
+        "subTasks": [
+            {"id": "sub-1", "device_id": "mac", "tool_name": "codex", "status": "running"}
+        ],
+    }
+    with factory() as db:
+        task = accept(db, actor="admin:1", key="stop-original", request=request())
+        task.device_id, task.attempt_id, task.para_task_id = "mac", "a" * 32, raw["id"]
+        task.state, task.snapshot_json = "running", encoded(execution_view(raw))
+        db.commit()
+        task_id = task.id
+    para.records = [raw]
+    client = TestClient(app)
+    body = {
+        "correlation_id": task_id,
+        "attempt_id": "a" * 32,
+        "device_id": "mac",
+        "task_id": "para-1",
+        "subtask_id": "sub-1",
+        "status": "running",
+        "progress": 10,
+    }
+
+    def post(payload=None):
+        payload = body if payload is None else payload
+        return client.post(
+            "/api/internal/mac-control/receipts",
+            json={**payload, "event_id": digest(payload)},
+            headers={"Authorization": "Bearer fixture-token"},
+        )
+
+    def cancel():
+        response = client.post(f"/api/admin/mac-control/tasks/{task_id}/cancel")
+        assert response.json()["task"]["state"] == "cancel_requested"
+        return post().json()["control"]
+
+    return client, raw, body, post, cancel
+
+
+def stopped_receipt(body, control):
+    return {
+        **body,
+        "status": "cancelled",
+        "progress": 0,
+        "cancellation": {
+            "intent_id": control["intent_id"],
+            "outcome": "process_exited",
+            "usage_status": "unknown",
+            "native": {
+                "status": "unknown",
+                "reason": "codex_cancelled",
+                "usage": None,
+                "exit_code": None,
+                "signal": "SIGKILL",
+                "termination_method": "posix_process_group",
+            },
+        },
+    }
+
+
+def test_cancel_command_is_live_on_duplicate_receipt_and_requires_admin(cancellation):
+    client, _, _, post, cancel = cancellation
+    assert post().json()["control"] is None
+    first = cancel()
+    replay = post().json()
+    assert replay["duplicate"] is True and replay["control"] == first
+    assert cancel() == first
+    client.app.dependency_overrides.pop(require_admin)
+    assert (
+        client.post(f"/api/admin/mac-control/tasks/{first['correlation_id']}/cancel").status_code
+        == 401
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("device_id", "other"),
+        ("correlation_id", "b" * 32),
+        ("attempt_id", "c" * 32),
+        ("task_id", "foreign-para"),
+        ("subtask_id", "foreign-subtask"),
+    ],
+)
+def test_cancel_command_does_not_cross_original_identity(cancellation, field, value):
+    _, _, body, post, cancel = cancellation
+    cancel()
+    result = post({**body, field: value})
+    assert result.status_code != 200 or result.json()["control"] is None
+
+
+@pytest.mark.parametrize("fault", ["tool", "subtask_device", "duplicate", "missing_native_task"])
+def test_cancel_requires_original_native_assignment(cancellation, factory, fault):
+    _, raw, body, post, cancel = cancellation
+    cancel()
+    if fault == "tool":
+        raw["subTasks"][0]["tool_name"] = "opencode"
+    elif fault == "subtask_device":
+        raw["subTasks"][0]["device_id"] = "other"
+    elif fault == "duplicate":
+        raw["subTasks"].append(dict(raw["subTasks"][0]))
+    with factory() as db:
+        task = db.get(MacControlTask, body["correlation_id"])
+        task.snapshot_json = encoded(execution_view(raw))
+        if fault == "missing_native_task":
+            task.para_task_id = ""
+        db.commit()
+    assert post().json()["control"] is None
+
+
+def test_actual_stop_waits_for_original_native_terminal_and_keeps_usage_unknown(
+    cancellation, factory, para
+):
+    _, raw, body, post, cancel = cancellation
+    proof = stopped_receipt(body, cancel())
+    assert post(proof).json()["accepted"] is True
+    worker.run_mac_control_sync()
+    with factory() as db:
+        assert db.get(MacControlTask, body["correlation_id"]).state == "cancel_requested"
+    raw["status"] = raw["subTasks"][0]["status"] = "failed"
+    worker.run_mac_control_sync()
+    worker.run_mac_control_sync()
+    with factory() as db:
+        task = db.get(MacControlTask, body["correlation_id"])
+        assert task.state == "cancelled"
+        snapshot = json.loads(task.snapshot_json)
+        assert snapshot["status"] == "failed"  # The native execution fact is preserved.
+        assert snapshot["cancellation"]["usage_status"] == "unknown"
+        assert snapshot["cancellation"]["subtasks"]["sub-1"]["native"]["usage"] is None
+    assert para.submitted == 0
+    assert post(proof).json()["duplicate"] is True
+
+
+@pytest.mark.parametrize("fault", ["intent", "attempt", "subtask", "signal_only", "usage_zero"])
+def test_cancellation_proof_rejects_unbound_or_unconfirmed_stop(cancellation, fault):
+    _, _, body, post, cancel = cancellation
+    proof = stopped_receipt(body, cancel())
+    if fault == "intent":
+        proof["cancellation"]["intent_id"] = "0" * 64
+    elif fault == "attempt":
+        proof["attempt_id"] = "b" * 32
+    elif fault == "subtask":
+        proof["subtask_id"] = "other"
+    elif fault == "signal_only":
+        proof["cancellation"]["native"].pop("termination_method")
+    else:
+        proof["cancellation"]["usage_status"] = "not_started"
+    assert post(proof).status_code == 409
+
+
+def test_cancelled_device_queued_work_never_claims_native_interrupt(cancellation, factory):
+    _, raw, body, post, cancel = cancellation
+    proof = {
+        **body,
+        "status": "cancelled",
+        "cancellation": {
+            "intent_id": cancel()["intent_id"],
+            "outcome": "not_started",
+            "usage_status": "not_started",
+            "native": None,
+        },
+    }
+    assert post(proof).status_code == 200
+    raw["status"] = raw["subTasks"][0]["status"] = "failed"
+    worker.run_mac_control_sync()
+    with factory() as db:
+        assert db.get(MacControlTask, body["correlation_id"]).state == "cancelled"
+
+
+def test_late_cancel_receipt_does_not_replace_actual_native_completion(cancellation, factory):
+    _, raw, body, post, cancel = cancellation
+    proof = stopped_receipt(body, cancel())
+    raw["status"] = raw["subTasks"][0]["status"] = "completed"
+    worker.run_mac_control_sync()
+    assert post(proof).status_code == 200
+    worker.run_mac_control_sync()
+    with factory() as db:
+        assert db.get(MacControlTask, body["correlation_id"]).state == "execution_completed"
+
+
+def test_cross_outbox_lost_ack_reconciles_without_another_execution(cancellation, factory, para):
+    _, raw, body, post, cancel = cancellation
+    control = cancel()
+    raw["status"] = raw["subTasks"][0]["status"] = "failed"
+    raw["reports"] = [
+        {
+            "applied": 1,
+            "status": "failed",
+            "report": encoded(
+                {
+                    "source": "mac_control_cancel",
+                    "control": control,
+                    "stop_confirmed": True,
+                    "model_usage_settled": False,
+                }
+            ),
+        }
+    ]
+    worker.run_mac_control_sync()
+    worker.run_mac_control_sync()
+    with factory() as db:
+        task = db.get(MacControlTask, body["correlation_id"])
+        assert task.state == "cancel_requested"
+        assert task.reason == "waiting_for_original_device_stop_receipt"
+    proof = stopped_receipt(body, control)
+    assert post(proof).status_code == 200  # Server accepted it; the device may lose this ACK.
+    assert post(proof).json()["duplicate"] is True
+    worker.run_mac_control_sync()
+    with factory() as db:
+        assert db.get(MacControlTask, body["correlation_id"]).state == "cancelled"
+        assert db.query(MacControlEvent).filter_by(event_key=digest(proof)).count() == 1
+    assert para.submitted == 0
+
+
+@pytest.mark.parametrize(
+    "native",
+    [
+        {"exit_code": False, "signal": None},
+        {"exit_code": True, "signal": None},
+        {"signal": True},
+        {"signal": 9},
+        {"signal": ["SIGKILL"]},
+        {"signal": "not-a-signal"},
+        {"exit_code": 0, "signal": "SIGKILL"},
+        {"termination_method": ["posix_process_group"]},
+    ],
+)
+def test_cancel_rejects_non_native_exit_fields(cancellation, native):
+    _, _, body, post, cancel = cancellation
+    proof = stopped_receipt(body, cancel())
+    proof["cancellation"]["native"].update(native)
+    assert post(proof).status_code == 409
+
+
+@pytest.mark.parametrize("invalid_field", [None, "exit_code", "active_tools"])
+def test_completed_native_receipt_is_preserved_before_publication_stop(cancellation, invalid_field):
+    _, _, body, post, cancel = cancellation
+    proof = stopped_receipt(body, cancel())
+    proof["cancellation"].update(
+        usage_status="known",
+        native={
+            "status": "completed",
+            "turn_completed": True,
+            "exit_code": 0,
+            "active_tools": 0,
+            "signal": None,
+            "usage": {"input_tokens": 11, "cached_input_tokens": 1, "output_tokens": 4},
+        },
+    )
+    if invalid_field:
+        proof["cancellation"]["native"][invalid_field] = False
+    assert post(proof).status_code == (409 if invalid_field else 200)
+
+
+@pytest.mark.parametrize(
+    "other_status,expected",
+    [
+        ("completed", "cancelled"),
+        ("merged", "cancelled"),
+        ("cancelled", "cancelled"),
+        ("running", "cancel_requested"),
+        ("pending", "cancel_requested"),
+        ("failed", "failed"),
+    ],
+)
+def test_partial_native_work_keeps_each_original_outcome(
+    cancellation, factory, other_status, expected
+):
+    _, raw, body, post, cancel = cancellation
+    control = cancel()
+    assert post(stopped_receipt(body, control)).status_code == 200
+    raw["status"] = raw["subTasks"][0]["status"] = "failed"
+    raw["subTasks"].append(
+        {"id": "other", "device_id": "mac", "tool_name": "codex", "status": other_status}
+    )
+    raw["reports"] = [
+        {
+            "applied": 1,
+            "status": "failed",
+            "report": encoded(
+                {
+                    "source": "mac_control_cancel",
+                    "control": control,
+                    "stop_confirmed": True,
+                }
+            ),
+        }
+    ]
+    worker.run_mac_control_sync()
+    with factory() as db:
+        task = db.get(MacControlTask, body["correlation_id"])
+        assert task.state == expected
+        assert json.loads(task.snapshot_json)["subtasks"][1]["status"] == other_status

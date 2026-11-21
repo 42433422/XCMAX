@@ -1,6 +1,6 @@
-"""Attach one approved Retort work order to its existing portfolio lease.
+"""Attach one approved original engineering order to its existing portfolio lease.
 
-Retort and the incident team still own dispatch, publication, acceptance and
+Retort or the original PR controller still owns dispatch, publication, acceptance and
 delivery. This adapter only binds their original request to the shared budget.
 """
 
@@ -29,6 +29,11 @@ ACTIVE = {"waiting_execution", "waiting_credential_isolation"}
 def original(session: Any, request: dict[str, Any], *, active: bool = False):
     """Verify the original dispatch approval, including its immutable private plan."""
     from modstore_server.integrations.repository_packages import load_repository_module
+
+    if request.get("original_request_kind") == "original_pr_repair":
+        from modstore_server.para_github_repair import budget_original
+
+        return budget_original(session, request, active=active)
 
     row = session.get(RetortEvolutionRun, request["original_request_id"])
     if row is None or row.user_id != request["binding"]["owner_user_id"]:
@@ -59,7 +64,7 @@ def original(session: Any, request: dict[str, Any], *, active: bool = False):
     return row, protocol, effects
 
 
-def authorized(row, proposal, state, saved, request, session):
+def authorized(row, proposal, state, saved, request, session, *, original_active=True):
     from modstore_server.strategic_company_resources import require_company_authorization
 
     require_authorization(row, proposal, state)
@@ -70,7 +75,7 @@ def authorized(row, proposal, state, saved, request, session):
         UTC
     ):
         raise PortfolioError("workspace portfolio lease is no longer active")
-    original(session, request, active=True)
+    original(session, request, active=original_active)
 
 
 def attach_workspace(task: dict[str, Any]) -> dict[str, Any]:
@@ -86,7 +91,14 @@ def attach_workspace(task: dict[str, Any]) -> dict[str, Any]:
         raise PortfolioError("strategic engineering worker is not configured")
     freeze_execution(task["owner_user_id"], task)
     spec = (task.get("input_data") or {}).get("remote_execution")
-    extra = {"original_request_id", "protocol_digest", "approval_digest"}
+    original_pr = (
+        isinstance(spec, dict) and spec.get("original_request_kind") == "original_pr_repair"
+    )
+    extra = {
+        "original_request_id",
+        "approval_digest",
+        "original_request_kind" if original_pr else "protocol_digest",
+    }
     base = {"kind", "repository", "source_sha", "provider", "model"}
     if (
         not isinstance(spec, dict)
@@ -103,6 +115,10 @@ def attach_workspace(task: dict[str, Any]) -> dict[str, Any]:
         raise PortfolioError("invalid original workspace request") from exc
     if request_id != spec["original_request_id"]:
         raise PortfolioError("original request must use its canonical identity")
+    if original_pr:
+        from modstore_server.para_github_repair import budget_request_id
+
+        request_id = budget_request_id(request_id)
 
     def validate(session, proposal):
         from modstore_server.strategic_company_resources import require_company_authorization
@@ -117,9 +133,18 @@ def attach_workspace(task: dict[str, Any]) -> dict[str, Any]:
             raise PortfolioError(
                 "an already dispatched workspace cannot acquire a retrospective budget"
             )
+        if original_pr:
+            from modstore_server.customer_ticket_github import github
+            from modstore_server.para_github_repair import _current_source
+
+            _, source, _ = original(
+                session, {**spec, "binding": {"owner_user_id": task["owner_user_id"]}}
+            )
+            if not _current_source(github, source):
+                raise PortfolioError("workspace original PR incident is no longer authorized")
 
     remote.prepare_request(task, spec, request_id, actor=ACTOR, validate=validate)
-    # Retort's existing scheduler resumes its own checkpoint. No new issue,
+    # The original scheduler resumes its own checkpoint. No new issue,
     # event, model task or workflow is dispatched by this strategic adapter.
     return {
         "ok": True,
@@ -162,6 +187,8 @@ def descriptor(request_id: str) -> dict[str, Any]:
     return {
         "kind": KIND,
         "request_id": request_id,
+        "original_request_id": request["original_request_id"],
+        "original_request_kind": request.get("original_request_kind", "retort"),
         "binding_id": request["binding"]["binding_id"],
         "model": request["model"],
         "provider": request["provider"],
@@ -204,16 +231,21 @@ def authenticate_model(request_id: str, token: str) -> dict[str, Any]:
             raise PortfolioError("workspace model task grant is invalid or no longer active")
         original_row, _, effects = original(session, request, active=True)
         verify_allocation(request, effects)
-        if original_row.event_id != grant.get("event_id"):
+        event_id = getattr(original_row, "event_id", None)
+        if event_id != grant.get("event_id"):
             raise PortfolioError("workspace original event changed")
         from modstore_server.strategic_workspace_grants import current_attempt
 
-        current_attempt(session, request, effects, original_row.event_id, grant)
+        current_attempt(session, request, effects, event_id, grant)
         return {
             **request,
             "caller_binding": {
                 "grant_id": grant["grant_id"],
-                "event_id": grant["event_id"],
+                **(
+                    {"control_task_id": grant["control_task_id"]}
+                    if "control_task_id" in grant
+                    else {"event_id": grant["event_id"]}
+                ),
                 "task_id": grant["task_id"],
                 "subtask_id": grant["subtask_id"],
                 "attempt": grant["attempt_id"],
@@ -226,12 +258,14 @@ def authenticate_model(request_id: str, token: str) -> dict[str, Any]:
     return cast(dict[str, Any], remote._mutate(request_id, check))
 
 
-def candidate_metered(request_id: str, candidate: dict[str, Any]) -> bool:
+def candidate_metered(request_id: str, candidate: dict[str, Any], *, allow_published=False) -> bool:
     """An attached work order cannot publish a different or unmetered fix."""
     request, _, _ = remote.read_request(request_id)
 
     def check(row, proposal, state, saved, _record, snapshot, session):
-        authorized(row, proposal, state, saved, request, session)
+        authorized(
+            row, proposal, state, saved, request, session, original_active=not allow_published
+        )
         matches = [
             grant
             for grant in snapshot.get("task_grants", [])
@@ -245,8 +279,20 @@ def candidate_metered(request_id: str, candidate: dict[str, Any]) -> bool:
         if len(matches) == 1:
             from modstore_server.strategic_workspace_grants import current_attempt
 
-            original_row, _, effects = original(session, request, active=True)
-            current_attempt(session, request, effects, original_row.event_id, matches[0])
+            original_row, _, effects = original(session, request, active=not allow_published)
+            if allow_published:
+                from modstore_server.para_github_repair import budget_attempt
+
+                if (
+                    request.get("original_request_kind") != "original_pr_repair"
+                    or original_row.state != "execution_completed"
+                ):
+                    return False
+                budget_attempt(session, request, effects, matches[0], allow_published=True)
+            else:
+                current_attempt(
+                    session, request, effects, getattr(original_row, "event_id", None), matches[0]
+                )
         calls = list(saved["calls"].values())
         return bool(
             len(matches) == 1

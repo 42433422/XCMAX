@@ -1,4 +1,4 @@
-"""Finish engineering budgets from the original Retort delivery/rollback record."""
+"""Finish budgets from original Retort delivery or original-PR repair CI receipts."""
 
 from __future__ import annotations
 
@@ -13,6 +13,17 @@ from modstore_server.strategic_portfolio import PortfolioError, _date, digest, p
 
 
 def _evidence(row: Any) -> dict[str, Any]:
+    from modstore_server.db.mac_control import MacControlTask
+
+    if isinstance(row, MacControlTask):
+        snapshot = json.loads(row.snapshot_json)
+        return {
+            "status": row.state,
+            "snapshot": snapshot,
+            "effects": snapshot,
+            "control_task_id": row.id,
+            "request": json.loads(row.request_json),
+        }
     return {
         "status": row.status,
         "snapshot": json.loads(row.snapshot_json),
@@ -22,6 +33,10 @@ def _evidence(row: Any) -> dict[str, Any]:
 
 
 def _terminal(request: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any] | None:
+    if request.get("original_request_kind") == "original_pr_repair":
+        from modstore_server.para_github_repair import budget_terminal
+
+        return budget_terminal(request, evidence)
     status, state, effects = evidence["status"], evidence["snapshot"], evidence["effects"]
     if status not in {"completed", "failed", "cancelled", "rejected", "customer_impact_rejected"}:
         return None
