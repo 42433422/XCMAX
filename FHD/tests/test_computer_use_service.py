@@ -243,6 +243,19 @@ def test_device_lease_prevents_parallel_observation(setup):
         assert service.invoke("computer_observe", {}, context)["error_code"] == "computer_busy"
 
 
+@pytest.mark.parametrize("headful", [False, True])
+def test_headful_browser_shares_the_physical_desktop_lease(setup, monkeypatch, headful):
+    service, adapter, params, context, *_ = setup
+    monkeypatch.setenv("XCAGI_COMPUTER_USE_HEADFUL", "1" if headful else "0")
+    service.root.mkdir()
+    with FileLock(str(service.root / "device.lock")):
+        result = service.invoke("computer_execute", params, context)
+    if headful:
+        assert result["error_code"] == "computer_busy" and adapter.calls == []
+    else:
+        assert result["success"] is True and len(adapter.calls) == 1
+
+
 def test_stale_observation_and_reuse_are_rejected(setup):
     service, adapter, params, context, run, _ = setup
     observed = service.invoke("computer_observe", {}, context)

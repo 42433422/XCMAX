@@ -17,6 +17,7 @@ from typing import Any
 
 from filelock import FileLock, Timeout
 
+from app.domain.autonomy.computer_use_policy import normalize_computer_effect
 from app.utils.deployment import env_flag, is_desktop_mode
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -283,7 +284,8 @@ class ComputerUseService:
             raise ValueError("invalid steps or verification")
         fingerprint = _fingerprint(params)
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        lock_name = "device.lock" if target == "desktop" else f"browser-{owner}.lock"
+        uses_desktop = target == "desktop" or env_flag("XCAGI_COMPUTER_USE_HEADFUL")
+        lock_name = "device.lock" if uses_desktop else f"browser-{owner}.lock"
         path = self._path(owner, "effect", request_id)
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with (
@@ -362,26 +364,9 @@ class ComputerUseService:
                     "输入执行中断，结果须核对，未自动重试",
                     uncertain=True,
                 )
-            result = {
-                **result,
-                "request_id": request_id,
-                "run_id": context.get("run_id"),
-            }
-            result["success"] = result.get("success") is True and result.get("verified") is True
-            if result["success"]:
-                result.pop("retryable", None)
-            else:
-                result["retryable"] = False
-            if result.get("code") and not result.get("error_code"):
-                result["error_code"] = result["code"]
-            if result.get("success") is not True and (
-                result.get("executed")
-                or result.get("may_have_executed")
-                or result.get("outcome_unknown")
-                or result.get("steps_completed", 0)
-                or result.get("status") == "outcome_unknown"
-            ):
-                result.update(outcome="unknown", reconciliation_required=True)
+            result = normalize_computer_effect(
+                {**result, "request_id": request_id, "run_id": context.get("run_id")}
+            )
             try:
                 self._write(
                     path,

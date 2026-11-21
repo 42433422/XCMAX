@@ -226,7 +226,7 @@ uv run --frozen --extra server-api --extra computer-use python -m playwright ins
 | `XCAGI_COMPUTER_USE_USER_ID`、`XCAGI_COMPUTER_USE_TENANT_ID` | 将桌面与浏览器执行器绑定到一个用户和租户；桌面操作还必须处于 `desktop_mode` |
 | `XCAGI_COMPUTER_USE_ALLOWED_ORIGINS` | 浏览器允许访问的 origin JSON 数组，例如 `["https://example.com"]`；按实际目标配置 |
 | `XCAGI_COMPUTER_USE_BROWSER_EXECUTABLE` | 可选：受控、已安装 Chromium 的可执行文件路径；不读取已有用户 profile |
-| `XCAGI_COMPUTER_USE_HEADFUL=1` | 可选：浏览器显示窗口；默认无界面，需要浏览器沙箱可用 |
+| `XCAGI_COMPUTER_USE_HEADFUL=1` | 可选：浏览器显示窗口，与桌面输入/观察共用设备锁；默认无界面，需要浏览器沙箱可用 |
 
 例如，提交 `desktop_automation.computer_execute` 的参数如下；必须由既有 Agent 审批后执行，不能把 `approved` 或身份字段加进参数自行放行。服务端允许的 origin 需包含示例站点。
 
