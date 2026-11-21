@@ -97,9 +97,9 @@ def test_revocation_is_visible_in_a_running_separate_process(tmp_path):
         "if not Path(release).exists(): sys.exit(2)\n"
         "Path(after).write_text(str(registry.authorize(key, 'ui_click')['ok']))\n"
     )
+    storage = str(tmp_path / "keys.json")
     worker = subprocess.Popen(
-        [sys.executable, "-c", script, str(tmp_path / "keys.json"),
-         key, str(before), str(release), str(after)],
+        [sys.executable, "-c", script, storage, key, str(before), str(release), str(after)],
         cwd=str(__import__("pathlib").Path(__file__).resolve().parents[2]),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
