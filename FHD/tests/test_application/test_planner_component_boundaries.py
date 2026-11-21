@@ -500,7 +500,7 @@ def test_waiting_run_overrides_stale_completed_interaction():
     )
     callbacks = Mock()
     callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
-    callbacks._merge_tool_runtime_context.return_value = {"tenant_id": "1"}
+    callbacks._merge_tool_runtime_context.return_value = {"tenant_id": "1", "chat_approval_mode": "auto"}
     callbacks._build_workflow_thinking_steps.return_value = "checked plan"
     callbacks._capture_agent_run_interaction.return_value = {
         "success": True,
