@@ -492,9 +492,23 @@ class AgentToolExecutor:
                     else nullcontext()
                 )
                 try:
+                    from app.application.tools.surface_authority import surface_invocation_scope
                     from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
-                    with receipt_scope, model_rate_limit_scope(params["_runtime_context"]):
+                    with (
+                        receipt_scope,
+                        model_rate_limit_scope(params["_runtime_context"]),
+                        surface_invocation_scope(
+                            validation.tool_id,
+                            action,
+                            {
+                                key: value
+                                for key, value in params.items()
+                                if key != "_runtime_context"
+                            },
+                            params["_runtime_context"],
+                        ),
+                    ):
                         guarded_batch = (validation.tool_id, action) in {
                             ("customers", "batch_delete"),
                             ("products", "batch_delete"),
@@ -707,8 +721,18 @@ def execute_with_tool_deadline(
             "exception_type": type(exc).__name__,
         }
     else:
+        completed_in_time = file_deadlines or time.monotonic() <= deadline
         if (
-            (file_deadlines or time.monotonic() <= deadline)
+            completed_in_time
+            and isinstance(result, dict)
+            and not invocation.uncertain
+            and result.get("reconciliation_required") is True
+        ):
+            # A returned receipt can require reconciliation without a timeout.
+            # Keep its durable artifacts and observed evidence visible to the run.
+            return {**result, "success": False, "outcome": "unknown", "retryable": False}
+        if (
+            completed_in_time
             and isinstance(result, dict)
             and not invocation.uncertain
             and (

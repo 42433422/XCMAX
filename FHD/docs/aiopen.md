@@ -197,7 +197,7 @@ MCP 只读资源：
 服务端 → 前端：
 
 ```json
-{ "type": "command", "id": "<hex>", "action": "click", "params": { "selector": "#btn" } }
+{ "type": "command", "id": "<hex>", "action": "click", "timeout_ms": 10000, "params": { "selector": "#btn" } }
 ```
 
 前端 → 服务端回执：
@@ -208,6 +208,101 @@ MCP 只读资源：
 
 `action ∈ snapshot | navigate | click | type | select | upload | wait | verify | screenshot | scroll`；
 普通操作回执超时 10s，`wait`/`upload` 20s，`screenshot` 30s。
+
+同一连接按 FIFO 串行执行。超时或调用取消时，服务端发送 `{"type":"cancel","id":"<hex>"}`；前端在下一次副作用前检查取消与截止时间，上传取文件使用可取消请求。已经发出的点击或网络请求不能撤销，超时必须先核对，不能自动重放。回执必须包含布尔 `success`；缺失或类型错误不能当成功。`ref` 失效时拒绝调用，不回退到 `selector`/`text` 猜另一个控件。输入值、口令、验证码与私密字段不进入光标操作日志。
+
+## Agent 浏览器执行闭环
+
+### 入口与复用边界
+
+现有 Agent 的工具目录提供两条入口，继续使用现有模型网关和规划器：
+
+| 入口 | 执行位置 | 完成依据 |
+|---|---|---|
+| `aiopen.ui_*` | 当前账号和租户的 XCAGI 页面 | 写操作只说明动作已执行；批准计划必须包含同屏幕、依赖于写操作的 `ui_verify` 回读 |
+| `browser.observe` / `browser.execute` | 每任务新建的 Playwright Chromium context | observe 返回未信任页面快照；execute 必须执行 `verify`，核验全通过才能 `verified=true` |
+
+两条入口均从 `AgentToolExecutor` 到现有 dispatcher，验证签名会话、运行归属、完整存储计划、当前步骤、标准幂等键、租约与审批记录。spawn 通过独立服务端参数传递租约代次，并恢复调用方 workflow 数据库，模型字段不能冒充租约。写操作先落现有幂等账本，未知结果保留原任务待核对；手工调用 dispatcher、模型自带身份字段或页面文字都不能授权。内部光标由 HTTP 进程持有，因此隔离 Agent 子进程通过仅限 loopback 的 HTTP 桥接调用原有 `/api/aiopen/invoke`，使用按账号/租户、单动作、单次配额、短期有效的临时 Key，调用结束撤销。原任务编号不被 HTTP 子轨迹覆盖。
+
+内部 Agent 的 `ui_*` 写操作 Schema 要求非空白 `session_id`，计划只接受不含 `branches` 的依赖图；后续同屏幕 `ui_verify` 必须同时存在于尚可执行的持久化步骤中。外部 REST/MCP 原有定义不受这项 Agent 约束修改。
+
+`browser.execute` 一次包含最多 30 步。支持 role/name、label、text、selector 与 frame 定位，动作包括 click、fill、select、check、press、upload、download；locator 不唯一时拒绝。每步可附 `verify` 等待业务回执，再执行下一步；任务末尾 `verify` 必填，支持 text、value、visible、url。页面 DOM 成功不替代业务事实，调用方应核验订单号、明确状态或下载内容等与目标有关的证据。
+
+### 安装与配置
+
+在运行 Agent 子进程的宿主安装锁定依赖和官方浏览器：
+
+```bash
+cd FHD
+uv sync --frozen --extra server-api --extra browser
+.venv/bin/python -m playwright install --with-deps chromium
+export XCAGI_BROWSER_ALLOWED_ORIGINS='{"7":["https://erp.example.com"]}'
+export XCAGI_AIOPEN_INTERNAL_URL='http://127.0.0.1:5000'
+```
+
+`7` 是示例租户，域名应替换为实际授权站点。配置没有对应租户时拒绝执行；不接受通配符、路径、账号口令或模型传入白名单。资源域名、登录跳转域名必须逐项显式批准。可通过宿主配置 `XCAGI_BROWSER_EXECUTABLE` 指定受维护的 Chromium；模型不能指定二进制、启动参数、本地文件路径、任意 JavaScript 或共享浏览器 profile。Chromium sandbox 保持开启，无法启动时失败。
+
+浏览器任务复用 psutil 7.2.2 对 worker、驱动和已观测浏览器后代合计 RSS，预算取 `XCAGI_TOOL_MEMORY_MB`，默认 2048 MiB。父进程在启动放行、运行等待、流式排空和接受回执前检查；不可观察或超额均停止，已放行的任务标记结果未知并禁止自动重放。子进程放行前仍用原地址空间限制，确认受监督后仅恢复继承的地址空间上限；默认 CPU 60 秒、句柄 256 及 Chromium sandbox 保留。其他工具沿用原地址空间限制。采样 RSS 会重复计共享页，也有采样间短时超额和未观测后代的边界；需要内核硬限制的部署应使用 [cgroup v2 memory controller](https://docs.kernel.org/admin-guide/cgroup-v2.html#memory)，不将轮询当作内核隔离。
+
+以下仅为进入现有审批流程的计划参数示例，不是直接执行端点：
+
+```json
+{
+  "tool_id": "browser",
+  "action": "execute",
+  "params": {
+    "url": "https://erp.example.com/orders/new",
+    "steps": [
+      {"action": "fill", "locator": {"label": "客户名称"}, "value": "示例客户"},
+      {"action": "click", "locator": {"role": "button", "name": "保存"},
+       "verify": [{"kind": "text", "locator": {"selector": "#receipt"}, "expected": "保存成功"}]},
+      {"action": "download", "locator": {"role": "link", "name": "下载回执"}}
+    ],
+    "verify": [{"kind": "text", "locator": {"selector": "#receipt"}, "expected": "保存成功"}],
+    "screenshot": true
+  }
+}
+```
+
+上传只接受已有 Agent 文件产物的 `run_id` / `artifact_id`，服务端复验所属账号、租户、摘要和 25 MiB 总大小后读取。下载在点击前注册监听，关闭 context 前保存，产物总接受大小最多 25 MiB；文件名由系统生成并保留安全后缀，随后写入现有不可变产物存储，返回原有账号/租户受控下载 URI。支持现有 xls/xlsm/xlsx/csv/pdf/docx/pptx 与新增 png/json/txt，格式清单复用同一产物存储契约。不支持或保存失败的附件逐项标记 `not_saved`，已观察的执行结果、步骤及核验仍写入回执；整体交付不报告成功、不自动重放。公共执行器保留已保存附件和原失败信息，供任务关联与受控下载；回执本身无法保存时明确报告失败。截图遮罩表单输入区域，JSON 回执避免重复保存输入值；任意页面正文与下载内容仍按用户业务数据处理。
+
+### 已发现缺口与当前处理
+
+此表覆盖本次实际审查的内部页面、Agent 执行器、MCP 适配和 Codex 接入，不表示已对全仓所有业务或任意网站做完生产验收。
+
+| 缺口 | 对应组件与当前处理 | 保留边界 |
+|---|---|---|
+| 工具目录有 ui_*，统一 dispatcher 没有 aiopen 路由 | 接入现有 Agent dispatcher 与 HTTP 桥接 | 只接受受信任务上下文 |
+| spawn 子进程读不到内存 WebSocket hub | 复用现有 REST/Key 注册表抵达持屏进程 | 当前要求单持屏服务实例；跨 worker 路由未实现 |
+| 子进程丢失队列代次与审批数据库绑定 | 复用受信租约传递/恢复及调用方 workflow 会话 | 租约失效后拒绝新动作；已经发出的外站请求不能撤销 |
+| 缺失 success 被当成功、MCP 错误字段漏读 | 严格布尔回执；兼容固定 MCP SDK 的 snake_case/camelCase | 外部服务器的语义仍是不可信声明 |
+| MCP schema 在注册时丢失 | 保留完整嵌套 input_schema；工具契约透传 | readonly 需本地配置与服务器标注同时满足 |
+| 指令并发、失效 ref 退回模糊定位 | FIFO、不可复用引用、失效拒绝 | 动态页面应重新 snapshot |
+| 超时后动作继续排队、上传阻塞后续任务 | 截止时间、cancel 协议、AbortController；前端命令预算最多 30 秒，非法时长立即过期 | 已发生的事件不能撤销 |
+| 账号/租户/审批与任务未完整绑定 | 复用签名会话、持久化审批、步骤与计划、标准幂等键 | 页面不能提升权限 |
+| 已执行写入在失败后可能重放 | 任务写前占用；异常回执 unknown 且不重试 | 外部站点不提供原子事务，不能宣称恰好一次 |
+| 点击完成等同业务成功 | 当前页面要求依赖回读；外站必填 verify 与可选步骤断言 | 断言内容需要与业务目标相关 |
+| 无外站浏览器执行层 | 薄适配复用 Playwright 1.65.1 | 操作限批准来源和固定动作，不支持任意脚本 |
+| 逐调用 MCP 会话丢失页面状态 | 外站多步在一次 BrowserContext 内执行 | 通用 MCP 长连接/恢复池仍未实现 |
+| 上传路径与下载临时文件缺乏归属，附件失败丢失原核验 | 复用现有摘要校验与产物下载权限；逐附件保存并保留原执行证据，公共执行器传递可下载回执 | 未支持格式标记未保存；交付不完整时保留待核对并禁止重放 |
+| Cookie/profile 跨任务污染 | 每任务独立 context，禁止共享 profile | 登录持久化、MFA/验证码及人工接管尚未实现 |
+| 脱敏仅覆盖日志，快照/截图仍可泄露输入 | 内部光标与外站表单快照/截图分别处理 | 任意网页文本不能自动证明无敏感信息 |
+| iframe 内输入未被顶层截图遮罩 | 截图保守遮罩整个 iframe/frame/object/embed 区域 | frame 内核验沿用 locator，截图不展示嵌入页面正文 |
+| 站点跳转/子资源可越过初始 URL 限制 | 每跳 exact-origin 校验，阻断 WebSocket/Service Worker；observe 仅 GET/HEAD | 来源限制不是 OS 网络沙箱；未实现 DNS/IP 钉住与流式传输配额 |
+| 外部 AIOPEN 客户端只有事后轨迹 | 本次受控 Agent 入口复用写前账本 | 直接外部 REST/MCP 多次调用不具备端到端幂等保证 |
+| Codex CLI 错误可能被直接回复/流式链路当完成 | 非零/未知退出、超时或缺终态保留部分输出并显式失败；直答、fallback、消息回填和开发循环不再提升为完成 | 已验证真实子进程协议边界；Codex 原生 JSONL 全部事件、实际模型及业务任务仍需分别验收 |
+| 生产 2 GiB 虚拟地址上限阻止 Chromium 启动 | 真实 CPU/FD 与 AS-only 对照定位，复用 psutil 的整树 RSS 预算与已有握手、截止和回收器 | RSS 采样不是内核硬限制；保留外部继承的限制，严格隔离依赖宿主 cgroup 等机制 |
+| 单测可通过但没有真实浏览器验收 | 专项 CI 强制真实 Chromium，缺依赖/启动失败/skip 均失败 | CI 成功只证明合成站点集成，实际模型、业务站点与生产仍需验收 |
+
+### 验证与回滚
+
+`tests/test_application/test_aiopen_agent_bridge.py` 使用真实 SQLite、会话签名、审批消耗、Agent executor 与 FastAPI route 验证身份和幂等；只替换 HTTP 传输与 screen。`test_browser_tool.py` 核对授权与实际产物存储；`test_surface_worker.py` 经真实 spawn 验证租约、原 workflow 数据库和默认资源限制下的 Playwright 驱动，页面效果仍为替身。`test_mcp_tools.py` 使用固定 SDK 的真实 stdio 子进程。`tests/test_infrastructure/test_browser_runtime.py` 在合成 HTTP 站点上验证表单、上传、提交、下载、回读、隔离、超时、iframe 截图遮罩和默认资源限制下的真实 Chromium。
+
+`test_browser_agent_e2e.py` 复用真实会话、审批和产物夹具，经原 AgentToolExecutor 启动真实 Chromium，完成表单、归属文件上传、提交及下载回执，再以新子进程读取同一幂等结果并断言网站只收到一次提交。专项 CI 为此使用独立 JUnit，缺报告或跳过均失败，并记录服务器依赖锁摘要及实际版本。
+
+真实浏览器门禁设置 `XCMAX_BROWSER_REQUIRE_REAL=1`，本地依赖缺失或 sandbox 启动失败时的 skip 不算通过。线上启用需另外核对安装版本、租户站点、真实模型任务、实际业务回执与生产 SHA；可先移除对应租户的站点配置以停止新外站任务，未知旧任务仍须回读核对。
+
+`test_codex_cli_receipts.py` 用实际子进程验证非零退出、stdout/输出文件部分内容、硬截止和流结束；失败只记录一次，不进入开发循环的验证、修复或发布。与既有 Codex/Claude/Cursor 和权限用例合计 916 项本地通过；这证明 Python CLI 适配的失败传播，不代表已连接真实模型或完成 Codex 原生 JSONL 工具事件的验收。
 
 ## 安全模型
 

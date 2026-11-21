@@ -809,23 +809,29 @@ class TestCliReplyBody:
         with patch.object(svc, "_cli_path", return_value=""):
             assert svc._cli_reply_body("hi", {}) == ""
 
-    def test_timeout_returns_message(self, tmp_path):
+    def test_timeout_raises_explicit_failure(self, tmp_path):
+        from app.application.super_employee.cli import CliExecutionError
+
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
         svc = _make_svc(tmp_path, cli_runner=_error_runner(subprocess.TimeoutExpired("cmd", 45)))
         with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "超过" in result or "CLI" in result
+            with pytest.raises(CliExecutionError, match="CLI 调用失败") as raised:
+                svc._cli_reply_body("hi", {})
+        assert raised.value.payload()["reconciliation_required"] is True
 
-    def test_os_error_returns_failure_message(self, tmp_path):
+    def test_os_error_raises_explicit_failure(self, tmp_path):
+        from app.application.super_employee.cli import CliExecutionError
+
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
         svc = _make_svc(tmp_path, cli_runner=_error_runner(OSError("no such")))
         with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "CLI" in result
+            with pytest.raises(CliExecutionError, match="CLI 调用失败") as raised:
+                svc._cli_reply_body("hi", {})
+        assert "no such" not in str(raised.value)
 
     def test_reads_output_file_when_exists(self, tmp_path):
         cli = tmp_path / "codex"
@@ -853,7 +859,9 @@ class TestCliReplyBody:
             result = svc._cli_reply_body("hi", {})
         assert "stdout answer" in result
 
-    def test_returncode_nonzero_returns_error_body(self, tmp_path):
+    def test_returncode_nonzero_raises_explicit_failure(self, tmp_path):
+        from app.application.super_employee.cli import CliExecutionError
+
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
@@ -863,8 +871,9 @@ class TestCliReplyBody:
 
         svc = _make_svc(tmp_path, cli_runner=fail_runner)
         with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "CLI" in result or "code" in result
+            with pytest.raises(CliExecutionError, match="code 1") as raised:
+                svc._cli_reply_body("hi", {})
+        assert "something bad" not in str(raised.value)
 
     def test_claude_profile_reads_stdout(self, tmp_path):
         import json as _json
