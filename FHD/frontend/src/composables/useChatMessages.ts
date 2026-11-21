@@ -15,6 +15,7 @@ import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { reconcileApprovalCards, restoreApprovalCard } from '@/utils/chatApprovalCard'
 import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { captureAuthSession } from '@/utils/authSessionCache'
+import { restoreRuntimeContinuation, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 
@@ -106,6 +107,11 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
   if (route && row.role !== 'user' && ui.role !== 'user') extras.routeMetadata = route
   const turnId = asString(ui.turnId || asRecord(metadata.business_harness).turn_id || asRecord(metadata.summary).turn_id).trim()
   if (turnId) extras.turnId = turnId
+  if (row.role !== 'user' && ui.role !== 'user') {
+    const continuation = restoreRuntimeContinuation(ui.runtimeContinuation)
+      || runtimeContinuationFromPayload(metadata)
+    if (continuation) extras.runtimeContinuation = continuation
+  }
   const summary = asRecord(metadata.summary)
   const serverStatus = asString(summary.status)
   const observationStatus = ['unknown', 'outcome_unknown'].includes(serverStatus) ? 'unknown'
@@ -789,6 +795,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         businessResult: message.businessResult,
         sameAsPrevious: message.sameAsPrevious,
         routeMetadata: message.routeMetadata,
+        runtimeContinuation: message.runtimeContinuation,
       })),
     () => persistMessagesCache(),
     { deep: true, flush: 'post' },

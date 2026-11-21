@@ -34,6 +34,7 @@ import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatF
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
+import { isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -129,6 +130,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const routeMetadata = readChatModelRoute(payload.route_metadata)
     const execution = readChatExecution(payload)
     const businessResult = readPlannerBusinessResult(payload)
+    const runtimeContinuation = runtimeContinuationFromPayload(payload)
+    const approvalCard = runtimeContinuation ? parseApprovalCardFromPayload(payload) : null
     const receipt = asRecord(payload.history_persistence)
     const receiptIds = asArray(receipt.message_ids)
     const extras: UiChatMessageExtras = {
@@ -137,6 +140,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}),
       ...(execution ? { execution } : {}),
       ...(businessResult ? { businessResult } : {}),
+      ...(runtimeContinuation ? { runtimeContinuation, workflowAction: runtimeExecutionState(payload) } : {}),
+      ...(approvalCard ? { approvalCard } : {}),
     }
     if (receipt.status === 'saved' && receiptIds.length) {
       const turnId = String(receipt.turn_id || payload.turn_id || '')
@@ -162,11 +167,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const activeTurn = readActiveChatTurn(payload)
     if (activeTurn) return ['waiting_approval', 'paused'].includes(activeTurn.status) ? 'waiting' : 'review'
     if (requiresTurnReconciliation(payload)) return 'review'
-    if (payload.requires_token || parseApprovalCardFromPayload(payload)?.status === 'pending') return 'waiting'
+    if (isRuntimeWaiting(payload) || payload.requires_token || parseApprovalCardFromPayload(payload)?.status === 'pending') return 'waiting'
     return payload.success === false ? 'error' : 'ready'
   }
 
   function observeModelOutcome(text: string, payload?: ChatPlannerPayload) {
+    if (payload && isRuntimeWaiting(payload)) return
     const execution = readChatExecution(payload)
     if (execution?.effect === 'preview') return
     const outcome = modelOutcomeFromText(text)
@@ -237,7 +243,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       plannerWriteUnlockResumeDraft.value = ''
     }
     const primaryText = remoteMessages[0] || ''
-    const aiModBrief = remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''
+    const continuingRuntime = Boolean(pendingRuntimeRunId(requestScope.messages, requestScope.sessionId))
+    const aiModBrief = !continuingRuntime && remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''
 
     if (aiModBrief) {
       round.setLoading(true)
@@ -280,12 +287,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     /** 查产品类话术可不必等 /ai/chat 或连通性探测，直接走产品列表接口 */
     /** 管理端（admin-console）无产品库业务，不走产品快路径，避免「查询…」话术被误判为产品检索 */
     const kwFast =
-      remoteMessages.length === 1 && !isAdminConsoleSpa() && !resolveExcelAnalysisContextForRequest() && multimodalPendingCount.value === 0
+      !continuingRuntime && remoteMessages.length === 1 && !isAdminConsoleSpa() && !resolveExcelAnalysisContextForRequest() && multimodalPendingCount.value === 0
         ? extractLikelyProductQueryKeyword(primaryText)
         : null
 
     // 快路径会自己拉产品列表并注水副窗；再 prefetch 会多打一遍相同接口，徒增等待
-    if (!kwFast && round.isActive()) {
+    if (!continuingRuntime && !kwFast && round.isActive()) {
       maybePrefetchProductAssistantFloat(primaryText)
     }
 
@@ -864,15 +871,15 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     if (!isOwnerCurrent()) return
     const results = data.batch && Array.isArray(data.results) ? data.results.map(asPlannerPayload) : [data]
     const statuses = results.map(conversationStatus)
-    round.setStatus(statuses.includes('review') ? 'review' : statuses.includes('error') || data.success === false ? 'error'
+    round.setStatus(statuses.includes('review') ? 'review' : statuses.includes('error') || (data.success === false && !statuses.includes('waiting')) ? 'error'
       : statuses.includes('waiting') ? 'waiting' : 'ready')
     if (!round.isActive()) return persistDetachedPlannerResult(data, requestScope.sessionId, saveMessage)
     const receipt = data.batch && Array.isArray(data.results) ? data.results[data.results.length - 1] : data
     recordChatModelRoute(requestScope.sessionId, receipt?.route_metadata, identity)
     if (data.batch && Array.isArray(data.results)) {
-      if (data.success) {
+      if (data.success || results.some(isRuntimeWaiting)) {
         for (const part of results) {
-          if (part && part.success) {
+          if (part && (part.success || isRuntimeWaiting(part))) {
             if (part.requires_token) {
               handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
             }
@@ -894,7 +901,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           }
         }
         attachContextSummaryToLastAiMessage()
-        const lastOk = [...results].reverse().find((p) => p && p.success)
+        const lastOk = [...results].reverse().find((p) => p && (p.success || isRuntimeWaiting(p)))
         if (lastOk) {
           consumeStateUpdates(lastOk)
           attachThinkingStepsToLastAiMessage(lastOk)
@@ -932,7 +939,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       return
     }
 
-    if (data.success) {
+    if (data.success || isRuntimeWaiting(data)) {
       if (data?.requires_token) {
         handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
       }

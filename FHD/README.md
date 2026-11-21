@@ -18,6 +18,8 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+企业 Agent 的可选本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK 负责进程协议和事件，XCMAX 只负责身份、额度、工具权限、持久任务与结果核验。受控工具使用已锁定的 MCP Python SDK `2.3.0`（MIT）；模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。安装可选 `codex-runtime` extra 才下载运行时；Native 安装和原业务路径保持默认。
+
 小 C 桌面浮窗复用已锁定的 [Electron 45.3.2](https://github.com/electron/electron/tree/v45.3.2)（MIT）`BrowserWindow` 和 `Tray`，沿用现有小 C 对话组件和同一登录会话。
 
 开发自动化继续使用 [LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT；checkpoint 4.3.0、SQLite 3.1.2 与已吸收的 PostgreSQL 适配版本见 `packages/retort_engine/pyproject.toml`）保存审批、中断和交付等待，不增加另一套任务引擎。GitHub 执行迁移到官方 Actions 独立 job：执行候选、受信发布、恢复原验证、独立验收；[checkout 4.4.0](https://github.com/actions/checkout/tree/11d5960a326750d5838078e36cf38b85af677262)、[upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)、[setup-node 4.4.0](https://github.com/actions/setup-node/tree/49933ea5288caeca8642d1e84afbd3f7d6820020)、[setup-python 7.1.0](https://github.com/actions/setup-python/tree/6d4fd22b20465ccc0f7354476588e8df7c9ca0e0) 均为 MIT，并在相关源 workflow 固定完整提交。候选用 Git 原生 bundle 传递，发布任务只导入对象，不执行候选代码；原共享身份发布入口保持禁用。
@@ -74,6 +76,42 @@ AIOPEN 虚拟光标的蓝色星尘拖尾复用 [cursor-effects](https://github.c
 前端测试的原生 Canvas 后端复用 [@napi-rs/canvas](https://github.com/Brooooooklyn/canvas) `1.0.13`（MIT，仅开发依赖），满足已锁定 jsdom `31.0.1` 的可选 peer 要求；像素回归使用真实绘制结果，依赖及平台二进制均由锁文件安装，不依赖宿主共享模块。
 
 <a id="version-policy"></a>
+
+## 独立 Agent 运行时
+
+`XCAGI_AGENT_RUNTIME_CONFIG` 指向部署方维护的 JSON 文件。请求不能选择供应商、凭据或引擎。Codex 路径使用独立私有目录、短期模型/工具令牌和本地 MCP/Responses 代理；不继承个人 Codex 配置、ChatGPT 登录或额外插件。仅开启受控业务工具，禁止 shell、文件修改、托管搜索及默认 OpenAI 回落。管理员强制策略仍然生效。该路径不改变已有开发超级员工的 Codex CLI 调度。
+
+配置示例（路径和容量必须替换成实际部署值，示例不构成验收）：
+
+```json
+{
+  "engine": "codex",
+  "surfaces": ["chat", "employee"],
+  "runtime_root": "/var/lib/xcmax/agent-runtime",
+  "qualification_file": "/etc/xcmax/runtime-qualification.json",
+  "turn_timeout_seconds": 300,
+  "route": {
+    "base_url": "https://your-enterprise-gateway.example/v1",
+    "model": "your-verified-model",
+    "provider_id": "enterprise-gateway",
+    "upstream_vendor": "your-non-openai-provider",
+    "api_key_env": "XCMAX_RUNTIME_GATEWAY_KEY",
+    "context_window": 32768,
+    "max_output_tokens": 4096,
+    "max_model_calls": 24
+  }
+}
+```
+
+仅支持网关真实提供的 Responses 多轮工具协议，不自行将 Chat Completions 拼装成 Responses。企业现有网关必须实际暴露该协议；平台聊天接口健康不代表已兼容。独立配置拒绝 OpenAI/ChatGPT/Azure OpenAI 地址和 OpenAI 上游声明，禁止重定向和通过 `previous_response_id` 借用其他任务的上游会话。任意代理域名本身不能证明上游独立，必须核对网关路由记录和网络隔离证据。
+
+启用凭据采用 `xcmax.runtime-qualification.v1`，必须匹配 `ModelRoute.identity`、`codex_version=0.171.0`、`model_kind=real`，并带实际 `evidence_refs`。`checks` 中 `responses_stream`、`multi_turn_tools`、`openai_network_denied`、`business_receipt_verified` 均需真实 PASS。缺凭据、模型/容量/版本变化、合成模型或缺证据均拒绝启动；不能手填 PASS 代替验收。未配置时继续 Native，已启动 Codex 的任务出错不改走 Native。
+
+所有模型请求先经过现有调用准入和用量账本预留额度，再按真实 usage 结算并释放余量；断流或用量未知保留待核对。工具调用创建受控子任务，权限、审批与冻结参数保持原语义。等待审批/补充信息和进程重启均保留原任务；取消先撤销运行授权，已发生的业务效果仍需回读。完成一个工具动作仅表示该动作有回执；完整业务目标必须有服务端冻结的目标契约及全部证据，模型轮次结束不代表业务完成。
+
+预算由根任务统一累计模型和子任务费用，未结算调用继续占用预留额度；`turn_timeout_seconds` 是同一任务跨轮累计的活跃运行时间（1–3570 秒），审批等待不计入。聊天历史保存原任务续跑指针，审批卡只指向实际冻结的子任务；Codex 子任务不能经普通重试入口绕开父任务预算。当前业务完成契约仅接受宿主传入的一项完整规范工作流（`expected_operations`）；任意自然语言多目标、动态多动作尚不能证明整体覆盖，只报告已核验动作并保留待核对，不能据此将全部员工任务切换到新引擎。
+
+验证分层：固定 SDK + 本地协议替身测试只证明接口/资源/隔离契约；SQL/LangGraph 回归证明权限、幂等与账本状态；真实非 OpenAI 模型、多轮工具与禁止 OpenAI 出网测试证明独立路径；Windows/macOS/Linux 安装与业务回归分别记录。没有客户原件时，ELT 原件到最终 Excel 的验收仍为 BLOCKED。发布不得用合成测试替代任何真实验收，也不得提前切换生产默认引擎。
 
 ## 版本与发布约定
 

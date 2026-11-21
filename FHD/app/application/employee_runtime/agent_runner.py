@@ -6,11 +6,14 @@ import asyncio
 import logging
 from collections.abc import Callable
 from contextvars import copy_context
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.infrastructure.codex.policy import RuntimeSettings
 
 
 def _run_async(coro):
@@ -55,6 +58,9 @@ def run_agent_handler(
     tools: list[dict[str, Any]] | None = None,
     gate: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
     max_iterations: int | None = None,
+    runtime_context: dict[str, Any] | None = None,
+    on_event: Callable[[dict[str, Any]], Any] | None = None,
+    settings: RuntimeSettings | None = None,
 ) -> dict[str, Any]:
     """委托多轮 function-calling 循环执行 agent handler。
 
@@ -98,6 +104,9 @@ def run_agent_handler(
         wall_time_limit_sec=max(1.0, wall_time_limit_sec),
         repeat_limit=max(2, repeat_limit),
         history=history,
+        runtime_context=runtime_context,
+        on_event=on_event,
+        settings=settings,
     )
 
 
