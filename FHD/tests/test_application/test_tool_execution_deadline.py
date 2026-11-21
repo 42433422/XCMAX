@@ -56,6 +56,64 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
     assert result["retryable"] is False and result["reconciliation_required"] is True
 
 
+@pytest.mark.parametrize("claimed_success", [False, True])
+@pytest.mark.parametrize("condition", ["timely", "late", "unknown_io"])
+def test_reconciliation_receipt_keeps_evidence_only_when_returned_within_budget(
+    monkeypatch, claimed_success, condition
+):
+    from app.application.agent_orchestrator import tool_executor as tools
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    monkeypatch.setenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", "true")
+    moments = iter((10.0, 12.0 if condition == "late" else 10.5))
+    monkeypatch.setattr(tools, "time", SimpleNamespace(monotonic=lambda: next(moments)))
+    receipt = {
+        "success": claimed_success,
+        "outcome": "succeeded" if claimed_success else "unknown",
+        "execution_outcome": "succeeded",
+        "error_code": "tool_delivery_incomplete",
+        "message": "The action was verified; one attachment was not delivered.",
+        "retryable": True,
+        "reconciliation_required": True,
+        "run_id": "existing-run",
+        "steps": [{"index": 0, "status": "completed"}],
+        "verification": [{"status": "passed"}],
+        "artifacts": [{"artifact_id": "json_receipt", "artifact_type": "file"}],
+    }
+    calls = []
+
+    def execute(step, *, runtime_context, deadline_monotonic):
+        calls.append(deadline_monotonic)
+        if condition == "unknown_io":
+            with invocation_deadline(deadline_monotonic) as budget:
+                budget.uncertain.append({"kind": "http_timeout", "method": "POST"})
+        return receipt
+
+    result = execute_with_tool_deadline(
+        SimpleNamespace(execute_with_deadline=execute),
+        _step(),
+        runtime_context={},
+        timeout_seconds=1,
+    )
+    assert calls == [11.0]
+    assert result["success"] is False and result["outcome"] == "unknown"
+    assert result["retryable"] is False and result["reconciliation_required"] is True
+    assert receipt["success"] is claimed_success and receipt["retryable"] is True
+    if condition == "timely":
+        assert result["error_code"] == receipt["error_code"]
+        assert result["message"] == receipt["message"]
+        for key in ("artifacts", "run_id", "execution_outcome", "steps", "verification"):
+            assert result[key] == receipt[key]
+        assert "reconciliation_evidence" not in result
+    else:
+        assert result["error_code"] == "tool_timeout_unknown"
+        assert result["reconciliation_evidence"] == receipt
+        assert "artifacts" not in result
+        assert result["io_reconciliation"] == (
+            [{"kind": "http_timeout", "method": "POST"}] if condition == "unknown_io" else []
+        )
+
+
 @pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
 def test_invalid_timeout_never_dispatches(timeout):
     result = execute_with_tool_deadline(

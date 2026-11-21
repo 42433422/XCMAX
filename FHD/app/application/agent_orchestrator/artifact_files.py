@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import re
 import tempfile
@@ -18,6 +19,9 @@ from defusedxml.ElementTree import fromstring
 from app.utils.path_io.path_utils import get_app_data_dir
 
 RUN_FILE_MIME_TYPES = {
+    ".png": "image/png",
+    ".json": "application/json",
+    ".txt": "text/plain",
     ".xls": "application/vnd.ms-excel",
     ".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -26,6 +30,24 @@ RUN_FILE_MIME_TYPES = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
+
+_OWNER_BOUND_TYPES = {".pdf", ".docx", ".pptx", ".png", ".json", ".txt"}
+
+
+def _verify_bound_content(content: bytes, suffix: str) -> None:
+    if suffix in {".pdf", ".docx", ".pptx"}:
+        _verify_office_content(content, suffix)
+    elif suffix == ".png":
+        from PIL import Image
+
+        with Image.open(io.BytesIO(content)) as image:
+            if image.format != "PNG":
+                raise ValueError("browser screenshot format does not match suffix")
+            image.verify()
+    elif suffix == ".json":
+        json.loads(content.decode("utf-8"))
+    elif suffix == ".txt":
+        content.decode("utf-8")
 
 
 def _verify_office_content(content: bytes, suffix: str) -> None:
@@ -87,10 +109,10 @@ def store_run_file(
     suffix = Path(name).suffix.lower()
     if suffix not in RUN_FILE_MIME_TYPES:
         raise ValueError("unsupported run file format")
-    if suffix in {".pdf", ".docx", ".pptx"}:
+    if suffix in _OWNER_BOUND_TYPES:
         if type(owner_user_id) is not int or owner_user_id <= 0 or not tenant_id:
             raise ValueError("office artifact requires account and tenant scope")
-        _verify_office_content(content, suffix)
+        _verify_bound_content(content, suffix)
     artifact_id = f"{suffix[1:]}_{digest[:32]}"
     path = artifact_path(run_id, artifact_id)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,7 +131,7 @@ def store_run_file(
     finally:
         temporary.unlink(missing_ok=True)
     metadata = {"sha256": digest, "size_bytes": len(content)}
-    if suffix in {".pdf", ".docx", ".pptx"}:
+    if suffix in _OWNER_BOUND_TYPES:
         metadata.update(run_id=run_id, owner_user_id=str(owner_user_id), tenant_id=str(tenant_id))
     return {
         "artifact_id": artifact_id,
@@ -132,14 +154,14 @@ def read_verified_run_file(run_id: str, artifact: dict[str, Any]) -> bytes:
         content
     ).hexdigest() != metadata.get("sha256"):
         raise ValueError("artifact checksum mismatch")
-    if path.suffix in {".pdf", ".docx", ".pptx"}:
+    if path.suffix in _OWNER_BOUND_TYPES:
         if (
             Path(str(artifact.get("name") or "")).suffix.lower() != path.suffix
             or artifact.get("mime_type") != RUN_FILE_MIME_TYPES[path.suffix]
             or metadata.get("run_id") != run_id
         ):
             raise ValueError("office artifact format or run mismatch")
-        _verify_office_content(content, path.suffix)
+        _verify_bound_content(content, path.suffix)
     return content
 
 

@@ -95,8 +95,10 @@ def test_merge_registers_read_and_write_actions(tmp_path, monkeypatch) -> None:
     actions = merged[tool_id]["actions"]
     assert actions["search_notes"]["risk"] == "low"
     assert actions["search_notes"]["idempotent"] is True
+    assert actions["search_notes"]["read_only"] is True
     assert actions["search_notes"]["required_params"] == ["query"]
     assert actions["write_note"]["risk"] == "high"
+    assert actions["write_note"]["read_only"] is False
     assert actions["write_note"]["requires_write_approval"] is True
     assert registered[tool_id]["actions"]["write_note"]["risk"] == "high"
 
@@ -182,8 +184,7 @@ def test_plan_parallel_switch(monkeypatch, value, expected) -> None:
 
 @pytest.mark.asyncio
 async def test_list_all_tools_follows_pagination() -> None:
-    pytest.importorskip("mcp")
-    from types import SimpleNamespace
+    from mcp.types import ListToolsResult, Tool
 
     from app.infrastructure.mcp.client import _list_all_tools
 
@@ -194,14 +195,16 @@ async def test_list_all_tools_follows_pagination() -> None:
         async def list_tools(self, params=None):
             self.cursors.append(params)
             if params is None:
-                return SimpleNamespace(tools=[SimpleNamespace(name="first")], nextCursor="page-2")
-            return SimpleNamespace(tools=[SimpleNamespace(name="second")], nextCursor=None)
+                return ListToolsResult(
+                    tools=[Tool(name="first", inputSchema={})], nextCursor="page-2"
+                )
+            return ListToolsResult(tools=[Tool(name="second", inputSchema={})])
 
     session = Session()
     tools = await _list_all_tools(session)
     assert [tool.name for tool in tools] == ["first", "second"]
     assert len(session.cursors) == 2
-    assert session.cursors[1] is not None
+    assert session.cursors[1].cursor == "page-2"
 
 
 def test_resource_actions_are_registered(monkeypatch) -> None:
@@ -306,6 +309,7 @@ def test_remote_name_and_hint_alone_never_grant_readonly_authority(name, hint):
     info = McpToolInfo(name=name, description="", input_schema={}, read_only=hint)
     spec = mcp_registry._action_spec(info, mcp_config.McpServerConfig(name="demo", command="x"))
     assert spec["risk"] == "high" and spec["idempotent"] is False
+    assert spec["read_only"] is False
     assert spec["requires_write_approval"] is True
 
 
@@ -466,3 +470,184 @@ async def test_oauth_network_io_is_cancellable_before_session_start(monkeypatch)
     assert started.is_set()
     assert cancelled.is_set()
     assert client._TOKEN_CACHE == {}
+
+
+def test_discovered_contract_reaches_agent_validation_without_losing_constraints(monkeypatch):
+    from app.application.agent_orchestrator import tool_spec
+
+    schema = {
+        "type": "object",
+        "required": ["target"],
+        "additionalProperties": False,
+        "properties": {
+            "target": {
+                "type": "object",
+                "required": ["role", "limit"],
+                "additionalProperties": False,
+                "properties": {
+                    "role": {"type": "string", "enum": ["button", "textbox"]},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 2},
+                },
+            }
+        },
+    }
+    info = McpToolInfo("inspect_form", "Inspect a form", schema, True)
+    config = mcp_config.McpServerConfig(
+        name="browser", command="x", read_only_tools=("inspect_form",)
+    )
+    action = mcp_registry._action_spec(info, config)
+    action["output_schema"] = {
+        "type": "object",
+        "required": ["success", "receipt"],
+        "properties": {"success": {"type": "boolean"}, "receipt": {"type": "string"}},
+    }
+    registry = {
+        "mcp__browser": {"actions": {"inspect_form": action}},
+        "shipment_orders": {
+            "actions": {"generate_batch": {"input_schema": {}, "output_schema": {}}}
+        },
+    }
+    monkeypatch.setattr(
+        "app.services.tools_execution.registry.get_workflow_tool_registry", lambda: registry
+    )
+    monkeypatch.setattr(tool_spec, "_TOOL_SPECS_CACHE", None)
+    spec = tool_spec.get_tool_action_spec("mcp__browser", "inspect_form")
+    assert spec is not None and spec.read_only and spec.idempotent
+    assert spec.description == "Inspect a form"
+    assert spec.input_schema == schema
+    assert spec.output_schema == action["output_schema"]
+    valid = {"target": {"role": "button", "limit": 1}}
+    assert tool_spec.validate_tool_call("mcp__browser", "inspect_form", valid).ok
+    for invalid in (
+        {"target": {"role": "dialog", "limit": 1}},
+        {"target": {"role": "button", "limit": 3}},
+        {"target": {"role": "button", "limit": "1"}},
+        {"target": {"role": "button", "limit": 1, "hidden": True}},
+    ):
+        assert not tool_spec.validate_tool_call("mcp__browser", "inspect_form", invalid).ok
+    assert not tool_spec.validate_tool_result("mcp__browser", "inspect_form", {"success": True}).ok
+    fixed_key = ("shipment_orders", "generate_batch")
+    fixed = tool_spec.get_tool_action_spec(*fixed_key)
+    assert fixed.input_schema == tool_spec._SPECIAL_INPUT_SCHEMAS[fixed_key]
+    assert fixed.output_schema == tool_spec._SPECIAL_OUTPUT_SCHEMAS[fixed_key]
+    schema["properties"]["target"]["properties"]["limit"]["maximum"] = 100
+    assert spec.input_schema["properties"]["target"]["properties"]["limit"]["maximum"] == 2
+    assert action["input_schema"]["properties"]["target"]["properties"]["limit"]["maximum"] == 2
+
+
+@pytest.mark.parametrize("success", [False, "false", "true", 1, 0, None, {}, []])
+def test_mcp_transport_success_does_not_promote_failed_or_invalid_business_receipts(
+    monkeypatch, success
+):
+    from mcp.types import CallToolResult, TextContent
+
+    from app.infrastructure.mcp import client
+
+    receipt = {"success": success, "evidence": {"observed": "not committed"}}
+    result = CallToolResult(
+        content=[TextContent(type="text", text="transport delivered")],
+        structuredContent=receipt,
+        isError=False,
+    )
+    monkeypatch.setattr(client, "_run_with_reconnect", lambda *a, **kw: result)
+    output = client.call_tool(mcp_config.McpServerConfig(name="demo", command="x"), "submit", {})
+    assert output["success"] is False
+    assert output["structuredContent"] == receipt
+    assert output["error_code"] == (
+        "mcp_business_error" if success is False else "mcp_result_invalid"
+    )
+    assert output["retryable"] is False and output["reconciliation_required"] is True
+    assert output["outcome"] == "unknown"
+
+
+def test_incomplete_mcp_result_cannot_complete_a_write(monkeypatch):
+    from mcp.types import CallToolResult
+
+    from app.infrastructure.mcp import client
+
+    monkeypatch.setattr(
+        client,
+        "_run_with_reconnect",
+        lambda *a, **kw: CallToolResult(content=[], resultType="input_required"),
+    )
+    output = client.call_tool(mcp_config.McpServerConfig(name="demo", command="x"), "submit", {})
+    assert output["success"] is False and output["resultType"] == "input_required"
+    assert output["error_code"] == "mcp_result_incomplete" and output["retryable"] is False
+
+
+@pytest.mark.parametrize("structured", [{"success": True}, {"rows": []}, [{"id": 1}]])
+def test_mcp_sdk_structured_data_is_preserved_without_inventing_business_fields(
+    monkeypatch, structured
+):
+    from mcp.types import CallToolResult
+
+    from app.infrastructure.mcp import client
+
+    monkeypatch.setattr(
+        client,
+        "_run_with_reconnect",
+        lambda *a, **kw: CallToolResult(content=[], structuredContent=structured),
+    )
+    output = client.call_tool(mcp_config.McpServerConfig(name="demo", command="x"), "read", {})
+    assert output["success"] is True and output["structuredContent"] == structured
+    assert output["structuredContent"] is not structured
+
+
+def test_real_mcp_stdio_preserves_structured_receipts_and_business_failure(tmp_path):
+    import sys
+
+    from app.infrastructure.mcp import client
+
+    server = tmp_path / "receipt_server.py"
+    server.write_text(
+        """import asyncio
+from mcp import types
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+
+async def list_tools(context, params):
+    return types.ListToolsResult(tools=[types.Tool(
+        name="submit", description="Synthetic form submission",
+        inputSchema={"type": "object", "required": ["commit"],
+                     "properties": {"commit": {"type": "boolean"}}},
+        annotations=types.ToolAnnotations(readOnlyHint=False)), types.Tool(
+        name="inspect", inputSchema={"type": "object"},
+        annotations=types.ToolAnnotations(readOnlyHint=True))])
+
+async def call_tool(context, params):
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text="transport delivered")],
+        isError=bool(params.arguments.get("protocol_error")),
+        structuredContent={"success": params.arguments["commit"],
+                           "receipt": {"form_id": "synthetic-form-1"}})
+
+async def main():
+    server = Server("receipt-test", on_list_tools=list_tools, on_call_tool=call_tool)
+    async with stdio_server() as (read, write):
+        await server.run(read, write, server.create_initialization_options())
+
+asyncio.run(main())
+""",
+        encoding="utf-8",
+    )
+    config = mcp_config.McpServerConfig(
+        name="receipt-test", command=sys.executable, args=(str(server),), timeout_seconds=10
+    )
+    tools = client.list_tools(config)
+    assert len(tools) == 2 and tools[0].name == "submit"
+    assert tools[0].input_schema["properties"]["commit"] == {"type": "boolean"}
+    assert tools[0].read_only is False and tools[1].read_only is True
+    for committed, protocol_error in ((False, False), (True, False), (True, True)):
+        output = client.call_tool(
+            config, "submit", {"commit": committed, "protocol_error": protocol_error}
+        )
+        assert output["success"] is (committed and not protocol_error), output
+        assert output["structuredContent"] == {
+            "success": committed,
+            "receipt": {"form_id": "synthetic-form-1"},
+        }
+        if not committed or protocol_error:
+            assert output["outcome"] == "unknown" and output["retryable"] is False
+            assert output["error_code"] == (
+                "mcp_tool_error" if protocol_error else "mcp_business_error"
+            )

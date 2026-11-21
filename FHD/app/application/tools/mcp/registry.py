@@ -10,6 +10,7 @@ import logging
 import re
 import threading
 import time
+from copy import deepcopy
 from typing import Any
 
 from app.infrastructure.mcp.client import (
@@ -86,6 +87,8 @@ def _action_spec(info: McpToolInfo, config: McpServerConfig) -> dict[str, Any]:
     return {
         "risk": "low" if read_only else "high",
         "idempotent": read_only,
+        "read_only": read_only,
+        "input_schema": deepcopy(schema),
         "required_params": required_params,
         "availability": "shared",
         "description": info.description,

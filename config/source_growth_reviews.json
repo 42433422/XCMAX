@@ -51,26 +51,26 @@
     },
     "FHD/app/application/agent_orchestrator/tool_spec.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec.py",
-      "base_blob": "b530c36af3c20425d858d8dd75746921fa633a76",
-      "head_blob": "9be9f4642cc52099d777ea989dec5e6a00fb3b19",
-      "before_lines": 801,
-      "after_lines": 818,
-      "reason": "为新增UI上传动作提供满足必填文件名和内容格式的真实契约样例，修复全注册动作校验失败。",
-      "boundary": "只调整契约样例生成；运行时上传schema、默认禁写和权限校验保持强制执行。",
-      "validation": "test_tool_spec_v2与test_aiopen_capability_loop覆盖合法样例、缺文件名拒绝和写开关两态。",
-      "follow_up": "后续增加样例优先放入既有tool_spec_data目录，不继续扩大注册器职责。",
+      "base_blob": "9be9f4642cc52099d777ea989dec5e6a00fb3b19",
+      "head_blob": "c26adbd7f7a1d56edf3509d89af32e7d498a70c6",
+      "before_lines": 818,
+      "after_lines": 854,
+      "reason": "MCP full schema propagation and AIOPEN risk metadata must survive existing central tool-spec enrichment.",
+      "boundary": "Keeps existing schema resolution and registry authority; browser runtime and validation live in separate bounded modules.",
+      "validation": "Focused MCP/ToolSpec, authenticated bridge and frontend cursor tests pass; exact changed blobs remain subject to CI and maintainer review.",
+      "follow_up": "Retain this narrow repair boundary; split declarative data or cursor lifecycle only when a reviewed refactor can preserve existing contracts.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py",
       "base_blob": "36244a3dde121a2229a9f1d2f664e1274bd621ac",
-      "head_blob": "67ef5cfeda81842374a1f8ba3815488e996a7f5c",
+      "head_blob": "81ad5b9655ac8656d612850a106f9f49e750e80a",
       "before_lines": 1142,
-      "after_lines": 1185,
-      "reason": "本记录是评审请求，不是审批证据。集成树在同一输入合同文件中同时保留客来来有界输入合同（#3435）与 Computer Use 桌面/浏览器动作参数声明（#3430）；不把任一来源评审请求视为已批准，也不合并成新的批准记录。最终将按与当前 main 的 merge-base 重算精确 identity 后再提交。",
-      "boundary": "仅登记读取渠道、客户、会话、发送与查询回执的有界输入合同；发送仍需当前账号与企业绑定、messages.send scope及持久化精确参数审批，不从模型参数取得授权。 仅增加参数描述、额外字段拒绝和最多20步的批次约束；既有 Agent 持久审批、密封身份、本机账号租户绑定和执行器运行时校验共同决定能否输入。",
-      "validation": "客来来与 Computer Use 各自登记的回归范围保留待集成后按真实调用链复验；远端 CI、真机与真实渠道验收仍待完成。本说明不是通过证明。",
-      "follow_up": "继续把渠道合同保留在独立工具族模块；首次真实渠道验收需核对供应商受理回执与未知结果恢复，不把accepted视为delivered。 继续在既有 tool_spec_data 中维护同一工具契约；若该工具族继续增长，评审后按工具族拆分静态数据，保持唯一注册入口。",
+      "after_lines": 1190,
+      "reason": "本记录是评审请求，不是审批证据。集成树对该文件保留各来源已登记增量的独特合并结果；不把任一来源评审请求视为已批准，也不合成新的批准记录。最终将按与当前 main 的 merge-base 重算精确 identity 后再提交。",
+      "boundary": "仅登记读取渠道、客户、会话、发送与查询回执的有界输入合同；发送仍需当前账号与企业绑定、messages.send scope及持久化精确参数审批，不从模型参数取得授权。 仅增加参数描述、额外字段拒绝和最多20步的批次约束；既有 Agent 持久审批、密封身份、本机账号租户绑定和执行器运行时校验共同决定能否输入。 Only imports and spreads two generated schema entries; all new validation is isolated in app/domain/browser_contract.py.",
+      "validation": "各来源已登记回归范围保留，待集成后按真实调用链复验；远端完整 CI 与未完成验收仍待进行。本说明不是通过证明。",
+      "follow_up": "继续把渠道合同保留在独立工具族模块；首次真实渠道验收需核对供应商受理回执与未知结果恢复，不把accepted视为delivered。 继续在既有 tool_spec_data 中维护同一工具契约；若该工具族继续增长，评审后按工具族拆分静态数据，保持唯一注册入口。 Retain this narrow repair boundary; split declarative data or cursor lifecycle only when a reviewed refactor can preserve existing contracts.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
@@ -88,13 +88,13 @@
     "FHD/app/application/agent_orchestrator/tool_spec_data/special_tool_contracts.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/special_tool_contracts.py",
       "base_blob": "ec8263696f704ab371a2b9b3d59b842504a742f6",
-      "head_blob": "9061e0c35a8eb0e2e66a7d2ab05c11cde03520f1",
+      "head_blob": "54205ac45e1e02092a6a6ec149f30f146fcb3666",
       "before_lines": 1087,
-      "after_lines": 1099,
-      "reason": "为 computer_execute 提供满足 steps.action 要求的浏览器导航与URL核验契约样例，修复默认数组占位样例无法通过新增参数校验的问题。此登记仅请求评审。",
-      "boundary": "新增12行静态输入输出样例，不自动执行示例站点、不授权外部来源、不替代服务端审批或已有动作契约。",
-      "validation": "工具契约全目录校验与相关243项整合回归通过；样例success包含verified字段，真实失败与未核验路径仍阻止任务完成。",
-      "follow_up": "沿用已有特例样例集合，后续按工具族拆分时与对应input schema同步移动；等待架构审查，不将本记录视为批准。",
+      "after_lines": 1124,
+      "reason": "本记录是评审请求，不是审批证据。集成树对该文件保留各来源已登记增量的独特合并结果；不把任一来源评审请求视为已批准，也不合成新的批准记录。最终将按与当前 main 的 merge-base 重算精确 identity 后再提交。",
+      "boundary": "新增12行静态输入输出样例，不自动执行示例站点、不授权外部来源、不替代服务端审批或已有动作契约。 Only two declarative examples; no browser execution, permissions or new dispatch logic in this table.",
+      "validation": "各来源已登记回归范围保留，待集成后按真实调用链复验；远端完整 CI 与未完成验收仍待进行。本说明不是通过证明。",
+      "follow_up": "沿用已有特例样例集合，后续按工具族拆分时与对应input schema同步移动；等待架构审查，不将本记录视为批准。 Retain this narrow repair boundary; split declarative data or cursor lifecycle only when a reviewed refactor can preserve existing contracts.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_tool_lifecycle.py": {
@@ -435,14 +435,14 @@
     },
     "FHD/frontend/src/composables/useAiOpenCursor.ts": {
       "base_file": "FHD/frontend/src/composables/useAiOpenCursor.ts",
-      "base_blob": "0f734f9e81d0571d35277109f253de9795e7dabc",
-      "head_blob": "0db8c3a087eef4b09f6396d1007c2a85fe03f336",
-      "before_lines": 376,
-      "after_lines": 937,
-      "reason": "审阅请求：扩展受控UI动作并收紧上传URL；复用现有身份会话代际与Vue监听，在账号切换、关闭和重连时退役旧任务，并让等待条件每轮重查。",
-      "boundary": "保留固定Agent产物授权路由、同源凭据和禁止重定向；异步恢复后及DOM事件间核验连接与身份，旧引用、回执和拖尾失效，不新建身份或请求通道。",
-      "validation": "四个前端动作与拖尾套件125项、type-check和目标ESLint通过；原上传URL的CodeQL告警在b515扫描消失；最终组合完整CI待远端，登记不代表人工架构批准。",
-      "follow_up": "后续将独立UI动作放入专门适配器，保留本次URL和权限边界，不以增长登记代替安全审查。",
+      "base_blob": "0db8c3a087eef4b09f6396d1007c2a85fe03f336",
+      "head_blob": "7e644b4461b911263f59d0042c5799e6c741f5f2",
+      "before_lines": 937,
+      "after_lines": 986,
+      "reason": "Serializes screen commands, cancels expired uploads, rejects stale element refs and masks sensitive receipts; bounds every command timer locally to 30 seconds and expires malformed durations before effects.",
+      "boundary": "Changes the established cursor lifecycle in place; no new page-control engine or duplicate UI; hardening is covered by real DOM assertions.",
+      "validation": "Cursor DOM, cancellation and malformed/overflow timer regressions: 161 tests passed across five files; changed-file ESLint passed. Exact changed blobs remain subject to final-head CI and maintainer review; this request is not approval.",
+      "follow_up": "Retain this narrow repair boundary; split declarative data or cursor lifecycle only when a reviewed refactor can preserve existing contracts.",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useChatMessages.ts": {
@@ -743,6 +743,18 @@
       "boundary": "只使用同租户、同所有人且可核验的上传回执。审批前规范化保留首个来源；已有冻结计划保持原附件集合，每个批准 ID 必须具有真实执行或行级跳过回执，无法读取和未知写入均保持未完成。 复用SQLAlchemy JSON查询，原matches保留最终核验，旧别名及非标准JSON兼容；不设置会漏掉旧目标的固定窗口。",
       "validation": "131 项 ELT、checkpoint、batch 与进度回归通过，包含审批前规范化及真实 CSV/SQLite 的 fresh、resume、unreadable 三种重复附件场景。最终远端 CI 与人工架构审查仍需完成；此登记不是批准。 最终 CI 类型修复保留既有装饰器、仓库及附件身份契约；在同 CI Python 3.11.18 / mypy 2.4.1 与依赖版本环境中，全量 app 类型检查和 186 项相关回归通过。 历史评审补修：续接复用仓库 matches 在 limit 前筛选完整授权范围；真实内存与文件 SQLite 各加入64条跨范围记录及外部账号，旧8失败/2通过，修复后续接与仓库56项通过，定点mypy及Ruff通过。 新增SQLite旧实现4失败，修后无匹配0条/有目标1条反序列化；相关完整文件60项及新增旧标量4项通过，独立复核162组无假阴性。PostgreSQL16真实场景与完整mypy待本head CI。",
       "follow_up": "评审后沿既有批次入口拆分上传来源核对与续接计划构造，保留冻结审批和真实回执契约。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/agent_orchestrator/tool_process.py": {
+      "base_file": "FHD/app/application/agent_orchestrator/tool_process.py",
+      "base_blob": "acfa7d1385047b168954500421dc43fc6dfe4bf8",
+      "head_blob": "226f37dd18bcbd07ee89b9705c43bc7771bc8499",
+      "before_lines": 695,
+      "after_lines": 906,
+      "reason": "真实固定 Chromium 对照确认生产 2 GiB RLIMIT_AS 阻止启动；复用已锁定 psutil 和现有进程握手、截止与回收器，对可信 browser 任务改用整树 RSS 预算，完成用户要求的浏览器代码执行闭环。",
+      "boundary": "保留同一 Agent 工具进程边界，不另建调度器；启动放行前仍施加原 AS，父监督建立后才恢复继承上限。CPU/FD/Chromium sandbox、其他工具 AS 与清理失败封锁保留；已观测后代按 PID/创建时间计量和回收。采样不是内核硬上限，严格隔离仍由宿主负责。",
+      "validation": "13 项真实进程资源测试覆盖聚合超额、执行/排空/回执三个阶段、8 GiB 低 RSS 预留、AccessDenied、外部 AS 硬限制和重挂后代。资源/清理/流式/spawn 62 项通过，整合工具回归 249 项通过，Ruff 与定向 mypy 通过；当前提交的真实 Chromium 和完整批准 Agent 整链 CI 尚待执行，不据此宣称上线。",
+      "follow_up": "由 @42433422 在 PR #3434 复核进程所有权、采样边界和实际 Chromium 证据，按主序列评审；本记录仅申请源文件增长评审，不表示批准。保持进程生命周期在现有边界内，后续变更按职责评估。",
       "review_owner": "@42433422"
     }
   }

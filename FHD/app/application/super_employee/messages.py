@@ -6,6 +6,7 @@ from typing import Any
 
 from app.application.message_repository import MessageRepository
 
+from .cli import CliExecutionError
 from .common import (
     DISPATCHER_MESSAGE_KIND,
     PARA_TERMINAL_TASK_STATUSES,
@@ -135,8 +136,12 @@ class MessageSynchronizer:
                 continue
             text = str(item.get("body") or "")
             body = self._ports.direct_reply(text)
+            failure = None
             if not body and cli_backfills < 1 and self._ports.should_reply(text, {}):
-                (body, _) = self._ports.compose_reply(text, {})
+                try:
+                    (body, _) = self._ports.compose_reply(text, {})
+                except CliExecutionError as exc:
+                    failure, body = exc, exc.reply_body()
                 cli_backfills += 1
             if not body:
                 continue
@@ -147,8 +152,8 @@ class MessageSynchronizer:
                     body=body,
                     created_at=_utc_now(),
                     request_id=request_id,
-                    status="completed",
-                    extra={"kind": self._p.direct_kind},
+                    status="failed" if failure else "completed",
+                    extra={"kind": self._p.direct_kind, **(failure.payload() if failure else {})},
                 )
             )
             request_ids_with_reply.add(request_id)

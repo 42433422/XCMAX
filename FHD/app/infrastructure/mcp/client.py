@@ -17,6 +17,7 @@ import time
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Coroutine, TypeVar
 
@@ -50,6 +51,11 @@ class McpToolInfo:
 
 class McpClientError(RuntimeError):
     """MCP 连接或调用失败；调用方按工具失败处理。"""
+
+
+def _sdk_field(value: Any, name: str, alias: str, default: Any = None) -> Any:
+    """MCP 2 uses Python snake_case fields; older clients expose wire aliases."""
+    return getattr(value, name, getattr(value, alias, default))
 
 
 def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) -> T:
@@ -148,7 +154,7 @@ async def _with_session(
 
 def _read_only(tool: Any) -> bool:
     annotations = getattr(tool, "annotations", None)
-    hint = getattr(annotations, "readOnlyHint", None)
+    hint = _sdk_field(annotations, "read_only_hint", "readOnlyHint")
     return hint is True
 
 
@@ -161,7 +167,7 @@ async def _list_all_tools(session: Any, *, max_pages: int = 10) -> list[Any]:
         params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
         result = await session.list_tools(params=params) if params else await session.list_tools()
         collected.extend(getattr(result, "tools", None) or [])
-        cursor = getattr(result, "nextCursor", None)
+        cursor = _sdk_field(result, "next_cursor", "nextCursor")
         if not cursor:
             break
     return collected
@@ -182,7 +188,7 @@ def list_tools(config: McpServerConfig) -> list[McpToolInfo]:
         name = str(getattr(tool, "name", "") or "").strip()
         if not name:
             continue
-        schema = getattr(tool, "inputSchema", None)
+        schema = _sdk_field(tool, "input_schema", "inputSchema")
         tools.append(
             McpToolInfo(
                 name=name,
@@ -219,7 +225,7 @@ def _result_text(result: Any) -> str:
                 parts.append(text)
         if parts:
             return "\n".join(parts)
-    structured = getattr(result, "structuredContent", None)
+    structured = _sdk_field(result, "structured_content", "structuredContent")
     return _serialize(structured) if structured is not None else ""
 
 
@@ -288,7 +294,15 @@ def call_tool(
                 retry_safe=safe_read,
             )
         text = _result_text(result)
-        is_error = bool(getattr(result, "isError", False))
+        is_error = bool(_sdk_field(result, "is_error", "isError", False))
+        structured = _sdk_field(result, "structured_content", "structuredContent")
+        invalid = (
+            isinstance(structured, dict)
+            and "success" in structured
+            and type(structured["success"]) is not bool
+        )
+        business_error = isinstance(structured, dict) and structured.get("success") is False
+        result_type = _sdk_field(result, "result_type", "resultType", "complete")
     except BOUNDARY_ERRORS as exc:  # The external SDK is an isolated plugin boundary.
         logger.warning("MCP 工具 %s.%s 调用失败：%s", config.name, tool_name, type(exc).__name__)
         return {
@@ -297,13 +311,26 @@ def call_tool(
             "message": "MCP 工具调用失败",
             **uncertain,
         }
+    error_code = (
+        "mcp_result_invalid"
+        if invalid
+        else "mcp_result_incomplete"
+        if result_type != "complete"
+        else "mcp_business_error"
+        if business_error
+        else "mcp_tool_error"
+        if is_error
+        else ""
+    )
     return {
-        "success": not is_error,
+        "success": not bool(error_code),
         "tool": tool_name,
         "server": config.name,
         "content": text,
-        "message": text if is_error else "",
-        **({"error_code": "mcp_tool_error", **uncertain} if is_error else {}),
+        "message": text if error_code else "",
+        **({"structuredContent": deepcopy(structured)} if structured is not None else {}),
+        **({"resultType": result_type} if result_type != "complete" else {}),
+        **({"error_code": error_code, **uncertain} if error_code else {}),
     }
 
 

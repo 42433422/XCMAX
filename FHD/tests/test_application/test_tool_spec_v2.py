@@ -469,10 +469,15 @@ def test_build_tool_specs_v2_exposes_aiopen_mcp_contracts() -> None:
     assert chat_spec.idempotent is False
     assert chat_spec.required_params == ["message"]
 
+    click = specs[("aiopen", "ui_click")]
+    assert click.risk == "high" and click.idempotent is False and click.read_only is False
+    snapshot = specs[("aiopen", "ui_snapshot")]
+    assert snapshot.risk == "low" and snapshot.idempotent is True and snapshot.read_only is True
+
     valid_ui_type = validate_tool_call(
         "aiopen",
         "ui_type",
-        {"selector": "#message", "text": "hello"},
+        {"session_id": "screen-session-1", "selector": "#message", "text": "hello"},
     )
     assert valid_ui_type.ok is True
 
@@ -488,7 +493,9 @@ def test_build_tool_specs_v2_exposes_aiopen_mcp_contracts() -> None:
         "type": "text/plain",
     }
     assert validate_tool_call("aiopen", "ui_upload", upload).ok
-    invalid_upload = validate_tool_call("aiopen", "ui_upload", {"files": [{"text": "sample"}]})
+    invalid_upload = validate_tool_call(
+        "aiopen", "ui_upload", {"session_id": "screen-session-1", "files": [{"text": "sample"}]}
+    )
     assert not invalid_upload.ok
     assert "name" in invalid_upload.message
 
@@ -711,12 +718,14 @@ def test_schema_failure_only_releases_a_certain_read_claim(
         result = execute_with_tool_deadline(
             executor, step, runtime_context=context, timeout_seconds=60
         )
-        evidence = result["reconciliation_evidence"] if unknown else result
+        evidence = result.get("reconciliation_evidence", result)
         assert evidence["error_code"] == "output_schema_validation_failed"
         assert result["success"] is False
         if unknown:
             assert result["outcome"] == "unknown" and result["retryable"] is False
             assert result["reconciliation_required"] is True
+            if not unknown_io:
+                assert result["error_code"] == "output_schema_validation_failed"
             tool_permission.drop_process_idempotency_memory()
             replay = execute_with_tool_deadline(
                 executor, step, runtime_context=context, timeout_seconds=60

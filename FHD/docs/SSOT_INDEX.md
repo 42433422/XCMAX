@@ -66,6 +66,7 @@
 |------|------|------|
 | DOMAIN 05 意图与工具路由 | [architecture/intent-tool-routing/05-intent-tool-routing-architecture.html](architecture/intent-tool-routing/05-intent-tool-routing-architecture.html) | 全链路 14 步、L0–L7 指标与 L2 记忆事实化；证据级别 E2，含离线图表资源 |
 | AIOPEN 开放面评审 | [architecture/AIOPEN_FULL_SURFACE.md](architecture/AIOPEN_FULL_SURFACE.md) | 开放面、安全边界与迁移方案；待评审提案，登记不代表功能已验收，接口以代码为准 |
+| AIOPEN 接入与浏览器执行 | [aiopen.md](aiopen.md) | 已有接口、Agent 浏览器契约、配置及未完成边界；测试通过不等于生产发布 |
 
 ## 审计记录（非 SSOT）
 
