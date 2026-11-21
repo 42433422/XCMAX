@@ -450,7 +450,7 @@ async def openai_chat_completions(
             {
                 "index": 0,
                 "message": {"role": "assistant", "content": out.get("content") or ""},
-                "finish_reason": "stop",
+                "finish_reason": out.get("finish_reason"),
             }
         ],
         "usage": {

@@ -249,6 +249,28 @@ system/user 原文与模板括号不经第二次插值。实际执行失败还�
 | L5 | 可把有来源的兴趣结果转为原战略提案 | 按独立额度探索，持久保留兴趣及其依据 |
 | L6 | 读取实际经历、失败与业务反馈，形成改进提案 | 反思并更新带证据的能力假设；训练、发布仍走原批准和验收 |
 
+### L1 对话闭环
+
+本轮从 #3449 的已发布源码 `f71246900c1b7141b40c7ba61c654d0b4211d6d7` 开始核查，提交前同步到其已发布增量 `e2b985fdbac101b08fe9f6a80417ed9fd240b7c4`；不将 PR 描述或另一工作树的未提交改动当作已合入代码。L1 允许对话、写作和代码建议及已授权上下文，不自动执行工具。以下是原调用链的故障回归范围，不能替代生产、真实模型或客户验收。
+
+上下文快照与回复审核选择性适配已提交来源 `cbb9b5541da`，普通回复/向量解释入口选择性适配 `f350f1a6667`，并保留本轮的完整终态检查；这些是核对过的本地提交来源，不据此声称对应远端 PR 已合入。运行时仍复用原 LangGraph、模型适配器和 Pydantic 结构化解析；产品只补完成事实、会话归属与权限传递。
+
+| 原断点 | 代码中的收口 | 回归入口 |
+|---|---|---|
+| 解释向量检索被误当表格任务、正常文字回复被当计划格式错误 | 兼容入口统一进入原 planner，原生工具选择仍允许无工具的普通回复；无执行回执不得声称已写入或完成业务 | `FHD/tests/test_application/test_native_tool_calling.py` 及兼容入口回归 |
+| 规划与二次审核读取不同上下文、审核失败状态留在复制字典 | 审核复用本轮授权上下文快照和失败状态；对话使用结构化 ReplyReview，不强迫写作建议生成执行图 | `FHD/tests/test_application/test_planner_context_continuity.py`、`test_planner_reply_completion.py` |
+| 流中断后补齐 JSON，将半句话记为成功 | 原供应商和 planner 保留结束原因，要求完整终态；已发布片段随失败回执保存，不自动再请求另一份答案 | `FHD/tests/test_application/test_planner_reply_completion.py` |
+| 计费回执丢失结束原因、兼容网关固定写 stop | 原 LiteLLM/供应商、同步计费和 OpenAI 兼容输出传递实际 finish_reason；缺失保持未知 | `tests/test_llm_billed_route_snapshot.py`、`tests/test_openai_llm_gateway_models.py` |
+| 管家空答复、空白、截断或无终态进入成功历史 | 同步与流式在成功日志前核对正文和结束事实；不将推理字段替代正文 | `tests/test_agent_butler_api.py` |
+| 输入重复、加载/失败占位混入上下文 | 捕获已完成历史，本轮用户输入只发送一次；L1 技能关键词不能截断正常模型建议 | `market/src/composables/agent/useAgentEngine.behavior.test.ts` |
+| 并发、清空、停止、换账号后旧结果覆盖新消息 | 绑定原消息、账号和会话代次；取消接收、权限等待与工具前复核共同拒绝迟到回写/动作；旧无归属操作记录不交给新账号 | 同上及 `useActionExecutor.test.ts`、`stores/agent.test.ts` |
+| 模型请求失败或截图失败后悄悄换成另一动作 | 故障沿原对话回报；截图未取得时不声称已看图，HTTP 失败不替代执行关键词技能 | `market/src/composables/agent/useAgentEngine.behavior.test.ts` |
+| 工作流生成 await 期间降 L1，仍写入图和技能 | 写入前及提交前复查原 manual scope，失败回滚；私人任务保持原权限 | `tests/test_xiaoc_life_execution.py` |
+| 员工转交离开请求上下文后丢失原管理员和等级 | 原建议单持久保存可信来源；调度恢复原责任人和等级，撤权/降级保持待核对，不换管理员执行 | `tests/test_xiaoc_life_handoff.py` |
+| 降级中断下一动作时丢弃前一步回执和模型用量 | 保留原 outputs 与真实 token；下一动作标记 blocked/not_started，已有 unknown 仍待核对，阻断后不启动验证工具 | `tests/test_xiaoc_life_execution.py` |
+
+上表 `tests/` 与 `market/` 均相对 `成都修茈科技有限公司/MODstore_deploy`。桌面和移动端原有缺少 SSE done、账号切换、原回执查询以及 unknown 禁重放保护继续保留；它们不是本轮新实现。停止接收与降级只阻止未发起的新动作，已经出站的动作仍按原回执核对。待办的批准、主线合入、发布和运行身份继续走原门禁。
+
 ### 管理端缺口与代码承接
 
 以下列出本轮代码审查发现的管理端缺口；文件均位于 `MODstore_deploy`，不把新增入口本身算作运行成功。

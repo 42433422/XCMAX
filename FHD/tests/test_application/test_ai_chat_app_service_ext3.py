@@ -1248,7 +1248,7 @@ def test_all_source_labels_execute_the_same_model_authored_reply_graph(source):
 
     def respond(**kwargs):
         request = json.loads(kwargs["messages"][-1]["content"])
-        if request.get("task") == "audit_goal_coverage":
+        if request.get("task") == "audit_reply":
             return goal_review_response(
                 request, source="解释一下工作方式", node_ids=["model_reply"], outcome="reply"
             )
@@ -1276,7 +1276,7 @@ def test_all_source_labels_execute_the_same_model_authored_reply_graph(source):
         result = service.process_chat("unified-reply", "解释一下工作方式", source=source)
     assert completion.call_count == 2
     assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
-        "audit_goal_coverage"
+        "audit_reply"
     )
     assert result["success"] is True
     assert result["response"] == "这是模型生成的说明"

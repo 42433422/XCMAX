@@ -33,7 +33,10 @@ class RecordingProvider:
         else:
             self.requests.append(copy.deepcopy(request))
             content = json.dumps({"mode": "reply", "reply": "收到"}, ensure_ascii=False)
-        return {"choices": [{"message": {"content": content}}], "model": "test"}
+        return {
+            "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+            "model": "test",
+        }
 
     async def stream_chat_completion(self, **request):
         self.requests.append(copy.deepcopy(request))
@@ -414,7 +417,9 @@ async def test_scoped_sdk_budgets_and_calls_the_same_selected_route(
             )
         assert request.url.path == "/api/llm/chat/stream"
         requests.append(json.loads(request.content))
-        return httpx.Response(200, text='data: {"delta":"收到"}\n\ndata: [DONE]\n\n')
+        return httpx.Response(
+            200, text='data: {"delta":"收到"}\n\ndata: {"finish_reason":"stop"}\n\ndata: [DONE]\n\n'
+        )
 
     client_type = httpx.Client
     monkeypatch.setattr(
@@ -655,6 +660,55 @@ def test_generate_sends_middle_fact_and_reuses_persisted_summary(monkeypatch, mo
     assert "FACT_85" in json.dumps(provider.requests[-1]["messages"], ensure_ascii=False)
 
 
+def test_goal_review_uses_shared_provider_budget_and_keeps_early_evidence(
+    monkeypatch, model_boundary
+):
+    from app.application.workflow.goal_coverage import review_goal_coverage
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    provider, manager = model_boundary
+    rows = long_history(40)
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows, "summary": None})
+    response = {
+        "goals": [
+            {
+                "goal_id": "query",
+                "source": "查询 A1",
+                "outcome": "execute",
+                "node_ids": ["query"],
+            }
+        ],
+        "violations": [],
+    }
+
+    async def respond(**request):
+        provider.requests.append(copy.deepcopy(request))
+        return {"choices": [{"message": {"content": json.dumps(response)}}]}
+
+    monkeypatch.setattr(provider, "chat_completion", respond)
+    context = {"local_user_id": 1, "session_id": "review-budget"}
+    plan = PlanGraph(
+        plan_id="p",
+        intent="query",
+        nodes=[WorkflowNode("query", "products", "query", {"keyword": "A1"})],
+    )
+    review, error = review_goal_coverage(
+        plan,
+        "查询 A1",
+        context,
+        lambda **kwargs: gateway.request_planner_completion(ai_service=SimpleNamespace(), **kwargs),
+    )
+    assert error is None and review is not None
+    request = provider.requests[-1]
+    wire = json.dumps(request["messages"], ensure_ascii=False)
+    assert "FACT_0" in wire
+    assert all(row["content"] in wire for row in rows)
+    assert "conversation_history" not in json.loads(request["messages"][-1]["content"])
+    assert windows.estimate_messages_tokens(request["messages"]) + request["max_tokens"] <= (
+        manager.token_budget
+    )
+
+
 @pytest.mark.parametrize("count", [60, 120, 121, 240])
 def test_old_excerpt_cache_never_discards_unsummarized_middle_or_120_boundary(count):
     rows = long_history(count)
@@ -846,7 +900,7 @@ def test_light_history_readback_falls_through_to_full_workflow(monkeypatch, mode
                     }
                 ],
             )
-        return {"choices": [{"message": {"content": json.dumps(payload)}}]}
+        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload)}}]}
 
     monkeypatch.setattr(provider, "chat_completion", complete)
     planner = generation.LlmPlanGeneration(

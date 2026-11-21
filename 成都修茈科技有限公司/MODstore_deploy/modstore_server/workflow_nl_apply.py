@@ -14,6 +14,8 @@ from uuid import uuid4
 from sqlalchemy.exc import SQLAlchemyError
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.xiaoc_life_chat import require_manual_life_capability
+from modstore_server.xiaoc_life_policy import LifePolicyError
 
 logger = logging.getLogger(__name__)
 _GENERATION_ERRORS = (asyncio.CancelledError,) + RECOVERABLE_ERRORS
@@ -160,7 +162,13 @@ async def apply_nl_workflow_graph(
             session=db,
         )
         if result.get("ok") is True or assignment is not None or generation_feedback:
+            if result.get("ok") is True:
+                require_manual_life_capability()
             db.commit()
+    except LifePolicyError:
+        db.rollback()
+        preserve_failed_generation({"ok": False, "error": "life_capability_revoked"})
+        raise
     except RECOVERABLE_ERRORS as exc:
         db.rollback()
         logger.warning(
@@ -583,6 +591,7 @@ def _apply_generated_response(
         }
     id_map: _facade().Dict[str, int] = {}
     temp_to_skill: _facade().Dict[str, int] = {}
+    require_manual_life_capability()
     try:
         temp_to_skill = _facade()._create_generated_skills(db, user, skill_blueprints, warnings)
         for n in nodes_in:

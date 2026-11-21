@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   detectTarget: vi.fn(),
   start: vi.fn(),
   serializeVisibleDom: vi.fn(),
+  conversationGeneration: 0,
 }))
 
 vi.mock('vue-router', () => ({
@@ -20,7 +21,12 @@ vi.mock('./usePrivacyManager', () => ({
 }))
 
 vi.mock('../../stores/agent', () => ({
-  useAgentStore: () => ({ setMode: mocks.setMode }),
+  useAgentStore: () => ({
+    setMode: mocks.setMode,
+    get conversationGeneration() {
+      return mocks.conversationGeneration
+    },
+  }),
 }))
 
 vi.mock('./useButlerOrchestrator', () => ({
@@ -42,6 +48,7 @@ describe('useActionExecutor', () => {
     sessionStorage.clear()
     vi.restoreAllMocks()
     vi.clearAllMocks()
+    mocks.conversationGeneration = 0
     mocks.push.mockResolvedValue(undefined)
     mocks.requestAction.mockResolvedValue(true)
     mocks.detectTarget.mockReturnValue({ type: 'mod', id: 'demo-mod' })
@@ -310,7 +317,11 @@ describe('useActionExecutor', () => {
     auth.user = { id: 11, username: 'admin', is_admin: true }
     auth.currentMode = 'admin'
     let confirm!: (value: boolean) => void
-    mocks.requestAction.mockReturnValue(new Promise<boolean>((resolve) => { confirm = resolve }))
+    mocks.requestAction.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        confirm = resolve
+      }),
+    )
     const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
     const button = document.createElement('button')
     button.id = 'pending-business-action'
@@ -322,6 +333,24 @@ describe('useActionExecutor', () => {
     expect((await result).success).toBe(false)
     expect(read).toHaveBeenCalledTimes(1)
     expect(button.click).not.toHaveBeenCalled()
+  })
+
+  it('停止或清空原轮后，尚未返回的 L2 权限读取不能再触发页面动作', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    let finish!: (state: XiaoCLifeState) => void
+    vi.spyOn(xiaocLifeApi, 'read').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const navigation = useActionExecutor().navigate({ name: 'plans' })
+    mocks.conversationGeneration += 1
+    finish({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
+
+    expect((await navigation).success).toBe(false)
+    expect(mocks.push).not.toHaveBeenCalled()
   })
 
   it('暂停后台仍允许 L2 的明确单步请求，L2 不允许发起改写编排', async () => {
@@ -351,7 +380,10 @@ describe('useActionExecutor', () => {
     budgetInput.setAttribute('value', '0')
     const levelSelect = document.createElement('select')
     levelSelect.setAttribute('id', 'life-level')
-    for (const [value, label] of [['1', 'L1'], ['6', 'L6']]) {
+    for (const [value, label] of [
+      ['1', 'L1'],
+      ['6', 'L6'],
+    ]) {
       const option = document.createElement('option')
       option.setAttribute('value', value)
       option.textContent = label

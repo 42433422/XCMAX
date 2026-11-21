@@ -257,11 +257,12 @@ def stream_planner_completion(
     """Stream through the same context/output/schema budget as normal completion."""
     from app.infrastructure.llm.model_admission import model_rate_limit_scope
     from app.infrastructure.llm.providers.registry import get_active_provider
+    from app.infrastructure.llm.response_completion import provider_supports_streaming
 
     provider = get_active_provider(conversation_service=ai_service)
-    stream = getattr(provider, "stream_chat_completion", None) if provider is not None else None
-    if stream is None:
+    if not provider_supports_streaming(provider):
         return None
+    stream = provider.stream_chat_completion
 
     async def generate():
         from app.infrastructure.llm.model_context_windows import resolve_model_limits
@@ -334,6 +335,12 @@ def request_planner_completion(
                     **{**extra, **limits.request_options},
                 )
                 limits.assert_current()
+                if isinstance(result, dict) and isinstance(result.get("choices"), list):
+                    # Keep missing terminal evidence explicit at the real IO
+                    # boundary; internal legacy completion ports may omit it.
+                    for choice in result["choices"]:
+                        if isinstance(choice, dict):
+                            choice.setdefault("finish_reason", None)
                 return result
 
             result = _run_async(complete())

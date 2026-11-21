@@ -372,28 +372,6 @@ class TestMergeRuntimeContextWithMessagePaths:
 
 
 # ---------------------------------------------------------------------------
-# _looks_like_vector_request
-# ---------------------------------------------------------------------------
-
-
-class TestLooksLikeVectorRequest:
-    def test_vector_keyword(self):
-        assert helpers._looks_like_vector_request("建立向量索引") is True
-
-    def test_embedding_keyword(self):
-        assert helpers._looks_like_vector_request("embedding search") is True
-
-    def test_semantic_search(self):
-        assert helpers._looks_like_vector_request("semantic search") is True
-
-    def test_normal_message(self):
-        assert helpers._looks_like_vector_request("你好") is False
-
-    def test_empty(self):
-        assert helpers._looks_like_vector_request("") is False
-
-
-# ---------------------------------------------------------------------------
 # _xcagi_chat_timeout_seconds
 # ---------------------------------------------------------------------------
 

@@ -316,7 +316,14 @@ async def test_l1_chat_uses_plain_model_without_tool_request(state, monkeypatch)
     monkeypatch.setattr(butler, "enforce_risk_limits", lambda *_: None)
     monkeypatch.setattr(butler, "_get_or_create_conversation", lambda *a: SimpleNamespace(id=5))
     monkeypatch.setattr(butler, "save_success_log", lambda *a, **kw: None)
-    plain = AsyncMock(return_value={"ok": True, "content": "你好", "usage": {"total_tokens": 2}})
+    plain = AsyncMock(
+        return_value={
+            "ok": True,
+            "content": "你好",
+            "finish_reason": "stop",
+            "usage": {"total_tokens": 2},
+        }
+    )
     monkeypatch.setattr(butler, "chat_dispatch", plain)
     result = await butler.butler_chat(
         Request({"type": "http", "headers": []}),

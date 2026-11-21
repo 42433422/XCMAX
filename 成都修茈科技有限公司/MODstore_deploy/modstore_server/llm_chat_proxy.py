@@ -495,6 +495,7 @@ async def _events_from_completion(result: Dict[str, Any]) -> AsyncIterator[Dict[
         yield {"type": "delta", "delta": content}
     if result.get("usage"):
         yield {"type": "usage", "usage": result.get("usage") or {}}
+    yield {"type": "finish", "finish_reason": result.get("finish_reason")}
 
 
 @_strategic_budgeted_stream

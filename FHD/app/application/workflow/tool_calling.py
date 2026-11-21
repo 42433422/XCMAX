@@ -15,6 +15,8 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.infrastructure.llm.response_completion import completion_is_incomplete
+
 
 class _Output(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
@@ -70,17 +72,33 @@ def plan_function_tools() -> list[dict[str, Any]]:
     return [convert_to_openai_tool(SubmitWorkflowPlan)]
 
 
-def native_plan_payload(response: dict[str, Any]) -> dict[str, Any] | None:
-    """Unwrap exactly one full-graph call; reject unordered action batches."""
+def native_plan_payload(
+    response: dict[str, Any], *, allow_text_reply: bool = False
+) -> dict[str, Any] | None:
+    """Normalize native content or one typed call; never reinterpret rejected calls."""
     if not isinstance(response, dict):
         raise ValueError("原生计划响应必须是对象")
+    if completion_is_incomplete(response):
+        raise ValueError("模型输出未完整生成")
     choices = response.get("choices")
     first = choices[0] if isinstance(choices, list) and choices else None
-    message = first.get("message") if isinstance(first, dict) else None
+    if not isinstance(first, dict):
+        return None
+    message = first.get("message")
     if isinstance(message, dict) and message.get("function_call"):
         raise ValueError("原生计划不支持旧式函数信封")
-    if not isinstance(message, dict) or not message.get("tool_calls"):
+    if not isinstance(message, dict):
         return None
+    if not message.get("tool_calls"):
+        content = message.get("content")
+        raw = content.strip() if isinstance(content, str) else ""
+        # JSON envelopes, including truncated ones, retain the existing strict
+        # parser/repair contract. Native tool_choice=auto also permits plain text.
+        structural = re.sub(r"^```(?:json)?\s*", "", raw, count=1, flags=re.I)
+        if not allow_text_reply or not raw or structural.startswith(("{", "[")):
+            return None
+        reply = SubmitWorkflowPlan(mode="reply", reply=raw)
+        return {"choices": [{"message": {"content": reply.model_dump_json()}}]}
     calls = message["tool_calls"]
     if not isinstance(calls, list) or len(calls) != 1:
         raise ValueError("原生调用必须一次提交完整依赖图")

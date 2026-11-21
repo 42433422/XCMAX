@@ -112,6 +112,7 @@ async def chat_openai_compatible(
     out: Dict[str, Any] = {
         "ok": True,
         "content": text_out,
+        "finish_reason": choice0.get("finish_reason"),
         "usage": data.get("usage") or {},
         "raw": data,
         "provider": provider,
@@ -329,6 +330,7 @@ async def chat_anthropic_compatible(
     return {
         "ok": True,
         "content": "\n".join(parts),
+        "finish_reason": data.get("stop_reason"),
         "usage": data.get("usage") or {},
         "raw": data,
     }
@@ -394,4 +396,10 @@ async def chat_google(
                 "completion_tokens": total - prompt,
                 "total_tokens": total,
             }
-    return {"ok": True, "content": "\n".join(texts), "usage": usage, "raw": data}
+    return {
+        "ok": True,
+        "content": "\n".join(texts),
+        "finish_reason": first.get("finishReason"),
+        "usage": usage,
+        "raw": data,
+    }

@@ -492,6 +492,12 @@ def _execute_employee_phase_03(state):
         if state["handler_ok"]
         else "burnin_rejected" if burn_in_acceptance else "handler_failed"
     )
+    if state["result"].get("blocked_by_life_policy"):
+        state["exec_status"] = (
+            "outcome_unknown"
+            if state["result"].get("requires_reconciliation")
+            else "blocked_by_life_policy"
+        )
     if state["handler_ok"]:
         metric_error = ""
     elif burn_in_acceptance:
@@ -749,25 +755,30 @@ def _execute_employee_phase_02(state):
             }
             _handoff_target = ""
         if _handoff_target:
+            from modstore_server.db.identity import User
+            from modstore_server.xiaoc_life_chat import manual_life_scope
+
             _ctx_parts = []
             if _handoff_context:
                 _ctx_parts.append(_handoff_context[:500])
             if isinstance(_parsed_llm, dict) and _parsed_llm.get("summary"):
                 _ctx_parts.append(f"LLM 摘要：{str(_parsed_llm.get('summary'))[:300]}")
             _handoff_ctx_str = " | ".join(_ctx_parts)[:1500]
-            _handoff_out = perform_handoff(
-                source_employee_id=state["employee_id"],
-                target_employee_id=_handoff_target,
-                reason=_handoff_reason,
-                context=_handoff_ctx_str,
-                original_task=str(state["task"] or ""),
-                extra_payload={
-                    "source_employee_id": state["employee_id"],
-                    "parsed_llm_excerpt": (
-                        str(_llm_out_raw)[:500] if isinstance(_llm_out_raw, str) else ""
-                    ),
-                },
-            )
+            source_user = state["session"].get(User, state["user_id"])
+            with manual_life_scope(source_user, 3):
+                _handoff_out = perform_handoff(
+                    source_employee_id=state["employee_id"],
+                    target_employee_id=_handoff_target,
+                    reason=_handoff_reason,
+                    context=_handoff_ctx_str,
+                    original_task=str(state["task"] or ""),
+                    extra_payload={
+                        "source_employee_id": state["employee_id"],
+                        "parsed_llm_excerpt": (
+                            str(_llm_out_raw)[:500] if isinstance(_llm_out_raw, str) else ""
+                        ),
+                    },
+                )
             if isinstance(state["reasoning"], dict):
                 state["reasoning"]["_handoff"] = _handoff_out
     except RECOVERABLE_ERRORS as _ho_exc:
@@ -796,6 +807,8 @@ def _execute_employee_phase_02(state):
         state["employee_id"],
         state["user_id"],
     )
+    if state["result"].get("blocked_by_life_policy"):
+        return (False, None)  # Settle original receipts without starting verification tools.
     from modstore_server.strategic_execution_contract import bind_file_receipts
 
     bind_file_receipts(state["result"], state["payload"], state["config"], state["user_id"])
