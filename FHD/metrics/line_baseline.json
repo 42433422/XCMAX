@@ -1,5 +1,5 @@
 {
-  "lines": 2555489,
+  "lines": 2555709,
   "updated": "2026-11-21",
-  "note": "发布安全门禁修复：codex/opencode 的 ws 8.18.0→8.21.0（package.json 各 1 行同位置替换），opencode 新增 zod 4.6.6 overrides 共 +3 行受管行（lockfile 不计入）；修复 CVE-2026-48779 与 Dependabot 762/764/765，无产品逻辑改动。批准：仓库所有者 42433422 发起的部署安全修复。"
+  "note": "规划器上下文预算改造：llm_plan_generation 精简工具目录 +72 行，planner_prompt_profile 意图域映射 +83 行，planner_llm_gateway 超限降级 +62 行，context_window_manager 指标埋点 +23 行，metrics 新增指标 +21 行，CHANGELOG +2 行，净增 220 行。批准：仓库所有者 42433422。"
 }
