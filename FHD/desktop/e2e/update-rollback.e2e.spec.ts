@@ -7,9 +7,9 @@ import os from 'node:os'
 import path from 'node:path'
 
 /**
- * 真实端到端：更新签名校验链路 + 更新后回滚观察期提交链路。
+ * 真实端到端：更新签名校验、回滚观察期提交与后端启动身份隔离。
  *
- * 与 desktop.e2e.spec.ts（启动/安全/IPC 基线）不同，本文件聚焦两条单测无法覆盖的
+ * 与 desktop.e2e.spec.ts（启动/安全/IPC 基线）不同，本文件聚焦以下单测无法覆盖的
  * 真实主进程链路（均在真实 Electron net / fs / crypto 上运行，非 mock）：
  *
  *   1. 更新元数据 Ed25519 二次签名校验：
@@ -22,6 +22,8 @@ import path from 'node:path'
  *      启动前预置 rollback-marker.json（模拟 quitAndInstall 后的首次启动）→
  *      bootstrap 进入观察期 → stub 后端就绪 + 主界面加载 + 5s 稳定性窗口全部通过 →
  *      commitRollback() 删除 marker。通过轮询真实文件系统验证 marker 被删除。
+ *
+ *   3. 外部进程占用后端端口时，真实 Electron 不得加载其伪造的应用页面。
  *
  * 未打包测试显式启用 electron-updater 的 dev 检查并初始化生产 provider；
  * 每次检查必须实际请求清单，但不下载或安装制品。
@@ -112,6 +114,26 @@ function startUpdateServer(port: number): Promise<http.Server> {
   })
 }
 
+async function launchDesktop(): Promise<void> {
+  electronApp = await electron.launch({
+    args: ['-r', path.join(__dirname, 'patch-backend.cjs'), '.'],
+    cwd: path.resolve(__dirname, '..'),
+    env: {
+      ...process.env,
+      // E2E 隔离开关：跳过登录项/协议注册/全局快捷键/OTA 自动检查（见 main.ts）
+      XCAGI_DESKTOP_E2E: '1',
+      XCAGI_DESKTOP_PORT: String(backendPort),
+      XCAGI_DESKTOP_USER_DATA_DIR: userDataDir,
+      // dev 模式后端可执行文件 → 指向 E2E stub（node shebang 脚本）
+      PYTHON: path.resolve(__dirname, 'stub-backend.mjs'),
+      // 更新链路：指向本地更新源替身 + 注入测试 Ed25519 公钥（main.ts 不会覆盖已设置的值）
+      XCAGI_UPDATE_URL: `http://127.0.0.1:${updateServerPort}/`,
+      XCAGI_UPDATE_ED25519_PUBLIC_KEY: TEST_PUBLIC_KEY_PEM,
+    },
+  })
+  page = await electronApp.firstWindow()
+}
+
 test.beforeAll(async () => {
   backendPort = await findFreePort()
   updateServerPort = await findFreePort()
@@ -137,23 +159,7 @@ test.beforeAll(async () => {
     'utf8',
   )
 
-  electronApp = await electron.launch({
-    args: ['-r', path.join(__dirname, 'patch-backend.cjs'), '.'],
-    cwd: path.resolve(__dirname, '..'),
-    env: {
-      ...process.env,
-      // E2E 隔离开关：跳过登录项/协议注册/全局快捷键/OTA 自动检查（见 main.ts）
-      XCAGI_DESKTOP_E2E: '1',
-      XCAGI_DESKTOP_PORT: String(backendPort),
-      XCAGI_DESKTOP_USER_DATA_DIR: userDataDir,
-      // dev 模式后端可执行文件 → 指向 E2E stub（node shebang 脚本）
-      PYTHON: path.resolve(__dirname, 'stub-backend.mjs'),
-      // 更新链路：指向本地更新源替身 + 注入测试 Ed25519 公钥（main.ts 不会覆盖已设置的值）
-      XCAGI_UPDATE_URL: `http://127.0.0.1:${updateServerPort}/`,
-      XCAGI_UPDATE_ED25519_PUBLIC_KEY: TEST_PUBLIC_KEY_PEM,
-    },
-  })
-  page = await electronApp.firstWindow()
+  await launchDesktop()
   await electronApp.evaluate(({ app, BrowserWindow }) => {
     const requireFromApp = process.getBuiltinModule('module').createRequire(
       process.getBuiltinModule('path').join(app.getAppPath(), 'package.json'),
@@ -247,4 +253,57 @@ test('回滚链路：更新后观察期稳定启动 → commitRollback 删除 ma
   await expect
     .poll(() => fs.existsSync(markerPath), { timeout: 45_000, intervals: [500, 1000, 2000] })
     .toBe(false)
+})
+
+test('a preoccupied loopback port never supplies the application page before owned startup', async () => {
+  await electronApp.close()
+  // This final test retires the healthy process before occupying its exact port.
+  // afterAll must not try to close a process that has already exited safely.
+  electronApp = undefined!
+  let unownedPages = 0
+  const occupant = http.createServer((request, response) => {
+    response.setHeader('Server', 'uvicorn')
+    response.setHeader('Content-Type', 'application/json')
+    if (request.url?.startsWith('/api/ping')) response.end('{"pong":true}')
+    else if (request.url === '/api/desktop/status') response.end('{"appRoutesReady":true,"readyForUi":true}')
+    else if (request.url === '/api/health') response.end('{"status":"healthy"}')
+    else { unownedPages += 1; response.end('{"unowned":true}') }
+  })
+  await new Promise<void>((resolve, reject) => {
+    occupant.once('error', reject)
+    occupant.listen(backendPort, '127.0.0.1', resolve)
+  })
+  try {
+    // Guarded startup can exit before Playwright attaches its debugger.
+    let exitedBeforeAttach = false
+    try {
+      await launchDesktop()
+    } catch (error) {
+      if (!(error instanceof Error) || !/Target page, context or browser has been closed/.test(error.message)) {
+        throw error
+      }
+      exitedBeforeAttach = true
+      electronApp = undefined!
+    }
+    if (!exitedBeforeAttach) {
+      // A safe splash may remain alive on macOS. Observe the original full
+      // startup window and never accept a page served by the unowned process.
+      const closed = await electronApp.waitForEvent('close', { timeout: 15_000 }).then(
+        () => true,
+        error => {
+          if (!(error instanceof Error) || !/Timeout/i.test(error.message)) throw error
+          return false
+        },
+      )
+      if (!closed) {
+        expect(electronApp.windows().every(window => !window.url().startsWith(`http://127.0.0.1:${backendPort}/`))).toBe(true)
+        await electronApp.close()
+      }
+      electronApp = undefined!
+    }
+    expect(unownedPages).toBe(0)
+  } finally {
+    occupant.closeAllConnections()
+    await new Promise<void>(resolve => occupant.close(() => resolve()))
+  }
 })
