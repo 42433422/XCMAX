@@ -86,6 +86,11 @@ async def test_pool_alias_discovery_and_call_share_account_catalog(monkeypatch, 
         "chat_compatible": True,
         "runtime_selectable": True,
         "pricing": {"platform_billing_ok": True},
+        "model_capabilities": {
+            "max_input_tokens": 65536,
+            "max_output_tokens": 4096,
+            "source": "litellm_registry",
+        },
     }
     catalog = AsyncMock(return_value=[row])
     billed_chat = AsyncMock(return_value={"content": "ok"})
@@ -113,6 +118,10 @@ async def test_pool_alias_discovery_and_call_share_account_catalog(monkeypatch, 
 
     listed = await gateway.openai_list_models(db=db, user=user)
     assert any(item["id"] == alias and item["resolved_model"] == target for item in listed["data"])
+    assert (
+        next(item for item in listed["data"] if item["id"] == alias)["model_capabilities"]
+        == row["model_capabilities"]
+    )
     response = await gateway.openai_chat_completions(request, body, db, user)
     assert json.loads(response.body)["model"] == target
     catalog.assert_awaited_with(db, 7, ("doubao",))
@@ -150,6 +159,45 @@ async def test_pool_alias_discovery_and_call_share_account_catalog(monkeypatch, 
         assert error.value.status_code == 404
     billed_chat.assert_awaited_once()
     db.close()
+
+
+@pytest.mark.asyncio
+async def test_openai_model_catalog_preserves_sanitized_deployment_limits(monkeypatch):
+    from modstore_server import llm_api
+    from modstore_server import openai_llm_gateway_api as gateway
+
+    monkeypatch.setattr(
+        llm_api,
+        "_fetch_catalog_provider_block",
+        AsyncMock(
+            return_value={
+                "provider": "doubao",
+                "models_detailed": [
+                    {
+                        "id": "seed-code",
+                        "runtime_selectable": True,
+                        "category": "llm",
+                        "model_capabilities": {
+                            "max_input_tokens": 65536,
+                            "max_output_tokens": 4096,
+                            "source": "provider_metadata",
+                            "api_key": "secret",
+                            "api_base": "private",
+                        },
+                    }
+                ],
+            }
+        ),
+    )
+    monkeypatch.setattr(gateway, "merge_catalog_capabilities", lambda *_: None)
+    monkeypatch.setattr(gateway, "merge_catalog_pricing", lambda *_: None)
+    rows = await gateway._build_catalog_model_entries(object(), 7, ("doubao",))
+    assert rows[0]["model_capabilities"] == {
+        "max_input_tokens": 65536,
+        "max_output_tokens": 4096,
+        "source": "provider_metadata",
+    }
+    assert "secret" not in json.dumps(rows) and "api_base" not in json.dumps(rows)
 
 
 @pytest.mark.asyncio
