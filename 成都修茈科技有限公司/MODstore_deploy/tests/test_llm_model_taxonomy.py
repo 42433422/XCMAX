@@ -190,3 +190,55 @@ def test_provider_metadata_is_sanitized_and_returned_with_limits() -> None:
     assert row["provider_metadata"]["context_window"] == 32768
     assert "api_key" not in row["provider_metadata"]
     assert row["runtime_selectable"] is True
+
+
+@pytest.mark.parametrize("invalid", [True, -1, 0, 1.5, 4096.0, float("inf"), "invalid"])
+def test_invalid_capacities_do_not_manufacture_context(invalid):
+    from modstore_server.llm_model_taxonomy import public_model_capabilities
+
+    assert (
+        public_model_capabilities(
+            {
+                "max_tokens": 999999,
+                "max_input_tokens": invalid,
+                "context_window": invalid,
+                "max_output_tokens": invalid,
+                "resolved_model": "https://credentials@example.com/private",
+                "source": {},
+            }
+        )
+        == {}
+    )
+
+
+def test_input_limit_is_not_a_combined_context_window():
+    from modstore_server.llm_model_taxonomy import public_model_capabilities
+
+    capabilities = public_model_capabilities({"inputTokenLimit": 65536, "outputTokenLimit": 8192})
+    assert capabilities == {
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "source": "provider_metadata",
+    }
+
+
+def test_gateway_alias_metadata_keeps_resolved_model_and_strictest_declared_limit():
+    from modstore_server.llm_model_taxonomy import public_model_capabilities
+
+    capabilities = public_model_capabilities(
+        {
+            "max_input_tokens": 65536,
+            "resolved_model": "doubao/seed-code",
+            "model_info": {
+                "max_input_tokens": 32768,
+                "max_output_tokens": 4096,
+                "api_key": "secret",
+            },
+        }
+    )
+    assert capabilities == {
+        "max_input_tokens": 32768,
+        "max_output_tokens": 4096,
+        "resolved_model": "doubao/seed-code",
+        "source": "provider_metadata",
+    }
