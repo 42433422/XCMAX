@@ -361,7 +361,7 @@ function parseChecklistBlock(raw: unknown): { text: string; lines: string[] } | 
 }
 function _providerRowHasUsableKey(row: WorkbenchStateRecord | null | undefined, fernetOk: boolean): boolean {
   if (!row) return false
-  if (row.provider === 'xiaomi' && row.has_platform_key) return true
+  if ((row.provider === 'xiaomi' || row.provider === 'litellm') && row.has_platform_key) return true
   if (row.has_user_override && fernetOk) return true
   return false
 }

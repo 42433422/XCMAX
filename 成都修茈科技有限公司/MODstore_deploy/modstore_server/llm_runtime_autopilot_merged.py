@@ -176,7 +176,7 @@ def autopilot_status() -> dict[str, _facade().Any]:
 def _provider_order() -> list[str]:
     raw = _facade().os.environ.get(
         "MODSTORE_LLM_AUTOPILOT_PROVIDER_ORDER",
-        "minimax,xiaomi,deepseek,openai,anthropic,google,siliconflow,dashscope,moonshot,openrouter,groq,together",
+        "litellm,minimax,xiaomi,deepseek,openai,anthropic,google,siliconflow,dashscope,moonshot,openrouter,groq,together",
     )
     return [part.strip().lower() for part in raw.split(",") if part.strip()]
 

@@ -196,8 +196,8 @@ async def dispatch_budgeted_stream(
             finished = finished or event.get("type") == "finish"
             if event.get("type") == "usage":
                 measured = {
-                    "provider": provider,
-                    "model": kwargs["model"],
+                    "provider": event.get("provider", provider),
+                    "model": event.get("model", kwargs["model"]),
                     "usage": event.get("usage"),
                     "usage_estimated": event.get("usage_estimated", False),
                     "_fallback_used": event.get("fallback_used", False),
@@ -356,7 +356,7 @@ def portfolio_worker_scope(
 
 
 async def planning_admission(provider: str, model: str) -> dict[str, Any] | None:
-    """Use existing prepaid platform headroom, never the unapproved proposal budget."""
+    """Use verified platform quota or gateway budget, not an unapproved proposal."""
     from modstore_server.llm_quota_monitor import platform_quota_snapshot
 
     snapshot = await platform_quota_snapshot(
@@ -386,7 +386,11 @@ async def planning_admission(provider: str, model: str) -> dict[str, Any] | None
                 "source": row.get("source"),
                 "checked_at": snapshot.get("checked_at"),
                 "remaining_percent": min(item["remaining_percent"] for item in applicable),
-                "budget_source": "existing_platform_subscription_quota",
+                "budget_source": (
+                    "existing_platform_gateway_budget"
+                    if row.get("source") == "litellm_proxy_budget_api"
+                    else "existing_platform_subscription_quota"
+                ),
                 "max_calls": 1,
                 "max_total_tokens": 32768,
                 "max_output_tokens": 1600,
@@ -529,7 +533,11 @@ def _settle_planning(reservation: dict[str, Any], result: dict[str, Any] | None)
         "status": "exceeded" if exceeded else "settled" if known else "unknown",
         "actual_tokens": total,
         "supplier_cost_cents": None,
-        "cost_basis": "existing_subscription_usage_not_supplier_invoice",
+        "cost_basis": (
+            "gateway_reported_token_usage_not_supplier_invoice"
+            if admission.get("budget_source") == "existing_platform_gateway_budget"
+            else "existing_subscription_usage_not_supplier_invoice"
+        ),
     }
     with get_session_factory()() as session:
         row = session.execute(

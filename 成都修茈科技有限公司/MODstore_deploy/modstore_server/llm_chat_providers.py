@@ -35,6 +35,8 @@ async def chat_openai_compatible(
     forbid_reasoning_fallback: bool = False,
     response_format: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
+    from modstore_server.llm_litellm_router import fallback_receipt_from_headers
+
     url = f"{base_url.rstrip('/')}/chat/completions"
     body = _facade()._openai_chat_body(
         provider,
@@ -53,6 +55,7 @@ async def chat_openai_compatible(
     ) as r:
         text = r.text if r.status_code < 300 else ""
         data = redact_key(_json_dict(text), api_key) if text else None
+        fallback = fallback_receipt_from_headers(getattr(r, "headers", None))
     if r.status_code >= 300:
         return {
             "ok": False,
@@ -83,6 +86,9 @@ async def chat_openai_compatible(
                 "content": "",
                 "usage": data.get("usage") or {},
                 "raw": data,
+                "provider": provider,
+                "model": data.get("model"),
+                **fallback,
             }
             if reasoning_trace:
                 out_fail["reasoning_trace"] = reasoning_trace
@@ -95,6 +101,9 @@ async def chat_openai_compatible(
         "content": text_out,
         "usage": data.get("usage") or {},
         "raw": data,
+        "provider": provider,
+        "model": data.get("model"),
+        **fallback,
     }
     if reasoning_trace:
         out["reasoning_trace"] = reasoning_trace
@@ -119,6 +128,7 @@ async def stream_openai_compatible(
       {"type": "toolcall", "choices": [{"index":0,"delta":{"tool_calls":[...]},"finish_reason":"tool_calls"}]}
       {"type": "usage", "usage": {...}} when upstream provides stream_options.include_usage
     """
+    from modstore_server.llm_litellm_router import fallback_receipt_from_headers
     from modstore_server.strategic_portfolio_usage import require_call_reservation
 
     require_call_reservation(provider=provider, model=model, start_transport=True)
@@ -148,6 +158,8 @@ async def stream_openai_compatible(
                 "error": "模型供应商请求失败，请检查密钥、模型、额度或服务状态",
             }
             return
+        fallback = fallback_receipt_from_headers(getattr(r, "headers", None))
+        reported_model = None
         tool_calls_accum: dict[int, dict[str, Any]] = {}
         async for line in r.aiter_lines():
             if not line:
@@ -163,8 +175,16 @@ async def stream_openai_compatible(
                 data = redact_key(json.loads(raw), api_key)
             except json.JSONDecodeError:
                 continue
+            if data.get("model"):
+                reported_model = data["model"]
             if data.get("usage"):
-                yield {"type": "usage", "usage": data.get("usage") or {}}
+                yield {
+                    "type": "usage",
+                    "usage": data.get("usage") or {},
+                    "provider": provider,
+                    "model": reported_model,
+                    **fallback,
+                }
             choice0 = (data.get("choices") or [{}])[0] or {}
             delta = choice0.get("delta") or {}
             content = delta.get("content")

@@ -326,6 +326,13 @@ async def test_total_deadline_includes_wait_for_terminal_usage(mandate, monkeypa
 
 
 @pytest.mark.asyncio
+# LiteLLM 1.109.3 reads Pydantic instance metadata before excluding model_*
+# attributes. Only these SDK accesses are exempt from warnings-as-errors.
+@pytest.mark.filterwarnings(
+    r"ignore:^Accessing the 'model_(computed_)?fields' attribute on the instance is deprecated\."
+    r":pydantic.PydanticDeprecatedSince211"
+    r":^litellm\.litellm_core_utils\.model_response_utils$"
+)
 @pytest.mark.parametrize("fallback", [False, True])
 @pytest.mark.parametrize("receipt", ["reported", "absent", "partial"])
 async def test_real_router_requires_original_usage_and_one_reserved_attempt(
