@@ -5,19 +5,20 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
+from app.application.tools.workflow_tools.contracts import ExcelIO
 from app.application.tools.workflow_tools.excel_analysis import (
     ExcelAnalysis,
     natural_language_query,
     read_excel_dataframe,
 )
-from app.application.tools.workflow_tools.contracts import ExcelIO
 from app.infrastructure.excel.date_norm import cn_date, first_date
 from app.infrastructure.excel.header_detection import detect_header_row_1based
 
@@ -39,11 +40,76 @@ def _write_workbook(path: Path) -> None:
     workbook.save(path)
 
 
-def test_detect_header_row_skips_title_rows_when_model_unavailable(tmp_path: Path) -> None:
+@pytest.fixture
+def unconfigured_header_registry(monkeypatch):
+    from app.infrastructure.llm import client
+    from app.infrastructure.llm.providers import registry
+
+    for name in (
+        "OPENAI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "XCAUTO_API_KEY",
+        "XCAUTO_PAT",
+        "XIUCI_API_KEY",
+        "XIAOMI_API_KEY",
+        "MIMO_API_KEY",
+        "XIAOMI_MIMO_API_KEY",
+        "LLM_ROUTING_ORDER",
+        "LLM_PROVIDER",
+        "XCAGI_LLM_PROVIDER",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(client, "_mode", "online")
+    monkeypatch.setattr(registry, "_registry", registry.LLMProviderRegistry())
+    return registry
+
+
+def test_detect_header_row_skips_title_rows_when_model_unavailable(
+    tmp_path: Path, unconfigured_header_registry
+) -> None:
     path = tmp_path / "ledger.xlsx"
     _write_workbook(path)
-    with patch("app.infrastructure.excel.header_detection.get_active_provider", return_value=None):
-        assert detect_header_row_1based(path) == 4
+    assert unconfigured_header_registry.get_active_provider(profile="excel_header") is None
+    assert detect_header_row_1based(path) == 4
+
+
+@pytest.mark.parametrize("decision", ["failure", "unknown"])
+@pytest.mark.parametrize("scoped", [True, False])
+def test_real_sdk_header_failure_does_not_become_no_model_fallback(
+    tmp_path, monkeypatch, unconfigured_header_registry, decision, scoped
+):
+    from app.application.tools.workflow import handle_excel_analysis
+    from app.infrastructure.llm import client
+
+    path = tmp_path / "ledger.xlsx"
+    _write_workbook(path)
+    create = MagicMock(
+        side_effect=RuntimeError("provider authorization denied")
+        if decision == "failure"
+        else None,
+        return_value={"choices": [{"message": {"content": '{"header_row": 0}'}}]},
+    )
+    sdk_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setenv("LLM_ROUTING_ORDER", "openai_sdk")
+    if not scoped:
+        monkeypatch.setenv("OPENAI_API_KEY", "header-test-credential")
+        monkeypatch.setattr(client, "_openai_client", sdk_client)
+    with (
+        client.llm_client_scope(sdk_client, "header-test-model") if scoped else nullcontext(),
+        patch(
+            "app.infrastructure.excel.header_detection._row_score",
+            side_effect=AssertionError("configured provider cannot fall back to rules"),
+        ),
+    ):
+        provider = unconfigured_header_registry.get_active_provider(profile="excel_header")
+        assert provider is not None and provider.provider_id == "openai_sdk"
+        assert provider.is_configured is True
+        result = handle_excel_analysis(
+            {"file_path": str(path), "action": "structure"}, workspace_root=str(tmp_path)
+        )
+    assert result["success"] is False and result["error"] == "read_excel_failed"
+    assert "columns" not in result
+    assert create.call_count == (2 if decision == "failure" else 1)
 
 
 def test_read_dataframe_fills_merged_header_columns(tmp_path: Path) -> None:

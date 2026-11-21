@@ -251,14 +251,16 @@ def _pending_delivery_page(
     in one tick. Only a page checked through the current EOF becomes actionable.
     Every finished page advances discovery even when its tasks remain unknown.
     """
-    recent = list({
-        str(run["run_id"]): run
-        for run in recent_runs or []
-        if isinstance(run, dict)
-        and run.get("run_id")
-        and run.get("status")
-        in {"completed_merge_requested", "completed_merged", "completed_merge_failed"}
-    }.values())[-DELIVERY_RECOVERY_RUNS:]
+    recent = list(
+        {
+            str(run["run_id"]): run
+            for run in recent_runs or []
+            if isinstance(run, dict)
+            and run.get("run_id")
+            and run.get("status")
+            in {"completed_merge_requested", "completed_merged", "completed_merge_failed"}
+        }.values()
+    )[-DELIVERY_RECOVERY_RUNS:]
     path = ledger_path()
     if not path.exists():
         return [dict(run) for run in recent], {}

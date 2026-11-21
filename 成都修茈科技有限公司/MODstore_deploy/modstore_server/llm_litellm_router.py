@@ -19,6 +19,7 @@ import os
 import secrets
 import threading
 import time
+from collections.abc import Mapping
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 from modstore_server.llm_key_resolver import (
@@ -317,16 +318,40 @@ def _usage_dict(response: Any) -> Dict[str, Any]:
         return {}
 
 
+def fallback_receipt_from_headers(headers: Any) -> Dict[str, Any]:
+    """Preserve local and upstream gateway fallback evidence for settlement."""
+    attempted = 0
+    unknown = False
+    if isinstance(headers, Mapping):
+        for name, value in headers.items():
+            # LiteLLM namespaces raw gateway headers so they cannot impersonate
+            # its own router metadata. Both layers can report a real fallback.
+            if str(name).lower() not in {
+                "x-litellm-attempted-fallbacks",
+                "llm_provider-x-litellm-attempted-fallbacks",
+            }:
+                continue
+            try:
+                if isinstance(value, bool) or not isinstance(value, (str, int)):
+                    raise ValueError("invalid fallback receipt")
+                count = int(value)
+                if count < 0:
+                    raise ValueError("negative fallback receipt")
+                attempted = max(attempted, count)
+            except (TypeError, ValueError):
+                unknown = True
+    # An unreadable explicit receipt cannot prove one approved model call.
+    # Keep the existing unknown-usage hold instead of inventing zero fallbacks.
+    return {
+        "fallback_used": unknown or attempted > 0,
+        "fallback_count": None if unknown else attempted,
+    }
+
+
 def _fallback_meta(response: Any) -> Dict[str, Any]:
     hidden = getattr(response, "_hidden_params", None) or {}
     headers = hidden.get("additional_headers") if isinstance(hidden, dict) else None
-    attempted = 0
-    if isinstance(headers, dict):
-        try:
-            attempted = int(headers.get("x-litellm-attempted-fallbacks") or 0)
-        except (TypeError, ValueError):
-            attempted = 0
-    return {"fallback_used": attempted > 0, "fallback_count": attempted}
+    return fallback_receipt_from_headers(headers)
 
 
 def _budgeted_stream_client(
@@ -347,9 +372,14 @@ def _budgeted_stream_client(
     from openai.types.chat import ChatCompletionChunk
 
     def record(chunk):
-        if isinstance(chunk, ChatCompletionChunk) and (values := _usage_dict(chunk)):
-            reported.clear()
-            reported.update(values)
+        if not isinstance(chunk, ChatCompletionChunk):
+            return
+        # The Router rewrites chunk.model to its requested alias. Preserve raw
+        # identity, including a mismatch that later frames must not erase.
+        if chunk.model and reported.get("model", model) == model:
+            reported["model"] = chunk.model
+        if values := _usage_dict(chunk):
+            reported["usage"] = values
 
     class ReceiptStream(AsyncStream[ChatCompletionChunk]):
         async def __aiter__(self):
@@ -637,13 +667,13 @@ async def _stream_impl(
     outcome = "success"
     response = None
     client = None
-    reported_usage: Dict[str, Any] = {}
+    reported_receipt: Dict[str, Any] = {}
     try:
         if budgeted or (
             single_attempt and str(deployments[0]["litellm_params"]["model"]).startswith("openai/")
         ):
             client = _budgeted_stream_client(
-                provider, model, deployments[0]["litellm_params"], reported_usage
+                provider, model, deployments[0]["litellm_params"], reported_receipt
             )
         response = await router.acompletion(
             model=_PRIMARY_ALIAS,
@@ -674,8 +704,12 @@ async def _stream_impl(
                     "usage": usage,
                     **(
                         {
+                            "provider": provider,
+                            "model": reported_receipt.get("model") or getattr(chunk, "model", None),
                             **_fallback_meta(chunk),
-                            "usage_estimated": not _reported_stream_usage(reported_usage, usage),
+                            "usage_estimated": not _reported_stream_usage(
+                                reported_receipt.get("usage", {}), usage
+                            ),
                         }
                         if budgeted
                         else {}

@@ -60,6 +60,8 @@ def test_planned_workflow_stream_reports_the_actual_run_outcome(status, expected
     callbacks._merge_tool_runtime_context.return_value = {}
     callbacks._task_owner_id.return_value = "owner"
     callbacks._build_workflow_thinking_steps.return_value = "读取产品记录"
+    callbacks._capture_agent_run_interaction.return_value = {"success": True}
+    agent_run = AgentRun(user_id="owner", message="查询产品", status=status)
     dispatch = PlannedWorkflowDispatch(
         {},
         callbacks,
@@ -86,16 +88,18 @@ def test_planned_workflow_stream_reports_the_actual_run_outcome(status, expected
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
         ):
-            orchestrator.return_value.start_run_from_plan.return_value = SimpleNamespace(
-                status=status
-            )
-            dispatch.handle("owner", "查询产品", "chat", {}, "查询产品")
+            orchestrator.return_value.start_run_from_plan.return_value = agent_run
+            orchestrator.return_value.get_run.return_value = agent_run
+            response = dispatch.handle("owner", "查询产品", "chat", {}, "查询产品")
     finally:
         current_lifetime.reset(token)
     assert notes[-1] == expected
     if status == "waiting_user":
         callbacks._capture_agent_run_interaction.assert_called_once()
         callbacks._format_agent_run_response.assert_not_called()
+        assert response["run_id"] == response["agent_run_id"] == agent_run.run_id
+        assert response["status"] == response["execution_state"] == "waiting_user"
+        assert response["needs_user_input"] is True
     else:
         callbacks._format_agent_run_response.assert_called_once()
     if status != "completed":

@@ -15,14 +15,14 @@
     },
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
-      "base_blob": "4a510433178b40587be19cd16b7307cf7c7cedda",
-      "head_blob": "4bf0b175dade7d4b0fb2ccba238b9d9d06f706ed",
-      "before_lines": 1651,
-      "after_lines": 1709,
-      "reason": "将通过持久审批的 ELT 批量执行交给现有后台队列，保留原任务及文件范围，避免在聊天请求内长时间执行。 本轮将ELT续接与活动任务查询的原运行范围下推到数据库，避免无匹配时加载账号全部历史。",
-      "boundary": "只在原步骤、计划摘要和持久审批都匹配时排队。限制上传标识和 SQL 仓储，并按原运行版本事务登记队列项。 复用SQLAlchemy JSON查询，原matches保留最终核验，旧别名及非标准JSON兼容；不设置会漏掉旧目标的固定窗口。",
-      "validation": "验证范围包括已批准任务入队、无凭据拒绝、计划篡改拒绝和后台任务恢复。待远端 CI 与原审批工作台验收。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。 The exact-turn history lookup regression is also verified against in-memory and SQLite repositories after 51 unrelated runs. 最终 CI 类型修复保留既有装饰器、仓库及附件身份契约；在同 CI Python 3.11.18 / mypy 2.4.1 与依赖版本环境中，全量 app 类型检查和 186 项相关回归通过。 新增SQLite旧实现4失败，修后无匹配0条/有目标1条反序列化；相关完整文件60项及新增旧标量4项通过，独立复核162组无假阴性。PostgreSQL16真实场景与完整mypy待本head CI。",
-      "follow_up": "继续由现有审批事务和任务调度持有入队逻辑，评审后收敛编排器的转发代码。",
+      "base_blob": "4bf0b175dade7d4b0fb2ccba238b9d9d06f706ed",
+      "head_blob": "01e7a819be5a25100ee8d47ca03c9f8ea0c2da1c",
+      "before_lines": 1709,
+      "after_lines": 1776,
+      "reason": "修复独立规划澄清被转为普通回复后丢失待办：在既有 AgentRun 上续接原问题及用户答复，复用现有 CAS、执行租约和计划准入。",
+      "boundary": "新增入口只允许尚未调用业务工具的单一规划提问图；检查原身份、计划指纹和完整快照，替换计划仍走原权限及审批闸门，不新建执行引擎或状态存储。",
+      "validation": "本地 14 个关联测试文件 333 项通过，其中真实 process_chat/SQL 整链 18 项覆盖重启恢复、并发 CAS、旧快照、身份隔离和审批；12 个生产文件 mypy 与变更 Python Ruff 通过。首轮 GitHub PostgreSQL 事务验收通过；新提交完整 CI 和用户现场验收仍待完成。本记录是审查请求，不代表批准。",
+      "follow_up": "由 @42433422 在 PR #3424 复核同任务续接边界和证据；本次保持编排器现有生命周期职责，不按行数拆分，后续新增阶段前再按任务生命周期边界评估。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
@@ -123,14 +123,14 @@
     },
     "FHD/app/application/ai_chat/workflow_session.py": {
       "base_file": "FHD/app/application/ai_chat/workflow_session.py",
-      "base_blob": "165a3abec3f175d125a57584071a0a6ec0a9ef93",
-      "head_blob": "53e15f5c94918bf2706341545b4eb9e790a69f66",
-      "before_lines": 1420,
-      "after_lines": 1478,
-      "reason": "在聊天自动审批之后区分后台导入排队、部分写入、未执行和结果待核对，避免把已提交的任务误报成空操作或成功。",
-      "boundary": "读取已归属的同一执行回执并检查 ELT 步骤结果。返回等待状态不会执行导入，不把部分或未知回执提升为完成。",
-      "validation": "验证范围包括自动审批接续、原任务回执、未写入标记和部分完成聚合。待远端 CI 和实际后台导入验收。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。",
-      "follow_up": "状态契约稳定后将回执投影和面向用户的文字归并到现有工作流响应构造器。",
+      "base_blob": "53e15f5c94918bf2706341545b4eb9e790a69f66",
+      "head_blob": "12665373fe15a9d2383a0048081258d17ac57f3f",
+      "before_lines": 1478,
+      "after_lines": 1562,
+      "reason": "修复澄清恢复、等待状态及审批投影：以持久化 AgentRun 恢复原待办，将 planning_scope 答复交回原任务，等待响应保留 run_id 与 waiting_user。",
+      "boundary": "维持 WorkflowSession 现有待办恢复和审批交接职责；索引落后时从权威运行记录恢复，复用审批请求幂等契约，不将用户选择范围视为写入批准。",
+      "validation": "本地 14 个关联测试文件 333 项通过，其中真实 process_chat/SQL 整链 18 项覆盖重启恢复、并发 CAS、旧快照、身份隔离和审批；12 个生产文件 mypy 与变更 Python Ruff 通过。首轮 GitHub PostgreSQL 事务验收通过；新提交完整 CI 和用户现场验收仍待完成。本记录是审查请求，不代表批准。",
+      "follow_up": "由 @42433422 在 PR #3424 复核崩溃窗口、索引失败回执和恢复后的审批保护；继续使用现有响应构造器，不增加状态旁路或为压行数搬移同职责代码。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat_app_service.py": {
@@ -316,12 +316,12 @@
     "FHD/app/application/workflow/llm_plan_generation.py": {
       "base_file": "FHD/app/application/workflow/llm_plan_generation.py",
       "base_blob": "229a6a5966eeced136ef902c3ec007e5864d0bd1",
-      "head_blob": "3fc3535c61044d0a6db9b9c9f73b06f141b6676e",
+      "head_blob": "614262fbf244915d9aa8c6f4f4104f6607f8035a",
       "before_lines": 927,
       "after_lines": 930,
-      "reason": "评审请求：按用户合入全部开放PR的要求整合#3423，减少规划请求中工具目录的说明冗余并稳定排序，缓解现有模型上下文窗口不足。集成修复保留完整输入/输出结构与跨域工具，防止精简后无法表达批准流程。",
+      "reason": "评审请求：按用户合入全部开放PR的要求整合#3423，减少规划请求中工具目录的说明冗余并稳定排序，缓解现有模型上下文窗口不足。集成修复保留完整输入/输出结构与跨域工具，防止精简后无法表达批准流程。 本轮采用 #3424 的持久 planning_scope 澄清提示，使范围问题经原任务恢复；保留既有完整工具目录与上下文预算。",
       "boundary": "仅精简模型提示投影中的说明性字段，不改变原用户输入、安全规则、原生工具schema预算或完整运行时注册表。const/enum/default字面量、嵌套/组合约束、$defs/$ref及输出路径保留；授权、risk/idempotent重赋值、完整参数与审批校验继续由原执行链路强制。超限只再压缩可选说明，仍超限沿原ContextWindowExceeded处理。",
-      "validation": "138项规划器/上下文/目录预算回归通过，完整集成同树20项复验及3源mypy通过；实际41工具/204动作含生图，四种受控请求均保留全部工具，最高总预算30763/32000。schema精简纯函数按职责移入既有prompt_profile，AST完全相同，G11保持181/181；没有新增分片或放宽门禁。独立复核确认运行时完整schema和审批不变；精确远端CI仍须通过，本记录不是人工批准。",
+      "validation": "138项规划器/上下文/目录预算回归通过，完整集成同树20项复验及3源mypy通过；实际41工具/204动作含生图，四种受控请求均保留全部工具，最高总预算30763/32000。schema精简纯函数按职责移入既有prompt_profile，AST完全相同，G11保持181/181；没有新增分片或放宽门禁。独立复核确认运行时完整schema和审批不变；精确远端CI仍须通过，本记录不是人工批准。 最新 #3423/#3424 与生图、目录、审批、CAS/租约相关 17 文件联合 452 passed；三个历史问题重放反证修复后通过。完整新 head CI 与人工审核仍待完成，不代表批准。",
       "follow_up": "继续复用现有schema池化、保守筛选和ContextWindowManager；后续目录优化必须保留实际业务工具依赖与完整输入输出结构，并以真实注册表预算验证。",
       "review_owner": "@42433422"
     },
@@ -779,6 +779,18 @@
       "boundary": "Reuse StrategicDecision SQL state, existing employee dispatch and authoritative payment/customer receipts. Keep solver and execution-contract code in their existing separate modules; no remote unmetered delegate or new financial ledger.",
       "validation": "744 integrated regressions passed with explicit optional promptfoo CLI and PostgreSQL skips; normal-import mypy passes the changed production files. Cases include future inputs, different artifact receipts, pre-completion confirmations and same-owner refunds. CI and architecture approval remain pending.；小 C SQL 预算、队列恢复和真实模型用量回归覆盖本次六行接线。",
       "follow_up": "Extract discovery-source collection and business-outcome attribution into focused adapters in a separately reviewed change before adding further market or asset providers.",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_litellm_router.py",
+      "base_blob": "b2be0908fb47e0522f94627c258b5af3c2b03095",
+      "head_blob": "9a95716a49aeee7c487c7d360c49f84624c95c49",
+      "before_lines": 634,
+      "after_lines": 804,
+      "reason": "按用户要求整合开放 PR #3398 的平台网关与原始流回执修复；保留真实 SDK 的原始模型身份和用量，避免 Router 改写别名后把不匹配回执结清。新增代码仍在既有流生命周期中处理，不另建请求或账本。",
+      "boundary": "沿用原 ReceiptStream、封装身份、只读授权、请求键、执行租约、tariff 和双层预留；首次观察到的模型不一致不能被后续帧覆盖。未知、缺失或部分用量保留待核对，不改批准模型，不额外发起收费请求。",
+      "validation": "49 项真实 SQL/Router/SDK/受控 HTTP 与原生流测试通过，四个错误结清场景修复前失败、修复后通过；联合组 457 passed，3 项缺实验表的旧 fixture 失败已在未改动 d560 同样复现。Black/isort/Flake8、6 个源文件 mypy 和结构门禁通过。完整新 head CI 与人工架构审核待完成，本记录仅为审查请求。",
+      "follow_up": "由 @42433422 在集成 PR #3418 对照原始回执证据复核此文件增长；保持原路由器的 SDK 适配职责，后续新增供应商能力前按生命周期边界评估，不以行数搬移代码或添加门禁豁免。",
       "review_owner": "@42433422"
     }
   }

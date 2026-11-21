@@ -18,9 +18,12 @@ class OpenAISdkProvider:
 
     @property
     def is_configured(self) -> bool:
-        from app.infrastructure.llm.client import get_llm_client
+        from app.infrastructure.llm.client import has_request_llm_client, resolve_mode
+        from app.infrastructure.llm.providers.credentials import resolve_openai_env_credentials
 
-        return get_llm_client() is not None
+        return resolve_mode() != "offline" and (
+            has_request_llm_client() or bool(resolve_openai_env_credentials()[0])
+        )
 
     async def chat_completion(
         self,

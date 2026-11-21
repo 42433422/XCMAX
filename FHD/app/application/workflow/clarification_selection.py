@@ -6,10 +6,11 @@ from typing import Any, Literal
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, ConfigDict, StrictBool
 
-from .clarification_lifecycle import resolve_confirmed_target
+from .clarification_lifecycle import option_letter_ordinal, resolve_confirmed_target
 
 CONFIRM_WORDS = {"确认", "是", "是的", "好的", "好", "继续", "执行", "确认执行", "ok", "yes"}
 CANCEL_WORDS = {"取消", "否", "不要", "停止", "no"}
+
 
 _PLAN_CONFIRM_PREFIXES = ("确认", "确定", "同意", "可以", "好的", "执行", "继续", "是", "对")
 _PLAN_CANCEL_PREFIXES = ("取消", "不要", "不用", "别", "停止", "算了", "否")
@@ -61,7 +62,7 @@ def select_clarified_target(
         )
         > 1
     )
-    if affirmative or text.strip().isdigit() or duplicate_name:
+    if affirmative or text.strip().isdigit() or option_letter_ordinal(text) or duplicate_name:
         return None
     selected = extract(**request, answer=text, allowed_fields={"id"}, candidates=candidates)
     if (

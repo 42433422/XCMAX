@@ -8,9 +8,9 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.infrastructure.llm.providers.registry import get_active_provider
 from app.infrastructure.llm.structured_output import StructuredOutputError, complete_structured_sync
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 

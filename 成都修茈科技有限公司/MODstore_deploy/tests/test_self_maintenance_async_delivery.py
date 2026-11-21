@@ -178,7 +178,8 @@ def test_staging_dispatch_binds_exact_release_and_artifact(dispatch_environment,
             assert intent["event"] == "deploy_dispatch_intent"
             assert intent["merge_sha"] == MERGE_SHA
             assert intent["inputs"] == {
-                "release_sha": MERGE_SHA, "release_artifact_sha256": ARTIFACT,
+                "release_sha": MERGE_SHA,
+                "release_artifact_sha256": ARTIFACT,
             }
         return run(args)
 

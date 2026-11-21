@@ -91,9 +91,11 @@ def test_scan_reports_failed_stage_without_internal_error_text(
     assert data["errors"] == [
         {
             "type": "release_planning" if stage == "planning" else kind,
-            "error": "release_planning_failed"
-            if stage == "planning"
-            else "telemetry_signal_ingest_failed",
+            "error": (
+                "release_planning_failed"
+                if stage == "planning"
+                else "telemetry_signal_ingest_failed"
+            ),
         }
     ]
     assert "private-token-sentinel" not in response.text

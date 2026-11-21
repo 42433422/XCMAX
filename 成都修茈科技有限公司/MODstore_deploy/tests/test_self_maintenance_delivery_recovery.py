@@ -90,13 +90,18 @@ def test_persisted_pages_make_bounded_progress_past_unknown_first_page(
     for index in range(store.DELIVERY_RECOVERY_ROWS + 17):
         store._append_ledger({"phase": "complete", "run_id": f"new-{index}", "status": "completed"})
     if recent_unknown:
-        store._write_loop_memory({
-            "recent_runs": [
-                {**request(f"loop-{index}", f"task-{index}"), "status": "completed_merge_requested"}
-                for index in range(store.DELIVERY_RECOVERY_RUNS)
-            ],
-            "open_items": [],
-        })
+        store._write_loop_memory(
+            {
+                "recent_runs": [
+                    {
+                        **request(f"loop-{index}", f"task-{index}"),
+                        "status": "completed_merge_requested",
+                    }
+                    for index in range(store.DELIVERY_RECOVERY_RUNS)
+                ],
+                "open_items": [],
+            }
+        )
     calls, checked, reads = [], [], []
     original = store._read_delivery_row
 
