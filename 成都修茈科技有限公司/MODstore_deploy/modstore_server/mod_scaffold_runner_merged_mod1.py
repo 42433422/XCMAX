@@ -1093,6 +1093,12 @@ async def resolve_llm_provider_model_auto(
             m0 = await first_model_id(pref_p)
             if m0:
                 return (pref_p, m0, None)
+    if "litellm" in _facade().KNOWN_PROVIDERS:
+        api_key, _ = _facade().resolve_api_key(db, user.id, "litellm")
+        if api_key:
+            m0 = await first_model_id("litellm")
+            if m0:
+                return ("litellm", m0, None)
     if "xiaomi" in _facade().KNOWN_PROVIDERS:
         api_key, _ = _facade().resolve_api_key(db, user.id, "xiaomi")
         if api_key:
