@@ -390,6 +390,12 @@ class ApiKeyRegistry:
         from app.utils.operational_errors import RECOVERABLE_ERRORS
 
         expires = entry.get("expires_at")
+        # Persisted credentials are untrusted JSON. Reject malformed expiry types
+        # instead of masking programmer TypeErrors from actor authorization.
+        if expires is not None and (
+            isinstance(expires, bool) or not isinstance(expires, (str, int, float))
+        ):
+            return None
         try:
             if expires is not None and self._clock() >= float(expires):
                 return None
@@ -401,8 +407,6 @@ class ApiKeyRegistry:
                 entry.get("principal_id"), entry.get("tenant_id")
             ):
                 return None
-        except TypeError:
-            return None
         except RECOVERABLE_ERRORS:
             return None
         context["_credential_authorization"] = {
