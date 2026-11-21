@@ -127,6 +127,40 @@ def test_actual_checkpoint_restart_preserves_approval_and_external_effects(
     assert not pending and ports.effects == ["dispatch", "knowledge"]
 
 
+def test_rejected_customer_impact_waits_for_real_compensation_after_restart(
+    tmp_path, protocol
+):
+    path = tmp_path / "feedback.sqlite"
+    ports = Ports()
+    ports.execution_status = "completed"
+    ports.delivery_status = "deployment_verified"
+    ports.impact = lambda _: {
+        "status": "customer_impact_rejected",
+        "reason": "negative_lift",
+    }
+    result = {"status": "waiting_recovery"}
+    ports.recover = lambda _: dict(result)
+    request_id = protocol["request_id"]
+    state, pending = invoke(
+        path, ports, request_id, {"protocol": protocol, "has_customer_feedback": True}
+    )
+    state, pending = invoke(path, ports, request_id, approved(pending))
+    state, pending = invoke(path, ports, request_id, Command(resume=True))
+    state, pending = invoke(path, ports, request_id, approved(pending))
+    state, pending = invoke(path, ports, request_id, Command(resume=True))
+    state, pending = invoke(path, ports, request_id, Command(resume=True))
+    assert state["status"] == "waiting_recovery" and pending[0]["kind"] == "recovery"
+    state, pending = invoke(
+        path, ports, request_id, Command(resume={"status": "rollback_verified"})
+    )
+    assert state["status"] == "waiting_recovery" and "knowledge" not in ports.effects
+    result["status"] = "rollback_verified"
+    state, pending = invoke(path, ports, request_id, Command(resume=True))
+    assert state["status"] == "customer_impact_rejected"
+    assert state["recovery"]["status"] == "rollback_verified" and not pending
+    assert "knowledge" not in ports.effects
+
+
 @pytest.mark.parametrize(
     "phase", ["dispatch", "acceptance", "verification", "execution"]
 )

@@ -5,7 +5,7 @@ import { createStep } from '../stepFactory'
 export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
   const { industryId, mods } = ctx
   const chatLabel = resolveCoreNavLabel('chat', industryId, mods) || '智能对话'
-  const dataSourcesLabel = resolveCoreNavLabel('data-sources', industryId, mods) || '数据来源'
+  const dataSourcesLabel = resolveCoreNavLabel('data-sources', industryId, mods) || '客来来'
   const settingsLabel = resolveCoreNavLabel('settings', industryId, mods) || '系统设置'
 
   return [
@@ -117,9 +117,9 @@ export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
     }),
     createStep({
       id: 'wechat-contacts-stars',
-      title: '微信与星标联系人',
-      description: `请点击侧栏「${dataSourcesLabel}」，在页面中选择「微信本地…`,
-      targetSelector: '.sidebar .menu-item[data-view="data-sources"]',
+      title: '客来来渠道与账号',
+      description: `请点击侧栏「${dataSourcesLabel}」，查看已授权的渠道、客户和消息。`,
+      targetSelector: '.sidebar .menu-item[data-view="data-sources"], .sidebar .menu-item[data-view="mod-kellai"]',
       actionType: 'click',
       routeName: 'chat',
       assistantTab: 'push',
@@ -127,12 +127,13 @@ export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
     }),
     createStep({
       id: 'wechat-starred-list-intro',
-      title: '星标联系人列表',
-      description: '下方卡片为「星标联系人列表」：可筛选类型（全部/联系人/群聊）、在列表中搜索…',
-      targetSelector: '#view-data-sources [data-tutorial-id="wechat-starred-list"]',
-      highlightSelector: '#view-data-sources [data-tutorial-id="wechat-starred-list"]',
+      title: '连接与账号',
+      description: '在这里连接客来来并查看真实渠道能力。发送权限需主动申请并确认，既有只读授权不会自动升级。',
+      targetSelector: '[data-tutorial-id="kellai-connections"]',
+      highlightSelector: '[data-tutorial-id="kellai-connections"]',
       actionType: 'observe',
       routeName: 'data-sources',
+      routeQuery: { workspace: 'connections' },
     }),
     createStep({
       id: 'chat-star-auto-refresh',

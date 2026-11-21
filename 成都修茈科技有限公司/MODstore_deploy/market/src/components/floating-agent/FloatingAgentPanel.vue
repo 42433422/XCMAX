@@ -34,6 +34,13 @@
       />
     </header>
 
+    <XiaoCLifeControl
+      v-if="!corpMode && activityOwner !== undefined"
+      :owner="activityOwner"
+      :light="isLightTheme"
+      @open-life="activitySection = 'life'; showActivity = true"
+    />
+
     <!-- 状态条 -->
     <AgentStatusBar v-if="!corpMode && !activityOpen" :mode="mode" @stop="agentStore.setMode('idle')" />
 
@@ -58,6 +65,8 @@
       :key="`${activityOwner}:${activityTicket ?? ''}`"
       :light="isLightTheme"
       :ticket-id="activityTicket"
+      :owner="activityOwner"
+      :initial-section="activitySection"
     />
 
     <!-- 对话区 -->
@@ -123,6 +132,7 @@ import {
 import AgentStatusBar from './AgentStatusBar.vue'
 import AgentChatHistory from './AgentChatHistory.vue'
 import ButlerFilesDrawer from './ButlerFilesDrawer.vue'
+import XiaoCLifeControl from './XiaoCLifeControl.vue'
 import { useButlerWorkbenchTrayStore } from '../../stores/butlerWorkbenchTray'
 import { useButlerDownloadHistoryStore } from '../../stores/butlerDownloadHistory'
 
@@ -193,10 +203,11 @@ const handleInput = props.handleInput
 const draft = ref('')
 const showLog = ref(false)
 const showActivity = ref(props.activityTicket !== undefined)
+const activitySection = ref<'delivery' | 'life'>('delivery')
 const activityOpen = computed(() => !props.corpMode && props.activityOwner !== undefined && showActivity.value)
 watch(
   [() => props.activityOwner, () => props.activityTicket],
-  ([, ticket]) => { showActivity.value = ticket !== undefined },
+  ([, ticket]) => { showActivity.value = ticket !== undefined; activitySection.value = 'delivery' },
 )
 const panelRef = ref<HTMLDivElement | null>(null)
 const composerRef = ref<InstanceType<typeof PanelComposer> | null>(null)

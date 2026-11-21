@@ -62,7 +62,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   purchase: '采购管理',
   'shipment-records': '业务记录',
   customers: '客户管理',
-  'data-sources': '数据来源',
+  'data-sources': '客来来',
   print: '模板与打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',
@@ -82,7 +82,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'batch-analyze': '批量分析',
   'kitten-finance': '财务分析',
   'chat-debug': '对话调试',
-  'mod-store': '能力库',
+  'mod-store': 'AI 市场',
 }
 
 /**

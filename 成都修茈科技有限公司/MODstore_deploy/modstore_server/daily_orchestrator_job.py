@@ -391,7 +391,7 @@ def _maybe_create_pr(branch: str, diff_summary: str, files_n: int, staged_id: in
 
 
 def cron_trigger_for_orchestrator():
-    """默认每天 07:00（北京时间），早于摘要邮件。"""
+    """默认每天 07:30（北京时间），早于摘要邮件。"""
     try:
         from zoneinfo import ZoneInfo
 
@@ -399,9 +399,9 @@ def cron_trigger_for_orchestrator():
 
         tz = ZoneInfo(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_TZ", "Asia/Shanghai").strip())
         hour = int(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_HOUR", "7"))
-        minute = int(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_MINUTE", "0"))
+        minute = int(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_MINUTE", "30"))
         return CronTrigger(hour=hour, minute=minute, timezone=tz)
     except RECOVERABLE_ERRORS:
         from apscheduler.triggers.cron import CronTrigger
 
-        return CronTrigger(hour=7, minute=0)
+        return CronTrigger(hour=7, minute=30)

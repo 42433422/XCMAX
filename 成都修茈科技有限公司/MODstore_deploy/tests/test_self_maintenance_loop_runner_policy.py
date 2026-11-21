@@ -119,6 +119,12 @@ QUALITY_CHECKS_JSON = (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolated_feedback_ledger(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(tmp_path / "feedback.jsonl"))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "memory.json"))
+
+
 def test_scheduler_selected_remediation_is_resolved_exactly() -> None:
     memory = {
         "open_items": [

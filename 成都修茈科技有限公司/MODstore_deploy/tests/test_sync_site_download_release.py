@@ -119,7 +119,11 @@ def test_absent_public_hotfix_removes_stale_staged_copy(tmp_path: Path) -> None:
 
 
 def test_server_and_static_publishers_never_infer_desktop_publication() -> None:
-    script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    script = (
+        (ROOT / "scripts/immutable_release_runtime.sh").read_text()
+        + "\n"
+        + (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    )
     sync = script.index('python3 "$POINTER_SYNC" --site-root')
     assert script.index("npm run build") < sync < script.index('chmod -R a-w "$BUILD_ROOT"')
     assert '--published-site-root "$SITE_LINK"' in script[sync : sync + 300]
@@ -164,14 +168,19 @@ def test_real_activation_and_rollback_blocks_preserve_public_bytes(
 
 
 def test_prepared_reuse_is_checked_before_migrations_with_controller_helper() -> None:
-    script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    script = (
+        (ROOT / "scripts/immutable_release_runtime.sh").read_text()
+        + "\n"
+        + (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    )
     early = script.index('verify_public_pointers "$FINAL_ROOT"')
     assert (
         script.index("unset BUILD_JWT_SECRET")
         < early
         < script.index("applying database migrations")
     )
-    assert 'POINTER_SYNC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)' in script
+    assert 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)' in script
+    assert 'POINTER_SYNC="$SCRIPT_DIR/sync_site_download_release.py"' in script
     workflow = (ROOT / ".github/workflows/prod-deploy.yml").read_text()
     assert (
         ':成都修茈科技有限公司/MODstore_deploy/scripts/sync_site_download_release.py" > "$BOOTSTRAP/sync_site_download_release.py"'
@@ -188,7 +197,11 @@ def test_publication_lock_serializes_switch_and_rechecks_waited_pointer(
 
 
 def _assert_public_switch(tmp_path: Path, rollback: bool, stale: bool, *, wait: bool) -> None:
-    script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    script = (
+        (ROOT / "scripts/immutable_release_runtime.sh").read_text()
+        + "\n"
+        + (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    )
     current, site = tmp_path / "current", tmp_path / "site"
     original = b'{"version":"1.0.0.6"}\n'
     for name in ("active", "prepared"):
@@ -302,7 +315,11 @@ def _assert_public_switch(tmp_path: Path, rollback: bool, stale: bool, *, wait: 
 
 
 def test_all_site_writers_share_one_lock_without_nested_acquisition() -> None:
-    script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    script = (
+        (ROOT / "scripts/immutable_release_runtime.sh").read_text()
+        + "\n"
+        + (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    )
     updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text()
     workflow = (ROOT.parents[1] / ".github/workflows/corp-site-deploy.yml").read_text()
     for source in (script, updater, workflow):

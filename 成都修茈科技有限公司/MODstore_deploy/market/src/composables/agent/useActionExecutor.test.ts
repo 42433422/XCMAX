@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuthStore } from '../../stores/auth'
+import { xiaocLifeApi, type XiaoCLifeState } from '../../application/xiaocLifeApi'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -36,7 +38,7 @@ import { getActionLog, useActionExecutor } from './useActionExecutor'
 
 describe('useActionExecutor', () => {
   beforeEach(() => {
-    document.body.innerHTML = ''
+    document.body.replaceChildren()
     sessionStorage.clear()
     vi.restoreAllMocks()
     vi.clearAllMocks()
@@ -284,5 +286,78 @@ describe('useActionExecutor', () => {
       message: '改写管线已启动',
     })
     expect(mocks.start).toHaveBeenLastCalledWith('增强表单', 'page')
+  })
+
+  it('管理端 L1 与状态读取失败都不能执行本地页面工具', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 1 } as XiaoCLifeState)
+    const executor = useActionExecutor()
+    expect((await executor.navigate({ name: 'plans' })).success).toBe(false)
+    expect((await executor.read()).success).toBe(false)
+    expect((await executor.scroll({ direction: 'down' })).success).toBe(false)
+    expect(mocks.push).not.toHaveBeenCalled()
+    expect(mocks.serializeVisibleDom).not.toHaveBeenCalled()
+    expect(window.scrollBy).not.toHaveBeenCalled()
+    read.mockRejectedValue(new Error('offline'))
+    expect((await executor.navigate({ name: 'plans' })).message).toContain('最新自主模式')
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+
+  it('旧点击确认卡在另一个窗口降为 L1 后不能继续执行', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    let confirm!: (value: boolean) => void
+    mocks.requestAction.mockReturnValue(new Promise<boolean>((resolve) => { confirm = resolve }))
+    const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
+    const button = document.createElement('button')
+    button.id = 'pending-business-action'
+    button.click = vi.fn()
+    document.body.appendChild(button)
+    const result = useActionExecutor().click({ selector: '#pending-business-action' })
+    read.mockResolvedValue({ scope: 'enterprise', level: 1 } as XiaoCLifeState)
+    confirm(true)
+    expect((await result).success).toBe(false)
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(button.click).not.toHaveBeenCalled()
+  })
+
+  it('暂停后台仍允许 L2 的明确单步请求，L2 不允许发起改写编排', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 2, paused: true } as XiaoCLifeState)
+    const executor = useActionExecutor()
+    expect((await executor.navigate({ name: 'plans' })).success).toBe(true)
+    expect((await executor.enhanceCurrentPage({ brief: 'start autonomous edits' })).success).toBe(false)
+    expect(mocks.push).toHaveBeenCalledOnce()
+    expect(mocks.start).not.toHaveBeenCalled()
+  })
+
+  it('小 C 不得通过页面工具修改自己的等级或消费授权', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 6 } as XiaoCLifeState)
+    const controls = document.createElement('section')
+    controls.dataset.xiaocControlPlane = ''
+    const button = Object.assign(document.createElement('button'), { id: 'save-life', textContent: '保存' })
+    const budget = Object.assign(document.createElement('input'), { id: 'life-budget', value: '0' })
+    const level = Object.assign(document.createElement('select'), { id: 'life-level' })
+    level.append(...['1', '6'].map((value) =>
+      Object.assign(document.createElement('option'), { value, textContent: `L${value}` }),
+    ))
+    controls.append(button, budget, level)
+    document.body.replaceChildren(controls)
+    button.click = vi.fn()
+    const executor = useActionExecutor()
+    expect((await executor.click({ selector: '#save-life' })).success).toBe(false)
+    expect((await executor.fill({ selector: '#life-budget', value: '1000000' })).success).toBe(false)
+    expect((await executor.select({ selector: '#life-level', value: '6' })).success).toBe(false)
+    expect(button.click).not.toHaveBeenCalled()
+    expect(document.querySelector<HTMLInputElement>('#life-budget')?.value).toBe('0')
+    expect(document.querySelector<HTMLSelectElement>('#life-level')?.value).toBe('1')
   })
 })

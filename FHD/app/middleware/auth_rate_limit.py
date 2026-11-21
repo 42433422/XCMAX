@@ -12,6 +12,7 @@ from app.utils.resilience.rate_limiter import check_rate_limit
 
 _AUTH_PREFIXES = (
     "/api/auth/login",
+    "/api/auth/offline-login",
     "/api/auth/login-with-phone-code",
     "/api/auth/register",
     "/api/auth/forgot-password",

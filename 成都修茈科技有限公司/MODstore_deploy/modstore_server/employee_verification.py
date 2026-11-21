@@ -27,6 +27,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.employee_path_guard import _extract_changed_files_from_output
+
 logger = logging.getLogger(__name__)
 
 
@@ -125,7 +127,9 @@ def _try_parse_handler_output(result: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
-def _extract_changed_files(llm_out: Dict[str, Any], result: Dict[str, Any]) -> List[str]:
+def _extract_changed_files(
+    llm_out: Dict[str, Any], result: Dict[str, Any], project_root: Optional[Path] = None
+) -> List[str]:
     """从 LLM 输出和 handler output 里抽 files_changed。"""
     files: List[str] = []
     # 1. LLM 输出顶层
@@ -141,6 +145,8 @@ def _extract_changed_files(llm_out: Dict[str, Any], result: Dict[str, Any]) -> L
         for out in outputs:
             if not isinstance(out, dict):
                 continue
+            if out.get("handler") == "direct_python":
+                files.extend(_extract_changed_files_from_output(out))
             out_field = out.get("output")
             if isinstance(out_field, str) and out_field.strip().startswith("{"):
                 try:
@@ -152,14 +158,7 @@ def _extract_changed_files(llm_out: Dict[str, Any], result: Dict[str, Any]) -> L
                                 files.extend(str(x) for x in v if str(x).strip())
                 except (ValueError, TypeError):
                     pass
-    # 去重保序
-    seen: set[str] = set()
-    out_files: List[str] = []
-    for f in files:
-        if f not in seen:
-            seen.add(f)
-            out_files.append(f)
-    return out_files
+    return _extract_changed_files_from_output({"files_changed": files}, project_root=project_root)
 
 
 def _check_files_changed_exist(
@@ -368,12 +367,34 @@ def run_verification(
         # Keep explicit cognition fields, but fill its missing contract from
         # the actual tool-using handler's final answer.
         llm_out = {**handler_out, **llm_out}
-    files = _extract_changed_files(llm_out, result if isinstance(result, dict) else {})
+    files = _extract_changed_files(
+        llm_out, result if isinstance(result, dict) else {}, project_root=project_root
+    )
+    status_check = _check_status_honest(llm_out)
+    outputs = result.get("outputs") or []
+    if (
+        reasoning.get("skipped_cognition") is True
+        and outputs
+        and all(isinstance(row, dict) and row.get("handler") == "direct_python" for row in outputs)
+    ):
+        native_ok = all(
+            row.get("ok") is True
+            and not row.get("error")
+            and isinstance(row.get("output"), dict)
+            and row["output"].get("ok") is True
+            and not row["output"].get("error")
+            for row in outputs
+        )
+        status_check = {
+            "name": "status_honest",
+            "ok": native_ok,
+            "evidence": "native direct_python ok/error results checked; cognition was not invoked",
+        }
 
     checks: List[Dict[str, Any]] = [
         _check_files_changed_exist(files, project_root),
         _check_tests_reported(llm_out, task),
-        _check_status_honest(llm_out),
+        status_check,
         _check_summary_provided(llm_out),
         _check_handler_outputs_nonempty(result if isinstance(result, dict) else {}),
     ]

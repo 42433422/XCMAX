@@ -1,115 +1,87 @@
-"""Tests for app.infrastructure.excel.text_to_pandas."""
+"""Query plans retain filtering, grouping and error contracts without Python execution."""
 
 from __future__ import annotations
+
+import json
 
 import pandas as pd
 import pytest
 
-from app.infrastructure.excel.text_to_pandas import (
-    MAX_CODE_LENGTH,
-    _safe_exec_pandas,
-    _validate_generated_code,
+from app.infrastructure.excel.text_to_pandas import _safe_exec_pandas, _validate_generated_code
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "obj._secret",
+        "for col in df.columns:\n    pass",
+        'result = {"key": "value"}',
+        "result = len(df)",
+    ],
 )
+def test_legacy_python_is_not_an_execution_fallback(code):
+    assert _validate_generated_code(code)
+    with pytest.raises(ValueError):
+        _safe_exec_pandas(code, pd.DataFrame({"a": [1]}))
 
 
-class TestValidateGeneratedCode:
-    """Tests for _validate_generated_code."""
-
-    def test_empty_code(self) -> None:
-        assert _validate_generated_code("") == "empty code"
-
-    def test_whitespace_only_code(self) -> None:
-        assert _validate_generated_code("   \n  ") == "empty code"
-
-    def test_none_code(self) -> None:
-        assert _validate_generated_code(None) == "empty code"
-
-    def test_code_exceeds_max_length(self) -> None:
-        long_code = "x = 1\n" * (MAX_CODE_LENGTH // 5 + 1)
-        result = _validate_generated_code(long_code)
-        assert "exceeds maximum length" in result
-
-    def test_syntax_error(self) -> None:
-        result = _validate_generated_code("def (")
-        assert "syntax error" in result
-
-    def test_access_to_private_attribute(self) -> None:
-        result = _validate_generated_code("obj._secret")
-        assert "private attribute" in result
-
-    def test_import_statement_forbidden(self) -> None:
-        result = _validate_generated_code("import os")
-        assert "import" in result and "forbidden" in result
-
-    def test_from_import_forbidden(self) -> None:
-        result = _validate_generated_code("from os import path")
-        assert "import" in result and "forbidden" in result
-
-    def test_valid_simple_code(self) -> None:
-        code = "result = df.head()"
-        assert _validate_generated_code(code) is None
-
-    def test_valid_code_with_if(self) -> None:
-        code = "if len(df) > 0:\n    result = df"
-        assert _validate_generated_code(code) is None
-
-    def test_valid_code_with_for_loop(self) -> None:
-        code = "for col in df.columns:\n    pass"
-        assert _validate_generated_code(code) is None
-
-    def test_valid_code_with_list_comp(self) -> None:
-        code = "result = [x for x in range(10)]"
-        assert _validate_generated_code(code) is None
-
-    def test_valid_code_with_dict(self) -> None:
-        code = 'result = {"key": "value"}'
-        assert _validate_generated_code(code) is None
+@pytest.mark.parametrize(
+    "plan",
+    [{}, {"limit": 5}, {"query_expression": "c0 > 1"}, {"columns": ["a"]}],
+)
+def test_valid_plans_pass_schema_validation(plan):
+    assert _validate_generated_code(json.dumps(plan)) is None
 
 
-class TestSafeExecPandas:
-    """Tests for _safe_exec_pandas."""
+def test_returns_filtered_dataframe():
+    result = _safe_exec_pandas('{"query_expression": "c0 > 1"}', pd.DataFrame({"a": [1, 2, 3]}))
+    assert result["a"].tolist() == [2, 3]
 
-    def test_invalid_code_raises_value_error(self) -> None:
-        df = pd.DataFrame({"a": [1, 2, 3]})
-        with pytest.raises(ValueError, match="code validation failed"):
-            _safe_exec_pandas("import os", df)
 
-    def test_returns_dataframe_result(self) -> None:
-        df = pd.DataFrame({"a": [1, 2, 3]})
-        code = "result = df[df['a'] > 1]"
-        result = _safe_exec_pandas(code, df)
-        assert isinstance(result, pd.DataFrame)
-        assert len(result) == 2
+def test_returns_all_rows_for_empty_plan():
+    frame = pd.DataFrame({"a": [1, 2, 3]})
+    pd.testing.assert_frame_equal(_safe_exec_pandas("{}", frame), frame)
 
-    def test_returns_series_as_dataframe(self) -> None:
-        df = pd.DataFrame({"a": [1, 2, 3]})
-        code = "result = df['a']"
-        result = _safe_exec_pandas(code, df)
-        assert isinstance(result, pd.DataFrame)
 
-    def test_returns_empty_df_when_no_result(self) -> None:
-        df = pd.DataFrame({"a": [1, 2, 3]})
-        code = "x = 5"
-        result = _safe_exec_pandas(code, df)
-        assert isinstance(result, pd.DataFrame)
-        assert len(result) == 0
+def test_aggregation_returns_expected_groups():
+    frame = pd.DataFrame({"group": ["a", "a", "b"], "val": [1, 2, 3]})
+    plan = {"group_by": ["group"], "metrics": [{"column": "val", "op": "sum"}]}
+    result = _safe_exec_pandas(json.dumps(plan), frame)
+    assert result.to_dict(orient="records") == [
+        {"group": "a", "val_sum": 3},
+        {"group": "b", "val_sum": 3},
+    ]
 
-    def test_does_not_mutate_original_df(self) -> None:
-        df = pd.DataFrame({"a": [1, 2, 3]})
-        code = "df['b'] = 4"
-        _safe_exec_pandas(code, df)
-        assert "b" not in df.columns
 
-    def test_can_use_safe_builtins(self) -> None:
-        df = pd.DataFrame({"a": [1, 2, 3]})
-        code = "result = len(df)"
-        # len returns int, not DataFrame, so result should be empty df
-        result = _safe_exec_pandas(code, df)
-        assert isinstance(result, pd.DataFrame)
+def test_aliases_cover_labels_that_are_not_python_identifiers():
+    frame = pd.DataFrame({"购货金额（元）": [1, 2, 3]})
+    result = _safe_exec_pandas(
+        '{"query_expression": "c0 >= 2", "sort_by": ["购货金额（元）"], "ascending": false, "limit": 1}',
+        frame,
+    )
+    assert result.to_dict(orient="records") == [{"购货金额（元）": 3}]
 
-    def test_aggregation_returns_dataframe(self) -> None:
-        df = pd.DataFrame({"group": ["a", "a", "b"], "val": [1, 2, 3]})
-        code = "result = df.groupby('group').sum()"
-        result = _safe_exec_pandas(code, df)
-        assert isinstance(result, pd.DataFrame)
-        assert len(result) == 2
+
+@pytest.mark.parametrize(
+    "plan",
+    [
+        {"query_expression": "missing > 1"},
+        {"columns": ["missing"]},
+        {"sort_by": ["missing"]},
+        {"conversions": [{"column": "missing", "kind": "date"}]},
+        {"group_by": ["a"]},
+        {"unsupported_reason": "requires arbitrary Python"},
+    ],
+)
+def test_unsupported_operations_fail_without_returning_false_success(plan):
+    with pytest.raises(ValueError):
+        _safe_exec_pandas(json.dumps(plan), pd.DataFrame({"a": [1]}))
+
+
+def test_schema_integer_floats_are_normalized_before_pandas_and_datetime():
+    plan = {
+        "limit": 1.0,
+        "conversions": [{"column": "日期", "kind": "date", "default_year": 2026.0}],
+    }
+    result = _safe_exec_pandas(json.dumps(plan), pd.DataFrame({"日期": ["2月", "3月"]}))
+    assert result["日期"].tolist() == [pd.Timestamp("2026-02-01")]

@@ -6,6 +6,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from modstore_server import xiaoc_admin_context as bridge
+from tests.test_xiaoc_life_chat import life_database as life_database
+
+pytestmark = pytest.mark.usefixtures("life_database")
 
 
 @pytest.mark.asyncio

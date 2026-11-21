@@ -1,4 +1,4 @@
-import { EventEmitter } from 'node:events'
+import { EventEmitter, once } from 'node:events'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -50,8 +50,16 @@ describe('packaged backend build identity resource handoff', () => {
   let resources: string
   let originalResources: PropertyDescriptor | undefined
   let originalDefaultApp: PropertyDescriptor | undefined
+  const logStreams = new Set<fs.WriteStream>()
 
   beforeEach(() => {
+    logStreams.clear()
+    const createWriteStream = fs.createWriteStream
+    vi.spyOn(fs, 'createWriteStream').mockImplementation((file, options) => {
+      const stream = createWriteStream(file, options)
+      logStreams.add(stream)
+      return stream
+    })
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-build-identity-'))
     resources = path.join(root, 'XCAGI.app', 'Contents', 'Resources')
     state.userData = path.join(root, 'user-data')
@@ -93,9 +101,14 @@ describe('packaged backend build identity resource handoff', () => {
     vi.useRealTimers()
     const stream = desktopRuntime.backendLogStream
     desktopRuntime.backendLogStream = null
-    if (stream) {
-      await new Promise<void>(resolve => { stream.once('close', resolve); stream.end() })
-    }
+    if (stream) logStreams.add(stream)
+    // stopBackend clears the current handle before its asynchronous file close.
+    await Promise.all([...logStreams].map(async logStream => {
+      if (logStream.closed) return
+      const closed = once(logStream, 'close')
+      if (!logStream.writableEnded) logStream.end()
+      await closed
+    }))
     if (originalResources) Object.defineProperty(process, 'resourcesPath', originalResources)
     else Reflect.deleteProperty(process, 'resourcesPath')
     if (originalDefaultApp) Object.defineProperty(process, 'defaultApp', originalDefaultApp)

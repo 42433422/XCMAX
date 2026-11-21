@@ -195,7 +195,7 @@ def _emit_deploy_callback(
                 if str(candidate) not in sys.path:
                     sys.path.insert(0, str(candidate))
                 callback_module = importlib.import_module("autonomy_callback")
-                deploy_callback = getattr(callback_module, "deploy_callback")
+                deploy_callback = callback_module.deploy_callback
                 deploy_callback(phase, payload, source="self_maintenance", action_id=action_id)
                 return
     except RECOVERABLE_ERRORS:
@@ -332,6 +332,13 @@ def _run_deploy_receipts_after_merge(
         gateway = GhActionsDeploymentGateway.from_environment(
             repo_root=Path(repo_root_text).expanduser(), ref=deploy_ref
         )
+        if merge_result.get("remote_task_id"):
+            gateway.verify_requested_merge(
+                run_id=run_id,
+                merge_sha=merge_sha,
+                task_id=str(merge_result["remote_task_id"]),
+                branch=str(merge_result.get("branch") or ""),
+            )
         result = run_staged_deployment_chain(
             gateway=gateway,
             record_event=_append_deploy_receipt_event,

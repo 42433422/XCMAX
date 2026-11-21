@@ -21,7 +21,7 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
   const errorMessage = ref('')
   const altLoginHint = ref('')
   const oidcEnabled = ref(false)
-  const loginMode = ref<'password' | 'qr'>('password')
+  const loginMode = ref<'password' | 'qr' | 'offline'>('password')
   const qrDataUrl = ref('')
   const qrPollTimer = ref<number | null>(null)
   const qrExpiresAt = ref(0)
@@ -69,7 +69,7 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
   })
 
   const canSubmit = computed(() => {
-    if (loading.value || loginMode.value !== 'password') return false
+    if (loading.value || (loginMode.value !== 'password' && loginMode.value !== 'offline')) return false
     return username.value.trim().length > 0 && password.value.length > 0
   })
 

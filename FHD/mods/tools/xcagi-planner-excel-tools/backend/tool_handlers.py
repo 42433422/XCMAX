@@ -68,50 +68,10 @@ def _handle_excel_chart_recommend(_args: dict[str, Any]) -> str:
 
 
 def _handle_excel_schema_understand(args: dict[str, Any], workspace_root: str | None) -> str:
-    from app.mod_sdk.host_services import (
-        ExcelSchemaUnderstandingService,
-        _parse_excel_header_row_1based,
-        _read_excel_dataframe,
-        resolve_safe_excel_path,
-    )
+    from app.mod_sdk.host_services import handle_excel_schema_understand
 
-    file_path = str(args.get("file_path") or "")
-    sheet_n = args.get("sheet_name")
-    header_1b = _parse_excel_header_row_1based(args)
-    root = workspace_root or str(Path.cwd())
-    p = resolve_safe_excel_path(root, file_path)
-    if not p.exists():
-        return json.dumps(
-            _tag_source(
-                {
-                    "success": False,
-                    "error": "file_not_found",
-                    "message": f"找不到文件: {file_path}",
-                    "hint": "请确认文件已正确上传，或重新上传文件。",
-                    "workspace_root": root,
-                    "resolved_path": str(p),
-                }
-            ),
-            ensure_ascii=False,
-        )
-    try:
-        df = _read_excel_dataframe(p, sheet_name=sheet_n, header_row_1based=header_1b)
-        svc = ExcelSchemaUnderstandingService()
-        out = svc.understand_dataframe(df, file_path=file_path)
-        if isinstance(out, dict):
-            _tag_source(out)
-        return json.dumps(out, ensure_ascii=False)
-    except BOUNDARY_ERRORS as e:
-        return json.dumps(
-            _tag_source(
-                {
-                    "success": False,
-                    "error": str(e),
-                    "message": f"读取 Excel 文件失败: {e}",
-                }
-            ),
-            ensure_ascii=False,
-        )
+    out = handle_excel_schema_understand(args, workspace_root=workspace_root)
+    return json.dumps(_tag_source(out), ensure_ascii=False)
 
 
 def _handle_excel_analysis(args: dict[str, Any], workspace_root: str | None) -> str:
@@ -303,8 +263,11 @@ def _handle_generate_office_document(
         if fmt != "xlsx":
             return json.dumps(
                 _tag_source(
-                    {"success": False, "error": "template_requires_xlsx",
-                     "message": "模板填充只支持 Excel（.xlsx）模板"}
+                    {
+                        "success": False,
+                        "error": "template_requires_xlsx",
+                        "message": "模板填充只支持 Excel（.xlsx）模板",
+                    }
                 ),
                 ensure_ascii=False,
             )

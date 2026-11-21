@@ -76,6 +76,7 @@ async def sandbox_run_workflow(
             report=report,
             validate_only=body.validate_only,
             mock_employees=body.mock_employees,
+            graph_fingerprint=report.get("graph_fingerprint"),
         )
         status = sandbox_status_for_workflow(db, workflow, user_id=user.id)
         report = {

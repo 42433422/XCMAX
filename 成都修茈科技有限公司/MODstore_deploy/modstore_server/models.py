@@ -39,3 +39,4 @@ from modstore_server.db.strategic import *  # noqa: F403,F401
 from modstore_server.db.studio_assets import *  # noqa: F403,F401
 from modstore_server.db.work_orders import *  # noqa: F403,F401
 from modstore_server.db.workflow import *  # noqa: F403,F401
+from modstore_server.db.xiaoc_life import *  # noqa: F403,F401

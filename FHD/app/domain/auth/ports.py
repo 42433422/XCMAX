@@ -71,6 +71,7 @@ class LoginBackend(Protocol):
         *,
         totp_code: str | None = None,
         enforce_mfa: bool = True,
+        offline: bool = False,
     ) -> JsonObject: ...
 
     def create_session_for_username(self, username: str) -> JsonObject: ...
@@ -131,6 +132,18 @@ class MarketFirstLogin(Protocol):
         login_market_fn: MarketPasswordLogin | None = None,
         totp_code: str | None = None,
         invitation_code: str = "",
+        background_tasks: BackgroundTasks | None = None,
+    ) -> Awaitable[tuple[JsonObject | None, JSONResponse | None]]: ...
+
+
+class OfflineLogin(Protocol):
+    def __call__(
+        self,
+        *,
+        username: str,
+        password: str,
+        auth_app_service: LoginBackend,
+        sku: str,
         background_tasks: BackgroundTasks | None = None,
     ) -> Awaitable[tuple[JsonObject | None, JSONResponse | None]]: ...
 

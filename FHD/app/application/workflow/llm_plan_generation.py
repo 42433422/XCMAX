@@ -149,7 +149,7 @@ class PlannerCompletion(Protocol):
         messages: list[dict[str, str]],
         http_client_factory: Callable[[], httpx.Client] | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 1200,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | None: ...
 
@@ -275,7 +275,9 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
 
     contracts = build_tool_specs_v2()
     result = []
-    for tool_id, spec in tool_registry.items():
+    # 固定顺序保证 system 前缀稳定，命中供应商的 prompt 缓存。
+    for tool_id in sorted(tool_registry, key=str):
+        spec = tool_registry[tool_id]
         actions = spec.get("actions", {})
         action_specs = []
         for name, metadata in actions.items():

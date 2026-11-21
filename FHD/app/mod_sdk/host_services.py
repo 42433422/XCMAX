@@ -224,6 +224,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "get_shipment_application_service_core",
     ),
     "handle_excel_analysis": ("app.application.tools.workflow", "handle_excel_analysis"),
+    "handle_excel_schema_understand": (
+        "app.application.tools.workflow",
+        "handle_excel_schema_understand",
+    ),
     "host_info": ("app.fastapi_routes.lan_routes", "host_info"),
     "import_mod_backend_py": ("app.infrastructure.mods.mod_manager", "import_mod_backend_py"),
     "issue_enterprise_credentials": (

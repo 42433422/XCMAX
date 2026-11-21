@@ -1,0 +1,414 @@
+"""Real session ownership and adapter HTTP receipts for the native image tool."""
+
+import asyncio
+import json
+from datetime import timedelta
+from types import SimpleNamespace
+
+import httpx
+import pytest
+
+from app.application.ai_chat.workflow_response_builder import _image_generate_summary
+from app.application.market_llm import authentication
+from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
+from app.db.models.user import Session, User
+from app.domain.shared_services.conversation import modstore_adapter
+from app.fastapi_routes.market_bridge.session_tokens import SQLSessionTokens
+from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
+from app.infrastructure.llm.model_admission import _MODEL_IDENTITY, model_rate_limit_scope
+from app.utils.time import utc_now_naive
+
+IMAGE = "data:image/png;base64,AA=="
+
+
+@pytest.fixture
+def image_runtime(dialogue_db, monkeypatch):
+    factory = dialogue_db
+    monkeypatch.setattr("app.db.HostSessionLocal", factory)
+    Session.__table__.create(factory.kw["bind"])
+    with factory.begin() as db:
+        for owner in (1, 2):
+            db.get(User, owner).tenant_id = owner + 6
+            db.add(
+                Session(
+                    session_id=f"login-{owner}",
+                    user_id=owner,
+                    expires_at=utc_now_naive() + timedelta(hours=1),
+                    market_access_token=f"synthetic-owner-{owner}",
+                )
+            )
+    repository = SQLSessionTokens(factory, lambda: Session)
+    monkeypatch.setattr(
+        authentication,
+        "load_session_ports",
+        lambda: authentication.SessionPorts(
+            lambda request: "",
+            lambda sid: repository.read(sid, "access"),
+            repository.owner,
+            lambda user_id=None: repository.latest("access", user_id),
+        ),
+    )
+    monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "synthetic-process-owner")
+    monkeypatch.setenv("MODSTORE_PLATFORM_URL", "https://market.invalid")
+    monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
+    remote = SimpleNamespace(
+        requests=[],
+        transports=[],
+        status=200,
+        payload={
+            "ok": True,
+            "images": [IMAGE],
+            "provider": "openai",
+            "model": "gpt-image-test",
+            "billed": True,
+            "charge_amount": "0.12",
+            "usage": {"prompt_tokens": 4, "completion_tokens": 6, "total_tokens": 10},
+            "request_id": "market-request-1",
+            "operation": "image_generation",
+        },
+        timeout=False,
+    )
+
+    class ControlledTransport(httpx.AsyncBaseTransport):
+        def __init__(self):
+            self.loop = None
+            self.closed = False
+            remote.transports.append(self)
+
+        async def handle_async_request(self, request):
+            self.loop = asyncio.get_running_loop()
+            remote.requests.append(
+                {
+                    "auth": request.headers["authorization"],
+                    "body": json.loads(request.content),
+                    "identity": _MODEL_IDENTITY.get(),
+                }
+            )
+            if remote.timeout:
+                raise httpx.ReadTimeout("synthetic timeout", request=request)
+            return httpx.Response(remote.status, json=remote.payload)
+
+        async def aclose(self):
+            assert asyncio.get_running_loop() is self.loop
+            self.closed = True
+
+    monkeypatch.setattr(
+        modstore_adapter._transport,
+        "httpx_async_client",
+        lambda **kwargs: httpx.AsyncClient(transport=ControlledTransport(), **kwargs),
+    )
+    context = {
+        "user_id": "1",
+        "actor_id": "1",
+        "local_user_id": 1,
+        "tenant_id": "7",
+        "session_id": "chat-conversation-1",
+        "_actor_authorization": bind_agent_actor_scope(session_id="login-1", user_id="1"),
+        "idempotency_key": "agent:run-one:step-one",
+    }
+    return factory, context, remote
+
+
+def execute(context, **params):
+    return execute_registered_workflow_tool(
+        "image_generate",
+        "generate",
+        {"prompt": "a blue bird", **params, "_runtime_context": context},
+    )
+
+
+@pytest.mark.parametrize("chat_session", ["", "login-2", "chat-conversation-1"])
+def test_tool_uses_sealed_login_owner_and_preserves_billing_receipt(image_runtime, chat_session):
+    _, context, remote = image_runtime
+    context["session_id"] = chat_session
+    result = execute(context)
+    assert result["success"], result
+    assert remote.requests[0]["auth"] == "Bearer synthetic-owner-1"
+    assert result["request_id"] == remote.payload["request_id"]
+    assert result["usage"] == remote.payload["usage"]
+    assert result["billed"] is True and result["charge_amount"] == "0.12"
+    assert result["client_request_id"] == remote.requests[0]["body"]["client_request_id"]
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing", "actor", "local_user", "tenant", "expired", "inactive"]
+)
+def test_tool_denies_unbound_or_revoked_identity_before_any_model_request(image_runtime, mutation):
+    factory, context, remote = image_runtime
+    if mutation == "missing":
+        context.pop("_actor_authorization")
+        context["session_id"] = ""
+    elif mutation == "actor":
+        context["actor_id"] = "2"
+    elif mutation == "local_user":
+        context["local_user_id"] = 2
+    elif mutation == "tenant":
+        context["tenant_id"] = "8"
+    else:
+        with factory.begin() as db:
+            if mutation == "expired":
+                db.query(Session).filter_by(session_id="login-1").one().expires_at = (
+                    utc_now_naive() - timedelta(seconds=1)
+                )
+            else:
+                db.get(User, 1).is_active = False
+    with pytest.raises(PermissionError):
+        authentication.authenticated_agent_session_id(context)
+    assert execute(context)["success"] is False
+    assert remote.requests == []
+
+
+def test_tool_never_borrows_other_accounts_or_process_market_token(image_runtime):
+    factory, context, remote = image_runtime
+    context["session_id"] = ""
+    with factory.begin() as db:
+        db.query(Session).filter_by(session_id="login-1").one().market_access_token = ""
+    assert execute(context)["success"] is False
+    assert remote.requests == []
+
+
+@pytest.mark.parametrize("running_loop", [False, True])
+def test_generate_and_close_share_one_loop_and_keep_model_scope(image_runtime, running_loop):
+    _, context, remote = image_runtime
+    context["session_id"] = "login-1"
+
+    async def invoke():
+        return execute(context)
+
+    with model_rate_limit_scope(context):
+        result = asyncio.run(invoke()) if running_loop else execute(context)
+    assert result["success"], result
+    assert remote.requests[0]["identity"] == "tenant:7:actor:1"
+    assert all(transport.closed for transport in remote.transports)
+
+
+@pytest.mark.parametrize("failure", ["timeout", "pending", "gateway"])
+def test_unknown_image_outcome_keeps_same_client_key_and_reconciliation_receipt(
+    image_runtime, failure
+):
+    _, context, remote = image_runtime
+    context["session_id"] = "login-1"
+    remote.timeout = failure == "timeout"
+    remote.status = 409 if failure == "pending" else 502
+    remote.payload = {"detail": {"message": "pending", "request_id": "market-pending-1"}}
+    results = [execute(context) for _ in range(2)]
+    keys = [request["body"]["client_request_id"] for request in remote.requests]
+    assert len(keys) == 2 and keys[0] == keys[1]
+    for result in results:
+        assert result["success"] is False
+        assert result["outcome"] == "unknown" and result["reconciliation_required"] is True
+        assert result["retryable"] is False and result["client_request_id"] == keys[0]
+    if failure == "pending":
+        assert results[0]["request_id"] == "market-pending-1"
+
+
+@pytest.mark.parametrize("status", [401, 402, 403, 422, 429])
+def test_confirmed_image_rejection_remains_definitive(image_runtime, status):
+    _, context, remote = image_runtime
+    context["session_id"] = "login-1"
+    remote.status, remote.payload = status, {"detail": "not authorized"}
+    result = execute(context)
+    assert result["success"] is False and result["status_code"] == status
+    assert not result.get("reconciliation_required")
+    assert result["client_request_id"] == remote.requests[0]["body"]["client_request_id"]
+
+
+@pytest.mark.parametrize("prompt", [17, "x" * 4001])
+def test_tool_keeps_original_prompt_validation_before_paid_dispatch(image_runtime, prompt):
+    _, context, remote = image_runtime
+    context["session_id"] = "login-1"
+    assert execute(context, prompt=prompt)["success"] is False
+    assert not remote.requests
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_native_executor_keeps_owner_receipt_durable_and_never_reissues_paid_request(
+    image_runtime, monkeypatch, tmp_path, pending
+):
+    from app.application.agent_orchestrator import tool_permission
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    _, context, remote = image_runtime
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))
+    tool_permission.drop_process_idempotency_memory()
+    if pending:
+        remote.status = 409
+        remote.payload = {"detail": {"message": "pending", "request_id": "market-pending-1"}}
+    step = AgentStep(
+        node_id="image", tool_id="image_generate", action="generate", params={"prompt": "a bird"}
+    )
+    executor = AgentToolExecutor()
+    first = executor.execute(step, runtime_context=context)
+    assert first["success"] is not pending, first
+    assert first["client_request_id"] == remote.requests[0]["body"]["client_request_id"]
+    assert bool(first.get("reconciliation_required")) is pending
+    tool_permission.drop_process_idempotency_memory()
+    second = executor.execute(step, runtime_context=context)
+    assert second == first
+    assert len(remote.requests) == 1
+    tool_permission.drop_process_idempotency_memory()
+
+
+def test_unrenderable_paid_receipt_is_retained_as_unknown(image_runtime):
+    _, context, remote = image_runtime
+    remote.payload["images"] = ["data:image/svg+xml;base64,PHN2Zz4="]
+    result = execute(context)
+    assert result["success"] is False and result["reconciliation_required"] is True
+    assert result["billed"] is True and result["request_id"] == "market-request-1"
+    assert result["usage"] == remote.payload["usage"]
+
+
+@pytest.mark.parametrize("key", [None, "short", "bad key", "x" * 129])
+def test_unrecoverable_request_key_is_rejected_before_dispatch(image_runtime, key):
+    _, context, remote = image_runtime
+    context.pop("idempotency_key")
+    result = execute(context, **({"client_request_id": key} if key is not None else {}))
+    assert result["success"] is False and not remote.requests
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "data:image/svg+xml;base64,PHN2Zz4=",
+        "data:image/gif;base64,R0lG",
+        "data:image/png,unencoded",
+        "data:image/png;base64,AA==\n[leaked](https://other.test)",
+        "https://",
+        "https://user:secret@example.test/a.png",
+        "https://example.test/a.png)\n[leaked](https://other.test)",
+    ],
+)
+def test_unsafe_image_results_are_not_rendered(url):
+    assert _image_generate_summary({"images": [url]}) is None
+
+
+def test_markdown_image_target_and_model_cannot_inject_markup():
+    summary = _image_generate_summary(
+        {
+            "images": ["https://example.test/image(1).png"],
+            "model": "[link](https://other.test)",
+        }
+    )
+    assert summary.startswith("![生成图片](https://example.test/image%281%29.png)")
+    assert "[link](https://other.test)" not in summary
+
+
+def _image_workflow_response(steps, status="completed"):
+    from app.application.agent_orchestrator.run_models import AgentArtifact, AgentRun
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(
+        plan_id="image-plan",
+        intent="image_workflow",
+        todo_steps=["查询资料后生成图片"],
+        nodes=[
+            WorkflowNode(node_id=step.node_id, tool_id=step.tool_id, action=step.action)
+            for step in steps
+        ],
+    )
+    run = AgentRun(
+        user_id="1",
+        message="查询资料后生成图片",
+        run_id="image-run",
+        status=status,
+        steps=steps,
+        metadata={"tool_call_count": len(steps), "cost_units_total": 3},
+        artifacts=[AgentArtifact(artifact_type="image", uri="https://example.test/saved.png")],
+    )
+    return AIChatWorkflowResponseMixin()._format_agent_run_response(plan, run)
+
+
+def _finished_image(node_id, **output):
+    from app.application.agent_orchestrator.run_models import AgentStep
+
+    return AgentStep(
+        node_id=node_id,
+        tool_id="image_generate",
+        action="generate",
+        status="completed",
+        output={
+            "success": True,
+            "images": [f"https://example.test/{node_id}.png"],
+            "billed": True,
+            **output,
+        },
+    )
+
+
+def test_multistep_response_keeps_summary_and_every_confirmed_image():
+    from app.application.agent_orchestrator.run_models import AgentStep
+
+    lookup = AgentStep(
+        node_id="lookup",
+        tool_id="customers",
+        action="query",
+        status="completed",
+        output={"success": True, "total": 1, "data": [{"customer_name": "客户甲"}]},
+    )
+    result = _image_workflow_response(
+        [
+            lookup,
+            _finished_image("first"),
+            _finished_image(
+                "second",
+                images=["https://example.test/image(2).png"],
+                model="[link](https://other.test)",
+            ),
+        ]
+    )
+    text = result["response"]
+    assert result["success"] is True and result["data"]["text"] == text
+    assert "工作流: image_workflow" in text and "客户甲" in text
+    assert "TODO:" in text and "工具调用: 3 次" in text
+    assert text.count("![生成图片](https://example.test/first.png)") == 1
+    assert text.count("![生成图片](https://example.test/image%282%29.png)") == 1
+    assert "[link](https://other.test)" not in text
+    assert result["data"]["data"]["artifacts"][0]["uri"] == "https://example.test/saved.png"
+
+
+@pytest.mark.parametrize("failure", ["failed", "unknown", "false_receipt"])
+def test_mixed_response_shows_confirmed_image_without_promoting_other_results(failure):
+    other = _finished_image("unconfirmed")
+    if failure == "failed":
+        other.status = "failed"
+        other.output = {"success": False, "message": "生成失败"}
+    elif failure == "unknown":
+        # A stale completed step cannot override an explicit uncertain receipt.
+        other.output.update(outcome="unknown", reconciliation_required=True)
+    else:
+        other.output["success"] = False
+    result = _image_workflow_response([_finished_image("confirmed"), other], status="failed")
+    text = result["response"]
+    assert result["success"] is False and result["data"]["text"] == text
+    assert "![生成图片](https://example.test/confirmed.png)" in text
+    assert "https://example.test/unconfirmed.png" not in text
+    assert result["execution"]["committed"] is True
+    if failure == "unknown":
+        assert result["execution_state"] == "unknown" and result["retryable"] is False
+        assert result["requires_reconciliation"] is True
+        assert "业务结果暂时无法核实" in text
+        assert result["execution"]["effect"] == result["execution"]["outcome"] == "unknown"
+    else:
+        assert "工作流: image_workflow" in text and "unconfirmed" in text
+        assert result["execution"]["effect"] == result["execution"]["outcome"] == "partial"
+
+
+def test_unknown_image_without_confirmed_result_does_not_claim_committed_effect():
+    result = _image_workflow_response(
+        [_finished_image("unconfirmed", outcome="unknown", reconciliation_required=True)],
+        status="failed",
+    )
+    assert result["success"] is False and result["requires_reconciliation"] is True
+    assert result["execution"]["committed"] is False
+    assert result["execution"]["effect"] == result["execution"]["outcome"] == "unknown"
+    assert "https://example.test/unconfirmed.png" not in result["response"]
+    assert result["data"]["text"] == result["response"]
+
+
+def test_single_image_response_still_displays_the_confirmed_image_once():
+    result = _image_workflow_response([_finished_image("single")])
+    assert result["success"] is True
+    assert result["response"] == "![生成图片](https://example.test/single.png)"
+    assert result["data"]["text"] == result["response"]

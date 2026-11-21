@@ -448,3 +448,68 @@ def test_competing_answers_replace_one_wait_and_execute_once(roundtrip, monkeypa
     )
     assert len(completed.tool_calls) == 1
     assert roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+def test_durable_question_takes_priority_over_stale_history_text(roundtrip, monkeypatch):
+    from app.application.ai_chat import dialogue_memory
+
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    monkeypatch.setattr(
+        dialogue_memory,
+        "conversation_history_messages",
+        lambda _context: [
+            {"role": "assistant", "content": "请选择删除编号42的产品，确认后直接删除。"}
+        ],
+    )
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert result["run_id"] == first["run_id"] and result["success"] is True
+    completed = roundtrip.repository.get(first["run_id"])
+    assert completed.metadata["runtime_context"]["planning_clarification"] == {
+        "original_request": ORIGINAL,
+        "exchanges": [{"question": QUESTION, "answer": "A"}],
+    }
+    assert completed.tool_calls[0].tool_id == "dataset_rag"
+    assert len(completed.tool_calls) == roundtrip.executor.execute_with_deadline.call_count == 1
+
+
+@pytest.mark.parametrize("approval_mode", ["manual", "auto"])
+def test_old_question_cannot_replan_a_completed_run_without_a_durable_wait(
+    roundtrip, monkeypatch, approval_mode
+):
+    from app.application.ai_chat import dialogue_memory
+
+    first = roundtrip.send(roundtrip.service(), ORIGINAL)
+    roundtrip.send(roundtrip.service(), "A")
+    completed = roundtrip.repository.get(first["run_id"])
+    assert completed.status == "completed" and len(completed.tool_calls) == 1
+    request_count = len(roundtrip.requests)
+    # A history projection may lag behind the durable completion receipt.
+    # Its old question cannot authorize a new plan in either approval mode.
+    monkeypatch.setattr(
+        dialogue_memory,
+        "conversation_history_messages",
+        lambda _context: [{"role": "assistant", "content": "请确认删除编号42的产品。"}],
+    )
+    roundtrip.state.write = True
+    result = roundtrip.send(
+        roundtrip.service(), "确认", extra={"chat_approval_mode": approval_mode}
+    )
+    assert len(roundtrip.requests) == request_count
+    assert result["data"]["action"] == "clarification_required"
+    assert roundtrip.executor.execute_with_deadline.call_count == 1
+    assert roundtrip.repository.get(first["run_id"]) == completed
+
+
+def test_unbound_short_answer_keeps_history_separate_from_current_request(roundtrip, monkeypatch):
+    from app.application.ai_chat import dialogue_memory
+
+    prior_question = "请选择日期范围：A. 当天 B. 整月"
+    monkeypatch.setattr(
+        dialogue_memory,
+        "conversation_history_messages",
+        lambda _context: [{"role": "assistant", "content": prior_question}],
+    )
+    result = roundtrip.send(roundtrip.service(), "A")
+    assert roundtrip.requests[0]["user_message"] == "A"
+    assert result["data"]["action"] == "clarification_required"
+    roundtrip.executor.execute_with_deadline.assert_not_called()

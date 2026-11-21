@@ -32,7 +32,12 @@ on:
         type: string
         default: ""
       release_sha:
-        description: Required for production apply-latest; exact 40-character release commit
+        description: Exact release commit; required for apply-latest in either environment
+        required: false
+        type: string
+        default: ""
+      release_artifact_sha256:
+        description: Artifact digest bound by automated staging dispatch
         required: false
         type: string
         default: ""
@@ -76,6 +81,17 @@ jobs:
       - name: Validate explicit retry scope
         if: ${{ inputs.retry_failed_release && (inputs.environment != 'production' || inputs.action != 'apply-latest') }}
         run: exit 64
+
+      - name: Verify exact staging release input
+        if: ${{ inputs.environment == 'staging' && inputs.action == 'apply-latest' }}
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::staging apply-latest requires release_sha=<40-char git sha>."
+            exit 1
+          fi
 
       - name: Checkout exact production release for gate verification
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
@@ -237,9 +253,20 @@ jobs:
           ACTION: ${{ inputs.action }}
           ACTION_ID: ${{ inputs.action_id }}
           RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_ARTIFACT_SHA256: ${{ inputs.release_artifact_sha256 }}
           PRESERVE_RELEASE_HISTORY: ${{ inputs.preserve_release_history && '1' || '0' }}
         run: |
           set -euo pipefail
+          if [ -n "$RELEASE_SHA" ]; then
+            [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 64
+          fi
+          if [ -n "$RELEASE_ARTIFACT_SHA256" ]; then
+            [[ "$RELEASE_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 64
+          fi
+          if [ "$TARGET_ENV" = "staging" ] && [ "$ACTION" = "apply-latest" ] && [ -n "$ACTION_ID" ]; then
+            [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 64
+            [[ "$RELEASE_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 64
+          fi
           if [ "$PRESERVE_RELEASE_HISTORY" = "1" ] \
             && { [ "$TARGET_ENV" != "production" ] || [ "$ACTION" != "apply-latest" ]; }; then
             echo "::error::preserve_release_history is only valid for production apply-latest"
@@ -338,9 +365,9 @@ jobs:
               exit 1
             fi
           else
-            RELEASE_FIELDS="\$(python3 - "${MANIFEST}" "${RELEASE_SHA}" "${TARGET_ENV}" "${ACTION}" <<'PY'
-          import json, re, sys
-          manifest_path, authorized_sha, environment, action = sys.argv[1:]
+            RELEASE_FIELDS="\$(python3 - "${MANIFEST}" "${RELEASE_SHA}" "${TARGET_ENV}" "${ACTION}" "${RELEASE_ARTIFACT_SHA256}" <<'PY'
+          import base64, json, re, sys
+          manifest_path, authorized_sha, environment, action, authorized_artifact = sys.argv[1:]
           with open(manifest_path, encoding="utf-8") as stream:
               doc = json.load(stream)
           git_sha = str(doc.get("git_sha") or "")
@@ -355,12 +382,15 @@ jobs:
               raise SystemExit("manifest archive verifier SHA256 is invalid")
           if not re.fullmatch(r"fhd-full-[A-Za-z0-9._-]+\.tar\.gz", artifact):
               raise SystemExit("manifest artifact is not a safe FHD tarball basename")
-          if environment == "production" and action == "apply-latest" and git_sha != authorized_sha:
+          if action == "apply-latest" and git_sha != authorized_sha:
               raise SystemExit("manifest git_sha differs from authorized release_sha")
-          print("|".join((git_sha, artifact, digest, verifier_sha)))
+          if authorized_artifact and digest != authorized_artifact:
+              raise SystemExit("manifest artifact differs from dispatched release_artifact_sha256")
+          snapshot = base64.b64encode(json.dumps(doc).encode("utf-8")).decode("ascii")
+          print("|".join((git_sha, artifact, digest, verifier_sha, snapshot)))
           PY
           )"
-            IFS='|' read -r MANIFEST_GIT_SHA ARTIFACT EXPECTED_ARCHIVE_SHA EXPECTED_VERIFIER_SHA <<<"\$RELEASE_FIELDS"
+            IFS='|' read -r MANIFEST_GIT_SHA ARTIFACT EXPECTED_ARCHIVE_SHA EXPECTED_VERIFIER_SHA MANIFEST_SNAPSHOT_B64 <<<"\$RELEASE_FIELDS"
             EXPECTED_SHA="\$MANIFEST_GIT_SHA"
             TARBALL="\$(dirname "${MANIFEST}")/\$ARTIFACT"
             test -f "\$TARBALL"
@@ -389,10 +419,17 @@ jobs:
             BOOTSTRAP="\$(mktemp -d /tmp/fhd-deploy-bootstrap.XXXXXX)"
             trap 'rm -rf -- "\$BOOTSTRAP"' EXIT
             tar -xzf "\$TARBALL" -C "\$BOOTSTRAP" ./scripts/deploy
+            # The updater must consume the exact validated read, even if latest advances while it waits for its lock.
+            printf '%s' "\$MANIFEST_SNAPSHOT_B64" | base64 --decode >"\$BOOTSTRAP/fhd-manifest.json"
+            export FHD_MANIFEST_PATH="\$BOOTSTRAP/fhd-manifest.json"
+            export FHD_ARTIFACT_DIR="\$(dirname "${MANIFEST}")"
+            export FHD_MANIFEST_FREEZE_MARKER="${MANIFEST}.frozen"
             AUTO="\$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"
             test -x "\$AUTO"
             # Keep old identity stamps intact for archive ownership checks and rollback.
-            FHD_FORCE_APPLY=1 bash "\$AUTO"
+            FHD_EXPECTED_RELEASE_SHA="\$EXPECTED_SHA" \
+              FHD_EXPECTED_ARTIFACT_SHA256="\$EXPECTED_ARCHIVE_SHA" \
+              FHD_FORCE_APPLY=1 bash "\$AUTO"
             DEPLOYED_SHA="\$(cat "${DEPLOY_ROOT}/.deploy-git-sha" 2>/dev/null || true)"
             if [ "\$DEPLOYED_SHA" != "\$EXPECTED_SHA" ]; then
               echo "Deployed SHA mismatch: expected=\$EXPECTED_SHA actual=\${DEPLOYED_SHA:-missing}" >&2
@@ -403,8 +440,8 @@ jobs:
 
           echo "Remote action done. Checking ${HEALTH_URL}${HEALTH_URL_ALT:+ (alt ${HEALTH_URL_ALT})}"
           EXPECTED_SHA=""
-          if [[ "$ACTION" = "apply-latest" && "$ACTION_ID" =~ ^release:([0-9a-f]{40})$ ]]; then
-            EXPECTED_SHA="${BASH_REMATCH[1]}"
+          if [ "$ACTION" = "apply-latest" ]; then
+            EXPECTED_SHA="$RELEASE_SHA"
           fi
           health_matches_target() {
             if [ -z "$EXPECTED_SHA" ]; then

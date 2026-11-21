@@ -1,0 +1,286 @@
+import json
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+
+from modstore_server import capability_trainer as trainer
+
+
+def _rec(employee="daily-orchestrator", reason="marker_missing", status="failed", ts=None):
+    return {
+        "employee_id": employee,
+        "error": reason,
+        "status": status,
+        "step": "review",
+        "report_excerpt": "任务正文",
+        "timestamp": ts or datetime.now(timezone.utc).isoformat(),
+        "run_id": "r1",
+    }
+
+
+def test_cluster_requires_min_count_and_summarizes():
+    records = [_rec(), _rec(), _rec(), _rec(employee="other", reason="x")]
+    clusters = trainer.cluster_failures(records, min_count=2)
+    assert len(clusters) == 1
+    assert clusters[0]["employee_id"] == "daily-orchestrator"
+    assert clusters[0]["count"] == 3
+
+
+def test_cluster_ignores_old_and_successful_records():
+    old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    records = [_rec(ts=old), _rec(ts=old), _rec(status="success")]
+    assert trainer.cluster_failures(records, min_count=1) == []
+
+
+def test_append_cases_is_idempotent(tmp_path):
+    clusters = trainer.cluster_failures([_rec(), _rec()], min_count=1)
+    first = trainer.append_cases(tmp_path, clusters)
+    second = trainer.append_cases(tmp_path, clusters)
+    assert len(first) == 1
+    assert second == []
+    rows = (tmp_path / "daily-orchestrator.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(rows) == 1
+    persisted = json.loads(rows[0])
+    assert "employee_id" not in persisted
+    assert "resource_id" not in persisted
+    assert persisted["surface"] == "employee_prompt"
+    assert persisted["task"] == "任务正文"
+    assert persisted["case_id"] == first[0]["case_id"] == "292ff0293853d560"
+    # Existing corpora keep their original identity/hash and are not rewritten.
+    legacy = {**persisted, "employee_id": "daily-orchestrator"}
+    legacy.pop("surface")
+    path = tmp_path / "daily-orchestrator.jsonl"
+    path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    assert trainer.append_cases(tmp_path, clusters) == []
+    assert json.loads(path.read_text(encoding="utf-8")) == legacy
+
+
+def test_workflow_corpus_preserves_context_without_redundant_resource_identity(tmp_path):
+    context = {"target_employee_pack_id": "worker@1.0", "execution_feedback": {"status": "failed"}}
+    cluster = {
+        "surface": "workflow_nl_prompt",
+        "resource_id": "workflow_nl_generator",
+        "failure_reason": "execution_failed",
+        "samples": [{"task": "生成工作流", "run_id": "wf-run", "generation_context": context}],
+    }
+    original = deepcopy(cluster)
+    written = trainer.append_cases(tmp_path, [cluster])
+    path = tmp_path / "workflow_nl_prompt-workflow_nl_generator.jsonl"
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted == written[0]
+    assert persisted["surface"] == "workflow_nl_prompt"
+    assert persisted["generation_context"] == context
+    assert persisted["task"] == "生成工作流"
+    assert persisted["source_run"] == "wf-run"
+    assert "employee_id" not in persisted and "resource_id" not in persisted
+    assert cluster == original
+    assert trainer.training_identity(cluster) == ("workflow_nl_prompt", "workflow_nl_generator")
+    assert trainer.append_cases(tmp_path, [cluster]) == []
+    changed = deepcopy(cluster)
+    changed["samples"][0]["generation_context"]["target_employee_pack_id"] = "other-worker@1.0"
+    assert trainer.append_cases(tmp_path, [changed])[0]["case_id"] != persisted["case_id"]
+
+
+def test_mine_cli_reports_counts_without_private_samples(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("MODSTORE_RETORT_GROWTHBOOK_URL", raising=False)
+    ledger = tmp_path / "private-ledger.jsonl"
+    record = _rec(employee="private-pack-sentinel", reason="private-reason-sentinel")
+    record["report_excerpt"] = "private-task-sentinel"
+    ledger.write_text("\n".join(json.dumps(record) for _ in range(2)), encoding="utf-8")
+    assert trainer.main(["mine", "--ledger", str(ledger)]) == 0
+    output = capsys.readouterr().out
+    assert json.loads(output) == {
+        "cluster_count": 1,
+        "failure_count": 2,
+        "sample_count": 2,
+    }
+    assert "private-" not in output
+    assert str(ledger) not in output
+    cluster = trainer.mine(ledger)[0]
+    assert trainer.training_identity(cluster) == ("employee_prompt", "private-pack-sentinel")
+    assert cluster["samples"][0]["task"] == "private-task-sentinel"
+
+
+def test_select_pack_prefers_latest_version(tmp_path):
+    for version in ("1.0.0", "1.0.2", "1.0.1"):
+        folder = tmp_path / f"worker@{version}"
+        folder.mkdir()
+        (folder / "prompt.txt").write_text("p" + version, encoding="utf-8")
+    assert trainer.select_pack(tmp_path, "worker").name == "worker@1.0.2"
+
+
+def test_build_config_writes_promptfoo_inputs(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_MODEL", "approved-model")
+    monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")
+    built = trainer.build_config(
+        out_dir=tmp_path,
+        baseline_prompt="基线",
+        candidate_prompt="候选",
+        cases=[{"task": "任务一"}],
+    )
+    config = json.loads(Path(built["config"]).read_text(encoding="utf-8"))
+    assert len(config["prompts"]) == 2
+    assert config["tests"].startswith("file://")
+    assert "{{task}}" in Path(built["baseline"]).read_text(encoding="utf-8")
+    assert config["defaultTest"]["options"]["provider"] == config["providers"][0]
+    assert config["providers"][0]["config"]["max_tokens"] == 1024
+
+
+def paired_result():
+    return {
+        "results": {
+            "results": [
+                {
+                    "promptIdx": i,
+                    "testIdx": 0,
+                    "success": bool(i),
+                    "failureReason": 0 if i else 1,
+                    "gradingResult": {"pass": bool(i)},
+                    "error": None if i else "Deterministic assertion failed",
+                    "provider": {"id": "model"},
+                    "vars": {"case_id": "case", "task": "actual case"},
+                }
+                for i in range(2)
+            ]
+        }
+    }
+
+
+def test_decide_requires_paired_provider_case_and_frozen_bundle():
+    result, bundle = (
+        paired_result(),
+        {
+            "provider_id": "model",
+            "case_ids": ["case"],
+            "case_sha256": [trainer._hash("actual case")],
+        },
+    )
+    assert trainer.decide(result)["verdict"] == "keep_baseline"
+    assert trainer.decide(result, bundle=bundle)["verdict"] == "candidate_for_approval"
+    unavailable = deepcopy(result)
+    unavailable["results"]["results"][0]["failureReason"] = 2
+    assert trainer.decide(unavailable, bundle=bundle)["verdict"] == "keep_baseline"
+    for mutation in ("provider", "testIdx", "success", "vars"):
+        changed = deepcopy(result)
+        changed["results"]["results"][1][mutation] = {
+            "provider": {"id": "other"},
+            "testIdx": 1,
+            "success": "true",
+            "vars": {"case_id": "other"},
+        }[mutation]
+        assert trainer.decide(changed, bundle=bundle)["verdict"] == "keep_baseline"
+    result["results"]["results"].append(deepcopy(result["results"]["results"][1]))
+    assert trainer.decide(result, bundle=bundle)["verdict"] == "keep_baseline"
+
+
+def frozen_evaluation(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_MODEL", "approved-model")
+    monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")
+    built = trainer.build_config(
+        out_dir=tmp_path,
+        baseline_prompt="baseline\r\n",
+        candidate_prompt="candidate\r\n",
+        cases=[{"task": "actual case"}],
+    )
+    bundle = json.loads(Path(built["bundle"]).read_text())
+    result = paired_result()
+    result["metadata"] = {"promptfooVersion": trainer.PROMPTFOO_VERSION}
+    result["results"]["prompts"] = [
+        {"raw": Path(built[key]).read_bytes().decode()} for key in ("baseline", "candidate")
+    ]
+    for row in result["results"]["results"]:
+        row["provider"]["id"] = bundle["provider_id"]
+        row["vars"]["case_id"] = bundle["case_ids"][0]
+    output = tmp_path / "result.json"
+    output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+    return built, output
+
+
+def test_frozen_input_result_hashes_survive_transport_and_detect_mutation(tmp_path, monkeypatch):
+    from modstore_server.retort_training_candidates import _candidate
+
+    built, result = frozen_evaluation(tmp_path, monkeypatch)
+    original = trainer.seal_evaluation(Path(built["bundle"]), result)
+    body = {
+        "bundle_json": Path(built["bundle"]).read_bytes().decode(),
+        "result_json": result.read_bytes().decode(),
+        "files": {
+            key: Path(built[key]).read_bytes().decode()
+            for key in ("baseline", "candidate", "config", "tests")
+        },
+    }
+    candidate = _candidate(json.loads(json.dumps(body)))
+    assert candidate["offline_evidence"] == original
+    assert candidate["control_prompt"] == "baseline\r\n"
+    wrong_bundle = deepcopy(body)
+    document = json.loads(wrong_bundle["bundle_json"])
+    document["prompt_sha256"]["candidate"] = "0" * 64
+    wrong_bundle["bundle_json"] = json.dumps(document)
+    with pytest.raises(ValueError, match="prompt_hash_mismatch"):
+        _candidate(wrong_bundle)
+    body["files"]["candidate"] += "changed"
+    with pytest.raises(ValueError, match="input_changed"):
+        _candidate(body)
+
+
+@pytest.mark.parametrize("result_vars", ["vars", "testCase"])
+def test_paired_results_cannot_substitute_a_different_task_for_frozen_cases(
+    tmp_path, monkeypatch, result_vars
+):
+    built, result_path = frozen_evaluation(tmp_path, monkeypatch)
+    result = json.loads(result_path.read_bytes())
+    for row in result["results"]["results"]:
+        variables = row["vars"]
+        variables["task"] = "Different task that was not in the frozen regression corpus"
+        if result_vars == "testCase":
+            row["testCase"] = {"vars": row.pop("vars")}
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+    sealed = trainer.seal_evaluation(Path(built["bundle"]), result_path)
+    assert sealed["verdict"] == "keep_baseline"
+    assert sealed["reason"] == "evaluation_bundle_unbound"
+    with pytest.raises(ValueError, match="training_candidate_not_improved"):
+        trainer.candidate_for_experiment(Path(built["bundle"]), result_path)
+
+
+def test_case_binding_preserves_exact_json_decoded_text_including_newlines():
+    result = paired_result()
+    task = "真实案例\r\n第二行\n"
+    for row in result["results"]["results"]:
+        row["vars"]["task"] = task
+    bundle = {
+        "provider_id": "model",
+        "case_ids": ["case"],
+        "case_sha256": [trainer._hash(task)],
+    }
+    transported = json.loads(json.dumps(result, ensure_ascii=True))
+    assert trainer.decide(transported, bundle=bundle)["verdict"] == "candidate_for_approval"
+    for row in transported["results"]["results"]:
+        row["vars"]["task"] = task.replace("\r\n", "\n")
+    assert trainer.decide(transported, bundle=bundle)["verdict"] == "keep_baseline"
+
+
+def test_observation_without_reproduction_is_not_synthetic_case(tmp_path):
+    clusters = trainer.cluster_failures([{**_rec(), "report_excerpt": ""}], min_count=1)
+    assert trainer.append_cases(tmp_path, clusters) == []
+
+
+def test_training_cost_bounds_and_unconfigured_model_fail_closed(tmp_path, monkeypatch):
+    monkeypatch.delenv("XCAGI_LLM_MODEL", raising=False)
+    with pytest.raises(ValueError, match="not_configured"):
+        trainer.build_config(
+            out_dir=tmp_path,
+            baseline_prompt="b",
+            candidate_prompt="c",
+            cases=[{"task": "case"}],
+        )
+    monkeypatch.setenv("XCAGI_LLM_MODEL", "model")
+    monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")
+    with pytest.raises(ValueError, match="cases_required"):
+        trainer.build_config(
+            out_dir=tmp_path,
+            baseline_prompt="b",
+            candidate_prompt="c",
+            cases=[{"task": "case"}] * 21,
+        )

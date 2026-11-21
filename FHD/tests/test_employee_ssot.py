@@ -170,11 +170,10 @@ def test_employee_contacts_installed_planned_and_super():
     )
 
 
-def test_digest_dispatch_derives_from_roster_ssot():
+def test_digest_dispatch_derives_from_roster_ssot(monkeypatch):
     """MODstore digest 产线路由派生自 roster SSOT（生成的 duty_roster），覆盖全编制。"""
     modstore_dir = REPO / "成都修茈科技有限公司" / "MODstore_deploy"
-    if str(modstore_dir) not in sys.path:
-        sys.path.insert(0, str(modstore_dir))
+    monkeypatch.syspath_prepend(str(modstore_dir))
     from modstore_server.digest_vibe_line_dispatch import build_employee_dispatch_map
 
     from app.mod_sdk.duty_roster import all_planned_duty_employee_ids

@@ -437,7 +437,7 @@ public class InternalPaymentController {
         return result;
     }
 
-    private void requireInternalKey(String key) {
+    void requireInternalKey(String key) {
         String expected = internalApiKey == null ? "" : internalApiKey.trim();
         if (expected.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "internal api not configured");

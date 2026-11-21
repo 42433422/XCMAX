@@ -16,7 +16,8 @@
     "xcagi-customer-service-bridge",
     "xcagi-planner-excel-tools",
     "lan-gate-ai-employee",
-    "attendance-industry"
+    "attendance-industry",
+    "kellai"
   ],
   "sku_bundled_mod_ids": [
     "xcagi-planner-bridge",
@@ -31,6 +32,7 @@
     "xcagi-customer-service-bridge",
     "xcagi-planner-excel-tools",
     "lan-gate-ai-employee",
-    "attendance-industry"
+    "attendance-industry",
+    "kellai"
   ]
 }

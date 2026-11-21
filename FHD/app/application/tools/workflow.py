@@ -163,6 +163,23 @@ def handle_excel_analysis(args: Payload, workspace_root: str | None = None) -> P
     ).analyze(args, workspace_root)
 
 
+def handle_excel_schema_understand(args: Payload, workspace_root: str | None = None) -> Payload:
+    """Shared schema entry for the host and its native planner Mod."""
+    try:
+        return WorkbookOperations(
+            _excel_io(),
+            lambda path: pd.read_excel(path),
+            ExcelSchemaUnderstandingService,
+            adapters.ingest_vector,
+        ).schema(args, workspace_root)
+    except RECOVERABLE_ERRORS:
+        return {
+            "success": False,
+            "error": "read_excel_failed",
+            "message": "读取 Excel 文件失败，请检查文件后重试",
+        }
+
+
 def _looks_like_contract_or_footer_line(name: str | None) -> bool:
     return looks_like_contract_or_footer_line(name, _CLAUSE_SUBSTRINGS)
 
@@ -308,7 +325,7 @@ def execute_workflow_tool(
             failure={"action": "forecast", "future_forecast": [], "error": "forecast_failed"},
         ),
         "excel_schema_understand": _json_tool(
-            lambda call: workbooks.schema(call.args, call.workspace_root),
+            lambda call: handle_excel_schema_understand(call.args, call.workspace_root),
             failure={
                 "success": False,
                 "error": "read_excel_failed",

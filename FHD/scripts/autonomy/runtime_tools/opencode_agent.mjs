@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -9,6 +9,25 @@ import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 const entry = fileURLToPath(import.meta.url);
+export const OPENCODE_CREDENTIAL_ISOLATION = 'srt-0.0.83-header-only-platform-v1';
+
+export function assertMaskedCredential(value, originalDigest) {
+  if (typeof value !== 'string' || !value || !/^[0-9a-f]{64}$/.test(originalDigest || '')
+      || createHash('sha256').update(value).digest('hex') === originalDigest) {
+    throw new Error('opencode_non_exportable_credential_required');
+  }
+}
+
+export function assertPrivateKeyUnreadable(path) {
+  if (typeof path !== 'string' || !path.startsWith('/')) throw new Error('opencode_ca_boundary_missing');
+  try {
+    accessSync(path, constants.R_OK);
+  } catch (error) {
+    if (['ENOENT', 'EACCES', 'EPERM'].includes(error.code)) return;
+    throw new Error('opencode_ca_boundary_unverified');
+  }
+  throw new Error('opencode_ca_private_key_readable');
+}
 
 function userNamespacesRestricted() {
   return [
@@ -271,9 +290,17 @@ export function sandboxSettings(cwd, temp, executable, node, gateway, reportOnly
     network: {
       allowedDomains: [`${gateway.hostname}:${gateway.port || 443}`, 'registry.npmjs.org:443'],
       deniedDomains: [],
+      tlsTerminate: {},
+      requireHostMatch: true,
+      refuseOpaqueTunnels: true,
       allowAllUnixSockets: false,
       // Linux gives the two processes a private loopback namespace.
       allowLocalBinding: process.platform === 'darwin',
+    },
+    // The trusted controller injects Authorization through SRT's request hook.
+    // Never enable generic masking: it substitutes secrets into request bodies.
+    credentials: {
+      envVars: [{ name: 'OPENCODE_API_KEY', mode: 'deny' }],
     },
     filesystem: {
       denyRead: ['/'],
@@ -327,23 +354,26 @@ export async function runOpenCodeAgent(cwd, prompt, {
     ? realpathSync('/tmp')
     : systemTemp;
   const temp = await mkdtemp(join(scratchRoot, 'para-opencode-'));
-  const policy = join(temp, 'sandbox.json');
+  // SRT writes its ephemeral CA private key under TMPDIR. Keep that control
+  // directory outside every workload read/write root; SRT exposes only the
+  // public certificate/trust bundle through its own narrow read exceptions.
+  const controlTemp = await mkdtemp(join(scratchRoot, 'para-opencode-control-'));
   try {
     const settings = sandboxSettings(workspace, temp, cli, node, gateway, reportOnly, sandbox);
     const childEnv = agentEnvironment(env, temp, platform, reportOnly);
-    await writeFile(policy, JSON.stringify(settings), {
-      mode: 0o600,
-    });
     log?.('OpenCode 平台模型 ' + platform.model);
     return await new Promise((resolve, reject) => {
-      const child = spawn(node, [sandbox, '--settings', policy, '--', node, entry, '--sandbox-worker'], {
+      const controller = join(dirname(entry), 'opencode_sandbox_controller.mjs');
+      const child = spawn(node, [controller], {
         cwd: workspace,
-        env: childEnv,
+        env: { ...childEnv, TMPDIR: controlTemp },
         stdio: ['pipe', 'pipe', 'pipe'],
         signal: AbortSignal.timeout(timeoutMs + 5000),
       });
       let result;
       let error = '';
+      let processError;
+      let killTimer;
       const lines = createInterface({ input: child.stdout });
       child.stderr.setEncoding('utf8').on('data', chunk => { error = (error + chunk).slice(-1000); });
       lines.on('line', line => {
@@ -352,19 +382,38 @@ export async function runOpenCodeAgent(cwd, prompt, {
         if (event?.type === 'result') result = event.text;
         if (event?.type === 'error') error = event.text;
       });
-      child.once('error', reject);
-      child.once('close', code => {
-        if (code === 0 && typeof result === 'string') resolve(result);
+      child.once('error', failure => {
+        processError = failure;
+        // AbortSignal emits its error before the process has closed. The
+        // controller still owns the sandbox and may be terminating a worker;
+        // keep its temporary directories until native close is observed.
+        if (!child.pid) reject(failure);
         else {
-          const reason = error.trim() || `OpenCode 沙箱执行退出 (${code})`;
+          child.kill('SIGTERM');
+          killTimer = setTimeout(() => child.kill('SIGKILL'), 5000);
+          killTimer.unref();
+        }
+      });
+      child.once('close', code => {
+        clearTimeout(killTimer);
+        lines.close();
+        if (!processError && code === 0 && typeof result === 'string') resolve(result);
+        else {
+          const reason = error.trim() || processError?.message || `OpenCode 沙箱执行退出 (${code})`;
           reject(Object.assign(new Error(reason), { stderr: reason }));
         }
       });
       child.stdin.on('error', () => {}); // The child exit carries sandbox setup failures.
-      child.stdin.end(JSON.stringify({ executable: cli, prompt, reportOnly, timeoutMs, workloadPath: env.PATH }));
+      child.stdin.end(JSON.stringify({ runtime: sandbox, settings,
+        gateway: platform.provider.xcmax.options.baseURL, model: env.PARA_OPENCODE_MODEL,
+        command: [node, entry, '--sandbox-worker'], timeoutMs,
+        workload: { executable: cli, prompt, reportOnly, timeoutMs,
+          workloadPath: env.PATH, workloadTemp: temp },
+      }));
     });
   } finally {
     await rm(temp, { recursive: true, force: true });
+    await rm(controlTemp, { recursive: true, force: true });
   }
 }
 
@@ -379,9 +428,20 @@ if (process.argv[1] && resolve(process.argv[1]) === entry && ['--sandbox-worker'
     if (!nativeTask && process.platform === 'linux') assertLinuxWorkloadIsolation(readFileSync('/proc/self/status', 'utf8'));
     const chunks = [];
     for await (const chunk of process.stdin) chunks.push(chunk);
-    const { executable, prompt, reportOnly, timeoutMs, workloadPath } = JSON.parse(Buffer.concat(chunks).toString());
+    const { executable, prompt, reportOnly, timeoutMs, workloadPath, workloadTemp,
+      credentialPlaceholder, credentialDigest, sandboxPrivateKeyPath } = JSON.parse(Buffer.concat(chunks).toString());
+    if (!nativeTask) {
+      if (process.env.OPENCODE_API_KEY) throw new Error('opencode_model_secret_reached_workload');
+      assertPrivateKeyUnreadable(sandboxPrivateKeyPath);
+      assertMaskedCredential(credentialPlaceholder, credentialDigest);
+      process.env.OPENCODE_API_KEY = credentialPlaceholder;
+    }
     // Restore the caller's toolchain after native PID/seccomp/capability checks.
     if (!nativeTask && typeof workloadPath === 'string') process.env.PATH = workloadPath;
+    if (!nativeTask) {
+      if (typeof workloadTemp !== 'string' || !workloadTemp.startsWith('/')) throw new Error('opencode_workload_temp_required');
+      process.env.TMPDIR = workloadTemp;
+    }
     const log = text => emit('log', text);
     const result = nativeTask
       ? await runOpenCodeAgent(process.cwd(), prompt, { env: process.env, executable, reportOnly, timeoutMs, log })

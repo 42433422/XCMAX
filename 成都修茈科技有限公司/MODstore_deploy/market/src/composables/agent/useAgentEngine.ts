@@ -7,6 +7,7 @@ import { serializeVisibleDom } from '../../utils/agent/pageSerializer'
 import type { AgentContext, AgentMessage, LLMResponse, LLMToolCall } from '../../types/agent'
 import { api } from '../../api'
 import { getMarketPageKnowledge, getStructuredPageSummary } from '../../content/siteKnowledge'
+import { checkXiaoCLifeAction, minimumSkillLevel } from './xiaocLifeActionGuard'
 
 let _msgId = 0
 function nextId() {
@@ -60,7 +61,7 @@ export function useAgentEngine() {
       if (!uploaded && !opts?.withScreenshot) {
         const matchedSkill = skillRegistry.matchByIntent(context)
         if (matchedSkill && !agentStore.currentConversationId) {
-          const result = await matchedSkill.execute(context)
+          const result = await checkXiaoCLifeAction(minimumSkillLevel(matchedSkill.id)) ?? await matchedSkill.execute(context)
           agentStore.updateLastMessage({
             content: result.assistantReply || result.message,
             isLoading: false,
@@ -135,7 +136,7 @@ export function useAgentEngine() {
       // 降级：关键词匹配兜底
       const fallbackSkill = skillRegistry.matchByIntent(context)
       if (fallbackSkill) {
-        const result = await fallbackSkill.execute(context)
+        const result = await checkXiaoCLifeAction(minimumSkillLevel(fallbackSkill.id)) ?? await fallbackSkill.execute(context)
         agentStore.updateLastMessage({
           content: result.assistantReply || result.message,
           isLoading: false,
@@ -163,6 +164,11 @@ export function useAgentEngine() {
 
   async function handleToolCalls(toolCalls: LLMToolCall[], _context: AgentContext) {
     const firstTool = toolCalls[0]
+    const blocked = await checkXiaoCLifeAction(toolCalls.length > 1 ? 3 : 2)
+    if (blocked) {
+      agentStore.updateLastMessage({ content: blocked.message, isLoading: false })
+      return
+    }
     const name = firstTool.name
     const args = firstTool.args as Record<string, unknown>
 
@@ -203,7 +209,7 @@ export function useAgentEngine() {
             userMessage: '',
             history: agentStore.messages.slice(-6),
           }
-          result = await skill.execute(ctx, args)
+          result = await checkXiaoCLifeAction(minimumSkillLevel(skill.id)) ?? await skill.execute(ctx, args)
         } else {
           result = { success: false, message: `未知工具：${name}` }
         }

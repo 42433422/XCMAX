@@ -4,7 +4,8 @@ name: AI Self-Heal
 
 on:
   schedule:
-    - cron: '17,47 * * * *'
+    # 每小时一次；主路径由 workflow_run 事件触发，定时仅作兜底
+    - cron: '17 * * * *'
   workflow_run:
     # Match display names in one inline list; the publisher path-prefixes sequence items.
     workflows: ["CI/CD Pipeline", "CI - Backend Python", "Source Governance", "Smoke Tests", "Employee Smoke Gate", "MODstore tests", "cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Release gate CI", "Capacity staging monthly", "desktop-macos-smoke", "ci-mobile-flutter", "ci-mobile-ios", "Deploy corp site (xiu-ci.com)"]

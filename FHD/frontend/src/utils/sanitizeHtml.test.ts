@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import DOMPurify from 'dompurify'
 import { plainTextFromChatHtml, sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, sanitizeTaskSummaryHtml } from './sanitizeHtml'
 
 describe('plainTextFromChatHtml', () => {
@@ -36,6 +37,20 @@ describe('sanitizeChatBubbleHtml', () => {
 })
 
 describe('sanitizeChatBubbleMarkdown', () => {
+  it('keeps shared sanitizer hooks and does not allow image data URLs as links', () => {
+    const existingHook = vi.fn()
+    DOMPurify.addHook('uponSanitizeAttribute', existingHook)
+    try {
+      const output = sanitizeChatBubbleMarkdown('[image](data:image/png;base64,AA==)')
+      expect(output).not.toContain('href=')
+      existingHook.mockClear()
+      sanitizeChatBubbleHtml('<p title="kept">text</p>')
+      expect(existingHook).toHaveBeenCalled()
+    } finally {
+      DOMPurify.removeHook('uponSanitizeAttribute', existingHook)
+    }
+  })
+
   it('renders markdown bold into strong', () => {
     const out = sanitizeChatBubbleMarkdown('**bold**')
     expect(out).toContain('<strong>bold</strong>')

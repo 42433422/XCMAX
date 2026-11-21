@@ -19,6 +19,51 @@ from app.application.attachment_artifacts.models import ELT_WORKBOOK_SUFFIXES
 from app.application.intent.route_catalog import INTENT_DESCRIPTIONS
 from app.application.workflow.tool_profile import RETIRED_PLANNER_TOOLS
 
+
+def _slim_schema(schema: Any, *, description_limit: int = 80) -> Any:
+    """Shorten schema annotations without changing validation or reference semantics."""
+    if isinstance(schema, list):
+        return [_slim_schema(item, description_limit=description_limit) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    slim = {
+        key: value for key, value in schema.items() if key not in {"title", "$comment", "examples"}
+    }
+    if isinstance(slim.get("description"), str):
+        if description_limit:
+            slim["description"] = slim["description"][:description_limit]
+        else:
+            slim.pop("description")
+    # These maps name schemas. Never treat property/definition names or literal
+    # enum/const/default values as schema keywords.
+    for key in ("properties", "patternProperties", "$defs", "definitions", "dependentSchemas"):
+        if isinstance(slim.get(key), dict):
+            slim[key] = {
+                name: _slim_schema(value, description_limit=description_limit)
+                for name, value in slim[key].items()
+            }
+    for key in (
+        "items",
+        "prefixItems",
+        "additionalItems",
+        "additionalProperties",
+        "unevaluatedItems",
+        "unevaluatedProperties",
+        "contains",
+        "propertyNames",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+        "if",
+        "then",
+        "else",
+    ):
+        if key in slim:
+            slim[key] = _slim_schema(slim[key], description_limit=description_limit)
+    return slim
+
+
 # 安全、格式与图结构约束：所有场景常驻，不参与裁剪。
 BASE_RULES: tuple[str, ...] = (
     "只输出 JSON，不要 markdown。",
@@ -126,6 +171,7 @@ _SCENARIO_KEYWORDS: dict[str, tuple[str, ...]] = {
     "knowledge": ("知识库", "资料", "文档库", "dataset", "检索资料"),
     "employee": ("员工", "派活", "专员", "助手", "交接", "让谁", "哪个员工"),
     "memory": ("记住", "偏好", "习惯", "上次说"),
+    "image": ("生成图片", "画一张", "画个", "画一个", "生图", "出图", "绘制图片"),
     "reset": ("初始化", "全部业务数据", "业务数据清空", "清空业务数据", "重置业务"),
 }
 
@@ -181,7 +227,7 @@ _DOCUMENT_TOOL_PREFIXES = (
     "csv-",
 )
 
-# 始终保留的核心工具（裁剪时不受影响，按前缀匹配）。
+# 场景提示不能证明跨域依赖不存在，保留既有核心业务能力。
 _CORE_TOOL_PREFIXES = (
     "conversation",
     "business_db",
@@ -196,6 +242,7 @@ _CORE_TOOL_PREFIXES = (
     "dataset_rag",
     "clarify",
     "excel_analysis",
+    "image_generate",
 )
 
 
@@ -243,6 +290,9 @@ def detect_intents(message: str, context: dict[str, Any] | None = None) -> set[s
     for intent, keywords in _SCENARIO_KEYWORDS.items():
         if any(keyword.lower() in text for keyword in keywords):
             intents.add(intent)
+    # 「生成一张…图片」这类语序不连续命中关键词，按"图片 + 生成动作"共现补充。
+    if "图片" in text and any(action in text for action in ("生成", "画", "绘制", "出图")):
+        intents.add("image")
     intents.update(_semantic_intents(text))
     return intents
 
@@ -299,7 +349,15 @@ def select_tools_for_prompt(
         if not allow_document and key.startswith(_DOCUMENT_TOOL_PREFIXES):
             continue
         filtered[tool_id] = spec
-    return filtered or tool_registry
+    if filtered:
+        return filtered
+    # 已知意图但没有任何工具命中时，回退也只保留通用工具与非文档工具，
+    # 避免把仅因注册表较窄而被筛掉的表格/导入工具重新注入。
+    return {
+        key: spec
+        for key, spec in tool_registry.items()
+        if _is_core_tool(key) or not key.startswith(_DOCUMENT_TOOL_PREFIXES)
+    }
 
 
 def select_rules_for_prompt(

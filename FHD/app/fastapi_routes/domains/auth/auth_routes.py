@@ -214,6 +214,7 @@ def _credentials() -> CredentialLogin:
             raw, default=default
         ),
         run_login=enterprise_login_flow.run_market_first_login,
+        run_offline=enterprise_login_flow.run_offline_login,
         login_market=lambda username, password: market_account.login_market_with_password(
             username, password
         ),
@@ -397,6 +398,7 @@ auth_forgot_password_send_code = _recovery_routes.auth_forgot_password_send_code
 auth_forgot_password_reset = _recovery_routes.auth_forgot_password_reset
 auth_register = _credential_routes.auth_register
 auth_login = _credential_routes.auth_login
+auth_offline_login = _credential_routes.auth_offline_login
 auth_login_with_phone_code = _credential_routes.auth_login_with_phone_code
 auth_oidc_status = _federated_routes.auth_oidc_status
 auth_oidc_start = _federated_routes.auth_oidc_start

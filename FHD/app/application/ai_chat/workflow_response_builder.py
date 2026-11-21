@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from app.application import agent_task_context
@@ -24,6 +25,21 @@ def _customer_query_summary(output: Any) -> str | None:
             name = str(row.get("customer_name") or row.get("unit_name") or "").strip()
             if name:
                 lines.append(f"- {name}")
+    return "\n".join(lines)
+
+
+def _image_generate_summary(output: Any) -> str | None:
+    from app.application.market_llm.multimodal import safe_image_result_urls
+
+    if not isinstance(output, dict):
+        return None
+    images = safe_image_result_urls(output.get("images"))
+    if not images:
+        return None
+    lines = [f"![生成图片]({url})" for url in images]
+    model = " ".join(str(output.get("model") or "").split())
+    if model:
+        lines.append("\n" + re.sub(r"([\\`*_[\]{}<>()!#|])", r"\\\1", model))
     return "\n".join(lines)
 
 
@@ -406,8 +422,27 @@ class AIChatWorkflowResponseMixin:
                 retryable=False,
             )
             payload["data"].update(text=text, requires_reconciliation=True)
+        image_results = [
+            rendered
+            for step in steps
+            if (step.status, step.tool_id, step.action)
+            == ("completed", "image_generate", "generate")
+            and isinstance(step.output, dict)
+            and step.output.get("success") is True
+            and not execution_result_error(step.output)
+            and (rendered := _image_generate_summary(step.output))
+        ]
+        if image_results:
+            images_text = "\n\n".join(image_results)
+            text = (
+                images_text
+                if success and len(steps) == 1
+                else f"{payload['response']}\n\n已确认生成的图片：\n\n{images_text}"
+            )
+            payload["response"] = text
+            payload["data"]["text"] = text
         write_actions = {"write", "create", "update", "delete", "batch_delete", "clear_dataset"}
-        wrote = any(
+        wrote = bool(image_results) or any(
             step.status == "completed"
             and step.action in write_actions
             or (step.tool_id, step.action) == ("elt_import", "execute")

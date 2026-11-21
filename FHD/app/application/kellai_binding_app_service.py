@@ -9,12 +9,38 @@ from app.domain.shared_services import kellai_binding_store, kellai_customer_cop
 KellaiCopilotError = kellai_customer_copilot.KellaiCopilotError
 
 
+class KellaiAuthorizationError(ValueError):
+    def __init__(self, message: str, status_code: int = 403):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def scoped_connection(*, actor: int | None, tenant_id: str, scope: str) -> dict[str, Any]:
+    if actor is None:
+        raise KellaiAuthorizationError("请先登录 XCMAX 企业账号", 401)
+    connection = kellai_binding_store.connection_credentials()
+    if not connection:
+        raise KellaiAuthorizationError("客来来尚未连接", 409)
+    if (
+        connection.get("xcmax_user_id") != actor
+        or str(connection.get("xcmax_tenant_id") or "") != tenant_id
+    ):
+        raise KellaiAuthorizationError("请由当前账号重新申请客来来模块授权")
+    if scope not in connection.get("authorized_scopes", []):
+        raise KellaiAuthorizationError(f"尚未授权 {scope}，请在连接与账号中申请")
+    return connection
+
+
 def binding_status() -> dict[str, Any]:
     return kellai_binding_store.status()
 
 
-def start_pairing() -> dict[str, Any]:
-    return kellai_binding_store.start_pairing()
+def start_pairing(**kwargs: Any) -> dict[str, Any]:
+    return kellai_binding_store.start_pairing(**kwargs)
+
+
+def binding_owners() -> set[int]:
+    return kellai_binding_store.binding_owners()
 
 
 def pending_for_kellai() -> dict[str, Any] | None:

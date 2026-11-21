@@ -9,7 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -137,9 +137,42 @@ class RuntimeHarness:
                 review=lambda _run, branch, memory: (f"review:{memory['owner']}:{branch}"),
                 qa=lambda _run, branch, memory: f"qa:{memory['owner']}:{branch}",
             ),
-            now=lambda: datetime(2026, 10, 22, tzinfo=timezone.utc),
+            now=lambda: datetime(2026, 10, 22, tzinfo=UTC),
             new_run_id=new_run_id,
         )
+
+
+@pytest.mark.parametrize(
+    "reason,expected",
+    [
+        ("cooldown", 1),
+        ("below_threshold", 1),
+        ("disabled", 0),
+        ("runtime_provenance_blocked", 0),
+        ("evolution_metrics_pause", 0),
+    ],
+)
+def test_pending_merge_readback_survives_new_work_throttle_without_weakening_gates(
+    reason, expected
+):
+    harness = RuntimeHarness("pending", admitted=False)
+    calls = []
+
+    def reconcile(memory):
+        assert harness.lock.locked()
+        calls.append(memory["owner"])
+        memory["delivery_readback"] = "pending"
+        return {"changed": True, "merged": 1}
+
+    harness.runtime.policy = replace(
+        harness.runtime.policy, admit=lambda **_kwargs: {"should_run": False, "reason": reason}
+    )
+    harness.runtime.recovery = replace(harness.runtime.recovery, requested_merges=reconcile)
+    result = harness.runtime.run()
+    assert len(calls) == expected
+    assert harness.calls == []
+    assert result["status"] == f"skipped_{reason}"
+    assert (harness.memory.get("delivery_readback") == "pending") == bool(expected)
 
 
 def test_two_overlapping_runtimes_keep_state_dispatch_and_platform_scope_isolated():
@@ -357,8 +390,22 @@ def test_status_participants_sort_by_each_participant_without_scratch_loop_state
     assert "item" not in state and "run_id" not in state
 
 
+@pytest.mark.parametrize(
+    "legacy,receipts,production,expected_envs,half_closed",
+    [
+        (False, False, False, [], True),
+        (True, False, True, [], True),
+        (False, True, False, ["staging"], True),
+        (False, True, True, ["staging", "production"], False),
+    ],
+)
 def test_runtime_status_projects_complete_read_model_without_previous_call_state(
     monkeypatch,
+    legacy,
+    receipts,
+    production,
+    expected_envs,
+    half_closed,
 ):
     from modstore_server import (
         duty_employee_registry,
@@ -367,6 +414,12 @@ def test_runtime_status_projects_complete_read_model_without_previous_call_state
     )
     from modstore_server.maintenance_loop import config, review, schedule, status, store
 
+    for suffix, enabled in (
+        ("AUTO_DISPATCH_DEPLOY", legacy),
+        ("DEPLOY_RECEIPTS_ENABLED", receipts),
+        ("PRODUCTION_DEPLOY_ENABLED", production),
+    ):
+        monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_" + suffix, str(int(enabled)))
     employees = ["vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"]
     rows = [{"phase": "start", "run_id": "visible", "created_at": "2026-10-22T00:00:00Z"}]
     rows.extend(
@@ -380,7 +433,7 @@ def test_runtime_status_projects_complete_read_model_without_previous_call_state
         }
         for index, (employee, step) in enumerate(zip(employees, ("code", "review", "qa")), 1)
     )
-    monkeypatch.setattr(config, "_utc_now", lambda: datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
+    monkeypatch.setattr(config, "_utc_now", lambda: datetime(2026, 10, 22, 1, tzinfo=UTC))
     monkeypatch.setattr(store, "_read_ledger", lambda **_kwargs: copy.deepcopy(rows))
     monkeypatch.setattr(store, "_load_loop_memory", lambda: {})
     monkeypatch.setattr(store, "_read_governance_audit", lambda _limit: [])
@@ -410,6 +463,9 @@ def test_runtime_status_projects_complete_read_model_without_previous_call_state
     assert [item["employee_id"] for item in first["participants"]] == list(reversed(employees))
     assert first["roster_alignment"]["gate"]["ok"] is True
     assert list(first["evidence"]["steps_by_open_run"]) == ["visible"]
+    assert first["policy"]["auto_dispatch_deploy_envs"] == expected_envs
+    assert first["policy"]["deployment_receipts_enabled"] is receipts
+    assert first["l4_closure"]["half_closed_without_deploy"] is half_closed
     rows.clear()
     second = status.get_self_maintenance_runtime_status()
     assert second["participants"] == []

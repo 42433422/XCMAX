@@ -1114,17 +1114,9 @@ class TestRunNaturalLanguagePandasErrors:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": [1, 2]})
-        mock_converter = MagicMock()
-        # Use code that raises a RECOVERABLE_ERRORS member (ValueError) at runtime,
-        # since SyntaxError is NOT in RECOVERABLE_ERRORS and would propagate.
-        mock_converter.translate.return_value = "result = df.loc['nonexistent']"
-        with patch.dict(
-            "sys.modules",
-            {
-                "app.legacy.excel_text_to_pandas": MagicMock(
-                    ExcelTextToPandas=MagicMock(return_value=mock_converter)
-                )
-            },
+        with patch(
+            "app.application.tools.workflow.adapters.translate_pandas",
+            return_value='{"query_expression": "missing > 0"}',
         ):
             result = run_natural_language_pandas(df, "anything")
         assert isinstance(result, dict)
@@ -1135,16 +1127,7 @@ class TestRunNaturalLanguagePandasErrors:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": [1, 2]})
-        mock_converter = MagicMock()
-        mock_converter.translate.return_value = ""
-        with patch.dict(
-            "sys.modules",
-            {
-                "app.legacy.excel_text_to_pandas": MagicMock(
-                    ExcelTextToPandas=MagicMock(return_value=mock_converter)
-                )
-            },
-        ):
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=""):
             result = run_natural_language_pandas(df, "anything")
         assert isinstance(result, dict)
         assert result["generated_code"] == ""
@@ -1154,20 +1137,14 @@ class TestRunNaturalLanguagePandasErrors:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": [1, 2, 3]})
-        mock_converter = MagicMock()
-        mock_converter.translate.return_value = "result = df.head(1)"
-        with patch.dict(
-            "sys.modules",
-            {
-                "app.legacy.excel_text_to_pandas": MagicMock(
-                    ExcelTextToPandas=MagicMock(return_value=mock_converter)
-                )
-            },
+        with patch(
+            "app.application.tools.workflow.adapters.translate_pandas",
+            return_value='{"limit": 1}',
         ):
             result = run_natural_language_pandas(df, "first row")
         assert isinstance(result, dict)
         assert result["row_count"] == 1
-        assert result["generated_code"] == "result = df.head(1)"
+        assert result["generated_code"] == '{"limit": 1}'
 
 
 # ---------------------------------------------------------------------------

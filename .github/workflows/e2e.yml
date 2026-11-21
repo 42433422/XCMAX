@@ -16,7 +16,8 @@ on:
       - "FHD/app/**"
   workflow_dispatch:
   schedule:
-    - cron: "0 18 * * *"
+    # 每日 22:50（北京时间）
+    - cron: "50 14 * * *"
 
 concurrency:
   group: e2e-${{ github.ref }}
