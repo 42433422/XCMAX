@@ -12,6 +12,28 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 _PUBLIC_WORKFLOW_FAILURE = "工作流执行失败，详细信息已记录"
 
 
+def agent_run_execution_state(agent_run: Any) -> tuple[str, bool]:
+    """Classify the existing receipt without rendering or synthesizing an answer."""
+    from app.domain.task_lifecycle.results import (
+        execution_result_error,
+        execution_result_pending_state,
+    )
+
+    recovery = (agent_run.metadata or {}).get("recovery")
+    result = {
+        "output": getattr(agent_run, "final_output", None),
+        "outputs": [step.output for step in getattr(agent_run, "steps", []) or []],
+    }
+    pending = execution_result_pending_state(result)
+    uncertain = (
+        isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+    ) or pending == "unknown"
+    execution_state = "unknown" if uncertain else pending or str(agent_run.status or "unknown")
+    if execution_state == "completed" and execution_result_error(result):
+        execution_state = "failed"
+    return execution_state, uncertain
+
+
 def _customer_query_summary(output: Any) -> str | None:
     if not isinstance(output, dict):
         return None
@@ -281,18 +303,7 @@ class AIChatWorkflowResponseMixin:
                 else:
                     lines.append(f"- {step.node_id}: {step.status}（{_PUBLIC_WORKFLOW_FAILURE}）")
 
-        recovery = (agent_run.metadata or {}).get("recovery")
-        result = {
-            "output": getattr(agent_run, "final_output", None),
-            "outputs": [step.output for step in getattr(agent_run, "steps", []) or []],
-        }
-        pending = execution_result_pending_state(result)
-        uncertain = (
-            isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
-        ) or pending == "unknown"
-        execution_state = "unknown" if uncertain else pending or str(agent_run.status or "unknown")
-        if execution_state == "completed" and execution_result_error(result):
-            execution_state = "failed"
+        execution_state, uncertain = agent_run_execution_state(agent_run)
         success = execution_state == "completed"
         state_message = {
             "completed": "处理完成",

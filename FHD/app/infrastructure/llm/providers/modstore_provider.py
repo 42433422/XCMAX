@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from typing import Any, cast
 
@@ -49,7 +50,13 @@ class ModstoreProvider:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             raise
 
-    async def stream_chat_completion(
+    @property
+    def stream_chat_completion(self) -> Callable[..., AsyncIterator[str]] | None:
+        if not callable(getattr(self._adapter, "stream_chat_completion", None)):
+            return None
+        return self._stream_chat_completion
+
+    async def _stream_chat_completion(
         self,
         messages: list[dict[str, str]],
         *,

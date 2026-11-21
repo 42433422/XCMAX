@@ -24,7 +24,7 @@ from app.application.workflow.clarification_selection import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
-    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
     from app.application.workflow.approval_service import ApprovalService
     from app.application.workflow.workflow_types import PlanGraph
 
@@ -1113,20 +1113,129 @@ class WorkflowSession:
         )
         return result
 
+    def _pending_run_state_reply(
+        self,
+        run: AgentRun,
+        plan: PlanGraph,
+        *,
+        user_id: str,
+        pending: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """An interruption may leave a verified wait, never bypass unsettled execution."""
+        from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+        from app.application.ai_chat.workflow_response_builder import agent_run_execution_state
+        from app.domain.task_lifecycle.results import (
+            execution_result_outcome_unknown,
+            execution_result_requires_reconciliation,
+        )
+
+        receipts: list[AgentStep | ToolCall] = [*run.steps, *run.tool_calls]
+        evidence = {"output": run.final_output, "outputs": [item.output for item in receipts]}
+        active = run.status in {"queued", "planning", "running", "retrying"}
+        terminal = run.status in {"completed", "failed", "cancelled", "rejected"}
+        # A verified terminal receipt can close its chat wait while preserving
+        # the original run's prohibition on retries.
+        known_terminal = terminal and agent_run_execution_state(run)[0] == run.status
+        uncertain = (
+            (requires_retry_reconciliation(run) and not known_terminal)
+            or (terminal and not known_terminal)
+            or str(run.metadata.get("trace_mode") or "").startswith("legacy_planner_run")
+            or execution_result_outcome_unknown(
+                {
+                    "execution_state": run.status,
+                    "output": evidence,
+                    "outputs": [{"execution_state": item.status} for item in receipts],
+                }
+            )
+            or (
+                not active
+                and (
+                    execution_result_requires_reconciliation(evidence)
+                    or any(item.status in {"running", "retrying"} for item in receipts)
+                )
+            )
+        )
+        if uncertain:
+            result = _control_reply(
+                "原任务执行回执尚需核对，请返回原任务查看；本次未恢复执行。",
+                "workflow_unknown",
+                {"run_id": run.run_id, "plan_id": run.plan_id},
+                success=False,
+                message="任务回执待核对",
+            )[1]
+            result.update(execution_state="unknown", requires_reconciliation=True, retryable=False)
+            return result
+        if known_terminal:
+            return self._settle_continued_run(
+                user_id, pending, plan, run, dict(run.metadata.get("runtime_context") or {})
+            )
+        if run.status != "waiting_user":
+            # Only project the authoritative run. An unrelated chat turn must
+            # not settle its plan, clear the pending index or alter its effects.
+            result = _control_reply(
+                workflow_run_note(run.status),
+                f"workflow_{run.status}",
+                {"run_id": run.run_id, "plan_id": run.plan_id},
+                success=False,
+                message="原任务状态已更新",
+            )[1]
+            result["execution_state"] = run.status
+            return result
+        return None
+
+    def _classification_state_reply(
+        self, user_id: str, pending: dict[str, Any], expected: AgentRun
+    ) -> dict[str, Any] | None:
+        """Discard a classification if its durable waiting snapshot changed during model I/O."""
+        from app.application.agent_orchestrator import AgentOrchestrator
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+        from app.application.agent_orchestrator.runtime_context import merge_runtime_context
+        from app.application.workflow.workflow_types import plan_from_dict, validate_plan_graph
+
+        try:
+            current = AgentOrchestrator().get_run(expected.run_id)
+            if (
+                current is None
+                or current.user_id != expected.user_id
+                or current.plan_id != expected.plan_id
+            ):
+                raise ValueError("The classified task identity changed")
+            # Use the same ownership fence as a durable continuation, in both
+            # directions so removing an original binding cannot relax it.
+            merge_runtime_context(expected, current.metadata.get("runtime_context"))
+            merge_runtime_context(current, expected.metadata.get("runtime_context"))
+            plan = plan_from_dict(current.metadata.get("plan"))
+            if plan is None or plan.plan_id != current.plan_id or validate_plan_graph(plan):
+                raise ValueError("The classified plan is no longer valid")
+            state_reply = self._pending_run_state_reply(
+                current, plan, user_id=user_id, pending=pending
+            )
+            if state_reply is not None:
+                return state_reply
+            if canonical_hash(current.to_dict()) != canonical_hash(expected.to_dict()):
+                raise ValueError("The classified waiting snapshot changed")
+            return None
+        except RECOVERABLE_ERRORS:
+            return _control_reply(
+                "原任务的等待状态或计划在识别期间发生变化，请返回原任务核对；未使用旧答复继续执行。",
+                "workflow_confirmation_stale",
+                {"run_id": expected.run_id, "plan_id": expected.plan_id},
+                success=False,
+                message="原任务状态已变化",
+            )[1]
+
     def _workflow_interruption_turn(
         self, user_id: str, pending: dict[str, Any], message: str, context: dict[str, Any]
     ) -> dict[str, Any]:
         """A side question may leave a verified approval wait; it cannot approve it."""
         from app.application.agent_orchestrator import AgentOrchestrator
         from app.application.agent_orchestrator.clarification import find_waiting_step
-        from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
         from app.application.agent_orchestrator.run_models import RunContextScope
         from app.application.workflow.workflow_types import (
             plan_fingerprint,
             plan_from_dict,
             validate_plan_graph,
         )
-        from app.domain.task_lifecycle.results import execution_result_requires_reconciliation
         from app.infrastructure.auth.agent_mod_scope import validate_actor_context
 
         run_id = str(pending.get("agent_run_id") or "")
@@ -1152,6 +1261,7 @@ class WorkflowSession:
 
         if not run_id:
             return confirmation_reply("原操作尚未执行。")
+        run = None
         try:
             run = AgentOrchestrator().get_run(run_id)
             revision = context.get("_conversation_revision")
@@ -1170,7 +1280,6 @@ class WorkflowSession:
             )
             if (
                 run is None
-                or run.status != "waiting_user"
                 or validate_actor_context(context) is not None
                 or type(revision) is not int
                 or revision < 0
@@ -1181,32 +1290,18 @@ class WorkflowSession:
                 or run.plan_id != plan_id
                 or validate_plan_graph(plan)
                 or plan_fingerprint(plan) != plan_fingerprint(pending["plan"])
-                or waiting is None
+            ):
+                raise ValueError("The pending workflow does not match the current conversation")
+            state_reply = self._pending_run_state_reply(run, plan, user_id=user_id, pending=pending)
+            if state_reply is not None:
+                return state_reply
+            if (
+                waiting is None
                 or node is None
                 or (node.tool_id, node.action, node.params, node.depends_on)
                 != (waiting.tool_id, waiting.action, waiting.params, waiting.depends_on)
             ):
                 raise ValueError("The pending workflow does not match the current conversation")
-            if (
-                requires_retry_reconciliation(run)
-                or str(run.metadata.get("trace_mode") or "").startswith("legacy_planner_run")
-                or any(
-                    execution_result_requires_reconciliation(s.output) or s.status == "running"
-                    for s in run.steps
-                )
-                or any(call.status == "running" for call in run.tool_calls)
-            ):
-                result = _control_reply(
-                    "原任务执行回执尚需核对，请返回原任务查看；本次未恢复执行。",
-                    "workflow_unknown",
-                    {"run_id": run_id, "plan_id": plan_id},
-                    success=False,
-                    message="任务回执待核对",
-                )[1]
-                result.update(
-                    execution_state="unknown", requires_reconciliation=True, retryable=False
-                )
-                return result
             turn_context = self._resume_turn_context(run.metadata.get("runtime_context"), context)
             question = str(waiting.output.get("question") or "是否继续原任务的待确认步骤？")
             try:
@@ -1224,6 +1319,9 @@ class WorkflowSession:
             finally:
                 if "_planner_model_budget" in turn_context:
                     context["_planner_model_budget"] = turn_context["_planner_model_budget"]
+            state_reply = self._classification_state_reply(user_id, pending, run)
+            if state_reply is not None:
+                return state_reply
             if turn.turn_kind == "new_goal":
                 return {
                     "_workflow_new_goal": {
@@ -1235,6 +1333,10 @@ class WorkflowSession:
             # Even a model-resolved answer cannot replace a user confirmation or grant.
             return confirmation_reply(question, turn.turn_kind)
         except ClarificationTurnError as exc:
+            if run is not None:
+                state_reply = self._classification_state_reply(user_id, pending, run)
+                if state_reply is not None:
+                    return state_reply
             return self._clarification_failure(exc, run_id=run_id, plan_id=plan_id)
         except RECOVERABLE_ERRORS:
             return _control_reply(
@@ -1446,6 +1548,7 @@ class WorkflowSession:
                 {"plan_id": plan.plan_id, "run_id": run_id},
             )[1]
 
+        run = None
         try:
             from app.application.agent_orchestrator import AgentOrchestrator
             from app.application.agent_orchestrator.clarification import ClarificationAnswerError
@@ -1510,6 +1613,11 @@ class WorkflowSession:
                     success=False,
                     message="澄清计划已变化",
                 )[1]
+            state_reply = self._pending_run_state_reply(
+                run, persisted_plan, user_id=user_id, pending=pending
+            )
+            if state_reply is not None:
+                return state_reply
             from app.application.agent_orchestrator.clarification import find_waiting_step
 
             waiting = find_waiting_step(
@@ -1549,6 +1657,9 @@ class WorkflowSession:
 
                 if is_planning_clarification(run, waiting):
                     turn = self._extract_clarification_turn(**extraction)
+                    state_reply = self._classification_state_reply(user_id, pending, run)
+                    if state_reply is not None:
+                        return state_reply
                     reply = self._clarification_turn_reply(turn, run, waiting)
                     if reply is not None:
                         return reply
@@ -1568,6 +1679,9 @@ class WorkflowSession:
                     decision = _plan_confirmation_decision(text)
                     if decision is None:
                         turn = self._extract_clarification_turn(**extraction)
+                        state_reply = self._classification_state_reply(user_id, pending, run)
+                        if state_reply is not None:
+                            return state_reply
                         if turn.turn_kind == "new_goal":
                             return self._clarification_turn_reply(turn, run, waiting)
                         question = str(
@@ -1632,6 +1746,9 @@ class WorkflowSession:
                     message="澄清未绑定业务节点",
                 )[1]
             answer = self._clarification_answer(run, waiting, text, context=turn_context)
+            state_reply = self._classification_state_reply(user_id, pending, run)
+            if state_reply is not None:
+                return state_reply
             if isinstance(answer, ClarificationExtraction):
                 return self._clarification_turn_reply(answer, run, waiting)
             if answer is None:
@@ -1709,6 +1826,10 @@ class WorkflowSession:
                 user_id, pending, updated_plan, continued, runtime_ctx
             )
         except ClarificationTurnError as exc:
+            if run is not None:
+                state_reply = self._classification_state_reply(user_id, pending, run)
+                if state_reply is not None:
+                    return state_reply
             return self._clarification_failure(exc, run_id=run_id, plan_id=plan.plan_id)
         except ClarificationAnswerError as exc:
             return _control_reply(

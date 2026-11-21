@@ -8,7 +8,9 @@ parameter; it does not replace these cases with an in-memory database.
 from __future__ import annotations
 
 import os
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
 import pytest
@@ -126,6 +128,58 @@ def _business_lifecycle(env) -> tuple[list[str], int]:
         return modules, session.query(TaskLifecycleIdempotency).count()
     finally:
         session.close()
+
+
+@pytest.mark.parametrize("dialect", _dialects())
+def test_concurrent_task_admission_persists_one_complete_run_and_replays_it(
+    tmp_path, monkeypatch, dialect
+):
+    import copy
+
+    from app.application.agent_orchestrator import AgentRun, SQLAlchemyAgentRunRepository
+    from app.db.models.agent import AgentRunRecord, AgentTaskRecord
+
+    with _execution_database(tmp_path, monkeypatch, dialect) as env:
+        candidates = [
+            AgentRun(user_id=str(env["user_id"]), message=f"candidate-{index}", status="queued")
+            for index in range(2)
+        ]
+        for run in candidates:
+            run.metadata["task_context"] = {"task_id": "concurrent-admission"}
+            run.metadata["runtime_context"] = {"tenant_id": "1"}
+        barrier = threading.Barrier(2)
+
+        def publish(run):
+            repository = SQLAlchemyAgentRunRepository(
+                session_factory=env["factory"], auto_create=False
+            )
+            barrier.wait(timeout=10)
+            return repository.create_task_run(run)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(publish, candidates))
+        assert sum(created for _, created in results) == 1
+        winner = next(run for run, created in results if created)
+        assert all(
+            run.run_id == winner.run_id and run.message == winner.message for run, _ in results
+        )
+        before = env["runs"].get(winner.run_id)
+        assert before is not None
+        assert before.message == winner.message and before.status == "queued"
+
+        # Exact-run admission must discard both a stale snapshot and the task
+        # identity tentatively inserted for it, without publishing another run.
+        stale = copy.deepcopy(before)
+        stale.message = "must not replace the persisted winner"
+        stale.metadata["task_context"]["task_id"] = "losing-task"
+        replayed, created = env["runs"].create_task_run(stale, initial_only=False)
+        assert not created and replayed.to_dict() == before.to_dict()
+        assert env["runs"].get(winner.run_id).to_dict() == before.to_dict()
+        with env["factory"]() as db:
+            assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
+            task = db.query(AgentTaskRecord).one()
+            assert task.task_id == "concurrent-admission"
+            assert task.active_run_id == winner.run_id and task.run_count == 1
 
 
 @pytest.mark.parametrize("dialect", _dialects())

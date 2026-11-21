@@ -1227,12 +1227,17 @@ class SQLAlchemyAgentRunRepository:
         from app.db.models.agent import AgentTaskRecord
 
         values = cls._task_record_values(task)
-        insert = sqlite_insert if db.get_bind().dialect.name == "sqlite" else postgresql_insert
+        dialect = db.get_bind().dialect.name
+        insert = sqlite_insert if dialect == "sqlite" else postgresql_insert
         statement = (
             insert(AgentTaskRecord)
             .values(**values)
             .on_conflict_do_nothing(index_elements=["tenant_id", "user_id", "task_id"])
         )
+        if dialect == "postgresql":
+            # INSERT rowcount is not portable; the returned identity proves insertion.
+            result = db.execute(statement.returning(AgentTaskRecord.id))
+            return result.scalar_one_or_none() is not None
         return cast(CursorResult, db.execute(statement)).rowcount == 1
 
     @classmethod

@@ -215,13 +215,15 @@ def test_missing_sdk_credentials_do_not_raise_during_provider_selection(monkeypa
         ("empty", "model_response_invalid"),
     ],
 )
-def test_started_stream_never_replays_or_fabricates_completion(provider, ending, code):
+def test_started_stream_never_replays_or_fabricates_completion(monkeypatch, provider, ending, code):
     from app.application.workflow.llm_plan_generation import LlmPlanGeneration
     from app.infrastructure.chat_stream_lifetime import current_lifetime
+    from app.infrastructure.llm.instrumented_provider import InstrumentedProvider
+    from app.infrastructure.llm.model_admission import RateLimitedProvider
 
     closed = []
 
-    async def chunks(**kwargs):
+    async def chunks(messages, **kwargs):
         try:
             if ending == "empty":
                 return
@@ -234,6 +236,12 @@ def test_started_stream_never_replays_or_fabricates_completion(provider, ending,
             closed.append(True)
 
     provider.stream_chat_completion = chunks
+    provider.provider_id = "fixture_stream"
+    provider.is_configured = True
+    wrapped = InstrumentedProvider(RateLimitedProvider(provider))
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **_: wrapped
+    )
     fallback, lifetime = Mock(), Mock()
     generation = LlmPlanGeneration(Mock(), fallback, Mock())
     context = {"_planner_model_budget": InvocationBudget(time.monotonic() + 0.05)}
@@ -251,18 +259,60 @@ def test_started_stream_never_replays_or_fabricates_completion(provider, ending,
         lifetime.publish_delta.assert_called_once_with("部分正文")
 
 
-def test_provider_without_stream_capability_uses_one_completion(provider):
+@pytest.mark.parametrize("provider_kind", ["compatible", "legacy", "modstore"])
+@pytest.mark.parametrize("instrumented", [False, True])
+def test_provider_without_stream_capability_uses_one_completion(
+    monkeypatch, provider_kind, instrumented
+):
     from app.application.workflow.llm_plan_generation import LlmPlanGeneration
     from app.infrastructure.chat_stream_lifetime import current_lifetime
+    from app.infrastructure.llm.client import _scoped_client
+    from app.infrastructure.llm.instrumented_provider import InstrumentedProvider
+    from app.infrastructure.llm.model_admission import RateLimitedProvider
+    from app.infrastructure.llm.providers import registry
+    from app.infrastructure.llm.providers.deepseek_legacy import DeepSeekLegacyProvider
+    from app.infrastructure.llm.providers.modstore_provider import ModstoreProvider
+    from app.infrastructure.llm.providers.openai_compatible_provider import OpenAICompatibleProvider
 
-    completion = Mock(return_value=_response('{"mode":"reply","reply":"你好"}'))
-    token = current_lifetime.set(Mock())
+    completion = AsyncMock(return_value=_response('{"mode":"reply","reply":"你好"}'))
+    adapter = SimpleNamespace(is_configured=True, chat_completion=completion)
+    if provider_kind == "legacy":
+        actual = DeepSeekLegacyProvider(api_key="test-only-model-key")
+        monkeypatch.setattr(actual, "chat_completion", completion)
+    else:
+        actual = (
+            OpenAICompatibleProvider(adapter)
+            if provider_kind == "compatible"
+            else ModstoreProvider(adapter)
+        )
+    registered = registry.LLMProviderRegistry()
+    registered.register("fixture_nonstream", actual)
+    monkeypatch.setattr(registry, "_registry", registered)
+    monkeypatch.setattr(registry, "_routing_order", lambda: ("fixture_nonstream",))
+    monkeypatch.setattr(
+        "app.infrastructure.llm.genai_telemetry.trace_enabled", lambda: instrumented
+    )
+    monkeypatch.setattr("app.infrastructure.llm.guardrails.guardrails_enabled", lambda: False)
+    monkeypatch.setattr(InstrumentedProvider, "_persist", staticmethod(lambda _span: None))
+    monkeypatch.setattr(
+        "app.infrastructure.llm.model_context_windows.resolve_model_limits",
+        AsyncMock(return_value=ModelLimits(context_window=8192)),
+    )
+    lifetime = Mock()
+    token = current_lifetime.set(lifetime)
+    client_token = _scoped_client.set(None)
     try:
-        result = LlmPlanGeneration(Mock(), completion, Mock())._light_reply("turn", "你好", {})
+        selected = registry.get_active_provider()
+        assert isinstance(selected, InstrumentedProvider if instrumented else RateLimitedProvider)
+        result = LlmPlanGeneration(
+            SimpleNamespace(), request_planner_completion, Mock()
+        )._light_reply("turn", "你好", {})
     finally:
+        _scoped_client.reset(client_token)
         current_lifetime.reset(token)
     assert result.metadata["reply"] == "你好"
-    completion.assert_called_once()
+    completion.assert_awaited_once()
+    lifetime.publish_delta.assert_not_called()
 
 
 @pytest.mark.parametrize("wire", ["sdk", "modstore", "modstore_done"])

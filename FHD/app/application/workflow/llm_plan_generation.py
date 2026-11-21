@@ -26,6 +26,9 @@ from app.application.workflow.planner_prompt_profile import (
 from app.application.workflow.planner_prompt_profile import (
     memory_digest as _memory_digest,
 )
+from app.application.workflow.planner_prompt_profile import (
+    tool_specs_for_prompt as _tool_specs,
+)
 from app.application.workflow.workflow_types import (
     Branch,
     PlanGraph,
@@ -278,43 +281,6 @@ async def _consume_reply_stream(stream, on_prefix: Callable[[str], None]) -> tup
         on_prefix(prefix[len(emitted_text) :])
         emitted_text = prefix
     return "".join(chunks), emitted_text
-
-
-def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
-    from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
-
-    contracts = build_tool_specs_v2()
-    result = []
-    for tool_id, spec in tool_registry.items():
-        actions = spec.get("actions", {})
-        action_specs = []
-        for name, metadata in actions.items():
-            contract = contracts.get((str(tool_id), str(name)))
-            raw_schema = getattr(contract, "input_schema", {})
-            action_spec = {
-                "action": name,
-                "description": str(
-                    getattr(contract, "description", "") or spec.get("description") or ""
-                )[:240],
-                "risk": metadata.get("risk", "low"),
-                "idempotent": bool(metadata.get("idempotent", False)),
-                "output_schema": getattr(contract, "output_schema", {}),
-                "input_schema": raw_schema,
-            }
-            # The complete JSON Schema already carries this exact requirement.
-            # Keep differing legacy requirements; never rewrite nested schemas.
-            required = metadata.get("required_params", [])
-            if required != raw_schema.get("required", []):
-                action_spec["required_params"] = required
-            action_specs.append(action_spec)
-        result.append(
-            {
-                "tool_id": tool_id,
-                "description": spec.get("description", ""),
-                "actions": action_specs,
-            }
-        )
-    return result
 
 
 def _load_model_json(raw: str) -> Any:
@@ -747,34 +713,25 @@ class LlmPlanGeneration:
             from app.application.workflow.retry_policy import call_with_retry, planner_retry_policy
 
             policy = planner_retry_policy()
+
             # Business replies are published only after plan and goal admission.
-            response_data = None
-            if response_data is None:
-                try:
-                    response_data = call_with_retry(
-                        lambda: self.completion(
-                            ai_service=self.conversation,
-                            context=context,
-                            messages=messages,
-                            http_client_factory=self.http_client,
-                            **extra,
-                        ),
-                        policy=policy,
-                    )
-                except TypeError as exc:
-                    if not extra or not unsupported_tool_parameter(exc):
-                        raise
-                    # 兼容不接受额外参数的旧 completion 实现（含测试替身）。
-                    extra = {}
-                    response_data = call_with_retry(
-                        lambda: self.completion(
-                            ai_service=self.conversation,
-                            context=context,
-                            messages=messages,
-                            http_client_factory=self.http_client,
-                        ),
-                        policy=policy,
-                    )
+            def request_completion() -> dict[str, Any] | None:
+                return self.completion(
+                    ai_service=self.conversation,
+                    context=context,
+                    messages=messages,
+                    http_client_factory=self.http_client,
+                    **extra,
+                )
+
+            try:
+                response_data = call_with_retry(request_completion, policy=policy)
+            except TypeError as exc:
+                if not extra or not unsupported_tool_parameter(exc):
+                    raise
+                # 兼容不接受额外参数的旧 completion 实现（含测试替身）。
+                extra = {}
+                response_data = call_with_retry(request_completion, policy=policy)
             if not isinstance(response_data, dict):
                 context["planning_failure_kind"] = (
                     "model_unavailable" if response_data is None else "plan_format_invalid"

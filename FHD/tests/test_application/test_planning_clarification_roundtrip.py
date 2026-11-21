@@ -4,22 +4,14 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from threading import Barrier
-from types import SimpleNamespace
 from unittest.mock import Mock
-from uuid import uuid4
 
 import pytest
 
-from app.application.agent_orchestrator import AgentOrchestrator, SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 from app.application.agent_orchestrator.runtime_context import RuntimeContextOwnershipError
 from app.application.agent_orchestrator.trace_payloads import _payload_status
-from app.application.agent_task_context import scoped_conversation_user_id
-from app.application.ai_chat_app_service import AIChatApplicationService
-from app.application.workflow.approval_service import ApprovalService
-from app.application.workflow.plan_store import WorkflowPlanStore
-from app.application.workflow.planner import LLMWorkflowPlanner
-from app.application.workflow.risk_gate import HybridRiskGate
 from app.application.workflow.workflow_types import (
     PlanGraph,
     WorkflowNode,
@@ -29,199 +21,16 @@ from app.application.workflow.workflow_types import (
 from app.infrastructure.modstore_transport import MarketModelError
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import (
-    provision_native_checkpoint_schema,
-)
-from tests.fixtures.backend_ci_isolation import (
     trusted_actor as trusted_actor,
 )
-from tests.fixtures.planner_model import goal_review_response
-
-ORIGINAL = "澜宇2026/9/30购货明细多少"
-QUESTION = "A) 查询2026/9/27—10/24的澜宇购货明细；B) 补充具体分厂。请选择。"
-QUERY = "澜宇2026/9/27—10/24购货明细"
-ANSWER = "合成验收样本：澜宇2026/9/30购货2件，金额100元。"
-
-
-def _model_response(payload):
-    return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
-
-
-def _planning_requests(requests):
-    return [
-        r
-        for r in requests
-        if r["task"] not in {"audit_goal_coverage", "audit_reply", "classify_clarification_turn"}
-    ]
-
-
-@pytest.fixture
-def roundtrip(monkeypatch, tmp_path, trusted_actor):
-    actor = trusted_actor(user_id=17, role="admin")
-    factory = actor.factory
-    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
-    provision_native_checkpoint_schema(factory.kw["bind"])
-    store = WorkflowPlanStore(session_factory=factory)
-    monkeypatch.setattr("app.application.workflow.plan_store.WorkflowPlanStore", lambda: store)
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
-    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-
-    executor = Mock()
-    executor.execute_with_deadline.return_value = {
-        "success": True,
-        "query": QUERY,
-        "answer": ANSWER,
-        "answer_grounded": True,
-        "chunks": [{"text": ANSWER, "source_url": "synthetic-purchase-fixture.xlsx"}],
-    }
-
-    def new_orchestrator():
-        return AgentOrchestrator(
-            repository=SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False),
-            tool_executor=executor,
-        )
-
-    monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator", new_orchestrator)
-    requests = []
-    state = SimpleNamespace(
-        write=False,
-        query=QUERY,
-        question=QUESTION,
-        fail_once=False,
-        questions=[],
-        classification={"turn_kind": "answer", "resolved": True, "parameters": {}},
-        classification_error=None,
-        reply=None,
-    )
-
-    def complete(**kwargs):
-        request = json.loads(kwargs["messages"][-1]["content"])
-        requests.append(request)
-        if request["task"] == "classify_clarification_turn":
-            if state.classification_error:
-                raise state.classification_error
-            return _model_response(state.classification)
-        if request["task"] == "audit_reply":
-            return _model_response({"violations": [], "clarification_question": None})
-        if request["task"] == "audit_goal_coverage":
-            if all(n["tool_id"] == "conversation" for n in request["plan"]["nodes"]):
-                return goal_review_response(
-                    request,
-                    source=request["user_message"],
-                    node_ids=[n["node_id"] for n in request["plan"]["nodes"]],
-                    outcome="reply",
-                )
-            assert [node["node_id"] for node in request["plan"]["nodes"]] == ["business"]
-            if len(request["user_message"]) > 2000:
-                # A real review cites bounded source spans, never the entire
-                # long transcript in one GoalDisposition.source (max 2000).
-                assert ORIGINAL in request["user_message"]
-                return _model_response(
-                    {
-                        "goals": [
-                            {
-                                "goal_id": "purchase",
-                                "source": ORIGINAL,
-                                "outcome": "execute",
-                                "node_ids": ["business"],
-                            },
-                            {
-                                "goal_id": "no_write",
-                                "source": "禁止写入",
-                                "outcome": "negated",
-                                "node_ids": [],
-                            },
-                        ],
-                        "violations": [],
-                    }
-                )
-            return goal_review_response(
-                request, source=request["user_message"], node_ids=["business"], outcome="execute"
-            )
-        if state.fail_once:
-            failure = state.fail_once
-            state.fail_once = False
-            if failure == "context":
-                from app.application.agent_orchestrator.context_window_manager import (
-                    ContextWindowExceeded,
-                )
-
-                raise ContextWindowExceeded("当前模型窗口不足，原任务范围不能裁剪")
-            raise MarketModelError({"status": 402})
-        if state.reply is not None:
-            return _model_response({"mode": "reply", "reply": state.reply})
-        if len(_planning_requests(requests)) == 1:
-            node = {
-                "node_id": "scope",
-                "tool_id": "clarify",
-                "action": "ask",
-                "params": {"question": state.question},
-            }
-        elif state.questions:
-            node = {
-                "node_id": "scope",
-                "tool_id": "clarify",
-                "action": "ask",
-                "params": {"question": state.questions.pop(0)},
-            }
-        elif state.write:
-            node = {
-                "node_id": "business",
-                "tool_id": "products",
-                "action": "delete",
-                "params": {"id": 42},
-            }
-        else:
-            node = {
-                "node_id": "business",
-                "tool_id": "dataset_rag",
-                "action": "query",
-                "params": {"dataset_id": "synthetic-purchases", "query": state.query},
-            }
-        return _model_response({"mode": "workflow", "intent": "purchase_query", "nodes": [node]})
-
-    def new_service():
-        service = object.__new__(AIChatApplicationService)
-        service._pending_workflows = {}
-        service.workflow_planner = LLMWorkflowPlanner(
-            ai_service=Mock(get_context=Mock(return_value=None)), completion=complete
-        )
-        service.risk_gate = HybridRiskGate()
-        service.approval_service = ApprovalService()
-        return service
-
-    context = {
-        **actor.context,
-        "session_id": "purchase-query",
-        "conversation_id": "purchase-query",
-        "tool_execution_profile": "full",
-        "chat_knowledge_dataset_ids": ["synthetic-purchases"],
-    }
-
-    def send(service, message, *, session="purchase-query", extra=None):
-        current = {
-            **context,
-            "session_id": session,
-            "conversation_id": session,
-            "turn_id": uuid4().hex,
-            **(extra or {}),
-        }
-        return service.process_chat("17", message, context=current, source="normal")
-
-    return SimpleNamespace(
-        actor=actor,
-        repository=repository,
-        store=store,
-        executor=executor,
-        requests=requests,
-        state=state,
-        service=new_service,
-        send=send,
-        chat_user=scoped_conversation_user_id("17", context),
-        context=context,
-        orchestrator=new_orchestrator,
-    )
+from tests.fixtures.planning_clarification import (
+    ANSWER,
+    ORIGINAL,
+    QUERY,
+    QUESTION,
+    _planning_requests,
+)
+from tests.fixtures.planning_clarification import roundtrip as roundtrip
 
 
 @pytest.mark.parametrize("reply", ["A", "按A查询", "就查这个时间段"])
@@ -351,144 +160,6 @@ def test_new_business_goal_completes_without_consuming_original_wait(roundtrip):
     resumed = roundtrip.send(roundtrip.service(), "A")
     assert resumed["run_id"] == waiting.run_id and resumed["success"] is True
     assert roundtrip.executor.execute_with_deadline.call_count == 2
-
-
-def _paused_preview(roundtrip):
-    from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
-    from tests.test_application.test_agent_user_decision_pause import _approve_and_execute, _run
-
-    run = _run(roundtrip.actor)
-    context = {**roundtrip.context, "turn_id": uuid4().hex}
-    bind_chat_turn_context(run.message, context)
-    run.metadata["runtime_context"] = context
-    roundtrip.executor.execute_with_deadline.side_effect = [
-        {
-            "success": True,
-            "preview": True,
-            "requires_user_decision": True,
-            "question": "CSV有一行校验失败，是否只保留有效行？",
-            "resume_params": {"valid_rows_only": True},
-            "data": {"run_id": "preview-result", "executable": False, "error_rows": 1},
-        },
-        {
-            "success": True,
-            "preview": True,
-            "requires_user_decision": False,
-            "data": {"run_id": "preview-result", "executable": True, "error_rows": 1},
-        },
-    ]
-    roundtrip.repository.save(run)
-    paused = _approve_and_execute(roundtrip.orchestrator(), run, roundtrip.actor)
-    service = roundtrip.service()
-    service._capture_agent_run_interaction(
-        user_id=roundtrip.chat_user,
-        agent_run=paused,
-        runtime_context=paused.metadata["runtime_context"],
-    )
-    return service, roundtrip.repository.get(run.run_id)
-
-
-def test_preview_side_question_preserves_grant_and_resumes_after_restart(roundtrip):
-    from app.application.agent_orchestrator.approval_grant import (
-        issue_approval_grant,
-        validate_approval_grant,
-    )
-
-    service, waiting = _paused_preview(roundtrip)
-    grant = issue_approval_grant(waiting, principal_id=waiting.user_id)
-    roundtrip.state.classification = {"turn_kind": "new_goal", "resolved": False, "parameters": {}}
-    roundtrip.state.reply = "宣传文案：从每一份可靠数据开始。"
-    reply = roundtrip.send(service, "先帮我写一句宣传文案")
-    assert reply["success"] is True and reply["response"] == roundtrip.state.reply
-    assert reply["data"]["pending_workflow"]["run_id"] == waiting.run_id
-    assert roundtrip.repository.get(waiting.run_id) == waiting
-    validate_approval_grant(grant["grant"], run=waiting, principal_id=waiting.user_id)
-    assert roundtrip.executor.execute_with_deadline.call_count == 1
-    continued = roundtrip.send(roundtrip.service(), "继续")
-    assert continued["run_id"] == waiting.run_id
-    approved = roundtrip.repository.get(waiting.run_id)
-    assert approved.run_id == waiting.run_id and approved.plan_id == waiting.plan_id
-    assert approved.steps[0].status == "completed"
-    assert approved.steps[1].status == "waiting_user"
-    assert roundtrip.executor.execute_with_deadline.call_count == 2
-    assert (
-        roundtrip.executor.execute_with_deadline.call_args.args[0].params["valid_rows_only"] is True
-    )
-    assert all(call.action == "preview" for call in approved.tool_calls)
-
-
-def test_approval_wait_side_question_keeps_original_request(roundtrip):
-    roundtrip.state.write = True
-    first = roundtrip.send(roundtrip.service(), ORIGINAL)
-    roundtrip.send(roundtrip.service(), "删除")
-    waiting = roundtrip.repository.get(first["run_id"])
-    assert waiting.status == "waiting_user"
-    roundtrip.state.classification = {"turn_kind": "new_goal", "resolved": False, "parameters": {}}
-    roundtrip.state.reply = "这是插问的说明。"
-    response = roundtrip.send(roundtrip.service(), "先解释一下采购成本")
-    assert response["success"] is True and response["response"] == roundtrip.state.reply
-    assert response["data"]["pending_workflow"]["run_id"] == waiting.run_id
-    assert roundtrip.repository.get(waiting.run_id) == waiting
-    roundtrip.executor.execute_with_deadline.assert_not_called()
-
-
-@pytest.mark.parametrize("turn_kind", ["answer", "unclear"])
-def test_free_text_cannot_approve_a_tool_wait(roundtrip, turn_kind):
-    service, waiting = _paused_preview(roundtrip)
-    roundtrip.state.classification = {
-        "turn_kind": turn_kind,
-        "resolved": turn_kind == "answer",
-        "parameters": {},
-    }
-    response = roundtrip.send(service, "只保留正确数据就行")
-    assert response["data"]["action"] == "workflow_confirmation_required"
-    assert response["run_id"] == waiting.run_id
-    assert roundtrip.repository.get(waiting.run_id) == waiting
-    assert roundtrip.executor.execute_with_deadline.call_count == 1
-    assert len(roundtrip.repository.list_recent()) == 1
-
-
-def test_tool_wait_classification_failure_preserves_original_run(roundtrip):
-    service, waiting = _paused_preview(roundtrip)
-    roundtrip.state.classification_error = TimeoutError("private provider details")
-    response = roundtrip.send(service, "先解释一下文案风格")
-    assert response["success"] is False and response["data"]["error_code"] == "model_timeout"
-    assert response["run_id"] == waiting.run_id
-    assert "private" not in json.dumps(response)
-    assert roundtrip.repository.get(waiting.run_id) == waiting
-    assert roundtrip.executor.execute_with_deadline.call_count == 1
-
-
-@pytest.mark.parametrize("mismatch", ["owner", "session", "plan", "unknown"])
-def test_tool_wait_side_question_cannot_bypass_durable_guards(roundtrip, mismatch):
-    from app.application.ai_chat.workflow_session import WorkflowSession
-
-    service, waiting = _paused_preview(roundtrip)
-    pending = service._pending_workflows[roundtrip.chat_user]
-    current = deepcopy(waiting)
-    if mismatch == "owner":
-        current.user_id = "another-owner"
-    elif mismatch == "session":
-        current.metadata["runtime_context"]["session_id"] = "other-session"
-    elif mismatch == "plan":
-        pending["plan"] = deepcopy(pending["plan"])
-        pending["plan"].nodes[0].params["valid_rows_only"] = False
-    else:
-        current.steps[0].output["requires_reconciliation"] = True
-    if mismatch != "plan":
-        roundtrip.repository.save(current)
-    before = roundtrip.repository.get(waiting.run_id)
-    context = {**waiting.metadata["runtime_context"], "turn_id": uuid4().hex}
-    handled, response = WorkflowSession(
-        service._pending_workflows, service
-    ).resume_pending_dynamic_workflow(roundtrip.chat_user, "先写一句文案", "先写一句文案", context)
-    assert handled is True and response["success"] is False
-    assert response["data"]["action"] == (
-        "workflow_unknown" if mismatch == "unknown" else "workflow_resume_failed"
-    )
-    assert not roundtrip.requests
-    assert roundtrip.repository.get(waiting.run_id) == before
-    assert roundtrip.executor.execute_with_deadline.call_count == 1
 
 
 @pytest.mark.parametrize("failure", ["balance", "timeout", "context", "invalid"])

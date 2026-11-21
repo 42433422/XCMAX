@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from app.infrastructure.llm import genai_telemetry as telemetry
@@ -137,7 +138,13 @@ class InstrumentedProvider:
                 messages, temperature=temperature, max_tokens=max_tokens, **kwargs
             )
 
-    async def stream_chat_completion(self, messages: list[dict[str, str]], **kwargs: Any):
+    @property
+    def stream_chat_completion(self) -> Callable[..., AsyncIterator[str]] | None:
+        if not callable(getattr(self._inner, "stream_chat_completion", None)):
+            return None
+        return self._stream_chat_completion
+
+    async def _stream_chat_completion(self, messages: list[dict[str, str]], **kwargs: Any):
         """增量透传给内层 provider；流式路径不重复做输出 guardrails。"""
         inner = getattr(self._inner, "stream_chat_completion", None)
         if inner is None:

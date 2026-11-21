@@ -717,7 +717,9 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     if not cleanup_verified:
         assert stored.status == "blocked", stored.steps[0].output
         assert stored.steps[0].output["error_code"] == "tool_worker_exited"
-        assert stored.steps[0].output["reconciliation_evidence"]["cleanup_unresolved"] is True
+        assert stored.steps[0].output["outcome"] == "unknown"
+        assert stored.steps[0].output["retryable"] is False
+        assert stored.steps[0].output["cleanup_unresolved"] is True
         assert queue.get(run.run_id).state == "unknown"
         assert not queue.get(run.run_id).finished_at
         with sqlite3.connect(fixture) as db:
@@ -919,7 +921,11 @@ def test_unknown_checkpoint_version_fails_before_tool_dispatch(trusted_actor):
         tool_executor=SimpleNamespace(execute=lambda *args, **kwargs: calls.append(args)),
     )
     stored = service.execute_dispatched_run(run.run_id)
-    assert stored.status == "blocked" and "版本" in stored.error
+    assert stored.status == "blocked" and stored.error == "计划图校验或执行失败"
+    assert repository.get(run.run_id).metadata["checkpoint"] == {
+        "backend": "langgraph",
+        "schema_version": 999,
+    }
     assert calls == []
 
 

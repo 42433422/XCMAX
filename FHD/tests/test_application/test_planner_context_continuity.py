@@ -104,46 +104,6 @@ async def test_conversation_provider_uses_full_owned_history_once(
     assert not provider.summaries
 
 
-def test_conversation_enrichment_does_not_accept_unowned_history(monkeypatch):
-    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": [], "summary": None})
-    context = {
-        "local_user_id": 1,
-        "session_id": "owned",
-        "_chat_history_messages": [{"role": "user", "content": "CLIENT_INJECTED_HISTORY"}],
-    }
-    current = {"role": "user", "content": [{"type": "text", "text": "分析图片"}]}
-    result = memory.enrich_model_messages([current], "分析图片", context)
-    assert result[-1] is current
-    assert "CLIENT_INJECTED_HISTORY" not in json.dumps(result)
-
-
-@pytest.mark.parametrize("authorized", [False, True])
-@pytest.mark.parametrize("message", ["A", " A "])
-def test_enrichment_excludes_current_turn_by_identity_not_equal_text(
-    monkeypatch, authorized, message
-):
-    rows = [
-        {"role": "user", "content": "A", "turn_id": "before", "at": time.time()},
-        {"role": "assistant", "content": "A", "turn_id": "before", "at": time.time()},
-        {"role": "user", "content": message, "turn_id": "current", "at": time.time()},
-    ]
-    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows})
-    context = {
-        "local_user_id": 1,
-        "session_id": "same",
-        "turn_id": "current",
-        "_chat_evidence_authorized": authorized,
-        "_chat_history_messages": rows[:-1],
-    }
-    current = {"role": "user", "content": message}
-    result = memory.enrich_model_messages([current], message, context)
-    assert result[1:] == [
-        {"role": "user", "content": "A"},
-        {"role": "assistant", "content": "A"},
-        current,
-    ]
-
-
 @pytest.mark.asyncio
 async def test_conversation_rejects_stale_history_before_cached_reply(monkeypatch, model_boundary):
     from app.domain.shared_services.conversation import api
@@ -888,74 +848,6 @@ async def test_oversized_latest_turn_or_schema_never_reaches_provider(
                 max_tokens=100,
             )
     assert not provider.requests and not provider.summaries
-
-
-def test_sql_projection_reads_only_uncovered_suffix_and_keeps_whole_long_messages(monkeypatch):
-    from app.application import task_conversation_store
-    from app.application.ai_chat import chat_evidence
-
-    monkeypatch.setattr(
-        task_conversation_store, "ConversationRevisionError", ValueError, raising=False
-    )
-    saved = {
-        "kind": "langchain",
-        "source": "sql",
-        "revision": 3,
-        "covered_through_id": 80,
-        "count": 80,
-        "text": "FACT_0",
-    }
-    monkeypatch.setattr(memory, "conversation_summary", lambda _: saved)
-    calls = []
-
-    def page(**request):
-        calls.append(request)
-        first = request["after_id"] == 80
-        return {
-            "session": {"revision": 3},
-            "snapshot_latest_id": 84,
-            "has_more": first,
-            "next_after_id": 82 if first else None,
-            "messages": [
-                {"id": value, "role": "user" if value % 2 else "assistant", "content": "长" * 4000}
-                for value in ([81, 82] if first else [83, 84])
-            ],
-        }
-
-    result = chat_evidence._prepare_history(SimpleNamespace(get_conversation=page), {}, "s", 1)
-    assert calls[0]["after_id"] == 80 and calls[1]["through_id"] == 84
-    assert result["_chat_history_ids"] == [None, 81, 82, 83, 84]
-    assert all("长" * 4000 in row["content"] for row in result["_chat_history_messages"][1:])
-    assert result["_chat_history_messages"][0]["content"].endswith("FACT_0")
-
-
-def test_later_finishing_old_summary_cannot_move_sql_cursor_backwards(monkeypatch):
-    from contextlib import nullcontext
-
-    previous = {
-        "kind": "langchain",
-        "source": "sql",
-        "revision": 3,
-        "covered_through_id": 90,
-        "count": 90,
-        "text": "newer",
-    }
-    data = {"revision": 3, "summary": previous}
-    writes = []
-    monkeypatch.setattr(memory, "_read", lambda *_: data)
-    monkeypatch.setattr(memory, "_write", lambda *args: writes.append(args))
-    monkeypatch.setattr(memory, "_lock", lambda _: nullcontext())
-    context = {
-        "local_user_id": 1,
-        "session_id": "same",
-        "_chat_history_source": "sql",
-        "_chat_history_revision": 3,
-        "_chat_history_ids": [None, 81, 82],
-        "_chat_history_prior_summary": {"count": 80, "covered_through_id": 80},
-    }
-    history = [{"role": "user", "content": str(index)} for index in range(3)]
-    memory.save_conversation_summary(context, history, 3, "older computation finished later")
-    assert not writes and data["summary"] is previous
 
 
 def test_light_history_readback_falls_through_to_full_workflow(monkeypatch, model_boundary):

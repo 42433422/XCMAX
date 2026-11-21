@@ -269,6 +269,43 @@ def attachment_import_manifest(message: str, context: dict[str, Any]) -> list[st
     return None
 
 
+def tool_specs_for_prompt(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
+    from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+
+    contracts = build_tool_specs_v2()
+    result = []
+    for tool_id, spec in tool_registry.items():
+        actions = spec.get("actions", {})
+        action_specs = []
+        for name, metadata in actions.items():
+            contract = contracts.get((str(tool_id), str(name)))
+            raw_schema = getattr(contract, "input_schema", {})
+            action_spec = {
+                "action": name,
+                "description": str(
+                    getattr(contract, "description", "") or spec.get("description") or ""
+                )[:240],
+                "risk": metadata.get("risk", "low"),
+                "idempotent": bool(metadata.get("idempotent", False)),
+                "output_schema": getattr(contract, "output_schema", {}),
+                "input_schema": raw_schema,
+            }
+            # The complete JSON Schema already carries this exact requirement.
+            # Keep differing legacy requirements; never rewrite nested schemas.
+            required = metadata.get("required_params", [])
+            if required != raw_schema.get("required", []):
+                action_spec["required_params"] = required
+            action_specs.append(action_spec)
+        result.append(
+            {
+                "tool_id": tool_id,
+                "description": spec.get("description", ""),
+                "actions": action_specs,
+            }
+        )
+    return result
+
+
 def select_tools_for_prompt(
     tool_registry: dict[str, Any],
     message: str,
