@@ -72,7 +72,7 @@ async function worker(t, { mode, entry = 'para_e2e_agent.mjs', reportOnly = fals
     if(sandbox!=='read-only') fs.writeFileSync('target.txt','changed by '+model+'\\n');
     emit({type:'item.started',item:{id:'command-1',type:'command_execution',status:'in_progress',command:'node local-check.cjs'}});
     if(mode==='shutdown') {
-      process.on('SIGTERM',()=>{}); setInterval(()=>fs.appendFileSync('heartbeat','.'),10);
+      process.on('SIGTERM',()=>{}); const beat=()=>fs.appendFileSync('heartbeat','.'); beat(); setInterval(beat,10);
     } else {
       emit({type:'item.completed',item:{id:'command-1',type:'command_execution',status:'completed',command:'node local-check.cjs',exit_code:0}});
       if(mode==='nonzero' || mode==='zero-failure' || mode==='quota') {
@@ -186,15 +186,15 @@ test('only probes may select another model, then the selected real task executes
 
 test('worker SIGTERM waits for a stubborn Codex process and persists the unknown result before exiting', native, async t => {
   const current = await worker(t, { mode: 'shutdown', managed: true });
-  await waitFor(() => current.calls().some(row => !row.probe), current.diagnostics);
+  const heartbeatPath = join(current.workspace, 'heartbeat');
+  await waitFor(() => existsSync(heartbeatPath), current.diagnostics);
   current.signal('SIGTERM');
-  const report = await current.terminal();
-  assert.equal(report.status, 'failed');
+  assert.equal((await current.terminal()).status, 'failed');
   assert.equal(current.receipt().status, 'unknown');
   assert.equal(current.receipt().reason, 'codex_cancelled');
-  const heartbeat = readFileSync(join(current.workspace, 'heartbeat'), 'utf8');
+  const heartbeat = readFileSync(heartbeatPath, 'utf8');
   await delay(40);
-  assert.equal(readFileSync(join(current.workspace, 'heartbeat'), 'utf8'), heartbeat);
+  assert.equal(readFileSync(heartbeatPath, 'utf8'), heartbeat);
 });
 
 test('restarting an unmanaged original task preserves its failed workspace and refuses another model execution', native, async t => {
