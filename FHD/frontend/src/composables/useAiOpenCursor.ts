@@ -21,6 +21,8 @@ const SNAPSHOT_MAX_SCAN = 3000
 const CURSOR_MOVE_MS = 480
 const WAIT_POLL_MS = 100
 const WAIT_MAX_MS = 15000
+// Match the longest server action budget, and bound every incoming envelope locally.
+const COMMAND_MAX_MS = 30000
 const SCREENSHOT_MAX_WIDTH = 1280
 // Agent 操作时不应触发虚拟光标动画的指令
 const SILENT_ACTIONS = new Set(['snapshot', 'wait', 'verify', 'screenshot'])
@@ -838,9 +840,12 @@ function connect() {
       if (!id || commands.has(id)) return
       const command = new AbortController()
       commands.set(id, command)
-      const ttl = Number(msg.timeout_ms)
-      const deadline = Number.isFinite(ttl) && ttl >= 0 ? performance.now() + ttl : Infinity
-      const deadlineTimer = Number.isFinite(deadline) ? window.setTimeout(() => command.abort(), ttl) : null
+      const timeout = msg.timeout_ms === undefined ? COMMAND_MAX_MS : msg.timeout_ms
+      let ttl = typeof timeout === 'number' && Number.isFinite(timeout) ? timeout : 0
+      if (ttl < 0) ttl = 0
+      if (ttl > COMMAND_MAX_MS) ttl = COMMAND_MAX_MS
+      const deadline = performance.now() + ttl
+      const deadlineTimer = window.setTimeout(() => command.abort(), ttl)
       const commandCurrent = () => isCurrent() && !command.signal.aborted && performance.now() < deadline
       const action = String(msg.action || '')
       const params = (msg.params && typeof msg.params === 'object' ? msg.params : {}) as Record<string, unknown>
@@ -855,7 +860,7 @@ function connect() {
           result = { success: false, message: String((err as Error)?.message || err) }
         } finally {
           commands.delete(id)
-          if (deadlineTimer !== null) window.clearTimeout(deadlineTimer)
+          window.clearTimeout(deadlineTimer)
         }
         if (!isCurrent()) return
         if (!commandCurrent()) {

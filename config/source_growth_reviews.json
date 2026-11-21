@@ -436,12 +436,12 @@
     "FHD/frontend/src/composables/useAiOpenCursor.ts": {
       "base_file": "FHD/frontend/src/composables/useAiOpenCursor.ts",
       "base_blob": "0db8c3a087eef4b09f6396d1007c2a85fe03f336",
-      "head_blob": "ab058a13cd0c8ca85a0ca7b00e913d932259f259",
+      "head_blob": "7e644b4461b911263f59d0042c5799e6c741f5f2",
       "before_lines": 937,
-      "after_lines": 981,
-      "reason": "Serializes screen commands, cancels expired uploads, rejects stale element refs and masks sensitive receipts.",
+      "after_lines": 986,
+      "reason": "Serializes screen commands, cancels expired uploads, rejects stale element refs and masks sensitive receipts; bounds every command timer locally to 30 seconds and expires malformed durations before effects.",
       "boundary": "Changes the established cursor lifecycle in place; no new page-control engine or duplicate UI; hardening is covered by real DOM assertions.",
-      "validation": "Focused MCP/ToolSpec, authenticated bridge and frontend cursor tests pass; exact changed blobs remain subject to CI and maintainer review.",
+      "validation": "Cursor DOM, cancellation and malformed/overflow timer regressions: 161 tests passed across five files; changed-file ESLint passed. Exact changed blobs remain subject to final-head CI and maintainer review; this request is not approval.",
       "follow_up": "Retain this narrow repair boundary; split declarative data or cursor lifecycle only when a reviewed refactor can preserve existing contracts.",
       "review_owner": "@42433422"
     },

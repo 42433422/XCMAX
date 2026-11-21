@@ -805,12 +805,14 @@ def test_schema_failure_only_releases_a_certain_read_claim(
         result = execute_with_tool_deadline(
             executor, step, runtime_context=context, timeout_seconds=60
         )
-        evidence = result["reconciliation_evidence"] if unknown else result
+        evidence = result.get("reconciliation_evidence", result)
         assert evidence["error_code"] == "output_schema_validation_failed"
         assert result["success"] is False
         if unknown:
             assert result["outcome"] == "unknown" and result["retryable"] is False
             assert result["reconciliation_required"] is True
+            if not unknown_io:
+                assert result["error_code"] == "output_schema_validation_failed"
             tool_permission.drop_process_idempotency_memory()
             replay = execute_with_tool_deadline(
                 executor, step, runtime_context=context, timeout_seconds=60

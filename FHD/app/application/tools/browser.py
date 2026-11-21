@@ -87,40 +87,77 @@ def _uploads(plan: dict, owner_id: int, tenant_id: str) -> None:
         step["files"] = files
 
 
+def _delivery_failed(result: dict, error_code: str) -> None:
+    if "execution_outcome" not in result:
+        result["execution_outcome"] = result.get("outcome", "unknown")
+        if result.get("error_code"):
+            result["execution_error_code"] = result["error_code"]
+    result.update(
+        success=False,
+        outcome="unknown",
+        retryable=False,
+        reconciliation_required=True,
+        delivery_status="incomplete",
+        error_code=error_code,
+        message="浏览器证据未完整保存；请核对原执行和核验记录，勿重复提交原操作。",
+    )
+
+
 def _persist_artifacts(
     result: dict, root: Path, run_id: str, owner_id: int, tenant_id: str
 ) -> None:
-    from app.application.agent_orchestrator.artifact_files import store_run_file
+    from app.application.agent_orchestrator.artifact_files import (
+        RUN_FILE_MIME_TYPES,
+        store_run_file,
+    )
 
-    persisted = []
-    for item in result.get("artifacts", []):
-        path = Path(item["path"])
-        if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
-            raise ValueError("browser artifact is outside its task directory")
-        if not path.is_file() or path.stat().st_size > MAX_ARTIFACT_BYTES:
-            raise ValueError("browser artifact size is invalid")
-        content = path.read_bytes()
-        if hashlib.sha256(content).hexdigest() != item["sha256"]:
-            raise ValueError("browser artifact checksum mismatch")
-        persisted.append(
-            store_run_file(
-                run_id, content, name=item["name"], owner_user_id=owner_id, tenant_id=tenant_id
+    persisted: list[dict] = []
+    unsaved = []
+    temporary_artifacts = result.get("artifacts", [])
+    result["artifacts"] = persisted
+    for item in temporary_artifacts:
+        evidence: dict = {"name": Path(item["name"]).name, "status": "not_saved"}
+        error_code = "browser_artifact_invalid"
+        try:
+            path = Path(item["path"])
+            if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+                raise ValueError("browser artifact is outside its task directory")
+            if not path.is_file() or path.stat().st_size > MAX_ARTIFACT_BYTES:
+                raise ValueError("browser artifact size is invalid")
+            content = path.read_bytes()
+            if hashlib.sha256(content).hexdigest() != item["sha256"]:
+                raise ValueError("browser artifact checksum mismatch")
+            evidence.update(sha256=item["sha256"], size_bytes=len(content))
+            if Path(item["name"]).suffix.lower() not in RUN_FILE_MIME_TYPES:
+                error_code = "browser_artifact_format_unsupported"
+                raise ValueError("unsupported run file format")
+            error_code = "browser_artifact_storage_failed"
+            persisted.append(
+                store_run_file(
+                    run_id, content, name=item["name"], owner_user_id=owner_id, tenant_id=tenant_id
+                )
             )
-        )
-    # Retain structured verification even when screenshots are unavailable.
+        except RECOVERABLE_ERRORS:
+            unsaved.append({**evidence, "error_code": error_code})
+    if unsaved:
+        result["unsaved_artifacts"] = unsaved
+        _delivery_failed(result, "browser_artifact_persistence_failed")
+    # An attachment failure must not discard evidence of completed browser effects.
     receipt = {k: v for k, v in result.items() if k not in {"artifacts", "snapshot"}}
     receipt["run_id"] = run_id
     receipt["artifacts"] = persisted
-    persisted.append(
-        store_run_file(
-            run_id,
-            json.dumps(receipt, ensure_ascii=False, allow_nan=False).encode(),
-            name="browser-receipt.json",
-            owner_user_id=owner_id,
-            tenant_id=tenant_id,
+    try:
+        persisted.append(
+            store_run_file(
+                run_id,
+                json.dumps(receipt, ensure_ascii=False, allow_nan=False).encode(),
+                name="browser-receipt.json",
+                owner_user_id=owner_id,
+                tenant_id=tenant_id,
+            )
         )
-    )
-    result["artifacts"] = persisted
+    except RECOVERABLE_ERRORS:
+        _delivery_failed(result, "browser_receipt_persistence_failed")
 
 
 def execute_browser(action: str, params: dict, context: dict) -> dict:

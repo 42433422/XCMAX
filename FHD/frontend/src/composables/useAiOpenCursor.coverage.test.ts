@@ -519,6 +519,49 @@ describe('useAiOpenCursor - coverage ramp', () => {
         expect(change).not.toHaveBeenCalled()
       })
 
+      it.each([
+        ['missing', undefined], ['server maximum', 30000],
+        ['largest signed timer', 2147483647], ['timer overflow', 2147483648],
+        ['huge finite value', Number.MAX_VALUE],
+      ])('bounds a hanging transfer with %s timeout to thirty seconds', async (_label, timeout) => {
+        fetchFile.mockImplementation((_url, options: RequestInit) => new Promise((_resolve, reject) => {
+          options.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+        }))
+        const socket = lastWs()!
+        const pending = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'bounded-upload', timeout_ms: timeout, action: 'upload', params: {
+          selector: '#upload-target', files: [{ name: 'private.txt', url: artifactPath }],
+        } }) })
+        await vi.advanceTimersByTimeAsync(29999)
+        expect(fetchFile).toHaveBeenCalledTimes(1)
+        const signal = fetchFile.mock.calls[0][1].signal as AbortSignal
+        expect(signal.aborted).toBe(false)
+        expect(socket.send).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(1)
+        expect(signal.aborted).toBe(true)
+        await pending
+        expect(JSON.parse(socket.send.mock.calls[0][0] as string).result).toMatchObject({ success: false, code: 'COMMAND_CANCELLED' })
+        expect(input.files).toHaveLength(0)
+        expect(change).not.toHaveBeenCalled()
+        expect(await runCommand('read-after-expiry', 'snapshot', {})).toMatchObject({ success: true })
+      })
+
+      it.each(['-1', 'null', '"1000"', '"invalid"', '{}', '[]', 'true', '1e309'])(
+        'rejects invalid wire timeout %s before transfer or input changes', async timeout => {
+          const socket = lastWs()!
+          const payload = JSON.stringify({ type: 'command', id: 'invalid-timeout', action: 'upload', params: {
+            selector: '#upload-target', files: [{ name: 'private.txt', url: artifactPath }],
+          } })
+          // Keep the raw JSON exponent: JSON.stringify(Infinity) would become null.
+          const pending = socket.onmessage!({ data: `${payload.slice(0, -1)},"timeout_ms":${timeout}}` })
+          await vi.runAllTimersAsync(); await pending
+          expect(JSON.parse(socket.send.mock.calls[0][0] as string).result).toMatchObject({ success: false, code: 'COMMAND_CANCELLED' })
+          expect(fetchFile).not.toHaveBeenCalled()
+          expect(input.files).toHaveLength(0)
+          expect(change).not.toHaveBeenCalled()
+          expect(await runCommand('read-after-invalid', 'snapshot', {})).toMatchObject({ success: true })
+        },
+      )
+
       it.each([artifactPath, `${window.location.origin}${artifactPath}`])('uploads authorized artifact bytes from %s', async url => {
         expect(await upload(url)).toEqual({ success: true, uploaded: ['invoice.txt'] })
         expect(fetchFile).toHaveBeenCalledWith(artifactPath, {
