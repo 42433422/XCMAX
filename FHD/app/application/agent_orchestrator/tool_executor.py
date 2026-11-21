@@ -734,7 +734,10 @@ def execute_with_tool_deadline(
         ):
             # A returned receipt can require reconciliation without a timeout.
             # Keep its durable artifacts and observed evidence visible to the run.
-            return {**result, "success": False, "outcome": "unknown", "retryable": False}
+            receipt = {**result, "success": False, "outcome": "unknown", "retryable": False}
+            if "reconciliation_evidence" not in receipt:
+                receipt["reconciliation_evidence"] = dict(result)
+            return receipt
         if (
             completed_in_time
             and isinstance(result, dict)

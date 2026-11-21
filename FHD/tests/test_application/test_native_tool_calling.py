@@ -426,16 +426,20 @@ def test_catalog_omits_only_duplicate_required_annotation(monkeypatch):
     prompt = {"tool_registry": _tool_specs(registry)}
     _compact_tool_registry(prompt)
     actions = _expanded_tool_specs(prompt)[0]["actions"]
+    # #3433: omit required_params only when they already match JSON Schema required.
     assert "required_params" not in actions[0]
     assert actions[1]["required_params"] == ["rows", "warehouse_id"]
+    # #3423: planner catalog uses slim input schema and omits output_schema.
     for action in actions:
-        for field in ("input_schema", "output_schema"):
-            assert action[field] == original_schema
-            validator = Draft202012Validator(action[field])
-            assert validator.is_valid({"rows": [{"quantity": 1}], "warehouse_name": "主仓"})
-            assert not validator.is_valid({"rows": [{}], "warehouse_name": "主仓"})
-            assert not validator.is_valid({"rows": [{"quantity": 0}], "warehouse_id": 1})
-            assert not validator.is_valid({"rows": [{"quantity": 1}]})
+        assert "output_schema" not in action
+        slim = action["input_schema"]
+        assert slim["type"] == "object"
+        assert slim["required"] == ["rows"]
+        assert set(slim["properties"]) == {"rows", "warehouse_id", "warehouse_name"}
+        assert slim["properties"]["rows"]["type"] == "array"
+        assert slim["properties"]["warehouse_id"] == {"type": "integer"}
+        assert slim["properties"]["warehouse_name"]["type"] == "string"
+        assert "$defs" not in slim and "additionalProperties" not in slim
     assert contract.input_schema == contract.output_schema == original_schema
 
 

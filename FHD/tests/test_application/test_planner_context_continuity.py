@@ -337,8 +337,15 @@ async def test_platform_alias_full_catalog_reaches_original_provider(monkeypatch
         "get_context_window_manager",
         lambda: windows.ContextWindowManager(token_budget=8192),
     )
-    with pytest.raises(windows.ContextWindowExceeded):
-        await gateway._prepare_model_messages(provider, {}, messages, 4096, extra)
+    tight_context = {}
+    try:
+        await gateway._prepare_model_messages(provider, tight_context, messages, 4096, extra)
+    except windows.ContextWindowExceeded:
+        pass
+    else:
+        # #3423 slim + catalog trim may fit the 8192 cap; still require an explicit trim,
+        # never a silent drop of the overflow path.
+        assert tight_context.get("_context_budget", {}).get("tool_catalog_trimmed") is True
     assert not provider.requests and not provider.summaries
 
     monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
