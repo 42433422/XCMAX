@@ -495,14 +495,14 @@
     },
     "FHD/frontend/src/views/ChatView.vue": {
       "base_file": "FHD/frontend/src/views/ChatView.vue",
-      "base_blob": "bb02182431e151888eb1344758a0218703ecd21c",
-      "head_blob": "49270b7be29399e04f9c060e3e933ba98b0f170f",
-      "before_lines": 1010,
-      "after_lines": 1086,
-      "reason": "接入通用附件选择、打开原任务和撤回确认，让用户能从开放式执行链回到审批与后台处理回执。 Add image generation to the existing chat composer and persist unresolved request keys across restarts.",
-      "boundary": "继续按当前会话和任务编号路由。撤回等待期间禁止重复提交，业务撤回和权限仍由服务端完成。 Keys are bound to the authenticated owner, Mod, conversation and prompt digest; only confirmed outcomes remove them.",
-      "validation": "验证范围包括拖放附件、原任务导航、会话恢复、撤回后提示和发送进入等待。待远端 CI 与桌面交互验收。 本地 925 项前端测试与构建类型检查通过。 Chat and storage tests cover scope changes and reopening; frontend type checking passed. Exact-head CI and production wallet readback remain required. 本次整合保留本地工作区与多模态生图入口，95 项多模态及交互前端回归通过。",
-      "follow_up": "模板验收后继续使用统一附件选择和会话状态模块，不在页面重新实现上传权限与步骤呈现。 Architecture review and installed desktop restart and billing verification remain outstanding.",
+      "base_blob": "49270b7be29399e04f9c060e3e933ba98b0f170f",
+      "head_blob": "86a80ede309a6cef253add73bf1bd5491f14b611",
+      "before_lines": 1086,
+      "after_lines": 1101,
+      "reason": "管理端手机聊天增加任务与会话面板入口，将原面板切换为窄屏抽屉，并在页面停用时关闭抽屉；页面净增15行用于模板接线及开关状态。",
+      "boundary": "沿用原ChatSidePanel、断点状态、会话与任务事件链；抽屉实现归属ChatSidePanel，响应式规则归属chat.css，不在ChatView复制任务处理或新增数据加载。",
+      "validation": "9个相关Vitest文件239项测试、严格vue-tsc和管理端生产构建通过。真实ElDrawer验证单实例与事件转发；手机Playwright回归已接入frontend-e2e，本地Chromium因Unix socket权限阻断，远端CI和真机键盘验收仍待完成。",
+      "follow_up": "@42433422 在PR中审查这15行的页面接线职责与测试证据，并复核手机导航、任务抽屉及横竖屏输入区；本次复用既有组件，不为行数拆分同职责代码。本记录是审查请求，不代表已获人工架构批准。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/views/PersyKnowledgeView.vue": {
