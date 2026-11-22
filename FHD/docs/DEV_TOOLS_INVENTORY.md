@@ -56,7 +56,7 @@
 | verify_no_legacy_shims.py | `scripts/dev/verify_no_legacy_shims.py` | verify | no | stdlib |
 | verify_shipment_excel_elt_closed_loop.py | `scripts/dev/verify_shipment_excel_elt_closed_loop.py` | verify | no | stdlib |
 | verify_surface_audit_demo_market.py | `scripts/dev/verify_surface_audit_demo_market.py` | verify | no | stdlib |
-| verify_task_holdout_evidence.py | `scripts/dev/verify_task_holdout_evidence.py` | verify | no | stdlib |
+| verify_task_benchmark_evidence.py | `scripts/dev/verify_task_benchmark_evidence.py` | verify | no | stdlib |
 | verify_version_anchors.py | `scripts/dev/verify_version_anchors.py` | verify | yes | stdlib |
 | version_sync.py | `scripts/dev/version_sync.py` | normative | yes | stdlib |
 | validate_evidence.py | `scripts/loadtest/validate_evidence.py` | guard | no | stdlib |

@@ -423,6 +423,84 @@ def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_emplo
     assert entry.invocation.call_count == 1
 
 
+@pytest.mark.parametrize("code", ["timeout", "upstream_unavailable", "rate_limited"])
+@pytest.mark.parametrize(
+    "marker,status",
+    [
+        ({"retryable": False}, "failed"),
+        ({"outcome": "unknown"}, "unknown"),
+        ({"reconciliation_required": True}, "unknown"),
+    ],
+)
+def test_admin_employee_explicit_no_retry_preserves_original_effect(
+    admin_employee, monkeypatch, code, marker, status
+):
+    entry = admin_employee
+    entry.state.output = {
+        "success": False,
+        "error": "original invocation refused replay",
+        "error_code": code,
+        **marker,
+    }
+    monkeypatch.setattr(employee_run.time, "sleep", lambda _: None)
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        repeated = client.post("/employees/clerk/execute", json=entry.body).json()
+        read = client.get(
+            "/employees/clerk/runs", params={"idempotency_key": "stable-request"}
+        ).json()
+    assert entry.invocation.call_count == 1
+    assert first["run_id"] == repeated["run_id"] == read["run_id"]
+    assert first["attempts"] == read["attempts"] == 1
+    assert not first["success"] and not repeated["success"] and not read["success"]
+    assert read["retryable"] is False
+    with entry.factory() as db:
+        row = db.query(EmployeeRunLog).one()
+        assert row.status == status and row.attempts == 1
+        assert json.loads(row.output_json) == read["data"]
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
+
+
+@pytest.mark.parametrize("code", ["timeout", "upstream_unavailable", "rate_limited"])
+def test_admin_employee_safe_retry_reuses_original_run_without_replaying_effect(
+    admin_employee, monkeypatch, code
+):
+    entry = admin_employee
+    dispatch = entry.invocation.side_effect
+
+    def fail_before_dispatch(*args, **kwargs):
+        if entry.invocation.call_count < 3:
+            return {
+                "success": False,
+                "error": "temporarily unavailable before dispatch",
+                "error_code": code,
+                "retryable": True,
+                "execution_status": "not_started",
+            }
+        return dispatch(*args, **kwargs)
+
+    entry.invocation.side_effect = fail_before_dispatch
+    monkeypatch.setattr(employee_run.time, "sleep", lambda _: None)
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        repeated = client.post("/employees/clerk/execute", json=entry.body).json()
+    assert entry.invocation.call_count == 3
+    assert first["run_id"] == repeated["run_id"]
+    assert first["attempts"] == repeated["attempts"] == 3
+    # A completed local execution remains unverified until independent readback.
+    assert not first["success"] and first["execution_state"] == "unknown"
+    with entry.factory() as db:
+        row = db.query(EmployeeRunLog).one()
+        assert row.status == "success" and row.attempts == 3 and row.verified == 0
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
+
+
 def test_admin_read_is_owner_tenant_mod_scoped_and_runtime_input_is_untrusted(
     admin_employee, trusted_actor
 ):
