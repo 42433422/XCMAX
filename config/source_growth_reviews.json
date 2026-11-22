@@ -687,14 +687,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
-      "base_blob": "f449f5781af352aabd6eb54d5abb1c29e79e4685",
-      "head_blob": "a4eb93d515424c689c1c86717f13b6776794306c",
-      "before_lines": 1534,
-      "after_lines": 1549,
-      "reason": "审查请求（不代表批准）：将LiteLLM已选模型的公开输入、输出和总窗口能力沿原默认路由响应传到桌面，消除只传别名导致错误回落16384的断点。",
-      "boundary": "复用原账号目录与路由签名，公开能力限于数值、模型身份和来源；保留BYOK、平台计费、原生流式回执重放与原审批边界，不添加另一套模型路由。",
-      "validation": "服务端6个相关测试文件178项通过且无跳过，包含实际LiteLLM1.109.3能力读取、同名别名隔离与多部署共同限制；Black、isort、flake8及定向类型检查通过。完整CI和架构审查待完成，本记录不是批准。",
-      "follow_up": "由维护者复核公开能力投影与15行净增长，部署后确认当前网关别名实际返回能力；容量未知继续报告来源，不猜测窗口或替换计费模型。",
+      "base_blob": "a4eb93d515424c689c1c86717f13b6776794306c",
+      "head_blob": "b9b56e8d0758b09c3789d45e76d59a7f51c8d802",
+      "before_lines": 1549,
+      "after_lines": 1565,
+      "reason": "审查请求（不代表批准）：在平台默认模型路由上兼容账户历史非BYOK偏好失效的回落，同时修复本轮发现的BYOK缺用户自有密钥时错误降级为平台收费路由。相对当前main净增16行。",
+      "boundary": "沿用原凭据解析、账户所有权及route_token签名；已保存的BYOK模式必须有user_override密钥，否则400 NO_BYOK_CHAT_MODEL，绝不因偏好失效自动使用平台计费。显式请求仍校验权限和聊天模型；历史非BYOK回退与旧显式恢复测试存在合同冲突，须在合入前确认并闭合。",
+      "validation": "本轮逐行核对当前main blob与候选blob、1549至1565行；上一HEAD MODstore测试4952通过、2失败，其中BYOK模式误回平台已修复代码分支，历史ASR偏好与自动回退的语义冲突仍待解决。最终HEAD完整CI与收费边界回归未通过前不得计PASS；该记录不是人工批准。",
+      "follow_up": "维护者需确认历史失效偏好是否允许自动选择平台付费模型，核验BYOK撤权/无密钥/跨用户以及ASR非聊天模型回退，保留完整安全和发布门禁；该16行增长需独立人工架构审查，不继承旧15行请求的批准。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py": {
