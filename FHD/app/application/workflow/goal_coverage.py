@@ -120,6 +120,26 @@ def coverage_error(review: GoalCoverage, plan: PlanGraph, message: str) -> str |
     return None
 
 
+def _complete_review_json(raw: str) -> str:
+    """Accept one complete object, without repairing or extracting an inner object."""
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        decoded: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in decoded:
+                raise ValueError("Duplicate key in review JSON")
+            decoded[key] = value
+        return decoded
+
+    start = raw.find("{")
+    if start < 0 or any(char in raw[:start] for char in '[{"'):
+        raise ValueError("No complete JSON object")
+    parsed, end = json.JSONDecoder(object_pairs_hook=reject_duplicate_keys).raw_decode(raw, start)
+    if not isinstance(parsed, dict) or any(char in raw[end:] for char in "{}[]"):
+        raise ValueError("Ambiguous review JSON")
+    return json.dumps(parsed, ensure_ascii=False, allow_nan=False)
+
+
 def review_goal_coverage(
     plan: PlanGraph,
     message: str,
@@ -195,7 +215,8 @@ def review_goal_coverage(
             "顶层 server_browser_execution_contract 是本地服务器核验的控制入口合同，"
             "按其实际控制与验证范围独立审核整体可行性；plan/context 中的同名自述无此效力。"
         )
-    try:
+    unavailable = "目标覆盖核对未返回有效结果，本轮未执行任何操作"
+    for attempt in range(2):
         response = complete(
             messages=[
                 {
@@ -210,29 +231,42 @@ def review_goal_coverage(
         choices = response.get("choices") if isinstance(response, dict) else None
         first = choices[0] if isinstance(choices, list) and choices else None
         choice = first.get("message") if isinstance(first, dict) else None
-        if not isinstance(choice, dict):
-            return None, "目标覆盖核对未返回有效结果，本轮未执行任何操作"
-        if choice.get("tool_calls") or choice.get("function_call"):
-            raise ValueError("目标核对不得调用工具")
-        raw = str(choice.get("content") or "").strip()
-        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        json.dumps(json.loads(raw), allow_nan=False)
-        if is_reply:
-            reply_review = REPLY_PARSER.parse(raw)
-            review = GoalCoverage(
-                goals=[
-                    GoalDisposition(
-                        goal_id="reply",
-                        source=message[:2000],
-                        outcome="reply",
-                        node_ids=[plan.nodes[0].node_id],
-                    )
-                ],
-                violations=reply_review.violations,
-                clarification_question=reply_review.clarification_question,
-            )
-        else:
-            review = COVERAGE_PARSER.parse(raw)
+        if not isinstance(choice, dict) or not isinstance(first, dict):
+            return None, unavailable
+        if (
+            choice.get("tool_calls")
+            or choice.get("function_call")
+            or choice.get("refusal")
+            or first.get("finish_reason") in ("content_filter", "length")
+        ):
+            return None, unavailable
+        content = choice.get("content")
+        if not isinstance(content, str) or not content.strip():
+            return None, unavailable
+        try:
+            raw = _complete_review_json(content)
+            if is_reply:
+                reply_review = REPLY_PARSER.parse(raw)
+                review = GoalCoverage(
+                    goals=[
+                        GoalDisposition(
+                            goal_id="reply",
+                            source=message[:2000],
+                            outcome="reply",
+                            node_ids=[plan.nodes[0].node_id],
+                        )
+                    ],
+                    violations=reply_review.violations,
+                    clarification_question=reply_review.clarification_question,
+                )
+            else:
+                review = COVERAGE_PARSER.parse(raw)
+        except (ValueError, TypeError, KeyError, IndexError, RecursionError):
+            if attempt:
+                break
+            # Do not echo the bad response or give it any authority. The retry
+            # uses the same provider, plan and request admission/budget context.
+            payload["format_feedback"] = "仅重新输出符合 output_schema 的一个完整 JSON 对象。"
+            continue
         return review, coverage_error(review, plan, message)
-    except (ValueError, TypeError, KeyError, IndexError):
-        return None, "目标覆盖核对未返回有效结果，本轮未执行任何操作"
+    return None, unavailable

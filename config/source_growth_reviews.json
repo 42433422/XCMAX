@@ -396,6 +396,18 @@
       "boundary": "仍使用原repository和事务/锁，不建第二份内容账本；验证阶段不解析重新入库，不把mock文件路径当作PDF内容证明。",
       "validation": "数据集真实入库/回滚、组件边界、队列rebuild/cancel及HTTP可信身份专项通过；生命周期最终43项、完整mypy通过。",
       "follow_up": "精确base为main@d5184dad4897a30ec6b010264ad4cd1269c00a8a，blob与行数由source_growth_review.py重算。由@42433422核对本次薄适配及验证证据；本请求不替代架构审批，不纳入原明确排除的来源或draft。"
+    },
+    "FHD/frontend/src/views/ChatView.vue": {
+      "base_file": "FHD/frontend/src/views/ChatView.vue",
+      "base_blob": "a40988dab3daffb819bdf2c9c3bdf7799d7dd90b",
+      "head_blob": "6f4c6461ec3b24f9df424949ca2f29015d009ec0",
+      "before_lines": 1021,
+      "after_lines": 1036,
+      "reason": "管理端手机聊天接通原任务与历史抽屉的窄屏入口，在停用时关闭；页面增量为模板与显示状态。",
+      "boundary": "复用 ChatSidePanel、原会话和任务事件。抽屉内部留在现有组件，样式留在 chat.css；不增加数据访问或权限。",
+      "validation": "锁定 npm 依赖；Vitest 三文件 70 项通过。两项 Chromium E2E 因容器拒绝 Unix socket 未进入断言，需精确远端 CI 和真机软键盘确认。",
+      "follow_up": "由仓库维护者核对页面职责和实测手机回归。本条仅申请架构审查，不代表获批。",
+      "review_owner": "@42433422"
     }
   }
 }

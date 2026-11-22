@@ -195,4 +195,11 @@ function onProactiveChange(event: Event) {
   color: var(--xc-color-primary, #0d47a1);
   background: rgba(13, 71, 161, 0.08);
 }
+
+@media (max-width: 768px) {
+  .input-toolbar { flex-wrap: nowrap; overflow-x: auto; gap: 6px; }
+  .input-toolbar > * { flex-shrink: 0; white-space: nowrap; }
+  .input-toolbar .toolbar-btn, .input-toolbar label { min-height: 44px; }
+  .approval-mode__choice { min-height: 44px; }
+}
 </style>
