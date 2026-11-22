@@ -12,7 +12,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 CODEX_VERSION = "0.171.0"
@@ -21,11 +21,21 @@ QUALIFICATION_CHECKS = (
     "multi_turn_tools",
     "openai_network_denied",
     "business_receipt_verified",
+    # These require observed upstream evidence, not merely a pinned request.model.
+    "upstream_failover_disabled",
+    "response_model_identity",
 )
 
 
 class RuntimePolicyError(ValueError):
     """A configured runtime is unavailable or has not been qualified."""
+
+
+class _DefaultResponseModel(str):
+    """Distinguish an omitted model binding from an explicitly invalid empty one."""
+
+
+_DEFAULT_RESPONSE_MODEL = _DefaultResponseModel()
 
 
 def _positive(value: Any, name: str, maximum: int) -> int:
@@ -65,6 +75,9 @@ class ModelRoute:
     api_key_env: str = field(default="", repr=False)
     max_model_calls: int = 24
     max_request_bytes: int = 4_194_304
+    response_model: str = _DEFAULT_RESPONSE_MODEL
+    failover_policy: Literal["disabled"] = "disabled"
+    gateway_kind: Literal["responses", "litellm"] = "responses"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "base_url", independent_gateway_url(self.base_url))
@@ -73,6 +86,20 @@ class ModelRoute:
             for value in (self.model, self.provider_id, self.upstream_vendor)
         ) or not isinstance(self.api_key_env, str):
             raise RuntimePolicyError("An explicit model, provider and upstream vendor are required")
+        if self.response_model is _DEFAULT_RESPONSE_MODEL:
+            object.__setattr__(self, "response_model", self.model)
+        if (
+            type(self.response_model) is not str
+            or not self.response_model
+            or any(
+                char.isspace() or ord(char) < 32 or ord(char) == 127 for char in self.response_model
+            )
+        ):
+            raise RuntimePolicyError("response_model must be one exact nonempty model identity")
+        if type(self.failover_policy) is not str or self.failover_policy != "disabled":
+            raise RuntimePolicyError("Runtime upstream failover must be disabled")
+        if type(self.gateway_kind) is not str or self.gateway_kind not in {"responses", "litellm"}:
+            raise RuntimePolicyError("gateway_kind must be responses or litellm")
         if self.upstream_vendor.strip().lower() in {"openai", "azure-openai", "azure_openai"}:
             raise RuntimePolicyError("The independent runtime cannot require an OpenAI model")
         for name, maximum in (
@@ -98,6 +125,9 @@ class ModelRoute:
                 "max_output_tokens",
                 "max_model_calls",
                 "max_request_bytes",
+                "response_model",
+                "failover_policy",
+                "gateway_kind",
             )
         }
         values["codex_version"] = CODEX_VERSION
@@ -118,6 +148,9 @@ class ModelRoute:
             "provider_id": self.provider_id,
             "route_identity": self.identity,
             "model": self.model,
+            "response_model": self.response_model,
+            "failover_policy": self.failover_policy,
+            "gateway_kind": self.gateway_kind,
             "upstream_vendor": self.upstream_vendor,
             "independent": True,
             "max_model_calls": self.max_model_calls,

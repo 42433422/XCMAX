@@ -25,6 +25,7 @@ from app.infrastructure.codex.policy import ModelRoute
 router = APIRouter()
 MODEL_PATH = "/api/agent-runtime/codex/responses"
 _ZERO_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+_TERMINAL_STATES = frozenset({"completed", "incomplete", "failed"})
 # 0.171 registers these local helper functions even when no business permission
 # was granted to them. Keep the model's catalog limited to the bound MCP bridge.
 # Unknown functions still fail admission; this list is tied to the pinned CLI.
@@ -40,6 +41,12 @@ _LOCAL_HELPERS = frozenset(
         "update_goal",
     }
 )
+
+
+class ModelGatewayContractError(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def response_usage(response: dict[str, Any]) -> dict[str, int] | None:
@@ -123,8 +130,18 @@ def _validate_model_output(response: Any) -> None:
 
 
 def _prepare_body(body: Any, route: ModelRoute) -> dict[str, Any]:
+    from openai.types.responses.response_create_params import ResponseCreateParamsBase
+
     if not isinstance(body, dict) or body.get("model", route.model) != route.model:
         raise HTTPException(409, "The model route is pinned to this task")
+    body = dict(body)
+    # Pinned CLI 0.171 sends its own trace metadata; it is not a Responses
+    # provider option or an authorization source. Keep it out of upstream I/O.
+    body.pop("client_metadata", None)
+    # Reuse the installed SDK's Responses field contract. Provider-specific
+    # routing/fallback/retry controls belong to the qualified host, not the CLI.
+    if body.keys() - ResponseCreateParamsBase.__annotations__.keys() - {"stream"}:
+        raise HTTPException(400, "Unsupported Responses fields or provider routing controls")
     if body.get("background") or body.get("conversation") or body.get("previous_response_id"):
         raise HTTPException(400, "Remote conversation storage is not enabled")
     tools = _controlled_tools(body.get("tools", []))
@@ -137,6 +154,11 @@ def _prepare_body(body: Any, route: ModelRoute) -> dict[str, Any]:
         "max_output_tokens": maximum,
         "store": False,
         "tools": tools,
+        # Existing MODstore LiteLLM wire contract; these are not generic
+        # Responses fields and must never be sent to another gateway kind.
+        **(
+            {"num_retries": 0, "disable_fallbacks": True} if route.gateway_kind == "litellm" else {}
+        ),
     }
 
 
@@ -189,6 +211,8 @@ def _claim(
                 "state": "reserved",
                 "reserved_units": reserve,
                 "model": route.model,
+                "expected_response_model": route.response_model,
+                "gateway_kind": route.gateway_kind,
                 "provider_id": route.provider_id,
                 "request_group": request_group or request_id,
                 "attempt": attempt,
@@ -234,14 +258,21 @@ def _finish(
             LLMCall(
                 call_id=request_id,
                 provider_id=call["provider_id"],
-                model=call["model"],
+                model=call.get("observed_model") or call["model"],
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
                 total_tokens=usage["total_tokens"],
                 cost_units=settled["cost_units"],
                 billing_status=settled.get("billing_status", ""),
                 status="completed" if state == "completed" else "failed",
-                metadata={"usage_key": usage_key, "source": "codex.model_gateway"},
+                metadata={
+                    "usage_key": usage_key,
+                    "source": "codex.model_gateway",
+                    "requested_model": call["model"],
+                    "observed_model": call.get("observed_model"),
+                    "model_identity_verified": call.get("model_identity_verified") is True,
+                    "gateway_attempts_verified": call.get("gateway_attempts_verified") is True,
+                },
             )
         )
         run.metadata["ai_cost_units_total"] = (
@@ -337,6 +368,8 @@ async def forward_responses(request: Request):
             )
             if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 429:
                 details.update(outcome="not_started", retryable=True)
+            if isinstance(error, ModelGatewayContractError):
+                details.update(failure_kind=error.code, failure_reason=str(error), retryable=False)
 
             def record(run: Any, metadata: dict[str, Any]) -> None:
                 call = metadata.get("model_requests", {}).get(request_id)
@@ -348,6 +381,47 @@ async def forward_responses(request: Request):
                 run.add_event("runtime.model.failure", details["failure_reason"], details)
 
             await anyio.to_thread.run_sync(lambda: store.update(binding.run_id, record))
+
+        async def observe_identity(response: Any) -> None:
+            if not isinstance(response, dict):
+                raise ModelGatewayContractError(
+                    "model_identity_missing", "Gateway response identity is missing"
+                )
+            raw = response.get("model")
+            observed = (
+                raw if isinstance(raw, str) and 0 < len(raw) <= 256 and raw.isprintable() else None
+            )
+            matches = observed == route.response_model
+
+            def record(run: Any, metadata: dict[str, Any]) -> None:
+                call = metadata["model_requests"][request_id]
+                call.update(observed_model=observed, model_identity_verified=matches)
+
+            await anyio.to_thread.run_sync(lambda: store.update(binding.run_id, record))
+            if response.get("fallback_used") or response.get("_fallback_used"):
+                raise ModelGatewayContractError(
+                    "gateway_attempts_unverified", "Gateway reported an unauthorized fallback"
+                )
+            if not matches:
+                # A complete final response can have known usage despite a
+                # wrong model. Account for that actual attempt, reject all its
+                # output, and retain the observed identity in the same ledger.
+                usage = response_usage(response)
+                if response.get("status") in _TERMINAL_STATES and usage is not None:
+                    await anyio.to_thread.run_sync(
+                        lambda: _finish(
+                            store,
+                            binding.run_id,
+                            request_id,
+                            usage=usage,
+                            usage_key=usage_key,
+                            state="failed",
+                        )
+                    )
+                raise ModelGatewayContractError(
+                    "model_identity_mismatch",
+                    "Gateway returned a missing or unqualified model identity",
+                )
 
         for attempt in range(1, 4):
             attempt_started = time.monotonic()
@@ -423,6 +497,24 @@ async def forward_responses(request: Request):
                     ) from exc
                 await anyio.sleep(delay)
                 continue
+            if route.gateway_kind == "litellm":
+                verified = all(
+                    upstream.headers.get_list(name) == ["0"]
+                    for name in ("x-litellm-attempted-retries", "x-litellm-attempted-fallbacks")
+                )
+                await anyio.to_thread.run_sync(
+                    lambda: store.update(
+                        binding.run_id,
+                        lambda _run, metadata: metadata["model_requests"][request_id].update(
+                            gateway_attempts_verified=verified
+                        ),
+                    )
+                )
+                if not verified:
+                    raise ModelGatewayContractError(
+                        "gateway_attempts_unverified",
+                        "Gateway did not prove zero hidden retries and fallbacks",
+                    )
             if upstream.status_code < 300:
                 break
             slot_failure = httpx.HTTPStatusError(
@@ -469,7 +561,13 @@ async def forward_responses(request: Request):
         if not body.get("stream"):
             with anyio.fail_after(_remaining(binding)):
                 response = json.loads(await upstream.aread())
+            await observe_identity(response)
             _validate_model_output(response)
+            status = response.get("status")
+            if status not in _TERMINAL_STATES:
+                raise ModelGatewayContractError(
+                    "model_terminal_state_invalid", "Gateway response has no valid terminal state"
+                )
             usage = response_usage(response)
             await anyio.to_thread.run_sync(
                 lambda: _finish(
@@ -478,16 +576,34 @@ async def forward_responses(request: Request):
                     request_id,
                     usage=usage,
                     usage_key=usage_key,
+                    state="completed" if status == "completed" else "failed",
                 )
             )
             finished = True
             if usage is None:
                 raise HTTPException(502, "Gateway response omitted verified usage")
+            current = await anyio.to_thread.run_sync(
+                lambda: store.authenticate(token, audience="model")
+            )
+            _remaining(current)
+            if status != "completed":
+                error = ModelGatewayContractError(
+                    f"model_response_{status}", f"Gateway response ended as {status}"
+                )
+                await record_failure(error)
+                if any(item.get("type") == "function_call" for item in response.get("output", [])):
+                    raise error
             return JSONResponse(response)
 
         async def events():
             completed = False
+            terminal = False
             failure = None
+            identity_verified = False
+            output_visible = False
+            held: list[bytes] = []
+            held_bytes = 0
+            hold_tools = False
             try:
                 with anyio.fail_after(_remaining(binding)):
                     async for event in EventSource(upstream).aiter_sse():
@@ -497,11 +613,30 @@ async def forward_responses(request: Request):
                         if not isinstance(payload, dict):
                             raise ValueError("Invalid model event")
                         kind = payload.get("type", event.event)
+                        if "response" in payload:
+                            await observe_identity(payload["response"])
+                            identity_verified = True
+                        if not identity_verified:
+                            raise ModelGatewayContractError(
+                                "model_identity_missing",
+                                "Gateway streamed output before its model identity",
+                            )
                         if kind in {"response.output_item.added", "response.output_item.done"}:
                             _validate_output_item(payload.get("item"))
-                        if kind == "response.completed":
-                            _validate_model_output(payload.get("response"))
-                            usage = response_usage(payload.get("response") or {})
+                            if (payload.get("item") or {}).get("type") == "function_call":
+                                hold_tools = True
+                        if str(kind).startswith("response.function_call_arguments."):
+                            hold_tools = True
+                        if kind in {f"response.{status}" for status in _TERMINAL_STATES}:
+                            response = payload.get("response") or {}
+                            _validate_model_output(response)
+                            status = response.get("status")
+                            if kind != f"response.{status}":
+                                raise ModelGatewayContractError(
+                                    "model_terminal_state_invalid",
+                                    "Gateway terminal event does not match its response state",
+                                )
+                            usage = response_usage(response)
                             await anyio.to_thread.run_sync(
                                 lambda: _finish(
                                     store,
@@ -509,28 +644,74 @@ async def forward_responses(request: Request):
                                     request_id,
                                     usage=usage,
                                     usage_key=usage_key,
+                                    state="completed" if status == "completed" else "failed",
                                 )
                             )
                             if usage is None:
                                 raise ModelReservationError("Gateway stream omitted verified usage")
-                            completed = True
+                            terminal = True
+                            completed = status == "completed"
+                            if not completed:
+                                error = ModelGatewayContractError(
+                                    f"model_response_{status}",
+                                    f"Gateway response ended as {status}",
+                                )
+                                await record_failure(error, output_started=output_visible)
+                                if any(
+                                    item.get("type") == "function_call"
+                                    for item in response.get("output", [])
+                                ):
+                                    raise error
                         # Re-check token/session revocation before tool proposals become visible.
-                        if kind in {"response.output_item.done", "response.completed"}:
-                            await anyio.to_thread.run_sync(
+                        if kind == "response.output_item.done" or terminal:
+                            current = await anyio.to_thread.run_sync(
                                 lambda: store.authenticate(token, audience="model")
                             )
-                        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
+                            _remaining(current)
+                        frame = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
+                        if terminal and not completed:
+                            # Preserve the provider's known failure for bounded
+                            # recovery, without releasing any earlier proposal.
+                            output_visible = True
+                            yield frame
+                            break
+                        if hold_tools:
+                            # Keep order from the first tool proposal onward.
+                            # A final identity/usage drift must not arrive after
+                            # the runtime has already been given executable work.
+                            held_bytes += len(frame)
+                            if held_bytes > route.max_request_bytes:
+                                raise ModelGatewayContractError(
+                                    "model_tool_stream_too_large",
+                                    "Model tool stream exceeded its bounded buffer",
+                                )
+                            held.append(frame)
+                            if completed:
+                                output_visible = True
+                                for item_frame in held:
+                                    yield item_frame
+                        else:
+                            output_visible = True
+                            yield frame
                         if completed:
                             break
-                    if not completed:
+                    if not terminal:
                         raise ModelReservationError("Gateway stream ended without completion")
             except BOUNDARY_ERRORS as exc:
                 failure = exc
-                await record_failure(exc, output_started=True)
-                yield b'data: {"type":"error","error":{"message":"Model stream requires reconciliation"}}\n\n'
+                await record_failure(exc, output_started=output_visible)
+                error = {
+                    "code": getattr(exc, "code", "model_stream_error"),
+                    "message": (
+                        "Model stream output was rejected"
+                        if terminal
+                        else "Model stream requires reconciliation"
+                    ),
+                }
+                yield f"data: {json.dumps({'type': 'error', 'error': error})}\n\n".encode()
             finally:
                 with anyio.CancelScope(shield=True):
-                    if not completed:
+                    if not terminal:
                         await anyio.to_thread.run_sync(mark_unknown)
                     await upstream.aclose()
                     await client.aclose()

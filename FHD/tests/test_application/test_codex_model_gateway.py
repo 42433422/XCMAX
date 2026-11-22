@@ -1,7 +1,9 @@
 """Admission/settlement failures must stop provider I/O and future tool work."""
 
+import json
 import time
 from contextlib import contextmanager
+from dataclasses import replace
 from types import SimpleNamespace
 
 import httpx
@@ -71,6 +73,7 @@ def gateway(tmp_path, monkeypatch):
     store, calls = Store(route), []
     response = {
         "id": "resp_1",
+        "model": route.response_model,
         "status": "completed",
         "output": [],
         "usage": {"input_tokens": 1500, "output_tokens": 500, "total_tokens": 2000},
@@ -142,6 +145,11 @@ def test_missing_or_wrong_audience_never_contacts_provider(gateway):
         {"tools": [{"type": "web_search"}]},
         {"tools": [{"type": "function", "name": "shell"}]},
         {"previous_response_id": "another-tenants-response"},
+        {"allow_failover": True},
+        {"disable_fallbacks": False},
+        {"num_retries": 5},
+        {"extra_body": {"disable_fallbacks": False}},
+        {"provider": {"order": ["another-provider"]}},
     ],
 )
 def test_route_and_tools_cannot_be_changed_by_model(gateway, body):
@@ -244,6 +252,54 @@ def test_revocation_after_reservation_before_io_releases_unused_hold(gateway):
     assert not store.binding.metadata.get("model_reconciliation_required")
 
 
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("stop", ["revoked", "deadline"])
+def test_final_authority_and_deadline_fence_output_after_real_usage_settlement(
+    gateway, monkeypatch, stream, stop
+):
+    from app.infrastructure.codex.binding import CodexBindingError
+
+    client, store, calls, response, _app = gateway
+    response["output"] = [
+        {
+            "type": "function_call",
+            "name": "mcp__xcmax__execute_action",
+            "call_id": "stopped-before-release",
+            "arguments": "{}",
+        }
+    ]
+    authenticate = store.authenticate
+    settled = False
+
+    def current_authority(token, audience="mcp"):
+        if settled and stop == "revoked":
+            raise CodexBindingError("cancelled", "revoked while model response was pending")
+        return authenticate(token, audience)
+
+    def settle_then_stop(usage_key, usage):
+        nonlocal settled
+        receipt = settle_model_usage(usage_key, usage)
+        settled = True
+        if stop == "deadline":
+            store.binding.metadata["deadline_at"] = time.time() - 1
+        return receipt
+
+    store.authenticate = current_authority
+    monkeypatch.setattr(
+        "app.infrastructure.billing.model_reservation.settle_model_usage", settle_then_stop
+    )
+    received = post(client, stream=stream)
+    assert received.status_code == (200 if stream else 409 if stop == "revoked" else 408)
+    assert "stopped-before-release" not in received.text
+    assert settled and len(calls) == 1
+    row = next(iter(store.binding.metadata["model_requests"].values()))
+    assert row["state"] == "completed" and row["usage"]["total_tokens"] == 2000
+    assert store.run.metadata["reserved_cost_units"] == 0
+    assert not store.binding.metadata.get("model_reconciliation_required")
+    assert len(store.run.llm_calls) == 1 and store.run.llm_calls[0].total_tokens == 2000
+    assert ledger.get_model_wallet("71")["balance_units"] == 98
+
+
 def test_gateway_error_is_reported_to_existing_circuit_breaker(gateway, monkeypatch):
     client, _, _, _, app = gateway
     failures = []
@@ -344,6 +400,257 @@ def test_pinned_cli_helpers_are_not_advertised_to_the_model(gateway):
         == 200
     )
     assert json.loads(calls[0].content)["tools"] == [bridge]
+
+
+@pytest.mark.parametrize("model", [None, "unexpected-fallback-model"])
+@pytest.mark.parametrize("stream", [False, True])
+def test_wrong_or_missing_response_model_cannot_drive_tools(gateway, model, stream):
+    client, store, calls, response, _app = gateway
+    response["model"] = model
+    response["output"] = [
+        {
+            "type": "function_call",
+            "name": "mcp__xcmax__execute_action",
+            "call_id": "never-visible",
+            "arguments": "{}",
+        }
+    ]
+    received = post(client, stream=stream)
+    assert received.status_code == (200 if stream else 502)
+    assert "never-visible" not in received.text
+    assert len(calls) == 1
+    attempt = next(iter(store.binding.metadata["model_requests"].values()))
+    assert attempt["state"] == "failed" and attempt["model_identity_verified"] is False
+    assert attempt["diagnostic"]["failure_kind"] == "model_identity_mismatch"
+    assert store.run.llm_calls[0].metadata["observed_model"] == model
+    assert ledger.get_model_wallet("71")["balance_units"] == 98
+
+
+def test_qualified_alias_records_actual_response_identity(gateway):
+    client, store, calls, response, app = gateway
+    route = replace(app.state.codex_model_route, response_model="local-agent-snapshot")
+    app.state.codex_model_route = route
+    store.binding.metadata["runtime_config"] = route.runtime_identity()
+    response["model"] = route.response_model
+    assert post(client).status_code == 200
+    wire = json.loads(calls[0].content)
+    assert wire["model"] == "local-agent"
+    assert not {"disable_fallbacks", "num_retries", "allow_failover"} & wire.keys()
+    assert store.run.llm_calls[0].model == "local-agent-snapshot"
+    assert store.run.llm_calls[0].metadata["requested_model"] == "local-agent"
+    assert store.run.llm_calls[0].metadata["model_identity_verified"] is True
+
+
+def test_pinned_cli_trace_metadata_is_not_forwarded_as_a_provider_option(gateway):
+    client, _store, calls, _response, _app = gateway
+    assert post(client, client_metadata={"private_trace": "host-only"}).status_code == 200
+    assert "client_metadata" not in json.loads(calls[0].content)
+    assert b"host-only" not in calls[0].content
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("proof", ["zero", "missing", "nonzero", "duplicate"])
+def test_litellm_controls_and_native_single_attempt_proof(gateway, stream, proof):
+    client, store, calls, response, app = gateway
+    route = replace(app.state.codex_model_route, gateway_kind="litellm")
+    app.state.codex_model_route = route
+    store.binding.metadata["runtime_config"] = route.runtime_identity()
+    response["output"] = [
+        {
+            "type": "function_call",
+            "name": "mcp__xcmax__request_input",
+            "call_id": "qualified-only",
+            "arguments": "{}",
+        }
+    ]
+
+    def handler(request):
+        calls.append(request)
+        body = json.loads(request.content)
+        assert body["num_retries"] == 0 and body["disable_fallbacks"] is True
+        assert "allow_failover" not in body and "extra_body" not in body
+        headers = (
+            []
+            if proof == "missing"
+            else [
+                ("x-litellm-attempted-retries", "0"),
+                ("x-litellm-attempted-fallbacks", "1" if proof == "nonzero" else "0"),
+            ]
+        )
+        if proof == "duplicate":
+            headers.append(("x-litellm-attempted-fallbacks", "0"))
+        if stream:
+            return httpx.Response(
+                200,
+                headers=[*headers, ("content-type", "text/event-stream")],
+                content="data: "
+                + json.dumps({"type": "response.completed", "response": response})
+                + "\n\n",
+            )
+        return httpx.Response(200, headers=headers, json=response)
+
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        **kwargs,
+    )
+    received = post(client, stream=stream)
+    assert len(calls) == 1
+    row = next(iter(store.binding.metadata["model_requests"].values()))
+    if proof == "zero":
+        assert received.status_code == 200 and "qualified-only" in received.text
+        assert row["state"] == "completed" and row["gateway_attempts_verified"] is True
+        assert ledger.get_model_wallet("71")["balance_units"] == 98
+    else:
+        assert received.status_code == 502 and "qualified-only" not in received.text
+        assert row["state"] == "unknown" and row["gateway_attempts_verified"] is False
+        assert row["diagnostic"]["failure_kind"] == "gateway_attempts_unverified"
+        assert ledger.get_model_wallet("71")["balance_units"] == 68
+        assert post(client).status_code == 409 and len(calls) == 1
+
+
+@pytest.mark.parametrize("first_identity", [None, "local-agent"])
+def test_stream_tool_frames_wait_for_final_model_and_usage_proof(gateway, first_identity):
+    client, store, calls, response, app = gateway
+    item = {
+        "type": "function_call",
+        "name": "mcp__xcmax__execute_action",
+        "call_id": "must-not-escape",
+        "arguments": "{}",
+    }
+    frames = []
+    if first_identity is not None:
+        frames.append(
+            {
+                "type": "response.created",
+                "response": {
+                    "id": response["id"],
+                    "model": first_identity,
+                    "status": "in_progress",
+                    "output": [],
+                },
+            }
+        )
+    frames.extend(
+        [
+            {"type": "response.output_item.added", "item": item},
+            {"type": "response.function_call_arguments.done", "arguments": "must-not-escape"},
+            {"type": "response.output_item.done", "item": item},
+            {
+                "type": "response.completed",
+                "response": {**response, "model": "fallback", "output": [item]},
+            },
+        ]
+    )
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content="".join("data: " + json.dumps(frame) + "\n\n" for frame in frames),
+        )
+
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        **kwargs,
+    )
+    received = post(client, stream=True)
+    assert received.status_code == 200 and "requires reconciliation" in received.text
+    assert "must-not-escape" not in received.text
+    assert len(calls) == 1
+    row = next(iter(store.binding.metadata["model_requests"].values()))
+    assert row["state"] == ("unknown" if first_identity is None else "failed")
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("terminal", ["incomplete", "failed"])
+@pytest.mark.parametrize("has_usage", [False, True])
+@pytest.mark.parametrize("terminal_has_tool", [False, True])
+def test_unsuccessful_terminal_settles_known_usage_and_never_releases_tools(
+    gateway, stream, terminal, has_usage, terminal_has_tool
+):
+    client, store, calls, response, app = gateway
+    item = {
+        "type": "function_call",
+        "name": "mcp__xcmax__execute_action",
+        "call_id": "failed-turn-proposal",
+        "arguments": "{}",
+    }
+    known_usage = dict(response["usage"])
+    response.update(status=terminal, output=[item] if terminal_has_tool else [])
+    if terminal == "incomplete":
+        response["incomplete_details"] = {"reason": "max_output_tokens"}
+    else:
+        response["error"] = {"code": "server_error", "message": "model generation failed"}
+    if not has_usage:
+        response.pop("usage")
+
+    def handler(request):
+        calls.append(request)
+        if not stream:
+            return httpx.Response(200, json=response)
+        frames = [
+            {
+                "type": "response.created",
+                "response": {
+                    "id": response["id"],
+                    "model": response["model"],
+                    "status": "in_progress",
+                    "output": [],
+                },
+            }
+        ]
+        if response["status"] != "completed":
+            frames.extend(
+                [
+                    {"type": "response.output_item.added", "item": item},
+                    {"type": "response.function_call_arguments.done", "arguments": "{}"},
+                    {"type": "response.output_item.done", "item": item},
+                ]
+            )
+        frames.append({"type": f"response.{response['status']}", "response": response})
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content="".join("data: " + json.dumps(frame) + "\n\n" for frame in frames),
+        )
+
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), **kwargs
+    )
+    received = post(client, stream=stream)
+    assert received.status_code == (200 if stream or has_usage and not terminal_has_tool else 502)
+    assert "failed-turn-proposal" not in received.text
+    assert len(calls) == 1
+    row = next(iter(store.binding.metadata["model_requests"].values()))
+    if not has_usage:
+        assert row["state"] == "unknown"
+        assert store.binding.metadata["model_reconciliation_required"] is True
+        assert ledger.get_model_wallet("71")["balance_units"] == 68
+        assert post(client, stream=stream).status_code == 409 and len(calls) == 1
+        return
+
+    assert row["state"] == "failed" and row["usage"]["total_tokens"] == 2000
+    assert not store.binding.metadata.get("model_reconciliation_required")
+    assert ledger.get_model_wallet("71")["balance_units"] == 98
+    assert store.run.metadata["reserved_cost_units"] == 0
+    assert len(store.run.llm_calls) == 1 and store.run.llm_calls[0].status == "failed"
+    if not terminal_has_tool:
+        if stream:
+            frames = [json.loads(line[6:]) for line in received.text.splitlines() if line]
+            assert frames[-1]["type"] == f"response.{terminal}"
+            assert frames[-1]["response"] == response
+        else:
+            assert received.json() == response
+
+    # A known failed attempt can be followed by a newly admitted request; no
+    # uncertain completion is silently retried or converted into a free call.
+    response.update(status="completed", output=[], usage=known_usage)
+    response.pop("incomplete_details", None)
+    response.pop("error", None)
+    assert post(client, stream=stream).status_code == 200 and len(calls) == 2
+    assert [call.status for call in store.run.llm_calls] == ["failed", "completed"]
+    assert ledger.get_model_wallet("71")["balance_units"] == 96
 
 
 @pytest.mark.parametrize("stream", [False, True])
