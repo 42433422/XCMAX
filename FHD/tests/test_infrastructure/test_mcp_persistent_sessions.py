@@ -524,3 +524,41 @@ def test_stateless_deadline_does_not_interrupt_sdk_shielded_cleanup():
         client._sync(shutdown, 0.02)
     assert finished.wait(timeout=2)
     assert cleaned.is_set()
+
+
+def test_stateless_timeout_stops_write_without_replay_and_finishes_cleanup(monkeypatch):
+    import anyio
+
+    dispatched = []
+    stopped, cleaned, finished = threading.Event(), threading.Event(), threading.Event()
+
+    async def write(tool, arguments):
+        dispatched.append((tool, arguments))
+        try:
+            await anyio.sleep_forever()
+        finally:
+            stopped.set()
+
+    async def connection(_config, action):
+        try:
+            return await action(SimpleNamespace(call_tool=write))
+        finally:
+            try:
+                with anyio.CancelScope(shield=True):
+                    await anyio.sleep(0.05)
+                    cleaned.set()
+            finally:
+                finished.set()
+
+    monkeypatch.setattr(client, "_with_session", connection)
+    result = client.call_tool(
+        McpServerConfig(name="bounded-write", command="unused", timeout_seconds=0.1),
+        "write",
+        {"receipt_id": "original-effect"},
+    )
+    assert result["success"] is False and result["error_code"] == "mcp_call_failed"
+    assert result["outcome"] == "unknown"
+    assert result["reconciliation_required"] is True and result["retryable"] is False
+    assert finished.wait(timeout=2)
+    assert stopped.is_set() and cleaned.is_set()
+    assert dispatched == [("write", {"receipt_id": "original-effect"})]

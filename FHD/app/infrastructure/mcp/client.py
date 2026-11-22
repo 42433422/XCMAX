@@ -81,12 +81,16 @@ def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) ->
         raise McpClientError("MCP 调用预算已耗尽", retryable=False)
 
     async def bounded() -> T:
+        from anyio import fail_after
+
         # The pool may have queued this call. Do not grant a fresh full timeout
         # when the worker eventually starts under the captured caller scope.
         remaining = remaining_invocation_seconds(timeout)
         if remaining <= 0:
             raise McpClientError("MCP 调用预算已耗尽", retryable=False)
-        async with asyncio.timeout(remaining):
+        # Cancel the operation without interrupting the SDK's shielded cleanup;
+        # the caller's future timeout still bounds its synchronous wait.
+        with fail_after(remaining):
             return await coro_factory()
 
     def run() -> T:

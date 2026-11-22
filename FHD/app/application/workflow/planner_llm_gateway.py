@@ -294,8 +294,8 @@ async def _prepare_model_messages(
             from app.utils import metrics
 
             metrics.context_window_overflow_total.labels(stage="tool_catalog_trimmed").inc()
-        except Exception:  # noqa: BLE001 - 指标失败不影响重试
-            pass
+        except (ImportError, OSError):
+            logger.debug("planner context overflow metric unavailable")
         diagnostics["message_tokens"] = estimate_messages_tokens(outbound)
         diagnostics["tool_catalog_trimmed"] = True
         try:
