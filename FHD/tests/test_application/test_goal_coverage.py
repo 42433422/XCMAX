@@ -190,9 +190,7 @@ def test_format_retry_budget_is_shared_across_replanned_candidates():
             _response(_review()),  # Must not be reached after the request's one retry.
         ]
     )
-    plan = _planner(completion).plan(
-        "owner", MESSAGE, get_workflow_tool_registry(), {}
-    )
+    plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
     assert plan.metadata["planning_rejected"]
     assert all(node.tool_id == "clarify" for node in plan.nodes)
     assert completion.call_count == 5
@@ -200,7 +198,8 @@ def test_format_retry_budget_is_shared_across_replanned_candidates():
         json.loads(call.kwargs["messages"][1]["content"])
         for call in completion.call_args_list
     ]
-    assert prompts[1]["task"] == prompts[2]["task"] == prompts[4]["task"] == "audit_goal_coverage"
+    for index in (1, 2, 4):
+        assert prompts[index]["task"] == "audit_goal_coverage"
     assert prompts[2]["format_feedback"]
     assert "format_feedback" not in prompts[4]
     assert prompts[3]["coverage_feedback"]["error"].startswith("漏掉")
