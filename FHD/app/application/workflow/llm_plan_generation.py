@@ -14,13 +14,11 @@ from app.application.workflow.clarification_selection import CLARIFICATION_PARSE
 from app.application.workflow.planner_prompt_profile import (
     BASE_RULES,
     ELT_IMPORT_RULE,
+    _slim_schema,
     attachment_import_manifest,
+    memory_digest as _memory_digest,
     select_rules_for_prompt,
     select_tools_for_prompt,
-    _slim_schema,
-)
-from app.application.workflow.planner_prompt_profile import (
-    memory_digest as _memory_digest,
 )
 from app.application.workflow.workflow_types import (
     Branch,
