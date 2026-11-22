@@ -252,6 +252,11 @@ def test_product_view_separates_recorded_gate_from_current_verification(monkeypa
         "_load_json",
         lambda path: snapshot if path == source else load_json(path),
     )
+    # Isolate the coverage-projection test from unrelated acceptance history.
+    # A shallow Actions checkout cannot resolve every historical evidence commit.
+    builder = product_lines_status._capability_builder()
+    monkeypatch.setattr(builder, "build", lambda: ({"stats": {}}, [], []))
+    monkeypatch.setattr(product_lines_status, "_capability_builder", lambda: builder)
     status = product_lines_status.build_status()
     coverage = status["coverage"]
     assert coverage["recorded_quality_gate"] == snapshot["quality_gate"]
@@ -260,3 +265,45 @@ def test_product_view_separates_recorded_gate_from_current_verification(monkeypa
     rendered = product_lines_status.render_doc(status)
     assert "原记录门禁：passed" in rendered and "本版验证：UNVERIFIED" in rendered
     assert "c" * 40 in rendered and "2026-07-25T11:34:00Z" in rendered
+
+def test_benchmark_marker_refresh_requires_regenerated_claimed_vs_actual(tmp_path, monkeypatch):
+    """Marker refresh must invalidate and then regenerate the derived SSOT."""
+    marker_path = tmp_path / "benchmark_run_mode.json"
+    output = tmp_path / "CLAIMED_VS_ACTUAL.md"
+    monkeypatch.setattr(gen_claimed_vs_actual, "METRICS_DIR", tmp_path)
+    monkeypatch.setattr(gen_claimed_vs_actual, "OUTPUT_DOC", output)
+    marker = {
+        "mode": "monitoring", "status": "UNVERIFIED", "llm_verified": False,
+        "sha": "a" * 40, "observed_at": "2026-11-22T12:00:00+08:00",
+    }
+    marker_path.write_text(json.dumps(marker), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["gen_claimed_vs_actual.py"])
+    assert gen_claimed_vs_actual.main() == 0
+    monkeypatch.setattr("sys.argv", ["gen_claimed_vs_actual.py", "--check"])
+    assert gen_claimed_vs_actual.main() == 0
+    marker.update(
+        mode="acceptance", status="VERIFIED", llm_verified=True,
+        sha="b" * 40, observed_at="2026-11-23T12:00:00+08:00",
+    )
+    marker_path.write_text(json.dumps(marker), encoding="utf-8")
+    assert gen_claimed_vs_actual.main() == 1  # stale doc must fail
+    monkeypatch.setattr("sys.argv", ["gen_claimed_vs_actual.py"])
+    assert gen_claimed_vs_actual.main() == 0
+    monkeypatch.setattr("sys.argv", ["gen_claimed_vs_actual.py", "--check"])
+    assert gen_claimed_vs_actual.main() == 0
+    doc = output.read_text(encoding="utf-8")
+    assert "b" * 40 in doc and marker["observed_at"] in doc
+    assert "本版未验证" in doc  # the mode marker is not acceptance evidence
+
+
+def test_benchmark_workflows_commit_regenerated_claimed_vs_actual():
+    """Both source and root mirrors must commit the derived doc with metrics."""
+    paths = (
+        FHD_ROOT / ".github/workflows/intent-benchmark.yml",
+        FHD_ROOT.parent / ".github/workflows/fhd-intent-benchmark.yml",
+    )
+    for path in paths:
+        content = path.read_text(encoding="utf-8")
+        assert content.count("python scripts/dev/gen_claimed_vs_actual.py\n") == 2
+        assert content.count("python scripts/dev/gen_claimed_vs_actual.py --check\n") == 2
+        assert content.count("git add metrics/ docs/CLAIMED_VS_ACTUAL.md") == 2

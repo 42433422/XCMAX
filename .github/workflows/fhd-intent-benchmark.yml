@@ -135,9 +135,12 @@ jobs:
           fi
           # #1859：运行模式标记必须随 metrics 提交（NOT_RUN/UNVERIFIED 可审计）
           cp test_reports/benchmark_run_mode.json metrics/benchmark_run_mode.json
+          # The benchmark marker also changes the derived public claims SSOT.
+          python scripts/dev/gen_claimed_vs_actual.py
+          python scripts/dev/gen_claimed_vs_actual.py --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/
+          git add metrics/ docs/CLAIMED_VS_ACTUAL.md
           if git diff --staged --quiet; then
             echo "No intent report changes"
             exit 0
@@ -296,9 +299,12 @@ jobs:
           for f in task_benchmark_report.json benchmark_run_mode.json llm_preflight_evidence.json; do
             [ -f "test_reports/$f" ] && cp "test_reports/$f" "metrics/$f"
           done
+          # The benchmark marker also changes the derived public claims SSOT.
+          python scripts/dev/gen_claimed_vs_actual.py
+          python scripts/dev/gen_claimed_vs_actual.py --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/
+          git add metrics/ docs/CLAIMED_VS_ACTUAL.md
           if git diff --staged --quiet; then
             echo "No acceptance report changes"
             exit 0
