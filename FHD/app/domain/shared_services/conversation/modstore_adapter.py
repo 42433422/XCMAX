@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio as asyncio
+import asyncio
 import hashlib as hashlib
 import json as json
 import logging
@@ -233,8 +233,9 @@ class ModstorePlatformAdapter:
         self, primary_provider: str, primary_model: str, connection: Connection | None = None
     ) -> list[tuple[str, str]]:
         connection = connection or self._connection()
-        if self._pinned_snapshot(connection, (primary_provider, primary_model)):
-            return [(primary_provider, primary_model)]
+        route = (primary_provider, primary_model)
+        if self._pinned_snapshot(connection, route):
+            return [route]
         cached = self._account_default
         return routing.FailoverDiscovery(
             connection,
@@ -243,7 +244,7 @@ class ModstorePlatformAdapter:
             {"provider": cached[1][0], "model": cached[1][1]}
             if cached is not None and cached[0] == connection
             else None,
-        ).candidates(primary_provider, primary_model)
+        ).candidates(*route)
 
     def _post_market_chat_sync(
         self,
