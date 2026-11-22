@@ -226,21 +226,27 @@ def test_runtime_context_override_and_foreign_principal_are_rejected(control_set
 
 
 @pytest.mark.parametrize(
-    "error_code,message",
+    "error_code,expected_code,message",
     [
         (
             "reconciliation_required",
+            "reconciliation_required",
             "原任务执行结果尚需核对，暂不能恢复或重试",
         ),
-        ("owner_changed", "任务身份或授权已变化，请确认当前账号与原任务的业务范围"),
-        ("identity_override", "续跑不能修改原任务的运行范围，请从原任务继续操作"),
-        ("run_inactive", "终态任务不能恢复；重新执行业务请提交新任务"),
-        ("binding_conflict", "任务操作未完成，请刷新原任务并核对状态、授权和执行结果"),
-        (None, "任务操作未完成，请刷新原任务并核对状态、授权和执行结果"),
+        ("owner_changed", "owner_changed", "任务身份或授权已变化，请确认当前账号与原任务的业务范围"),
+        ("identity_override", "identity_override", "续跑不能修改原任务的运行范围，请从原任务继续操作"),
+        ("run_inactive", "run_inactive", "终态任务不能恢复；重新执行业务请提交新任务"),
+        ("binding_conflict", "binding_conflict", "任务操作未完成，请刷新原任务并核对状态、授权和执行结果"),
+        (None, "runtime_control_denied", "任务操作未完成，请刷新原任务并核对状态、授权和执行结果"),
+        (
+            "traceback private internal details",
+            "runtime_control_denied",
+            "任务操作未完成，请刷新原任务并核对状态、授权和执行结果",
+        ),
     ],
 )
 def test_control_errors_keep_internal_details_out_of_http_responses(
-    control_setup, monkeypatch, caplog, error_code, message
+    control_setup, monkeypatch, caplog, error_code, expected_code, message
 ):
     setup = control_setup
     assert setup.client.post(f"/api/agent/runs/{setup.run.run_id}/pause").status_code == 200
@@ -260,7 +266,7 @@ def test_control_errors_keep_internal_details_out_of_http_responses(
     with caplog.at_level("WARNING", logger="app.fastapi_routes.domains.agent.route_support"):
         response = setup.client.post(f"/api/agent/runs/{setup.run.run_id}/resume", json={})
     assert response.status_code == 409
-    assert response.json()["error_code"] == (error_code or "runtime_control_denied")
+    assert response.json()["error_code"] == expected_code
     assert looked_up == [setup.run.run_id]
     for marker in _PRIVATE_CONTROL_MARKERS:
         assert marker not in response.text

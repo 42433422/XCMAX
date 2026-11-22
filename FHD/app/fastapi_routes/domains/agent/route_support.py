@@ -50,6 +50,39 @@ _CODEX_CONTROL_MESSAGES = {
     "run_inactive": "终态任务不能恢复；重新执行业务请提交新任务",
 }
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
+_CODEX_PUBLIC_CONTROL_CODES = {
+    "binding_conflict": "binding_conflict",
+    "binding_missing": "binding_missing",
+    "budget_exceeded": "budget_exceeded",
+    "call_conflict": "call_conflict",
+    "call_in_progress": "call_in_progress",
+    "call_limit": "call_limit",
+    "call_missing": "call_missing",
+    "conversation_changed": "conversation_changed",
+    "durable_storage_required": "durable_storage_required",
+    "evidence_mismatch": "evidence_mismatch",
+    "goal_changed": "goal_changed",
+    "goal_mismatch": "goal_mismatch",
+    "goal_required": "goal_required",
+    "identity_override": "identity_override",
+    "input_not_requested": "input_not_requested",
+    "invalid_call": "invalid_call",
+    "invalid_config": "invalid_config",
+    "invalid_cost": "invalid_cost",
+    "invalid_request": "invalid_request",
+    "invalid_thread": "invalid_thread",
+    "invalid_ttl": "invalid_ttl",
+    "owner_changed": "owner_changed",
+    "reconciliation_required": "reconciliation_required",
+    "resume_context_missing": "resume_context_missing",
+    "run_inactive": "run_inactive",
+    "runtime_budget_exhausted": "runtime_budget_exhausted",
+    "runtime_changed": "runtime_changed",
+    "scope_conflict": "scope_conflict",
+    "token_expired": "token_expired",
+    "token_invalid": "token_invalid",
+    "waiting_user": "waiting_user",
+}
 _TaskResult = TypeVar("_TaskResult", AgentRun, AgentTask)
 
 
@@ -649,7 +682,10 @@ def control_codex_run(
         logger.warning(
             "Codex run control denied: action=%s run_id=%s", action, run.run_id, exc_info=True
         )
-        error_code = getattr(exc, "code", "runtime_control_denied")
+        # Exception attributes can contain internal details; only static public codes cross HTTP.
+        error_code = _CODEX_PUBLIC_CONTROL_CODES.get(
+            getattr(exc, "code", None), "runtime_control_denied"
+        )
         return JSONResponse(
             {
                 "success": False,
