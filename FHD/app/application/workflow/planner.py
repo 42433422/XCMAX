@@ -345,6 +345,8 @@ class LLMWorkflowPlanner:
 
             # Review the final, repaired graph, never the planner's own claim of completeness.
             # One full replan is allowed before execution; the old graph is not resumed.
+            # Format-only retry is shared across the two candidates of this request.
+            format_retry_budget = [1]
             for attempt in range(2):
                 if question := _standalone_question(planned):
                     planned = _clarification_plan(plan_id, question)
@@ -352,7 +354,11 @@ class LLMWorkflowPlanner:
                 with model_rate_limit_scope(context), model_response_scope():
                     try:
                         review, error = review_goal_coverage(
-                            planned, message, context, self.complete_messages
+                            planned,
+                            message,
+                            context,
+                            self.complete_messages,
+                            format_retry_budget=format_retry_budget,
                         )
                     except RECOVERABLE_ERRORS:
                         review, error = None, "目标覆盖核对暂不可用，本轮未执行任何操作"

@@ -68,6 +68,18 @@ async function installAdminDisplayMocks(page: Page) {
       })
       return
     }
+    if (path === '/api/tutorial/v2/runs/current' || path === '/api/conversation/model-status' || path.startsWith('/api/conversations/')) {
+      const sessions = [{ session_id: 'mobile-layout-history', title: '手机适配历史会话', message_count: 2, last_message_at: '2026-11-22T02:00:00Z' }]
+      const body = path === '/api/tutorial/v2/runs/current' ? { success: true, data: null }
+        : path === '/api/conversation/model-status' ? { ok: true }
+          : path === '/api/conversations/sessions' ? { success: true, sessions }
+            : { success: true, id: path.split('/').pop(), durable: true, revision: 1, messages: [
+              { id: 1, role: 'user', content: '手机布局测试', time: '12:00' },
+              { id: 2, role: 'assistant', time: '12:01', content: `手机布局测试：${'https://example.test/long-value-'.repeat(12)}\n\n\`\`\`javascript\nconst value = "${'x'.repeat(250)}"\n\`\`\`\n\n|项目|值|\n|---|---|\n|长内容|${'y'.repeat(200)}|` },
+            ] }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+      return
+    }
     if (path.endsWith('/api/runtime/product-sku')) {
       await route.fulfill({
         status: 200,
@@ -511,4 +523,109 @@ test('founder dashboard keeps every evidence section in document flow', async ({
       )
     })
   }
+})
+
+test.describe('admin mobile shell and chat', () => {
+
+  async function openMobileChat(page: Page) {
+    await installAdminDisplayMocks(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+    // A fresh admin login opens the overview; enter chat through the real navigation.
+    await page.goto('/admin/xcmax-admin', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
+    await page.getByRole('button', { name: '打开管理端导航', exact: true }).click()
+    await page.locator('.mobile-sidebar-drawer [data-view="chat"]').click()
+    await expect(page.locator('#messageInput')).toBeVisible()
+    await expect(page.locator('.mobile-sidebar-drawer')).not.toBeVisible()
+  }
+
+  test('navigation and chat drawers remain reachable through real controls', async ({ page }) => {
+    test.setTimeout(120_000)
+    await openMobileChat(page)
+    const menu = page.getByRole('button', { name: '打开管理端导航', exact: true })
+    const navigation = page.locator('.mobile-sidebar-drawer')
+    await menu.click()
+    await expect(navigation).toBeVisible()
+    await expect(navigation.locator('.sidebar')).toBeVisible()
+    await expect(page.locator('.sidebar')).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await expect(navigation).not.toBeVisible()
+    await expect(menu).toBeFocused()
+    await menu.click()
+    await expect(navigation).toBeVisible()
+    await page.mouse.click(388, 420)
+    await expect(navigation).not.toBeVisible()
+    await menu.click()
+    await navigation.getByRole('button', { name: '系统设置', exact: true }).click()
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(navigation).not.toBeVisible()
+    await menu.click()
+    await navigation.locator('[data-view="chat"]').click()
+    await expect(page.locator('#messageInput')).toBeVisible()
+    await expect(navigation).not.toBeVisible()
+    await page.locator('#messageInput').fill('仅做布局验收，不发送')
+    const chatToggle = page.locator('.chat-panel-toggle')
+    const chatDrawer = page.locator('.chat-side-drawer')
+    await chatToggle.click()
+    await expect(chatDrawer).toBeVisible()
+    await expect(page.locator('#chat-side-panel')).toHaveCount(1)
+    await expect(chatDrawer.getByRole('tab')).toHaveCount(2)
+    await chatDrawer.getByRole('tab', { name: '对话', exact: true }).click()
+    const history = chatDrawer.locator('.conv-item-main').filter({ hasText: '手机适配历史会话' })
+    await expect(history).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(chatDrawer).not.toBeVisible()
+    await expect(page.locator('#messageInput')).toHaveValue('仅做布局验收，不发送')
+    await chatToggle.click()
+    await history.click()
+    await expect(chatDrawer).not.toBeVisible()
+    await menu.click()
+    await expect(navigation).toBeVisible()
+    await page.setViewportSize({ width: 1024, height: 768 })
+    await expect(navigation).not.toBeVisible()
+    await expect(page.locator('.sidebar-shell .sidebar')).toBeVisible()
+    await expect(page.locator('.sidebar')).toHaveCount(1)
+    await expect(chatToggle).not.toBeVisible()
+    await expect(page.locator('#chat-side-panel')).toBeVisible()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(menu).toBeVisible()
+    await expect(chatToggle).toBeVisible()
+    await expect(navigation).not.toBeVisible()
+    await expect(chatDrawer).not.toBeVisible()
+  })
+
+  test('messages and composer remain usable at mobile and desktop breakpoints', async ({ page }) => {
+    test.setTimeout(120_000)
+    await openMobileChat(page)
+    await expect(page.locator('.chat-messages')).toContainText('手机布局测试')
+    await page.locator('#messageInput').fill('只检查输入布局，不发送')
+    for (const viewport of [
+      { width: 320, height: 568 }, { width: 390, height: 844 }, { width: 430, height: 932 },
+      { width: 768, height: 1024 }, { width: 769, height: 1024 }, { width: 1023, height: 768 },
+      { width: 1024, height: 768 }, { width: 1440, height: 900 }, { width: 844, height: 390 },
+      { width: 390, height: 420 },
+    ]) {
+      await test.step(`${viewport.width}x${viewport.height}`, async () => {
+        await page.setViewportSize(viewport)
+        await expect.poll(() => page.evaluate(() => {
+          const input = document.querySelector<HTMLTextAreaElement>('#messageInput')!
+          const send = document.querySelector<HTMLElement>('.send-message-btn')!
+          const messages = document.querySelector<HTMLElement>('.chat-messages-shell')!
+          const inputBox = input.getBoundingClientRect(), sendBox = send.getBoundingClientRect(), messageBox = messages.getBoundingClientRect()
+          const visible = (box: DOMRect) => box.y >= 0 && box.bottom <= window.innerHeight + 1 && box.x >= 0 && box.right <= window.innerWidth + 1
+          return {
+            pageFits: document.documentElement.scrollWidth <= window.innerWidth + 1,
+            messagesReadable: messageBox.width >= 220 && messageBox.height >= 60,
+            composerFits: visible(inputBox) && visible(sendBox) && inputBox.width >= 200,
+            mobileInputFont: window.innerWidth > 768 || parseFloat(getComputedStyle(input).fontSize) >= 16,
+          }
+        })).toEqual({ pageFits: true, messagesReadable: true, composerFits: true, mobileInputFont: true })
+        await expect(page.locator('#messageInput')).toHaveValue('只检查输入布局，不发送')
+        if (viewport.width <= 768) await expect(page.getByRole('button', { name: '打开管理端导航', exact: true })).toBeVisible()
+        if (viewport.width <= 1023) await expect(page.locator('.chat-panel-toggle')).toBeVisible()
+        else await expect(page.locator('#chat-side-panel')).toBeVisible()
+      })
+    }
+  })
+
 })

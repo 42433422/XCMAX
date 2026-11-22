@@ -6,7 +6,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.application.workflow.goal_coverage import GoalCoverage, coverage_error
+from app.application.workflow.goal_coverage import (
+    GoalCoverage,
+    coverage_error,
+    review_goal_coverage,
+)
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.services.tools_execution.registry import get_workflow_tool_registry
@@ -164,11 +168,107 @@ def test_repeated_semantic_failure_is_bounded_and_never_returns_partial_nodes():
     "verdict", [None, _response({"goals": [], "violations": []}), _response({"approved": True})]
 )
 def test_missing_or_malformed_independent_review_fails_closed(verdict):
-    completion = Mock(side_effect=[_response(_plan_payload()), verdict])
+    expected_attempts = 1 if verdict is None else 2
+    completion = Mock(side_effect=[_response(_plan_payload()), *([verdict] * expected_attempts)])
     plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
     assert plan.metadata["planning_rejected"]
     assert "目标" in plan.metadata["rejection_reason"]
+    assert completion.call_count == 1 + expected_attempts
+
+
+def test_format_retry_budget_is_shared_across_replanned_candidates():
+    malformed = {"choices": [{"message": {"content": "{incomplete"}}]}
+    missing = _review()
+    missing["violations"] = ["漏掉查询 B2"]
+    completion = Mock(
+        side_effect=[
+            _response(_plan_payload(complete=False)),
+            malformed,
+            _response(missing),
+            _response(_plan_payload()),
+            malformed,
+            _response(_review()),  # Must not be reached after the request's one retry.
+        ]
+    )
+    plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
+    assert plan.metadata["planning_rejected"]
+    assert all(node.tool_id == "clarify" for node in plan.nodes)
+    assert completion.call_count == 5
+    prompts = [
+        json.loads(call.kwargs["messages"][1]["content"]) for call in completion.call_args_list
+    ]
+    for index in (1, 2, 4):
+        assert prompts[index]["task"] == "audit_goal_coverage"
+    assert prompts[2]["format_feedback"]
+    assert "format_feedback" not in prompts[4]
+    assert prompts[3]["coverage_feedback"]["error"].startswith("漏掉")
+
+
+def test_malformed_review_retries_the_same_request_without_reusing_raw_model_output():
+    bad = {"choices": [{"message": {"content": "private opaque diagnostic {broken"}}]}
+    corrected = _response(_review())
+    message = corrected["choices"][0]["message"]
+    message["content"] = f"核对结果如下：\n```json\n{message['content']}\n```"
+    completion = Mock(side_effect=[_response(_plan_payload()), bad, corrected])
+    plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
+    assert not plan.metadata.get("planning_rejected")
+    assert len(plan.nodes) == 2
+    first, second = [call.kwargs for call in completion.call_args_list[-2:]]
+    before, after = [json.loads(call["messages"][-1]["content"]) for call in (first, second)]
+    assert after.pop("format_feedback")
+    assert after == before
+    assert "private opaque diagnostic" not in str(second["messages"])
+
+
+@pytest.mark.parametrize(
+    "fields, reason",
+    [
+        ({"refusal": "deny"}, "stop"),
+        ({"tool_calls": [{"id": "unexpected"}]}, "stop"),
+        ({}, "length"),
+    ],
+)
+def test_refusal_tool_call_and_truncation_do_not_trigger_format_retry(fields, reason):
+    response = _response(_review())
+    response["choices"][0]["message"].update(fields)
+    response["choices"][0]["finish_reason"] = reason
+    completion = Mock(return_value=response)
+    assert review_goal_coverage(_graph(), MESSAGE, {}, completion)[0] is None
+    completion.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "wrapper",
+    [
+        lambda raw: raw + '\n{"violations":[]}',
+        lambda raw: "[" + raw + "]",
+        lambda raw: raw[:-1] + ', "violations":[]}',
+        lambda raw: '{"incomplete":' + raw,
+    ],
+)
+def test_ambiguous_or_incomplete_review_objects_are_not_salvaged(wrapper):
+    response = _response(_review())
+    message = response["choices"][0]["message"]
+    message["content"] = wrapper(message["content"])
+    completion = Mock(return_value=response)
+    assert review_goal_coverage(_graph(), MESSAGE, {}, completion)[0] is None
     assert completion.call_count == 2
+
+
+def test_valid_negative_verdict_is_not_replaced_by_later_positive_response():
+    rejected = _review()
+    rejected["violations"] = ["遗漏了原始目标"]
+    complete = Mock(side_effect=[_response(rejected), _response(_review())])
+    review, reason = review_goal_coverage(_graph(), MESSAGE, {}, complete)
+    assert review is not None and reason == "遗漏了原始目标"
+    complete.assert_called_once()
+
+
+def test_transport_timeout_propagates_without_format_retry():
+    completion = Mock(side_effect=TimeoutError("test timeout"))
+    with pytest.raises(TimeoutError):
+        review_goal_coverage(_graph(), MESSAGE, {}, completion)
+    completion.assert_called_once()
 
 
 @pytest.mark.parametrize("review_available", [False, True])
@@ -220,11 +320,21 @@ def test_business_reply_cannot_claim_unexecuted_work_completed():
     assert all(node.tool_id == "clarify" for node in plan.nodes)
 
 
-def test_admitted_graph_executes_in_existing_runtime_in_order_without_replay(monkeypatch, tmp_path):
+@pytest.mark.parametrize("malformed_review_first", [False, True])
+def test_admitted_graph_executes_in_existing_runtime_in_order_without_replay(
+    monkeypatch, tmp_path, malformed_review_first
+):
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 
-    completion = Mock(side_effect=[_response(_plan_payload()), _response(_review())])
+    malformed = [{"choices": [{"message": {"content": "{truncated"}}]}]
+    completion = Mock(
+        side_effect=[
+            _response(_plan_payload()),
+            *(malformed if malformed_review_first else []),
+            _response(_review()),
+        ]
+    )
     plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
     assert not plan.metadata.get("planning_rejected")
     # Isolate external I/O; retain real plan admission, graph, repository and tool executor.
