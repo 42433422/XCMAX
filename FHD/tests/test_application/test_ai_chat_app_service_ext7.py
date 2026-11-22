@@ -580,23 +580,36 @@ def _reply_completion(source):
 
 
 @pytest.mark.parametrize("event", ["received", "completed"])
-def test_neuro_failure_does_not_replace_model_or_bypass_attachment_authority(event):
-    completion = _reply_completion("说明工作方式")
-    svc = _active_model_service(completion)
-    with patch(
-        f"app.neuro_bus.application_neuro_bridge.neuro_notify_chat_{event}",
-        side_effect=RuntimeError("bus down"),
+def test_neuro_failure_does_not_replace_fixed_executor(event):
+    from app.infrastructure.codex.policy import RuntimeSettings
+
+    svc = _make_svc()
+    with (
+        patch(
+            f"app.neuro_bus.application_neuro_bridge.neuro_notify_chat_{event}",
+            side_effect=RuntimeError("bus down"),
+        ),
+        patch(
+            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+        ),
+        patch(
+            "app.application.agent_runtime.gateway.run_runtime_task",
+            return_value={
+                "ok": True,
+                "run_id": "parent",
+                "exit_status": "reply_completed",
+                "output": "已读取",
+            },
+        ) as execute,
+        patch.object(svc, "_persist_chat_turn"),
+        patch.object(svc, "_persist_recallable_chat_turn"),
     ):
         result = svc.process_chat("u1", "说明工作方式")
-        assert result["response"] == "已读取"
-        assert result["data"]["workflow_runtime"] == "xcagi-langgraph"
-        rejected = svc.process_chat("u1", "说明附件", context={"attachment_upload_ids": ["forged"]})
-        assert rejected["success"] is False
-        assert rejected["data"]["error_code"] == "attachment_reupload_required"
-    assert completion.call_count == 2
-    assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
-        "audit_goal_coverage"
-    )
+    assert result["response"] == "已读取"
+    assert result["runtime"] == "codex"
+    execute.assert_called_once()
+    assert execute.call_args.kwargs["admit_goal"] is True
+    svc.workflow_planner.plan.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -610,7 +623,7 @@ def test_neuro_failure_does_not_replace_model_or_bypass_attachment_authority(eve
     ],
 )
 @pytest.mark.parametrize("retry_limit,expected_attempts", [(1, 1), (2, 2), (99, 4)])
-def test_model_transport_error_is_fail_closed_without_old_chat_fallback(
+def test_preserved_planner_transport_error_is_fail_closed_without_old_chat_fallback(
     monkeypatch, error, retry_limit, expected_attempts
 ):
     monkeypatch.setenv("XCAGI_PLAN_MODEL_RETRIES", str(retry_limit))
@@ -627,7 +640,9 @@ def test_model_transport_error_is_fail_closed_without_old_chat_fallback(
     with patch(
         "app.infrastructure.llm.providers.registry.get_active_provider", return_value=provider
     ):
-        result = svc.process_chat("u1", "说明工作方式")
+        # The host planner is retained for goal compilation and historical task
+        # continuation. It is no longer the public new-chat execution entry.
+        result = svc._dispatch_model_selection("u1", "说明工作方式", None, {}, "说明工作方式")
     if isinstance(error, (ConnectionError, TimeoutError)):
         assert provider.chat_completion.await_count == expected_attempts
     else:
@@ -639,12 +654,16 @@ def test_model_transport_error_is_fail_closed_without_old_chat_fallback(
 
 
 @pytest.mark.parametrize("sheet_name", [None, "Sheet2"])
-def test_registered_upload_reaches_real_planner_without_implicit_import(owned, sheet_name):
+def test_registered_upload_reaches_preserved_planner_without_implicit_import(owned, sheet_name):
     context, _ = owned
     completion = _reply_completion("说明附件")
     svc = _active_model_service(completion)
-    result = svc.process_chat(
-        "u1", "说明附件", context=context, file_context={"sheet_name": sheet_name}
+    result = svc._dispatch_model_selection(
+        "u1",
+        "说明附件",
+        None,
+        {**context, "file_context": {"sheet_name": sheet_name}},
+        "说明附件",
     )
     assert result["success"] is True
     assert completion.call_count == 2

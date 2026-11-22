@@ -20,10 +20,39 @@ from app.utils.scalars import coerce_float as _coerce_float
 from app.utils.scalars import coerce_int as _coerce_int
 
 
+def requires_frozen_parameters(
+    run: AgentRun, runtime_context: dict[str, Any] | None, *, repository: Any = None
+) -> bool:
+    """Codex owns replanning; its child graph cannot mint a second model loop."""
+    contexts = (run.metadata.get("runtime_context") or {}, runtime_context or {})
+    if run.metadata.get("runtime_type") == "codex" or any(
+        context.get("source") == "codex_runtime" for context in contexts
+    ):
+        return True
+    parent_ids = {str(context.get("parent_run_id") or "") for context in contexts} - {""}
+    if not parent_ids:
+        return False
+    try:
+        if repository is None:
+            from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+
+            repository = get_agent_run_repository()
+        for parent_id in parent_ids:
+            parent = repository.get(parent_id)
+            if parent is None or parent.metadata.get("runtime_type") == "codex":
+                return True
+    except RECOVERABLE_ERRORS:
+        # Missing ancestry is never authority to change a persisted request.
+        return True
+    return False
+
+
 def is_llm_repair_enabled(
     run: AgentRun,
     runtime_context: dict[str, Any],
 ) -> bool:
+    if requires_frozen_parameters(run, runtime_context):
+        return False
     plan_metadata = _plan_metadata(run)
     for container in (plan_metadata, dict(runtime_context or {})):
         policy = container.get("repair_policy")

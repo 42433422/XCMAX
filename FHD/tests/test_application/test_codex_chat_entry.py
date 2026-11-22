@@ -1,4 +1,4 @@
-"""Chat rollout preserves native work and keeps continuation/approval identities."""
+"""Fixed chat admission preserves historical work and continuation identities."""
 
 import json
 from types import SimpleNamespace
@@ -18,7 +18,7 @@ def entry(monkeypatch):
     monkeypatch.setattr("app.application.agent_runtime.gateway.run_runtime_task", execute)
     service = SimpleNamespace(_pending_workflows={}, _hydrate_pending_workflow=Mock())
 
-    def invoke(context=None, engine="native"):
+    def invoke(context=None, engine="codex"):
         nonlocal selected
         selected = RuntimeSettings(engine=engine)
         return chat.try_runtime_chat(
@@ -32,11 +32,12 @@ def entry(monkeypatch):
     return invoke, execute, service
 
 
-def test_native_default_does_not_initialize_optional_runtime(entry):
+def test_new_chat_uses_fixed_executor_and_host_goal_admission(entry):
     invoke, execute, service = entry
-    assert invoke({"session_id": "original"}) is None
-    execute.assert_not_called()
-    service._hydrate_pending_workflow.assert_not_called()
+    assert invoke({"session_id": "original"})["runtime"] == "codex"
+    execute.assert_called_once()
+    assert execute.call_args.kwargs["completion_mode"] == "auto"
+    assert execute.call_args.kwargs["admit_goal"] is True
 
 
 def test_rollout_keeps_native_pending_plan_in_its_original_conversation(entry):
@@ -108,6 +109,42 @@ def test_approval_card_targets_frozen_child_not_coordinator():
     assert payload["data"]["data"]["approval_card"]["run_id"] == "child"
     result["business_receipts"] = []
     assert "data" not in chat.runtime_chat_payload(result)["data"]
+
+
+def test_unverified_business_narration_is_not_streamed(monkeypatch):
+    delta = Mock()
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_delta", delta)
+    event = {"method": "item/agentMessage/delta", "payload": {"delta": "已全部完成"}}
+    chat.stream_runtime_event({**event, "runtime_goal_mode": "business"})
+    chat.stream_runtime_event(event)
+    delta.assert_not_called()
+    chat.stream_runtime_event({**event, "runtime_goal_mode": "reply"})
+    delta.assert_called_once_with("已全部完成")
+
+
+def test_unknown_work_retains_original_task_pointer():
+    result = chat.runtime_chat_payload(
+        {
+            "run_id": "original",
+            "execution_state": "unknown",
+            "reconciliation_required": True,
+        },
+        conversation_id="session",
+    )
+    assert result["runtime_context_update"]["agent_runtime_run_id"] == "original"
+    assert result["success"] is False
+
+
+def test_stale_legacy_pending_never_mints_a_new_plan():
+    from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
+
+    callbacks = SimpleNamespace(_resume_pending_dynamic_workflow=Mock(return_value=(False, None)))
+    planner = Mock()
+    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, Mock(), Mock())
+    result = dispatch.handle("owner", "继续", "chat", {}, "继续", resume_only=True)
+    assert result["success"] is False
+    assert result["data"]["error_code"] == "legacy_workflow_missing"
+    planner.plan.assert_not_called()
 
 
 @pytest.mark.parametrize("state,run_id", [("waiting_user", "parent"), ("completed", None)])

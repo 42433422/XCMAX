@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from app.infrastructure.codex import CodexTransport, CodexTransportConfig, CodexTransportError
-from app.infrastructure.codex.launcher import runtime_environment
+from app.infrastructure.codex.launcher import launch_arguments, runtime_environment
 
 
 @pytest.fixture
@@ -113,6 +113,27 @@ def test_environment_and_configuration_do_not_inherit_host_authority(config, mon
 def test_invalid_configuration_fails_before_launch(config, overrides):
     with pytest.raises(ValueError):
         replace(config, **overrides)
+
+
+def test_frozen_launcher_reenters_backend_without_starting_the_server(monkeypatch, tmp_path):
+    from app.infrastructure.codex import launcher
+    from XCAGI import run_fastapi
+
+    plan = tmp_path / "launch.json"
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    arguments = launch_arguments(plan)
+    assert arguments == (sys.executable, "--xcagi-codex-launch", str(plan))
+    launched = []
+    monkeypatch.setattr(launcher, "main", lambda path: launched.append(path))
+
+    def forbidden(*_args):
+        raise AssertionError("Codex subprocess initialized the application server")
+
+    monkeypatch.setattr(run_fastapi, "_apply_desktop_bootstrap", forbidden)
+    monkeypatch.setattr(run_fastapi, "_apply_no_console_child_defaults", forbidden)
+    monkeypatch.setattr(run_fastapi, "_load_dotenv_if_present", forbidden)
+    run_fastapi.main(list(arguments[1:]))
+    assert launched == [str(plan)]
 
 
 @pytest.fixture

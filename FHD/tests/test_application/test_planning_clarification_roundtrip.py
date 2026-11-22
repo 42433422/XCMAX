@@ -1,4 +1,4 @@
-"""A planning question survives a new service and resumes one guarded business run."""
+"""Persisted pre-Codex questions retain their guarded continuation after rollout."""
 
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -147,6 +147,19 @@ def roundtrip(monkeypatch, tmp_path, trusted_actor):
             "turn_id": uuid4().hex,
             **(extra or {}),
         }
+        if not requests:
+            # Seed a task created by the pre-rollout planner. Subsequent turns
+            # use the real public entry, including service/SQL rehydration.
+            from app.application.agent_orchestrator.business_harness import (
+                ensure_business_harness_context,
+            )
+            from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
+
+            bind_chat_turn_context(message, current)
+            current = ensure_business_harness_context(current, message=message)
+            return service._dispatch_model_selection(
+                scoped_conversation_user_id("17", current), message, "normal", current, message
+            )
         return service.process_chat("17", message, context=current, source="normal")
 
     return SimpleNamespace(
@@ -196,7 +209,7 @@ def test_scope_choice_survives_restart_and_executes_once(roundtrip, reply):
     assert roundtrip.chat_user not in recovered._pending_workflows
 
     again = roundtrip.send(roundtrip.service(), "确认")
-    assert again["data"]["action"] == "clarification_required"
+    assert again["runtime"] == "codex" and again["success"] is False
     assert roundtrip.executor.execute_with_deadline.call_count == 1
     assert len(roundtrip.repository.get(run_id).tool_calls) == 1
 
@@ -215,7 +228,7 @@ def test_cancelling_a_scope_question_is_durable(roundtrip):
 def test_other_conversation_cannot_consume_the_scope_question(roundtrip):
     first = roundtrip.send(roundtrip.service(), ORIGINAL)
     result = roundtrip.send(roundtrip.service(), "确认", session="different-conversation")
-    assert result["data"]["action"] == "clarification_required"
+    assert result["runtime"] == "codex" and result["success"] is False
     waiting = roundtrip.repository.get(first["run_id"])
     assert waiting.status == "waiting_user"
     assert roundtrip.store.load(waiting.plan_id)["status"] == "pending_awaiting"

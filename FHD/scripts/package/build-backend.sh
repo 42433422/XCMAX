@@ -94,4 +94,21 @@ if [[ "${BUNDLED_JS}" -lt 1 ]]; then
 fi
 echo "[ok] bundled vue-dist (${BUNDLED_JS} js)"
 
+# Exercise the completed bundle outside the checkout, just as the Windows build
+# does. This catches missing executable resources and frozen SDK/launcher imports.
+"${PYTHON}" - <<'PY'
+import subprocess
+import tempfile
+from pathlib import Path
+
+backend = (Path.cwd() / "dist/xcagi-backend/xcagi-backend").resolve(strict=True)
+with tempfile.TemporaryDirectory(prefix="xcagi-frozen-probe-") as probe_dir:
+    subprocess.run(
+        [str(backend), "--verify-frozen-critical-runtime", "--data-dir", str(Path(probe_dir) / "data")],
+        cwd=probe_dir,
+        check=True,
+        timeout=300,
+    )
+PY
+
 echo "Backend build complete: dist/xcagi-backend"

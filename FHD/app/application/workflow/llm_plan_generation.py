@@ -449,16 +449,21 @@ class LlmPlanGeneration:
         conversation: PlannerConversation,
         completion: PlannerCompletion,
         http_client: Callable[[], httpx.Client],
+        *,
+        allow_streaming: bool = True,
     ) -> None:
         self.conversation = conversation
         self.completion = observe_model_response(completion)
         self.http_client = http_client
+        self.allow_streaming = allow_streaming
 
     @observe_model_response
     def _stream_reply(
         self, messages: list[dict[str, str]], context: dict[str, Any], **extra: Any
     ) -> dict[str, Any] | None:
         """流式生成闲聊回复；无法流式或判定为工作流时返回 None 走原路径。"""
+        if not self.allow_streaming:
+            return None
         from app.application.workflow.planner_llm_gateway import stream_planner_completion
         from app.infrastructure.chat_stream_lifetime import current_lifetime
 

@@ -77,20 +77,13 @@ class EmployeeAgent:
         workspace_root: str | None,
         input_data: dict[str, Any] | None = None,
     ) -> Any:
-        """任一必需授权门初始化失败时拒绝执行。"""
+        """Keep employee file policy; durable child tasks own business approvals."""
         try:
             from app.application.employee_runtime.workspace_guard import (
                 build_employee_gate,
             )
-            from app.application.employee_runtime.write_approval import (
-                build_write_approval_gate,
-                compose_gates,
-            )
 
-            return compose_gates(
-                build_employee_gate(self.employee_id, manifest, config, workspace_root),
-                build_write_approval_gate(self.employee_id, input_data),
-            )
+            return build_employee_gate(self.employee_id, manifest, config, workspace_root)
         except RECOVERABLE_ERRORS:
             logger.exception("employee authorization initialization failed closed")
             return lambda name, args: {
@@ -412,6 +405,11 @@ class EmployeeAgent:
 
                 try:
                     selected_runtime = policy.runtime_settings()
+                    if (
+                        selected_runtime.engine != "codex"
+                        or "employee" not in selected_runtime.surfaces
+                    ):
+                        raise policy.RuntimePolicyError("员工 Agent 必须启用固定 Codex 执行器")
                 except policy.RuntimePolicyError:
                     return self._cognition_failed_result(
                         pack,
@@ -424,10 +422,8 @@ class EmployeeAgent:
                         },
                         t0,
                     )
-                defer_cognition = (
-                    selected_runtime.engine == "codex" and "employee" in selected_runtime.surfaces
-                )
-                if defer_cognition and handler_list != ["agent"]:
+                defer_cognition = True
+                if handler_list != ["agent"]:
                     return self._cognition_failed_result(
                         pack,
                         task,

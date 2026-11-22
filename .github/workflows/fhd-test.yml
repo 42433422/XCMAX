@@ -13,13 +13,19 @@ on:
       - "FHD/assets/evals/**"
       - "FHD/frontend/**"
       - "FHD/ops/deploy/requirements*.txt"
+      - "FHD/requirements-server-api.txt"
       - "FHD/pyproject.toml"
+      - "FHD/uv.lock"
+      - "FHD/packages/**"
       - "FHD/metrics/coverage-dual-summary.json"
       - "FHD/metrics/coverage_ratchet_baseline.json"
       - "FHD/scripts/ci/check_coverage_ssot.py"
       - "FHD/scripts/ci/guard_temp_scripts.py"
       - "FHD/scripts/ci/check_repo_hygiene.sh"
       - "FHD/scripts/dev/verify_version_anchors.py"
+      - "FHD/scripts/dev/check_requirements_lock.py"
+      - "FHD/.github/workflows/test.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
       - ".github/workflows/fhd-test.yml"
   pull_request:
     branches: [main, develop, master]
@@ -29,13 +35,19 @@ on:
       - "FHD/assets/evals/**"
       - "FHD/frontend/**"
       - "FHD/ops/deploy/requirements*.txt"
+      - "FHD/requirements-server-api.txt"
       - "FHD/pyproject.toml"
+      - "FHD/uv.lock"
+      - "FHD/packages/**"
       - "FHD/metrics/coverage-dual-summary.json"
       - "FHD/metrics/coverage_ratchet_baseline.json"
       - "FHD/scripts/ci/check_coverage_ssot.py"
       - "FHD/scripts/ci/guard_temp_scripts.py"
       - "FHD/scripts/ci/check_repo_hygiene.sh"
       - "FHD/scripts/dev/verify_version_anchors.py"
+      - "FHD/scripts/dev/check_requirements_lock.py"
+      - "FHD/.github/workflows/test.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
       - ".github/workflows/fhd-test.yml"
   workflow_dispatch:
 
@@ -55,7 +67,7 @@ defaults:
     working-directory: FHD
 
 jobs:
-  repo-hygiene:
+  backend-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,26 +76,29 @@ jobs:
         shell: bash
         run: bash scripts/ci/check_repo_hygiene.sh
 
-  backend-smoke:
-    needs: repo-hygiene
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+
+      - name: Set up cached uv installer
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            FHD/requirements-server-api.txt
+            FHD/ops/deploy/requirements-dev.txt
+            FHD/uv.lock
+            FHD/pyproject.toml
+            FHD/packages/**/pyproject.toml
 
       - name: Install dependencies
         run: |
           set -euo pipefail
           pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
           [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
-          python -m pip install --upgrade pip
-          pip install -r requirements-server-api.txt
-          pip install -r ops/deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
+          uv pip check --system --python "$(command -v python)"
 
       - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
@@ -104,7 +119,7 @@ jobs:
           python -m pytest tests/test_routes/test_route_registry.py \
             tests/test_routes/test_registry_unit.py -x -q --tb=short
 
-      - name: Optional local runtime contracts
+      - name: Fixed local runtime contracts
         env:
           XCAGI_PRODUCT_SKU: enterprise
         run: |
@@ -116,4 +131,13 @@ jobs:
       - name: Offline Agent contract fixtures (process boundary tested separately)
         env:
           SECRET_KEY: "ci-agent-eval-secret-at-least-32-bytes"
-        run: python assets/evals/run_agent_eval.py
+        run: python assets/evals/run_agent_eval.py --junitxml agent-eval-results/junit.xml
+
+      - name: Preserve offline Agent contract diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-contracts-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: FHD/agent-eval-results/junit.xml
+          if-no-files-found: warn
+          retention-days: 7

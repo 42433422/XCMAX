@@ -252,11 +252,29 @@ def confirm_phase(db_path: Path, marker: Path) -> None:
     service = _chat_service()
     context = _actor(factory, user_id)
     with tenant_scope(1):
-        first = service.process_chat(
-            user_id=str(user_id),
-            message=SENTENCE,
-            context=context,
-            source="pro",
+        # This restart suite retains a historical approval graph across the
+        # rollout. New public tasks are covered by the fixed Codex suites.
+        from uuid import uuid4
+
+        from app.application.agent_orchestrator.business_harness import (
+            ensure_business_harness_context,
+        )
+        from app.application.agent_task_context import scoped_conversation_user_id
+        from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
+
+        historical_context = {
+            **context,
+            "conversation_id": str(user_id),
+            "turn_id": uuid4().hex,
+        }
+        bind_chat_turn_context(SENTENCE, historical_context)
+        historical_context = ensure_business_harness_context(historical_context, message=SENTENCE)
+        first = service._dispatch_model_selection(
+            scoped_conversation_user_id(str(user_id), historical_context),
+            SENTENCE,
+            "pro",
+            historical_context,
+            SENTENCE,
         )
         assert first["data"]["action"] == "workflow_confirmation_required", first
         second = service.process_chat(

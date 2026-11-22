@@ -132,7 +132,7 @@ class TestResolveEmployeeTools:
         manifest = {"employee": {"capabilities": ["批量导入入库"]}}
         names = ts.employee_tool_names("e", manifest, {})
         assert "import_excel_to_database" in names
-        assert "products_bulk_import" in names
+        assert "products_bulk_import" not in names
 
     def test_import_keyword_readonly_excludes_write(self, fake_base):
         manifest = {

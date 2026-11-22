@@ -9,7 +9,7 @@ from __future__ import annotations
 import inspect
 import time
 from copy import deepcopy
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -18,6 +18,7 @@ from app.application.employee_runtime import agent_loop, agent_runner, executor
 from app.application.tools.workflow_business_db import business_db_tool_specs
 from app.application.tools.workflow_tools.catalog_excel import excel_tool_specs
 from app.infrastructure.codex import policy
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _allow(name, arguments):
@@ -133,8 +134,8 @@ def test_parameter_schema_restrictions_never_expand_or_fetch_remote_references(
     "tool",
     [
         {"function": {"name": "business_db", "parameters": {"type": "object"}}},
-        excel_tool_specs()[0],  # aggregate has no registered canonical action.
-        excel_tool_specs()[1],  # schema_understand has no equivalent canonical function.
+        excel_tool_specs()[3],  # legacy chart recommendations have no observed-data implementation.
+        {"function": {"name": "products_bulk_import", "parameters": {"type": "object"}}},
         {
             "function": {
                 "name": "excel_analysis",
@@ -219,20 +220,17 @@ def test_codex_preserves_the_inherited_employee_deadline(runtime_boundary, monke
 @pytest.mark.parametrize(
     "settings",
     [
-        policy.RuntimeSettings(),
+        policy.RuntimeSettings(engine="native"),
         policy.RuntimeSettings(engine="codex", surfaces=("chat",)),
     ],
 )
-def test_native_default_and_unselected_surface_keep_existing_path(
+def test_retired_engine_and_unselected_surface_fail_without_native_fallback(
     monkeypatch, runtime_boundary, settings
 ):
-    def no_key():
-        raise RuntimeError("not configured")
-
     monkeypatch.setattr(policy, "runtime_settings", lambda: settings)
-    monkeypatch.setattr("app.infrastructure.llm.client.require_api_key", no_key)
     result = _run(tools=[])
-    assert result["error_code"] == "employee_llm_not_configured"
+    assert result["error_code"] == "runtime_configuration_invalid"
+    assert result["legacy_fallback_allowed"] is False
     assert runtime_boundary == []
 
 
@@ -309,7 +307,8 @@ def test_real_employee_call_chain_preserves_trusted_context_and_workspace_gate(
     assert submitted["runtime_context"]["_actor_authorization"] == "server sealed identity"
     assert submitted["runtime_context"]["turn_id"] == "persisted-turn-7"
     assert submitted["runtime_context"]["workspace_root"] == str(tmp_path)
-    assert submitted["completion_mode"] == "business"
+    assert submitted["completion_mode"] == "auto"
+    assert submitted["admit_goal"] is True
     assert "clerk role" in submitted["system_prompt"]
     assert "trusted memory context" in submitted["system_prompt"]
     submitted["on_event"]({"method": "turn/started"})
@@ -395,3 +394,196 @@ def test_handler_delegation_keeps_trusted_history_and_context_outside_input(
     assert submitted["runtime_context"]["turn_id"] == "request-9"
     assert submitted["history"] == history
     assert submitted["input_data"] == {"user_id": "forged"}
+
+
+def test_retired_engine_is_rejected_before_employee_cognition(
+    employee, runtime_boundary, monkeypatch
+):
+    actor, _ = employee
+    monkeypatch.setattr(policy, "runtime_settings", lambda: policy.RuntimeSettings(engine="native"))
+    result = actor.run("read")
+    assert result["error_code"] == "runtime_configuration_invalid"
+    assert runtime_boundary == []
+
+
+@pytest.mark.parametrize(
+    "manifest, config, expected",
+    [
+        (
+            {},
+            {},
+            {
+                "excel_analysis.read",
+                "excel_analysis.structure",
+                "excel_analysis.aggregate",
+                "generate_office_document.execute",
+            },
+        ),
+        (
+            {"employee": {"capabilities": ["Excel 数据分析"]}},
+            {},
+            {"excel_join_compare.join", "excel_join_compare.diff"},
+        ),
+        ({"employee": {"capabilities": ["批量导入"]}}, {}, {"import_excel_to_database.import"}),
+        (
+            {},
+            {"tools": ["business_db_read", "business_db_write"]},
+            {"business_db.read", "business_db.write"},
+        ),
+    ],
+)
+def test_default_and_erp_employee_scopes_have_real_canonical_actions(
+    monkeypatch, manifest, config, expected
+):
+    from app.application.employee_runtime.tool_scope import resolve_employee_tools
+
+    monkeypatch.setattr("app.application.agent_tool_lifecycle.discovery_for_runtime", lambda _: [])
+    declared = resolve_employee_tools("clerk", manifest, config)
+    actions, _ = agent_loop._codex_employee_tool_scope(declared, _allow)
+    assert expected.issubset(actions)
+    assert all("products_bulk_import" not in action for action in actions)
+
+
+@pytest.mark.parametrize(
+    "change", ["none", "path", "pack", "actions", "contract", "cancelled", "unknown"]
+)
+def test_durable_child_rebuilds_employee_scope_before_effect(
+    employee, runtime_boundary, trusted_actor, monkeypatch, tmp_path, change
+):
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    principal = trusted_actor(permissions=["tool.excel_analysis.read"])
+    actor, config = employee
+    actor.run(
+        "read",
+        user_id=principal.user_id,
+        workspace_root=str(tmp_path),
+        runtime_context={**principal.context, "turn_id": "original-turn"},
+    )
+    original = runtime_boundary[0]
+    parent = AgentRun(user_id=str(principal.user_id), message="read", status="waiting_user")
+    parent.metadata.update(
+        runtime_type="codex",
+        runtime_gate_required=True,
+        runtime_context=deepcopy(original["runtime_context"]),
+        runtime_allowed_actions=original["allowed_actions"],
+        _codex_input_data=original["input_data"],
+    )
+    if change == "actions":
+        parent.metadata["runtime_allowed_actions"] = [
+            "excel_analysis.read",
+            "excel_analysis.export",
+        ]
+    if change in {"cancelled", "unknown"}:
+        parent.status = change
+    SQLAlchemyAgentRunRepository(session_factory=principal.factory).save(parent)
+    reopened = SQLAlchemyAgentRunRepository(session_factory=principal.factory)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
+        lambda: reopened,
+    )
+    context = {
+        **original["runtime_context"],
+        "parent_run_id": parent.run_id,
+        "run_id": "child",
+        "source": "codex_runtime",
+    }
+    if change == "pack":
+        config["workspace_policy"]["forbidden_globs"] = []
+    if change == "contract":
+        context.pop("_employee_gate_contract")
+    dispatch = Mock(return_value={"success": True, "data": {"records": []}})
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
+    )
+    step = AgentStep(
+        node_id="read",
+        tool_id="excel_analysis",
+        action="read",
+        params={
+            "file_path": "secret/passwords.xlsx" if change == "path" else "public/report.xlsx",
+        },
+    )
+    result = AgentToolExecutor().execute(step, runtime_context=context)
+    if change == "none":
+        assert result["success"] is True
+        dispatch.assert_called_once()
+    else:
+        assert result["error_code"] == "employee_gate_denied"
+        dispatch.assert_not_called()
+
+
+def test_employee_document_write_uses_one_durable_child_approval(
+    employee, runtime_boundary, trusted_actor, monkeypatch, tmp_path
+):
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.infrastructure.codex.binding import CodexBindingStore
+    from app.infrastructure.codex.tools import CodexToolBridge
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    principal = trusted_actor(permissions=["tool.generate_office_document.execute"])
+    actor, _ = employee
+    document = next(
+        t for t in excel_tool_specs() if t["function"]["name"] == "generate_office_document"
+    )
+    monkeypatch.setattr(actor, "_build_agent_tools", lambda *args: [document])
+    old_gate = Mock(side_effect=AssertionError("No parallel approval owner may be created"))
+    monkeypatch.setattr(
+        "app.application.employee_runtime.write_approval.build_write_approval_gate", old_gate
+    )
+    actor.run(
+        "生成合同",
+        user_id=principal.user_id,
+        workspace_root=str(tmp_path),
+        runtime_context={**principal.context, "turn_id": "document-turn"},
+    )
+    original = runtime_boundary[0]
+    params = {"user_request": "生成合同", "output_format": "docx"}
+    parent = AgentRun(user_id=str(principal.user_id), message="生成合同", status="running")
+    parent.metadata.update(
+        runtime_type="codex",
+        runtime_gate_required=True,
+        runtime_context=original["runtime_context"],
+        runtime_allowed_actions=original["allowed_actions"],
+        runtime_expected_operations=[
+            {"tool_id": "generate_office_document", "action": "execute", "params": params}
+        ],
+    )
+    repository = SQLAlchemyAgentRunRepository(session_factory=principal.factory)
+    repository.save(parent)
+    store = CodexBindingStore(repository)
+    grant = store.create(
+        parent.run_id,
+        allowed_actions=original["allowed_actions"],
+        runtime_config={"gate_required": True},
+    )
+    bridge = CodexToolBridge(store, AgentOrchestrator(repository=repository), gate=original["gate"])
+    args = {
+        "call_id": "document",
+        "tool_id": "generate_office_document",
+        "action": "execute",
+        "params": params,
+    }
+    first = bridge.invoke(grant.mcp_token, "execute_action", args)
+    second = bridge.invoke(grant.mcp_token, "execute_action", {**args, "call_id": "model-retry"})
+    assert first["status"] == "waiting_user" and first["pending_approval"] is True
+    assert first["run_id"] == second["run_id"] != parent.run_id
+    assert first["approval_card"]["run_id"] == first["run_id"]
+    assert len(repository.list_recent()) == 2
+    assert first["tool_calls"] == []
+    old_gate.assert_not_called()
+    for tool_id, action in (
+        ("generate_office_document", "execute"),
+        ("import_excel_to_database", "import"),
+        ("business_db", "write"),
+    ):
+        spec = get_tool_action_spec(tool_id, action)
+        assert spec is not None and not (spec.read_only and spec.risk == "low")

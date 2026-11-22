@@ -19,7 +19,7 @@ def stream_runtime_event(event: dict[str, Any]) -> None:
     from app.infrastructure.chat_stream_lifetime import publish_stream_delta, publish_stream_note
 
     method, payload = event.get("method"), event.get("payload") or {}
-    if method == "item/agentMessage/delta":
+    if method == "item/agentMessage/delta" and event.get("runtime_goal_mode") == "reply":
         publish_stream_delta(str(payload.get("delta") or ""))
     elif method == "item/started" and (payload.get("item") or {}).get("type") == "mcpToolCall":
         publish_stream_note("正在通过授权工具处理任务…")
@@ -28,7 +28,14 @@ def stream_runtime_event(event: dict[str, Any]) -> None:
 def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -> dict[str, Any]:
     state = str(result.get("execution_state") or result.get("exit_status") or "failed")
     waiting = state in {"waiting_user", "waiting_approval"}
-    retained = result.get("resume_required") is True
+    retained = (
+        result.get("resume_required") is True
+        or bool(result.get("run_id"))
+        and (
+            result.get("reconciliation_required") is True
+            or state in {"running", "unknown", "paused"}
+        )
+    )
     text = str(result.get("output") or result.get("error") or "本轮执行未完成")
     if result.get("pending_approval"):
         text = "任务已进入审批，请通过审批入口处理；原任务及参数已保留。"
@@ -71,6 +78,13 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
             "business_completed": result.get("business_completed") is True,
             "business_receipts": result.get("business_receipts", []),
             "tool_calls": result.get("tool_calls", []),
+            "artifacts": result.get("artifacts", []),
+            "needs_user_input": result.get("needs_user_input") is True,
+            **(
+                {"clarification": result["clarification"]}
+                if isinstance(result.get("clarification"), dict)
+                else {}
+            ),
             "error_code": result.get("error_code") or result.get("exit_status", ""),
             **({"data": {"approval_card": card}} if card else {}),
         },
@@ -85,13 +99,10 @@ def try_runtime_chat(
     file_context: dict[str, Any],
     service: Any,
 ) -> dict[str, Any] | None:
-    """None means a new native turn, never a Codex error fallback."""
+    """None is reserved for an existing session-bound historical workflow."""
     run_id = str(context.get("agent_runtime_run_id") or "")
     session = str(context.get("session_id") or context.get("conversation_id") or "")
     try:
-        settings = runtime_settings()
-        if not run_id and (settings.engine != "codex" or "chat" not in settings.surfaces):
-            return None
         # Native plans created before rollout retain their original continuation.
         if not run_id:
             pending = service._pending_workflows.get(user_id)
@@ -114,6 +125,7 @@ def try_runtime_chat(
                     pending = None
             if pending:
                 return None
+        settings = runtime_settings()
         from app.application.agent_runtime.gateway import run_runtime_task
 
         result = run_runtime_task(
@@ -121,9 +133,18 @@ def try_runtime_chat(
             system_prompt=_INSTRUCTIONS,
             runtime_context=context,
             history=context.get("_chat_history_messages") or [],
-            input_data={"file_context": file_context} if file_context else None,
+            input_data={
+                **({"file_context": file_context} if file_context else {}),
+                **(
+                    {"attachment_upload_ids": context["attachment_upload_ids"]}
+                    if "attachment_upload_ids" in context
+                    else {}
+                ),
+            }
+            or None,
             run_id=run_id or None,
-            completion_mode="reply",
+            completion_mode="auto",
+            admit_goal=True,
             settings=settings,
             on_event=stream_runtime_event,
             # Chat turn admission supplies a new stable turn_id for a genuine user answer.
@@ -133,6 +154,7 @@ def try_runtime_chat(
             "runtime_not_selected",
             "runtime_not_qualified",
             "runtime_configuration_invalid",
+            "runtime_policy_blocked",
         }:
             # An unavailable deployment must not erase a prior task's pointer
             # and let the following chat turn replay its work in Native.

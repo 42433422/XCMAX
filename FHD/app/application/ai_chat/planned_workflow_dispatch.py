@@ -261,6 +261,8 @@ class PlannedWorkflowDispatch:
         source: str | None,
         context: dict[str, Any],
         text: str,
+        *,
+        resume_only: bool = False,
     ) -> dict[str, Any] | None:
         from app.application.agent_orchestrator.attachment_inputs import (
             AttachmentInputError,
@@ -282,6 +284,14 @@ class PlannedWorkflowDispatch:
             user_id, message, text, context
         )
         planning_continuation = (pending_result or {}).get("_planning_clarification")
+        if resume_only and not isinstance(planning_continuation, dict):
+            if pending_handled:
+                return pending_result
+            return self._risk_rejection(
+                "legacy_workflow_missing",
+                "原待办任务已结束或无法恢复，请查看原任务记录；本轮未创建新业务执行。",
+                context,
+            )
         if isinstance(planning_continuation, dict):
             from app.application.agent_orchestrator.tool_permission import overlay_resume_context
 

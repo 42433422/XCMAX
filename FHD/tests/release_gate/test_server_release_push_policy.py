@@ -2,8 +2,10 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 import yaml
@@ -66,8 +68,10 @@ def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
     assert "FHD_SERVICE_PYTHON" in apply
 
 
-@pytest.mark.parametrize("name", ["jsonschema", "referencing"])
-def test_tarball_forced_runtime_pins_workflow_schema_dependencies(name: str) -> None:
+@pytest.mark.parametrize(
+    "name", ["jsonschema", "referencing", "openai-codex", "openai-codex-cli-bin"]
+)
+def test_tarball_forced_runtime_pins_required_dependencies(name: str) -> None:
     requirements = {
         item.name: item
         for line in (FHD_ROOT / "ops/deploy/requirements-langgraph-runtime.txt")
@@ -80,6 +84,51 @@ def test_tarball_forced_runtime_pins_workflow_schema_dependencies(name: str) -> 
     locked_versions = {item["version"] for item in lock["package"] if item["name"] == name}
     assert len(locked_versions) == 1
     assert str(requirements[name].specifier) == f"=={locked_versions.pop()}"
+
+
+@pytest.mark.parametrize("name", ["openai-codex", "openai-codex-cli-bin"])
+def test_codex_executor_is_required_by_standard_installers(name: str) -> None:
+    project = tomllib.loads((FHD_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    base = {item.name: item for item in map(Requirement, project["dependencies"])}
+    assert str(base[name].specifier) == "==0.171.0"
+    for manifest in ("requirements-server-api.txt", "ops/deploy/requirements-server-api.lock.txt"):
+        pins = {
+            item.name: item
+            for line in (FHD_ROOT / manifest).read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith(("#", "-"))
+            for item in [Requirement(line)]
+        }
+        assert pins[name].specifier == base[name].specifier
+
+
+@pytest.mark.parametrize("mode", ["installed", "sdk", "cli_package", "executable", "missing"])
+def test_tarball_codex_probe_rejects_unusable_runtime(monkeypatch, tmp_path, mode: str) -> None:
+    import importlib.metadata
+
+    import codex_cli_bin
+    import openai_codex
+
+    source = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(encoding="utf-8")
+    probe = source.split('PYTHONPATH="$DEPLOY_ROOT" "$service_python" - <<\'PY\'\n', 1)[1]
+    probe = probe.split("\nPY", 1)[0]
+    # LangGraph provenance has its own suite; execute the exact deployment
+    # Codex check against real installed metadata and the packaged executable.
+    provenance = ModuleType("app.infrastructure.workflow.langgraph_assert")
+    provenance.assert_vendored_sources = lambda: None
+    monkeypatch.setitem(sys.modules, provenance.__name__, provenance)
+    if mode == "sdk":
+        monkeypatch.setattr(openai_codex, "__version__", "0.170.0")
+    elif mode == "cli_package":
+        monkeypatch.setattr(importlib.metadata, "version", lambda name: "0.170.0")
+    elif mode in {"executable", "missing"}:
+        binary = Path(sys.executable) if mode == "executable" else tmp_path / "missing-codex"
+        monkeypatch.setattr(codex_cli_bin, "bundled_codex_path", lambda: binary)
+
+    if mode == "installed":
+        exec(compile(probe, "fhd-apply-release.sh:runtime-probe", "exec"), {})
+    else:
+        with pytest.raises(FileNotFoundError if mode == "missing" else RuntimeError):
+            exec(compile(probe, "fhd-apply-release.sh:runtime-probe", "exec"), {})
 
 
 def test_server_release_archive_strips_macos_extended_attributes() -> None:

@@ -1085,3 +1085,41 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
         )
     ],
 }
+
+
+_SPECIAL_TOOL_CONTRACTS.update(
+    {
+        ("excel_analysis", "aggregate"): [
+            {
+                "name": "workbook_aggregate_contract",
+                "input": {
+                    "file_path": "sample.xlsx",
+                    "metrics": [{"column": "amount", "op": "sum"}],
+                },
+                "output": {"success": True},
+            }
+        ],
+        ("excel_join_compare", "join"): [
+            {
+                "name": "workbook_join_contract",
+                "input": {"file_paths": ["left.xlsx", "right.xlsx"], "join_keys": ["id"]},
+                "output": {"success": True, "action": "join", "row_count": 1},
+            }
+        ],
+        ("excel_join_compare", "diff"): [
+            {
+                "name": "workbook_diff_contract",
+                "input": {
+                    "file_path_a": "left.xlsx",
+                    "file_path_b": "right.xlsx",
+                    "key_columns": ["id"],
+                },
+                "output": {
+                    "success": True,
+                    "action": "diff",
+                    "rows_with_value_changes": {"count": 1},
+                },
+            }
+        ],
+    }
+)

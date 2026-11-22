@@ -15,7 +15,6 @@ import ipaddress
 import json
 import math
 import os
-import sys
 import tempfile
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -23,6 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from app.infrastructure.codex.launcher import launch_arguments
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 CODEX_SDK_VERSION = "0.171.0"
@@ -32,6 +32,7 @@ _MCP_TOOLS = (
     "capability_search",
     "capability_describe",
     "execute_action",
+    "execute_plan",
     "task_evidence",
     "request_input",
 )
@@ -236,7 +237,7 @@ class CodexTransport:
                 'default_tools_approval_mode = "prompt"',
             ]
         )
-        # Permit entry into the five host-controlled gates. This does not approve
+        # Permit entry into the host-controlled gates. This does not approve
         # business operations: execute_action still enforces XCMAX authorization.
         for name in cfg.mcp_tools:
             settings.extend([f"[mcp_servers.xcmax.tools.{q(name)}]", 'approval_mode = "approve"'])
@@ -280,12 +281,7 @@ class CodexTransport:
                 ),
             )
             sdk_config = CodexConfig(
-                launch_args_override=(
-                    sys.executable,
-                    "-I",
-                    str(Path(__file__).with_name("launcher.py")),
-                    str(plan_path),
-                ),
+                launch_args_override=launch_arguments(plan_path),
                 cwd=str(self.workspace),
                 client_name="xcmax_runtime",
                 experimental_api=False,
@@ -512,3 +508,31 @@ class CodexTransport:
         if client is not None:
             await asyncio.to_thread(_close_sdk_client, client)
         (self.runtime_dir / "launch.json").unlink(missing_ok=True)
+
+
+def verify_packaged_runtime() -> None:
+    """Launch and initialize the real CLI without requesting any model response.
+
+    Run through the same isolated launcher as production, including the frozen
+    executable branch. This proves packaging/protocol startup, not provider or
+    business qualification; it cannot write a qualification receipt.
+    """
+    with tempfile.TemporaryDirectory(prefix="xcagi-codex-probe-") as temporary:
+        config = CodexTransportConfig(
+            runtime_root=Path(temporary).resolve(),
+            scope_id="packaged-protocol-probe",
+            model="packaging-probe-no-model-call",
+            provider_url="http://127.0.0.1:1/v1",
+            provider_token="packaging-probe",
+            mcp_url="http://127.0.0.1:1/mcp",
+            mcp_token="packaging-probe",
+            context_window=32768,
+            timeout_seconds=15,
+        )
+
+        async def initialize() -> None:
+            async with CodexTransport(config):
+                pass
+
+        asyncio.run(initialize())
+    print(f"[frozen-runtime-probe] Codex SDK/CLI {CODEX_RUNTIME_VERSION} initialize OK")

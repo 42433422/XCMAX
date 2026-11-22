@@ -54,14 +54,21 @@ def _dispatch(context, outside, monkeypatch, *, registered=False):
 
 @pytest.mark.parametrize("registered", [False, True])
 def test_real_http_run_context_to_employee_ledger(roots, monkeypatch, registered):
+    from app.application.agent_orchestrator import get_agent_run_repository
+    from app.application.agent_orchestrator.run_models import AgentRun
+
     server, outside = roots
     captured = {}
 
-    def start_run(self, **kwargs):
+    def runtime(**kwargs):
         captured.update(kwargs["runtime_context"])
-        return SimpleNamespace(status="completed")
+        run = AgentRun(user_id="17", message=kwargs["task"], status="paused")
+        run.metadata["runtime_context"] = dict(captured)
+        get_agent_run_repository().save(run)
+        assert kwargs["start_paused"] is True and kwargs["admit_goal"] is True
+        return {"run_id": run.run_id, "execution_state": "paused"}
 
-    monkeypatch.setattr(agent_routes.AgentOrchestrator, "start_run", start_run)
+    monkeypatch.setattr("app.application.agent_runtime.gateway.run_runtime_task", runtime)
     monkeypatch.setattr(agent_routes, "_run_response", lambda run, **kw: {"success": True})
     app = FastAPI()
     app.include_router(agent_routes.router)

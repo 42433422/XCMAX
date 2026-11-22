@@ -670,6 +670,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             parameters=parameters,
             confirmed=confirmed,
             allowed_fields=allowed_fields,
+            answered_by=answered_by,
         )
         run.metadata["runtime_context"] = context
         apply_ai_budget_metadata(run, context)

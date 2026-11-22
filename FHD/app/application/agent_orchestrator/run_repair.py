@@ -5,10 +5,12 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from app.application.agent_orchestrator.repair_advisor import requires_frozen_parameters
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_repository import AgentRunRepository
 from app.application.agent_orchestrator.run_usage import RunUsageLedger
 from app.application.agent_orchestrator.runtime_dependencies import RuntimeDependencies
+from app.domain.task_lifecycle.results import execution_result_requires_reconciliation
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -30,7 +32,12 @@ class RunRepair:
         *,
         runtime_context: dict[str, Any],
     ) -> bool:
-        if run.metadata.get("non_retryable") or (step.output or {}).get("retryable") is False:
+        if (
+            run.metadata.get("non_retryable")
+            or run.status == "unknown"
+            or (step.output or {}).get("retryable") is False
+            or execution_result_requires_reconciliation(step.output)
+        ):
             return False
         if str((step.output or {}).get("error_code") or "") == "tool_billing_blocked":
             return False
@@ -57,6 +64,10 @@ class RunRepair:
             candidate_params = copy.deepcopy(previous_params)
             if params_patch:
                 candidate_params.update(copy.deepcopy(params_patch))
+                if candidate_params != previous_params and requires_frozen_parameters(
+                    run, runtime_context, repository=self.repository
+                ):
+                    return False
                 validation = self.dependencies.validate(step.tool_id, step.action, candidate_params)
                 if not validation.ok:
                     run.add_event(
@@ -130,6 +141,14 @@ class RunRepair:
         # A repair can change business parameters. Keep that capability limited to
         # actions that the server independently marked low-risk and idempotent;
         # a prior human approval never authorizes a different repaired payload.
+        if (
+            run.metadata.get("non_retryable")
+            or run.status == "unknown"
+            or (step.output or {}).get("retryable") is False
+            or execution_result_requires_reconciliation(step.output)
+            or requires_frozen_parameters(run, runtime_context, repository=self.repository)
+        ):
+            return False
         if not self.can_auto_execute(step):
             return False
         if not self.dependencies.repair_enabled(run, runtime_context):

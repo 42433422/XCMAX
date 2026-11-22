@@ -25,7 +25,12 @@ def canonical_digest(value: Any) -> str:
 def validate_expected_operations(
     value: list[dict[str, Any]] | None,
 ) -> list[dict[str, Any]] | None:
-    """Copy a host-frozen goal; malformed identities never become completion evidence."""
+    """Freeze all required independent operations, never infer a goal from tool calls.
+
+    Ordering and conditional branches belong to an existing, frozen workflow
+    operation. Two identical effects cannot represent separate obligations: the
+    server deliberately deduplicates those effects across model call IDs.
+    """
     if value is None:
         return None
     if (
@@ -36,35 +41,105 @@ def validate_expected_operations(
             not isinstance(row, dict)
             or set(row) != {"tool_id", "action", "params"}
             or not isinstance(row["tool_id"], str)
-            or not row["tool_id"]
+            or not row["tool_id"].strip()
             or not isinstance(row["action"], str)
-            or not row["action"]
+            or not row["action"].strip()
             or not isinstance(row["params"], dict)
             for row in value
         )
     ):
         raise AgentRuntimeContractError("invalid_expected_operations", "冻结业务目标格式无效")
-    canonical_digest(value)  # Reject non-JSON values and non-finite numbers.
+    try:
+        fingerprints = {canonical_digest(operation) for operation in value}
+    except (TypeError, ValueError) as exc:
+        raise AgentRuntimeContractError(
+            "invalid_expected_operations", "冻结业务目标必须是有效 JSON"
+        ) from exc
+    if len(fingerprints) != len(value):
+        raise AgentRuntimeContractError(
+            "invalid_expected_operations", "冻结业务目标不能重复声明同一操作"
+        )
     return copy.deepcopy(value)
 
 
-def match_frozen_workflow(
-    expected: Any,
-    rows: list[dict[str, Any]],
-) -> tuple[bool, int]:
-    """Match one whole workflow, returning coverage and distinct operation count.
+def frozen_workflow_operation(plan: dict[str, Any]) -> dict[str, Any]:
+    """Reference a host-normalized graph; the model never supplies executable nodes."""
+    return {
+        "tool_id": "xcmax_workflow",
+        "action": "execute",
+        "params": {"plan_digest": canonical_digest(plan)},
+    }
 
-    The existing executor proves each receipt before this identity comparison.
-    A bag of dynamic actions cannot establish a multi-goal task's ordering or
-    conditional coverage. Repeated model call IDs for one child count only once.
+
+def frozen_goal_digest(expected: Any, plan: Any = None) -> str:
+    """Bind the operation obligations and their optional host-owned workflow together."""
+    expected = validate_expected_operations(expected)
+    workflows = [row for row in expected or [] if row["tool_id"] == "xcmax_workflow"]
+    if (plan is None and workflows) or (
+        plan is not None
+        and (not isinstance(plan, dict) or workflows != [frozen_workflow_operation(plan)])
+    ):
+        raise AgentRuntimeContractError(
+            "invalid_frozen_plan", "冻结工作流必须与宿主保存的完整计划一致"
+        )
+    return canonical_digest({"expected_operations": expected, "frozen_plan": plan})
+
+
+def frozen_goal_coverage(expected: Any, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compare host obligations against independently verified durable child identities.
+
+    The receipt reader proves execution before this comparison. Exploratory safe
+    reads are observations, not extra obligations or permission to write. Aliases
+    of one durable child never cover two obligations, and contradictory aliases
+    or repeated effect executions cannot silently overwrite earlier evidence.
     """
-    unique = {row.get("child_run_id") or row.get("child_task_id"): row for row in rows}
-    if isinstance(expected, list) and len(expected) == len(unique) == 1:
-        operation = expected[0]
-        actual = next(iter(unique.values()))
-        if isinstance(operation, dict) and set(operation) == {"tool_id", "action", "params"}:
-            matched = canonical_digest(operation) == canonical_digest(
-                {key: actual.get(key) for key in ("tool_id", "action", "params")}
-            )
-            return matched, len(unique)
-    return False, len(unique)
+    try:
+        expected = validate_expected_operations(expected)
+    except AgentRuntimeContractError:
+        expected = None
+    required = {canonical_digest(operation) for operation in expected or []}
+    children: dict[str, tuple[str, str, bool]] = {}
+    tasks: dict[str, str] = {}
+    operations: dict[str, dict[str, Any]] = {}
+    conflicts: set[str] = set()
+    for row in rows:
+        child = str(row.get("child_run_id") or "")
+        task = str(row.get("child_task_id") or "")
+        fingerprint = canonical_digest(
+            {key: row.get(key) for key in ("tool_id", "action", "params")}
+        )
+        identity = (task, fingerprint, row.get("read_only") is True)
+        if (
+            not child
+            or not task
+            or children.get(child, identity) != identity
+            or tasks.get(task, child) != child
+            or row.get("fingerprint", fingerprint) != fingerprint
+        ):
+            conflicts.add(child or task or "missing_child_identity")
+            continue
+        if child in children:
+            continue
+        children[child] = identity
+        tasks[task] = child
+        prior = operations.get(fingerprint)
+        if prior and (prior.get("read_only") is not True or row.get("read_only") is not True):
+            conflicts.add(child)
+        operations[fingerprint] = row
+    matched = required & operations.keys()
+    unexpected = {
+        fingerprint
+        for fingerprint, row in operations.items()
+        if fingerprint not in required and row.get("read_only") is not True
+    }
+    missing = required - matched
+    return {
+        "frozen": expected is not None,
+        "required": len(required),
+        "verified": len(matched),
+        "operations": len(children),
+        "missing": sorted(missing),
+        "unexpected": sorted(unexpected),
+        "conflicting_receipts": sorted(conflicts),
+        "completed": bool(required) and not (missing or unexpected or conflicts),
+    }

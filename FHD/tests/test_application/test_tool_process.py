@@ -44,14 +44,10 @@ class FixtureExecutor(AgentToolExecutor):
         if step.action == "llm":
             from app.application.agent_orchestrator.repair_advisor import request_llm_repair
             from app.application.agent_orchestrator.run_models import AgentRun
-            from app.application.employee_runtime.agent_loop import run_employee_agent_loop
             from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
             from app.application.workflow.planner_llm_gateway import request_planner_completion
 
             planner = request_planner_completion(ai_service=None, context={}, messages=[])
-            agent = run_employee_agent_loop(
-                employee_id="fixture", system_prompt="test", task="test", tools=[]
-            )
             cognition = _run_async(_chat_completion([]))
             repair = request_llm_repair(
                 AgentRun(user_id="owner", message="test"),
@@ -59,7 +55,7 @@ class FixtureExecutor(AgentToolExecutor):
                 {},
             )
             return {
-                "success": agent["ok"],
+                "success": bool(planner and cognition and repair["llm_call"]),
                 "planner_model": planner["model"],
                 "cognition_model": cognition["model"],
                 "critic_model": repair["llm_call"].model,
@@ -340,7 +336,7 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
             server.shutdown()
             thread.join()
     assert sorted(seen) == [
-        (f"Bearer fake-{owner}", owner) for owner in ["owner-a", "owner-b"] for _ in range(4)
+        (f"Bearer fake-{owner}", owner) for owner in ["owner-a", "owner-b"] for _ in range(3)
     ]
 
 

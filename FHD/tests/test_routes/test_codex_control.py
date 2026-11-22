@@ -36,6 +36,13 @@ def control_setup(trusted_actor, monkeypatch):
         _codex_input_data={"source": "original"},
         runtime_completion_mode="reply",
         runtime_allowed_actions=None,
+        runtime_expected_operations=[
+            {
+                "tool_id": "customers",
+                "action": "create",
+                "params": {"unit_name": "fixture"},
+            }
+        ],
     )
     repository.save(run)
     store = CodexBindingStore(repository)

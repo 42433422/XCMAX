@@ -119,6 +119,14 @@ def _classification_metadata(binding: Any) -> dict[str, Any]:
     }
 
 
+def _completion_mode(binding: Any, requested: str) -> str:
+    if requested != "auto":
+        return requested
+    if binding.run.metadata.get("runtime_expected_operations") is not None:
+        return "business"
+    return "reply" if binding.run.metadata.get("runtime_goal_mode") == "reply" else "business"
+
+
 async def run_codex_agent(
     *,
     run_id: str,
@@ -130,16 +138,21 @@ async def run_codex_agent(
     input_data: dict[str, Any] | None = None,
     on_event: Callable[[dict[str, Any]], Any] | None = None,
     transport_factory: Callable[[Any], Any] | None = None,
-    completion_mode: Literal["business", "reply"] = "business",
+    completion_mode: Literal["business", "reply", "auto"] = "business",
     runtime_config: dict[str, Any] | None = None,
     allowed_actions: list[str] | None = None,
     answer_to_waiting_input: bool = False,
+    admit_goal: bool = False,
 ) -> dict[str, Any]:
     """Run one authenticated turn; no action is executed outside the MCP bridge."""
     from app.infrastructure.codex import CODEX_RUNTIME_VERSION, CODEX_SDK_VERSION, CodexTransport
 
     result = _base_result(run_id)
-    if completion_mode not in {"business", "reply"} or not str(task).strip():
+    if (
+        completion_mode not in {"business", "reply", "auto"}
+        or not str(task).strip()
+        or (completion_mode == "auto" and not admit_goal)
+    ):
         return {**result, "exit_status": "invalid_request", "error": "任务或完成模式无效"}
     pinned = dict(runtime_config or {})
     if not pinned.get("provider_id") or not pinned.get("route_identity"):
@@ -189,6 +202,7 @@ async def run_codex_agent(
                 raise
             previous = None
         if previous is not None:
+            result["artifacts"] = [artifact.to_dict() for artifact in previous.run.artifacts]
             if (
                 previous.metadata.get("coordinator_active")
                 and float(previous.metadata.get("expires_at", float("inf"))) > time.time()
@@ -199,13 +213,21 @@ async def run_codex_agent(
                 raise CodexBindingError("reconciliation_required", error)
             if any(_receipt_state(row) in (_WAITING | _ACTIVE) for row in rows):
                 _classify(
-                    result, rows, _classification_metadata(previous), completion_mode, "completed"
+                    result,
+                    rows,
+                    _classification_metadata(previous),
+                    _completion_mode(previous, completion_mode),
+                    "completed",
                 )
                 result["thread_id"] = previous.thread_id
                 return result
             if previous.metadata.get("waiting_input") and not answer_to_waiting_input:
                 _classify(
-                    result, rows, _classification_metadata(previous), completion_mode, "completed"
+                    result,
+                    rows,
+                    _classification_metadata(previous),
+                    _completion_mode(previous, completion_mode),
+                    "completed",
                 )
                 return result
         limit = float(config.turn_timeout_seconds)
@@ -234,7 +256,11 @@ async def run_codex_agent(
                     run.add_event(
                         "runtime.input_answered",
                         "已收到原任务补充信息",
-                        {"question": question.get("question"), "answer": task},
+                        {
+                            "question": question.get("question"),
+                            "answer": task,
+                            "input_data": copy.deepcopy(input_data),
+                        },
                     )
 
             mutate(answer)
@@ -250,106 +276,202 @@ async def run_codex_agent(
             scope_id=hashlib.sha256(run_id.encode()).hexdigest(),
             turn_timeout_seconds=timeout,
         )
-        async with (
-            asyncio.timeout(timeout),
-            (transport_factory or CodexTransport)(actual_config) as active,
-        ):
-            transport = active
-            store.authenticate(grant.model_token, "model")
-            thread_id = binding.thread_id
-            if thread_id:
-                resumed = await active.resume_thread(
-                    thread_id, developer_instructions=system_prompt
+        if admit_goal:
+            from app.application.agent_runtime.gateway import _goal_instructions
+            from app.application.agent_runtime.goal_admission import compile_runtime_goal
+            from app.domain.task_lifecycle.agent_runtime_contract import (
+                frozen_goal_digest,
+                frozen_workflow_operation,
+            )
+
+            binding = store.get(run_id)
+            if not binding.run.metadata.get(
+                "runtime_goal_admitted"
+            ) and not binding.run.metadata.get("runtime_expected_operations"):
+                goal = await asyncio.wait_for(
+                    asyncio.to_thread(compile_runtime_goal, binding, actual_config), timeout=timeout
                 )
-                if resumed != thread_id:
-                    raise CodexBindingError("binding_conflict", "恢复返回了不同的 Codex 会话")
-            else:
-                thread_id = await active.start_thread(developer_instructions=system_prompt)
-                store.authenticate(grant.model_token, "model")
-                store.record_thread(run_id, thread_id, generation=generation)
-            result["thread_id"] = thread_id
 
-            def started(run: AgentRun, metadata: dict[str, Any]) -> None:
-                run.status = "running"
-                metadata["runtime_status"] = "running"
-                run.add_event("runtime.codex.started", "Codex 执行已开始", {"thread_id": thread_id})
-
-            mutate(started)
-            text = _input_text(task, history if not binding.thread_id else None, input_data)
-            result["session_messages"] = [{"role": "user", "content": task}]
-            iterator = active.stream_turn(text).__aiter__()
-            pending = asyncio.ensure_future(anext(iterator))
-            turn_id = ""
-            try:
-                while True:
-                    done, _ = await asyncio.wait({pending}, timeout=_CONTROL_POLL_SECONDS)
-                    store.authenticate(grant.model_token, "model")
-                    if not done:
-                        continue
-                    try:
-                        event = pending.result()
-                    except StopAsyncIteration:
-                        break
-                    if event.get("thread_id") != thread_id:
-                        raise CodexBindingError("binding_conflict", "运行事件不属于当前会话")
-                    event_turn = str(event.get("turn_id") or "")
-                    if turn_id and event_turn and event_turn != turn_id:
-                        raise CodexBindingError("binding_conflict", "运行事件不属于当前轮次")
-                    turn_id = turn_id or event_turn
-                    method, payload = event.get("method"), event.get("payload") or {}
-                    item = payload.get("item") or {}
-                    if method == "turn/started":
-                        result.update(turn_id=turn_id, rounds=1)
-                    if method == "item/agentMessage/delta":
-                        key = str(event.get("item_id") or payload.get("itemId") or "message")
-                        texts[key] = texts.get(key, "") + str(payload.get("delta") or "")
-                    if method == "item/completed" and item.get("type") == "agentMessage":
-                        texts[str(item.get("id") or event.get("item_id") or "message")] = str(
-                            item.get("text") or ""
-                        )
-                    if method in {"turn/started", "turn/completed", "item/completed"}:
-                        data = {
-                            "thread_id": thread_id,
-                            "turn_id": turn_id,
-                            "item_id": event.get("item_id"),
-                            "item_type": item.get("type"),
-                            "status": (payload.get("turn") or {}).get("status")
-                            or item.get("status"),
+                def freeze_goal(run: AgentRun, metadata: dict[str, Any]) -> None:
+                    store._validate_current(run, metadata, generation)
+                    if (
+                        metadata.get("calls")
+                        or _model_unsettled(metadata)
+                        or run.metadata.get("runtime_goal_admitted")
+                        or run.metadata.get("runtime_expected_operations") is not None
+                        or run.metadata.get("runtime_frozen_plan") is not None
+                    ):
+                        raise CodexBindingError("goal_changed", "已有执行或冻结目标，不能重新规划")
+                    if (
+                        goal.mode not in {"business", "reply"}
+                        or (not goal.question and goal.mode == "business" and not goal.plan)
+                        or (goal.mode == "reply" and goal.plan is not None)
+                    ):
+                        raise CodexBindingError("goal_admission_failed", "宿主目标准入结果无效")
+                    if goal.question:
+                        metadata["waiting_input"] = {
+                            "question": goal.question,
+                            "created_at": time.time(),
                         }
+                        return
+                    expected = [frozen_workflow_operation(goal.plan)] if goal.plan else None
+                    digest = frozen_goal_digest(expected, goal.plan)
+                    run.metadata.update(
+                        runtime_goal_admitted=True,
+                        runtime_goal_mode=goal.mode,
+                        runtime_expected_operations=expected,
+                        runtime_frozen_plan=copy.deepcopy(goal.plan),
+                        runtime_goal_digest=digest,
+                        _codex_goal_reply=goal.reply,
+                    )
+                    if goal.artifacts:
+                        from app.application.agent_orchestrator.artifact_attachment import (
+                            ArtifactAttachmentMixin,
+                        )
 
-                        def record(run: AgentRun, metadata: dict[str, Any]) -> None:
-                            metadata["turn_id"] = turn_id
-                            run.add_event(
-                                "runtime.codex." + str(method).replace("/", "."), data=data
+                        # Only the host upload resolver produces these records;
+                        # neither model text nor caller paths become evidence.
+                        ArtifactAttachmentMixin()._attach_artifacts_from_payload(
+                            run, {"artifacts": goal.artifacts}, source="owned_elt_upload"
+                        )
+                    metadata["goal_digest"] = digest
+                    run.add_event(
+                        "runtime.goal.frozen",
+                        "任务目标已通过独立核对并冻结",
+                        {"goal_digest": digest, "mode": goal.mode},
+                    )
+
+                mutate(freeze_goal)
+            binding = store.get(run_id)
+            system_prompt = _goal_instructions(
+                system_prompt,
+                binding.run.metadata.get("runtime_expected_operations"),
+                binding.run.metadata.get("runtime_frozen_plan"),
+                allow_unfrozen_reads=False,
+            )
+            if binding.run.metadata.get("runtime_goal_mode") == "reply":
+                input_data = {
+                    **(input_data or {}),
+                    "host_reviewed_reply": binding.run.metadata.get("_codex_goal_reply", ""),
+                }
+            timeout = min(
+                timeout, limit - spent - max(0, time.time() - binding.metadata["active_started_at"])
+            )
+            if timeout <= 0:
+                raise CodexBindingError("runtime_budget_exhausted", "目标准入后运行预算已耗尽")
+            actual_config = replace(actual_config, turn_timeout_seconds=timeout)
+        if store.get(run_id).metadata.get("waiting_input"):
+            runtime_status = "completed"
+        else:
+            async with (
+                asyncio.timeout(timeout),
+                (transport_factory or CodexTransport)(actual_config) as active,
+            ):
+                transport = active
+                store.authenticate(grant.model_token, "model")
+                thread_id = binding.thread_id
+                if thread_id:
+                    resumed = await active.resume_thread(
+                        thread_id, developer_instructions=system_prompt
+                    )
+                    if resumed != thread_id:
+                        raise CodexBindingError("binding_conflict", "恢复返回了不同的 Codex 会话")
+                else:
+                    thread_id = await active.start_thread(developer_instructions=system_prompt)
+                    store.authenticate(grant.model_token, "model")
+                    store.record_thread(run_id, thread_id, generation=generation)
+                result["thread_id"] = thread_id
+
+                def started(run: AgentRun, metadata: dict[str, Any]) -> None:
+                    run.status = "running"
+                    metadata["runtime_status"] = "running"
+                    run.add_event(
+                        "runtime.codex.started", "Codex 执行已开始", {"thread_id": thread_id}
+                    )
+
+                mutate(started)
+                text = _input_text(task, history if not binding.thread_id else None, input_data)
+                result["session_messages"] = [{"role": "user", "content": task}]
+                iterator = active.stream_turn(text).__aiter__()
+                pending = asyncio.ensure_future(anext(iterator))
+                turn_id = ""
+                try:
+                    while True:
+                        done, _ = await asyncio.wait({pending}, timeout=_CONTROL_POLL_SECONDS)
+                        store.authenticate(grant.model_token, "model")
+                        if not done:
+                            continue
+                        try:
+                            event = pending.result()
+                        except StopAsyncIteration:
+                            break
+                        if event.get("thread_id") != thread_id:
+                            raise CodexBindingError("binding_conflict", "运行事件不属于当前会话")
+                        event_turn = str(event.get("turn_id") or "")
+                        if turn_id and event_turn and event_turn != turn_id:
+                            raise CodexBindingError("binding_conflict", "运行事件不属于当前轮次")
+                        turn_id = turn_id or event_turn
+                        method, payload = event.get("method"), event.get("payload") or {}
+                        item = payload.get("item") or {}
+                        if method == "turn/started":
+                            result.update(turn_id=turn_id, rounds=1)
+                        if method == "item/agentMessage/delta":
+                            key = str(event.get("item_id") or payload.get("itemId") or "message")
+                            texts[key] = texts.get(key, "") + str(payload.get("delta") or "")
+                        if method == "item/completed" and item.get("type") == "agentMessage":
+                            texts[str(item.get("id") or event.get("item_id") or "message")] = str(
+                                item.get("text") or ""
                             )
+                        if method in {"turn/started", "turn/completed", "item/completed"}:
+                            data = {
+                                "thread_id": thread_id,
+                                "turn_id": turn_id,
+                                "item_id": event.get("item_id"),
+                                "item_type": item.get("type"),
+                                "status": (payload.get("turn") or {}).get("status")
+                                or item.get("status"),
+                            }
 
-                        mutate(record)
-                        result["trajectory"].append({"round": 1, "event": method, **data})
-                    if on_event is not None:
-                        emitted = on_event(copy.deepcopy(event))
-                        if inspect.isawaitable(emitted):
-                            await emitted
-                    if method == "turn/completed":
-                        runtime_status = str((payload.get("turn") or {}).get("status") or "failed")
-                        break
-                    pending = asyncio.ensure_future(anext(iterator))
-            finally:
+                            def record(run: AgentRun, metadata: dict[str, Any]) -> None:
+                                metadata["turn_id"] = turn_id
+                                run.add_event(
+                                    "runtime.codex." + str(method).replace("/", "."), data=data
+                                )
+
+                            mutate(record)
+                            result["trajectory"].append({"round": 1, "event": method, **data})
+                        if on_event is not None:
+                            emitted = on_event(
+                                {
+                                    **copy.deepcopy(event),
+                                    "runtime_goal_mode": _completion_mode(binding, completion_mode),
+                                }
+                            )
+                            if inspect.isawaitable(emitted):
+                                await emitted
+                        if method == "turn/completed":
+                            runtime_status = str(
+                                (payload.get("turn") or {}).get("status") or "failed"
+                            )
+                            break
+                        pending = asyncio.ensure_future(anext(iterator))
+                finally:
+                    if runtime_status != "completed":
+                        await stop(runtime_status)
+                    else:
+                        store.close(
+                            run_id,
+                            reason=runtime_status,
+                            generation=generation,
+                            release_coordinator=False,
+                        )
+                    if not pending.done():
+                        pending.cancel()
+                        await asyncio.gather(pending, return_exceptions=True)
+                    if close_iterator := getattr(iterator, "aclose", None):
+                        await close_iterator()
                 if runtime_status != "completed":
                     await stop(runtime_status)
-                else:
-                    store.close(
-                        run_id,
-                        reason=runtime_status,
-                        generation=generation,
-                        release_coordinator=False,
-                    )
-                if not pending.done():
-                    pending.cancel()
-                    await asyncio.gather(pending, return_exceptions=True)
-                if close_iterator := getattr(iterator, "aclose", None):
-                    await close_iterator()
-            if runtime_status != "completed":
-                await stop(runtime_status)
     except asyncio.CancelledError as exc:
         cancelled = exc
         runtime_status = "cancelled"
@@ -380,7 +502,11 @@ async def run_codex_agent(
         binding = store.get(run_id)
         result["output"] = "\n\n".join(text for text in texts.values() if text.strip())
         status: RunStatus = _classify(
-            result, rows, _classification_metadata(binding), completion_mode, runtime_status
+            result,
+            rows,
+            _classification_metadata(binding),
+            _completion_mode(binding, completion_mode),
+            runtime_status,
         )
         if runtime_status in {"cancelled", "paused"}:
             status = "cancelled" if runtime_status == "cancelled" else "paused"
@@ -411,6 +537,7 @@ async def run_codex_agent(
                     execution_state=run.status,
                 )
             run.error = str(result.get("error") or run.error or "")
+            result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts]
             run.final_output = {**run.final_output, "codex_result": copy.deepcopy(result)}
             metadata["runtime_status"] = runtime_status
             if result.get("reconciliation_required"):

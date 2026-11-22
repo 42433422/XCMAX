@@ -11,10 +11,24 @@ from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStor
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def make_binding(actor, *, runtime_config=None, **context):
+def make_binding(
+    actor,
+    *,
+    runtime_config=None,
+    expected_operations=None,
+    goal_admission=False,
+    goal_mode=None,
+    **context,
+):
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     run = AgentRun(user_id=str(actor.user_id), message="查询并生成报告", status="running")
     run.metadata["runtime_context"] = {**actor.context, **context}
+    run.metadata["runtime_expected_operations"] = expected_operations
+    run.metadata.update(
+        runtime_goal_admission=goal_admission,
+        runtime_goal_admitted=goal_mode is not None,
+        runtime_goal_mode=goal_mode,
+    )
     repository.save(run)
     store = CodexBindingStore(repository)
     return store, run, store.create(run.run_id, runtime_config=runtime_config)
@@ -124,7 +138,12 @@ def test_disabled_actor_and_cleared_conversation_invalidate_grants(trusted_actor
 
 
 def test_effect_identity_is_server_owned_across_changed_model_call_ids(trusted_actor):
-    store, run, grant = make_binding(trusted_actor())
+    store, run, grant = make_binding(
+        trusted_actor(),
+        expected_operations=[
+            {"tool_id": "customers", "action": "create", "params": {"unit_name": "fixture"}}
+        ],
+    )
     kwargs = {
         "tool_id": "customers",
         "action": "create",
@@ -144,6 +163,66 @@ def test_effect_identity_is_server_owned_across_changed_model_call_ids(trusted_a
     assert error.value.code == "call_conflict"
 
 
+@pytest.mark.parametrize(
+    "changed",
+    [None, [{"tool_id": "customers", "action": "create", "params": {"unit_name": "changed"}}]],
+)
+def test_goal_cannot_change_after_grant_even_after_repository_reopen(trusted_actor, changed):
+    actor = trusted_actor()
+    store, run, grant = make_binding(
+        actor,
+        expected_operations=[
+            {"tool_id": "customers", "action": "create", "params": {"unit_name": "fixture"}}
+        ],
+    )
+    parent = store.repository.get(run.run_id)
+    parent.metadata["runtime_expected_operations"] = changed
+    store.repository.save(parent)
+    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=actor.factory))
+    for check in (
+        lambda: reopened.authenticate(grant.mcp_token),
+        lambda: reopened.receipt_snapshot(run.run_id),
+        lambda: reopened.create(run.run_id),
+    ):
+        with pytest.raises(CodexBindingError) as error:
+            check()
+        assert error.value.code == "goal_changed"
+
+
+def test_unfrozen_goal_never_claims_an_effect(trusted_actor):
+    store, run, grant = make_binding(trusted_actor())
+    options = {
+        "tool_id": "customers",
+        "action": "create",
+        "params": {"unit_name": "fixture"},
+        "read_only": False,
+        "generation": grant.binding.metadata["generation"],
+    }
+    with pytest.raises(CodexBindingError) as error:
+        store.claim_call(run.run_id, "unfrozen-effect", **options)
+    assert error.value.code == "goal_required"
+    assert store.get(run.run_id).metadata["calls"] == {}
+
+
+@pytest.mark.parametrize("goal_mode", [None, "reply"])
+def test_auto_admission_does_not_permit_business_reads_before_goal_or_during_reply(
+    trusted_actor, goal_mode
+):
+    store, run, grant = make_binding(trusted_actor(), goal_admission=True, goal_mode=goal_mode)
+    with pytest.raises(CodexBindingError) as error:
+        store.claim_call(
+            run.run_id,
+            "unexpected-query",
+            tool_id="products",
+            action="query",
+            params={},
+            read_only=True,
+            generation=grant.binding.metadata["generation"],
+        )
+    assert error.value.code == "goal_required"
+    assert store.get(run.run_id).metadata["calls"] == {}
+
+
 def test_pending_cancel_blocks_new_actions_even_before_run_status_changes(trusted_actor):
     store, run, grant = make_binding(trusted_actor())
     store.repository.request_task_control(run.run_id, "cancel", requested_by=run.user_id)
@@ -153,7 +232,13 @@ def test_pending_cancel_blocks_new_actions_even_before_run_status_changes(truste
 
 
 def test_child_budget_shares_model_reservations_and_settles_only_once(trusted_actor):
-    store, run, grant = make_binding(trusted_actor())
+    store, run, grant = make_binding(
+        trusted_actor(),
+        expected_operations=[
+            {"tool_id": "customers", "action": "create", "params": {"unit_name": name}}
+            for name in ("fixture", "another")
+        ],
+    )
 
     def budget(parent, metadata):
         parent.metadata["ai_cost_budget_units"] = 10
@@ -192,7 +277,10 @@ def test_child_budget_shares_model_reservations_and_settles_only_once(trusted_ac
 
 
 def test_unknown_child_cost_stays_reserved_and_forbids_replay(trusted_actor):
-    store, run, grant = make_binding(trusted_actor())
+    store, run, grant = make_binding(
+        trusted_actor(),
+        expected_operations=[{"tool_id": "customers", "action": "create", "params": {}}],
+    )
     store.update(
         run.run_id, lambda parent, metadata: parent.metadata.update(ai_cost_budget_units=10)
     )
@@ -234,7 +322,11 @@ def test_real_model_admission_and_child_claim_share_one_budget(
         context_window=1000,
         max_output_tokens=100,
     )
-    store, run, grant = make_binding(trusted_actor(), runtime_config=route.runtime_identity())
+    store, run, grant = make_binding(
+        trusted_actor(),
+        runtime_config=route.runtime_identity(),
+        expected_operations=[{"tool_id": "customers", "action": "create", "params": {}}],
+    )
     store.update(
         run.run_id, lambda parent, metadata: parent.metadata.update(ai_cost_budget_units=10)
     )

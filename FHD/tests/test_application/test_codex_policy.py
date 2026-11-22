@@ -30,9 +30,26 @@ def test_independent_profile_rejects_online_openai_and_insecure_routes(url):
         independent_gateway_url(url)
 
 
-def test_no_configuration_preserves_native_behavior(monkeypatch):
+def test_unconfigured_fixed_executor_blocks_instead_of_selecting_retired_native(monkeypatch):
     monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
-    assert runtime_settings().engine == "native"
+    settings = runtime_settings()
+    assert settings.engine == "codex"
+    assert settings.surfaces == ("chat", "employee")
+    with pytest.raises(RuntimePolicyError, match="qualification is missing"):
+        settings.require_qualified()
+
+
+@pytest.mark.parametrize(
+    "override", [{"engine": "native"}, {"surfaces": ["chat"]}, {"surfaces": []}]
+)
+def test_deployment_cannot_reenable_retired_loops_or_split_entrypoints(
+    tmp_path, monkeypatch, override
+):
+    config = tmp_path / "runtime.json"
+    config.write_text(json.dumps(override))
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", str(config))
+    with pytest.raises(RuntimePolicyError):
+        runtime_settings()
 
 
 def test_only_real_exact_route_qualification_can_enable_runtime(tmp_path):

@@ -18,7 +18,11 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
-企业 Agent 的可选本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK 负责进程协议和事件，XCMAX 只负责身份、额度、工具权限、持久任务与结果核验。受控工具使用已锁定的 MCP Python SDK `2.3.0`（MIT）；模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。安装可选 `codex-runtime` extra 才下载运行时；Native 安装和原业务路径保持默认。
+企业 Agent 的固定本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK 负责进程协议和事件，XCMAX 只负责身份、额度、工具权限、持久任务与结果核验。受控工具使用已锁定的 MCP Python SDK `2.3.0`（MIT）；模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。标准服务器、Linux 热更新和桌面依赖均安装固定 SDK/CLI；`codex-runtime` extra 只保留旧安装命令兼容。桌面包收集 SDK 模块、CLI 资源及版本元数据，构建门禁实际启动 App Server 并核验协议版本。
+
+CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。
+
+Smoke 与真实 API E2E 使用官方 [setup-uv 6.8.0](https://github.com/astral-sh/setup-uv/tree/d0cc045d04ccac9d8b7881df0226f9e82c39688e)（MIT）缓存依赖下载，每次仍从当前检出源码安装并校验依赖；离线 Agent 评测通过 Python 标准库输出脱敏 JUnit，由官方 [upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)（MIT）按源码、运行和重试身份保存。迁移检查及过期 CI 清理复用官方 [github-script 9.0.0](https://github.com/actions/github-script/tree/3a2844b7e9c422d3c10d287c895573f7108da1b3)（MIT，Node 24）；清理调用 GitHub REST 2022-11-28 的 [force-cancel](https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#force-cancel-a-workflow-run)，本仓只增加 PR、运行和提交身份核验。可信主线的 `pull_request_target` 不检出或执行 PR 内容，仅在普通取消已有证据且同 PR 旧运行仍未结束时调用；当前提交的 `always()` 门禁保留。新增 Action 引用固定完整提交。真实 API E2E 的随机端口是构建输入，因此仍独立严格构建。
 
 小 C 桌面浮窗复用已锁定的 [Electron 45.3.2](https://github.com/electron/electron/tree/v45.3.2)（MIT）`BrowserWindow` 和 `Tray`，沿用现有小 C 对话组件和同一登录会话。
 
@@ -41,7 +45,7 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | 桌面更新 | [electron-updater 6.8.11](https://github.com/electron-userland/electron-builder/tree/electron-updater%406.8.11/packages/electron-updater)，MIT | 沿用上游频道、灰度、制品哈希校验与安装。产品 provider 在同一次清单请求上验 Ed25519。Windows 未签名候选沿用 NSIS 安装包和临时手动下载流程。 |
 | 执行卡片 | [shadcn-vue v2.9.0](https://github.com/unovue/shadcn-vue/tree/39cb0b277f009e47de2dc62c4217755fb9a27eec/apps/v4/registry/bases/reka/ui/trace)，MIT | `frontend/src/components/ui/trace/` 保留上游 Trace / Collapsible 结构及许可；仅替换样式、图标和 Vue getter，使用已有 Reka UI 2.11.0，无额外 CSS 框架。 |
 | 消息状态 | [Vercel AI SDK 7.0.173](https://github.com/vercel/ai)，Apache-2.0，版本由前端 lockfile 固定 | `readUIMessageStream` 组装文本和工具事件，`ChatStatus` 提供会话状态。参考 [Open WebUI 的会话任务事件](https://docs.openwebui.com/features/extensibility/plugin/development/events/) 按会话分发，产品层只绑定账号、Mod、会话和审批回执。 |
-| SSE 解析 | [eventsource-parser 3.1.1](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
+| SSE 解析 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
 | 子进程观测 | Python 标准库 `multiprocessing.Pipe` | 只增加隔离工具与现有 StreamLifetime 的 JSON 进度适配，保留业务回执、绝对截止、进程回收、租户和审批控制。 |
 | ELT 预演续租 | [CPython 3.12.13 threading](https://github.com/python/cpython/blob/v3.12.13/Lib/threading.py)，PSF-2.0 | 阻塞解析和字段映射期间使用线程及 Event，在独立短事务校验原租户和租约令牌。 |
 | ELT 台账证据 | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)，MIT | 复用只读行列坐标。现有结构化模型只判断客户归属，入库校验逐行核对原件。 |
@@ -77,7 +81,7 @@ AIOPEN 虚拟光标的蓝色星尘拖尾复用 [cursor-effects](https://github.c
 
 <a id="version-policy"></a>
 
-## 独立 Agent 运行时
+## 固定本地 Agent 执行器
 
 `XCAGI_AGENT_RUNTIME_CONFIG` 指向部署方维护的 JSON 文件。请求不能选择供应商、凭据或引擎。Codex 路径使用独立私有目录、短期模型/工具令牌和本地 MCP/Responses 代理；不继承个人 Codex 配置、ChatGPT 登录或额外插件。仅开启受控业务工具，禁止 shell、文件修改、托管搜索及默认 OpenAI 回落。管理员强制策略仍然生效。该路径不改变已有开发超级员工的 Codex CLI 调度。
 
@@ -105,13 +109,17 @@ AIOPEN 虚拟光标的蓝色星尘拖尾复用 [cursor-effects](https://github.c
 
 仅支持网关真实提供的 Responses 多轮工具协议，不自行将 Chat Completions 拼装成 Responses。企业现有网关必须实际暴露该协议；平台聊天接口健康不代表已兼容。独立配置拒绝 OpenAI/ChatGPT/Azure OpenAI 地址和 OpenAI 上游声明，禁止重定向和通过 `previous_response_id` 借用其他任务的上游会话。任意代理域名本身不能证明上游独立，必须核对网关路由记录和网络隔离证据。
 
-启用凭据采用 `xcmax.runtime-qualification.v1`，必须匹配 `ModelRoute.identity`、`codex_version=0.171.0`、`model_kind=real`，并带实际 `evidence_refs`。`checks` 中 `responses_stream`、`multi_turn_tools`、`openai_network_denied`、`business_receipt_verified` 均需真实 PASS。缺凭据、模型/容量/版本变化、合成模型或缺证据均拒绝启动；不能手填 PASS 代替验收。未配置时继续 Native，已启动 Codex 的任务出错不改走 Native。
+启用凭据采用 `xcmax.runtime-qualification.v1`，必须匹配 `ModelRoute.identity`、`codex_version=0.171.0`、`model_kind=real`，并带实际 `evidence_refs`。`checks` 中 `responses_stream`、`multi_turn_tools`、`openai_network_denied`、`business_receipt_verified` 均需真实 PASS。缺凭据、模型/容量/版本变化、合成模型或缺证据均拒绝启动；不能手填 PASS 代替验收。新聊天与 agent 型员工任务固定使用 Codex；缺配置或资格证时明确阻断，不回落 Native。配置不能再选择 `native` 或拆分 chat/employee 的执行器。旧会话内已经持久化的计划、审批和澄清继续走原任务恢复，过期索引不得生成新的 Native 计划。
 
 所有模型请求先经过现有调用准入和用量账本预留额度，再按真实 usage 结算并释放余量；断流或用量未知保留待核对。工具调用创建受控子任务，权限、审批与冻结参数保持原语义。等待审批/补充信息和进程重启均保留原任务；取消先撤销运行授权，已发生的业务效果仍需回读。完成一个工具动作仅表示该动作有回执；完整业务目标必须有服务端冻结的目标契约及全部证据，模型轮次结束不代表业务完成。
 
-预算由根任务统一累计模型和子任务费用，未结算调用继续占用预留额度；`turn_timeout_seconds` 是同一任务跨轮累计的活跃运行时间（1–3570 秒），审批等待不计入。聊天历史保存原任务续跑指针，审批卡只指向实际冻结的子任务；Codex 子任务不能经普通重试入口绕开父任务预算。当前业务完成契约仅接受宿主传入的一项完整规范工作流（`expected_operations`）；任意自然语言多目标、动态多动作尚不能证明整体覆盖，只报告已核验动作并保留待核对，不能据此将全部员工任务切换到新引擎。
+预算由根任务统一累计模型和子任务费用，未结算调用继续占用预留额度；`turn_timeout_seconds` 是同一任务跨轮累计的活跃运行时间（1–3570 秒），审批等待不计入。聊天历史保存原任务续跑指针，审批卡只指向实际冻结的子任务；Codex 子任务不能经普通重试入口绕开父任务预算。宿主目标准入复用现有计划编译、参数校验、独立目标覆盖审核和风险策略，模型请求经同一个运行令牌、Responses 路由及用量账本。普通回复与业务任务由宿主准入结果区分；缺参在原父任务暂停，补充后只允许首次冻结，已有业务效果或合同不得被改写。完整依赖图通过 `execute_plan(plan_digest, call_id)` 提交，模型不能上传、改写或拆分该图；LangGraph 执行条件与顺序，独立核验时只回放已持久化的工具回执，不重执行业务。宿主显式提供的多个独立 `expected_operations` 也逐项核验，遗漏、重复副作用、改参、未知结果和未决审批均不算完成。若全部业务回执已经核验而最终模型回复丢失，业务结果可以完成，但仍保留真实运行状态。
 
-验证分层：固定 SDK + 本地协议替身测试只证明接口/资源/隔离契约；SQL/LangGraph 回归证明权限、幂等与账本状态；真实非 OpenAI 模型、多轮工具与禁止 OpenAI 出网测试证明独立路径；Windows/macOS/Linux 安装与业务回归分别记录。没有客户原件时，ELT 原件到最终 Excel 的验收仍为 BLOCKED。发布不得用合成测试替代任何真实验收，也不得提前切换生产默认引擎。
+自然语言 Agent API 默认以 `202` 持久受理，父任务与请求在原 SQL 队列同事务保存，由原 dispatcher 执行；恢复继续使用原父任务和 worker 租约。冻结图内的候选澄清只接受原候选的编号、完整名称或明确序号，回答在同一事务保存并排入原子任务；普通“确认”不授予写审批。查询原父任务或审批后轮询原子任务时，只核对已持久化业务回执并更新父任务、Task 与队列状态，不启动新的模型轮次或业务操作。活动租约、撤权、取消和未知结果不能被读刷新覆盖。
+
+退役范围是员工手写的模型→工具→模型循环、该循环专用的文本工具协议/伪执行检测/配置与测试，以及 Codex 子任务中的原生模型改参修复。LangGraph、AgentOrchestrator、业务叶子工具、审批、预算、业务核验和历史计划恢复继续复用。员工工作空间授权在提交与审批后实际执行前重新从宿主包恢复；业务审批统一绑定原子任务，不能生成平行的临时审批。
+
+验证分层：固定 SDK + 本地协议替身测试只证明接口/资源/隔离契约；SQL/LangGraph 回归证明权限、幂等、目标覆盖与账本状态；真实非 OpenAI 模型、多轮工具与禁止 OpenAI 出网测试证明独立路径；Windows/macOS/Linux 完整安装与业务回归分别记录。Linux 最小冻结包实际执行生产 launcher→App Server initialize 只证明冻结启动链，不代表完整平台安装或真实模型验收。没有客户原件时，ELT 原件到最终 Excel 的验收仍为 BLOCKED。部署固定执行器前必须准备真实路由资格证；未配置的部署会明确拒绝新 Agent 任务。发布不得用合成测试替代任何真实验收。
 
 ## 版本与发布约定
 

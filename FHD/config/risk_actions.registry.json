@@ -1943,7 +1943,8 @@
           "required_params": [
             "file_path"
           ],
-          "availability": "shared"
+          "availability": "shared",
+          "read_only": true
         },
         "structure": {
           "risk": "low",
@@ -1951,7 +1952,8 @@
           "required_params": [
             "file_path"
           ],
-          "availability": "shared"
+          "availability": "shared",
+          "read_only": true
         },
         "query": {
           "risk": "low",
@@ -1960,7 +1962,8 @@
             "file_path",
             "question"
           ],
-          "availability": "shared"
+          "availability": "shared",
+          "read_only": true
         },
         "statistics": {
           "risk": "low",
@@ -1968,7 +1971,8 @@
           "required_params": [
             "file_path"
           ],
-          "availability": "shared"
+          "availability": "shared",
+          "read_only": true
         },
         "export": {
           "risk": "medium",
@@ -1976,6 +1980,16 @@
           "required_params": [
             "file_path",
             "rows"
+          ],
+          "availability": "shared"
+        },
+        "aggregate": {
+          "risk": "low",
+          "idempotent": true,
+          "read_only": true,
+          "required_params": [
+            "file_path",
+            "metrics"
           ],
           "availability": "shared"
         }
@@ -2088,6 +2102,33 @@
           ],
           "availability": "shared",
           "action_class": "bulk_import"
+        }
+      }
+    },
+    "excel_join_compare": {
+      "description": "读取两份已授权表格并执行合并或差异比较，不写入文件或业务库。",
+      "availability": "shared",
+      "actions": {
+        "join": {
+          "risk": "low",
+          "idempotent": true,
+          "read_only": true,
+          "required_params": [
+            "file_paths",
+            "join_keys"
+          ],
+          "availability": "shared"
+        },
+        "diff": {
+          "risk": "low",
+          "idempotent": true,
+          "read_only": true,
+          "required_params": [
+            "file_path_a",
+            "file_path_b",
+            "key_columns"
+          ],
+          "availability": "shared"
         }
       }
     }

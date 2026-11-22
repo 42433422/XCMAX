@@ -63,3 +63,5 @@ socksio==1.0.0
 defusedxml==0.7.1
 semantic-router==1.1.2
 fastembed==0.9.1
+openai-codex==0.171.0
+openai-codex-cli-bin==0.171.0

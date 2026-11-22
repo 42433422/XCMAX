@@ -59,6 +59,35 @@ def capture_worker_claim():
     return (execution.run_id, owner_id, execution.execution_count)
 
 
+def worker_claim_owns_run(run_id):
+    """Accept a child only through the queued Codex parent's durable call binding."""
+    claim = _claim.get()
+    if claim is None:
+        return False
+    repository, execution, _ = claim
+    if run_id == execution.run_id:
+        return True
+    from app.application.agent_orchestrator.task_models import mod_id_of_run, tenant_id_of_run
+
+    parent, child = repository.get(execution.run_id), repository.get(run_id)
+    if parent is None or child is None:
+        return False
+    if (
+        parent.intent != "codex.runtime"
+        or parent.metadata.get("runtime_type") != "codex"
+        or child.user_id != parent.user_id
+        or tenant_id_of_run(child) != tenant_id_of_run(parent)
+        or mod_id_of_run(child) != mod_id_of_run(parent)
+        or (child.metadata.get("runtime_context") or {}).get("parent_run_id") != parent.run_id
+    ):
+        return False
+    calls = (parent.metadata.get("codex_runtime") or {}).get("calls") or {}
+    return any(
+        isinstance(call, dict) and call.get("child_run_id") == child.run_id
+        for call in calls.values()
+    )
+
+
 def capture_elt_worker_claim(step, context):
     """Capture the approved stored step from the host, never a client marker."""
     claim = _claim.get()

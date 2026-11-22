@@ -21,6 +21,10 @@ from typing import Any
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest as canonical_digest
+from app.domain.task_lifecycle.agent_runtime_contract import (
+    frozen_goal_digest,
+    frozen_workflow_operation,
+)
 
 _KEY = "codex_runtime"
 _AUDIENCES = frozenset({"mcp", "model"})
@@ -125,6 +129,22 @@ class CodexBindingStore:
         raise CodexBindingError("binding_conflict", "任务状态已变化，请重新读取")
 
     @staticmethod
+    def _validate_goal(run: AgentRun, metadata: dict[str, Any]) -> str:
+        try:
+            digest = frozen_goal_digest(
+                run.metadata.get("runtime_expected_operations"),
+                run.metadata.get("runtime_frozen_plan"),
+            )
+        except (TypeError, ValueError) as exc:
+            raise CodexBindingError("goal_changed", "原任务冻结的业务目标已失效") from exc
+        if (
+            run.metadata.get("runtime_goal_digest", digest) != digest
+            or metadata.get("goal_digest", digest) != digest
+        ):
+            raise CodexBindingError("goal_changed", "原任务冻结的业务目标不能改变")
+        return digest
+
+    @staticmethod
     def _validate_authority(run: AgentRun, metadata: dict[str, Any]) -> None:
         from app.application.agent_orchestrator.run_lifecycle import continuation_conversation_error
         from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
@@ -143,6 +163,7 @@ class CodexBindingStore:
                 raise CodexBindingError("conversation_changed", "会话运行缺少可信历史版本")
             if error := continuation_conversation_error(run, context):
                 raise CodexBindingError("conversation_changed", error)
+        CodexBindingStore._validate_goal(run, metadata)
 
     def create(
         self,
@@ -178,6 +199,7 @@ class CodexBindingStore:
             metadata.update(
                 version=1,
                 identity_digest=_identity(run),
+                goal_digest=self._validate_goal(run, metadata),
                 runtime_config=config,
                 allowed_actions=normalized,
                 coordinator_active=True,
@@ -350,12 +372,29 @@ class CodexBindingStore:
             created = False
             if metadata.get("waiting_input"):
                 raise CodexBindingError("waiting_user", "请先补充原任务所需信息")
+            expected = run.metadata.get("runtime_expected_operations")
+            if run.metadata.get("runtime_goal_admission") is True:
+                if (
+                    run.metadata.get("runtime_goal_admitted") is not True
+                    or run.metadata.get("runtime_goal_mode") != "business"
+                    or not expected
+                ):
+                    raise CodexBindingError("goal_required", "当前任务没有获准执行的业务目标")
+                plan = run.metadata.get("runtime_frozen_plan")
+                permitted = [frozen_workflow_operation(plan)] if plan is not None else expected
+                if fingerprint not in {canonical_digest(row) for row in permitted}:
+                    raise CodexBindingError("goal_mismatch", "只能执行宿主冻结的完整业务义务")
             calls = metadata.setdefault("calls", {})
             existing = calls.get(call_id)
             if existing is not None:
                 if existing["fingerprint"] != fingerprint:
                     raise CodexBindingError("call_conflict", "同一调用标识不能改变操作内容")
                 return
+            if not read_only:
+                if expected is None:
+                    raise CodexBindingError("goal_required", "请先由宿主冻结完整业务目标")
+                if fingerprint not in {canonical_digest(row) for row in expected}:
+                    raise CodexBindingError("goal_mismatch", "操作不属于原任务冻结的业务目标")
             if len(calls) >= 256:
                 raise CodexBindingError("call_limit", "任务工具调用已达到上限")
             prior = next((c for c in calls.values() if c["child_task_id"] == child_task_id), None)
@@ -468,6 +507,7 @@ class CodexBindingStore:
         from app.infrastructure.codex.tools import read_call_receipt
 
         binding = self.get(run_id)
+        self._validate_goal(binding.run, binding.metadata)
         receipts = []
         for call_id, call in binding.metadata.get("calls", {}).items():
             receipt = read_call_receipt(self, binding, call)

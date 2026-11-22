@@ -17,7 +17,6 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-from tests.fixtures.planner_model import goal_review_response
 from tests.test_application.ai_chat_test_helpers import (
     _make_svc as _make_service,
 )
@@ -1136,25 +1135,27 @@ class TestInjectExcelVectorContextDeep:
     ],
 )
 @pytest.mark.parametrize("source", ["basic", "pro", None])
-def test_unified_model_failure_never_falls_back_to_local_reply_or_tool(message, source):
-    """Replaces removed greeting/import/pro-tool shortcut contracts with real planning."""
-    from app.application.workflow.planner import LLMWorkflowPlanner
+def test_unqualified_fixed_runtime_never_falls_back_to_local_reply_or_tool(message, source):
+    """All source labels and utterances require the same qualified executor."""
+    from app.infrastructure.codex.policy import RuntimeSettings
 
-    completion = Mock(return_value=None)
     service = _make_service()
-    service.workflow_planner = LLMWorkflowPlanner(
-        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
-    )
     with (
+        patch(
+            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+        ),
         patch.object(service, "_persist_chat_turn"),
         patch.object(service, "_persist_recallable_chat_turn"),
         patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
         patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
     ):
         result = service.process_chat("unified-failure", message, source=source)
-    completion.assert_called_once()
+    service.workflow_planner.plan.assert_not_called()
     assert result["success"] is False
-    assert result["data"]["execution_started"] is False
+    assert result["runtime"] == "codex"
+    assert result["data"]["error_code"] == "runtime_policy_blocked"
+    assert result["data"]["business_receipts"] == []
+    assert result["data"]["tool_calls"] == []
     assert not result.get("toolCall")
     assert not service._pending_workflows
 
@@ -1189,16 +1190,21 @@ def test_unsigned_context_cannot_supply_business_owner():
     ],
 )
 def test_file_context_reaches_model_without_direct_import(file_context):
-    import json
+    from app.infrastructure.codex.policy import RuntimeSettings
 
-    from app.application.workflow.planner import LLMWorkflowPlanner
-
-    completion = Mock(return_value=None)
     service = _make_service()
-    service.workflow_planner = LLMWorkflowPlanner(
-        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
-    )
     with (
+        patch(
+            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+        ),
+        patch(
+            "app.application.agent_runtime.gateway.run_runtime_task",
+            return_value={
+                "ok": False,
+                "exit_status": "planning_failed",
+                "business_completed": False,
+            },
+        ) as execute,
         patch.object(service, "_persist_chat_turn"),
         patch.object(service, "_persist_recallable_chat_turn"),
         patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
@@ -1208,77 +1214,74 @@ def test_file_context_reaches_model_without_direct_import(file_context):
         result = service.process_chat(
             "file-context", "请分析这个文件", source="pro", file_context=file_context
         )
-    prompt = json.loads(completion.call_args.kwargs["messages"][-1]["content"])
-    assert prompt["context"]["file_context"] == file_context
+    execute.assert_called_once()
+    assert execute.call_args.kwargs["input_data"]["file_context"] == file_context
+    assert execute.call_args.kwargs["completion_mode"] == "auto"
+    assert execute.call_args.kwargs["admit_goal"] is True
+    service.workflow_planner.plan.assert_not_called()
     direct_import.assert_not_called()
     assert result["success"] is False
-    assert result["data"]["execution_started"] is False
+    assert result["business_completed"] is False
 
 
 @pytest.mark.parametrize(
     "reason",
     ["connection refused", "timed out", "api_key=private-test-secret", "unknown internal error"],
 )
-def test_model_transport_failure_is_safe_and_does_not_call_legacy_chat(reason):
-    from app.application.workflow.planner import LLMWorkflowPlanner
+def test_runtime_policy_failure_is_safe_and_does_not_call_legacy_chat(reason):
+    from app.infrastructure.codex.policy import RuntimePolicyError
 
-    completion = Mock(side_effect=RuntimeError(reason))
-    conversation = Mock(get_context=Mock(return_value=None))
     service = _make_service()
-    service.workflow_planner = LLMWorkflowPlanner(ai_service=conversation, completion=completion)
     with (
+        patch(
+            "app.application.agent_runtime.chat.runtime_settings",
+            side_effect=RuntimePolicyError(reason),
+        ),
         patch.object(service, "_persist_chat_turn"),
         patch.object(service, "_persist_recallable_chat_turn"),
         patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
         patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
     ):
         result = service.process_chat("transport-failure", "解释一下库存查询")
-    completion.assert_called_once()
-    conversation.chat.assert_not_called()
+    service.workflow_planner.plan.assert_not_called()
     assert result["success"] is False
-    assert result["data"]["execution_started"] is False
+    assert result["data"]["error_code"] == "runtime_not_qualified"
+    assert result["data"]["business_receipts"] == []
+    assert result["data"]["tool_calls"] == []
     assert "private-test-secret" not in str(result)
 
 
 @pytest.mark.parametrize("source", ["basic", "pro", "xcagi-pro", "PRO_MODE", "professional"])
-def test_all_source_labels_execute_the_same_model_authored_reply_graph(source):
-    import json
+def test_all_source_labels_execute_the_same_fixed_runtime(source):
+    from app.infrastructure.codex.policy import RuntimeSettings
 
-    from app.application.workflow.planner import LLMWorkflowPlanner
-
-    def respond(**kwargs):
-        request = json.loads(kwargs["messages"][-1]["content"])
-        if request.get("task") == "audit_goal_coverage":
-            return goal_review_response(
-                request, source="解释一下工作方式", node_ids=["model_reply"], outcome="reply"
-            )
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps({"mode": "reply", "reply": "这是模型生成的说明"})
-                    }
-                }
-            ]
-        }
-
-    completion = Mock(side_effect=respond)
     service = _make_service()
-    service.workflow_planner = LLMWorkflowPlanner(
-        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
-    )
     with (
+        patch(
+            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+        ),
+        patch(
+            "app.application.agent_runtime.gateway.run_runtime_task",
+            return_value={
+                "ok": True,
+                "run_id": "fixed-parent",
+                "exit_status": "reply_completed",
+                "output": "这是模型生成的说明",
+            },
+        ) as execute,
         patch.object(service, "_persist_chat_turn"),
         patch.object(service, "_persist_recallable_chat_turn"),
         patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
         patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
     ):
         result = service.process_chat("unified-reply", "解释一下工作方式", source=source)
-    assert completion.call_count == 2
-    assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
-        "audit_goal_coverage"
-    )
+    execute.assert_called_once()
+    assert execute.call_args.kwargs["task"] == "解释一下工作方式"
+    assert execute.call_args.kwargs["completion_mode"] == "auto"
+    assert execute.call_args.kwargs["admit_goal"] is True
+    service.workflow_planner.plan.assert_not_called()
     assert result["success"] is True
     assert result["response"] == "这是模型生成的说明"
-    assert result["data"]["workflow_runtime"] == "xcagi-langgraph"
+    assert result["runtime"] == "codex"
+    assert result["run_id"] == "fixed-parent"
     assert not result.get("toolCall")

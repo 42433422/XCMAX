@@ -1,7 +1,8 @@
-"""Deployment-owned runtime selection; no request can choose credentials or a provider.
+"""The fixed local executor's deployment contract and independent model route.
 
-Codex is an optional, qualified local engine. Native remains the default until a
-real gateway qualification receipt matches the exact deployed route and version.
+New tasks use Codex. Missing qualification blocks admission; it never selects a
+retired model/tool loop. Previously persisted business graphs retain their own
+host-owned continuation path.
 """
 
 from __future__ import annotations
@@ -125,7 +126,7 @@ class ModelRoute:
 
 @dataclass(frozen=True)
 class RuntimeSettings:
-    engine: str = "native"
+    engine: str = "codex"
     surfaces: tuple[str, ...] = ("chat", "employee")
     route: ModelRoute | None = None
     runtime_root: Path | None = None
@@ -166,15 +167,17 @@ def runtime_settings() -> RuntimeSettings:
         data = json.loads(Path(location).read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("expected object")
-        engine = data.get("engine", "native")
-        if engine not in {"native", "codex"}:
-            raise RuntimePolicyError("Unknown configured agent runtime")
+        engine = data.get("engine", "codex")
+        if engine != "codex":
+            raise RuntimePolicyError(
+                "Native agent loops are retired; configure the fixed Codex executor"
+            )
         surfaces = data.get("surfaces", ["chat", "employee"])
-        if not isinstance(surfaces, list) or any(s not in {"chat", "employee"} for s in surfaces):
-            raise RuntimePolicyError("Invalid agent runtime surfaces")
-        route = ModelRoute(**data["route"]) if engine == "codex" else None
+        if not isinstance(surfaces, list) or sorted(surfaces) != ["chat", "employee"]:
+            raise RuntimePolicyError("The fixed executor must own both chat and employee tasks")
+        route = ModelRoute(**data["route"])
         root = Path(data["runtime_root"]).expanduser() if data.get("runtime_root") else None
-        if engine == "codex" and (root is None or not root.is_absolute()):
+        if root is None or not root.is_absolute():
             raise RuntimePolicyError("Codex requires an absolute private runtime_root")
         return RuntimeSettings(
             engine=engine,

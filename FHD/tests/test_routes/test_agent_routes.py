@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,7 +28,6 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.fastapi_routes.domains.agent.agent_routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.planner_model import goal_review_response
 
 
 def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant(trusted_actor) -> None:
@@ -377,99 +376,63 @@ def test_resume_explains_unreconciled_result_without_state_changes():
     assert repository.latest_task_control(run.run_id) is None
 
 
-def _planner_fallback_patches():
+def _seed_legacy_run(*, user_id="u1", runtime_context=None, write=False, enqueue=True):
+    """Restore the already-frozen graph used by pre-Codex task control tests."""
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.fastapi_routes.domains.agent.route_support import enqueue_run
 
-    def model_plan(plan_id, user_id, message, registry, context):
-        del user_id, registry, context
-        write = "发货单" in message
-        node = (
-            WorkflowNode(
-                node_id="generate_shipment",
-                tool_id="shipment_orders",
-                action="generate",
-                params={
-                    "unit_name": "星光贸易",
-                    "products": [{"model_number": "XG-5003", "quantity": 1}],
-                },
-            )
-            if write
-            else WorkflowNode(
-                node_id="read_products",
-                tool_id="business_db",
-                action="read",
-                params={"entity": "products", "keyword": "XG-5003"},
-            )
+    node = (
+        WorkflowNode(
+            node_id="generate_shipment",
+            tool_id="shipment_orders",
+            action="generate",
+            params={
+                "unit_name": "星光贸易",
+                "products": [{"model_number": "XG-5003", "quantity": 1}],
+            },
         )
-        return PlanGraph(
-            plan_id=plan_id,
+        if write
+        else WorkflowNode(
+            node_id="read_products",
+            tool_id="business_db",
+            action="read",
+            params={"entity": "products", "keyword": "XG-5003"},
+        )
+    )
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message="请为星光贸易生成发货单" if write else "查数据库产品 XG-5003",
+        runtime_context=runtime_context,
+        plan=PlanGraph(
+            plan_id=f"legacy_{uuid.uuid4().hex}",
             intent="shipment_generate" if write else "business_db_read",
             nodes=[node],
-        )
-
-    def review_completion(**kwargs):
-        payload = json.loads(kwargs["messages"][-1]["content"])
-        source = payload["user_message"]
-        nodes = {
-            "查数据库产品 XG-5003": ["read_products"],
-            "查产品": ["read_products"],
-            "请为星光贸易生成发货单": ["generate_shipment"],
-        }
-        return goal_review_response(
-            payload, source=source, node_ids=nodes[source], outcome="execute"
-        )
-
-    return (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch(
-            "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm",
-            side_effect=model_plan,
         ),
-        patch(
-            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        patch(
-            "app.application.workflow.planner.request_planner_completion",
-            side_effect=review_completion,
-        ),
+        auto_execute=False,
     )
+    if enqueue:
+        run = orchestrator.stage_run_for_dispatch(run.run_id, requested_by=user_id)
+        enqueue_run(run, requested_by=user_id)
+    return run
 
 
-def test_create_get_and_list_agent_run(local_tools, trusted_actor, monkeypatch) -> None:
+def test_get_and_list_historical_agent_run(local_tools, trusted_actor, monkeypatch) -> None:
     get_agent_run_repository().clear()
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(user_id=17, role="admin")
     client = _client(actor=actor)
-    patches = _planner_fallback_patches()
-
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
-        ) as mock_execute,
-    ):
-        response = client.post(
-            "/api/agent/runs",
-            json={
-                "message": "查数据库产品 XG-5003",
-                "user_id": "forged-user",
-                "runtime_context": {"source": "route-test"},
-            },
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
+    ) as mock_execute:
+        queued = _seed_legacy_run(
+            user_id=str(actor.user_id),
+            runtime_context={**actor.context, "source": "route-test"},
         )
-        completed_run = _drain_background_run(response.json()["data"]["run_id"])
+        assert queued.status == "queued"
+        completed_run = _drain_background_run(queued.run_id)
 
-    assert response.status_code == 202
-    payload = response.json()
-    assert payload["success"] is True
-    assert payload["data"]["status"] == "queued"
-    assert payload["execution"]["state"] == "queued"
     run = completed_run.to_dict()
     assert run["status"] == "completed"
     assert run["user_id"] == str(actor.user_id)
@@ -583,30 +546,12 @@ def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
 def test_continue_waiting_agent_run(local_tools) -> None:
     get_agent_run_repository().clear()
     client = _client()
-    patches = _planner_fallback_patches()
-
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool"
-        ) as mock_execute,
-    ):
-        create_response = client.post(
-            "/api/agent/runs",
-            json={
-                "message": "请为星光贸易生成发货单",
-                "user_id": "u1",
-                "runtime_context": {"source": "route-continue-test"},
-            },
-        )
-        assert create_response.status_code == 202
-        queued = create_response.json()["data"]
-        assert queued["status"] == "queued"
-        waiting = _drain_background_run(queued["run_id"])
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool"
+    ) as mock_execute:
+        queued = _seed_legacy_run(write=True, runtime_context={"source": "route-continue-test"})
+        assert queued.status == "queued"
+        waiting = _drain_background_run(queued.run_id)
         approval_response = client.get(f"/api/agent/runs/{waiting.run_id}").json()
         approval_grant = approval_response["approval"]["grant"]
         assert waiting.status == "waiting_user"
@@ -638,19 +583,8 @@ def test_agent_routes_require_authentication_and_enforce_ownership() -> None:
     assert anonymous.get("/api/agent/runs").status_code == 401
 
     owner = _client("owner")
-    patches = _planner_fallback_patches()
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": []},
-        ),
-    ):
-        created = owner.post("/api/agent/runs", json={"message": "查产品"}).json()["data"]
+    created = _seed_legacy_run(user_id="owner").to_dict()
+    assert owner.get(f"/api/agent/runs/{created['run_id']}").status_code == 200
 
     stranger = _client("stranger")
     assert stranger.get(f"/api/agent/runs/{created['run_id']}").status_code == 403
@@ -663,20 +597,11 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
 ) -> None:
     get_agent_run_repository().clear()
     owner = _client("owner")
-    patches = _planner_fallback_patches()
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True},
-        ) as execute,
-    ):
-        response = owner.post("/api/agent/runs", json={"message": "请为星光贸易生成发货单"})
-        run_id = response.json()["data"]["run_id"]
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={"success": True},
+    ) as execute:
+        run_id = _seed_legacy_run(user_id="owner", write=True).run_id
         _drain_background_run(run_id)
         grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
         second_grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
@@ -731,24 +656,15 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
     )
 
     owner = _client("owner")
-    patches = _planner_fallback_patches()
     engine = create_engine(f"sqlite:///{tmp_path / 'unmigrated.db'}")
     durable_repository = approval_grant._consumption_repository()
     unavailable_repository = SQLAlchemyApprovalConsumptionRepository(sessionmaker(bind=engine))
     try:
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patches[4],
-            patch(
-                "app.application.facades.tools_facade.execute_registered_workflow_tool",
-                return_value={"success": True},
-            ) as execute,
-        ):
-            response = owner.post("/api/agent/runs", json={"message": "请为星光贸易生成发货单"})
-            run_id = response.json()["data"]["run_id"]
+        with patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            return_value={"success": True},
+        ) as execute:
+            run_id = _seed_legacy_run(user_id="owner", write=True).run_id
             _drain_background_run(run_id)
             grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
             monkeypatch.setattr(
@@ -1043,15 +959,16 @@ def test_agent_routes_do_not_expose_internal_exception_details() -> None:
         )
     )
     run.add_event("run.failed", "Agent run 失败", {"error": secret})
+    repository.save(run)
 
     client = _client()
     with patch(
-        "app.fastapi_routes.domains.agent.agent_routes.AgentOrchestrator.start_run",
-        return_value=run,
+        "app.application.agent_runtime.gateway.run_runtime_task",
+        return_value={"run_id": run.run_id, "ok": False, "execution_state": "failed"},
     ):
         response = client.post("/api/agent/runs", json={"message": "执行任务"})
 
-    assert response.status_code == 200
+    assert response.status_code == 409
     assert secret not in response.text
     payload = response.json()["data"]
     assert payload["error"] == "Agent 执行失败，详细信息已记录"
@@ -1068,7 +985,7 @@ def test_agent_routes_do_not_expose_internal_exception_details() -> None:
 def test_agent_route_internal_failure_returns_stable_public_message() -> None:
     client = _client()
     with patch(
-        "app.fastapi_routes.domains.agent.agent_routes.AgentOrchestrator.start_run",
+        "app.application.agent_runtime.gateway.run_runtime_task",
         side_effect=RuntimeError("Traceback: database password=do-not-expose"),
     ):
         response = client.post("/api/agent/runs", json={"message": "执行任务"})
@@ -1080,27 +997,19 @@ def test_agent_route_internal_failure_returns_stable_public_message() -> None:
     }
 
 
-def test_pause_resume_and_cancel_agent_run(local_tools, trusted_actor, monkeypatch) -> None:
+def test_pause_resume_and_cancel_historical_run(local_tools, trusted_actor, monkeypatch) -> None:
     get_agent_run_repository().clear()
     clear_run_controls_for_tests()
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    client = _client(actor=trusted_actor(user_id=17, role="admin"))
-    patches = _planner_fallback_patches()
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": []},
-        ) as execute,
-    ):
-        created = client.post(
-            "/api/agent/runs",
-            json={"message": "查产品", "auto_execute": False},
-        ).json()["data"]
+    actor = trusted_actor(user_id=17, role="admin")
+    client = _client(actor=actor)
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={"success": True, "data": []},
+    ) as execute:
+        created = _seed_legacy_run(
+            user_id=str(actor.user_id), runtime_context=actor.context, enqueue=False
+        ).to_dict()
         paused = client.post(f"/api/agent/runs/{created['run_id']}/pause").json()["data"]
         assert paused["status"] == "paused"
         execute.assert_not_called()
@@ -1115,10 +1024,9 @@ def test_pause_resume_and_cancel_agent_run(local_tools, trusted_actor, monkeypat
         assert resumed["status"] == "completed"
         execute.assert_called_once()
 
-        second = client.post(
-            "/api/agent/runs",
-            json={"message": "查产品", "auto_execute": False},
-        ).json()["data"]
+        second = _seed_legacy_run(
+            user_id=str(actor.user_id), runtime_context=actor.context, enqueue=False
+        ).to_dict()
         cancelled = client.post(f"/api/agent/runs/{second['run_id']}/cancel").json()["data"]
         assert cancelled["status"] == "cancelled"
         assert cancelled["steps"][0]["status"] == "skipped"

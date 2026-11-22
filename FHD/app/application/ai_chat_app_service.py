@@ -374,6 +374,8 @@ class AIChatApplicationService(
 
         from app.application.agent_runtime.chat import try_runtime_chat
 
+        ctx = self._inject_excel_vector_context(message=message, context=ctx)
+        ctx = self._inject_wechat_contact_context(message=message, context=ctx)
         runtime_result = try_runtime_chat(
             user_id=user_id,
             message=message,
@@ -384,8 +386,10 @@ class AIChatApplicationService(
         if runtime_result is not None:
             return _finalize(runtime_result)
 
-        ctx = self._inject_excel_vector_context(message=message, context=ctx)
-        ctx = self._inject_wechat_contact_context(message=message, context=ctx)
+        # Only a previously saved workflow in this exact conversation can reach
+        # the compatibility dispatcher. A stale pending index cannot mint a new
+        # native plan after the fixed executor has taken over new tasks.
+        ctx = {**ctx, "_legacy_resume_only": True}
         workflow_result = self._try_handle_dynamic_workflow(
             user_id=user_id,
             message=message,
@@ -512,7 +516,14 @@ class AIChatApplicationService(
             self.workflow_planner,
             self.risk_gate,
             self.approval_service,
-        ).handle(user_id, message, source, context, text)
+        ).handle(
+            user_id,
+            message,
+            source,
+            context,
+            text,
+            resume_only=context.get("_legacy_resume_only") is True,
+        )
 
 
 def get_ai_chat_app_service() -> AIChatApplicationService:

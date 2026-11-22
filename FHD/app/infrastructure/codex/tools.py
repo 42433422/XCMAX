@@ -23,11 +23,7 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_call,
 )
 from app.application.agent_orchestrator.unified_task import create_unified_task
-from app.domain.task_lifecycle.results import (
-    execution_result_envelopes,
-    execution_result_error,
-    execution_result_outcome_unknown,
-)
+from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 from app.infrastructure.codex.binding import (
     CodexBinding,
     CodexBindingError,
@@ -39,6 +35,7 @@ CODEX_TOOL_NAMES = (
     "capability_search",
     "capability_describe",
     "execute_action",
+    "execute_plan",
     "task_evidence",
     "request_input",
 )
@@ -133,21 +130,7 @@ def read_call_receipt(
         or (child.metadata.get("task_context") or {}).get("task_id") != call["child_task_id"]
     ):
         raise CodexBindingError("owner_changed", "业务回执不属于当前运行范围")
-    nodes = (child.metadata.get("plan") or {}).get("nodes") or []
-    if len(nodes) != 1 or len(child.steps) != 1:
-        raise CodexBindingError("evidence_mismatch", "业务任务已偏离原调用冻结计划")
-    node, step = nodes[0], child.steps[0]
-    if (
-        canonical_digest({key: node.get(key) for key in ("tool_id", "action", "params")})
-        != call["fingerprint"]
-        or node.get("node_id") != step.node_id
-        or node.get("tool_id") != step.tool_id
-        or node.get("action") != step.action
-        or node.get("params") != step.params
-        or list(node.get("depends_on") or []) != step.depends_on
-    ):
-        raise CodexBindingError("evidence_mismatch", "业务任务已偏离原调用冻结计划")
-    outputs = [step.output for step in child.steps]
+    outputs = [step.output for step in child.steps] + [record.output for record in child.tool_calls]
     total_cost = max(
         int(child.metadata.get("ai_cost_units_total") or 0),
         sum(int(record.cost_units or 0) for record in child.tool_calls)
@@ -164,58 +147,88 @@ def read_call_receipt(
             "child_updated_at": child.updated_at,
             "ai_cost_units_total": total_cost,
         }
+    from app.infrastructure.codex.workflow import verified_step
+
+    workflow_verified = True
+    is_workflow = (call.get("tool_id"), call.get("action")) == ("xcmax_workflow", "execute")
+    if is_workflow:
+        from app.infrastructure.codex.workflow import validate_workflow_receipt
+
+        workflow_verified = validate_workflow_receipt(binding, call, child)
+    else:
+        nodes = (child.metadata.get("plan") or {}).get("nodes") or []
+        if len(nodes) != 1 or len(child.steps) != 1:
+            raise CodexBindingError("evidence_mismatch", "业务任务已偏离原调用冻结计划")
+        node, step = nodes[0], child.steps[0]
+        if (
+            canonical_digest({key: node.get(key) for key in ("tool_id", "action", "params")})
+            != call["fingerprint"]
+            or node.get("node_id") != step.node_id
+            or node.get("tool_id") != step.tool_id
+            or node.get("action") != step.action
+            or node.get("params") != step.params
+            or list(node.get("depends_on") or []) != step.depends_on
+        ):
+            raise CodexBindingError("evidence_mismatch", "业务任务已偏离原调用冻结计划")
     latest = {record.step_id: record for record in child.tool_calls}
-    completed_steps = [step for step in child.steps if step.status != "skipped"]
+    completed_steps = [
+        step
+        for step in child.steps
+        if step.status != "skipped"
+        and not (is_workflow and (step.tool_id, step.action) == ("clarify", "ask"))
+    ]
     verified = (
         child.status == "completed"
+        and workflow_verified
         and bool(completed_steps)
-        and all(
-            step.status == "completed"
-            and step.output.get("success") is True
-            and not execution_result_error(step.output)
-            and step.step_id in latest
-            and latest[step.step_id].status == "completed"
-            and latest[step.step_id].node_id == step.node_id
-            and latest[step.step_id].tool_id == step.tool_id
-            and latest[step.step_id].action == step.action
-            and latest[step.step_id].params == step.params
-            and latest[step.step_id].output == step.output
-            and not any(
-                isinstance(row.get("status_code"), int) and row["status_code"] >= 400
-                for row in execution_result_envelopes(step.output)
-            )
-            for step in completed_steps
-        )
+        and all(verified_step(step, latest.get(step.step_id)) for step in completed_steps)
     )
     status = child.status
     if status == "completed" and not verified:
         status = "failed"
     approval_card = None
+    clarification = None
     if status == "waiting_user":
         from app.application.workflow.approval_card import build_approval_card_payload
 
         waiting = [step for step in child.steps if step.status == "waiting_user"]
-        approval_card = build_approval_card_payload(
-            action="approval_pending",
-            inner={
+        question = next(
+            (step for step in waiting if (step.tool_id, step.action) == ("clarify", "ask")), None
+        )
+        if question is not None:
+            clarification = {
+                **_safe_output(question.output),
                 "run_id": child.run_id,
-                "plan_id": child.plan_id,
-                "intent": child.intent,
-                "blocking_nodes": [step.node_id for step in waiting],
-                "approval_required": True,
-                "approval_nodes": [
-                    {
-                        "step_id": step.step_id,
-                        "node_id": step.node_id,
-                        "tool_id": step.tool_id,
-                        "action": step.action,
-                        "params": _safe_output(step.params),
-                    }
-                    for step in waiting
-                ],
-                "todo": [step.description or f"{step.tool_id}.{step.action}" for step in waiting],
-                "reason": "原任务的冻结业务操作需要用户审批",
-            },
+                "step_id": question.step_id,
+            }
+        waiting = [step for step in waiting if (step.tool_id, step.action) != ("clarify", "ask")]
+        approval_card = (
+            build_approval_card_payload(
+                action="approval_pending",
+                inner={
+                    "run_id": child.run_id,
+                    "plan_id": child.plan_id,
+                    "intent": child.intent,
+                    "blocking_nodes": [step.node_id for step in waiting],
+                    "approval_required": True,
+                    "approval_nodes": [
+                        {
+                            "step_id": step.step_id,
+                            "node_id": step.node_id,
+                            "tool_id": step.tool_id,
+                            "action": step.action,
+                            "params": _safe_output(step.params),
+                        }
+                        for step in waiting
+                    ],
+                    "todo": [
+                        step.description or f"{step.tool_id}.{step.action}" for step in waiting
+                    ],
+                    "reason": "原任务的冻结业务操作需要用户审批",
+                },
+            )
+            if waiting
+            else None
         )
     return {
         "success": verified,
@@ -225,8 +238,10 @@ def read_call_receipt(
         "task_id": call["child_task_id"],
         "child_updated_at": child.updated_at,
         "ai_cost_units_total": total_cost,
-        "pending_approval": child.status == "waiting_user",
+        "pending_approval": approval_card is not None,
         "approval_card": approval_card,
+        "needs_user_input": clarification is not None,
+        "clarification": clarification,
         "retryable": False,
         "reconciliation_required": False,
         "message": str(child.error or ("业务回执已核验" if verified else "业务任务尚未完成")),
@@ -339,6 +354,8 @@ class CodexToolBridge:
                 return self._evidence(binding, str(arguments.get("call_id") or ""))
             if name == "execute_action":
                 return self._execute(binding, arguments)
+            if name == "execute_plan":
+                return self._execute_plan(binding, arguments)
             raise CodexBindingError("unknown_tool", "工具不属于当前运行接口")
 
     def _spec(self, binding: CodexBinding, args: dict[str, Any]) -> ToolActionSpecV2:
@@ -354,7 +371,10 @@ class CodexToolBridge:
         call = binding.metadata.get("calls", {}).get(call_id)
         if call is None:
             raise CodexBindingError("call_missing", "本次运行没有该工具调用")
-        self._spec(binding, call)
+        if (call.get("tool_id"), call.get("action")) == ("xcmax_workflow", "execute"):
+            self._plan(binding, call.get("params") or {})
+        else:
+            self._spec(binding, call)
         receipt = read_call_receipt(self.store, binding, call)
         saved = self.store.record_call(
             binding.run_id, call_id, child_run_id=receipt.get("run_id", ""), receipt=receipt
@@ -362,6 +382,8 @@ class CodexToolBridge:
         return dict(saved.metadata["calls"][call_id]["receipt"])
 
     def _execute(self, binding: CodexBinding, args: dict[str, Any]) -> dict[str, Any]:
+        if binding.run.metadata.get("runtime_frozen_plan") is not None:
+            raise CodexBindingError("goal_mismatch", "原任务必须通过 execute_plan 执行完整冻结图")
         params = args.get("params")
         if not isinstance(params, dict):
             raise CodexBindingError("invalid_arguments", "业务参数必须是对象")
@@ -396,35 +418,8 @@ class CodexToolBridge:
         )
         if not created:
             return self._evidence(self.store.get(binding.run_id), call_id)
-        context = binding.context
-        from app.application.agent_orchestrator.budget import AI_COST_BUDGET_KEYS
-
-        for key in AI_COST_BUDGET_KEYS:
-            context.pop(key, None)
-        if call.get("budget_units") is not None:
-            context["ai_cost_budget_units"] = call["budget_units"]
-        for key in (
-            "run_id",
-            "agent_run_id",
-            "task_id",
-            "approved_step_id",
-            "approval_receipt",
-            "idempotency_key",
-            "plan_id",
-            "node_outputs",
-            "_tool_approval_grants",
-        ):
-            context.pop(key, None)
-        context.update(
-            task_id=call["child_task_id"],
-            task_title=f"{spec.tool_id}.{spec.action}",
-            parent_run_id=binding.run_id,
-            parent_task_id=str(
-                (binding.run.metadata.get("task_context") or {}).get("task_id") or binding.run_id
-            ),
-            root_run_id=str(context.get("root_run_id") or binding.run_id),
-            source="codex_runtime",
-        )
+        context = self._child_context(binding, call)
+        context["task_title"] = f"{spec.tool_id}.{spec.action}"
         self.store.check_current(binding.run_id, generation=binding.metadata["generation"])
         if safe_read:
             from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -478,6 +473,99 @@ class CodexToolBridge:
             self.orchestrator.execute_dispatched_run(child.run_id)
         return self._evidence(self.store.get(binding.run_id), call_id)
 
+    def _plan(self, binding: CodexBinding, args: dict[str, Any]):
+        from app.application.agent_orchestrator.param_references import unresolved_placeholders
+        from app.infrastructure.codex.workflow import frozen_plan
+
+        plan = frozen_plan(binding, str(args.get("plan_digest") or ""))
+        for node in plan.nodes:
+            spec = self._spec(
+                binding, {"tool_id": node.tool_id, "action": node.action, "params": node.params}
+            )
+            validation = validate_tool_call(
+                node.tool_id, node.action, node.params, allow_references_from=set(node.depends_on)
+            )
+            if not validation.ok:
+                raise CodexBindingError("goal_changed", "冻结图的动作契约当前不可用")
+            if not unresolved_placeholders(node.params):
+                self._check_gate(binding, spec, node.params)
+        return plan
+
+    def _execute_plan(self, binding: CodexBinding, args: dict[str, Any]) -> dict[str, Any]:
+        if set(args) != {"plan_digest", "call_id"}:
+            raise CodexBindingError("invalid_arguments", "只能提交原图摘要和调用标识")
+        plan = self._plan(binding, args)
+        call_id = args.get("call_id")
+        if not isinstance(call_id, str) or not call_id.strip():
+            raise CodexBindingError("invalid_call", "工具调用标识无效")
+        costs = 0
+        for node in plan.nodes:
+            spec = get_tool_action_spec(node.tool_id, node.action)
+            if spec is None:
+                raise CodexBindingError("goal_changed", "冻结图的动作契约当前不可用")
+            costs += spec.cost_units
+        call, created = self.store.claim_call(
+            binding.run_id,
+            call_id,
+            tool_id="xcmax_workflow",
+            action="execute",
+            params={"plan_digest": args["plan_digest"]},
+            read_only=False,
+            generation=binding.metadata["generation"],
+            cost_units=costs,
+        )
+        if not created:
+            return self._evidence(self.store.get(binding.run_id), call_id)
+        context = self._child_context(binding, call)
+        child = self.orchestrator.start_run_from_plan(
+            user_id=binding.run.user_id,
+            message=binding.run.message,
+            plan=plan,
+            runtime_context=context,
+            auto_execute=False,
+        )
+        self.store.record_call(binding.run_id, call_id, child_run_id=child.run_id)
+        try:
+            self.store.check_current(binding.run_id, generation=binding.metadata["generation"])
+            self._plan(binding, args)
+        except CodexBindingError:
+            self.orchestrator.cancel_run(child.run_id, requested_by=binding.run.user_id)
+            raise
+        if child.status in {"queued", "running"}:
+            self.orchestrator.execute_dispatched_run(child.run_id)
+        return self._evidence(self.store.get(binding.run_id), call_id)
+
+    @staticmethod
+    def _child_context(binding: CodexBinding, call: dict[str, Any]) -> dict[str, Any]:
+        from app.application.agent_orchestrator.budget import AI_COST_BUDGET_KEYS
+
+        context = binding.context
+        for key in (
+            *AI_COST_BUDGET_KEYS,
+            "run_id",
+            "agent_run_id",
+            "task_id",
+            "approved_step_id",
+            "approval_receipt",
+            "idempotency_key",
+            "plan_id",
+            "node_outputs",
+            "_tool_approval_grants",
+        ):
+            context.pop(key, None)
+        if call.get("budget_units") is not None:
+            context["ai_cost_budget_units"] = call["budget_units"]
+        context.update(
+            task_id=call["child_task_id"],
+            parent_run_id=binding.run_id,
+            parent_task_id=str(
+                (binding.run.metadata.get("task_context") or {}).get("task_id") or binding.run_id
+            ),
+            root_run_id=str(context.get("root_run_id") or binding.run_id),
+            source="codex_runtime",
+        )
+        return context
+
 
 def mcp_tool_definitions():
     """Use MCP SDK types; schema is glue around the existing capability catalog."""
@@ -505,6 +593,12 @@ def mcp_tool_definitions():
             "提交企业动作到受控任务链。待审批或未知结果不是完成，不可更换调用标识重复提交。",
             {**fields, "call_id": {"type": "string"}, "params": {"type": "object"}},
             ["tool_id", "action", "call_id", "params"],
+        ),
+        (
+            "execute_plan",
+            "按摘要提交宿主已冻结的完整业务图；保留顺序、条件、审批和原任务回执，不接收模型改图。",
+            {"plan_digest": {"type": "string"}, "call_id": {"type": "string"}},
+            ["plan_digest", "call_id"],
         ),
         (
             "task_evidence",

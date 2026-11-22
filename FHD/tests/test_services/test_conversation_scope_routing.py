@@ -79,8 +79,7 @@ def test_provider_registry_does_not_retain_previous_users_adapter(monkeypatch):
     assert providers.resolve(conversation_service=SimpleNamespace(modstore_adapter=None)) is None
 
 
-def test_planner_and_agent_share_each_threads_model_without_environment_key(monkeypatch):
-    from app.application.employee_runtime.agent_loop import run_employee_agent_loop
+def test_planner_and_cognition_share_each_threads_model_without_environment_key(monkeypatch):
     from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
     from app.application.workflow.planner_llm_gateway import request_planner_completion
     from app.infrastructure.llm import client as routing
@@ -104,12 +103,8 @@ def test_planner_and_agent_share_each_threads_model_without_environment_key(monk
                 context={},
                 messages=[{"role": "user", "content": "test"}],
             )
-            agent = run_employee_agent_loop(
-                employee_id="test", system_prompt="test", task="test", tools=[]
-            )
             cognition = _run_async(_chat_completion([{"role": "user", "content": "test"}]))
         assert plan["model"] == model
-        assert agent["ok"] is True
         assert cognition["model"] == model
         assert {call.kwargs["model"] for call in client.chat.completions.create.call_args_list} == {
             model

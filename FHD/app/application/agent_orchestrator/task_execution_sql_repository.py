@@ -419,6 +419,134 @@ class SQLAlchemyTaskExecutionRepository:
     ) -> AgentTaskExecution | None:
         return self._transition(run_id, state, error_code=error_code)
 
+    def reconcile_codex_receipts(self, run_repository: Any, previous: AgentRun) -> AgentRun | None:
+        """Project verified delegated results without claiming or replaying a worker.
+
+        This restricted reconciliation event is not a general lifecycle edge.
+        A stopped parent's original children and frozen goal are independently
+        checked, then its run, Task view and unleased waiting queue row commit
+        together. Callers cannot supply a desired state or replacement result.
+        """
+        from app.application.agent_orchestrator.run_sql_repository import (
+            SQLAlchemyAgentRunRepository,
+        )
+        from app.application.agent_runtime.receipt_projection import (
+            project_receipt_state,
+            projection_allowed,
+        )
+        from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
+        from app.domain.task_lifecycle.control import SessionBook, remember
+        from app.infrastructure.codex.binding import (
+            CodexBinding,
+            CodexBindingError,
+            CodexBindingStore,
+        )
+        from app.infrastructure.codex.tools import read_call_receipt
+
+        if not isinstance(run_repository, SQLAlchemyAgentRunRepository) or not projection_allowed(
+            previous
+        ):
+            return None
+        store = CodexBindingStore(run_repository)
+        binding = CodexBinding(previous)
+        store._validate_goal(previous, binding.metadata)
+        rows, children = [], {}
+        for call_id, call in binding.metadata["calls"].items():
+            receipt = read_call_receipt(store, binding, call)
+            if receipt != call.get("receipt"):
+                return None  # A child changed since the caller's receipt snapshot.
+            rows.append({"call_id": call_id, **call})
+            if child_id := receipt.get("run_id"):
+                child = run_repository.get(child_id)
+                if child is None or child.updated_at != receipt.get("child_updated_at"):
+                    return None
+                children[child_id] = child
+        projected = project_receipt_state(previous, rows)
+        if projected is None:
+            return None
+        result = projected.final_output["codex_result"]
+        if projected.status == "completed" and not (
+            result.get("business_completed") is True
+            and result.get("verified_operations") is True
+            and (result.get("goal_coverage") or {}).get("completed") is True
+        ):
+            return None
+        target = {"completed": "succeeded", "failed": "failed", "blocked": "failed"}.get(
+            projected.status, "waiting_approval"
+        )
+        code = (
+            "needs_verification"
+            if result.get("reconciliation_required")
+            else "codex_receipt_projection"
+        )
+        now = utc_now_iso()
+        with self.transaction() as db, run_repository.transaction(read_only=True) as runs:
+            if db.get_bind() is not runs.get_bind():
+                raise CodexBindingError("durable_storage_required", "父任务与队列不属于同一数据库")
+            execution = db.get(AgentTaskExecutionRecord, previous.run_id)
+            if execution is not None:
+                if (
+                    execution.state not in WAITING_STATES
+                    or execution.lease_owner
+                    or execution.lease_expires_at
+                ):
+                    return None
+                fenced = (
+                    db.query(AgentTaskExecutionRecord)
+                    .filter(
+                        AgentTaskExecutionRecord.run_id == previous.run_id,
+                        AgentTaskExecutionRecord.state == execution.state,
+                        AgentTaskExecutionRecord.execution_count == execution.execution_count,
+                        AgentTaskExecutionRecord.lease_owner == execution.lease_owner,
+                        AgentTaskExecutionRecord.lease_expires_at == execution.lease_expires_at,
+                    )
+                    .update(
+                        {AgentTaskExecutionRecord.updated_at: execution.updated_at},
+                        synchronize_session=False,
+                    )
+                )
+                if fenced != 1:
+                    return None
+                book = SessionBook(db)
+                body = book.get("agent", str(execution.tenant_id or ""), previous.run_id)
+                if target == "succeeded" and (
+                    body.get("effects") or execution.last_error_code == "needs_verification"
+                ):
+                    return None
+            for child_id, child in children.items():
+                record = db.get(AgentRunRecord, child_id)
+                current = run_repository._record_to_run(record) if record is not None else None
+                if current is None or current.to_dict() != child.to_dict():
+                    return None
+                assert record is not None
+                if (
+                    db.query(AgentRunRecord)
+                    .filter(
+                        AgentRunRecord.run_id == child_id,
+                        AgentRunRecord.payload_json == record.payload_json,
+                    )
+                    .update({AgentRunRecord.status: record.status}, synchronize_session=False)
+                    != 1
+                ):
+                    return None
+            if not run_repository.save_if_unchanged_in_session(db, projected, previous):
+                return None
+            if projected.status != result["execution_state"] and not (
+                projected.status == "blocked" and result["execution_state"] == "unknown"
+            ):
+                raise CodexBindingError("evidence_mismatch", "父任务投影未通过宿主结果核验")
+            if execution is not None:
+                remember(
+                    body, at=now, source=str(execution.state), target=target, code=code, actor=""
+                )
+                book.put("agent", str(execution.tenant_id or ""), previous.run_id, body)
+                execution.state = target
+                execution.last_error_code = None if target == "succeeded" else code
+                execution.updated_at = now
+                if target in {"succeeded", "failed"}:
+                    execution.finished_at = now
+        return run_repository.get(previous.run_id)
+
     def _transition(
         self,
         run_id: str,

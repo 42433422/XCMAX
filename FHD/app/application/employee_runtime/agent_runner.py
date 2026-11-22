@@ -1,4 +1,4 @@
-"""Employee Agent loop and cognition completion through the shared model route."""
+"""Employee Codex delegation and shared single-call cognition helpers."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def _run_async(coro):
 async def _chat_completion(
     messages: list[dict[str, Any]], max_tokens: int = 4000
 ) -> dict[str, Any]:
-    """Cognition uses the same owner-bound route as Planner and the Agent loop."""
+    """Non-agent cognition uses the owner-bound model route."""
     from app.infrastructure.llm.providers.registry import get_active_provider
 
     try:
@@ -57,12 +57,11 @@ def run_agent_handler(
     workspace_root: str | None = None,
     tools: list[dict[str, Any]] | None = None,
     gate: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
-    max_iterations: int | None = None,
     runtime_context: dict[str, Any] | None = None,
     on_event: Callable[[dict[str, Any]], Any] | None = None,
     settings: RuntimeSettings | None = None,
 ) -> dict[str, Any]:
-    """委托多轮 function-calling 循环执行 agent handler。
+    """委托固定 Codex Runtime 执行 agent handler。
 
     ``reasoning`` 来自认知层：携带 system_prompt（已含记忆段落）与 input/prior reasoning。
     ``tools`` / ``gate`` 由 EmployeeAgent 注入（P1 接入作用域工具 + WorkspaceGuard/risk_gate）。
@@ -76,21 +75,10 @@ def run_agent_handler(
     if prior:
         input_data.setdefault("_prior_reasoning", prior[:2000])
 
-    max_iters = max_iterations
-    if max_iters is None:
-        try:
-            max_iters = int((actions_cfg or {}).get("max_iterations") or 0) or None
-        except (TypeError, ValueError):
-            max_iters = None
     try:
         wall_time_limit_sec = float((actions_cfg or {}).get("wall_time_limit_sec") or 300.0)
     except (TypeError, ValueError):
         wall_time_limit_sec = 300.0
-    try:
-        repeat_limit = int((actions_cfg or {}).get("repeat_limit") or 3)
-    except (TypeError, ValueError):
-        repeat_limit = 3
-
     history = agent_cfg.get("history") if isinstance(agent_cfg.get("history"), list) else None
     return run_employee_agent_loop(
         employee_id=employee_id,
@@ -100,9 +88,7 @@ def run_agent_handler(
         tools=tools,
         workspace_root=workspace_root,
         gate=gate,
-        max_iterations=max_iters or 6,
         wall_time_limit_sec=max(1.0, wall_time_limit_sec),
-        repeat_limit=max(2, repeat_limit),
         history=history,
         runtime_context=runtime_context,
         on_event=on_event,

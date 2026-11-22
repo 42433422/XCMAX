@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 from fastapi import Body, Depends, Query
@@ -30,6 +31,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
+from app.domain.shared_services.conversation_service import ConversationRevisionError
 from app.fastapi_routes.domains.agent.artifact_routes import (
     download_agent_artifact as download_agent_artifact,
 )
@@ -196,33 +198,93 @@ def create_agent_run(
             status_code=400,
         )
 
-    runtime_context_raw = data.get("runtime_context") or {}
+    runtime_context_raw = data.get("runtime_context", {})
     if not isinstance(runtime_context_raw, dict):
         return JSONResponse(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
+    auto_execute = data.get("auto_execute", True)
+    request_id = data.get("request_id", runtime_context_raw.get("turn_id"))
+    if request_id is None:
+        request_id = f"agent_{uuid.uuid4().hex}"
+    if (
+        type(auto_execute) is not bool
+        or not isinstance(request_id, str)
+        or not request_id.strip()
+        or len(request_id) > 160
+    ):
+        return JSONResponse(
+            {"success": False, "message": "auto_execute 或 request_id 格式无效"},
+            status_code=400,
+        )
     runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
+    runtime_context["turn_id"] = request_id
 
     try:
-        orchestrator = AgentOrchestrator()
-        auto_execute = bool(data.get("auto_execute", True))
-        run = orchestrator.start_run(
-            user_id=principal.user_id,
-            message=message,
+        from app.application.agent_runtime.gateway import run_runtime_task
+        from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
+        from app.infrastructure.auth.agent_mod_scope import agent_mod_execution_scope
+
+        # The onboarding/chat task client supplies a conversation reference,
+        # never a trusted history version. Bind that version under this actor.
+        runtime_context.pop("_conversation_revision", None)
+        with agent_mod_execution_scope(principal.mod_authorization):
+            bind_chat_turn_context(message, runtime_context)
+
+        result = run_runtime_task(
+            task=message,
+            system_prompt=(
+                "你是 XCMAX 企业任务助手。按宿主冻结的目标通过受控工具执行；"
+                "权限、审批、幂等和执行证据由宿主管理。缺少信息时请求补充。"
+                "等待审批时保留原任务，只根据真实回执描述结果。"
+            ),
             runtime_context=runtime_context,
-            auto_execute=False,
+            input_data={
+                key: runtime_context[key]
+                for key in ("attachment_upload_ids", "file_context", "file_analysis")
+                if key in runtime_context
+            }
+            or None,
+            completion_mode="auto",
+            admit_goal=True,
+            start_paused=not auto_execute,
+            start_queued=auto_execute,
         )
-        if auto_execute and run.status == "running":
-            staged_run = orchestrator.stage_run_for_dispatch(
-                run.run_id,
-                requested_by=principal.user_id,
+        run_id = str(result.get("run_id") or "")
+        run = get_agent_run_repository().get(run_id) if run_id else None
+        if run is None:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": result.get("error") or "任务未能创建",
+                    "error_code": result.get("error_code") or result.get("exit_status"),
+                    "runtime_result": result,
+                },
+                status_code=409,
             )
-            if staged_run is not None:
-                run = staged_run
-                _enqueue_run(run, requested_by=principal.user_id)
-        status_code = 202 if run.status in {"queued", "waiting_user", "blocked"} else 200
-        return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
+        # Read the same durable parent through the normal public ownership and
+        # redaction boundary. Explicit tool tasks keep their existing graph lane.
+        run, error = _owned_run(AgentOrchestrator(), run_id, principal)
+        if error is not None:
+            return error
+        response = _run_response(run, principal=principal)
+        response["runtime_result"] = result
+        state = result.get("execution_state")
+        status_code = (
+            202
+            if state in {"queued", "running", "waiting_user", "waiting_approval"}
+            else 200
+            if result.get("ok") or state == "paused"
+            else 409
+        )
+        return JSONResponse(response, status_code=status_code)
+    except PermissionError:
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
+    except ConversationRevisionError:
+        return JSONResponse(
+            {"success": False, "message": "会话已变更或删除，请重新打开会话后提交"}, status_code=409
+        )
     except RECOVERABLE_ERRORS:
         return _internal_error_response("create agent run")
 

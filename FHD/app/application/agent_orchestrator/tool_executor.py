@@ -42,6 +42,7 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         # 表格读取会在任务快照阶段查询上传记录并按租户校验归属，
         # 后台/持久化运行必须从 runtime_context 恢复租户上下文。
         "excel_analysis",
+        "excel_join_compare",
         # 导入会按当前租户写入客户/产品/订单，同样需要恢复租户。
         "import_excel_to_database",
         # ELT 预演与执行同样按租户查询上传并写入目标库。
@@ -232,6 +233,76 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
             factory.engine.dispose()
 
 
+def _employee_runtime_gate_denial(
+    tool_id: str, action: str, params: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Rebuild the original employee gate before a persisted child effect."""
+    parent_id = str(context.get("parent_run_id") or "")
+    employee_bound = bool(context.get("_employee_gate_contract"))
+    if not parent_id and not employee_bound:
+        return None
+    denied = {
+        "success": False,
+        "error_code": "employee_gate_denied",
+        "retryable": False,
+        "execution_status": "not_started",
+        "message": "原员工工具或工作空间授权无法恢复，未执行本次操作",
+    }
+    try:
+        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+
+        parent = get_agent_run_repository().get(parent_id) if parent_id else None
+        if parent is None or parent.metadata.get("runtime_type") != "codex":
+            return denied if employee_bound else None
+        if not parent.metadata.get("runtime_gate_required"):
+            return denied if employee_bound else None
+        original = parent.metadata.get("runtime_context") or {}
+        if (
+            parent.status in {"cancelled", "failed", "completed", "unknown"}
+            or any(
+                context.get(key) != original.get(key)
+                for key in (
+                    "user_id",
+                    "local_user_id",
+                    "tenant_id",
+                    "mod_id",
+                    "active_mod_id",
+                    "_actor_authorization",
+                    "_mod_authorization",
+                    "workspace_root",
+                    "employee_id",
+                    "employee_tool_allowlist",
+                    "_employee_gate_contract",
+                )
+            )
+            or any(
+                original.get(key) is not None and context.get(key) != original.get(key)
+                for key in (
+                    "session_id",
+                    "conversation_id",
+                    "_conversation_revision",
+                    "workspace_id",
+                )
+            )
+        ):
+            return denied
+        from app.application.employee_runtime.agent import restore_codex_employee_gate
+
+        actions, gate = restore_codex_employee_gate(
+            str(original.get("employee_id") or ""),
+            original,
+            input_data=parent.metadata.get("_codex_input_data"),
+        )
+        if actions != parent.metadata.get("runtime_allowed_actions"):
+            return denied
+        verdict = gate(tool_id, action, dict(params))
+        if not isinstance(verdict, dict) or verdict.get("ok") is not True:
+            return denied
+    except RECOVERABLE_ERRORS:
+        return denied
+    return None
+
+
 class AgentToolExecutor:
     def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
         from app.application.agent_orchestrator.tool_process import execute_isolated
@@ -386,6 +457,11 @@ class AgentToolExecutor:
         )
         if approval_denied is not None:
             return approval_denied
+        employee_denied = _employee_runtime_gate_denial(
+            validation.tool_id, validation.action or step.action, params, context
+        )
+        if employee_denied is not None:
+            return employee_denied
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
         product_db_read = (validation.tool_id, validation.action) == (

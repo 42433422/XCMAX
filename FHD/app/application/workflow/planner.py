@@ -460,6 +460,7 @@ class LLMWorkflowPlanner:
             self._http_client_factory
             if self._http_client_factory is not None
             else _get_planner_http_client,
+            allow_streaming=self._completion is None,
         )
 
     def complete_messages(

@@ -4,8 +4,10 @@ version = "1.0.0.7"
 description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
 license = "Apache-2.0"
 requires-python = ">=3.11.5"
-# 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
+# CI/生产安装：requirements-server-api.txt（基础运行时 + server-api extra）。
 dependencies = [
+    "openai-codex==0.171.0",
+    "openai-codex-cli-bin==0.171.0",
     "langchain-core==1.5.3",
     "langchain==1.3.14",
     "filelock==4.2.4",
@@ -21,7 +23,7 @@ dependencies = [
 xcagi-brain = "app.cli.brain:main"
 
 [project.optional-dependencies]
-# Optional local agent engine. Native installs do not download the Codex binary.
+# Compatibility extra: the pinned execution runtime is now installed by default.
 codex-runtime = [
     "openai-codex==0.171.0",
 ]

@@ -22,7 +22,16 @@ from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_
 logger = logging.getLogger(__name__)
 
 # 触碰文件的参数键
-_INPUT_PATH_KEYS = ("file_path", "path", "filepath", "input_path", "src", "source")
+_INPUT_PATH_KEYS = (
+    "file_path",
+    "file_path_a",
+    "file_path_b",
+    "path",
+    "filepath",
+    "input_path",
+    "src",
+    "source",
+)
 _OUTPUT_PATH_KEYS = (
     "output_path",
     "out_path",

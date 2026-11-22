@@ -161,7 +161,10 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "elt.read"
     if tool_id in {"template_preview", "document_template"}:
         return "elt.template.manage"
-    if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
+    if (
+        tool_id == "excel_analysis"
+        and action in {"read", "structure", "query", "aggregate", "statistics"}
+    ) or tool_id == "excel_join_compare":
         return "tool.excel_analysis.read"
     fixed = PERMISSION_OVERRIDES.get(tool_id)
     if fixed is not None:

@@ -236,6 +236,16 @@ def test_model_completion_without_receipt_cannot_complete_business(setup_runtime
     assert store.run.status == "blocked"
 
 
+@pytest.mark.parametrize("text", ["", "   \n"])
+def test_empty_model_turn_is_not_a_completed_reply(setup_runtime, text):
+    invoke, _ = setup_runtime
+    store = Store()
+    result = asyncio.run(invoke(store, Transport(store, completed(text)), completion_mode="reply"))
+    assert result["ok"] is False and result["reply_completed"] is False
+    assert result["exit_status"] == "empty_reply" and result["runtime_completed"] is True
+    assert store.run.status == "failed"
+
+
 @pytest.mark.parametrize("state", ["waiting_user", "waiting_approval", "pending_approval"])
 def test_approval_wait_survives_turn_completion(setup_runtime, state):
     invoke, _ = setup_runtime
@@ -343,16 +353,107 @@ def test_business_harness_honors_a_verified_complete_workflow_but_not_stale_repl
     assert corrected["status"] == "reply_completed" and corrected["success"] is False
 
 
-def test_multiple_frozen_actions_still_need_a_root_goal_graph(setup_runtime):
+def test_all_independent_frozen_obligations_require_distinct_child_receipts(setup_runtime):
     invoke, _ = setup_runtime
-    extra = {**receipt(), "child_run_id": "another-child", "params": {"month": "May"}}
-    store = Store(rows=[receipt(), extra])
+    extra = {
+        **receipt(),
+        "child_run_id": "another-child",
+        "child_task_id": "another-task",
+        "params": {"month": "May"},
+    }
+    store = Store(rows=[receipt(), extra, {**receipt(), "call_id": "model-alias"}])
+    store.run.metadata["runtime_expected_operations"] = [
+        {key: row[key] for key in ("tool_id", "action", "params")} for row in (receipt(), extra)
+    ]
+    result = asyncio.run(invoke(store, Transport(store)))
+    assert result["verified_operations"] is True and result["business_completed"] is True
+    assert result["goal_coverage"] == {
+        "frozen": True,
+        "required": 2,
+        "verified": 2,
+        "operations": 2,
+        "missing": [],
+        "unexpected": [],
+        "conflicting_receipts": [],
+        "completed": True,
+    }
+
+
+@pytest.mark.parametrize("failure", ["missing", "changed", "alias", "extra_effect", "replayed"])
+def test_frozen_goal_cannot_be_completed_with_incomplete_or_substituted_evidence(
+    setup_runtime, failure
+):
+    invoke, _ = setup_runtime
+    first = receipt()
+    second = {
+        **receipt(),
+        "child_run_id": "run-second",
+        "child_task_id": "task-second",
+        "params": {"month": "May"},
+    }
+    expected = [
+        {key: row[key] for key in ("tool_id", "action", "params")} for row in (first, second)
+    ]
+    rows = [first, second]
+    if failure == "missing":
+        rows = [first, {**first, "call_id": "alias-for-missing-obligation"}]
+    elif failure == "changed":
+        rows[1] = {**second, "params": {"month": "June"}}
+    elif failure == "alias":
+        rows[1] = {**second, "child_run_id": first["child_run_id"]}
+    else:
+        rows.append(
+            {
+                **first,
+                "child_run_id": "run-third",
+                "child_task_id": "task-third",
+                "params": {"month": "July"} if failure == "extra_effect" else {},
+            }
+        )
+    store = Store(rows=rows)
+    store.run.metadata["runtime_expected_operations"] = expected
+    result = asyncio.run(invoke(store, Transport(store, completed("所有目标已完成"))))
+    assert result["ok"] is False and result["business_completed"] is False
+    assert result["exit_status"] == "goal_verification_required"
+    assert result["goal_coverage"]["completed"] is False
+    assert "所有目标已完成" not in result["output"]
+
+
+def test_exploratory_reads_do_not_add_or_replace_frozen_obligations(setup_runtime):
+    invoke, _ = setup_runtime
+    probe = {
+        **receipt(),
+        "child_run_id": "run-probe",
+        "child_task_id": "task-probe",
+        "params": {"month": "June"},
+        "read_only": True,
+    }
+    store = Store(rows=[receipt(), probe])
+    store.run.metadata["runtime_expected_operations"] = [
+        {"tool_id": "sales", "action": "query", "params": {}}
+    ]
+    result = asyncio.run(invoke(store, Transport(store)))
+    assert result["business_completed"] is True
+    assert result["goal_coverage"]["verified"] == result["goal_coverage"]["required"] == 1
+
+
+@pytest.mark.parametrize("state", ["unknown", "waiting_user"])
+def test_one_unresolved_obligation_prevents_multi_goal_completion(setup_runtime, state):
+    invoke, _ = setup_runtime
+    second = {
+        **receipt(status=state, success=False, verified=False),
+        "child_run_id": "run-unresolved",
+        "child_task_id": "task-unresolved",
+        "params": {"month": "May"},
+    }
+    store = Store(rows=[receipt(), second])
     store.run.metadata["runtime_expected_operations"] = [
         {key: row[key] for key in ("tool_id", "action", "params")} for row in store.rows
     ]
-    result = asyncio.run(invoke(store, Transport(store)))
-    assert result["verified_operations"] is True and result["business_completed"] is False
-    assert result["exit_status"] == "goal_verification_required"
+    result = asyncio.run(invoke(store, Transport(store, completed("所有目标已完成"))))
+    assert result["business_completed"] is False and result["ok"] is False
+    assert result["exit_status"] == state
+    assert "所有目标已完成" not in result["output"]
 
 
 @pytest.mark.parametrize("state", ["reserved", "unknown"])
@@ -427,6 +528,9 @@ def test_unknown_outcome_is_durable_and_never_replayed(setup_runtime):
 def test_model_usage_uncertainty_blocks_completion(setup_runtime):
     invoke, _ = setup_runtime
     store = Store(rows=[receipt()])
+    store.run.metadata["runtime_expected_operations"] = [
+        {"tool_id": "sales", "action": "query", "params": {}}
+    ]
 
     def mark_usage_uncertain(_event):
         store.run.metadata["codex_runtime"]["model_reconciliation_required"] = True
@@ -547,6 +651,44 @@ def test_transport_loss_does_not_restart_or_fallback(setup_runtime):
     assert result["ok"] is False and result["reconciliation_required"] is True
     assert len(transport.inputs) == 1 and len(transport.started) == 1
     assert store.log.index("revoke") < store.log.index("interrupt") < store.log.index("exit")
+
+
+def test_complete_frozen_goal_closes_from_receipts_after_final_model_response_is_lost(
+    setup_runtime,
+):
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt()])
+    store.run.metadata["runtime_expected_operations"] = [
+        {"tool_id": "sales", "action": "query", "params": {}}
+    ]
+    transport = Transport(
+        store,
+        events=completed()[:1],
+        error=CodexTransportError("codex_connection_lost", "lost", outcome_unknown=True),
+    )
+    result = asyncio.run(invoke(store, transport))
+    assert result["ok"] is True and result["business_completed"] is True
+    assert result["runtime_completed"] is False and result["runtime_status"] == "failed"
+    assert result["runtime_error_code"] == "codex_connection_lost"
+    assert result["goal_coverage"]["completed"] is True
+    assert "按业务回执核验" in result["output"]
+    assert store.run.status == "completed" and len(transport.started) == 1
+
+
+def test_cancellation_is_not_overridden_by_already_verified_business_receipts(setup_runtime):
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt()])
+    store.run.metadata["runtime_expected_operations"] = [
+        {"tool_id": "sales", "action": "query", "params": {}}
+    ]
+
+    def cancel(_event):
+        store.auth_error = "cancelled"
+
+    result = asyncio.run(invoke(store, Transport(store), on_event=cancel))
+    assert result["ok"] is False and result["business_completed"] is False
+    assert result["exit_status"] == "cancelled"
+    assert "业务任务已完成" not in result["output"]
 
 
 def test_cancel_revokes_before_interrupt_and_preserves_child_uncertainty(setup_runtime):

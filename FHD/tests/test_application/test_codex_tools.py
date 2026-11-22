@@ -21,6 +21,9 @@ def bridge_setup(trusted_actor, monkeypatch, tmp_path):
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     run = AgentRun(user_id=str(actor.user_id), message="执行企业任务", status="running")
     run.metadata["runtime_context"] = actor.context
+    run.metadata["runtime_expected_operations"] = [
+        {"tool_id": "customers", "action": "create", "params": {"unit_name": "fixture"}}
+    ]
     repository.save(run)
     store = CodexBindingStore(repository)
     grant = store.create(run.run_id)
@@ -98,6 +101,89 @@ def test_write_uses_original_approval_and_stable_task_for_repeated_model_calls(b
     assert card["approval_nodes"][0]["step_id"] == child.steps[0].step_id
     assert card["approval_nodes"][0]["params"] == args["params"]
     assert "approval_grant" not in card
+
+
+def test_changed_write_is_rejected_before_task_creation_or_approval(bridge_setup):
+    setup = bridge_setup
+    with pytest.raises(CodexBindingError) as error:
+        setup.bridge.invoke(
+            setup.grant.mcp_token,
+            "execute_action",
+            {
+                "call_id": "changed",
+                "tool_id": "customers",
+                "action": "create",
+                "params": {"unit_name": "different-from-frozen-goal"},
+            },
+        )
+    assert error.value.code == "goal_mismatch"
+    assert setup.store.get(setup.run.run_id).metadata["calls"] == {}
+    assert len(setup.store.repository.list_recent()) == 1
+
+
+def test_two_frozen_obligations_use_reopened_sql_child_evidence(bridge_setup, monkeypatch):
+    """Protocol/business-ledger test; the dispatcher output is explicitly a fixture."""
+    from app.domain.task_lifecycle.agent_runtime_results import (
+        base_runtime_result,
+        classify_runtime_result,
+    )
+
+    setup = bridge_setup
+    expected = [
+        {"tool_id": "products", "action": "query", "params": {"keyword": key}}
+        for key in ("first", "second")
+    ]
+    run = AgentRun(user_id=setup.run.user_id, message="查询两个产品", status="running")
+    run.metadata.update(runtime_context=setup.actor.context, runtime_expected_operations=expected)
+    setup.store.repository.save(run)
+    grant = setup.store.create(run.run_id)
+    dispatched = []
+
+    def dispatch(tool, action, params):
+        dispatched.append((tool, action, params["keyword"]))
+        return {"success": True, "data": [{"model_number": params["keyword"]}]}
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
+    )
+    first = setup.bridge.invoke(
+        grant.mcp_token, "execute_action", {**expected[0], "call_id": "first"}
+    )
+    assert first["verified"] is True
+    partial = base_runtime_result(run.run_id)
+    assert (
+        classify_runtime_result(
+            partial,
+            setup.store.receipt_snapshot(run.run_id),
+            {"expected_operations": expected},
+            "business",
+            "completed",
+        )
+        == "blocked"
+    )
+    assert partial["goal_coverage"]["verified"] == 1
+    setup.store.close(run.run_id, "waiting_user")
+    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    renewed = reopened.create(run.run_id)
+    bridge = CodexToolBridge(reopened, setup.bridge.orchestrator)
+    second = bridge.invoke(
+        renewed.mcp_token, "execute_action", {**expected[1], "call_id": "second"}
+    )
+    assert second["verified"] is True and second["run_id"] != first["run_id"]
+    result = base_runtime_result(run.run_id)
+    assert (
+        classify_runtime_result(
+            result,
+            reopened.receipt_snapshot(run.run_id),
+            {"expected_operations": expected},
+            "business",
+            "completed",
+        )
+        == "completed"
+    )
+    assert result["business_completed"] is True
+    assert result["goal_coverage"]["verified"] == 2
+    assert dispatched == [("products", "query", "first"), ("products", "query", "second")]
 
 
 def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_setup, monkeypatch):

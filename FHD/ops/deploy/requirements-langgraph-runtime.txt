@@ -1,9 +1,11 @@
-# External dependencies for vendored LangGraph and host workflow input contracts.
+# Fixed Codex executor, vendored LangGraph and host workflow input contracts.
 #
 # The LangGraph projects themselves are shipped under packages/ and exposed to
 # the service interpreter through an audited .pth file.  Keep this list aligned
 # with the six vendored pyproject.toml files and host schema pins in uv.lock,
 # without installing PyPI LangGraph. This bootstrap also runs when FHD_SKIP_PIP=1.
+openai-codex==0.171.0
+openai-codex-cli-bin==0.171.0
 langchain-core==1.5.3
 jsonschema==4.26.0
 referencing==0.37.0

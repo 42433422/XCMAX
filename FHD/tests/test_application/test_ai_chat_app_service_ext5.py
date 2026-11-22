@@ -205,33 +205,34 @@ class TestModelLikeScore:
 @pytest.mark.parametrize("source", ["pro", "normal", None])
 @pytest.mark.parametrize("message", ["导入Excel", "你好", "确认", "取消", "测试消息"])
 def test_public_chat_model_failure_has_no_local_success_or_implicit_import(source, message):
-    from unittest.mock import Mock
-
-    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.infrastructure.codex.policy import RuntimeSettings
     from tests.test_application.ai_chat_test_helpers import _make_svc
 
     service = _make_svc()
-    completion = Mock(return_value=None)
-    service.workflow_planner = LLMWorkflowPlanner(
-        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
-    )
     with (
+        patch(
+            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+        ),
+        patch(
+            "app.application.agent_runtime.gateway.run_runtime_task",
+            return_value={
+                "ok": False,
+                "exit_status": "planning_failed",
+                "business_completed": False,
+            },
+        ) as execute,
         patch.object(service, "_persist_chat_turn"),
         patch.object(service, "_persist_recallable_chat_turn"),
         patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
         patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
     ):
         result = service.process_chat("single-brain", message, source=source)
-    if message in {"确认", "取消"}:
-        completion.assert_not_called()
-        assert result["data"]["action"] == "clarification_required"
-        assert "没有待确认" in result["response"]
-        assert not result.get("toolCall")
-        assert not service._pending_workflows
-        return
-    completion.assert_called_once()
+    execute.assert_called_once()
+    assert execute.call_args.kwargs["task"] == message
+    assert execute.call_args.kwargs["admit_goal"] is True
+    service.workflow_planner.plan.assert_not_called()
     assert result["success"] is False
-    assert result["data"]["execution_started"] is False
+    assert result["business_completed"] is False
     assert not result.get("toolCall")
     assert not service._pending_workflows
 

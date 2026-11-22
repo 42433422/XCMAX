@@ -152,6 +152,22 @@ def internal_error_response(operation: str) -> JSONResponse:
 
 
 def run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
+    if run_owned_by(run, principal):
+        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+        from app.application.agent_runtime.receipt_projection import refresh_codex_receipts
+
+        parent = run if run.metadata.get("runtime_type") == "codex" else None
+        context = run.metadata.get("runtime_context") or {}
+        if (
+            parent is None
+            and context.get("source") == "codex_runtime"
+            and context.get("parent_run_id")
+        ):
+            parent = get_agent_run_repository().get(str(context["parent_run_id"]))
+        if parent is not None and run_owned_by(parent, principal):
+            refreshed = refresh_codex_receipts(parent)
+            if parent.run_id == run.run_id:
+                run = refreshed
     approval = issue_approval_grant(run, principal_id=principal.user_id)
     extra: dict[str, Any] = {"capabilities": task_capabilities(run)}
     if approval:
@@ -444,6 +460,23 @@ def control_codex_run(
             not isinstance(message, str) or not message.strip() or len(message) > 16000
         ):
             raise CodexBindingError("invalid_request", "补充信息无效")
+        turn_input = original_input
+        if "attachment_upload_ids" in data:
+            if not binding.metadata.get("waiting_input") or not message:
+                raise CodexBindingError("input_not_requested", "只有原任务等待补充时可以提交新附件")
+            upload_ids = data["attachment_upload_ids"]
+            if (
+                not isinstance(upload_ids, list)
+                or not 1 <= len(upload_ids) <= 4
+                or any(
+                    not isinstance(item, str) or not item or len(item) > 80 for item in upload_ids
+                )
+                or len(set(upload_ids)) != len(upload_ids)
+            ):
+                raise CodexBindingError("invalid_request", "附件引用格式无效")
+            # References are untrusted turn data. The compiler must resolve
+            # current ownership, expiry and bytes again before any model request.
+            turn_input = {**(original_input or {}), "attachment_upload_ids": upload_ids}
         request_key = canonical_digest({"turn_id": request_id, "owner": run.user_id})
         duplicate = request_key in (run.metadata.get("runtime_requests") or {})
         if not duplicate:
@@ -507,10 +540,12 @@ def control_codex_run(
             task=message or run.message,
             system_prompt=prompt,
             runtime_context=context,
-            input_data=original_input,
+            input_data=turn_input,
             allowed_actions=actions,
             gate=gate,
             completion_mode=run.metadata.get("runtime_completion_mode", "business"),
+            admit_goal=run.metadata.get("runtime_goal_admission", False),
+            start_queued=True,
             answer_to_waiting_input=bool(message and binding.metadata.get("waiting_input")),
             expected_operations=copy.deepcopy(run.metadata.get("runtime_expected_operations")),
         )
@@ -518,7 +553,7 @@ def control_codex_run(
         response["runtime_result"] = result
         code = (
             202
-            if result.get("execution_state") in {"running", "waiting_user"}
+            if result.get("execution_state") in {"queued", "running", "waiting_user"}
             else 200
             if result.get("ok")
             else 409

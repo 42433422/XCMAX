@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
+
+from app.application.tools.workflow_tools.catalog_excel import excel_tool_specs
 
 from .report_input_schemas import REPORT_INPUT_SCHEMAS
 
@@ -1140,3 +1143,36 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ),
     ("sales", "create_order"): _SALES_QUOTE_INPUT,
 }
+
+
+def _workbook_input_schema(name: str, required: list[str]) -> dict[str, Any]:
+    function = next(
+        tool["function"] for tool in excel_tool_specs() if tool["function"]["name"] == name
+    )
+    schema: dict[str, Any] = deepcopy(function["parameters"])
+    schema["properties"].pop("action", None)
+    schema["required"] = required
+    return schema
+
+
+_SPECIAL_INPUT_SCHEMAS.update(
+    {
+        ("excel_analysis", "structure"): _workbook_input_schema(
+            "excel_schema_understand", ["file_path"]
+        ),
+        ("excel_analysis", "aggregate"): _workbook_input_schema(
+            "excel_analysis", ["file_path", "metrics"]
+        ),
+        ("excel_join_compare", "join"): _workbook_input_schema(
+            "excel_join_compare", ["file_paths", "join_keys"]
+        ),
+        ("excel_join_compare", "diff"): _workbook_input_schema(
+            "excel_join_compare", ["file_path_a", "file_path_b", "key_columns"]
+        ),
+    }
+)
+_SPECIAL_INPUT_SCHEMAS[("excel_join_compare", "join")]["properties"]["file_paths"].update(
+    minItems=2, maxItems=2
+)
+for _action, _key in (("join", "join_keys"), ("diff", "key_columns")):
+    _SPECIAL_INPUT_SCHEMAS[("excel_join_compare", _action)]["properties"][_key]["minItems"] = 1

@@ -8437,6 +8437,8 @@ dependencies = [
     { name = "langgraph-checkpoint-sqlite" },
     { name = "langgraph-prebuilt" },
     { name = "langgraph-sdk" },
+    { name = "openai-codex" },
+    { name = "openai-codex-cli-bin" },
 ]
 
 [package.optional-dependencies]
@@ -8605,7 +8607,9 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "numpy", marker = "extra == 'server-api'", specifier = ">=1.24.0" },
     { name = "openai", marker = "extra == 'server-api'", specifier = ">=1.40.0" },
+    { name = "openai-codex", specifier = "==0.171.0" },
     { name = "openai-codex", marker = "extra == 'codex-runtime'", specifier = "==0.171.0" },
+    { name = "openai-codex-cli-bin", specifier = "==0.171.0" },
     { name = "openpyxl", marker = "extra == 'server-api'", specifier = "==3.1.5" },
     { name = "opentelemetry-api", marker = "extra == 'server-api'", specifier = ">=1.45.2" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'server-api'", specifier = ">=1.45.1" },

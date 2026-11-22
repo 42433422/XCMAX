@@ -4,10 +4,17 @@ import importlib.util
 import json
 import os
 import runpy
+from importlib.metadata import version
 from pathlib import Path
 
 import setuptools
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+from codex_cli_bin import bundled_codex_path
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_dynamic_libs,
+    collect_submodules,
+    copy_metadata,
+)
 
 ROOT = Path.cwd().resolve()
 
@@ -111,6 +118,20 @@ except Exception:
     pass
 
 hiddenimports = []
+# The standard executor must survive freezing with the upstream package layout.
+# bundled_codex_path() requires codex-package.json beside bin/codex[.exe]; keep
+# its helpers/resources too, and fail the build for missing or mismatched wheels.
+bundled_codex_path()
+for module, distribution in (
+    ("openai_codex", "openai-codex"),
+    ("codex_cli_bin", "openai-codex-cli-bin"),
+):
+    if version(distribution) != "0.171.0":
+        raise RuntimeError(f"Required Codex runtime version mismatch: {distribution}")
+    hiddenimports.extend(collect_submodules(module, on_error="raise"))
+    datas.extend(collect_data_files(module, include_py_files=False))
+    datas.extend(copy_metadata(distribution))
+
 for module in [
     "appdirs",
     "app.desktop_runtime",

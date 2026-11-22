@@ -211,8 +211,8 @@ def resolve_employee_tools(
         for n in DOC_TOOLS:
             add(n)
     if not read_only and any(k in text for k in _IMPORT_KW):
-        for n in ("import_excel_to_database", "products_bulk_import"):
-            add(n)
+        # products_bulk_import only reports a count; it has no persisted write.
+        add("import_excel_to_database")
 
     if not selected:
         for n in (
