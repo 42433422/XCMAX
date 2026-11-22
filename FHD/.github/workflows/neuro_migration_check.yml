@@ -12,6 +12,10 @@ on:
     # 每天凌晨 2 点运行
     - cron: '0 2 * * *'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Candidate tests never inherit repository-wide write permissions.
 permissions:
   contents: read
@@ -88,7 +92,7 @@ jobs:
     - name: Comment PR with migration status
       if: github.event_name == 'pull_request'
       continue-on-error: true
-      uses: actions/github-script@v6
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       with:
         script: |
           const fs = require('fs');

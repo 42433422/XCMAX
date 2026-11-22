@@ -627,6 +627,8 @@ os._exit(23)
 def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     trusted_actor, monkeypatch, tmp_path, cleanup_verified
 ):
+    # Collection can prepend another project's tests package; spawn imports afresh.
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
     from app.application.agent_orchestrator import tool_process
     from app.application.agent_orchestrator.approval_grant import _params_hash
     from app.application.agent_orchestrator.elt_checkpoint_recovery import ELT_CHECKPOINT_PROTOCOL
