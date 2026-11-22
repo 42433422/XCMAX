@@ -133,7 +133,7 @@ _SALES_QUOTE_INPUT = {
 }
 
 _MEMORY_V2_REJECT_INPUT = _object_schema(
-    ["user_id", "memory_id"],
+    ["memory_id"],
     {
         "user_id": {"type": "string"},
         "memory_id": {"type": "string"},
@@ -866,12 +866,14 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "run_id": {"type": "string", "description": "单个预演编号"},
             "preview_revision": {
                 "type": "string",
-                "description": "用户核对并确认的预演版本；关联客户产品预演必须提供",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "引用已有预演执行时必须提供用户核对的精确版本；请先读取 elt_import.preview",
             },
             "preview_revisions": {
                 "type": "object",
-                "additionalProperties": {"type": "string"},
-                "description": "批量确认时逐个预演编号对应的版本",
+                "minProperties": 1,
+                "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "description": "run_ids 中每个已有预演编号对应的精确已核对版本，不能遗漏",
             },
             "run_ids": {
                 "type": "array",
@@ -885,7 +887,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
                 "description": "用户明确接受 AI 建议映射时传 true，可免去逐字段确认",
             },
         },
-    ),
+    )
+    | {"dependentRequired": {"run_id": ["preview_revision"], "run_ids": ["preview_revisions"]}},
     ("excel_import", "execute_import"): _object_schema(
         ["pending_import_id"], {"pending_import_id": {"type": "string"}}
     ),
@@ -1050,7 +1053,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("memory_v2", "propose_candidate"): _object_schema(
-        ["user_id", "memory_type", "key", "value"],
+        ["memory_type", "key", "value"],
         {
             "user_id": {"type": "string"},
             "memory_type": {"type": "string", "enum": ["preference", "entity", "episodic"]},
@@ -1063,7 +1066,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("memory_v2", "confirm"): _object_schema(
-        ["user_id", "memory_id"],
+        ["memory_id"],
         {
             "user_id": {"type": "string"},
             "memory_id": {"type": "string"},
@@ -1072,7 +1075,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ),
     ("memory_v2", "reject"): _MEMORY_V2_REJECT_INPUT,
     ("memory_v2", "correct"): _object_schema(
-        ["user_id", "memory_id"],
+        ["memory_id"],
         {
             "user_id": {"type": "string"},
             "memory_id": {"type": "string"},

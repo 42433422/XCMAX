@@ -216,6 +216,7 @@ def test_real_cli_corrects_missing_goal_in_original_thread_and_settles_parent(
             context_window=32000,
             max_output_tokens=4000,
         )
+        # Synthetic receipt for contract tests, never evidence of real route qualification.
         qualification = tmp_path / "test-only-qualification.json"
         qualification.write_text(
             json.dumps(

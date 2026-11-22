@@ -24,6 +24,9 @@ QUALIFICATION_CHECKS = (
     # These require observed upstream evidence, not merely a pinned request.model.
     "upstream_failover_disabled",
     "response_model_identity",
+    # One real run on this exact route/version must force local compaction,
+    # restart the runtime, resume the same task and prove no effect was replayed.
+    "forced_compaction_restart_same_task_no_replay",
 )
 
 

@@ -64,13 +64,13 @@
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py",
       "base_blob": "b52d746583f470ca214de68ae2865d8f346e1799",
-      "head_blob": "37bea31d78cedd64e9ea8875aa67ad0614f8fe9b",
+      "head_blob": "d1f7556017904e939cb4c51bccead4d54f24a280",
       "before_lines": 1189,
-      "after_lines": 1239,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。按既有 Excel 公共目录生成 structure、aggregate、join、diff 的动作级 schema，并对受信模板员工附加精确写入输入合同。",
-      "boundary": "采用延迟导入和 deepcopy 复用现有目录；连接只接受两个文件及非空键，writer 的 if/then 复用 workbook_write_contract，不增加表格推理规则或执行循环。",
-      "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，含 employee_workbook_tools 4 项和 workbook_write 6 项，覆盖真实汇总/合并/差异、禁止路径及 writer 输入和产物边界；均为合成工作簿。",
-      "follow_up": "输入约束继续由 catalog_excel 与 workbook_write_contract 各自单源维护；最终提交复核默认目录无重复能力，原 222 题和 Excel 16 原件尚未取得。",
+      "after_lines": 1242,
+      "reason": "保留现有ToolSpec唯一参数合同，个人记忆沿宿主账号绑定；ELT引用已有预演必须携带同次64位版本，数组映射不得遗漏目标。",
+      "boundary": "模型不能提供身份；新准入缺版本即拒绝，历史已完成回执只读恢复，不能用当前版本改写原审批。",
+      "validation": "本轮真实服务与临时SQL回归包括159项业务目标/权限/ELT合同和54项个人记忆路由；完整远端CI以最终提交为准，不把记录本身当批准。",
+      "follow_up": "按用户2026-11-23要求同步最新重构、解决主线冲突并审查后合入；此条保留精确blob供审查，不伪造人工批准或真实客户验收。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
@@ -88,13 +88,13 @@
     "FHD/app/application/agent_orchestrator/tool_spec_data/special_tool_contracts.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/special_tool_contracts.py",
       "base_blob": "1fc63cf43a1d7ee23ca552277b40269b43b6e226",
-      "head_blob": "4dc6d92e134e7731cd12c68a0e59e5b6433832a9",
+      "head_blob": "e0b323fa8a6313fd847f503e39dad74c82581532",
       "before_lines": 1123,
-      "after_lines": 1161,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。给原样例目录补充 aggregate、join、diff 三个最小输入输出样例，使新增可发现动作具有对应契约示例。",
-      "boundary": "仅增加样例数据；聚合、连接和差异计算仍由原注册工具执行，样例不授权访问文件或代表业务验收。",
-      "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，其中 employee_workbook_tools 4 项用实际合成 XLSX 验证聚合、连接、差异及文件拒绝；样例 success 字段不算独立核验。Ruff app/tests/scripts 与 CI 指定 format app/tests 通过。",
-      "follow_up": "样例继续留在现有契约目录并随单一输入源更新；最终提交需复核契约门禁，原客户 Excel 题库资格仍待取得原件后验证。",
+      "after_lines": 1166,
+      "reason": "工具示例与实际合同一致，ELT示例展示合法预演版本，个人记忆示例移除模型侧用户身份。",
+      "boundary": "仅更新原目录的声明和示例，不新增执行器或绕过ToolSpec验证，示例不授予任何业务权限。",
+      "validation": "本轮真实服务与临时SQL回归包括159项业务目标/权限/ELT合同和54项个人记忆路由；完整远端CI以最终提交为准，不把记录本身当批准。",
+      "follow_up": "按用户2026-11-23要求同步最新重构、解决主线冲突并审查后合入；此条保留精确blob供审查，不伪造人工批准或真实客户验收。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_tool_lifecycle.py": {
@@ -347,18 +347,6 @@
       "boundary": "只适配已有市场路由和能力目录；共用原同步与异步传输，私有快照不进入HTTP负载，摘要与发送前复核当前身份。保留原任务、审批、工具执行、业务记忆及已开始请求的凭据快照契约。",
       "validation": "本地桌面相关15文件613项回归通过，含实际SDK到Modstore HTTP的6项文字及视觉整链、默认输出上限与修复入口透传验收；使用本库固定LangGraph包。源码结构门禁通过，适配器小于40000字节。精确提交CI、架构审查与安装后现场验证仍待完成。",
       "follow_up": "由维护者审查一次选路快照边界及30行净增长；按主线合入顺序发布后，用志刚账号原模型与原始问候核对能力来源、请求回执及安装身份。",
-      "review_owner": "@42433422"
-    },
-    "FHD/app/domain/shared_services/tools_workflow_elt.py": {
-      "base_file": "FHD/app/domain/shared_services/tools_workflow_elt.py",
-      "base_blob": "7dc7d19fa8f33f63fe1d15fc5b5e6edb31dc7111",
-      "head_blob": "16fde19f0c0a41722bb0fd012b0ebe51b8d04556",
-      "before_lines": 1836,
-      "after_lines": 2445,
-      "reason": "将逐文件预演、批量提交和待继续回执接入现有 ELT 调度。已确认的父出货和附表结果可按原有凭据恢复，避免批量任务卡住或重复写入。",
-      "boundary": "只恢复同租户、同所有人和同任务的原预演。执行仍核对源内容、预演版本和审批。写入结果未知时停止恢复并保留待核对状态。 Durable batches preserve each approved upload ID and record actual native row-level duplicate skips; unreadable uploads remain failed.",
-      "validation": "验证范围包括逐文件写入、等待超时、租约接管、重复写入、过期预演拒绝和父子预演确认的现有 ELT 回归。待远端 CI 和真实业务场景核验。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。 Final review regression: 131 ELT, batch and progress tests pass, including three real CSV/SQLite cases for identical uploads, receipt recovery and unreadable duplicates; no fabricated completion receipt.",
-      "follow_up": "待原场景通过后，抽取文件阶段和回执复用逻辑，保持批量导入入口及既有审批契约不变。",
       "review_owner": "@42433422"
     },
     "FHD/app/fastapi_routes/ai_open.py": {
@@ -784,13 +772,13 @@
     "FHD/app/application/agent_orchestrator/verification_readback.py": {
       "base_file": "FHD/app/application/agent_orchestrator/verification_readback.py",
       "base_blob": "f4acbf37e7c54f852515a01c30efc323adc24bd1",
-      "head_blob": "c311771889454eb9171f4320ce25fe03eb146000",
+      "head_blob": "3dac0f5fbe8143f31c8488f0c54885954bb2de9a",
       "before_lines": 908,
-      "after_lines": 916,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。将受信 Excel 模板员工加入原独立核验分派，写入完成后调用实际产物与模板 QC，补齐通用 employee 成功回执不足以证明写出结果的问题。",
-      "boundary": "本文件只识别 canonical writer 并委托 verification_workbook；独立读回、文件归属及哈希核验仍使用既有机制，不能据此宣称公式数值已重算。",
-      "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，其中 workbook_write 6 项覆盖真实 writer、独立 QC、同父产物续读、上传归属变化和产物篡改；全 app mypy 2272 源文件通过。",
-      "follow_up": "新增工作簿 QC 规则继续归 verification_workbook 和已有受信 QC 库，本分派不承载业务推理；最终提交复核原产物证据与公式核验范围。",
+      "after_lines": 919,
+      "reason": "沿原独立读回分派补齐memory_v2.reject和ELT run_ids，复用既有持久记录与ELT整批声明，不增设备用执行或验证通道。",
+      "boundary": "记忆拒绝的状态、版本、历史链与原因必须匹配；ELT逐项目标和业务行均核验，缺失、部分或未知回执不能提升完成，验证阶段不重做写入。",
+      "validation": "本轮真实SQL审批、原EltService、持久回执和重复读回覆盖正向完成及缺版本、修订漂移、跨作用域和伪造结果；验证阶段SQL写入被监测。最终远端CI绑定实际候选提交。",
+      "follow_up": "按用户2026-11-23明确要求同步改造、集成最新主线并审查后合入；此记录提供精确blob供审查，不代表人工架构批准、生产资格或真实客户验收。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/super_employee_service.py": {

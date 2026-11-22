@@ -21,13 +21,14 @@ def _route(**kwargs):
     )
 
 
-def _qualification(route):
+def _synthetic_qualification(route):
+    """Exercise the receipt contract; this fixture is not real route qualification."""
     return {
         "schema": "xcmax.runtime-qualification.v1",
         "route_identity": route.identity,
         "codex_version": CODEX_VERSION,
         "model_kind": "real",
-        "evidence_refs": ["run:1"],
+        "evidence_refs": ["synthetic-policy-test-only"],
         "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
     }
 
@@ -75,10 +76,11 @@ def test_only_real_exact_route_qualification_can_enable_runtime(tmp_path):
     route = _route()
     path = tmp_path / "qualification.json"
     settings = RuntimeSettings(engine="codex", route=route, qualification_file=path)
-    evidence = _qualification(route)
+    evidence = _synthetic_qualification(route)
     for replacement in (
         {"model_kind": "synthetic"},
         {"route_identity": "another-route"},
+        {"codex_version": "0.170.0"},
         {"checks": {}},
         {"evidence_refs": []},
     ):
@@ -133,16 +135,46 @@ def test_gateway_protocol_cannot_be_guessed(value):
         _route(gateway_kind=value)
 
 
-@pytest.mark.parametrize("check", ["upstream_failover_disabled", "response_model_identity"])
-@pytest.mark.parametrize("value", [None, "FAIL", "PENDING", True])
-def test_qualification_requires_each_upstream_identity_and_failover_check(tmp_path, check, value):
+@pytest.mark.parametrize(
+    "check",
+    [
+        "responses_stream",
+        "multi_turn_tools",
+        "openai_network_denied",
+        "business_receipt_verified",
+        "upstream_failover_disabled",
+        "response_model_identity",
+        "forced_compaction_restart_same_task_no_replay",
+    ],
+)
+@pytest.mark.parametrize("value", [None, "FAIL", "PENDING", True, "pass", {"status": "PASS"}])
+def test_qualification_requires_each_gate_check(tmp_path, check, value):
     route = _route(response_model="model-snapshot")
-    evidence = _qualification(route)
+    evidence = _synthetic_qualification(route)
     if value is None:
-        del evidence["checks"][check]
+        evidence["checks"].pop(check, None)
     else:
         evidence["checks"][check] = value
     path = tmp_path / "qualification.json"
+    path.write_text(json.dumps(evidence))
+    with pytest.raises(RuntimePolicyError, match="Exact route"):
+        RuntimeSettings(route=route, qualification_file=path).require_qualified()
+
+
+def test_previous_six_check_receipt_cannot_enable_compaction_recovery(tmp_path):
+    route = _route()
+    evidence = _synthetic_qualification(route)
+    # A short real-route smoke previously met every gate. It must no longer
+    # qualify without the full compaction/restart/same-task/no-replay scenario.
+    evidence["checks"] = {
+        "responses_stream": "PASS",
+        "multi_turn_tools": "PASS",
+        "openai_network_denied": "PASS",
+        "business_receipt_verified": "PASS",
+        "upstream_failover_disabled": "PASS",
+        "response_model_identity": "PASS",
+    }
+    path = tmp_path / "synthetic-short-run-qualification.json"
     path.write_text(json.dumps(evidence))
     with pytest.raises(RuntimePolicyError, match="Exact route"):
         RuntimeSettings(route=route, qualification_file=path).require_qualified()
@@ -168,7 +200,9 @@ def test_previous_route_certificate_is_invalid_even_with_new_checks(tmp_path):
     previous_identity = hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest()
     assert route.identity != previous_identity
     path = tmp_path / "qualification.json"
-    path.write_text(json.dumps({**_qualification(route), "route_identity": previous_identity}))
+    path.write_text(
+        json.dumps({**_synthetic_qualification(route), "route_identity": previous_identity})
+    )
     with pytest.raises(RuntimePolicyError, match="Exact route"):
         RuntimeSettings(route=route, qualification_file=path).require_qualified()
 
@@ -179,7 +213,7 @@ def test_host_configuration_binds_request_alias_to_one_qualified_model(
 ):
     route = _route(response_model="model-snapshot", gateway_kind=gateway_kind)
     certificate = tmp_path / "qualification.json"
-    certificate.write_text(json.dumps(_qualification(route)))
+    certificate.write_text(json.dumps(_synthetic_qualification(route)))
     config = tmp_path / "runtime.json"
     config.write_text(
         json.dumps(

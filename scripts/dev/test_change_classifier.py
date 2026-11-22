@@ -16,7 +16,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.dev.change_classifier import CATEGORY_MODE, RELEVANT, _changed_files, decide
+from scripts.dev.change_classifier import (
+    CATEGORY_MODE,
+    RELEVANT,
+    _changed_files,
+    decide,
+)
 from scripts.dev.change_classifier import main as classifier_main
 
 DOCS_ONLY = ["docs/CI_SSOT.md", "FHD/docs/WINDOWS_RELEASE_SSOT.md"]
@@ -227,6 +232,38 @@ class RunIfAnyRelevantTests(unittest.TestCase):
 
     def test_shipment_etl_output_security_runs_cross_platform_contract(self) -> None:
         self.assertTrue(decide("runtime_contract", ETL_OUTPUT_SECURITY))
+
+    def test_codex_process_authority_and_dependencies_run_cross_platform_contract(
+        self,
+    ) -> None:
+        for path in (
+            "FHD/app/infrastructure/codex/launcher.py",
+            "FHD/app/infrastructure/codex/transport.py",
+            "FHD/app/infrastructure/codex/tools.py",
+            "FHD/app/application/agent_orchestrator/tool_process.py",
+            "FHD/app/application/agent_orchestrator/tool_executor.py",
+            "FHD/app/application/agent_orchestrator/tool_permission.py",
+            "FHD/tests/test_application/test_tool_process.py",
+            "FHD/pyproject.toml",
+            "FHD/requirements-server-api.txt",
+            "FHD/ops/deploy/requirements-server-api.lock.txt",
+            "FHD/uv.lock",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(decide("runtime_contract", [path]))
+
+    def test_runtime_contract_scope_does_not_match_documentation_or_similar_names(
+        self,
+    ) -> None:
+        for path in (
+            "FHD/docs/codex-runtime.md",
+            "FHD/app/infrastructure/codex_notes.py",
+            "FHD/app/infrastructure/codex_other/launcher.py",
+            "FHD/app/application/agent_orchestrator/tool_process_notes.md",
+            *FRONTEND_ONLY,
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(decide("runtime_contract", [path]))
 
 
 class FailOpenTests(unittest.TestCase):

@@ -2343,7 +2343,6 @@
           "risk": "medium",
           "idempotent": true,
           "required_params": [
-            "user_id",
             "memory_type",
             "key",
             "value"
@@ -2354,7 +2353,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -2363,7 +2361,6 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -2372,7 +2369,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -2381,7 +2377,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"

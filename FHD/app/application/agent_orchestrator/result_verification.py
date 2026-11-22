@@ -150,13 +150,16 @@ def freeze_verification_contract(
     if step.tool_id == "memory_v2" and step.action in {
         "propose_candidate",
         "confirm",
+        "reject",
         "correct",
         "delete",
     }:
         from app.application.memory_v2_facade import capture_memory_baseline
 
         contract["memory_baseline"] = capture_memory_baseline(step, context)
-    if (step.tool_id, step.action) == ("elt_import", "execute") and step.params.get("run_id"):
+    if (step.tool_id, step.action) == ("elt_import", "execute") and (
+        step.params.get("run_id") or step.params.get("run_ids")
+    ):
         from app.application.elt.preview_confirmation import capture_agent_execution
 
         contract["elt_execution_baseline"] = capture_agent_execution(step, context)

@@ -346,6 +346,13 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             ),
         )
     ],
+    ("elt_import", "execute"): [
+        _sample(
+            "execute_reviewed_preview",
+            {"run_id": "sample-preview", "preview_revision": "a" * 64},
+            _success(data={"run_id": "sample-preview", "status": "completed", "executed_rows": 1}),
+        )
+    ],
     ("excel_import", "execute_import"): [
         _sample(
             "execute_pending_import",
@@ -1060,7 +1067,6 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
         _sample(
             "propose_memory_v2_candidate",
             {
-                "user_id": "tenant-a",
                 "memory_type": "preference",
                 "key": "favorite_customer",
                 "value": "ACME Trading",
@@ -1081,7 +1087,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "confirm"): [
         _sample(
             "confirm_memory_v2_candidate",
-            {"user_id": "tenant-a", "memory_id": "mem_1"},
+            {"memory_id": "mem_1"},
             _success(
                 memory={"memory_id": "mem_1", "status": "active", "eligible_for_planner": True}
             ),
@@ -1090,7 +1096,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "reject"): [
         _sample(
             "reject_memory_v2_candidate",
-            {"user_id": "tenant-a", "memory_id": "mem_1", "reason": "not useful"},
+            {"memory_id": "mem_1", "reason": "not useful"},
             _success(memory={"memory_id": "mem_1", "status": "rejected"}),
         )
     ],
@@ -1098,7 +1104,6 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
         _sample(
             "correct_memory_v2_record",
             {
-                "user_id": "tenant-a",
                 "memory_id": "mem_1",
                 "key": "favorite_customer",
                 "value": "ACME Trading Ltd.",
@@ -1116,7 +1121,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "delete"): [
         _sample(
             "delete_memory_v2_record",
-            {"user_id": "tenant-a", "memory_id": "mem_1", "reason": "user removed memory"},
+            {"memory_id": "mem_1", "reason": "user removed memory"},
             _success(memory={"memory_id": "mem_1", "status": "deleted"}),
         )
     ],

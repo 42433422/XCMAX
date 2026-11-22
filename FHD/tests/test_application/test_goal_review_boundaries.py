@@ -2,6 +2,7 @@
 
 from unittest.mock import Mock
 
+from app.application.agent_orchestrator.param_references import resolve_references
 from app.application.workflow.planning_graph_policy import validate_required_params
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 from app.services.tools_execution.registry import get_workflow_tool_registry
@@ -76,10 +77,20 @@ def test_elt_preview_and_dependent_execution_remain_valid():
                 "execute",
                 "elt_import",
                 "execute",
-                {"run_id": "{{preview.data.run_id}}"},
+                {
+                    "run_id": "{{preview.data.run_id}}",
+                    "preview_revision": "{{preview.data.preview_revision}}",
+                },
                 depends_on=["preview"],
             ),
         ],
     )
     assert validate_required_params(plan, get_workflow_tool_registry()) is None
     assert plan.nodes[1].depends_on == ["preview"]
+    original_preview = {"run_id": "owned-preview", "preview_revision": "a" * 64}
+    problems = []
+    assert (
+        resolve_references(plan.nodes[1].params, {"preview": {"data": original_preview}}, problems)
+        == original_preview
+    )
+    assert problems == []

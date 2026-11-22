@@ -886,7 +886,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         if graph_error:
             run.status = "blocked"
             run.error = graph_error
-            run.add_event("workflow.blocked", run.error)
+            run.add_event("workflow.graph_rejected", run.error)
             return
         self._apply_repair_policy(run, plan_metadata)
         self._attach_artifacts_from_payload(run, plan_metadata, source="plan.metadata")

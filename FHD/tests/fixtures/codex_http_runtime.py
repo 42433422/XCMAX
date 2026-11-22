@@ -50,6 +50,7 @@ def runtime_entry(trusted_actor, tmp_path, monkeypatch):
         context_window=32000,
         max_output_tokens=4000,
     )
+    # Synthetic receipt for contract tests, never evidence of real route qualification.
     qualification = tmp_path / "fixture-qualification.json"
     qualification.write_text(
         json.dumps(
@@ -58,7 +59,7 @@ def runtime_entry(trusted_actor, tmp_path, monkeypatch):
                 "route_identity": route.identity,
                 "codex_version": CODEX_VERSION,
                 "model_kind": "real",
-                "evidence_refs": ["test-only-fixture"],
+                "evidence_refs": ["synthetic-http-runtime-test-only"],
                 "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
             }
         )

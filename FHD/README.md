@@ -128,7 +128,7 @@ AIOPEN 虚拟光标的蓝色星尘拖尾复用 [cursor-effects](https://github.c
 
 浏览器自动化复用 [Microsoft Playwright MCP](https://github.com/microsoft/playwright-mcp) `@playwright/mcp==0.0.86`（Apache-2.0）、已锁定的官方 Python MCP SDK `2.3.0`（MIT）与原有 AgentRun / LangGraph。浏览器依赖单独锁在 [browser_mcp_deps](scripts/autonomy/runtime_tools/browser_mcp_deps/package.json)，保持官方发行包的 Playwright `1.66.0-alpha-2026-11-18` 精确依赖及 integrity；这是官方 MCP 包的依赖选择，不把 alpha 浏览器引擎描述成稳定版，也不更改前端 Playwright 版本。
 
-决策继续调用 `planner_llm_gateway` 和已有模型池，使用原任务的预算、模型调用记录、工具契约、逐步审批、租户权限与检查点。产品适配只补任务身份、原执行器进程生命周期和观察回路；纯动作策略与决策/页面证据契约分别位于 `domain/autonomy/browser_policy.py`、`browser_evidence.py`，本地服务信任与执行图入口合同留在原 MCP registry。已调研 [Browser Use](https://github.com/browser-use/browser-use)（MIT）与 [Stagehand](https://github.com/browserbase/stagehand)（MIT）；它们带有另外的 Agent / 模型控制面，本实现直接使用 Playwright MCP 的浏览器能力，保留仓库已存在的执行控制面。AIOPEN 的宿主 DOM 导航与光标仍负责自身页面；Codex CLI 的编码执行、模型路由与超时能力不等同于这个第三方网页回路。
+浏览器动作由同一个固定 Codex 会话选择，经原工具桥与 Playwright MCP 执行，使用原任务的预算、模型调用记录、工具契约、逐步审批、租户权限与检查点；旧 `planner_llm_gateway` 和浏览器专用模型循环已删除。产品适配只补任务身份、原执行器进程生命周期和观察证据；纯动作策略与决策/页面证据契约分别位于 `domain/autonomy/browser_policy.py`、`browser_evidence.py`，本地服务信任与执行图入口合同留在原 MCP registry。已调研 [Browser Use](https://github.com/browser-use/browser-use)（MIT）与 [Stagehand](https://github.com/browserbase/stagehand)（MIT）；它们带有另外的 Agent / 模型控制面，本实现直接使用 Playwright MCP 的浏览器能力，保留仓库已存在的执行控制面。AIOPEN 的宿主 DOM 导航与光标仍负责自身页面；Codex CLI 的编码执行、模型路由与超时能力不等同于这个第三方网页回路。
 
 | 已定位的缺口 | 当前代码处理与证据入口 |
 |---|---|
@@ -250,7 +250,7 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 仅支持网关真实提供的 Responses 多轮工具协议，不自行将 Chat Completions 拼装成 Responses。企业现有网关必须实际暴露该协议；平台聊天接口健康不代表已兼容。独立配置拒绝 OpenAI/ChatGPT/Azure OpenAI 地址和 OpenAI 上游声明，禁止重定向和通过 `previous_response_id` 借用其他任务的上游会话。任意代理域名本身不能证明上游独立，必须核对网关路由记录和网络隔离证据。`response_model` 是已验收的单个实际响应 ID，省略时等于请求 `model`；别名解析到快照时须由宿主显式绑定，不能由响应自行扩充允许列表。`gateway_kind=responses` 只发送标准 Responses 字段；明确验收为 `litellm` 时才由宿主下发 `num_retries=0`、`disable_fallbacks=true`，并检查原始 HTTP 两项 attempted-retries/fallbacks 头唯一且均为零。缺头、重复或非零保留未知用量，不结算为一次成功。通用 Responses 没有标准关闭换模参数，上游固定路由仍须实际资格证据；网关计数头是其协议声明，不能替代实际路由验收。
 
-启用凭据采用 `xcmax.runtime-qualification.v1`，必须匹配 `ModelRoute.identity`、`codex_version=0.171.0`、`model_kind=real`，并带实际 `evidence_refs`。`checks` 中 `responses_stream`、`multi_turn_tools`、`openai_network_denied`、`business_receipt_verified`、`upstream_failover_disabled`、`response_model_identity` 均需真实 PASS。最后两项必须有实际上游关闭故障转移与响应模型身份的证据，不能从固定请求模型推定；旧摘要或缺少新检查的资格文件不可沿用。缺凭据、模型/容量/版本变化、合成模型或缺证据均拒绝启动；不能手填 PASS 代替验收。所有新自然语言任务使用同一 Codex 入口，配置不提供第二执行器。已持久化的正式工作流与审批仍从原任务恢复。
+启用凭据采用 `xcmax.runtime-qualification.v1`，必须匹配 `ModelRoute.identity`、`codex_version=0.171.0`、`model_kind=real`，并带实际 `evidence_refs`。`checks` 中 `responses_stream`、`multi_turn_tools`、`openai_network_denied`、`business_receipt_verified`、`upstream_failover_disabled`、`response_model_identity`、`forced_compaction_restart_same_task_no_replay` 均需真实 PASS。除实际上游关闭故障转移与响应模型身份外，还须在同一固定非 OpenAI 路由和版本上强制压缩、重启执行器、恢复原任务，并用持久回执证明未重复执行；不能从固定请求模型或合成测试推定这些证据；旧摘要或缺少新检查的资格文件不可沿用。缺凭据、模型/容量/版本变化、合成模型或缺证据均拒绝启动；不能手填 PASS 代替验收。所有新自然语言任务使用同一 Codex 入口，配置不提供第二执行器。已持久化的正式工作流与审批仍从原任务恢复。引用已有 ELT 预演的执行必须绑定该次预演的精确版本；缺失、过期或批量映射遗漏目标时拒绝写入。历史缺版本的未完成审批保持原参数并要求重新预演、重新审批，已完成回执仍只读恢复。
 
 宿主在首次执行前保存原始请求、约束、附件身份与内容摘要、当前授权范围，形成不可覆盖的 `runtime_goal_contract`；本阶段不生成完整计划或调用模型审计。个人记忆、MemoryV2 和已授权数据集通过原服务实际召回，作为只读上下文记录来源与检索回执；请求自报记忆不构成授权。补答作为持久事件累积，不能用最新一句话替换原目标。附件不完整时先补充信息，已有合同或业务效果不得重建。
 
@@ -264,7 +264,7 @@ Codex 在同一 thread 内发现能力、读取完整 JSON Schema 和 `schema_di
 
 旧通用 Planner、整图 JSON 修复、执行前目标覆盖闸门、员工手写 agent loop、浏览器第二模型循环、模型改参修复及 `execute_plan` 接口已移除，不保留备用分支或兼容空壳。现有任务、工具目录、审批、费用、业务核验和正式 LangGraph 工作流各自保持唯一权威来源。
 
-验证分层：固定 SDK/CLI 配合本地受控模型响应只证明协议、隔离和恢复契约；真实 SQL、审批、Excel/浏览器读回证明对应实现路径。原 222 轮与 Excel 16 题必须使用原题、原输入、同一模型/预算另行评测，不能用回归数量推导及格率。真实独立模型、Windows/macOS/Linux 完整安装、真实客户材料和部署同 SHA 验收分别保留证据。#3468 为受审候选，保持 Draft / hold-merge，不代表已合入或部署。
+验证分层：固定 SDK/CLI 配合本地受控模型响应只证明协议、隔离和恢复契约；真实 SQL、审批、Excel/浏览器读回证明对应实现路径。原 222 轮与 Excel 16 题必须使用原题、原输入、同一模型/预算另行评测，不能用回归数量推导及格率。真实独立模型、Windows/macOS/Linux 完整安装、真实客户材料和部署同 SHA 验收分别保留证据。合入须以当前提交的完整 CI 与审查结果为准，代码集成不等于已部署或真实业务验收。
 
 ## 版本与发布约定
 

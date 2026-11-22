@@ -741,10 +741,13 @@ def verify_independent_result(
         "batch_delete",
     }
     elt_preview = action == ("elt_import", "preview")
-    elt_execution = action == ("elt_import", "execute") and bool(step.params.get("run_id"))
+    elt_execution = action == ("elt_import", "execute") and bool(
+        step.params.get("run_id") or step.params.get("run_ids")
+    )
     memory_action = step.tool_id == "memory_v2" and step.action in {
         "propose_candidate",
         "confirm",
+        "reject",
         "correct",
         "delete",
     }

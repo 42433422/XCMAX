@@ -32,6 +32,11 @@ from app.infrastructure.codex.receipts import read_call_receipt
 from app.infrastructure.codex.tool_names import CODEX_TOOL_NAMES
 
 _CONTROL_TOOLS = frozenset({"conversation", "clarify"})
+# These contracts use run_id to select an existing business object. The host's
+# current execution identity remains exclusively in the bound runtime context.
+_BUSINESS_RUN_TARGETS = frozenset(
+    {("elt_import", "preview"), ("elt_import", "execute"), ("enterprise_cognition", "evaluate")}
+)
 _AUTHORITY_KEYS = frozenset(
     {
         "tenant_id",
@@ -248,7 +253,15 @@ class CodexToolBridge:
             raise CodexBindingError("invalid_arguments", "业务参数必须是对象")
         if len(json.dumps(params, ensure_ascii=False, allow_nan=False).encode()) > 256_000:
             raise CodexBindingError("invalid_arguments", "业务参数过大，请使用已归档文件引用")
-        if any(str(key).startswith("_") or key in _AUTHORITY_KEYS for key in params):
+        business_run_target = (
+            str(args.get("tool_id") or ""),
+            str(args.get("action") or ""),
+        ) in _BUSINESS_RUN_TARGETS
+        if any(
+            str(key).startswith("_")
+            or (key in _AUTHORITY_KEYS and not (key == "run_id" and business_run_target))
+            for key in params
+        ):
             raise CodexBindingError("identity_override", "模型不得提交身份、授权或执行控制字段")
         spec = self._spec(binding, args)
         self._check_schema(spec, args)
