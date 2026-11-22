@@ -229,9 +229,18 @@ def test_pip_runtime_install_supplies_all_vendored_sources() -> None:
         install = next(
             line
             for line in script.splitlines()
-            if "pip install" in line and ".[server-api]" in line
+            if "pip install" in line
+            and "-r requirements-server-api.txt" in line
+            and ("server-api" in line or "${BACKEND_EXTRAS}" in line)
         )
         assert "-r requirements-server-api.txt" in install
+        if name.endswith(".sh"):
+            assert "${BACKEND_EXTRAS}" in install
+            assert 'BACKEND_EXTRAS="server-api"' in script
+            assert 'BACKEND_EXTRAS="server-api,computer-use"' in script
+            assert "XCAGI_BUNDLE_COMPUTER_USE" in script
+        else:
+            assert '-e ".[server-api]"' in script
     jobs = yaml.safe_load((_REPO_ROOT / ".github/workflows/fhd-alembic-ssot.yml").read_text())[
         "jobs"
     ]
