@@ -16,9 +16,11 @@ from app.application.workflow.planner_prompt_profile import (
     ELT_IMPORT_RULE,
     _slim_schema,
     attachment_import_manifest,
-    memory_digest as _memory_digest,
     select_rules_for_prompt,
     select_tools_for_prompt,
+)
+from app.application.workflow.planner_prompt_profile import (
+    memory_digest as _memory_digest,
 )
 from app.application.workflow.workflow_types import (
     Branch,
