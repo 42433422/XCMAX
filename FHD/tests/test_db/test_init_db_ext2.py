@@ -694,6 +694,7 @@ class TestEnsureRuntimeAuthBootstrapDeep:
             patch("app.db.init_db.ensure_employee_run_log_bootstrap") as mock_ledger,
             patch("app.db.init_db.ensure_ai_conversation_bootstrap") as mock_conversation,
             patch("app.db.init_db.ensure_mobile_push_bootstrap") as mock_push,
+            patch("app.db.init_db.ensure_enterprise_cognition_bootstrap") as mock_cognition,
             patch("app.db.init_db.ensure_erp_bootstrap") as mock_erp,
         ):
             ensure_runtime_auth_bootstrap(None)
@@ -705,6 +706,7 @@ class TestEnsureRuntimeAuthBootstrapDeep:
             mock_ledger.assert_called_once()
             mock_conversation.assert_called_once()
             mock_push.assert_called_once()
+            mock_cognition.assert_called_once()
             mock_erp.assert_called_once()
 
 

@@ -19,7 +19,9 @@ def _client() -> TestClient:
 def test_excel_vector_ingest_route_executes_through_agent_orchestrator(
     tmp_path, monkeypatch, local_tools
 ) -> None:
-    from app.application.dataset_rag_app_service import reset_dataset_rag_app_service_for_tests
+    from app.application.dataset_rag_app_service import (
+        reset_dataset_rag_app_service_for_tests,
+    )
 
     repo = InMemoryAgentRunRepository()
     ingest_service = Mock()
@@ -50,22 +52,32 @@ def test_excel_vector_ingest_route_executes_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 400
     payload = response.json()
-    assert payload["success"] is True
-    assert payload["index_id"] == "idx-agent"
-    assert payload["excel_vector_index_id"] == "idx-agent"
+    assert payload["success"] is False
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["agent_status"] == "blocked"
     assert payload["agent_run_id"] == payload["run_id"]
 
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == "excel_vector_execute"
     assert run.tool_calls[0].tool_id == "excel_vector_index"
     assert run.tool_calls[0].action == "execute"
     assert run.tool_calls[0].permission == "tool.excel_vector_index.execute"
     assert run.tool_calls[0].cost_units == 1
+    ingest_service.ingest_excel.assert_called_once_with(
+        file_path="/tmp/products.xlsx", index_name="products", index_id=None
+    )
+    assert run.tool_calls[0].output["success"] is True
+    assert run.tool_calls[0].output["index_id"] == "idx-agent"
+    assert run.tool_calls[0].output["excel_vector_index_id"] == "idx-agent"
+    verification = run.tool_calls[0].metadata["verification"]
+    assert verification["accepted"] is False
+    assert verification["code"] == "result_verifier_unavailable"
+    assert all(check["status"] != "passed" for check in verification["checks"])
 
 
 def test_excel_vector_query_route_executes_through_agent_orchestrator(

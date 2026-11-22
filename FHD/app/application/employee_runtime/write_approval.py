@@ -2,35 +2,59 @@
 
 from __future__ import annotations
 
+import inspect
+import json
 import logging
-import uuid
 from typing import Any, cast
 
-from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS
-from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_GATE_INVOCATION_ERRORS = (TypeError,) + RECOVERABLE_ERRORS
 
 
 def build_write_approval_gate(
     employee_id: str,
     input_data: dict[str, Any] | None = None,
+    *,
+    runtime_context: dict[str, Any] | None = None,
 ):
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
     代码修改工具（``patch_file`` / ``write_file``）统一委托 autonomy_guard；
-    写库类业务工具（``import_excel_to_database`` / ``products_bulk_import``）只能由
-    ApprovalService 创建并持久化审批记录。模型参数和员工输入不能自我声明批准，
-    也不能携带服务端写令牌绕过审批。
+    业务写操作从当前注册契约解析动作，绑定原 AgentRun 后持久化审批。
+    模型参数和员工输入不能自我声明批准，也不能携带服务端写令牌绕过审批。
     """
-    payload = dict(input_data or {})
+    # Legacy positional input is model/user data, never approval evidence.
+    trusted_context = dict(runtime_context or {})
 
-    def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    def gate(
+        tool_name: str,
+        args: dict[str, Any],
+        *,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        from resources.config.risk_actions_loader import (
+            list_code_write_tools,
+            list_write_tools,
+        )
+
         name = str(tool_name or "").strip()
-        if name not in WRITE_TOOLS and name not in CODE_WRITE_TOOLS:
+        code_writes = list_code_write_tools()
+        if name not in list_write_tools() and name not in code_writes:
             return {"ok": True}
-        if name in CODE_WRITE_TOOLS:
+        if runtime_context is not None and not str(runtime_context.get("call_id") or "").strip():
+            return {
+                "ok": False,
+                "blocked": True,
+                "execution_state": "blocked",
+                "retryable": False,
+                "reason": "写操作缺少当前工具调用标识，未创建审批或执行，不能复用父调用标识。",
+            }
+        # The loop supplies its current tool-call identity separately from model
+        # arguments. Keep this exact scope when staging the original approval.
+        payload = {**trusted_context, **dict(runtime_context or {}), "employee_id": employee_id}
+        if name in code_writes:
             from app.domain.autonomy.autonomy_guard import evaluate_risk
 
             decision = evaluate_risk(
@@ -48,60 +72,107 @@ def build_write_approval_gate(
                 "pending_approval": decision.requires_confirmation,
                 "risk_decision": decision.to_dict(),
             }
-        try:
-            from app.application.workflow.approval_policy import WorkflowApprovalPolicy
-            from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-            from resources.config.risk_actions_loader import get_action_risk
+        from app.application.employee_runtime.result_verifier import pending_employee_result
+        from app.application.tools.registered_capabilities import execute_registered_capability
+        from resources.config.risk_actions_loader import (
+            get_action_approval,
+            get_action_risk,
+            get_workflow_tools_from_registry,
+            requires_write_approval,
+        )
 
-            write_action = "execute"
-            if name in ("import_excel_to_database", "products_bulk_import"):
-                write_action = "import"
-            risk = get_action_risk(name, write_action, default="high")
-            plan = PlanGraph(
-                plan_id=f"emp-write-{employee_id}-{uuid.uuid4().hex[:8]}",
-                intent=f"员工 {employee_id} 写操作审批",
-                nodes=[
-                    WorkflowNode(
-                        node_id="write",
-                        tool_id=name,
-                        action=write_action,
-                        params=dict(args or {}),
-                        risk=normalize_workflow_risk(risk),
-                    )
-                ],
-                risk_level=normalize_workflow_risk(risk),
-            )
-            gated = WorkflowApprovalPolicy()
-            gated_decision = gated.evaluate_plan(plan, runtime_context=payload)
-            if gated_decision.all_approved and not gated_decision.any_rejected:
-                return {"ok": True}
-            if gated_decision.pending_approval:
+        try:
+            actions = (get_workflow_tools_from_registry().get(name) or {}).get("actions") or {}
+            action = str(args.get("action") or "").strip()
+            if not action and len(actions) == 1:
+                action = next(iter(actions))
+            if not action or action not in actions:
                 return {
                     "ok": False,
-                    "reason": "写操作待审批（请在审批工作台通过后重试）",
-                    "pending_approval": True,
-                    "approval_request_ids": list(gated_decision.approval_request_ids or []),
+                    "blocked": True,
+                    "reason": "工具缺少明确的已登记动作，未执行或创建审批；请使用已登记能力，导入可先发起 ELT 预演。",
                 }
-        except RECOVERABLE_ERRORS:
-            logger.debug(
-                "write approval gate fallback emp=%s tool=%s",
-                employee_id,
-                name,
-                exc_info=True,
+            if (
+                not requires_write_approval(name, action)
+                and get_action_approval(name, action) not in {"always", "interactive"}
+                and get_action_risk(name, action) == "low"
+                and actions[action].get("idempotent") is True
+            ):
+                return {"ok": True}
+            params = (
+                dict(args["params"])
+                if isinstance(args.get("params"), dict)
+                else {key: value for key, value in args.items() if key != "action"}
             )
-
-        try:
-            from app.application.employee_runtime.metrics import record_write_block
-
-            record_write_block(employee_id)
+            receipt = json.loads(
+                execute_registered_capability(
+                    {"tool_id": name, "action": action, "params": params},
+                    workspace_root=payload.get("workspace_root"),
+                    runtime_context=payload,
+                    require_approval=True,
+                )
+            )
+            return {
+                "ok": False,
+                "reason": str(
+                    receipt.get("message") or receipt.get("error") or "请查询原任务回执。"
+                ),
+                "execution_result": receipt,
+                **pending_employee_result(receipt),
+            }
         except RECOVERABLE_ERRORS:
-            pass
-        return {
-            "ok": False,
-            "reason": (f"写库工具 {name} 被审批门拦截：需在审批工作台通过"),
-        }
+            logger.exception(
+                "employee approval receipt unavailable emp=%s tool=%s", employee_id, name
+            )
+            return {
+                "ok": False,
+                "reason": "原任务审批回执尚未确认，请核对原任务，勿重复提交。",
+                "execution_state": "unknown",
+                "retryable": False,
+                "requires_reconciliation": True,
+            }
 
     return gate
+
+
+def invoke_employee_gate(
+    gate: Any,
+    tool_name: str,
+    args: dict[str, Any],
+    *,
+    runtime_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Adapt legacy validation gates before invocation, never retry after a call."""
+    try:
+        signature = inspect.signature(gate)
+        context_param = signature.parameters.get("runtime_context")
+        accepts_context = (
+            context_param is not None
+            and context_param.kind
+            in (
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            )
+        ) or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+        options: dict[str, Any] = {"runtime_context": runtime_context} if accepts_context else {}
+        signature.bind(tool_name, args, **options)
+    except (TypeError, ValueError):
+        return {"ok": False, "blocked": True, "reason": "工具授权接口无效，未调用"}
+    try:
+        return cast("dict[str, Any]", gate(tool_name, args, **options))
+    except _GATE_INVOCATION_ERRORS:
+        # A write gate can already have published an approval. Losing its return
+        # value is not evidence that nothing happened and cannot trigger replay.
+        return {
+            "ok": False,
+            "execution_state": "unknown",
+            "retryable": False,
+            "requires_reconciliation": True,
+            "reason": "工具授权回执尚未确认，请核对原任务，勿重复提交。",
+        }
 
 
 def compose_gates(*gates: Any) -> Any:
@@ -110,10 +181,15 @@ def compose_gates(*gates: Any) -> Any:
     if not active:
         return None
 
-    def combined(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    def combined(
+        tool_name: str,
+        args: dict[str, Any],
+        *,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         for g in active:
             try:
-                verdict = g(tool_name, args)
+                verdict = invoke_employee_gate(g, tool_name, args, runtime_context=runtime_context)
             except RECOVERABLE_ERRORS:
                 return {"ok": False, "reason": "工具授权检查失败，未执行"}
             if not isinstance(verdict, dict) or type(verdict.get("ok")) is not bool:
@@ -125,4 +201,4 @@ def compose_gates(*gates: Any) -> Any:
     return combined
 
 
-__all__ = ["build_write_approval_gate", "compose_gates"]
+__all__ = ["build_write_approval_gate", "compose_gates", "invoke_employee_gate"]

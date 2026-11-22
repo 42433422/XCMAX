@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import logging
 import os
 import time
 from array import array
@@ -24,6 +25,7 @@ DOC_PREFIX = "modstore:kb:doc:"
 USER_DOCS_PREFIX = "modstore:kb:user:"
 
 _redis = None
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeVectorError(RuntimeError):
@@ -176,8 +178,9 @@ def status() -> Dict[str, Any]:
         info = r.ft(INDEX_NAME).info()
         out["ready"] = True
         out["chunks"] = int(info.get(b"num_docs") or info.get("num_docs") or 0)
-    except RECOVERABLE_ERRORS as e:
-        out["error"] = str(e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("Redis vector status unavailable")
+        out["error"] = "向量服务状态暂时无法读取"
     return out
 
 

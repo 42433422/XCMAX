@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -12,6 +11,7 @@ from typing import Any, cast
 
 from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
 from modstore_server.customer_value_classification import text as _text
+from modstore_server.customer_value_release import desktop_publications, published_installation
 from modstore_server.models import CustomerValueReceipt, UpdateInstallationReceipt
 from modstore_server.standard_delivery_api import configured_internal_installation_ids
 
@@ -45,9 +45,7 @@ def build_customer_lifecycle(
 ) -> dict[str, Any]:
     """Build the ordered payment-to-reuse proof without exposing identifiers."""
 
-    release_sha = _text(os.environ.get("XCMAX_RELEASE_SHA"), 40).lower()
-    if not re.fullmatch(r"[0-9a-f]{40}", release_sha):
-        release_sha = ""
+    publications = desktop_publications()
     latest_install_by_device: dict[tuple[int, str], UpdateInstallationReceipt] = {}
     internal_installation_ids = {
         value.casefold() for value in configured_internal_installation_ids()
@@ -136,8 +134,7 @@ def build_customer_lifecycle(
             ), installation_row in latest_install_by_device.items()
             if receipt_user_id == user_id
             and installation_id.casefold() not in internal_installation_ids
-            and installation_row.status == "installed"
-            and _text(installation_row.installed_build_sha, 40).lower() == release_sha
+            and published_installation(installation_row, publications)
         ]
         first_use = by_kind.get("first_use")
         goal = by_kind.get("goal")
@@ -157,7 +154,7 @@ def build_customer_lifecycle(
 
         stages = {
             "payment": True,
-            "installation": bool(release_sha and user_id and matching_installs),
+            "installation": bool(user_id and matching_installs),
             "first_use": bool(
                 first_use
                 and first_evidence.get("success") is True
@@ -268,8 +265,9 @@ def build_customer_lifecycle(
         )
 
     return {
-        "lifecycle_schema": "customer_value_lifecycle/v2",
-        "release_sha": release_sha,
+        "lifecycle_schema": "customer_value_lifecycle/v3",
+        "desktop_release_source": publications["source"],
+        "desktop_release_source_available": publications["available"],
         "six_stage_counts": {stage: int(stage_counts.get(stage, 0)) for stage in _STAGES},
         "complete_customer_count": len(complete_entities),
         "complete_customer_target": 3,

@@ -34,7 +34,6 @@ async function launchApp(): Promise<Launched> {
       XCAGI_DESKTOP_E2E: '1',
       XCAGI_DESKTOP_PORT: String(port),
       XCAGI_DESKTOP_USER_DATA_DIR: userDataDir,
-      PYTHON: path.resolve(__dirname, 'stub-backend.mjs'),
     },
   })
   const page = await app.firstWindow()

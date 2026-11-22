@@ -10,6 +10,7 @@ from modstore_server.customer_value_evidence import (
     append_customer_value_receipt,
     build_customer_value_evidence,
 )
+from tests.customer_value_release_fixture import published_catalog
 
 NOW = datetime(2026, 9, 4, 8, 0, tzinfo=UTC)
 
@@ -65,7 +66,8 @@ def _append(sf, order, kind, occurred_at, **extra):
 def test_complete_six_stage_chain_requires_post_acceptance_reuse(tmp_path, monkeypatch) -> None:
     sf = _init_db(tmp_path, monkeypatch)
     sha = "a" * 40
-    monkeypatch.setenv("XCMAX_RELEASE_SHA", sha)
+    published_catalog(tmp_path, monkeypatch, sha)
+    monkeypatch.setenv("XCMAX_RELEASE_SHA", "f" * 40)
     order = _order()
     first = NOW + timedelta(hours=1)
     outcome_at = NOW + timedelta(hours=2)
@@ -176,7 +178,8 @@ def test_aggregate_selects_a_complete_goal_without_mixing_earlier_goal(
 ) -> None:
     sf = _init_db(tmp_path, monkeypatch)
     sha = "9" * 40
-    monkeypatch.setenv("XCMAX_RELEASE_SHA", sha)
+    published_catalog(tmp_path, monkeypatch, sha)
+    monkeypatch.setenv("XCMAX_RELEASE_SHA", "f" * 40)
     order = _order()
     with sf() as session:
         session.add(models.User(id=11, username="lifecycle-goal-user-11", password_hash="x"))

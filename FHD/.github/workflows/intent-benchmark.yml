@@ -16,7 +16,8 @@ name: Intent Accuracy Benchmark
 
 on:
   schedule:
-    - cron: "0 3 * * 1"
+    # 每周一 15:35 UTC（23:35 北京时间）
+    - cron: "35 15 * * 1"
   workflow_dispatch:
     inputs:
       mode:

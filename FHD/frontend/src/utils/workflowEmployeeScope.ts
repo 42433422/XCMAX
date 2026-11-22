@@ -38,11 +38,12 @@ export function harvestOfficialCarrierEmployeesForStack(
     if (!isCustomPhaseEmployeeCarrierModId(packId)) continue
     if (entitled.size && !entitlementMatchesMod(packId, entitled) && !modBelongsToEnterpriseStack(packId, stack)) continue
     for (const item of Array.isArray(mod.workflow_employees) ? mod.workflow_employees : []) {
-      const record = item && typeof item === 'object' ? item as { id?: string; label?: string; host_mod_id?: string; enterprise_mod_id?: string } : {}
+      if (!item || typeof item !== 'object') continue
+      const record = item
       const id = String(record.id || '').trim()
       if (!id || harvested.some((entry) => entry.id === id)) continue
       const explicit = String(record.host_mod_id || record.enterprise_mod_id || '').trim()
-      harvested.push({ id, label: String(record.label || '').trim() || id, kind: 'mod_extension', order: 100 + harvested.length, source: 'mod_manifest', carrierModId: packId, hostModId: explicit && modBelongsToEnterpriseStack(explicit, stack) ? explicit : host })
+      harvested.push({ id, label: String(record.label || '').trim() || id, kind: 'mod_extension', order: 100 + harvested.length, source: 'mod_manifest', carrierModId: packId, hostModId: explicit && modBelongsToEnterpriseStack(explicit, stack) ? explicit : host, enterprise_layer: record.enterprise_layer })
     }
   }
   return harvested

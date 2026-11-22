@@ -13,7 +13,18 @@
   "verify_script": "verify_vendor.py",
   "fetch_time_utc": "2026-10-29T00:00:00Z",
   "verification": {
-    "method": "在线取回远端 tag sdk==0.4.6 并 rev-parse，其解析 commit 须等于锁定 SHA 55b0e36c51d2922b11640b980fcfca1064243a96，再对该 commit 的 libs/sdk-py/langgraph_sdk + LICENSE 做字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
-    "note": "吸收源取自 langgraph 仓库 tag sdk==0.4.6 @ commit 55b0e36c51d2922b11640b980fcfca1064243a96 的 libs/sdk-py/langgraph_sdk + LICENSE（修复 GHSA-3fx2-cqw9-xr3c / CVE-2026-118667：v3 stream 的 get_tree/_fetch_state 未编码 thread_id/assistant_id 路径参数；含此前 0.4.4 已吸收的 GHSA-fvww-7h3r-vfhp / CVE-2026-104873 修复）。XCAGI 本地修改 16 个文件：except Exception/BaseException 改为 _exception_policy.py 的同义异常族，并删去 ty: ignore 注释；这些文件的上游比对会报不一致，其余文件与上游字节级一致。"
-  }
+    "method": "Locked upstream tag and commit + UPSTREAM_MANIFEST.sha256, reverse and forward replay of local patches, installed MANIFEST.sha256, and MIT LICENSE verification",
+    "note": "吸收源取自 langgraph 仓库 tag sdk==0.4.6 @ commit 55b0e36c51d2922b11640b980fcfca1064243a96 的 libs/sdk-py/langgraph_sdk + LICENSE（修复 GHSA-3fx2-cqw9-xr3c / CVE-2026-118667：v3 stream 的 get_tree/_fetch_state 未编码 thread_id/assistant_id 路径参数；含此前 0.4.4 已吸收的 GHSA-fvww-7h3r-vfhp / CVE-2026-104873 修复）。XCAGI 已有本地差异涉及 16 个文件：Exception/BaseException 的等义异常族和 ty: ignore 注释移除。已将这些差异记录为可双向重放的补丁，当前源码未改动；官方 0.4.6 的四个 v3 stream 路径编码修复保持不变。"
+  },
+  "upstream_sha256_manifest": "UPSTREAM_MANIFEST.sha256",
+  "upstream_manifest_sha256": "c07a37ccf967426241bc758d5d64d52febbc267f8e6ae4a736171d4be3013c8d",
+  "local_patches": [
+    {
+      "path": "patches/existing-runtime-boundaries.patch.b64",
+      "sha256": "f023873bbe7a69bf4cc63c225c1a934cfe9fdcd48eadd2d2b417207ed87b46f0",
+      "description": "Record existing main changes in 16 files: named Exception/BaseException aliases and removal of ty: ignore comments. The exception-family tuples preserve upstream catch behavior; the SDK 0.4.6 path-encoding security fix is unchanged. This provenance repair does not modify runtime source or package version. Stored base64-encoded to preserve exact patch context whitespace, following the Postgres provenance format.",
+      "observed_main_commit": "ce5a491e1836a5516c773e6461da4fa027097ae9",
+      "evidence": "Every changed runtime file is byte-identical to observed_main_commit. The full diff against the authenticated sdk==0.4.6 tag contains only the documented aliases, imports, whitespace, and removed type-ignore comments."
+    }
+  ]
 }

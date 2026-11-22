@@ -307,11 +307,11 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
 
     def completion(**kwargs):
         payload = json.loads(kwargs["messages"][1]["content"])
-        if payload.get("task") == "audit_goal_coverage":
+        if payload.get("task") == "audit_reply":
             reviewed.append(payload)
             source = payload["user_message"]
             assert source in {"Summarize attached prices.", "Explain the attached document."}
-            assert payload["plan"]["nodes"][0]["params"] == {"response": "已查看附件"}
+            assert payload["reply"] == "已查看附件"
             return goal_review_response(
                 payload, source=source, node_ids=["model_reply"], outcome="reply"
             )

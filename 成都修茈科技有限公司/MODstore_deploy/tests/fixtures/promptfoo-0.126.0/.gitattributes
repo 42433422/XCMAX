@@ -1,0 +1,3 @@
+# Captured CLI artifacts must retain original bytes, including CRLF.
+* -text
+*.md whitespace=trailing-space,space-before-tab,cr-at-eol

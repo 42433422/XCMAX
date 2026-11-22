@@ -1,7 +1,7 @@
 # CI SSOT: generated from MODstore_deploy/.github/workflows/ci-backend-python.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: CI - Backend Python
-run-name: CI - Backend Python ${{ inputs.release_sha || github.sha }}
+run-name: CI - Backend Python ${{ inputs.release_sha || github.sha }}${{ inputs.delivery_request_id && format(' [delivery:{0}]', inputs.delivery_request_id) || '' }}
 
 on:
   push:
@@ -22,6 +22,11 @@ on:
     inputs:
       release_sha:
         description: Exact main commit to validate after a protected merge
+        required: false
+        default: ""
+        type: string
+      delivery_request_id:
+        description: Original post-merge CI request identity
         required: false
         default: ""
         type: string
@@ -87,6 +92,15 @@ jobs:
   modstore-backend-test:
     runs-on: ubuntu-latest
     needs: [release-gate]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: component-test-only
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      RETORT_TEST_POSTGRES_DSN: postgresql+psycopg://postgres:component-test-only@127.0.0.1:5432/postgres
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -112,7 +126,7 @@ jobs:
             "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_prebuilt" \
             "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_sdk" \
             -e "$GITHUB_WORKSPACE/packages/retort_engine" \
-            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]" "$pytest_pin"
+            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance,llm-router]" "$pytest_pin"
 
       - name: Test shared employee archive builds
         run: python -m pytest "$GITHUB_WORKSPACE/packages/xcagi_common/tests" -q
@@ -126,6 +140,20 @@ jobs:
 
       - name: Install runtime Mod compiler dependencies
         run: bash "$GITHUB_WORKSPACE/FHD/scripts/ci/npm_ci_with_network_retry.sh" --prefix "$GITHUB_WORKSPACE/FHD/frontend" --no-audit --no-fund
+
+      - name: Install the pinned experiment evaluator
+        run: |
+          mkdir -p "$RUNNER_TEMP/xcagi-promptfoo"
+          cp "$GITHUB_WORKSPACE/FHD/scripts/autonomy/runtime_tools/capability_trainer_deps/"{package.json,package-lock.json} "$RUNNER_TEMP/xcagi-promptfoo/"
+          bash "$GITHUB_WORKSPACE/FHD/scripts/ci/npm_ci_with_network_retry.sh" --prefix "$RUNNER_TEMP/xcagi-promptfoo" --ignore-scripts --no-audit --no-fund
+          echo "PROMPTFOO_CLI=$RUNNER_TEMP/xcagi-promptfoo/node_modules/.bin/promptfoo" >> "$GITHUB_ENV"
+
+      - name: Install the pinned native report consumer
+        run: |
+          mkdir -p "$RUNNER_TEMP/xcagi-report"
+          cp "$GITHUB_WORKSPACE/FHD/scripts/autonomy/runtime_tools/github_executor_deps/opencode/"{package.json,package-lock.json} "$RUNNER_TEMP/xcagi-report/"
+          bash "$GITHUB_WORKSPACE/FHD/scripts/ci/npm_ci_with_network_retry.sh" --prefix "$RUNNER_TEMP/xcagi-report" --ignore-scripts --include=optional --no-audit --no-fund
+          echo "PARA_TEST_OPENCODE_BINARY=$RUNNER_TEMP/xcagi-report/node_modules/opencode-linux-x64-baseline/bin/opencode" >> "$GITHUB_ENV"
 
       - name: Run Black formatter check
         run: black --check --diff modman/ modstore_server/ tests/

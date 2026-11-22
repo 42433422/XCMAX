@@ -49,7 +49,7 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
       - name: Install the actual runtime frontend compiler
         working-directory: FHD/frontend
-        run: npm ci --no-audit --no-fund
+        run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
       - name: Install isolated cross-service test dependencies
         run: |
           set -euo pipefail

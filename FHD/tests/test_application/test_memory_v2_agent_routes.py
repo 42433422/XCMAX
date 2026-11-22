@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import multiprocessing
 import time
-from unittest.mock import patch
+from copy import deepcopy
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -23,9 +25,7 @@ def _client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def authenticated_memory_client(monkeypatch, trusted_actor):
-    actor = trusted_actor(
-        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
-    )
+    actor = trusted_actor(user_id=7, role="admin", permissions=["memory_v2.write"])
     original = _client
 
     def client():
@@ -53,7 +53,11 @@ def _configure_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-receipts.sqlite"))
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+    from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
+
+    clear_idempotent_replay_for_tests()
     memory_mod.reset_user_memory_service()
 
 
@@ -122,7 +126,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
                 },
                 headers={"X-User-Id": "7"},
             )
-            assert created.status_code == 200
+            assert created.status_code == 200, created.json()
             created_body = created.json()
             assert created_body["success"] is True
             assert created_body["agent_run_id"] == created_body["run_id"]
@@ -211,20 +215,405 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
                 json={"user_id": "7"},
                 headers={"X-User-Id": "7"},
             )
-            assert confirm.status_code == 404
+            assert confirm.status_code == 202
             body = confirm.json()
             assert body["success"] is False
             assert body["agent_run_id"] == body["run_id"]
             run = repo.get(body["run_id"])
             assert run is not None
-            assert run.status == "failed"
+            assert run.status == "blocked"
             assert run.intent == "memory_v2_confirm"
             assert run.tool_calls[0].tool_id == "memory_v2"
             assert run.tool_calls[0].action == "confirm"
             assert run.tool_calls[0].permission == "memory_v2.write"
-            assert "tool.failed" in {event.event_type for event in run.events}
+            assert run.tool_calls[0].output == {
+                "success": False,
+                "message": "记忆已拒绝，不能确认",
+                "outcome": "unknown",
+                "reconciliation_required": True,
+                "retryable": False,
+            }
+            verification = run.tool_calls[0].metadata["verification"]
+            assert verification["accepted"] is False
+            assert verification["code"] == "execution_receipt_not_successful"
+            assert "tool.completed" not in {event.event_type for event in run.events}
+            persisted = json.loads((tmp_path / "memory" / "memory_store.json").read_text())
+            records = next(iter(persisted.values()))["memory_v2_records"]
+            assert records == [candidate]
     finally:
         memory_mod.reset_user_memory_service()
+
+
+@pytest.fixture
+def memory_case(tmp_path, monkeypatch, local_tools):
+    import app.domain.shared_services.user_memory_service as memory_mod
+
+    # Fault-injection cases keep the real executor, claims and JSON transactions
+    # in this process; the normal/personal lifecycle tests above cover workers.
+    _configure_runtime(monkeypatch, tmp_path)
+    repo = InMemoryAgentRunRepository()
+    with _patch_agent_repo(repo):
+        client = _client()
+        response = client.post(
+            "/memory/v2/candidates",
+            json={
+                "user_id": "7",
+                "memory_type": "preference",
+                "key": "original",
+                "value": "A",
+                "source": "settings_ui",
+            },
+        )
+        assert response.status_code == 200, response.json()
+        result = response.json()
+        try:
+            yield SimpleNamespace(
+                repo=repo,
+                client=client,
+                run=repo.get(result["run_id"]),
+                memory_id=result["candidate"]["memory_id"],
+                path=tmp_path / "memory" / "memory_store.json",
+            )
+        finally:
+            memory_mod.reset_user_memory_service()
+
+
+def _memory_readback(run, *, output=None, context_changes=None):
+    from app.application.agent_orchestrator.verification_readback import verify_independent_result
+
+    call = run.tool_calls[0]
+    step = run.steps[0]
+    context = {
+        **run.metadata["runtime_context"],
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+        "idempotency_key": call.metadata["idempotency_key"],
+        **(context_changes or {}),
+    }
+    return verify_independent_result(
+        run=run,
+        step=step,
+        call=call,
+        output=deepcopy(call.output) if output is None else output,
+        context=context,
+    )
+
+
+def test_memory_readback_survives_service_restart_without_initializing_or_writing(
+    memory_case, monkeypatch
+):
+    import app.domain.shared_services.user_memory_service as memory_mod
+    from app.infrastructure.user_memory.persistence import MemoryRepository
+
+    memory_mod.reset_user_memory_service()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("readback must not initialize a store, write, or rebuild projections")
+
+    monkeypatch.setattr(memory_mod, "get_user_memory_service", forbidden)
+    monkeypatch.setattr(MemoryRepository, "__init__", forbidden)
+    monkeypatch.setattr(MemoryRepository, "get_memory", forbidden)
+    monkeypatch.setattr(MemoryRepository, "save_memory", forbidden)
+    monkeypatch.setattr("app.application.user_memory.projections.sync_memory_projection", forbidden)
+    before = {
+        item.name: (item.read_bytes(), item.stat().st_mtime_ns)
+        for item in memory_case.path.parent.iterdir()
+        if item.is_file()
+    }
+    report = _memory_readback(memory_case.run)
+    assert report["status"] == "verified", report
+    assert memory_mod.UserMemoryStore._instance is None
+    assert memory_mod.UserMemoryService._instance is None
+    after = {
+        item.name: (item.read_bytes(), item.stat().st_mtime_ns)
+        for item in memory_case.path.parent.iterdir()
+        if item.is_file()
+    }
+    assert after == before
+
+
+@pytest.mark.parametrize("field", ["tenant_id", "user_id", "mod_id", "local_user_id"])
+def test_memory_readback_rejects_foreign_scope_without_opening_store(
+    memory_case, monkeypatch, field
+):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("scope must be checked before opening the memory store")
+
+    monkeypatch.setattr("app.application.memory_v2_facade._memory_snapshot", forbidden)
+    report = _memory_readback(memory_case.run, context_changes={field: "foreign-scope"})
+    assert report["status"] in {"failed", "inconclusive"}
+    assert report["code"] == (
+        "result_read_permission_unavailable"
+        if field == "local_user_id"
+        else "result_scope_mismatch"
+    )
+
+
+def test_memory_readback_checks_current_owner_management_permission(
+    memory_case, authenticated_memory_client, monkeypatch
+):
+    from app.db.models.permission import Role
+
+    with authenticated_memory_client.factory.begin() as db:
+        role = db.query(Role).filter_by(name="admin").one()
+        role.permissions = [
+            permission for permission in role.permissions if permission.code != "memory_v2.write"
+        ]
+    original = memory_case.path.read_bytes()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("permission must be checked before opening the memory store")
+
+    monkeypatch.setattr("app.application.memory_v2_facade._memory_snapshot", forbidden)
+    report = _memory_readback(memory_case.run)
+    assert report["code"] == "result_read_permission_unavailable"
+    assert memory_case.path.read_bytes() == original
+
+
+@pytest.mark.parametrize("missing", ["receipt", "baseline"])
+def test_memory_readback_requires_original_durable_proof(memory_case, missing):
+    from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
+
+    if missing == "receipt":
+        clear_idempotent_replay_for_tests()
+    else:
+        memory_case.run.tool_calls[0].metadata["verification_contract"].pop("memory_baseline")
+    original = memory_case.path.read_bytes()
+    report = _memory_readback(memory_case.run)
+    assert report["status"] == "inconclusive"
+    assert report["code"] == f"result_memory_{missing}_unavailable"
+    assert memory_case.path.read_bytes() == original
+
+
+def test_memory_readback_rejects_fabricated_output(memory_case):
+    output = deepcopy(memory_case.run.tool_calls[0].output)
+    output["candidate"]["value"] = "forged"
+    report = _memory_readback(memory_case.run, output=output)
+    assert report["status"] == "failed"
+    assert report["code"] == "result_memory_receipt_mismatch"
+
+
+@pytest.mark.parametrize("tamper", ["value", "revision", "owner", "missing", "symlink", "store"])
+def test_memory_readback_rejects_changed_original_store(memory_case, monkeypatch, tmp_path, tamper):
+    import app.domain.shared_services.user_memory_service as memory_mod
+
+    payload = json.loads(memory_case.path.read_text())
+    owner = next(iter(payload))
+    if tamper in {"value", "revision"}:
+        payload[owner]["memory_v2_records"][0][tamper] = "changed"
+        memory_case.path.write_text(json.dumps(payload))
+    elif tamper == "owner":
+        payload["other-owner"] = payload.pop(owner)
+        payload["other-owner"]["user_id"] = "other-owner"
+        memory_case.path.write_text(json.dumps(payload))
+    elif tamper == "missing":
+        memory_case.path.unlink()
+    elif tamper == "symlink":
+        replacement = tmp_path / "copied-memory.json"
+        memory_case.path.rename(replacement)
+        memory_case.path.symlink_to(replacement)
+    else:
+        replacement = tmp_path / "different-store.json"
+        replacement.write_bytes(memory_case.path.read_bytes())
+        memory_mod.reset_user_memory_service()
+        monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(replacement))
+    report = _memory_readback(memory_case.run)
+    assert report["status"] in {"failed", "inconclusive"}, report
+    assert (
+        report["code"]
+        == {
+            "value": "result_memory_state_mismatch",
+            "revision": "result_memory_state_mismatch",
+            "owner": "result_memory_owner_unavailable",
+            "missing": "result_memory_owner_unavailable",
+            "symlink": "result_evidence_mismatch",
+            "store": "result_memory_source_mismatch",
+        }[tamper]
+    )
+
+
+@pytest.mark.parametrize(
+    "action,field,requested,actual",
+    [
+        ("correct", "value", "B", "C"),
+        ("correct", "key", "requested-key", "wrong-key"),
+        ("confirm", "value", "B", "C"),
+        ("confirm", "key", "requested-key", "wrong-key"),
+        ("confirm", "memory_type", "entity", "episodic"),
+        ("confirm", "confidence", 0.8, 0.2),
+    ],
+)
+def test_memory_readback_rejects_wrong_effect_even_when_real_claim_and_output_match(
+    memory_case, monkeypatch, local_tools, action, field, requested, actual
+):
+    import app.domain.shared_services.user_memory_service as memory_mod
+
+    # Fault injection only changes the writer input; its real JSON transaction,
+    # original durable tool claim and host readback all remain in use.
+    service = memory_mod.get_user_memory_service()
+    method = "correct_memory" if action == "correct" else "confirm_memory_candidate"
+    original = getattr(service, method)
+
+    def write_wrong_effect(*args, **kwargs):
+        if action == "confirm":
+            kwargs["correction"] = {**(kwargs.get("correction") or {}), field: actual}
+        else:
+            kwargs[field] = actual
+        return original(*args, **kwargs)
+
+    writer = Mock(side_effect=write_wrong_effect)
+    monkeypatch.setattr(service, method, writer)
+    payload = {"user_id": "7", field: requested}
+    if action == "confirm":
+        response = memory_case.client.post(
+            f"/memory/v2/{memory_case.memory_id}/confirm",
+            json={"user_id": "7", "correction": {field: requested}},
+        )
+    else:
+        response = memory_case.client.patch(f"/memory/v2/{memory_case.memory_id}", json=payload)
+    body = response.json()
+    assert response.status_code == 202, body
+    assert body["success"] is False
+    run = memory_case.repo.get(body["run_id"])
+    assert run.status == "blocked"
+    call = run.tool_calls[0]
+    assert call.output["success"] is True
+    assert call.output["memory"][field] == actual
+    assert call.metadata["verification"]["code"] == "result_memory_effect_mismatch"
+    assert call.metadata["verification"]["accepted"] is False
+    assert writer.call_count == 1
+    persisted = json.loads(memory_case.path.read_text())
+    assert next(iter(persisted.values()))["memory_v2_records"][0] == call.output["memory"]
+
+
+def test_memory_readback_rejects_wrong_source_governance(memory_case, monkeypatch, local_tools):
+    import app.domain.shared_services.user_memory_service as memory_mod
+
+    service = memory_mod.get_user_memory_service()
+    original = service.propose_memory_candidate
+
+    def ignore_blocked_source(*args, **kwargs):
+        kwargs["source"] = "settings_ui"
+        return original(*args, **kwargs)
+
+    writer = Mock(side_effect=ignore_blocked_source)
+    monkeypatch.setattr(service, "propose_memory_candidate", writer)
+    response = memory_case.client.post(
+        "/memory/v2/candidates",
+        json={
+            "user_id": "7",
+            "memory_type": "preference",
+            "key": "blocked-source",
+            "value": "B",
+            "source": "llm_guess",
+        },
+    )
+    body = response.json()
+    assert response.status_code == 202, body
+    assert body["success"] is False
+    run = memory_case.repo.get(body["run_id"])
+    call = run.tool_calls[0]
+    assert call.output["success"] is True
+    assert call.output["candidate"]["status"] == "pending"
+    assert call.metadata["verification"]["code"] == "result_memory_effect_mismatch"
+    assert writer.call_count == 1
+
+
+def test_memory_corrections_preserve_null_and_normalization_semantics(memory_case):
+    confirmed = memory_case.client.post(
+        f"/memory/v2/{memory_case.memory_id}/confirm",
+        json={
+            "user_id": "7",
+            "correction": {
+                "memory_type": "pref",
+                "key": "  normalized  ",
+                "value": None,
+                "confidence": 8,
+            },
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.json()
+    current = confirmed.json()["memory"]
+    assert (current["memory_type"], current["key"], current["value"], current["confidence"]) == (
+        "preference",
+        "normalized",
+        None,
+        1.0,
+    )
+    changed = memory_case.client.patch(
+        f"/memory/v2/{memory_case.memory_id}", json={"user_id": "7", "value": "new"}
+    )
+    assert changed.status_code == 200, changed.json()
+    no_clear = memory_case.client.patch(
+        f"/memory/v2/{memory_case.memory_id}", json={"user_id": "7", "value": None}
+    )
+    assert no_clear.status_code == 200, no_clear.json()
+    assert no_clear.json()["memory"]["value"] == "new"
+    assert no_clear.json()["memory"]["correction_count"] == 3
+
+
+@pytest.mark.parametrize("field,value", [("key", "renamed"), ("memory_type", "entity")])
+def test_memory_readback_rejects_stale_owned_preference_and_preserves_other_owners(
+    memory_case, local_tools, field, value
+):
+    confirmed = memory_case.client.post(
+        f"/memory/v2/{memory_case.memory_id}/confirm", json={"user_id": "7"}
+    )
+    assert confirmed.status_code == 200, confirmed.json()
+    persisted = json.loads(memory_case.path.read_text())
+    owner = next(iter(persisted))
+    previous = persisted[owner]["preferences"]["original"]
+    other = {"value": "other-value", "memory_id": "another-memory"}
+    persisted[owner]["preferences"]["unrelated"] = other
+    memory_case.path.write_text(json.dumps(persisted))
+    changed = memory_case.client.post(
+        f"/memory/v2/{memory_case.memory_id}/confirm",
+        json={"user_id": "7", "correction": {field: value}},
+    )
+    assert changed.status_code == 200, changed.json()
+    run = memory_case.repo.get(changed.json()["run_id"])
+    persisted = json.loads(memory_case.path.read_text())
+    assert "original" not in persisted[owner]["preferences"]
+    assert persisted[owner]["preferences"]["unrelated"] == other
+    persisted[owner]["preferences"]["original"] = previous
+    memory_case.path.write_text(json.dumps(persisted))
+    report = _memory_readback(run)
+    assert report["code"] == "result_memory_effect_mismatch", report
+    assert json.loads(memory_case.path.read_text())[owner]["preferences"]["unrelated"] == other
+
+
+def test_memory_noop_confirmation_deduplication_and_delete_keep_original_record(
+    memory_case, local_tools
+):
+    before = memory_case.run.tool_calls[0].output["candidate"]
+    duplicate = memory_case.client.post(
+        "/memory/v2/candidates",
+        json={
+            "user_id": "7",
+            "memory_type": "preference",
+            "key": "original",
+            "value": "A",
+            "source": "llm_guess",
+        },
+    )
+    assert duplicate.status_code == 200, duplicate.json()
+    assert duplicate.json()["created"] is False
+    assert duplicate.json()["candidate"] == before
+    confirmed = memory_case.client.post(
+        f"/memory/v2/{memory_case.memory_id}/confirm", json={"user_id": "7"}
+    )
+    assert confirmed.status_code == 200, confirmed.json()
+    repeated = memory_case.client.post(
+        f"/memory/v2/{memory_case.memory_id}/confirm", json={"user_id": "7"}
+    )
+    assert repeated.status_code == 200, repeated.json()
+    assert repeated.json()["memory"] == confirmed.json()["memory"]
+    deleted = memory_case.client.delete(f"/memory/v2/{memory_case.memory_id}")
+    assert deleted.status_code == 200, deleted.json()
+    repeated = memory_case.client.delete(f"/memory/v2/{memory_case.memory_id}")
+    assert repeated.status_code == 200, repeated.json()
+    assert repeated.json()["memory"] == deleted.json()["memory"]
 
 
 def test_memory_store_keeps_concurrent_same_and_other_user_writes(tmp_path, monkeypatch) -> None:

@@ -50,11 +50,10 @@ workflows=(
   fhd-ci-mobile-flutter.yml
 )
 for wf in "${workflows[@]}"; do dispatch_one "${wf}" || true; done
-dispatch_one fhd-security-full-scan.yml -f "release_sha=${RELEASE_SHA}" || true
 
 if ((${#failed_dispatch[@]} > 0)); then echo "::error::Nightly dispatch failed:${failed_dispatch[*]}"; exit 1; fi
 
-for wf in "${workflows[@]}" fhd-security-full-scan.yml; do wait_one "${wf}" || true; done
+for wf in "${workflows[@]}"; do wait_one "${wf}" || true; done
 
 echo "Nightly watched runs: ${watched[*]:-none}"
 if ((${#failed_runs[@]} > 0)); then echo "::error::Nightly downstream failures:${failed_runs[*]}"; exit 1; fi

@@ -134,3 +134,7 @@ generate_weekly_report = _routes_module.generate_weekly_report
 generate_monthly_report = _routes_module.generate_monthly_report
 list_reports = _routes_module.list_reports
 get_report = _routes_module.get_report
+
+from modstore_server.strategic_portfolio_api import router as portfolio_router
+
+router.include_router(portfolio_router)

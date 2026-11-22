@@ -6,6 +6,8 @@ import ModStore from './ModStore.vue'
 
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
+  getActiveExtensionModHeaders: () => ({}),
+  getClientModsUiOffHeader: () => ({}),
   getApiBase: () => '',
   DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
 }))
@@ -53,6 +55,6 @@ describe('ModStore.vue', () => {
       },
     })
     expect(wrapper.find('.mod-store').exists()).toBe(true)
-    expect(wrapper.text()).toContain('AI 员工市场')
+    expect(wrapper.text()).toContain('AI 市场')
   })
 })

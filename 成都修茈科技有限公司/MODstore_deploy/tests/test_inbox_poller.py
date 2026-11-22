@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -40,7 +40,7 @@ def test_handle_incoming_dispatches_on_token_hash(fresh_db, monkeypatch):
     monkeypatch.setenv("MODSTORE_APPROVAL_AUTHORIZED_FROM", "owner@qq.com")
     plain = "A1B2C3"
     th = hashlib.sha256(plain.encode("utf-8")).hexdigest()
-    exp = datetime.utcnow() + timedelta(hours=5)
+    exp = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=5)
     sf = models.get_session_factory()
     with sf() as s:
         tok = models.OpsApprovalToken(

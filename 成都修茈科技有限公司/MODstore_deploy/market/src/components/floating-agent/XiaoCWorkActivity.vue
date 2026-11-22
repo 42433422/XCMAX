@@ -1,19 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import XiaoCDeliveryFollowups from './XiaoCDeliveryFollowups.vue'
 import XiaoCMemoryList from './XiaoCMemoryList.vue'
+import XiaoCLifeActivity from './XiaoCLifeActivity.vue'
 
-defineProps<{ light?: boolean; ticketId?: number }>()
-const section = ref<'delivery' | 'memory'>('delivery')
+const props = defineProps<{ light?: boolean; ticketId?: number; owner?: number; initialSection?: 'delivery' | 'life' }>()
+const section = ref<'delivery' | 'memory' | 'life'>(props.initialSection ?? 'delivery')
+watch(() => props.initialSection, (value) => { if (value) section.value = value })
 </script>
 
 <template>
   <section class="xiaoc-activity" :class="{ 'xiaoc-activity--light': light }" aria-label="小 C 工作动态">
     <nav class="xiaoc-activity__sections" aria-label="工作动态功能">
+      <button v-if="owner !== undefined" type="button" :aria-pressed="section === 'life'" @click="section = 'life'">自主状态</button>
       <button type="button" :aria-pressed="section === 'delivery'" @click="section = 'delivery'">交付跟进</button>
       <button type="button" :aria-pressed="section === 'memory'" @click="section = 'memory'">我的记忆</button>
     </nav>
-    <XiaoCDeliveryFollowups v-if="section === 'delivery'" :ticket-id="ticketId" />
+    <XiaoCLifeActivity v-if="section === 'life' && owner !== undefined" :owner="owner" />
+    <XiaoCDeliveryFollowups v-else-if="section === 'delivery'" :ticket-id="ticketId" />
     <XiaoCMemoryList v-else />
   </section>
 </template>
@@ -43,6 +47,7 @@ const section = ref<'delivery' | 'memory'>('delivery')
 }
 .xiaoc-activity__sections {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 12px;
 }

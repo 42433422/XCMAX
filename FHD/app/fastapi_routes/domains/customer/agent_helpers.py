@@ -30,6 +30,7 @@ def run_customers_agent(
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("customers") or {}).get("actions") or {}).get(action)
@@ -41,12 +42,18 @@ def run_customers_agent(
         }
 
     node_id = f"customers_{action}"
-    principal = None
-    if action in {"delete", "batch_delete"}:
-        from app.infrastructure.auth.agent_principal import require_agent_principal
-
-        principal = require_agent_principal(request, x_user_id=None)
-    user_id = principal.user_id if principal else customers_agent_user_id(request, params)
+    params = {key: value for key, value in params.items() if key not in {"tenant_id", "tenantId"}}
+    runtime_context = request_runtime_context(
+        request,
+        {
+            "source": "customers_route",
+            "route": route_path,
+            "request_path": str(request.url.path),
+            "route_confirmed": True,
+            "service_source": "fastapi_customer_route",
+        },
+    )
+    user_id = str(runtime_context["user_id"])
     from app.middleware.request_id import ensure_request_id
 
     risk = normalize_workflow_risk(str(action_meta.get("risk") or "medium"))
@@ -68,18 +75,6 @@ def run_customers_agent(
         risk_level=risk,
         metadata={"source": "customers_route", "route": route_path},
     )
-    runtime_context = {
-        "source": "customers_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_customer_route",
-    }
-    if principal is not None:
-        from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
-
-        runtime_context = authenticated_runtime_context(runtime_context, principal)
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,
@@ -90,7 +85,7 @@ def run_customers_agent(
     if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
-            approved_by=user_id or "customers-route",
+            approved_by=user_id,
             approved_step_id=node_id,
             runtime_context=runtime_context,
         )

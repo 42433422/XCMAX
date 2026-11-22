@@ -7,28 +7,15 @@ from typing import Any
 from fastapi import Request
 
 from app.application.workflow.workflow_types import normalize_workflow_risk
+from app.domain.task_lifecycle.results import agent_node_output as _project_agent_node_output
 
 
 def agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
+    output = _project_agent_node_output(run, node_id, include_run_error=False)
     if not output.get("success"):
         output.setdefault("message", "出货单操作失败")
         output.pop("error", None)
         output.pop("traceback", None)
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
     return output
 
 
@@ -44,9 +31,17 @@ def _run_shipment_agent(
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
 
     principal = require_agent_principal(request, x_user_id=None)
+    # Ownership comes from the authenticated session, never compatibility-body
+    # aliases carried alongside mutable shipment fields.
+    params = {
+        key: value
+        for key, value in params.items()
+        if key not in {"tenant_id", "tenantId", "user_id", "userId"}
+    }
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get(tool_id) or {}).get("actions") or {}).get(action)
     if not isinstance(action_meta, dict):
@@ -94,6 +89,7 @@ def _run_shipment_agent(
         actor = get_logged_in_user(request)
         user_id = str(actor.id)
         runtime_context.update(user_id=user_id, tenant_id=str(actor.tenant_id))
+    runtime_context = authenticated_runtime_context(runtime_context, principal)
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,

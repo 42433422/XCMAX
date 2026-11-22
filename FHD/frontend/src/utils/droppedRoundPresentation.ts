@@ -28,6 +28,7 @@ interface DroppedRoundPresentation {
 
 export function activeChatTurnStatus(raw: string): ActiveChatTurn['status'] | undefined {
   if (raw === 'waiting_user' || raw === 'waiting_approval') return 'waiting_approval'
+  if (raw === 'waiting_input' || raw === 'waiting_auth') return 'blocked'
   if (raw === 'queued' || raw === 'pending') return 'queued'
   if (raw === 'paused' || raw === 'blocked') return raw
   if (['running', 'planning', 'retrying'].includes(raw)) return 'running'
@@ -100,9 +101,11 @@ export function droppedRoundFromHistory(conversation: unknown, turnId: string): 
     return { status, workflowAction: activeTurn.status, text: activeChatTurnMessage(activeTurn), activeTurn }
   }
   const receipt = asRecord(body.turn_receipt)
-  if (turnId && asString(receipt.turn_id) === turnId && asString(receipt.run_id)) {
+  if (turnId && asString(receipt.turn_id) === turnId && (asString(receipt.run_id)
+    || (receipt.receipt_kind === 'turn' && receipt.durable === true))) {
+    const uncertain = receipt.requires_reconciliation === true || receipt.reconciliation_required === true || receipt.outcome_unknown === true
     return droppedRoundPresentation({
-      reachable: true, serverStatus: asString(receipt.status), serverText: asString(receipt.message),
+      reachable: true, serverStatus: uncertain ? 'unknown' : asString(receipt.execution_state || receipt.status), serverText: asString(receipt.message),
     })
   }
   const rows = asArray(body.messages ?? asRecord(body.data).messages)

@@ -6,12 +6,14 @@
  */
 import { getToolName, isToolUIPart, type UIMessage } from 'ai'
 import type { PlannerSseEvent } from '@/utils/chatSseStream'
-import { asRecord } from '@/utils/typeGuards'
+import type { ExecutionObservation } from '@/api/agentRuns'
+import { asRecord, asNonNegativeNumber } from '@/utils/typeGuards'
+import { readExecutionObservation } from '@/utils/agentRunTraceModel'
 import { actionDisplayName, toolDisplayName } from '@/utils/toolLabels'
 
 export type AgentStepState = 'pending' | 'running' | 'success' | 'failed' | 'waiting' | 'blocked' | 'unknown' | 'deferred' | 'partial'
 
-export interface ChatNodeResultLike {
+export interface ChatNodeResultLike extends ExecutionObservation {
   node_id: string
   success: boolean
   tool_id: string
@@ -21,10 +23,9 @@ export interface ChatNodeResultLike {
   output_preview?: string
   retries?: number
   recovery_hint?: string
-  duration_ms?: number
 }
 
-export interface AgentStepView {
+export interface AgentStepView extends ExecutionObservation {
   /** 稳定 key：优先使用 node_id */
   id: string
   toolId: string
@@ -87,17 +88,18 @@ export function stepsFromNodeResults(rows: ChatNodeResultLike[] | undefined): Ag
     const error = String(row.error || '').trim()
     const state: AgentStepState = row.success ? 'success' : 'failed'
     steps.push({
+      ...readExecutionObservation(row as unknown as Record<string, unknown>),
       id: String(row.node_id || '').trim() || `node-${index}`,
       toolId,
       action,
       title: toolDisplayName(toolId),
       subtitle: actionDisplayName(action),
       state,
-      durationMs: row.duration_ms && row.duration_ms > 0 ? row.duration_ms : undefined,
+      durationMs: asNonNegativeNumber(row.duration_ms),
       output: String(row.output_preview || '').trim() || undefined,
       error: error || (row.success ? undefined : String(row.message || '').trim() || undefined),
       hint: String(row.recovery_hint || '').trim() || undefined,
-      retries: Number(row.retries || 0),
+      retries: asNonNegativeNumber(row.retries) ?? 0,
       live: false,
     })
   })
@@ -131,17 +133,17 @@ export function stepsFromAiParts(parts: UIMessage['parts']): AgentStepView[] {
     const preview = (state === 'partial' || state === 'unknown') && typeof detail.output_preview === 'string'
       ? detail.output_preview : undefined
     const percent = detail.progress
-    const count = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
     return {
+      ...readExecutionObservation(detail),
       id: part.toolCallId, toolId, action,
       title: toolDisplayName(toolId), subtitle: actionDisplayName(action), state,
-      durationMs: count(detail.duration_ms),
+      durationMs: asNonNegativeNumber(detail.duration_ms),
       output: typeof part.output === 'string' ? part.output : preview !== error ? preview : undefined,
       error,
       hint: String((state === 'running' ? detail.label : detail.recovery_hint) || '') || undefined,
-      retries: count(detail.retries) || 0,
+      retries: asNonNegativeNumber(detail.retries) ?? 0,
       progress: typeof percent === 'number' && Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : undefined,
-      processedRows: count(detail.processed_rows), totalRows: count(detail.total_rows),
+      processedRows: asNonNegativeNumber(detail.processed_rows), totalRows: asNonNegativeNumber(detail.total_rows),
       live: false,
     }
   })
@@ -168,12 +170,13 @@ export function chainState(steps: AgentStepView[]): AgentStepState {
 }
 
 export function chainDurationMs(steps: AgentStepView[]): number | undefined {
-  const total = steps.reduce((sum, step) => sum + (step.durationMs || 0), 0)
-  return total > 0 ? total : undefined
+  // This is tool time, not wall time: concurrent spans may overlap.
+  if (!steps.length || steps.some(step => asNonNegativeNumber(step.durationMs) === undefined)) return undefined
+  return asNonNegativeNumber(steps.reduce((sum, step) => sum + step.durationMs!, 0))
 }
 
 export function hasStepDetails(step: AgentStepView): boolean {
-  return Boolean(step.output || step.error || step.hint || step.retries > 0)
+  return Boolean(step.output || step.error || step.hint || step.retries > 0 || step.trace_id || step.run_id || step.error_code)
 }
 
 export function formatStepDuration(ms: number): string {

@@ -1,6 +1,6 @@
 /**
- * 企业端工作流「四部门」— 工具层 / 执行层 / 服务层 / 管理层。
- * 与管理端内部六部门（O-A 获客 / P-S 软件等）不同；员工从 AI 市场安装后可自动上岗至对应栏位。
+ * 企业端工作流四部门；名称、编制与管理端六部门均由 duty_roster SSOT 派生。
+ * 员工从 AI 市场安装后可自动上岗至对应栏位。
  */
 
 export type EnterpriseOrgLayerId = 'tools' | 'execution' | 'service' | 'management';
@@ -30,10 +30,10 @@ export type EnterpriseEmployeeMeta = {
 // CI SSOT BEGIN
 /** 企业端四层 + 员工层归属/上架状态（来自 config/duty_roster.json，勿手改）。 */
 export const ENTERPRISE_ORG_LAYERS: readonly EnterpriseOrgLayer[] = [
-  { id: 'tools', code: 'L1', label: '工具层', desc: '连接、授权、技能与通用工具 Mod', color: '#4f46e5' },
-  { id: 'execution', code: 'L2', label: '执行层', desc: '出货、打单、单据与履约执行', color: '#d97706' },
-  { id: 'service', code: 'L3', label: '服务层', desc: '客服沟通与人事服务', color: '#059669' },
-  { id: 'management', code: 'L4', label: '管理层', desc: '流程编排、路由协同与自治监控', color: '#7c3aed' },
+  { id: 'tools', code: 'L1', label: '信息技术部', desc: '连接、授权、技能与通用工具 Mod', color: '#4f46e5' },
+  { id: 'execution', code: 'L2', label: '业务运营部', desc: '出货、打单、单据与履约执行', color: '#d97706' },
+  { id: 'service', code: 'L3', label: '综合服务部', desc: '客服沟通与人事服务', color: '#059669' },
+  { id: 'management', code: 'L4', label: '运营管理部', desc: '流程编排、路由协同与自治监控', color: '#7c3aed' },
 ] as const
 export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {
   'lan_gate': { id: 'lan_gate', label: '局域网网关', enterprise_layer: 'tools', listing: 'listed', source: 'store', mod_id: 'lan-gate-ai-employee' },

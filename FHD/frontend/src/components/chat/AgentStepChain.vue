@@ -24,7 +24,7 @@
                   <TraceTitle>{{ step.title }}</TraceTitle>
                   <TraceDescription v-if="step.subtitle" class="asc-step-subtitle">{{ step.subtitle }}</TraceDescription>
                   <span v-if="step.retries" class="asc-badge">重试 {{ step.retries }}</span>
-                  <TraceDescription v-if="step.durationMs" class="asc-step-duration">{{
+                  <TraceDescription v-if="step.durationMs != null" class="asc-step-duration">{{
                     formatStepDuration(step.durationMs)
                   }}</TraceDescription>
                   <TraceIcon class="asc-step-status"><i class="fa" :class="stepStateIcon(step.state)"></i></TraceIcon>
@@ -58,6 +58,10 @@
                     <div class="asc-label">建议</div>
                     <p>{{ step.hint }}</p>
                   </section>
+                  <details v-if="step.trace_id || step.run_id || step.error_code" class="asc-section">
+                    <summary>诊断信息</summary>
+                    <pre>{{ executionObservationDetails(step) }}</pre>
+                  </details>
                 </div>
               </TraceCollapsibleContent>
             </component>
@@ -91,6 +95,7 @@ import {
   type AgentStepState,
 } from '@/utils/agentStepChain'
 import { toolIconClass } from '@/utils/toolLabels'
+import { executionObservationDetails } from '@/utils/agentRunTraceModel'
 
 const props = defineProps<{
   steps: AgentStepView[]
@@ -100,7 +105,7 @@ const state = computed<AgentStepState>(() => chainState(props.steps))
 const stateLabel = computed(() => stepStateLabel(state.value))
 const durationLabel = computed(() => {
   const ms = chainDurationMs(props.steps)
-  return ms ? formatStepDuration(ms) : ''
+  return ms == null ? '' : `工具累计 ${formatStepDuration(ms)}`
 })
 
 /** 执行中或有待处理事项时自动展开，用户手动设置优先。 */

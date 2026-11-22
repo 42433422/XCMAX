@@ -9,8 +9,8 @@ name: Desktop Manifest Drift Check
 
 on:
   schedule:
-    - cron: "30 2 * * *"  # 当前公开版本每天核验
-    - cron: "30 3 * * 0"  # 每周核验完整 SHA-256
+    - cron: "30 14 * * *"  # 当前公开版本每天核验（22:30 北京时间）
+    - cron: "55 15 * * 0"  # 每周核验完整 SHA-256（周日 23:55 北京时间）
   workflow_dispatch:
     inputs:
       version:
@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: desktop-manifest-drift-check
@@ -58,7 +59,7 @@ jobs:
             --output "${RUNNER_TEMP}/drift-size.json" \
             | tee "${GITHUB_STEP_SUMMARY}"
       - name: Check sha256 when requested
-        if: ${{ github.event.schedule == '30 3 * * 0' || inputs.full_sha256 == true }}
+        if: ${{ github.event.schedule == '55 15 * * 0' || inputs.full_sha256 == true }}
         run: |
           set -euo pipefail
           python scripts/dev/verify_desktop_manifest_drift.py \
@@ -74,3 +75,28 @@ jobs:
           path: ${{ runner.temp }}/drift-*.json
           if-no-files-found: ignore
           retention-days: 90
+
+      - name: Open or update the drift follow-up issue
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set +e
+          title="[release] 桌面下载清单与线上产物不一致"
+          body="$(printf '下载中心 manifest 与线上制品核对失败。\n\n- 运行记录: %s\n- 证据: artifact `desktop-manifest-drift-report`\n\n处置方式：重新生成 manifest.json 并上传，或回滚发布指针；修复后重跑本 workflow 验证。\n' "$RUN_URL")"
+          number="$(gh issue list --repo "$REPO" --state open --limit 100 \
+            --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)"
+          assignee="${{ vars.SECURITY_ISSUE_ASSIGNEE }}"
+          if [ -z "$assignee" ] && [ -f "${GITHUB_WORKSPACE}/.github/CODEOWNERS" ]; then
+            assignee="$(grep -m1 '^/.github/' "${GITHUB_WORKSPACE}/.github/CODEOWNERS" | awk '{print $1}' | tr -d '@')"
+          fi
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body "$body"
+          elif [ -n "$assignee" ]; then
+            gh issue create --repo "$REPO" --title "$title" --body "$body" --assignee "$assignee"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi

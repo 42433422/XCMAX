@@ -23,7 +23,7 @@ PR_LANES = DUPLICATE_SOURCES + (
     ".github/workflows/guard-guards.yml",
     ".github/workflows/media-assets.yml",
     ".github/workflows/e2e.yml",
-    "FHD/.github/workflows/neuro_migration_check.yml",
+    "FHD/.github/workflows/release-gate-ci.yml",
     "FHD/.github/workflows/slo-promql-tests.yml",
     "FHD/.github/workflows/changelog-gate.yml",
     "FHD/.github/workflows/mac-control-contract.yml",

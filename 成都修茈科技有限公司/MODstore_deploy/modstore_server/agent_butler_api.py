@@ -67,11 +67,13 @@ from modstore_server.models import (
 )
 
 from modstore_server.xiaoc_admin_context import router as _xiaoc_admin_memory_router
+from modstore_server.xiaoc_life_api import router as _xiaoc_life_router
 from modstore_server.xiaoc_cs_ssot import xiaoc_system_prompt as _xiaoc_system_prompt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent/butler", tags=["butler"])
 router.include_router(_xiaoc_admin_memory_router)
+router.include_router(_xiaoc_life_router)
 BUTLER_SYSTEM_PROMPT = _xiaoc_system_prompt(mode="admin")
 BUTLER_TOOLS = [
     {

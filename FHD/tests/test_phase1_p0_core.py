@@ -472,6 +472,7 @@ def test_clear_impersonation(mock_get_db: MagicMock) -> None:
 def test_audit_admin_action_no_crash(mock_load: MagicMock) -> None:
     mock_load.return_value = {"impersonating_username": "admin"}
     audit_admin_action(SimpleNamespace(), "test.action", target_user_id=1)
+    mock_load.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

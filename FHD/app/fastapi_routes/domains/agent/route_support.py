@@ -3,18 +3,28 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from collections.abc import Callable
+from dataclasses import replace
+from typing import Any, TypeVar, cast
 
 from fastapi.responses import JSONResponse
 
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_dispatcher import notify_agent_task_dispatcher
+from app.application.agent_orchestrator.task_execution_models import AgentTaskExecution
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
 )
-from app.application.agent_orchestrator.task_models import tenant_id_of_run
+from app.application.agent_orchestrator.task_models import (
+    AgentTask,
+    attention_for_status,
+    tenant_id_of_run,
+)
+from app.application.agent_orchestrator.task_progress import fallback_task_progress_snapshot
 from app.application.agent_orchestrator.unified_task import task_capabilities
+from app.domain.task_lifecycle.adapters import canonical_execution_state
 from app.infrastructure.auth.agent_principal import AgentPrincipal
 from app.utils.json_safe import json_safe
 
@@ -24,6 +34,53 @@ PUBLIC_AGENT_ERROR = "Agent 执行失败，详细信息已记录"
 PUBLIC_AGENT_SERVICE_ERROR = "Agent 服务暂时不可用，请稍后重试"
 PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹配"
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
+_TaskResult = TypeVar("_TaskResult", AgentRun, AgentTask)
+
+
+def project_execution_failure(
+    result: _TaskResult, execution: AgentTaskExecution | None
+) -> _TaskResult:
+    """Expose a stopped lease without rewriting business receipts or stored state."""
+    if (
+        execution is None
+        or canonical_execution_state(execution.state) not in {"failed", "unknown"}
+        or result.status not in {"queued", "planning", "running", "retrying"}
+    ):
+        return result
+    code = execution.last_error_code
+    uncertain = (
+        canonical_execution_state(execution.state) == "unknown" or code == "needs_verification"
+    )
+    status = "blocked" if uncertain else "failed"
+    metadata = dict(result.metadata)
+    if uncertain or code == "retries_exhausted":
+        metadata["non_retryable"] = True
+    if uncertain:
+        recovery = metadata.get("recovery")
+        metadata["recovery"] = {
+            **(recovery if isinstance(recovery, dict) else {}),
+            "state": "manual_reconciliation_required",
+            "error_code": code or "needs_verification",
+        }
+    updated_at = execution.finished_at or execution.updated_at or result.updated_at
+    changes: dict[str, Any] = {
+        "status": status,
+        "metadata": metadata,
+        "updated_at": updated_at,
+    }
+    if isinstance(result, AgentTask):
+        progress = result.to_dict()["progress"]
+        stage = fallback_task_progress_snapshot(
+            status=status, attempt=result.attempt, updated_at=updated_at
+        )["stage"]
+        metadata["progress"] = {
+            **progress,
+            "status": status,
+            "stage": "执行结果待人工核对" if uncertain else stage,
+            "updated_at": updated_at,
+        }
+        changes["attention_state"] = attention_for_status(status)
+    return replace(result, **changes)
 
 
 def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
@@ -40,6 +97,7 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
         "authenticated_local_user_id",
         "_mod_authorization",
         "_actor_authorization",
+        "_tool_approval_scope",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
         "mutation_policy",
@@ -113,11 +171,20 @@ def redact_internal_errors(value: Any) -> Any:
     return value
 
 
-def public_run_dict(run: Any) -> dict[str, Any]:
+def public_run_dict(run: Any, *, read_run: Callable[[str], Any] | None = None) -> dict[str, Any]:
     # to_dict shares metadata with the stored run: redact only the recursive copy.
     data = cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
     if isinstance(data.get("metadata"), dict):
         data["metadata"].pop("_tool_approval_grants", None)
+        if data["metadata"].get("child_results"):
+            from app.application.agent_orchestrator.run_audit_scope import project_child_results
+            from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+
+            data["metadata"]["child_results"] = redact_internal_errors(
+                project_child_results(
+                    run, read_run or (lambda run_id: get_agent_run_repository().get(run_id))
+                )
+            )
     return data
 
 
@@ -133,15 +200,18 @@ def internal_error_response(operation: str) -> JSONResponse:
     )
 
 
-def run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
+def run_response(
+    run: Any, *, principal: AgentPrincipal, read_run: Callable[[str], Any] | None = None
+) -> dict[str, Any]:
+    execution = get_task_execution_repository().get(run.run_id)
+    run = project_execution_failure(run, execution)
     approval = issue_approval_grant(run, principal_id=principal.user_id)
     extra: dict[str, Any] = {"capabilities": task_capabilities(run)}
     if approval:
         extra["approval"] = approval
-    execution = get_task_execution_repository().get(run.run_id)
     if execution is not None:
         extra["execution"] = execution.to_dict()
-    return success(public_run_dict(run), **extra)
+    return success(public_run_dict(run, read_run=read_run), **extra)
 
 
 def run_reference_response(run: Any) -> dict[str, Any]:
@@ -276,6 +346,7 @@ __all__ = [
     "enqueue_run",
     "internal_error_response",
     "owned_run",
+    "project_execution_failure",
     "public_event_dict",
     "public_run_dict",
     "run_reference_response",

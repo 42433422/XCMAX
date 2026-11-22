@@ -157,6 +157,114 @@ def test_completion_notifies_only_after_the_result_is_committed(relay_queue, mon
     assert service.get_task(user_id=7406, task_id=task["task_id"]) == response
 
 
+def test_expired_running_task_is_read_only_until_original_desktop_receipt(relay_queue):
+    desktop = _paired(relay_queue, 7410, "Original desktop")
+    service = relay_queue.service
+    task = service.create_task(user_id=7410, relay_id=desktop["relay_id"], kind="codex.invoke")
+    auth = {"relay_id": desktop["relay_id"], "desktop_token": desktop["desktop_token"]}
+    assert service.poll_desktop(**auth)["task_count"] == 1
+    with relay_queue.database() as db:
+        db.execute(
+            text("UPDATE mobile_relay_tasks SET claimed_at = '2000-01-01' WHERE task_id = :task"),
+            {"task": task["task_id"]},
+        )
+    assert service.poll_desktop(**auth)["tasks"] == []
+    original = service.get_task(user_id=7410, task_id=task["task_id"])
+    assert original["status"] == "unknown"
+    assert not original["completed_at"]
+    assert service.poll_desktop(**auth)["tasks"] == []
+    completed = service.complete_desktop_task(
+        **auth, task_id=task["task_id"], status="completed", result={"original": True}
+    )
+    assert completed["task_id"] == task["task_id"]
+    assert completed["status"] == "completed"
+
+
+def test_poll_never_dispatches_a_task_when_claim_compare_and_set_loses(relay_queue):
+    desktop = _paired(relay_queue, 7411, "Concurrent desktop")
+    service = relay_queue.service
+    task = service.create_task(user_id=7411, relay_id=desktop["relay_id"], kind="codex.invoke")
+    with relay_queue.database() as db:
+        db.execute(
+            text(
+                "CREATE TRIGGER reject_claim BEFORE UPDATE OF status ON mobile_relay_tasks WHEN NEW.status = 'running' BEGIN SELECT RAISE(IGNORE); END"
+            )
+        )
+    assert (
+        service.poll_desktop(relay_id=desktop["relay_id"], desktop_token=desktop["desktop_token"])[
+            "tasks"
+        ]
+        == []
+    )
+    assert service.get_task(user_id=7411, task_id=task["task_id"])["status"] == "queued"
+
+
+@pytest.mark.parametrize("state", ["blocked", "unknown", "future_unrecognized_status", ""])
+def test_unfinished_relay_receipt_never_has_completion_timestamp(relay_queue, state):
+    desktop = _paired(relay_queue, 7412, "Unfinished desktop")
+    service = relay_queue.service
+    task = service.create_task(user_id=7412, relay_id=desktop["relay_id"], kind="codex.invoke")
+    result = service.complete_desktop_task(
+        relay_id=desktop["relay_id"],
+        desktop_token=desktop["desktop_token"],
+        task_id=task["task_id"],
+        status=state,
+    )
+    assert result["status"] == ("blocked" if state == "blocked" else "unknown")
+    assert not result["completed_at"]
+
+
+def test_retention_erases_expired_ciphertext_but_keeps_unresolved_task_identity(relay_queue):
+    desktop = _paired(relay_queue, 7415, "Retention desktop")
+    service = relay_queue.service
+    task = service.create_task(
+        user_id=7415,
+        relay_id=desktop["relay_id"],
+        kind="codex.invoke",
+        payload={"expired": "business data"},
+    )
+    auth = {"relay_id": desktop["relay_id"], "desktop_token": desktop["desktop_token"]}
+    service.poll_desktop(**auth)
+    with relay_queue.database() as db:
+        db.execute(
+            text("UPDATE mobile_relay_tasks SET updated_at = '2000-01-01' WHERE task_id = :task"),
+            {"task": task["task_id"]},
+        )
+    assert service.poll_desktop(**auth)["tasks"] == []
+    original = service.get_task(user_id=7415, task_id=task["task_id"])
+    assert original["status"] == "unknown"
+    assert original["payload"] == original["result"] == {}
+    assert not original["completed_at"]
+
+
+@pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled"])
+def test_terminal_relay_receipt_cannot_be_overwritten_or_notified_twice(relay_queue, terminal):
+    desktop = _paired(relay_queue, 7413, "Terminal desktop")
+    service = relay_queue.service
+    task = service.create_task(user_id=7413, relay_id=desktop["relay_id"], kind="codex.invoke")
+    auth = {
+        "relay_id": desktop["relay_id"],
+        "desktop_token": desktop["desktop_token"],
+        "task_id": task["task_id"],
+    }
+    original = service.complete_desktop_task(**auth, status=terminal, result={"original": True})
+    late = service.complete_desktop_task(**auth, status="completed", result={"late": True})
+    assert late == original
+    relay_queue.notifications.assert_called_once_with(original)
+
+
+@pytest.mark.parametrize("claimed", [False, True])
+def test_cancel_only_reports_cancelled_when_task_was_not_claimed(relay_queue, claimed):
+    desktop = _paired(relay_queue, 7414, "Cancellation desktop")
+    service = relay_queue.service
+    task = service.create_task(user_id=7414, relay_id=desktop["relay_id"], kind="codex.invoke")
+    if claimed:
+        service.poll_desktop(relay_id=desktop["relay_id"], desktop_token=desktop["desktop_token"])
+    result = service.cancel_task(user_id=7414, task_id=task["task_id"])
+    assert result["status"] == ("unknown" if claimed else "cancelled")
+    assert bool(result["completed_at"]) is not claimed
+
+
 def test_failed_transaction_neither_changes_the_task_nor_notifies(relay_queue, monkeypatch):
     desktop = _paired(relay_queue, 7407, "Synthetic failed commit")
     service = relay_queue.service

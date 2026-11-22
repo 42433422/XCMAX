@@ -46,6 +46,9 @@ def late_callback(
 
 class SuperEmployeePort(Protocol):
     def list_messages(self, *, user_id: int, limit: int) -> list[dict[str, Any]]: ...
+    def read_dispatch_receipt(
+        self, *, user_id: int, request_id: str, task_id: str
+    ) -> dict[str, Any] | None: ...
     def invoke(self, *, user_id: int, message: str, context: dict[str, Any]) -> dict[str, Any]: ...
     def invoke_stream(
         self, *, user_id: int, message: str, context: dict[str, Any]

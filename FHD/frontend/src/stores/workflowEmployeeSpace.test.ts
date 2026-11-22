@@ -30,7 +30,7 @@ describe('workflowEmployeeSpace store', () => {
     vi.useFakeTimers()
   })
 
-  it('applyFromWorkflowPayload creates snapshot and bumps processed', () => {
+  it('applyFromWorkflowPayload records activity without claiming task completion', () => {
     const s = useWorkflowEmployeeSpaceStore()
     s.applyFromWorkflowPayload('工作流 · 测试', {
       employeeId: 'emp1',
@@ -43,7 +43,7 @@ describe('workflowEmployeeSpace store', () => {
     })
     expect(s.snapshots.emp1.stage).toBe('阶段A')
     expect(s.snapshots.emp1.visuallyBusy).toBe(true)
-    expect(s.sessions.emp1.processedCount).toBe(1)
+    expect(s.sessions.emp1.processedCount).toBe(0)
   })
 
   it('applyFromWorkflowPayload ignores empty empId', () => {
@@ -65,7 +65,7 @@ describe('workflowEmployeeSpace store', () => {
     }
     s.applyFromWorkflowPayload('工作流 · 二', payload)
     s.applyFromWorkflowPayload('工作流 · 二', payload)
-    expect(s.sessions.emp2.processedCount).toBe(1)
+    expect(s.sessions.emp2.processedCount).toBe(0)
   })
 
   it('heartbeat does not bump processed', () => {
@@ -126,17 +126,19 @@ describe('workflowEmployeeSpace store', () => {
   it('hydrate from storage parses persisted snapshots and sessions', () => {
     sessionStorage.setItem(
       'xcagi_workflow_employee_space_v1:t1',
-      JSON.stringify({ schemaVersion: 1, snapshots: { e: { empId: 'e', stage: 'X' } } }),
+      JSON.stringify({ schemaVersion: 1, snapshots: { e: { empId: 'e', stage: 'X', hintLine: 'private-message' } } }),
     )
     localStorage.setItem(
       'xcagi_workflow_employee_sessions_v1:t1',
       JSON.stringify({ schemaVersion: 1, sessions: { e: { empId: 'e', processedCount: 2 } } }),
     )
     const s = useWorkflowEmployeeSpaceStore()
+    expect(s.snapshots.e.stage).toBe('X')
     s.hydrateFromSessionStorage('t1')
     s.hydrateSessionsFromLocalStorage('t1')
-    expect(s.snapshots.e.stage).toBe('X')
+    expect(s.snapshots.e.stage).toBe('等待状态同步')
     expect(s.sessions.e.processedCount).toBe(2)
+    expect(sessionStorage.getItem('xcagi_workflow_employee_space_v1:t1')).not.toContain('private-message')
   })
 
   it('hydrate handles malformed and wrong schema gracefully', () => {
@@ -148,4 +150,51 @@ describe('workflowEmployeeSpace store', () => {
     expect(s.snapshots).toEqual({})
     expect(s.sessions).toEqual({})
   })
+
+  it('persists progress and duration without customer text or arbitrary payload fields', () => {
+    const s = useWorkflowEmployeeSpaceStore()
+    s.applyReceiptBridge({ contactName: 'private-name', messageText: 'private-message' })
+    s.applyFromWorkflowPayload('private-title', {
+      employeeId: 'receipt_confirm', workflowStageLine: 'private-stage',
+      workflowProgressPct: 55, workflowCurrentHint: 'private-message',
+    })
+    s.markEnabled('receipt_confirm')
+    vi.advanceTimersByTime(300)
+    const stored = sessionStorage.getItem('xcagi_workflow_employee_space_v1:t1') || ''
+    expect(stored).not.toContain('private-')
+    expect(JSON.parse(stored).snapshots.receipt_confirm.progressPct).toBe(55)
+    s.hydrateFromSessionStorage('t1')
+    s.hydrateSessionsFromLocalStorage('t1')
+    expect(s.snapshots.receipt_confirm.empId).toBe('receipt_confirm')
+    expect(s.snapshots.receipt_confirm.hintLine).toBe('')
+    expect(s.sessions.receipt_confirm.enabledAt).not.toBeNull()
+  })
+})
+
+it('refreshes an identical heartbeat timestamp without manufacturing a completed task', () => {
+  setActivePinia(createPinia())
+  vi.useFakeTimers()
+  const store = useWorkflowEmployeeSpaceStore()
+  const payload = { employeeId: 'heartbeat', workflowStageLine: '监控中' }
+  store.applyFromWorkflowPayload('监控', payload, { isHeartbeat: true })
+  const before = store.snapshots.heartbeat.lastActivityAt
+  vi.advanceTimersByTime(1000)
+  store.applyFromWorkflowPayload('监控', payload, { isHeartbeat: true })
+  expect(store.snapshots.heartbeat.lastActivityAt).toBeGreaterThan(before)
+  expect(store.sessions.heartbeat?.processedCount || 0).toBe(0)
+  vi.useRealTimers()
+})
+
+it('does not persist an old scope activity into a new tenant during the debounce', () => {
+  setActivePinia(createPinia())
+  vi.useFakeTimers()
+  sessionStorage.clear()
+  const store = useWorkflowEmployeeSpaceStore()
+  store.reloadForTenantScope('old')
+  store.applyFromWorkflowPayload('旧租户', { employeeId: 'old-employee' })
+  store.reloadForTenantScope('new')
+  vi.advanceTimersByTime(300)
+  expect(sessionStorage.getItem('xcagi_workflow_employee_space_v1:new')).toBeNull()
+  expect(JSON.parse(sessionStorage.getItem('xcagi_workflow_employee_space_v1:old') || '{}').snapshots['old-employee']).toBeDefined()
+  vi.useRealTimers()
 })

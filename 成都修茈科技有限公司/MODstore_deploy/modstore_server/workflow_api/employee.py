@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +23,7 @@ from modstore_server.workflow_api.helpers import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/employee-eligible", summary="获取员工可绑定的工作流")
@@ -101,7 +103,7 @@ async def list_workflows_by_employee(
                 continue
             data, err = read_manifest(d)
             if err or not isinstance(data, dict):
-                errors.append(f"mod[{mid}] manifest 读取失败: {err or 'invalid'}")
+                errors.append(f"mod[{mid}] manifest 读取失败")
                 continue
             wf_rows = data.get("workflow_employees")
             if not isinstance(wf_rows, list):
@@ -122,7 +124,8 @@ async def list_workflows_by_employee(
                     "source": "manifest",
                 }
     except RECOVERABLE_ERRORS as e:
-        errors.append(f"manifest 扫描失败: {e}")
+        logger.warning("employee workflow manifest scan failed: %s", e)
+        errors.append("manifest 扫描失败")
 
     rows = sorted(result_by_id.values(), key=lambda x: int(x.get("id") or 0))
     return {

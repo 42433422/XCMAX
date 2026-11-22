@@ -1,4 +1,9 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
+
+const scope = vi.hoisted(() => ({ value: 'tenant-a' }))
+vi.mock('@/utils/tenantStorageScope', () => ({
+  resolveTenantStorageScopeFromRuntime: () => scope.value,
+}))
 import {
   buildMarketCatalogCacheKey,
   clearMarketCatalogCache,
@@ -23,5 +28,18 @@ describe('marketCatalogCache', () => {
     const hit = readMarketCatalogCache(key)
     expect(hit?.items).toHaveLength(1)
     expect(isMarketCatalogCacheFresh(hit)).toBe(true)
+  })
+
+  it('isolates memory caches and targeted removal across tenant switches', () => {
+    const key = buildMarketCatalogCacheKey('office')
+    scope.value = 'tenant-a'
+    writeMarketCatalogCache(key, 'office', [{ id: 'private-a' } as never])
+    scope.value = 'tenant-b'
+    expect(readMarketCatalogCache(key)).toBeNull()
+    writeMarketCatalogCache(key, 'office', [{ id: 'private-b' } as never])
+    clearMarketCatalogCache(key)
+    expect(readMarketCatalogCache(key)).toBeNull()
+    scope.value = 'tenant-a'
+    expect(readMarketCatalogCache(key)?.items[0].id).toBe('private-a')
   })
 })

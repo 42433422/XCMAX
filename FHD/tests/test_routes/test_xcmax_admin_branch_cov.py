@@ -591,7 +591,8 @@ class TestAdminActivateEnterpriseImpersonation:
                 json={"bridge_token": "valid"},
             )
         assert resp.status_code == 400
-        assert "bad session" in resp.json()["message"]
+        assert resp.json()["message"] == "代管会话无法激活，请核对登录状态"
+        assert "bad session" not in resp.text
 
     def test_success_with_enterprise_session_id(self, client: TestClient):
         """Lines 952-961: success path with enterprise_session_id in body."""
@@ -1157,7 +1158,11 @@ class TestOpsStaffingCloseGap:
             resp = client.post("/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True})
         assert resp.status_code == 200
         assert resp.json()["data"]["install_results"][0]["success"] is False
-        assert "install fail" in resp.json()["data"]["install_results"][0]["message"]
+        assert (
+            resp.json()["data"]["install_results"][0]["message"]
+            == "员工配置安装失败，请查看服务日志"
+        )
+        assert "install fail" not in resp.text
 
     def test_onboard_dict_result(self, client: TestClient):
         """Lines 1620-1621: onboard_result is dict with success=False."""

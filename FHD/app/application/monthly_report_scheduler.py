@@ -17,11 +17,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
 
 from app.extensions import celery_app
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ def generate_monthly_finance_summary(
             "start_date": start.isoformat(),
             "end_date": (end - timedelta(days=1)).isoformat(),
         },
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": utc_now_naive().isoformat(),
     }
 
 

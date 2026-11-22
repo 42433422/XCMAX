@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -14,10 +15,14 @@ from typing import Any, cast
 import pandas as pd
 
 from app.application.tools.workflow_tools.contracts import ExcelIO, NaturalQuery, Payload
+from app.infrastructure.excel.date_norm import date_like_columns, normalize_excel_dates
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS = 1000
 _EXCEL_ANALYSIS_MAX_PAGE_ROWS = 5000
+# 只有依赖列语义的动作才自动探测表头；read/query 保持用户可见的默认第 1 行。
+_AUTO_HEADER_ACTIONS = frozenset({"excel_query", "statistics", "structure", "aggregate"})
+_TOTAL_ROW_MARKERS = ("合计", "总计", "小计", "累计")
 
 
 def _env_positive_int(name: str, default: int) -> int:
@@ -54,7 +59,7 @@ def read_excel_dataframe(
 ) -> pd.DataFrame:
     if p.suffix.lower() == ".csv":
         header = 0 if header_row_1based is None else header_row_1based - 1
-        return pd.read_csv(p, header=header)
+        return _clean_header_columns(pd.read_csv(p, header=header))
     options: Payload = {}
     if p.suffix.lower() in (".xlsx", ".xlsm"):
         options["engine"] = "openpyxl"
@@ -62,7 +67,63 @@ def read_excel_dataframe(
         options["sheet_name"] = sheet_name
     if header_row_1based is not None:
         options["header"] = header_row_1based - 1
-    return cast(pd.DataFrame, pd.read_excel(p, **options))
+    return _clean_header_columns(cast(pd.DataFrame, pd.read_excel(p, **options)))
+
+
+def _clean_header_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """合并单元格表头读入后会出现 ``Unnamed: n``，用左侧标签补齐并去掉全空列。"""
+    original = [str(name) for name in df.columns]
+    if not any(name.startswith("Unnamed:") for name in original):
+        return df
+    keep = [
+        index
+        for index, name in enumerate(original)
+        if not (name.startswith("Unnamed:") and df.iloc[:, index].isna().all())
+    ]
+    if not keep:
+        return df
+    frame = df.iloc[:, keep].copy()
+    names: list[str] = []
+    seen: dict[str, int] = {}
+    previous: str | None = None
+    for index in keep:
+        name = original[index]
+        if name.startswith("Unnamed:") and previous is not None:
+            name = previous
+        else:
+            previous = name
+        count = seen.get(name, 0) + 1
+        seen[name] = count
+        names.append(name if count == 1 else f"{name}_{count}")
+    frame.columns = names
+    return frame
+
+
+def auto_header_row(path: Path, sheet_name: str | None) -> int | None:
+    """未显式给表头时用 openpyxl 探测；探测失败保持 pandas 默认行为。"""
+    from app.infrastructure.excel.header_detection import detect_header_row_1based
+
+    try:
+        return detect_header_row_1based(path, sheet_name)
+    except RECOVERABLE_ERRORS:
+        return None
+
+
+def _suspected_total_rows(df: pd.DataFrame, limit: int = 20) -> list[int]:
+    """标出疑似合计行（0-based 位置），供上层决定是否剔除，避免直接改动数据。"""
+    text_columns = [name for name in df.columns if df[name].dtype.kind in "OUS"]
+    rows: list[int] = []
+    for position, (_, row) in enumerate(df.iterrows()):
+        if position >= limit:
+            break
+        for name in text_columns:
+            value = row[name]
+            if pd.isna(value):
+                continue
+            if any(marker in str(value) for marker in _TOTAL_ROW_MARKERS):
+                rows.append(position)
+                break
+    return rows
 
 
 def first_sheet_name(path: Path) -> str | None:
@@ -110,6 +171,16 @@ def table_result(df: pd.DataFrame, *, offset: int = 0, max_rows: Any = None) -> 
     }
 
 
+def _supports_error_feedback(fn: Callable[..., Any]) -> bool:
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return "error_feedback" in params or any(
+        param.kind is inspect.Parameter.VAR_KEYWORD for param in params.values()
+    )
+
+
 def natural_language_query(
     df: pd.DataFrame,
     natural_language: str,
@@ -124,19 +195,63 @@ def natural_language_query(
     result = df
     try:
         code = translate(natural_language, df)
-        if code and code.strip():
-            generated_code = code
-            result = execute(code, df)
     except ValueError:
-        error = "invalid_pandas_query"
+        code, error = None, "invalid_pandas_query"
     except RECOVERABLE_ERRORS:
-        error = "excel_query_failed"
+        code, error = None, "excel_query_failed"
+    if error is None and not (code and code.strip()):
+        error = "query_translation_failed"
+    if error is None:
+        generated_code = str(code)
+        try:
+            result = execute(generated_code, df)
+        except RECOVERABLE_ERRORS as exc:
+            # 成熟的表格 agent 会把「失败的代码 + 异常」回传模型重写一次，
+            # 而不是把首次生成的错误直接抛给用户。
+            retry_code = _retry_translation(
+                translate, natural_language, df, f"{generated_code}\n# error: {exc}"
+            )
+            if retry_code and retry_code.strip():
+                generated_code = retry_code
+                try:
+                    result = execute(retry_code, df)
+                except ValueError:
+                    error = "invalid_pandas_query"
+                except RECOVERABLE_ERRORS:
+                    error = "excel_query_failed"
+            else:
+                error = (
+                    "invalid_pandas_query" if isinstance(exc, ValueError) else "excel_query_failed"
+                )
+    messages = {
+        "invalid_pandas_query": "查询条件无法转换为可执行的表格计算，请换一种描述。",
+        "excel_query_failed": "表格查询执行失败，请核对问题描述或文件内容后重试。",
+        "query_translation_failed": "未能从问题中识别出表格查询条件，已返回原始表格；请指明列名或日期范围。",
+    }
     return {
         "generated_code": generated_code,
         "result_kind": "dataframe",
         **table_result(result, offset=offset, max_rows=max_rows),
-        **({"error": error} if error else {}),
+        **(
+            {"error": error, "message": messages[error], "success": False}
+            if error
+            else {"success": True}
+        ),
     }
+
+
+def _retry_translation(
+    translate: Callable[..., str | None],
+    natural_language: str,
+    df: pd.DataFrame,
+    feedback: str,
+) -> str | None:
+    if not _supports_error_feedback(translate):
+        return None
+    try:
+        return translate(natural_language, df, error_feedback=feedback)
+    except RECOVERABLE_ERRORS:
+        return None
 
 
 def aggregate_frame(df: pd.DataFrame, args: Payload) -> pd.DataFrame:
@@ -210,6 +325,8 @@ class ExcelAnalysis:
                 "workspace_root": root,
                 "resolved_path": str(path),
             }
+        if header is None and action in _AUTO_HEADER_ACTIONS:
+            header = auto_header_row(path, str(sheet).strip() if sheet else None)
         try:
             df = self.io.read(path, sheet_name=sheet, header_row_1based=header)
         except RECOVERABLE_ERRORS:
@@ -221,6 +338,7 @@ class ExcelAnalysis:
                 "sheet_name": sheet,
                 "header_row": header,
             }
+        df = normalize_excel_dates(df)
         offset, max_rows = page_budget(args)
         if action == "excel_query":
             out = self.query(
@@ -231,6 +349,7 @@ class ExcelAnalysis:
                 max_rows=max_rows,
             )
             out["action"] = "excel_query"
+            out["header_row"] = header
             return out
         base = {"success": True, "action": action, "file_path": file_path}
         if action == "read":
@@ -271,6 +390,24 @@ class ExcelAnalysis:
                 **table_result(result, offset=offset, max_rows=max_rows),
                 "source_row_count": len(df),
             }
+        if action == "structure":
+            from app.infrastructure.excel.schema_service import dataframe_schema_snapshot
+
+            snapshot = dataframe_schema_snapshot(df)
+            return {
+                **base,
+                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
+                "header_row": header,
+                "row_count": snapshot["row_count"],
+                "columns": snapshot["columns"],
+                "dtypes": snapshot["dtypes"],
+                "sample_rows": snapshot["sample_rows"],
+                "numeric_columns": [
+                    str(name) for name in df.select_dtypes(include="number").columns
+                ],
+                "date_like_columns": date_like_columns(df),
+                "suspected_total_rows": _suspected_total_rows(df),
+            }
         if action == "statistics":
             numeric = df.select_dtypes(include="number")
             numeric_summary = (
@@ -280,6 +417,7 @@ class ExcelAnalysis:
             )
             return {
                 **base,
+                "header_row": header,
                 "row_count": len(df),
                 "dtypes": {str(k): str(v) for k, v in df.dtypes.items()},
                 "numeric_summary": numeric_summary,

@@ -44,6 +44,55 @@ class SandboxHostContext:
     employee_run_allowlist: Optional[tuple[str, ...]] = None
 
 
+def _execution_receipt(result: Any, *, depth: int = 0) -> Dict[str, Any]:
+    """Retain typed control fields, not employee payloads, prompts or error text."""
+    unknown = {"outcome": "unknown", "retryable": False, "requires_reconciliation": True}
+    if not isinstance(result, dict) or depth > 8:
+        return unknown
+    receipt: Dict[str, Any] = {}
+    invalid = False
+    for key in (
+        "ok",
+        "success",
+        "accepted",
+        "completed",
+        "retryable",
+        "requires_reconciliation",
+        "queued",
+        "ticket_route_requires_reconciliation",
+        "handler_failed",
+        "blocked_by_risk_gate",
+        "partial",
+    ):
+        if key in result:
+            if type(result[key]) is bool:
+                receipt[key] = result[key]
+            else:
+                invalid = True
+    for key in ("status", "execution_status", "outcome", "handler"):
+        if key in result:
+            if isinstance(result[key], str):
+                receipt[key] = result[key][:128]
+            else:
+                invalid = True
+    for key in ("task_id", "para_task_id", "id"):
+        if isinstance(result.get(key), str) or type(result.get(key)) is int:
+            receipt[key] = result[key]
+    if result.get("error"):
+        receipt["error"] = True
+    if result.get("outbox_path"):
+        receipt["requires_reconciliation"] = True
+    for key in ("result", "para_result", "task"):
+        if isinstance(result.get(key), dict):
+            receipt[key] = _execution_receipt(result[key], depth=depth + 1)
+    for key in ("outputs", "results"):
+        if isinstance(result.get(key), list):
+            receipt[key] = [_execution_receipt(row, depth=depth + 1) for row in result[key]]
+    if invalid:
+        receipt.update(unknown)
+    return receipt
+
+
 class SandboxRpcServer:
     """asyncio TCP server，使用 newline-delimited JSON-RPC 协议。
 
@@ -141,17 +190,30 @@ class SandboxRpcServer:
             resp = {"id": req_id, "ok": False, "error": f"unknown method: {method}"}
             self.ctx.sdk_calls.append({"method": method, "ok": False, "error": "unknown"})
         else:
+            # Record before awaiting: a killed subprocess can leave an employee
+            # thread running even when the RPC reply is never delivered.
+            call: Dict[str, Any] = {
+                "method": method,
+                "ok": False,
+                "outcome": "unknown",
+                "retryable": False,
+                "requires_reconciliation": True,
+            }
+            self.ctx.sdk_calls.append(call)
             try:
                 result = await asyncio.wait_for(handler(params), timeout=RPC_TIMEOUT_SECONDS)
                 resp = {"id": req_id, "ok": True, "result": result}
-                self.ctx.sdk_calls.append({"method": method, "ok": True})
+                call.clear()
+                call.update({"method": method, "ok": True})
+                if method == "employee_run":
+                    call["result"] = _execution_receipt(result)
             except TimeoutError:
                 resp = {"id": req_id, "ok": False, "error": f"{method} timeout"}
-                self.ctx.sdk_calls.append({"method": method, "ok": False, "error": "timeout"})
+                call["error"] = "timeout"
             except BOUNDARY_ERRORS as e:  # noqa: BLE001
-                msg = str(e)[:500]
+                msg = f"{method} failed ({type(e).__name__})"
                 resp = {"id": req_id, "ok": False, "error": msg}
-                self.ctx.sdk_calls.append({"method": method, "ok": False, "error": msg[:200]})
+                call["error"] = type(e).__name__
         try:
             writer.write((json.dumps(resp, ensure_ascii=False) + "\n").encode("utf-8"))
             await writer.drain()

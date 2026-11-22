@@ -246,18 +246,18 @@ def test_llm_request_response_round_trip():
     assert response.usage["prompt_tokens"] == 1
 
 
-def test_workflow_client_calls_underlying_engine(monkeypatch):
+def test_workflow_client_preserves_inputs_and_output_through_recorded_execution(monkeypatch):
     from modstore_server.services import InProcessWorkflowEngineClient
 
     captured = {}
 
-    def fake_execute(workflow_id, input_data, *, user_id=0):
+    def fake_execute(*, workflow_id, input_data, user_id=0):
         captured["call"] = (workflow_id, input_data, user_id)
         return {"ok": True}
 
-    import modstore_server.workflow_engine as engine
+    import modstore_server.workflow_event_runner as runner
 
-    monkeypatch.setattr(engine, "execute_workflow", fake_execute)
+    monkeypatch.setattr(runner, "run_recorded_workflow", fake_execute)
 
     client = InProcessWorkflowEngineClient()
     result = client.execute_workflow(workflow_id=1, input_data={"x": 1}, user_id=7)

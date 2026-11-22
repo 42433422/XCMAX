@@ -291,13 +291,18 @@ export const customerService = {
   customerServiceTicketTranscript: (id: number | string, beforeId?: number, signal?: AbortSignal) => {
     const cursor = beforeId === undefined ? '' : `&transcript_before_id=${encodeURIComponent(String(beforeId))}`
     return req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}?include_transcript=true${cursor}`, {
-      timeoutMs: 15_000, ...(signal ? { signal } : {}),
+      timeoutMs: 15_000,
+      ...(signal ? { signal } : {}),
     })
   },
   customerServiceTicketTranscriptImage: (id: number | string, messageId: number, signal: AbortSignal) =>
-    requestBlob(`/api/customer-service/tickets/${encodeURIComponent(String(id))}?transcript_image_message_id=${encodeURIComponent(String(messageId))}`, {
-      method: 'GET', signal,
-    }),
+    requestBlob(
+      `/api/customer-service/tickets/${encodeURIComponent(String(id))}?transcript_image_message_id=${encodeURIComponent(String(messageId))}`,
+      {
+        method: 'GET',
+        signal,
+      },
+    ),
   customerServiceIssueDecision: (id: number, payload: CustomerServiceIssueDecision) =>
     req(`/api/customer-service/issues/${encodeURIComponent(String(id))}/decision`, {
       method: 'POST',
@@ -340,8 +345,8 @@ export const butler = {
   }) => req('/api/agent/butler/corp-chat', { method: 'POST', body: JSON.stringify(payload) }),
   agentCorpIntakeFill: (payload: { message: string; current_draft?: Record<string, unknown>; page_summary?: string }) =>
     req('/api/agent/butler/corp-intake-fill', { method: 'POST', body: JSON.stringify(payload) }),
-  agentButlerChat: (payload: { messages: unknown[]; conversation_id?: number | null; page_context?: string }) =>
-    req('/api/agent/butler/chat', { method: 'POST', body: JSON.stringify(payload) }),
+  agentButlerChat: (payload: { messages: unknown[]; conversation_id?: number | null; page_context?: string }, signal?: AbortSignal) =>
+    req('/api/agent/butler/chat', { method: 'POST', body: JSON.stringify(payload), signal }),
   agentButlerChatStream: (payload: { messages: unknown[]; conversation_id?: number | null; page_context?: string }, signal?: AbortSignal) =>
     requestStreamResponse('/api/agent/butler/chat/stream', {
       method: 'POST',

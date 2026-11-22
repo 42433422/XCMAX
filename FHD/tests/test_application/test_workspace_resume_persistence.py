@@ -95,6 +95,11 @@ def test_sqlite_legacy_run_resume_uses_server_workspace(
             return
         assert finished.status == "completed", finished.to_dict()
         assert finished.tool_calls and finished.tool_calls[0].output["success"]
+        evidence = finished.tool_calls[0].metadata["verification"]["checks"][0]["evidence"]
+        assert evidence["scope"] == "task_admission"
+        assert evidence["business_effect_verified"] is False
+        assert finished.final_output["business_result"]["status"] == "pending"
+        assert finished.final_output["business_result"]["success"] is False
         assert ledger_path(server).is_file()
         assert load_employee_task_ledger(server)["tasks"]
         assert list(outside.iterdir()) == []

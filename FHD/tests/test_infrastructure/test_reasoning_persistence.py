@@ -27,6 +27,7 @@ class _Adapter:
     async def stream_chat_completion(self, messages, **kwargs):
         for chunk in self.chunks:
             yield json.dumps(chunk, ensure_ascii=False)
+        yield json.dumps({"finish_reason": "stop"})
         yield "[DONE]"
 
 

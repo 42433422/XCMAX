@@ -96,3 +96,22 @@ def test_public_workflow_rows_still_reject_nested_credentials(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="公共元数据"):
         write_manifest(mod_dir, manifest)
+
+
+def test_manifest_read_diagnostics_expose_location_within_document_only(tmp_path, monkeypatch):
+    mod_dir = tmp_path / "private-library"
+    mod_dir.mkdir()
+    assert read_manifest(mod_dir) == (None, "缺少 manifest.json")
+    (mod_dir / "manifest.json").write_text('{\n"id": }', encoding="utf-8")
+    data, error = read_manifest(mod_dir)
+    assert data is None and error == "manifest.json 格式无效（第 2 行，第 7 列）"
+    assert str(tmp_path) not in error
+
+    def private_decoder(*args, **kwargs):
+        raise json.JSONDecodeError("token=private-parser-error", "{", 1)
+
+    monkeypatch.setattr(json, "loads", private_decoder)
+    assert read_manifest(mod_dir) == (
+        None,
+        "manifest.json 格式无效（第 1 行，第 2 列）",
+    )

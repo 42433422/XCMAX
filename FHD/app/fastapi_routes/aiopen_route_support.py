@@ -21,6 +21,9 @@ from app.application.aiopen.service import (
     issue_client_key,
     revoke_client_key,
 )
+from app.application.employee_runtime.result_verifier import (
+    execution_result_requires_reconciliation,
+)
 from app.domain.aiopen.principal import ScreenPrincipal
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -33,6 +36,9 @@ _TRACE_FLAGS = (
     "revoked",
     "wechat_open",
     "remote_control_enabled",
+    "retryable",
+    "reconciliation_required",
+    "requires_reconciliation",
 )
 _TRACE_TOOL_NAMES = frozenset(item["name"] for item in TOOL_DEFINITIONS)
 
@@ -44,6 +50,18 @@ def safe_control_payload(payload: dict[str, Any]) -> dict[str, Any]:
         value = payload.get(name)
         if isinstance(value, bool):
             safe[name] = value
+    outcome = payload.get("outcome")
+    if isinstance(outcome, str) and outcome in {
+        "unknown",
+        "succeeded",
+        "failed",
+        "not_started",
+        "not_executed",
+        "partial",
+    }:
+        safe["outcome"] = outcome
+    if execution_result_requires_reconciliation(payload):
+        safe.update(success=False, outcome="unknown", retryable=False, reconciliation_required=True)
     status = payload.get("status_code")
     if isinstance(status, int) and not isinstance(status, bool) and 100 <= status <= 599:
         safe["status_code"] = status
@@ -66,8 +84,9 @@ def trace_tool_call(
     try:
         tool = tool if tool in _TRACE_TOOL_NAMES else "unknown_tool"
         message = f"AIOPEN {tool} executed"
+        safe_result = safe_control_payload(result or {})
         trace_payload = {
-            "success": bool(result.get("success", False)),
+            "success": bool(safe_result.get("success", False)),
             "response": message,
             "data": {
                 "text": message,
@@ -77,7 +96,7 @@ def trace_tool_call(
                         "tool_name": "aiopen",
                         "action": tool,
                         "params": {"payload_redacted": True, "argument_count": len(args or {})},
-                        "output": safe_control_payload(result or {}),
+                        "output": safe_result,
                         "tool_call_id": f"aiopen:{tool}",
                     }
                 ],
@@ -123,7 +142,7 @@ def trace_control_result(
         message = f"AIOPEN {action}"
         run = create_trace_run(
             {
-                "success": bool(payload.get("success", False)),
+                "success": bool(safe_payload.get("success", False)),
                 "response": message,
                 "data": {"text": message, "control_result": safe_payload},
             },

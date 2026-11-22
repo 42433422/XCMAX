@@ -250,7 +250,6 @@ def batch_delete_materials(
             except (TypeError, ValueError):
                 continue
 
-        deleted_count = len(valid_ids)
         result = _run_materials_agent(
             request=request,
             action="batch_delete",
@@ -258,19 +257,9 @@ def batch_delete_materials(
             route_path="/api/materials/batch-delete",
         )
         if not result.get("success"):
-            if result.get("error_code") == "tool_exception":
-                logger.error("批量删除原材料时 Agent 执行异常")
-            else:
-                return JSONResponse(jsonable_encoder(result), status_code=400)
-        return JSONResponse(
-            {
-                **result,
-                "success": True,
-                "message": f"已删除 {deleted_count} 条记录",
-                "deleted_count": deleted_count,
-            },
-            status_code=200,
-        )
+            status = 500 if result.get("error_code") == "tool_exception" else 400
+            return JSONResponse(jsonable_encoder(result), status_code=status)
+        return JSONResponse(jsonable_encoder(result), status_code=200)
     except RECOVERABLE_ERRORS:
         logger.exception("批量删除原材料失败")
         return JSONResponse({"success": False, "message": "批量删除失败"}, status_code=500)

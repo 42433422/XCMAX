@@ -1,10 +1,4 @@
-"""Comprehensive tests for conversation/helpers — covering _ensure_vector_index_if_needed,
-Conversation reply and asynchronous stream helpers
-with tool results, _chat_db_read_grace_seconds_left, _touch_chat_db_read_grace, and other
-uncovered branches.
-
-Extends the existing test file with additional coverage for uncovered lines.
-"""
+"""Conversation reply, stream and database authorization helper coverage."""
 
 from __future__ import annotations
 
@@ -29,14 +23,13 @@ def _patch_conversation(name, *args, **kwargs):
 
 
 @contextmanager
-def _planner_context(*, vector_error=None):
+def _planner_context():
     """Use an empty, authorized runtime while leaving stream behavior to each test."""
     with (
         _patch_conversation("effective_db_read_token", return_value=""),
         _patch_conversation("_merge_runtime_context_with_message_paths", return_value=({}, [])),
         _patch_conversation("runtime_context_with_tier", return_value={}),
         _patch_conversation("planner_workflow_interrupt_reply", return_value=None),
-        _patch_conversation("_ensure_vector_index_if_needed", return_value=vector_error),
     ):
         yield
 
@@ -102,72 +95,6 @@ class TestChatDbReadGrace:
         # Entry should be cleaned up
         with helpers._chat_db_read_grace_lock:
             assert subject not in helpers._chat_db_read_grace_until
-
-
-# ---------------------------------------------------------------------------
-# _ensure_vector_index_if_needed
-# ---------------------------------------------------------------------------
-
-
-class TestEnsureVectorIndexIfNeeded:
-    """Tests for _ensure_vector_index_if_needed function."""
-
-    def test_non_vector_request_returns_none(self):
-        """Non-vector requests should return None."""
-        result = helpers._ensure_vector_index_if_needed("你好", {})
-        assert result is None
-
-    def test_vector_request_no_file_path(self):
-        """Vector request without file path should return error message."""
-        result = helpers._ensure_vector_index_if_needed("建立向量索引", {})
-        assert result is not None
-        assert "向量" in result or "Excel" in result
-
-    def test_vector_request_with_file_path_success(self):
-        """Vector request with file path and successful indexing should return None."""
-        runtime_context = {"excel_file_path": "/data/test.xlsx"}
-        mock_result = {"success": True, "index_size": 100}
-
-        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolve:
-            mock_executor = MagicMock(return_value=json.dumps(mock_result))
-            mock_resolve.return_value = mock_executor
-
-            result = helpers._ensure_vector_index_if_needed("建立向量索引", runtime_context)
-            assert result is None
-
-    def test_vector_request_with_file_path_error_result(self):
-        """Vector request with file path but indexing error should return error message."""
-        runtime_context = {"excel_file_path": "/data/test.xlsx"}
-        mock_result = {"error": "file not found", "message": "文件不存在"}
-
-        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolve:
-            mock_executor = MagicMock(return_value=json.dumps(mock_result))
-            mock_resolve.return_value = mock_executor
-
-            result = helpers._ensure_vector_index_if_needed("建立向量索引", runtime_context)
-            assert result is not None
-            assert "文件不存在" in result or "失败" in result
-
-    def test_vector_request_with_file_path_exception(self):
-        """Vector request with file path but exception should return error message."""
-        runtime_context = {"excel_file_path": "/data/test.xlsx"}
-
-        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolve:
-            mock_resolve.side_effect = OSError("connection failed")
-
-            result = helpers._ensure_vector_index_if_needed("建立向量索引", runtime_context)
-            assert result is not None
-            assert "失败" in result
-
-    def test_vector_request_embedding_keyword(self):
-        """Request with 'embedding' keyword should trigger vector check."""
-        result = helpers._ensure_vector_index_if_needed("embedding search", {})
-        assert result is not None
-
-    def test_vector_request_semantic_search_keyword(self):
-        """Request with 'semantic search' keyword should trigger vector check."""
-        result = helpers._ensure_vector_index_if_needed("semantic search", {})
-        assert result is not None
 
 
 # ---------------------------------------------------------------------------

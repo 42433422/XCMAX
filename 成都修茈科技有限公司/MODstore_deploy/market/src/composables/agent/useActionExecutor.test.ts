@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuthStore } from '../../stores/auth'
+import { xiaocLifeApi, type XiaoCLifeState } from '../../application/xiaocLifeApi'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -7,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   detectTarget: vi.fn(),
   start: vi.fn(),
   serializeVisibleDom: vi.fn(),
+  conversationGeneration: 0,
 }))
 
 vi.mock('vue-router', () => ({
@@ -18,7 +21,12 @@ vi.mock('./usePrivacyManager', () => ({
 }))
 
 vi.mock('../../stores/agent', () => ({
-  useAgentStore: () => ({ setMode: mocks.setMode }),
+  useAgentStore: () => ({
+    setMode: mocks.setMode,
+    get conversationGeneration() {
+      return mocks.conversationGeneration
+    },
+  }),
 }))
 
 vi.mock('./useButlerOrchestrator', () => ({
@@ -40,6 +48,7 @@ describe('useActionExecutor', () => {
     sessionStorage.clear()
     vi.restoreAllMocks()
     vi.clearAllMocks()
+    mocks.conversationGeneration = 0
     mocks.push.mockResolvedValue(undefined)
     mocks.requestAction.mockResolvedValue(true)
     mocks.detectTarget.mockReturnValue({ type: 'mod', id: 'demo-mod' })
@@ -284,5 +293,113 @@ describe('useActionExecutor', () => {
       message: '改写管线已启动',
     })
     expect(mocks.start).toHaveBeenLastCalledWith('增强表单', 'page')
+  })
+
+  it('管理端 L1 与状态读取失败都不能执行本地页面工具', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 1 } as XiaoCLifeState)
+    const executor = useActionExecutor()
+    expect((await executor.navigate({ name: 'plans' })).success).toBe(false)
+    expect((await executor.read()).success).toBe(false)
+    expect((await executor.scroll({ direction: 'down' })).success).toBe(false)
+    expect(mocks.push).not.toHaveBeenCalled()
+    expect(mocks.serializeVisibleDom).not.toHaveBeenCalled()
+    expect(window.scrollBy).not.toHaveBeenCalled()
+    read.mockRejectedValue(new Error('offline'))
+    expect((await executor.navigate({ name: 'plans' })).message).toContain('最新自主模式')
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+
+  it('旧点击确认卡在另一个窗口降为 L1 后不能继续执行', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    let confirm!: (value: boolean) => void
+    mocks.requestAction.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        confirm = resolve
+      }),
+    )
+    const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
+    const button = document.createElement('button')
+    button.id = 'pending-business-action'
+    button.click = vi.fn()
+    document.body.appendChild(button)
+    const result = useActionExecutor().click({ selector: '#pending-business-action' })
+    read.mockResolvedValue({ scope: 'enterprise', level: 1 } as XiaoCLifeState)
+    confirm(true)
+    expect((await result).success).toBe(false)
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(button.click).not.toHaveBeenCalled()
+  })
+
+  it('停止或清空原轮后，尚未返回的 L2 权限读取不能再触发页面动作', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    let finish!: (state: XiaoCLifeState) => void
+    vi.spyOn(xiaocLifeApi, 'read').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const navigation = useActionExecutor().navigate({ name: 'plans' })
+    mocks.conversationGeneration += 1
+    finish({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
+
+    expect((await navigation).success).toBe(false)
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+
+  it('暂停后台仍允许 L2 的明确单步请求，L2 不允许发起改写编排', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 2, paused: true } as XiaoCLifeState)
+    const executor = useActionExecutor()
+    expect((await executor.navigate({ name: 'plans' })).success).toBe(true)
+    expect((await executor.enhanceCurrentPage({ brief: 'start autonomous edits' })).success).toBe(false)
+    expect(mocks.push).toHaveBeenCalledOnce()
+    expect(mocks.start).not.toHaveBeenCalled()
+  })
+
+  it('小 C 不得通过页面工具修改自己的等级或消费授权', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 6 } as XiaoCLifeState)
+    const controlPlane = document.createElement('section')
+    controlPlane.setAttribute('data-xiaoc-control-plane', '')
+    const saveControl = document.createElement('button')
+    saveControl.setAttribute('id', 'save-life')
+    saveControl.textContent = '保存'
+    const budgetInput = document.createElement('input')
+    budgetInput.setAttribute('id', 'life-budget')
+    budgetInput.setAttribute('value', '0')
+    const levelSelect = document.createElement('select')
+    levelSelect.setAttribute('id', 'life-level')
+    for (const [value, label] of [
+      ['1', 'L1'],
+      ['6', 'L6'],
+    ]) {
+      const option = document.createElement('option')
+      option.setAttribute('value', value)
+      option.textContent = label
+      levelSelect.append(option)
+    }
+    controlPlane.append(saveControl, budgetInput, levelSelect)
+    document.body.replaceChildren()
+    document.body.append(controlPlane)
+    const button = document.querySelector<HTMLButtonElement>('#save-life')!
+    button.click = vi.fn()
+    const executor = useActionExecutor()
+    expect((await executor.click({ selector: '#save-life' })).success).toBe(false)
+    expect((await executor.fill({ selector: '#life-budget', value: '1000000' })).success).toBe(false)
+    expect((await executor.select({ selector: '#life-level', value: '6' })).success).toBe(false)
+    expect(button.click).not.toHaveBeenCalled()
+    expect(document.querySelector<HTMLInputElement>('#life-budget')?.value).toBe('0')
+    expect(document.querySelector<HTMLSelectElement>('#life-level')?.value).toBe('1')
   })
 })

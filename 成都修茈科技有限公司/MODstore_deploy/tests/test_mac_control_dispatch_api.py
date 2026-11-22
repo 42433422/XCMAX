@@ -3,10 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import UTC, datetime
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -64,6 +63,42 @@ def test_rejects_missing_or_wrong_token(setup):
     assert (
         client.post("/api/service/mac-control/tasks", json=body(), headers=auth("x" * 48))
     ).status_code == 401
+
+
+def test_training_failure_transport_requires_auth_and_redacts_employee_credentials(
+    setup, monkeypatch
+):
+    from modstore_server import capability_trainer
+
+    client, _ = setup
+    monkeypatch.setattr(
+        capability_trainer,
+        "mine",
+        lambda *args, **kwargs: [
+            {
+                "employee_id": "daily-orchestrator",
+                "failure_reason": "failed password=private-password",
+                "count": 2,
+                "samples": [
+                    {
+                        "task": "invoice token=private-token",
+                        "run_id": "private-run",
+                        "failure_reason": "failed password=private-password",
+                    }
+                ],
+            }
+        ],
+    )
+    rejected = client.get("/api/service/mac-control/training/failures")
+    assert rejected.status_code == 401
+    assert "private" not in rejected.text
+    response = client.get("/api/service/mac-control/training/failures", headers=auth())
+    assert response.status_code == 200
+    assert "private-password" not in response.text and "private-token" not in response.text
+    cluster = response.json()["clusters"][0]
+    assert cluster["employee_id"] == "daily-orchestrator" and cluster["count"] == 2
+    assert cluster["samples"][0]["run_id"] == "private-run"
+    assert "invoice" in cluster["samples"][0]["task"]
 
 
 def test_unconfigured_token_fails_closed(setup, monkeypatch):
@@ -158,198 +193,159 @@ def test_service_token_is_not_an_admin_credential(setup):
     assert created.status_code in {401, 403}
 
 
-@pytest.mark.parametrize("lost_dispatch_response", [False, True])
 @pytest.mark.parametrize("pool,tool", [(False, "codex"), (True, "codex"), (True, "opencode")])
-def test_original_pr_uses_hosted_worker_and_reads_back_publication(
-    setup,
-    monkeypatch,
-    lost_dispatch_response,
-    pool,
-    tool,
+def test_original_pr_waits_for_explicit_budget_even_with_shared_capacity(
+    setup, monkeypatch, pool, tool
 ):
     from modstore_server import customer_ticket_github as bridge
     from modstore_server import para_github_repair as repair
     from modstore_server import para_model_admission as admission
 
+    client, factory = setup
     monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1" if tool == "opencode" else "0")
     monkeypatch.setenv("MODSTORE_PARA_PLATFORM_POOL", "1" if pool else "0")
-    waiting = {"status": "waiting", "reason": "no_verified_headroom"}
-    allocated = {"status": "admitted", "model": "coding-route", "approved_models": ["coding-route"]}
-    decision = [waiting if pool else None]
-    monkeypatch.setattr(admission, "platform_model_admission", lambda: decision[0])
-
-    client, factory = setup
-    repo, old, new = "owner/repo", "a" * 40, "b" * 40
     monkeypatch.setattr(
         bridge,
         "configuration",
         lambda: {
-            "repository": repo,
+            "repository": "owner/repo",
             "configured": True,
             "para_configured": True,
         },
     )
+    monkeypatch.setattr(
+        bridge, "github", lambda *_: pytest.fail("unapproved work cannot leave the service")
+    )
+    monkeypatch.setattr(
+        repair, "ParaClient", lambda **_: pytest.fail("unapproved work cannot create a worker")
+    )
+    monkeypatch.setattr(
+        admission,
+        "platform_model_admission",
+        lambda: pytest.fail("shared capacity grants no original budget"),
+    )
     route = "/api/service/mac-control/github-pr-tasks"
-    payload = body(source_sha=old, github_issue=5, pull_request=7, source_run_id=99)
+    payload = body(
+        source_sha="a" * 40, github_issue=5, pull_request=7, source_run_id=99, source_run_attempt=2
+    )
     assert client.post(route, json=payload).status_code == 401
     result = client.post(route, headers=auth(), json=payload)
     assert result.status_code == 202, result.text
     task = result.json()["task"]
-    assert task["executor"] == repair.REPAIR_KIND
+    assert task["executor"] == repair.REPAIR_KIND and task["state"] == "awaiting_approval"
+    with factory() as db:
+        original = db.get(MacControlTask, task["id"])
+        frozen = original.request_json, original.request_digest
+    repair.sync(factory)
     assert client.post(route, headers=auth(), json=payload).json()["task"]["id"] == task["id"]
+    assert (
+        client.post(route, headers=auth(), json={**payload, "source_run_attempt": 3}).status_code
+        == 409
+    )
     request_id = str(uuid.UUID(hex=task["id"]))
-    status_url = f"/api/service/mac-control/github-runs/{request_id}"
-    record_url = f"/api/service/mac-control/tasks/{task['id']}"
-    name = f"para-workspace-{request_id}"
-    branch, device = "devfleet/fix", "cloud"
-    monkeypatch.setenv("MODSTORE_PARA_GITHUB_DEVICE_ID", device)
-    initial_run = {
+    status = client.get(f"/api/service/mac-control/github-runs/{request_id}", headers=auth()).json()
+    assert status["status"] == "awaiting_approval" and status["source_run_attempt"] == 2
+    assert status["strategic_budget"] == status["publication_authorization"] == {}
+    with factory() as db:
+        original = db.get(MacControlTask, task["id"])
+        assert (original.request_json, original.request_digest) == frozen
+    for change in (
+        {"source_run_attempt": 0},
+        {"source_run_attempt": -1},
+        {"strategic_budget": {"approved": True}},
+    ):
+        assert client.post(route, headers=auth(), json={**payload, **change}).status_code == 422
+    del payload["source_run_attempt"]
+    assert client.post(route, headers=auth(), json=payload).status_code == 422
+
+
+def test_legacy_published_original_pr_remains_readback_only(setup, monkeypatch):
+    from modstore_server import customer_ticket_github as bridge
+    from modstore_server import para_github_repair as repair
+
+    client, factory = setup
+    branch, commit = "devfleet/original-legacy", "b" * 40
+    with factory() as db:
+        row = accept(
+            db,
+            actor=repair.REPAIR_ACTOR,
+            key="original-legacy",
+            request={
+                "source": repair.REPAIR_KIND,
+                "repository": "owner/repo",
+                "message": "old repair",
+                "github_issue": 5,
+                "pull_request": 7,
+                "source_run_id": 99,
+                "source_sha": "a" * 40,
+            },
+        )
+        task_id, request_id = row.id, str(uuid.UUID(hex=row.id))
+        row.state, row.para_task_id, row.attempt_id = "running", "para-old", "a" * 32
+        row.snapshot_json = json.dumps(
+            {
+                "runner_intent": True,
+                "run_id": 33,
+                "candidate": {
+                    "branch": branch,
+                    "commit_sha": commit,
+                    "request_id": request_id,
+                    "run_id": "33",
+                    "repository": "owner/repo",
+                    "base_sha": "a" * 40,
+                    "task_id": "para-old",
+                    "attempt_id": "a" * 32,
+                },
+            }
+        )
+        db.commit()
+    native = {
         "id": 33,
-        "display_title": name,
+        "display_title": f"para-workspace-{request_id}",
         "event": "workflow_dispatch",
         "path": f".github/workflows/{repair.WORKFLOW}",
         "head_branch": "main",
+        "head_sha": "c" * 40,
         "run_attempt": 1,
-        "repository": {"full_name": repo},
-        "status": "queued",
+        "repository": {"full_name": "owner/repo"},
+        "status": "completed",
+        "conclusion": "success",
     }
-    posted = []
+    reads = []
 
-    def github(method, path, data=None):
-        if method == "POST":
-            posted.append(data["inputs"]["request_id"])
-            assert path.endswith(f"/{repair.WORKFLOW}/dispatches") and data["ref"] == "main"
-            if lost_dispatch_response:
-                raise HTTPException(502)
-            return {"workflow_run_id": 33}
-        if path.endswith("/pulls/7"):
-            return {
-                "state": "open",
-                "draft": False,
-                "head": {"sha": old, "ref": "fix/x", "repo": {"full_name": repo}},
-                "base": {"ref": "main", "repo": {"full_name": repo}},
-            }
-        if path.endswith("/issues/5"):
-            return {
-                "state": "open",
-                "user": {"login": "github-actions[bot]", "type": "Bot"},
-                "labels": [{"name": label} for label in ("ai-implement", "auto-incident")],
-                "body": "- Self-Heal-Run: `99/1`",
-            }
-        if path.endswith("/runs/99"):
-            return {
-                "head_sha": old,
-                "head_branch": "fix/x",
-                "run_attempt": 1,
-                "status": "completed",
-                "conclusion": "failure",
-                "head_repository": {"full_name": repo},
-            }
+    def github(method, path, _body=None):
+        assert method == "GET"
+        reads.append(path)
         if path.endswith("/runs/33"):
-            return initial_run
-        if "/runs?" in path:
-            return {"workflow_runs": [initial_run]}
-        if path.endswith("/runs/33/jobs"):
-            return {"jobs": [{"name": "publish-candidate", "conclusion": "success"}]}
-        if path.endswith(f"/git/ref/heads/{branch}"):
-            return {"object": {"sha": new}}
-        pytest.fail(f"unexpected GitHub call {method} {path}")
-
-    class CloudClient:
-        def __init__(self, *, github_worker):
-            assert github_worker
-
-        def devices(self):
-            return [
-                {
-                    "id": device,
-                    "status": "online",
-                    "lastSeen": datetime.now(UTC).isoformat(),
-                    "tools": [{"toolName": tool, "status": "idle"}],
-                    "capabilities": {
-                        "github_actions": True,
-                        "github_request_id": request_id,
-                        "github_run_id": 33,
-                        "github_run_attempt": 1,
-                        "github_stage": "execute",
-                        "supports_exact_commit": True,
-                    },
-                }
-            ]
-
-        def submit(self, data):
-            assert data["branch"] == old and data["auto_merge"] is False
-            assert data["tool_name"] == tool
-            submitted.append(data["title"])
-            return {"id": "para1"}
-
-        def task(self, task_id):
-            assert task_id == "para1"
-            title = submitted[0]
-            report = {
-                "source": "executor_git_readback",
-                "pushed": False,
-                "publication": "artifact_pending",
-                "base_sha": old,
-                "branch": branch,
-                "task_id": task_id,
-                "subtask_id": "sub1",
-                "attempt_id": title.split(":")[2].split("]")[0],
-                "commit_sha": new,
-                "archive_sha256": "c" * 64,
-                "bundle_sha256": "d" * 64,
-            }
+            return native
+        if path.endswith("/runs/33/attempts/1/jobs?per_page=100"):
             return {
-                "id": task_id,
-                "status": "completed",
-                "title": title,
-                "repo_url": f"https://github.com/{repo}.git",
-                "subTasks": [
+                "total_count": 1,
+                "jobs": [
                     {
-                        "id": "sub1",
-                        "device_id": device,
-                        "branch_name": branch,
+                        "id": 102,
+                        "run_id": 33,
+                        "run_attempt": 1,
+                        "head_sha": native["head_sha"],
+                        "name": "publish-candidate",
                         "status": "completed",
-                        "logs": [{"content": json.dumps(report)}],
-                    },
+                        "conclusion": "success",
+                    }
                 ],
             }
+        if path.endswith(f"/git/ref/heads/{branch}"):
+            return {"object": {"sha": commit}}
+        pytest.fail(f"unexpected legacy observation {path}")
 
-        def close(self):
-            pass
-
-    submitted = []
     monkeypatch.setattr(bridge, "github", github)
-    monkeypatch.setattr(repair, "ParaClient", CloudClient)
-    if pool:
-        repair.sync(factory)
-        assert posted == [] and submitted == []
-        assert client.get(status_url, headers=auth()).json()["model_allocation"] == waiting
-        decision[0] = allocated
-    repair.sync(factory)
-    if pool:
-        assert client.get(status_url, headers=auth()).json()["model_allocation"] == allocated
     monkeypatch.setattr(
-        admission,
-        "platform_model_admission",
-        lambda: pytest.fail("an accepted workflow must retain its original allocation"),
+        repair, "ParaClient", lambda **_: pytest.fail("legacy publication cannot dispatch again")
     )
-    initial_run["status"] = "in_progress"
-    repair.sync(factory)
-    # Changing the policy after acceptance cannot replace the original attempt.
-    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "0" if tool == "opencode" else "1")
-    repair.sync(factory)
-    status = client.get(status_url, headers=auth()).json()
-    assert status["run_id"] == 33 and status["source_sha"] == old
-    assert not status["finished"] and status["publication_candidate"]["commit_sha"] == new
-    initial_run.update(status="completed", conclusion="success")
     repair.sync(factory)
     repair.sync(factory)
-    final = client.get(record_url, headers=auth()).json()["task"]
-    assert (final["state"], final["github_run_id"], final["para_task_id"]) == (
-        "execution_completed",
-        33,
-        "para1",
-    )
-    assert final["execution"]["reports"][0]["report"]["commit_sha"] == new
-    assert posted == [request_id] and len(submitted) == 1
+    final = client.get(f"/api/service/mac-control/tasks/{task_id}", headers=auth()).json()["task"]
+    assert final["state"] == "execution_completed" and final["github_run_id"] == 33
+    assert final["execution"]["reports"][0]["report"]["commit_sha"] == commit
+    assert len(reads) == 3
+    with factory() as db:
+        assert "strategic_request" not in json.loads(db.get(MacControlTask, task_id).snapshot_json)

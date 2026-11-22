@@ -1,7 +1,17 @@
 import copy
+import hashlib
+import io
+import json
 import unittest
+import zipfile
+from unittest.mock import patch
 
-from scripts.ci.verify_modstore_release_approval import verify, verify_running_release
+from scripts.ci.verify_modstore_release_approval import (
+    _archive,
+    read_source_evidence,
+    verify,
+    verify_running_release,
+)
 
 
 class ReleaseApprovalTest(unittest.TestCase):
@@ -70,11 +80,100 @@ class ReleaseApprovalTest(unittest.TestCase):
             ("push", "Legacy push commit message"),
             ("schedule", "Nightly full CI"),
             ("workflow_dispatch", f"CI/CD {self.sha}"),
+            (
+                "workflow_dispatch",
+                f"CI/CD {self.sha} [delivery:749f8800-080f-5f7a-8c94-1c51db98f8b4]",
+            ),
         ]:
             with self.subTest(event=event, title=title):
                 runs = copy.deepcopy(self.runs)
                 runs["ci_run_id"].update(event=event, display_title=title)
                 verify(self.approval, self.sha, "1.0.0.6", runs)
+
+    def test_newer_controller_reads_exact_native_source_before_approval(self):
+        controller = "c" * 40
+        run = {
+            **self.runs["ci_run_id"],
+            "head_sha": controller,
+            "run_attempt": 2,
+            "event": "workflow_dispatch",
+            "run_started_at": "2026-11-22T00:00:00Z",
+            "updated_at": "2026-11-22T00:10:00Z",
+        }
+        report = {
+            "source_sha": self.sha,
+            "test_sha": self.sha,
+            "run_id": "1",
+            "run_attempt": "2",
+            "execution_environment": "github-actions",
+        }
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as bundle:
+            bundle.writestr("business-contract-evidence.json", json.dumps(report))
+        raw = stream.getvalue()
+        artifact = {
+            "id": 91,
+            "name": "backend-combined-2",
+            "expired": False,
+            "workflow_run": {"id": 1, "head_sha": controller},
+            "size_in_bytes": len(raw),
+            "created_at": "2026-11-22T00:05:00Z",
+            "digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+        }
+
+        def api(path):
+            return (
+                {"artifacts": [artifact], "total_count": 1}
+                if "/artifacts?" in path
+                else run
+            )
+
+        with patch("subprocess.check_output", return_value=raw):
+            proof = read_source_evidence(
+                "owner/repo",
+                "ci_run_id",
+                run,
+                self.sha,
+                api=api,
+                read_archive=lambda a: _archive("owner/repo", a),
+            )
+        runs = {**self.runs, "ci_run_id": run}
+        contains = lambda a, b: (a, b) in {(self.sha, controller), (controller, "main")}
+        verify(
+            self.approval,
+            self.sha,
+            "1.0.0.6",
+            runs,
+            source_evidence={"ci_run_id": proof},
+            contains=contains,
+        )
+        for bad_proof, bad_ancestor in (
+            (None, contains),
+            (proof, lambda *_: False),
+            ({**proof, "run_attempt": 1}, contains),
+            ({**proof, "source_sha": controller}, contains),
+        ):
+            with self.assertRaises(ValueError):
+                verify(
+                    self.approval,
+                    self.sha,
+                    "1.0.0.6",
+                    runs,
+                    source_evidence={"ci_run_id": bad_proof},
+                    contains=bad_ancestor,
+                )
+        artifact["digest"] = "sha256:" + "0" * 64
+        with patch("subprocess.check_output", return_value=raw), self.assertRaises(
+            ValueError
+        ):
+            read_source_evidence(
+                "owner/repo",
+                "ci_run_id",
+                run,
+                self.sha,
+                api=api,
+                read_archive=lambda a: _archive("owner/repo", a),
+            )
 
     def test_same_metadata_cannot_attest_different_manual_source(self):
         for event, title in [

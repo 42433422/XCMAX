@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
+import { requestedToolName, pausedByOpenCodePolicy } from './e2e_agent_runtime_policy.mjs';
 
 import {
   activeTaskId,
@@ -39,6 +40,7 @@ test('GitHub worker rejects recovery of a different dispatch on the same Para de
   const source = readFileSync(new URL('./para_e2e_agent.mjs', import.meta.url), 'utf8');
   const queue = [];
   const context = vm.createContext({ process: { env: { GITHUB_ACTIONS: 'true', PARA_GITHUB_REQUEST_ID: 'current' } },
+    agentShutdown: new AbortController(), requestedToolName, pausedByOpenCodePolicy,
     createHash, console: { error: () => {} }, knownSubtasks: new Set(), taskToolName: () => 'codex',
     taskQueuesByTool: new Map([['codex', queue]]), enqueueByPriority, publishToolStatus: () => {}, drainToolQueue: () => {},
   });

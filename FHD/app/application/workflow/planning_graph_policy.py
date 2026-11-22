@@ -12,6 +12,7 @@ from app.application.workflow.workflow_types import (
     WorkflowNode,
     validate_plan_graph,
 )
+from app.utils.deployment import env_flag
 
 
 def filter_registry_for_profile(tool_registry: dict[str, Any], profile: str) -> dict[str, Any]:
@@ -34,6 +35,12 @@ def filter_registry_for_profile(tool_registry: dict[str, Any], profile: str) -> 
         kept_actions: dict[str, Any] = {}
         for aname, ameta in actions.items():
             if not isinstance(ameta, dict):
+                continue
+            if (
+                tool_id == "desktop_automation"
+                and aname in {"computer_observe", "computer_execute"}
+                and not env_flag("XCAGI_COMPUTER_USE_ENABLED")
+            ):
                 continue
             av = str(ameta.get("availability") or "shared").strip().lower()
             if profile == "normal" and av == "pro_only":
@@ -184,10 +191,13 @@ def validate_required_params(plan: PlanGraph, tool_registry: dict[str, Any]) -> 
             if key in (schema.get("required") or []) and params.get(key) in (None, "")
         )
         from app.application.agent_orchestrator.param_references import (
+            host_reference_params,
             validate_plan_references,
         )
 
-        reference_error = validate_plan_references(params, set(node.depends_on or []))
+        reference_error = validate_plan_references(
+            host_reference_params(node.tool_id, node.action, params)[0], set(node.depends_on or [])
+        )
         if reference_error:
             return f"节点 {node.node_id} 参数预检失败：{reference_error}"
         for key in required_params:

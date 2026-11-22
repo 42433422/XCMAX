@@ -22,6 +22,25 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _trace_context(request: Request) -> dict[str, str]:
+    # ServerErrorMiddleware can run after the inner tracing context has unwound.
+    fields = {}
+    for key, width in (("trace_id", 32), ("span_id", 16)):
+        value = getattr(request.state, key, None)
+        if (
+            isinstance(value, str)
+            and re.fullmatch(rf"[0-9a-f]{{{width}}}", value)
+            and int(value, 16)
+        ):
+            fields[key] = value
+    return fields
+
+
+def _trace_headers(request: Request) -> dict[str, str]:
+    trace_id = _trace_context(request).get("trace_id")
+    return {"X-Trace-ID": trace_id} if trace_id else {}
+
+
 def _reviewed_excel_context(request: Request) -> dict:
     """Bound diagnostics to server stages and a safe correlation id, never workbook data."""
     if not request.url.path.startswith("/api/templates/reviewed-excel/"):
@@ -72,12 +91,13 @@ def _reviewed_excel_failure(request: Request, exc: Exception):
     _log_reviewed_excel(context, exc, logging.ERROR)
     return JSONResponse(
         status_code=500,
-        headers={"X-Request-ID": context["request_id"]},
+        headers={"X-Request-ID": context["request_id"], **_trace_headers(request)},
         content={
             "success": False,
             "error_code": "elt_processing_failed",
             "message": "文件处理失败，请核对当前处理状态后重试；若仍失败，请提供请求编号。",
             **context,
+            **_trace_context(request),
         },
     )
 
@@ -167,8 +187,11 @@ def register_exception_handlers(app: FastAPI) -> None:
             )
         return JSONResponse(
             status_code=exc.status_code,
-            headers={"X-Request-ID": context["request_id"]} if context else None,
-            content={**exc.to_dict(request_id=request_id), **context},
+            headers={
+                **({"X-Request-ID": context["request_id"]} if context else {}),
+                **_trace_headers(request),
+            },
+            content={**exc.to_dict(request_id=request_id), **context, **_trace_context(request)},
         )
 
     @app.exception_handler(StarletteHTTPException)
@@ -208,7 +231,8 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             headers={
-                "X-Request-ID": context["request_id"] if context else ensure_request_id(request)
+                "X-Request-ID": context["request_id"] if context else ensure_request_id(request),
+                **_trace_headers(request),
             },
             content={
                 "success": False,
@@ -217,6 +241,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 **(_elt_model_error(exc.detail) if context else {}),
                 "path": request.url.path,
                 **context,
+                **_trace_context(request),
             },
         )
 
@@ -238,7 +263,10 @@ def register_exception_handlers(app: FastAPI) -> None:
             )
         return JSONResponse(
             status_code=422,
-            headers={"X-Request-ID": context["request_id"]} if context else None,
+            headers={
+                **({"X-Request-ID": context["request_id"]} if context else {}),
+                **_trace_headers(request),
+            },
             content={
                 "success": False,
                 "error_code": "validation_error",
@@ -246,6 +274,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "errors": errors,
                 "path": request.url.path,
                 **context,
+                **_trace_context(request),
             },
         )
 
@@ -264,13 +293,14 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
         return JSONResponse(
             status_code=500,
-            headers={"X-Request-ID": request_id},
+            headers={"X-Request-ID": request_id, **_trace_headers(request)},
             content={
                 "success": False,
                 "error_code": "internal_error",
                 "message": "服务器内部错误",
                 "request_id": request_id,
                 "path": request.url.path,
+                **_trace_context(request),
             },
         )
 

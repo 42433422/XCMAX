@@ -693,7 +693,12 @@ def _section_a08(suite: Suite) -> None:
         "A08",
         {"grant_id": grant_id},
         {"status": allowed, "body": allow_body},
-        pub == 200 and allowed == 200 and _data(allow_body).get("success") is True,
+        pub == 200
+        and allowed == 200
+        and _data(allow_body).get("success") is False
+        and _data(allow_body).get("validation_status") == "validated"
+        and _data(allow_body).get("execution_status") == "not_started"
+        and _data(allow_body).get("error_code") == "tool_execution_unbound",
     )
     denied, deny_body = suite.call(
         "POST",
@@ -752,7 +757,9 @@ def _section_a08(suite: Suite) -> None:
         {"roles": ["admin", "employee", "readonly"]},
         {"admin": admin_status, "employee": after_revoke, "readonly": reader_status},
         admin_status == 200
-        and _data(admin_body).get("success") is True
+        and _data(admin_body).get("success") is False
+        and _data(admin_body).get("validation_status") == "validated"
+        and _data(admin_body).get("execution_status") == "not_started"
         and reader_status == 403
         and _err(reader_body).get("code") == "invoke_forbidden",
     )

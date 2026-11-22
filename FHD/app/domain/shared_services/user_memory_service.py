@@ -117,6 +117,16 @@ def memory_store_transaction(
     return wrapped
 
 
+def configured_memory_path() -> Path:
+    """Resolve the existing store configuration without opening or initializing it."""
+    configured_dir = os.environ.get("XCAGI_USER_MEMORY_DIR")
+    memory_dir = Path(configured_dir or MEMORY_DIR)
+    return Path(
+        os.environ.get("XCAGI_USER_MEMORY_JSON_PATH")
+        or (memory_dir / "memory_store.json" if configured_dir else JSON_MEMORY_PATH)
+    )
+
+
 class UserMemoryStore:
     """Legacy singleton facade over the replaceable memory-store port."""
 
@@ -134,13 +144,7 @@ class UserMemoryStore:
     ) -> None:
         if getattr(self, "_initialized", False):
             return
-        configured_dir = os.environ.get("XCAGI_USER_MEMORY_DIR")
-        memory_dir = Path(configured_dir or MEMORY_DIR)
-        configured_path = os.environ.get("XCAGI_USER_MEMORY_JSON_PATH")
-        path = Path(
-            configured_path
-            or (memory_dir / "memory_store.json" if configured_dir else JSON_MEMORY_PATH)
-        )
+        path = configured_memory_path()
         self._repository = (
             repository
             if repository is not None

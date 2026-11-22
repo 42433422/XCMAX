@@ -73,213 +73,202 @@ def test_stock_in_contract_requires_destination_and_valid_quantity(params, accep
 def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> None:
     specs = build_tool_specs_v2()
 
-    read_spec = specs[("business_db", "read")]
-    assert read_spec.risk == "low"
+    def contract(tool, action, risk):
+        spec = specs[(tool, action)]
+        assert spec.risk == risk, (tool, action)
+        return spec
+
+    # Only actions whose implementation cannot publish or persist output may
+    # use the explicit read-only result contract. Analyzer accepts output_json;
+    # OCR request publishes an event, so neither inherits its read siblings.
+    for tool, actions in {
+        "materials": ("list", "query"),
+        "template_extract": ("extract", "view"),
+        "excel_toolkit": ("view", "merged", "styles", "structure"),
+        "ocr": ("recognize", "extract", "analyze", "recognize_and_extract"),
+    }.items():
+        assert all(specs[(tool, action)].read_only for action in actions)
+    for tool, action in (
+        ("ocr", "request"),
+        ("excel_analyzer", "analyze"),
+        ("materials", "create"),
+        ("document_template", "create"),
+        ("generate_office_document", "execute"),
+    ):
+        assert specs[(tool, action)].read_only is False
+
+    read_spec = contract("business_db", "read", "low")
     assert read_spec.read_only is True
     assert read_spec.idempotent is True
     assert read_spec.required_params == ["entity"]
     assert read_spec.input_schema["required"] == ["entity"]
     assert read_spec.permission == "business_db.read"
 
-    write_spec = specs[("business_db", "write")]
-    assert write_spec.risk == "medium"
+    write_spec = contract("business_db", "write", "medium")
     assert write_spec.read_only is False
     assert write_spec.idempotent is False
     assert write_spec.input_schema["properties"]["payload"]["type"] == "object"
 
-    employee_spec = specs[("employee", "execute")]
-    assert employee_spec.risk == "medium"
+    employee_spec = contract("employee", "execute", "medium")
     assert employee_spec.permission == "employee.execute"
     assert "task" in employee_spec.required_params
     assert employee_spec.output_schema["required"] == ["success", "message", "data"]
     assert employee_spec.test_fixtures[0]["input"]["task"] == "Prepare a quote"
 
-    customer_update_spec = specs[("customers", "update")]
-    assert customer_update_spec.risk == "medium"
+    customer_update_spec = contract("customers", "update", "medium")
     assert customer_update_spec.required_params == ["id"]
     assert customer_update_spec.input_schema["required"] == ["id"]
     assert customer_update_spec.test_fixtures[0]["input"]["id"] == 7
 
-    customer_delete_spec = specs[("customers", "delete")]
-    assert customer_delete_spec.risk == "high"
+    customer_delete_spec = contract("customers", "delete", "high")
     assert customer_delete_spec.permission == "customer.edit"
 
-    customer_batch_spec = specs[("customers", "batch_delete")]
-    assert customer_batch_spec.risk == "high"
+    customer_batch_spec = contract("customers", "batch_delete", "high")
     assert customer_batch_spec.input_schema["required"] == ["ids"]
     assert customer_batch_spec.test_fixtures[0]["output"]["deleted"] == 2
 
-    product_update_spec = specs[("products", "update")]
-    assert product_update_spec.risk == "medium"
+    product_update_spec = contract("products", "update", "medium")
     assert product_update_spec.required_params == ["id"]
     assert product_update_spec.input_schema["required"] == ["id"]
     assert product_update_spec.test_fixtures[0]["input"]["id"] == 7
 
-    product_delete_spec = specs[("products", "delete")]
-    assert product_delete_spec.risk == "high"
+    product_delete_spec = contract("products", "delete", "high")
     assert product_delete_spec.permission == "tool.products.delete"
 
-    product_batch_spec = specs[("products", "batch_create")]
-    assert product_batch_spec.risk == "high"
+    product_batch_spec = contract("products", "batch_create", "high")
     assert product_batch_spec.input_schema["required"] == ["products"]
     assert product_batch_spec.test_fixtures[0]["output"]["data"]["success_count"] == 1
 
-    print_event_spec = specs[("business_event", "print_label")]
-    assert print_event_spec.risk == "high"
+    print_event_spec = contract("business_event", "print_label", "high")
     assert print_event_spec.idempotent is False
     assert print_event_spec.required_params == ["document_name"]
     assert print_event_spec.output_schema["required"] == ["success", "job_id", "event"]
 
-    inventory_event_spec = specs[("business_event", "inventory_update")]
-    assert inventory_event_spec.risk == "high"
+    inventory_event_spec = contract("business_event", "inventory_update", "high")
     assert inventory_event_spec.input_schema["required"] == ["product_id"]
     assert inventory_event_spec.test_fixtures[0]["output"]["event"] == "inventory.changed"
 
-    stock_in_spec = specs[("inventory", "stock_in")]
-    assert stock_in_spec.risk == "high"
+    stock_in_spec = contract("inventory", "stock_in", "high")
     assert stock_in_spec.input_schema["required"] == ["quantity"]
     assert stock_in_spec.test_fixtures[0]["output"]["data"]["transaction_type"] == "in"
 
-    warehouse_delete_spec = specs[("inventory", "delete_warehouse")]
-    assert warehouse_delete_spec.risk == "high"
+    warehouse_delete_spec = contract("inventory", "delete_warehouse", "high")
     assert warehouse_delete_spec.permission == "tool.inventory.delete_warehouse"
 
-    purchase_approve_spec = specs[("purchase", "approve_order")]
-    assert purchase_approve_spec.risk == "high"
+    purchase_approve_spec = contract("purchase", "approve_order", "high")
     assert purchase_approve_spec.required_params == ["order_id"]
     assert purchase_approve_spec.permission == "tool.purchase.approve_order"
     assert purchase_approve_spec.test_fixtures[0]["input"]["approver"] == "manager"
 
-    purchase_inbound_spec = specs[("purchase", "create_inbound")]
-    assert purchase_inbound_spec.risk == "high"
+    purchase_inbound_spec = contract("purchase", "create_inbound", "high")
     assert purchase_inbound_spec.input_schema["properties"]["items"]["type"] == "array"
     assert purchase_inbound_spec.test_fixtures[0]["output"]["data"]["order_id"] == 9
 
-    finance_create_spec = specs[("finance", "create_transaction")]
-    assert finance_create_spec.risk == "high"
+    finance_create_spec = contract("finance", "create_transaction", "high")
     assert finance_create_spec.required_params == ["transaction_type", "amount"]
     assert finance_create_spec.input_schema["required"] == ["transaction_type", "amount"]
     assert finance_create_spec.test_fixtures[0]["input"]["transaction_type"] == "expense"
 
-    finance_delete_spec = specs[("finance", "delete_transaction")]
-    assert finance_delete_spec.risk == "high"
+    finance_delete_spec = contract("finance", "delete_transaction", "high")
     assert finance_delete_spec.permission == "tool.finance.delete_transaction"
     assert finance_delete_spec.test_fixtures[0]["input"]["transaction_id"] == 31
 
     assert specs[("shipment_orders", "generate")].permission == "shipment.create"
-    shipment_create_spec = specs[("shipment_records", "create")]
-    assert shipment_create_spec.risk == "high"
+    shipment_create_spec = contract("shipment_records", "create", "high")
     assert shipment_create_spec.required_params == ["unit_name"]
     assert len(shipment_create_spec.input_schema["allOf"]) == 2
     assert shipment_create_spec.test_fixtures[0]["output"]["data"]["id"] == 7
 
-    shipment_update_spec = specs[("shipment_records", "update")]
-    assert shipment_update_spec.risk == "medium"
-    assert shipment_update_spec.permission == "tool.shipment_records.update"
+    shipment_update_spec = contract("shipment_records", "update", "medium")
+    assert shipment_update_spec.permission == "shipment.edit"
+    assert shipment_update_spec.receipt_permission == "tool.shipment_records.update"
 
-    shipment_delete_spec = specs[("shipment_records", "delete")]
-    assert shipment_delete_spec.risk == "high"
+    shipment_delete_spec = contract("shipment_records", "delete", "high")
     assert shipment_delete_spec.test_fixtures[0]["output"]["deleted_count"] == 1
 
-    shipment_order_generate_spec = specs[("shipment_orders", "generate")]
-    assert shipment_order_generate_spec.risk == "high"
+    shipment_order_generate_spec = contract("shipment_orders", "generate", "high")
     assert shipment_order_generate_spec.permission == "shipment.create"
     assert shipment_order_generate_spec.required_params == ["unit_name", "products"]
     assert shipment_order_generate_spec.input_schema["required"] == ["unit_name", "products"]
     assert shipment_order_generate_spec.test_fixtures[0]["output"]["record_id"] == 7
 
-    shipment_order_batch_spec = specs[("shipment_orders", "generate_batch")]
-    assert shipment_order_batch_spec.risk == "high"
+    shipment_order_batch_spec = contract("shipment_orders", "generate_batch", "high")
     assert shipment_order_batch_spec.input_schema["required"] == ["shipments"]
     assert shipment_order_batch_spec.output_schema["required"] == ["success", "data"]
 
-    shipment_order_print_spec = specs[("shipment_orders", "print")]
-    assert shipment_order_print_spec.risk == "high"
-    assert shipment_order_print_spec.permission == "tool.shipment_orders.print"
+    shipment_order_print_spec = contract("shipment_orders", "print", "high")
+    assert shipment_order_print_spec.permission == "shipment.edit"
+    assert shipment_order_print_spec.receipt_permission == "tool.shipment_orders.print"
     assert shipment_order_print_spec.output_schema["required"] == [
         "success",
         "file_path",
         "updated",
     ]
 
-    shipment_order_clear_spec = specs[("shipment_orders", "clear_shipment")]
-    assert shipment_order_clear_spec.risk == "high"
+    shipment_order_clear_spec = contract("shipment_orders", "clear_shipment", "high")
     assert shipment_order_clear_spec.required_params == ["purchase_unit"]
     assert shipment_order_clear_spec.input_schema["required"] == ["purchase_unit"]
     assert shipment_order_clear_spec.test_fixtures[0]["output"]["cleared_count"] == 3
 
-    shipment_order_set_sequence_spec = specs[("shipment_orders", "set_sequence")]
-    assert shipment_order_set_sequence_spec.risk == "high"
+    shipment_order_set_sequence_spec = contract("shipment_orders", "set_sequence", "high")
     assert shipment_order_set_sequence_spec.required_params == ["sequence"]
     assert shipment_order_set_sequence_spec.test_fixtures[0]["input"]["sequence"] == 12
 
-    shipment_order_reset_sequence_spec = specs[("shipment_orders", "reset_sequence")]
-    assert shipment_order_reset_sequence_spec.risk == "high"
+    shipment_order_reset_sequence_spec = contract("shipment_orders", "reset_sequence", "high")
     assert shipment_order_reset_sequence_spec.required_params == []
     assert shipment_order_reset_sequence_spec.test_fixtures[0]["output"]["sequence"] == 1
 
-    shipment_order_clear_all_spec = specs[("shipment_orders", "clear_all")]
-    assert shipment_order_clear_all_spec.risk == "high"
-    assert shipment_order_clear_all_spec.permission == "tool.shipment_orders.clear_all"
+    shipment_order_clear_all_spec = contract("shipment_orders", "clear_all", "high")
+    assert shipment_order_clear_all_spec.permission == "shipment.edit"
+    assert shipment_order_clear_all_spec.receipt_permission == "tool.shipment_orders.clear_all"
     assert shipment_order_clear_all_spec.test_fixtures[0]["output"]["deleted_count"] == 5
 
-    shipment_order_delete_spec = specs[("shipment_orders", "delete")]
-    assert shipment_order_delete_spec.risk == "high"
+    shipment_order_delete_spec = contract("shipment_orders", "delete", "high")
     assert shipment_order_delete_spec.input_schema["required"] == ["id"]
     assert shipment_order_delete_spec.test_fixtures[0]["output"]["deleted_id"] == 7
 
-    products_batch_delete_spec = specs[("products", "batch_delete")]
-    assert products_batch_delete_spec.risk == "high"
+    products_batch_delete_spec = contract("products", "batch_delete", "high")
     assert products_batch_delete_spec.required_params == ["ids"]
     assert products_batch_delete_spec.input_schema["required"] == ["ids"]
     assert products_batch_delete_spec.test_fixtures[0]["output"]["deleted"] == 2
 
-    print_document_spec = specs[("print", "print_document")]
-    assert print_document_spec.risk == "high"
+    print_document_spec = contract("print", "print_document", "high")
     assert print_document_spec.required_params == ["file_path"]
     assert print_document_spec.permission == "tool.print.print_document"
     assert print_document_spec.test_fixtures[0]["input"]["printer_name"] == "DocPrinter"
 
-    print_label_spec = specs[("print", "print_label")]
-    assert print_label_spec.risk == "high"
+    print_label_spec = contract("print", "print_label", "high")
     assert print_label_spec.input_schema["required"] == ["file_path"]
     assert print_label_spec.test_fixtures[0]["output"]["require_confirm"] is False
 
-    print_test_spec = specs[("print", "test")]
-    assert print_test_spec.risk == "medium"
+    print_test_spec = contract("print", "test", "medium")
     assert print_test_spec.required_params == ["printer_name"]
     assert print_test_spec.test_fixtures[0]["output"]["printer_name"] == "DocPrinter"
 
-    print_selection_spec = specs[("print", "save_printer_selection")]
-    assert print_selection_spec.risk == "medium"
+    print_selection_spec = contract("print", "save_printer_selection", "medium")
     assert print_selection_spec.permission == "tool.print.save_printer_selection"
     assert print_selection_spec.test_fixtures[0]["output"]["document_printer"] == "DocPrinter"
 
-    print_workflow_spec = specs[("print", "workflow_label_dispatch")]
-    assert print_workflow_spec.risk == "high"
+    print_workflow_spec = contract("print", "workflow_label_dispatch", "high")
     assert print_workflow_spec.required_params == ["model_number"]
     assert print_workflow_spec.input_schema["required"] == ["model_number"]
     assert print_workflow_spec.test_fixtures[0]["input"]["quantity"] == 2
 
-    shipment_event_spec = specs[("business_event", "shipment_create")]
-    assert shipment_event_spec.risk == "high"
+    shipment_event_spec = contract("business_event", "shipment_create", "high")
     assert shipment_event_spec.output_schema["required"] == ["success", "event", "published"]
     assert shipment_event_spec.test_fixtures[0]["output"]["published"] is True
 
-    printer_spec = specs[("system_maintenance", "set_default_printer")]
-    assert printer_spec.risk == "medium"
+    printer_spec = contract("system_maintenance", "set_default_printer", "medium")
     assert printer_spec.idempotent is False
     assert printer_spec.required_params == ["printer_name"]
     assert printer_spec.input_schema["required"] == ["printer_name"]
 
-    restore_spec = specs[("system_maintenance", "restore_database")]
-    assert restore_spec.risk == "high"
+    restore_spec = contract("system_maintenance", "restore_database", "high")
     assert restore_spec.required_params == ["backup_file"]
     assert restore_spec.timeout_seconds == 120
     assert restore_spec.test_fixtures[0]["input"]["backup_file"] == "backup.sql"
 
-    invalidate_spec = specs[("system_maintenance", "invalidate_performance_cache")]
-    assert invalidate_spec.risk == "medium"
+    invalidate_spec = contract("system_maintenance", "invalidate_performance_cache", "medium")
     assert invalidate_spec.input_schema["properties"]["keys"]["type"] == "array"
     assert invalidate_spec.test_fixtures[0]["output"]["data"]["deleted_count"] == 1
 
@@ -469,10 +458,15 @@ def test_build_tool_specs_v2_exposes_aiopen_mcp_contracts() -> None:
     assert chat_spec.idempotent is False
     assert chat_spec.required_params == ["message"]
 
+    click = specs[("aiopen", "ui_click")]
+    assert click.risk == "high" and click.idempotent is False and click.read_only is False
+    snapshot = specs[("aiopen", "ui_snapshot")]
+    assert snapshot.risk == "low" and snapshot.idempotent is True and snapshot.read_only is True
+
     valid_ui_type = validate_tool_call(
         "aiopen",
         "ui_type",
-        {"selector": "#message", "text": "hello"},
+        {"session_id": "screen-session-1", "selector": "#message", "text": "hello"},
     )
     assert valid_ui_type.ok is True
 
@@ -488,7 +482,9 @@ def test_build_tool_specs_v2_exposes_aiopen_mcp_contracts() -> None:
         "type": "text/plain",
     }
     assert validate_tool_call("aiopen", "ui_upload", upload).ok
-    invalid_upload = validate_tool_call("aiopen", "ui_upload", {"files": [{"text": "sample"}]})
+    invalid_upload = validate_tool_call(
+        "aiopen", "ui_upload", {"session_id": "screen-session-1", "files": [{"text": "sample"}]}
+    )
     assert not invalid_upload.ok
     assert "name" in invalid_upload.message
 
@@ -711,12 +707,14 @@ def test_schema_failure_only_releases_a_certain_read_claim(
         result = execute_with_tool_deadline(
             executor, step, runtime_context=context, timeout_seconds=60
         )
-        evidence = result["reconciliation_evidence"] if unknown else result
+        evidence = result.get("reconciliation_evidence", result)
         assert evidence["error_code"] == "output_schema_validation_failed"
         assert result["success"] is False
         if unknown:
             assert result["outcome"] == "unknown" and result["retryable"] is False
             assert result["reconciliation_required"] is True
+            if not unknown_io:
+                assert result["error_code"] == "output_schema_validation_failed"
             tool_permission.drop_process_idempotency_memory()
             replay = execute_with_tool_deadline(
                 executor, step, runtime_context=context, timeout_seconds=60
@@ -841,3 +839,37 @@ def test_shipment_order_generate_uses_shipment_create_permission(trusted_actor, 
     viewer = trusted_actor(permissions=["shipment.view"], role="viewer")
     denied = actor_tool_denial("shipment_orders", "generate", viewer.context, {})
     assert denied is not None and denied["reason"] == "permission_denied"
+
+
+@pytest.mark.parametrize(
+    "tool_id,action,permission",
+    [
+        ("shipment_records", "create", "shipment.edit"),
+        ("shipment_records", "update", "shipment.edit"),
+        ("shipment_records", "delete", "shipment.edit"),
+        ("shipment_orders", "generate", "shipment.create"),
+        ("shipment_orders", "generate_batch", "shipment.create"),
+        ("shipment_orders", "print", "shipment.edit"),
+        ("shipment_orders", "clear_shipment", "shipment.edit"),
+        ("shipment_orders", "set_sequence", "shipment.edit"),
+        ("shipment_orders", "reset_sequence", "shipment.edit"),
+        ("shipment_orders", "clear_all", "shipment.edit"),
+        ("shipment_orders", "delete", "shipment.edit"),
+    ],
+)
+def test_shipment_action_permissions_use_the_live_seeded_business_grant(
+    trusted_actor, monkeypatch, tool_id, action, permission
+):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+    from app.db.models.permission import DEFAULT_PERMISSIONS
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    assert permission in {row["code"] for row in DEFAULT_PERMISSIONS}
+    assert get_workflow_tool_registry()[tool_id]["actions"][action]["permission"] == permission
+    assert get_tool_action_spec(tool_id, action).permission == permission
+    editor = trusted_actor(permissions=[permission])
+    viewer = trusted_actor(role="viewer", permissions=["shipment.view"])
+    assert actor_tool_denial(tool_id, action, editor.context, {}) is None
+    denial = actor_tool_denial(tool_id, action, viewer.context, {})
+    assert denial is not None and denial["reason"] == "permission_denied"

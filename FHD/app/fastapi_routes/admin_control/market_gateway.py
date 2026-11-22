@@ -106,16 +106,17 @@ class MarketGateway:
                         "local yuangon onboarding failed path=%s: %s", path, exc
                     )
                     return JSONResponse(
-                        {"success": False, "message": f"本地元工登记服务不可用: {exc}"},
+                        {"success": False, "message": "本地元工登记服务不可用"},
                         status_code=502,
                     )
         try:
             transport = self._transport()
         except self._errors.recoverable() as exc:
+            self._errors.logger.warning("market account proxy unavailable: %s", exc)
             if sensitive:
                 return _platform_config_response(None, 503)
             return JSONResponse(
-                {"success": False, "message": f"市场账号代理不可用: {exc}"}, status_code=500
+                {"success": False, "message": "市场账号代理不可用"}, status_code=500
             )
         if sensitive:
             try:

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -24,6 +23,7 @@ from app.domain.app_pure.butler_identity_catalog import (
     get_identity_affinities,
     pick_primary_identity,
 )
+from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class ButlerProfileService:
             mbti_jp=DEFAULT_MBTI_JP,
             mbti_type=mbti_type,
             mbti_confidence=0.3,
-            last_inferred_at=datetime.utcnow(),
+            last_inferred_at=utc_now_naive(),
             interaction_count=0,
         )
         self.db.add(profile)
@@ -163,7 +163,7 @@ class ButlerProfileService:
         if mbti_confidence is not None:
             profile.mbti_confidence = max(0.0, min(1.0, mbti_confidence))
 
-        profile.last_inferred_at = datetime.utcnow()
+        profile.last_inferred_at = utc_now_naive()
 
         # 更新身份亲和度向量
         affinities = get_identity_affinities(profile.mbti_type)

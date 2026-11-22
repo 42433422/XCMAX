@@ -11,6 +11,7 @@ vi.mock('./core', () => ({
 }))
 
 import agentRunsApi from './agentRuns'
+import { writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
 
 describe('agentRunsApi', () => {
   it('downloads artifacts through the authenticated client with encoded identities', async () => {
@@ -99,5 +100,22 @@ describe('agentRunsApi', () => {
     }, { timeoutMs: 15000 })
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/retry', {}, { timeoutMs: 15000 })
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/cancel', {}, { timeoutMs: 15000 })
+  })
+
+  it('requests read-only result verification without treating transport success as acceptance', async () => {
+    const response = { success: true, verification: { status: 'inconclusive', accepted: false, steps: [] } }
+    apiMock.post.mockResolvedValueOnce(response)
+
+    expect(await agentRunsApi.verifyRun('run/1')).toBe(response)
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/verify', {}, { timeoutMs: 30_000, quiet: true, headers: {} })
+    expect(apiMock.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('binds a verification request to the current Mod through the existing authenticated client', async () => {
+    writeActiveExtensionModIdToStorage('business-mod')
+    await agentRunsApi.verifyRun('run-1')
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run-1/verify', {}, {
+      timeoutMs: 30_000, quiet: true, headers: { 'X-XCAGI-Active-Mod-Id': 'business-mod' },
+    })
   })
 })

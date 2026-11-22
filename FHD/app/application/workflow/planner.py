@@ -14,7 +14,12 @@ from app.infrastructure.observability.metrics import observe_plan_stage
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .llm_plan_generation import LlmPlanGeneration, PlannerCompletion, PlannerConversation
+from .llm_plan_generation import (
+    LlmPlanGeneration,
+    PlannerCompletion,
+    PlannerConversation,
+    _mark_incomplete_response,
+)
 from .model_response_metrics import model_response_scope, record_response_error
 from .planner_llm_gateway import request_planner_completion
 from .planner_prompt_profile import attachment_import_manifest
@@ -22,6 +27,7 @@ from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
+from .tool_calling import completion_is_incomplete
 from .tool_profile import resolve_tool_execution_profile
 from .workflow_types import PlanGraph, WorkflowNode, plan_fingerprint, validate_plan_graph
 
@@ -158,7 +164,9 @@ class LLMWorkflowPlanner:
         from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
         context = dict(context or {})
+        context.pop("_planning_snapshot", None)
         context.pop("_planning_failure_code", None)
+        context.pop("_planning_partial_reply", None)
         for key in (
             "planning_failure_reason",
             "planning_failure_kind",
@@ -167,10 +175,9 @@ class LLMWorkflowPlanner:
         ):
             context.pop(key, None)
         context.pop("prior_conversation", None)
-        session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
-        plan_id = (
-            f"wp-{session_key}-{uuid.uuid4().hex[:8]}" if session_key else f"wp-{uuid.uuid4().hex}"
-        )
+        # A plan id is persisted and exposed in audit logs; it must not contain
+        # conversation identifiers or authentication material from the context.
+        plan_id = f"wp-{uuid.uuid4().hex}"
         rejected = rejected_sql_plan(message, plan_id)
         if rejected is not None:
             return rejected
@@ -334,8 +341,6 @@ class LLMWorkflowPlanner:
                     context["planning_failure_reason"] = str(errors[-1].get("message") or "")
                 logger.warning("计划修复未成功，本轮不执行: %s", repair_trace.get("errors"))
         if planned is not None and planned.metadata.get("planning_tier") != "light":
-            from app.application.ai_chat.dialogue_memory import recent_conversation_messages
-
             from .goal_coverage import review_goal_coverage
 
             # Review the final, repaired graph, never the planner's own claim of completeness.
@@ -346,12 +351,8 @@ class LLMWorkflowPlanner:
                     break
                 with model_rate_limit_scope(context), model_response_scope():
                     try:
-                        review_context = {
-                            **context,
-                            "prior_conversation": recent_conversation_messages(context, limit=12),
-                        }
                         review, error = review_goal_coverage(
-                            planned, message, review_context, self.complete_messages
+                            planned, message, context, self.complete_messages
                         )
                     except RECOVERABLE_ERRORS:
                         review, error = None, "目标覆盖核对暂不可用，本轮未执行任何操作"
@@ -440,6 +441,10 @@ class LLMWorkflowPlanner:
             plan_type=PlanGraph,
             node_type=WorkflowNode,
         )
+        if context.get("_planning_failure_code") == "model_response_incomplete":
+            # Preserve published text for the failed chat receipt, after graph
+            # logging so conversation bodies do not enter durable plan logs.
+            final_plan.metadata["partial_reply"] = context.get("_planning_partial_reply") or ""
         if planned is None or (final_plan.metadata or {}).get("planning_rejected"):
             valid_outcome = "rejected"
         elif repair_trace.get("first_pass_valid"):
@@ -475,7 +480,7 @@ class LLMWorkflowPlanner:
         completion = (
             self._completion if self._completion is not None else request_planner_completion
         )
-        return completion(
+        response = completion(
             ai_service=self._ai_service,
             context=context,
             messages=messages,
@@ -484,6 +489,11 @@ class LLMWorkflowPlanner:
             max_tokens=max_tokens,
             **extra,
         )
+        if completion_is_incomplete(response):
+            if context is not None:
+                _mark_incomplete_response(context)
+            return None
+        return response
 
     def _plan_with_llm(
         self,

@@ -12,6 +12,92 @@ function ev(event_type: AgentRunEvent['event_type'], overrides: Partial<AgentRun
 }
 
 describe('buildAgentRunTraceFromEvents', () => {
+  it('keeps trace identity, errors and zero durations across failed attempts and a successful retry', () => {
+    const trace = buildAgentRunTraceFromEvents([
+      ev('run.created', { trace_id: 'trace-a', data: { task_id: 'task-a' } }),
+      ev('tool.started', { data: { trace_id: 'trace-a', span_id: 'span-a', node_id: 'a' } }),
+      ev('tool.failed', { data: { node_id: 'a', error_code: 'tool_timeout', error_type: 'TimeoutError', duration_ms: 0 } }),
+      ev('tool.started', { data: { node_id: 'b' } }),
+      ev('step.retry_scheduled', { data: { node_id: 'a' } }),
+      ev('step.llm_repair_requested', { data: { node_id: 'a' }, message: '重试前核对参数' }),
+      ev('observation.recorded', { data: { node_id: 'a' }, message: '已确认未写入' }),
+      ev('tool.started', { data: { node_id: 'a', trace_id: 'trace-a', span_id: 'span-retry', attempt: 2 } }),
+      ev('tool.completed', { data: { node_id: 'a', duration_ms: 0 } }),
+      ev('tool.completed', { data: { node_id: 'b', duration_ms: 1 } }),
+      ev('run.completed', { data: { trace_id: 'trace-a', duration_ms: 100 } }),
+    ], 'run_test')
+    expect(trace).toMatchObject({ trace_id: 'trace-a', status: 'success', total_duration_ms: 100 })
+    expect(trace.phases[1]).toMatchObject({ span_id: 'span-a', status: 'failed', error_code: 'tool_timeout',
+      error_type: 'TimeoutError', duration_ms: 0, retries: 1, repair_history: ['重试前核对参数'], observations: ['已确认未写入'] })
+    expect(trace.phases[2]).toMatchObject({ node_id: 'b', retries: 0, repair_history: [] })
+    expect(trace.phases[3]).toMatchObject({ span_id: 'span-retry', attempt: 2, status: 'success', duration_ms: 0 })
+  })
+
+  it.each([undefined, null, '', -1, NaN, Infinity])('does not turn invalid duration %s into a measurement', duration_ms => {
+    const trace = buildAgentRunTraceFromEvents([ev('run.failed', { data: { duration_ms } })], 'run_test')
+    expect(trace.total_duration_ms).toBeUndefined()
+    expect(trace.phases[0].duration_ms).toBeUndefined()
+  })
+
+  it('does not treat a transport done event as business completion', () => {
+    const trace = buildAgentRunTraceFromEvents([
+      ev('tool.started', { data: { node_id: 'a' } }), ev('done', { data: { success: true } }),
+    ], 'run_test')
+    expect(trace).toMatchObject({ status: 'running', terminal: false })
+    expect(trace.phases[0].status).toBe('running')
+  })
+
+  it('deduplicates reconnect events and matches overlapping attempts by call identity', () => {
+    const retry = ev('step.retry_scheduled', { data: { node_id: 'a' } })
+    const trace = buildAgentRunTraceFromEvents([
+      ev('tool.started', { data: { node_id: 'a', call_id: 'first' } }), retry, retry,
+      ev('tool.started', { data: { node_id: 'a', call_id: 'second' } }),
+      ev('tool.failed', { data: { node_id: 'a', call_id: 'first', error_code: 'timeout' } }),
+      ev('tool.completed', { data: { node_id: 'a', call_id: 'second' } }),
+    ], 'run_test')
+    expect(trace.phases).toHaveLength(2)
+    expect(trace.phases[0]).toMatchObject({ call_id: 'first', status: 'failed', retries: 1 })
+    expect(trace.phases[1]).toMatchObject({ call_id: 'second', status: 'success', retries: 0 })
+  })
+
+  it('clears aggregate failure codes after recovery and updates the terminal row only with final measured duration', () => {
+    const events = [
+      ev('run.observed', { data: { phase: 'execution', status: 'failed', duration_ms: 100,
+        error_code: 'agent_phase_failed', error_type: 'TimeoutError', duration_scope: 'active', trace_id: 'legacy-run-observation' } }),
+      ev('run.observed', { data: { phase: 'planning', status: 'planning', duration_ms: 120, phase_duration_ms: 20 } }),
+      ev('run.completed'),
+    ]
+    const before = buildAgentRunTraceFromEvents(events, 'run_test')
+    expect(before.phases.at(-1)?.duration_ms).toBeUndefined()
+    expect(before.error_code).toBeUndefined()
+    expect(before.error_type).toBeUndefined()
+    events.push(ev('run.observed', { data: { phase: 'execution', status: 'completed', duration_ms: 400, duration_scope: 'active', trace_id: 'a'.repeat(32) } }))
+    const trace = buildAgentRunTraceFromEvents(events, 'run_test')
+    expect(trace).toMatchObject({ status: 'success', total_duration_ms: 400, trace_id: 'a'.repeat(32) })
+    expect(trace.phases.at(-1)?.duration_ms).toBe(400)
+    expect(trace.error_code).toBeUndefined()
+    expect(trace.error_type).toBeUndefined()
+    expect(trace.phases[0].error_code).toBe('agent_phase_failed')
+    expect(trace.phases[0].trace_id).toBe('legacy-run-observation')
+    const observedOnly = buildAgentRunTraceFromEvents([events[0], events[3]], 'run_test')
+    expect(observedOnly.status).toBe('success')
+    expect(observedOnly.error_code).toBeUndefined()
+    expect(observedOnly.error_type).toBeUndefined()
+  })
+
+  it.each([
+    ['completed', 'success', true], ['failed', 'failed', true], ['blocked', 'blocked', false],
+    ['waiting_user', 'waiting', false], ['paused', 'paused', false], ['cancelled', 'cancelled', true],
+    ['rejected', 'blocked', true], ['', 'running', false],
+  ])('observed status %s records active time without assuming completion', (status, expected, terminal) => {
+    const trace = buildAgentRunTraceFromEvents([
+      ev('planner.started'),
+      ev('run.observed', { data: { status, duration_ms: 0, duration_scope: 'active', trace_id: 'trace-a', task_id: 'task-a' } }),
+    ], 'run_test')
+    expect(trace).toMatchObject({ status: expected, terminal, total_duration_ms: 0, duration_scope: 'active',
+      trace_id: 'trace-a', task_id: 'task-a' })
+  })
+
   it('returns running status with empty phases when no events', () => {
     const trace = buildAgentRunTraceFromEvents([], 'run_empty')
     expect(trace.status).toBe('running')

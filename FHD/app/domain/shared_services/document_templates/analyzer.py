@@ -98,8 +98,10 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
         file_ext = os.path.splitext(file.filename)[1].lower()
 
         # 打包后 __file__ 位于签名 bundle 内部（只读），上传文件必须落用户数据目录
-        upload_dir = os.path.join(get_upload_dir(), "templates")
-        os.makedirs(upload_dir, exist_ok=True)
+        upload_dir = getattr(file, "upload_directory", None)
+        if not isinstance(upload_dir, str) or not upload_dir:
+            upload_dir = os.path.join(get_upload_dir(), "templates")
+            os.makedirs(upload_dir, exist_ok=True)
 
         unique_filename = f"{uuid.uuid4().hex}{file_ext}"
         file_path = os.path.join(upload_dir, unique_filename)

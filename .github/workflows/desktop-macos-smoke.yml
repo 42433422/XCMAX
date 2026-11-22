@@ -12,6 +12,7 @@ on:
     branches: [main, master]
     paths:
       - "FHD/desktop/**"
+      - ".github/workflows/desktop-macos-smoke.yml"
   workflow_dispatch:
     inputs:
       full_build:
@@ -53,21 +54,21 @@ jobs:
       - name: TypeScript build
         run: npm run build
 
-      - name: Signed updater, rollback and workspace capability E2E
-        run: npx playwright test e2e/update-rollback.e2e.spec.ts e2e/workspace-capability.e2e.spec.ts --reporter=line
+      - name: Desktop CSP and navigation contracts
+        run: npm test -- session-security.test.ts desktop-navigation.test.ts
 
-      - name: Electron smoke (headless CI)
-        env:
-          ELECTRON_DISABLE_SECURITY_WARNINGS: "true"
+      - name: Signed updater, rollback and desktop launch E2E
         run: |
           npx electron --version
-          # 无显示器环境：短时启动后退出；0=正常退出, 124=GNU timeout, 142=perl alarm(SIGALRM)
-          perl -e 'alarm 25; exec @ARGV' npx electron . --no-sandbox || code=$?
-          if [ "${code:-0}" -eq 0 ] || [ "${code:-0}" -eq 124 ] || [ "${code:-0}" -eq 142 ]; then
-            echo "[smoke] electron . exited (code=${code:-0}) — OK for CI"
-            exit 0
-          fi
-          exit "${code}"
+          npx playwright test e2e/update-rollback.e2e.spec.ts e2e/desktop.e2e.spec.ts --reporter=line
+
+      - name: Upload desktop test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: FHD/desktop/test-results/
+          if-no-files-found: ignore
 
   # 手动触发 full_build 时：双架构矩阵各出 enterprise SKU dmg + 可交付冒烟
   macos-deliverable-build:

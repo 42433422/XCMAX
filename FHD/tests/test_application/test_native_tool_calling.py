@@ -55,7 +55,7 @@ def _native(graph=None, *, name="SubmitWorkflowPlan", arguments=None):
                             },
                         }
                     ]
-                }
+                },
             }
         ]
     }
@@ -81,6 +81,71 @@ def test_native_and_json_use_identical_validation():
     native = _decode_completion(native_plan_payload(_native(graph)))
     text = _decode_completion({"choices": [{"message": {"content": json.dumps(graph)}}]})
     assert native == text
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "向量表示一组数值，可以用于比较语义相似度。",
+        "```python\nitems = [1, 2]\nprint(items[0])\n```",
+        "春风拂过窗前，远山渐渐明亮。",
+    ],
+)
+def test_native_auto_text_uses_typed_reply_without_shape_repair(content, monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    completion = Mock(
+        return_value={"choices": [{"finish_reason": "stop", "message": {"content": content}}]}
+    )
+    plan = _generator(completion).generate("p1", "u1", "请解释并给出示例", {}, {})
+    assert plan.metadata["response_mode"] == "reply"
+    assert plan.metadata["reply"] == content
+    assert len(plan.nodes) == 1
+    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("conversation", "reply")
+    assert plan.nodes[0].params == {"response": content}
+    completion.assert_called_once()
+    assert completion.call_args.kwargs["tool_choice"] == "auto"
+
+
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("prefix", ["", "```json\n", "```JSON\n", "```\n"])
+def test_native_text_does_not_reinterpret_structured_or_truncated_plans(
+    native, prefix, monkeypatch
+):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1" if native else "0")
+    completion = Mock(
+        return_value={
+            "choices": [{"message": {"content": prefix + '{"mode":"workflow","nodes":['}}]
+        }
+    )
+    assert _generator(completion).generate("p1", "u1", "查询并导出", {}, {}) is None
+
+
+def test_plain_text_is_not_native_when_tools_were_not_offered(monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "0")
+    completion = Mock(return_value={"choices": [{"message": {"content": "普通文本"}}]})
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    assert "tools" not in completion.call_args.kwargs
+
+
+def test_legacy_completion_without_tool_parameters_keeps_json_contract(monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    plain = {"choices": [{"message": {"content": "普通文本"}}]}
+    completion = Mock(side_effect=[TypeError("unexpected keyword argument 'tools'"), plain, plain])
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    assert completion.call_count == 3
+    assert "tools" not in completion.call_args_list[1].kwargs
+
+
+@pytest.mark.parametrize("finish_reason", ["length", "tool_calls", "content_filter"])
+def test_incomplete_native_text_is_rejected(finish_reason, monkeypatch):
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    completion = Mock(
+        return_value={
+            "choices": [{"finish_reason": finish_reason, "message": {"content": "未完整的回答"}}]
+        }
+    )
+    assert _generator(completion).generate("p1", "u1", "介绍向量", {}, {}) is None
+    completion.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -148,12 +213,15 @@ def test_native_arguments_require_json_text(arguments):
 
 @pytest.mark.parametrize("transport", ["tool_calls", "function_call"])
 @pytest.mark.parametrize("mode", ["full", "light", "repair"])
-def test_native_actions_never_reinterpret_shadow_text_or_request_a_new_plan(mode, transport):
+@pytest.mark.parametrize("plain_text", [False, True])
+def test_native_actions_never_reinterpret_shadow_text_or_request_a_new_plan(
+    mode, transport, plain_text
+):
     response = _native(name="unknown__write")
     message = response["choices"][0]["message"]
     if transport == "function_call":
         message["function_call"] = message.pop("tool_calls")[0]["function"]
-    message["content"] = json.dumps(_graph())
+    message["content"] = "已经完成" if plain_text else json.dumps(_graph())
     completion = Mock(return_value=response)
     generator = _generator(completion)
     if mode == "repair":
@@ -286,7 +354,9 @@ def test_default_gateway_legacy_provider_signature_really_falls_back(monkeypatch
     class Provider:
         async def chat_completion(self, *, messages, temperature, max_tokens):
             provider_calls.append(messages)
-            return {"choices": [{"message": {"content": json.dumps(_graph())}}]}
+            return {
+                "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(_graph())}}]
+            }
 
     monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
     monkeypatch.setattr(
@@ -383,6 +453,99 @@ def test_catalog_compaction_preserves_independent_local_schema_references():
     assert prompt == compacted
 
 
+def test_catalog_omits_only_duplicate_required_annotation(monkeypatch):
+    from jsonschema import Draft202012Validator
+
+    from app.application.workflow.llm_plan_generation import _tool_specs
+    from app.application.workflow.planner_llm_gateway import _compact_tool_registry
+
+    schema = {
+        "$defs": {
+            "row": {
+                "type": "object",
+                "properties": {"quantity": {"type": "integer", "minimum": 1}},
+                "required": ["quantity"],
+                "additionalProperties": False,
+            }
+        },
+        "type": "object",
+        "properties": {
+            "rows": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/row"}},
+            "warehouse_id": {"type": "integer"},
+            "warehouse_name": {"type": "string", "minLength": 1},
+        },
+        "required": ["rows"],
+        "anyOf": [{"required": ["warehouse_id"]}, {"required": ["warehouse_name"]}],
+        "additionalProperties": False,
+    }
+    contract = SimpleNamespace(input_schema=schema, output_schema=copy.deepcopy(schema))
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_spec.build_tool_specs_v2",
+        lambda: {("inventory", action): contract for action in ("create", "update")},
+    )
+    registry = {
+        "inventory": {
+            "description": "Inventory",
+            "actions": {
+                "create": {"required_params": ["rows"]},
+                "update": {"required_params": ["rows", "warehouse_id"]},
+            },
+        }
+    }
+    original_schema = copy.deepcopy(schema)
+    prompt = {"tool_registry": _tool_specs(registry)}
+    _compact_tool_registry(prompt)
+    actions = _expanded_tool_specs(prompt)[0]["actions"]
+    # #3433: omit required_params only when they already match JSON Schema required.
+    assert "required_params" not in actions[0]
+    assert actions[1]["required_params"] == ["rows", "warehouse_id"]
+    # #3423: planner catalog uses slim input schema and omits output_schema.
+    for action in actions:
+        assert "output_schema" not in action
+        slim = action["input_schema"]
+        assert slim["type"] == "object"
+        assert slim["required"] == ["rows"]
+        assert set(slim["properties"]) == {"rows", "warehouse_id", "warehouse_name"}
+        assert slim["properties"]["rows"]["type"] == "array"
+        assert slim["properties"]["warehouse_id"] == {"type": "integer"}
+        assert slim["properties"]["warehouse_name"]["type"] == "string"
+        assert "$defs" not in slim
+        assert slim["additionalProperties"] is False
+    assert contract.input_schema == contract.output_schema == original_schema
+
+
+def test_real_catalog_remains_losslessly_reconstructable_with_smaller_budget():
+    from app.application.agent_orchestrator.context_window_manager import estimate_messages_tokens
+    from app.application.facades.tools_facade import get_workflow_tool_registry
+    from app.application.workflow.llm_plan_generation import _tool_specs
+    from app.application.workflow.planner_llm_gateway import _compact_tool_registry
+
+    registry = get_workflow_tool_registry()
+    projected = _tool_specs(registry)
+    original = copy.deepcopy(projected)
+    for tool in original:
+        for action in tool["actions"]:
+            action["required_params"] = registry[tool["tool_id"]]["actions"][action["action"]].get(
+                "required_params", []
+            )
+    previous = {"tool_registry": copy.deepcopy(original)}
+    prompt = {"tool_registry": projected}
+    for value in (previous, prompt):
+        _compact_tool_registry(value)
+    restored = _expanded_tool_specs(prompt)
+    for tool in restored:
+        for action in tool["actions"]:
+            action.setdefault("required_params", action["input_schema"].get("required", []))
+    assert restored == original  # Includes every tool, action, schema and execution annotation.
+    encoded = [
+        json.dumps(value, ensure_ascii=False, separators=(",", ":")) for value in (previous, prompt)
+    ]
+    assert len(encoded[1].encode()) < len(encoded[0].encode())
+    assert estimate_messages_tokens(
+        [{"role": "user", "content": encoded[1]}]
+    ) < estimate_messages_tokens([{"role": "user", "content": encoded[0]}])
+
+
 @pytest.mark.parametrize("profile", ["normal", "pro_default"])
 @pytest.mark.parametrize("native", [False, True])
 @pytest.mark.parametrize("replanning", [False, True])
@@ -401,6 +564,7 @@ def test_full_catalog_reaches_real_budget_gateway_without_losing_contracts(
     response = (
         _native(payload) if native else {"choices": [{"message": {"content": json.dumps(payload)}}]}
     )
+    response["choices"][0]["finish_reason"] = "tool_calls" if native else "stop"
     provider = SimpleNamespace(
         _adapter=SimpleNamespace(model_name="gpt-4o"),
         chat_completion=AsyncMock(return_value=response),

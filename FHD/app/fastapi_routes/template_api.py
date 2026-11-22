@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.template_create import router as template_create_router
 from app.infrastructure.auth.dependencies import get_logged_in_user
-from app.infrastructure.tenant_scope import tenant_scope
+from app.infrastructure.tenant_scope import owned_tenant_scope
 from app.neuro_bus.application_neuro_bridge import publish_neuro_event
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -214,7 +214,7 @@ def _tenant_scope_or_403(user: Any):
     tenant_id = getattr(user, "tenant_id", None)
     if tenant_id is None:
         raise HTTPException(status_code=403, detail="缺少租户上下文，无法操作模板")
-    return tenant_scope(int(tenant_id))
+    return owned_tenant_scope(int(tenant_id))
 
 
 @router.post("/api/templates/delete", summary="删除当前租户的模板")

@@ -29,7 +29,9 @@
 
 ## 2. 第一版做不到、需要后续的部分
 
-- **自动修复安全暂停（2026-11-21）**：`original_pr_repair` 与持久客户反馈来源的 `customer_feedback_repair` 不再启动模型、发布新候选或将旧候选推回原分支；已完成执行、已应用写入准备记录及已存在的匹配 PR 只回读核对。客户反馈流程保留原任务并显示 `waiting_credential_isolation`，新派工在创建 issue、workflow 和执行任务前暂停，旧 incident 不再把私有复现交给模型。API key 环境白名单、登录文件权限、同用户本地代理和提示词中的“仅当数据”声明都不构成不可导出的任务凭据隔离。恢复前必须接入独立受信执行边界，让 PR 或客户内容控制的工具无法读取或导出真实模型凭据；当前没有环境开关或管理员审批可以解除暂停。普通非 repair 任务继续沿用既有流程。
+- **修复执行的隔离边界（2026-11-21）**：`original_pr_repair` 保持暂停，已完成执行和匹配 PR 只读核对。`customer_feedback_repair` 新增固定的 `srt-0.0.83-header-only-platform-v1` 准入：非 root Ubuntu 22.04 原生 PID/mount/seccomp 隔离、批准的平台模型分配和独立发布任务全部满足后才允许执行。仅配置开关、环境白名单或管理员审批均不能替代这些运行检查；不满足时仍保留 `waiting_credential_isolation`。
+- **仅请求头注入**：复用 SRT 0.0.83 官方 `SandboxManager` / `filterRequest`，每次任务一个控制进程。真实模型 key 捕获到控制闭包后删除环境变量；子进程仅持有随机占位符。仅向匹配的 HTTPS 主机、路径、方法和批准模型注入 Authorization，拒绝其它目标及透传认证头。禁用通用 mask，因为它会把提示词正文中的占位符替换为真实 key。CA 私钥目录不在任务读写根内，隔离后启动模型前强制核验不可读；原生 namespace 测试与真实 TLS 注入/拒绝测试分别覆盖执行和网络边界。
+- **独立发布身份**：发布器要求受信 execute 任务的 GitHub artifact digest，并绑定同一 request、run、source SHA 和 candidate SHA；每次新写前重读管理端准入，未知回执仅核对。原 PR repair 没有接入这套专用协议，不能使用客户修复标志绕开暂停。
 - 可信候选发布器使用仓库既有的 [Gitleaks 8.18.4（MIT）](https://github.com/gitleaks/gitleaks/releases/tag/v8.18.4)，发布前扫描 `base..candidate` 的全部新增提交、合并解冲突内容及提交消息。规则和空忽略表来自可信发布环境，不接受候选配置、忽略文件或 `gitleaks:allow` 注释；扫描器缺失、版本错误或扫描失败一律拒绝发布。扫描只识别已知秘密形态，不能替代上述隔离，也不能保证识别任意编码后的凭据。
 - Para 云端不在本仓库，无法新增「凭授权换凭据」接口；授权目前只在 MODstore 与 Mac 代理两端校验和审计，签名供下一版兑换接口使用。
 - `MODSTORE_CREDENTIAL_GRANT_SIGNING_KEY` 未配置时，签名用进程内随机钥，只在本进程内可校验。

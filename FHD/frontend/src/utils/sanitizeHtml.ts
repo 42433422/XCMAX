@@ -75,6 +75,9 @@ const CHAT_BUBBLE_CONFIG: Config = {
 /** AI 气泡：Markdown → HTML 后再消毒；允许代码块复制按钮与图片等 Markdown 产物 */
 const CHAT_MARKDOWN_CONFIG: Config = {
   ...CHAT_BUBBLE_CONFIG,
+  // 生图工具以 data:image 内联返回图片，仅放行常用位图格式。
+  ALLOWED_URI_REGEXP:
+    /^(?:(?:https?|mailto):|data:image\/(?:png|jpeg|webp);base64,|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
   ALLOWED_TAGS: [...(CHAT_BUBBLE_CONFIG.ALLOWED_TAGS as string[]), 'img', 'button'],
   ALLOWED_ATTR: [
     ...(CHAT_BUBBLE_CONFIG.ALLOWED_ATTR as string[]),

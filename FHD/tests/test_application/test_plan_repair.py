@@ -10,7 +10,6 @@ import pytest
 
 from app.application.workflow.llm_plan_generation import (
     _decode_completion,
-    _load_model_json,
     build_plan_from_payload,
 )
 from app.application.workflow.plan_repair import (
@@ -20,6 +19,7 @@ from app.application.workflow.plan_repair import (
 )
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.infrastructure.llm.response_completion import load_model_json
 from tests.fixtures.planner_model import goal_review_response
 
 
@@ -253,7 +253,7 @@ def test_enforce_scope_allows_fixing_mentioned_node() -> None:
 
 
 def test_model_json_falls_back_to_repair() -> None:
-    parsed = _load_model_json('{"mode":"workflow","nodes":[{"node_id":"n1",}]}')
+    parsed = load_model_json('{"mode":"workflow","nodes":[{"node_id":"n1",}]}')
     assert parsed["nodes"][0]["node_id"] == "n1"
 
 

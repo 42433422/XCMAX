@@ -16,8 +16,9 @@ from app.db.models.approval import ApprovalFlowNode, ApprovalRequest, ApprovalSt
 
 
 @pytest.mark.parametrize("with_node", [False, True])
-def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
-    """A missing or contradictory executor receipt must never approve or notify."""
+@pytest.mark.parametrize("state", ["failed", "unknown", "queued", "paused", "blocked"])
+def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node, state):
+    """Approval is retained for unfinished or uncertain execution, never shown as done."""
     node = ApprovalFlowNode(
         id=10,
         flow_id=1,
@@ -58,10 +59,21 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
     monkeypatch.setattr(service, "_has_pending_ai_workflow", lambda *args: True)
     monkeypatch.setattr(service, "_audit", MagicMock())
     monkeypatch.setattr(service, "notify_mobile_user", notify)
+    receipt = (
+        (None if with_node else {"success": True, "workflow_executed": False})
+        if state == "failed"
+        else {
+            "success": False,
+            "workflow_executed": False,
+            "execution_accepted": state != "unknown",
+            "execution_state": state,
+            "code": "outcome_unknown" if state == "unknown" else state,
+        }
+    )
     monkeypatch.setattr(
         service,
         "_resume_pending_ai_workflow_after_approval",
-        lambda **kwargs: None if with_node else {"success": True, "workflow_executed": False},
+        lambda **kwargs: receipt,
     )
 
     from app.infrastructure.tenant_scope import tenant_scope
@@ -74,14 +86,19 @@ def test_final_ai_approval_requires_confirmed_execution(monkeypatch, with_node):
     payload = json.loads(result.body) if isinstance(result, JSONResponse) else result
 
     assert payload["success"] is False
-    assert req.status == ApprovalStatus.CANCELLED.value
+    assert req.status == (
+        ApprovalStatus.CANCELLED.value if state == "failed" else ApprovalStatus.APPROVED.value
+    )
     outcome = json.loads(req.business_data)["workflow_execution"]
     assert outcome["success"] is False
     assert outcome["workflow_executed"] is False
+    if state != "failed":
+        assert result.status_code == 202
+        assert outcome["code"] == ("outcome_unknown" if state == "unknown" else state)
     db.commit.assert_called_once()
     db.rollback.assert_not_called()
     notify.assert_not_called()
-    if not with_node:
+    if not with_node and state == "failed":
         db.add.assert_not_called()
 
 
@@ -197,7 +214,10 @@ def test_reused_query_component_resolves_current_mod_database_and_tenant(monkeyp
             engine.dispose()
 
 
-def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatch):
+@pytest.mark.parametrize(
+    "state", ["completed", "queued", "retrying", "paused", "blocked", "unknown"]
+)
+def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatch, state):
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
     from app.application.approval_workspace.protocols import WorkflowBackends
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
@@ -272,14 +292,16 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatc
     agent = MagicMock()
     agent.continue_run.side_effect = lambda run_id, **kwargs: SimpleNamespace(
         run_id=run_id,
-        status="completed",
+        status="completed" if state == "unknown" else state,
         plan_id=runs[run_id].plan_id,
         intent="delete_customer",
         steps=[SimpleNamespace(status="completed")],
         tool_calls=[],
+        final_output=({"output": {"requires_reconciliation": True}} if state == "unknown" else {}),
     )
     monkeypatch.setattr(
-        "app.application.workflow.approval_persistence.claim_agent_approval", lambda **kwargs: True
+        "app.application.workflow.approval_persistence.claim_agent_approval",
+        lambda **kwargs: True,
     )
     bridge = WorkflowApprovalBridge(
         WorkflowBackends(
@@ -296,7 +318,14 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatc
     for index, backend in enumerate(approvals, 1):
         current[0] = backend
         result = bridge.resume(request_no=f"request-{index}", opinion="approved", approved_by="7")
-        assert result["success"] is True, result
+        assert result["success"] is (state == "completed"), result
+        assert result["execution_state"] == state
+        if state not in {"completed", "unknown"}:
+            assert result["execution_accepted"] is True
+            assert result["workflow_executed"] is False
+        if state == "unknown":
+            assert result["code"] == "outcome_unknown"
+            assert result["retryable"] is False
         backend.approve.assert_called_once_with(f"request-{index}", "approved")
         backend.remove_pending_workflow.assert_called_once_with(f"request-{index}")
     executor_calls = agent.continue_run.call_args_list
@@ -319,9 +348,7 @@ def test_bridge_preserves_bound_context_and_resolves_backend_per_call(monkeypatc
 
 def test_missing_agent_link_never_runs_legacy_plan():
     from app.application.approval_workspace.protocols import WorkflowBackends
-    from app.application.approval_workspace.workflow_bridge import (
-        WorkflowApprovalBridge,
-    )
+    from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
 
     approvals = MagicMock()
     approvals.get_pending_workflow.return_value = {
@@ -447,9 +474,7 @@ def test_langgraph_runtime_dispatches_registered_tool(monkeypatch):
 def test_workflow_lookup_failure_preserves_pending_approval(failure_source):
     """A transient lookup outage must not commit cancellation or execute work."""
     from app.application.approval_workspace.decisions import ApprovalDecisions
-    from app.application.approval_workspace.workflow_bridge import (
-        WorkflowApprovalBridge,
-    )
+    from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
 
     backend = MagicMock()
     backend.approvals.return_value.get_pending_workflow.return_value = None
@@ -487,9 +512,7 @@ def test_workflow_lookup_failure_preserves_pending_approval(failure_source):
 def test_pending_snapshot_propagates_storage_errors(monkeypatch):
     from sqlalchemy.exc import OperationalError
 
-    from app.application.workflow.approval_persistence import (
-        load_durable_workflow_snapshot,
-    )
+    from app.application.workflow.approval_persistence import load_durable_workflow_snapshot
 
     failure = OperationalError("SELECT", {}, RuntimeError("offline"))
     monkeypatch.setattr("app.db.session.get_db", MagicMock(side_effect=failure))
@@ -500,7 +523,15 @@ def test_pending_snapshot_propagates_storage_errors(monkeypatch):
 
 @pytest.mark.parametrize(
     "status",
-    ["pending", "in_progress", "approved", "rejected", "withdrawn", "cancelled", "completed"],
+    [
+        "pending",
+        "in_progress",
+        "approved",
+        "rejected",
+        "withdrawn",
+        "cancelled",
+        "completed",
+    ],
 )
 @pytest.mark.parametrize("availability", [None, False, True])
 @pytest.mark.parametrize("endpoint", ["detail", "list", "reviewer_list"])
@@ -523,7 +554,13 @@ def test_workflow_queries_preserve_unknown_availability(availability, endpoint, 
     access.workflow_reviewer.return_value = True
     pending = MagicMock(return_value=availability)
     queries = ApprovalQueries(
-        repository, access, lambda *_args, **_kwargs: {}, pending, MagicMock(), MagicMock(), ()
+        repository,
+        access,
+        lambda *_args, **_kwargs: {},
+        pending,
+        MagicMock(),
+        MagicMock(),
+        (),
     )
     result = (
         queries.get_request_detail(1)

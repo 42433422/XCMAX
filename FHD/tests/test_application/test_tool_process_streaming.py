@@ -274,14 +274,21 @@ def test_elt_file_deadline_supersedes_startup_and_still_bounds_stalled_stage(
 
     if stage_stalls:
         monkeypatch.setitem(ELT_FILE_WATCHDOG_SECONDS, marker, 0.2)
+    # Match the other real-spawn tests: cold worker imports can exceed 3 seconds.
+    # The stage must still outlive this initial budget; its own stall cap remains 0.2s.
+    startup_seconds = 8
     step = AgentStep(
         "batch",
         "elt_import",
         "execute",
-        params={"run_id": "child-preview", "preview_delay": 3.1, "phase": stage},
+        params={
+            "run_id": "child-preview",
+            "preview_delay": startup_seconds + 0.1,
+            "phase": stage,
+        },
     )
     result = execute_with_tool_deadline(
-        FileDeadlineExecutor(), step, runtime_context={}, timeout_seconds=3
+        FileDeadlineExecutor(), step, runtime_context={}, timeout_seconds=startup_seconds
     )
     if stage_stalls:
         assert result["outcome"] == "unknown"

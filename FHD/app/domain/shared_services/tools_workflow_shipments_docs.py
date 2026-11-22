@@ -166,6 +166,7 @@ def _registered_router_shipment_records(
                 unit_name=str(params.get("unit") or params.get("unit_name") or "").strip() or None,
                 template_id=params.get("template_id"),
                 status_filter=params.get("status"),
+                **({"runtime_context": runtime_context} if runtime_context.get("run_id") else {}),
             ),
         )
     return {"success": False, "message": f"未注册的 shipment_records 动作: {action}"}

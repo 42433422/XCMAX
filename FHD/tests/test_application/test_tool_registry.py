@@ -207,10 +207,9 @@ class TestDispatcherResolution:
 
 
 class TestDispatcherExecution:
-    """分发器在缺少 confirm 时应返回 needs_confirm，不应调用 service。"""
+    """Legacy names without action contracts cannot enter the business handler."""
 
-    def test_delete_order_without_confirm_returns_needs_confirm(self):
-        """delete_order 通过分发器调用，未传 confirm 应返回 needs_confirm。"""
+    def test_delete_order_without_contract_cannot_request_or_execute_confirmation(self):
         import json
 
         from app.application.tools.workflow import execute_workflow_tool
@@ -220,10 +219,12 @@ class TestDispatcherExecution:
         )
         result = json.loads(result_json)
         assert result["success"] is False
-        assert result.get("needs_confirm") is True
+        assert result["error_code"] == "tool_contract_unavailable"
+        assert result["execution_status"] == "not_started"
+        assert result["retryable"] is False
+        assert not result.get("needs_confirm")
 
-    def test_create_role_without_confirm_returns_needs_confirm(self):
-        """create_role 通过分发器调用，未传 confirm 应返回 needs_confirm。"""
+    def test_create_role_without_contract_cannot_request_or_execute_confirmation(self):
         import json
 
         from app.application.tools.workflow import execute_workflow_tool
@@ -234,7 +235,10 @@ class TestDispatcherExecution:
         )
         result = json.loads(result_json)
         assert result["success"] is False
-        assert result.get("needs_confirm") is True
+        assert result["error_code"] == "tool_contract_unavailable"
+        assert result["execution_status"] == "not_started"
+        assert result["retryable"] is False
+        assert not result.get("needs_confirm")
 
     def test_unknown_tool_returns_unknown_tool_error(self):
         """未知工具名应返回 unknown_tool 错误。"""

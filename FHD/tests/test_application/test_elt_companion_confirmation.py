@@ -1,9 +1,13 @@
 """Independent chat approvals execute only the reviewed linked customer/product run."""
 
+import copy
+import json
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import Mock
 
 from openpyxl import Workbook
+from sqlalchemy import event
 
 from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
 from app.application.agent_orchestrator.approval_grant import (
@@ -18,6 +22,7 @@ from app.application.workflow.clarification_inputs import missing_tool_fields
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.db import session as db_session
 from app.db.models import Product, PurchaseUnit, ShipmentRecord
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.db.models.user import Session as UserSession
 from app.infrastructure.auth.agent_principal import require_agent_principal
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
@@ -71,6 +76,7 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
         user_id=7, tenant_id=1, role="importer", permissions=["elt.execute"]
     )
     monkeypatch.setattr(db_session, "SessionLocal", store.factory)
+    monkeypatch.setattr("app.db.SessionLocal", store.factory)
     monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     with store.factory() as db:
         assert db.query(UserSession).filter_by(session_id=actor.session_id).first() is None
@@ -221,5 +227,131 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
     assert refreshed["data"]["customer_products"]["requires_user_confirmation"] is False
     assert "客户及产品已写入 1 行" in refreshed["message"]
     assert "需单独确认" not in refreshed["message"]
+    assert submitted.call_count == 2
+
+    from app.application.agent_orchestrator.verification_readback import verify_independent_result
+
+    def readback(run, *, overrides=None, output=None):
+        step, call = run.steps[0], run.tool_calls[0]
+        return verify_independent_result(
+            run=run,
+            step=step,
+            call=call,
+            output=call.output if output is None else output,
+            context={
+                **actor.context,
+                **task_execution_context(run, step),
+                "run_id": run.run_id,
+                "step_id": step.step_id,
+                **(overrides or {}),
+            },
+        )
+
+    # Rechecking either original receipt after the child finishes is read-only,
+    # and must not turn the retained parent preview into a second child import.
+    mutations = []
+    engine = store.factory.kw["bind"]
+
+    def observe(_conn, _cursor, statement, _params, _context, _many):
+        if statement.lstrip().split()[0].upper() in {
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "CREATE",
+            "DROP",
+            "ALTER",
+        }:
+            mutations.append(statement)
+
+    event.listen(engine, "before_cursor_execute", observe)
+    try:
+        reports = [readback(done), readback(child_done)]
+        assert all(report["status"] == "verified" for report in reports), reports
+        assert mutations == []
+    finally:
+        event.remove(engine, "before_cursor_execute", observe)
+    assert submitted.call_count == 2
+
+    with store.factory.begin() as db:
+        product = db.query(Product).one()
+        product_id, price = product.id, product.price
+        product.price = 999
+    assert readback(child_done)["code"] == "result_business_state_mismatch"
+    with store.factory.begin() as db:
+        row = db.query(EltRunRow).filter_by(run_id=child["id"], execution_status="success").one()
+        child_after = row.after_json
+        changed = json.loads(child_after)
+        changed["product"]["price"] = "999"
+        row.after_json = json.dumps(changed)
+    # A wrong writer value plus an equally wrong receipt cannot overrule the
+    # original reviewed projection or its unchanged normalized source row.
+    assert readback(child_done)["code"] == "result_business_state_mismatch"
+    with store.factory.begin() as db:
+        db.get(Product, product_id).price = price
+        db.query(EltRunRow).filter_by(
+            run_id=child["id"], execution_status="success"
+        ).one().after_json = child_after
+
+    with store.factory.begin() as db:
+        record = db.query(ShipmentRecord).one()
+        shipment_id, name = record.id, record.product_name
+        record.product_name = "修改后的产品"
+    assert readback(done)["code"] == "result_business_state_mismatch"
+    assert readback(child_done)["code"] == "result_business_state_mismatch"
+    with store.factory.begin() as db:
+        row = db.query(EltRunRow).filter_by(run_id=parent["id"], execution_status="success").one()
+        shipment_after = row.after_json
+        changed = json.loads(shipment_after)
+        changed["product_name"] = "修改后的产品"
+        row.after_json = json.dumps(changed)
+    assert readback(done)["code"] == "result_business_state_mismatch"
+    with store.factory.begin() as db:
+        db.get(ShipmentRecord, shipment_id).product_name = name
+        db.query(EltRunRow).filter_by(
+            run_id=parent["id"], execution_status="success"
+        ).one().after_json = shipment_after
+
+    with store.factory.begin() as db:
+        row = db.get(EltRun, child["id"])
+        original = row.summary_json
+        changed = json.loads(original)
+        changed["execution_confirmation"]["preview_revision"] = "0" * 64
+        row.summary_json = json.dumps(changed)
+    assert readback(child_done)["code"] == "result_preview_changed"
+    with store.factory.begin() as db:
+        db.get(EltRun, child["id"]).summary_json = original
+
+    with store.factory() as db:
+        source = Path(db.get(EltUpload, parent["upload_id"]).storage_path)
+    original_bytes = source.read_bytes()
+    original_mode = source.stat().st_mode
+    source.chmod(original_mode | 0o200)
+    try:
+        source.write_bytes(original_bytes + b"changed")
+        assert readback(done)["code"] == readback(child_done)["code"] == "result_preview_changed"
+    finally:
+        source.write_bytes(original_bytes)
+        source.chmod(original_mode)
+    assert readback(done, overrides={"tenant_id": "2"})["code"] == "result_scope_mismatch"
+    altered_receipt = copy.deepcopy(child_done.tool_calls[0].output)
+    altered_receipt["committed"] = False
+    assert readback(child_done, output=altered_receipt)["code"] == "result_receipt_mismatch"
+    without_baseline = copy.deepcopy(child_done)
+    without_baseline.tool_calls[0].metadata["verification_contract"].pop("elt_execution_baseline")
+    assert readback(without_baseline)["code"] == "result_verifier_unavailable"
+    absent_claims = tmp_path / "absent-claims.sqlite"
+    with monkeypatch.context() as patcher:
+        patcher.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(absent_claims))
+        assert readback(child_done)["code"] == "result_receipt_unavailable"
+        assert not absent_claims.exists()
+    assert readback(done)["status"] == readback(child_done)["status"] == "verified"
+    assert submitted.call_count == 2
+
+    from app.db.models.permission import Role
+
+    with actor.factory.begin() as db:
+        role = db.query(Role).filter_by(name="importer").one()
+        role.permissions.clear()
+    assert readback(child_done)["code"] == "result_read_permission_unavailable"
     assert submitted.call_count == 2
     clear_idempotent_replay_for_tests()

@@ -104,8 +104,9 @@ def test_issue_plan_executes_original_report_once_under_signed_account(
         run = runner.continue_run(
             run.run_id, approved_by=str(actor.user_id), approved_step_id="submit"
         )
-    assert run is not None and run.status == "completed", run.error if run else None
-    assert "WO-test" in str(run.steps[0].output)
+    assert run is not None and run.status == "blocked", run.error if run else None
+    assert run.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
+    assert "WO-test" in str(run.tool_calls[0].output)
     assert calls == [(str(actor.tenant_id), message)]
     runner.continue_run(run.run_id, approved_by=str(actor.user_id), approved_step_id="submit")
     assert len(calls) == 1

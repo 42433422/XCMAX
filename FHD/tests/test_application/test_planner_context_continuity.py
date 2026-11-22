@@ -33,7 +33,10 @@ class RecordingProvider:
         else:
             self.requests.append(copy.deepcopy(request))
             content = json.dumps({"mode": "reply", "reply": "收到"}, ensure_ascii=False)
-        return {"choices": [{"message": {"content": content}}], "model": "test"}
+        return {
+            "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+            "model": "test",
+        }
 
     async def stream_chat_completion(self, **request):
         self.requests.append(copy.deepcopy(request))
@@ -64,6 +67,205 @@ def long_history(count=180):
         }
         for index in range(count)
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("turn_count", [100, 220])
+async def test_conversation_provider_uses_full_owned_history_once(
+    monkeypatch, model_boundary, turn_count
+):
+    from app.domain.shared_services.conversation.api import ApiMixin
+    from app.domain.shared_services.conversation.context import ConversationContext
+
+    provider, _ = model_boundary
+    rows = long_history(turn_count * 2)
+    for index, row in enumerate(rows):
+        row["content"] = f"EXACT_MESSAGE_{index:04d}"
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows[-400:], "summary": None})
+    request_context = {
+        "local_user_id": 1,
+        "tenant_id": "tenant",
+        "session_id": "full-transcript",
+        "_chat_evidence_authorized": True,
+        "_chat_history_messages": rows,
+    }
+    context = ConversationContext(
+        user_id="scoped-user",
+        conversation_history=[{"role": "assistant", "content": "STALE_LOCAL_ONLY"}],
+        metadata={"request_context": request_context},
+    )
+    service = ApiMixin()
+    service.model = "test"
+    service._metadata_cache_hash = lambda _: ""
+    service._build_context_prompt = lambda _: ""
+    service.add_to_history = lambda *_: None
+
+    assert (await service._call_ai("根据原文继续", context, {}))["action"] == "ai_response"
+    wire = json.dumps(provider.requests[-1]["messages"], ensure_ascii=False)
+    assert "STALE_LOCAL_ONLY" not in wire
+    assert all(wire.count(row["content"]) == 1 for row in rows)
+    assert not provider.summaries
+
+
+def test_conversation_enrichment_does_not_accept_unowned_history(monkeypatch):
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": [], "summary": None})
+    context = {
+        "local_user_id": 1,
+        "session_id": "owned",
+        "_chat_history_messages": [{"role": "user", "content": "CLIENT_INJECTED_HISTORY"}],
+    }
+    current = {"role": "user", "content": [{"type": "text", "text": "分析图片"}]}
+    result = memory.enrich_model_messages([current], "分析图片", context)
+    assert result[-1] is current
+    assert "CLIENT_INJECTED_HISTORY" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("authorized", [False, True])
+@pytest.mark.parametrize("message", ["A", " A "])
+def test_enrichment_excludes_current_turn_by_identity_not_equal_text(
+    monkeypatch, authorized, message
+):
+    rows = [
+        {"role": "user", "content": "A", "turn_id": "before", "at": time.time()},
+        {"role": "assistant", "content": "A", "turn_id": "before", "at": time.time()},
+        {"role": "user", "content": message, "turn_id": "current", "at": time.time()},
+    ]
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows})
+    context = {
+        "local_user_id": 1,
+        "session_id": "same",
+        "turn_id": "current",
+        "_chat_evidence_authorized": authorized,
+        "_chat_history_messages": rows[:-1],
+    }
+    current = {"role": "user", "content": message}
+    result = memory.enrich_model_messages([current], message, context)
+    assert result[1:] == [
+        {"role": "user", "content": "A"},
+        {"role": "assistant", "content": "A"},
+        current,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_conversation_rejects_stale_history_before_cached_reply(monkeypatch, model_boundary):
+    from app.domain.shared_services.conversation import api
+    from app.domain.shared_services.conversation.context import ConversationContext
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+    provider, _ = model_boundary
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": [], "revision": 4})
+    context = ConversationContext(
+        user_id="owner",
+        metadata={
+            "request_context": {
+                "local_user_id": 1,
+                "session_id": "recalled",
+                "_chat_evidence_authorized": True,
+                "_chat_history_source": "sql",
+                "_chat_history_revision": 3,
+                "_chat_history_messages": [{"role": "user", "content": "RECALLED_FACT"}],
+            }
+        },
+    )
+    service = api.ApiMixin()
+    service.model = "test"
+    service._metadata_cache_hash = lambda _: "cached-key"
+    monkeypatch.setattr(api, "_ai_response_cache", SimpleNamespace(get=lambda _: "RECALLED_FACT"))
+    with pytest.raises(ConversationRevisionError):
+        await service._call_ai("继续", context, {})
+    assert not provider.requests
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("channel", ["conversation", "planner", "stream"])
+@pytest.mark.parametrize("needs_summary", [False, True])
+async def test_revision_change_during_budget_resolution_blocks_provider_io(
+    monkeypatch, model_boundary, channel, needs_summary
+):
+    import asyncio
+
+    from app.domain.shared_services.conversation.api import ApiMixin
+    from app.domain.shared_services.conversation.context import ConversationContext
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+    from app.infrastructure.llm import model_context_windows
+
+    provider, _ = model_boundary
+    stored = {"turns": [], "revision": 3}
+    monkeypatch.setattr(memory, "_read", lambda *_: stored)
+    request_context = {
+        "local_user_id": 1,
+        "session_id": "recalled-during-await",
+        "_chat_history_source": "sql",
+        "_chat_history_revision": 3,
+    }
+
+    original_resolve = model_context_windows.resolve_model_limits
+
+    async def resolve_model(*args, **kwargs):
+        stored["revision"] = 4
+        return await original_resolve(*args, **kwargs)
+
+    monkeypatch.setattr(model_context_windows, "resolve_model_limits", resolve_model)
+    messages = [*(long_history() if needs_summary else []), {"role": "user", "content": "continue"}]
+    with pytest.raises(ConversationRevisionError):
+        if channel == "conversation":
+            service = ApiMixin()
+            context = ConversationContext(
+                user_id="owner", metadata={"request_context": request_context}
+            )
+            await service.call_llm_api(messages, conversation_context=context)
+        elif channel == "planner":
+            await asyncio.to_thread(
+                gateway.request_planner_completion,
+                ai_service=None,
+                context=request_context,
+                messages=messages,
+            )
+        else:
+            _ = [
+                part
+                async for part in gateway.stream_planner_completion(
+                    ai_service=None, context=request_context, messages=messages
+                )
+            ]
+    assert not provider.requests and not provider.summaries
+
+
+@pytest.mark.asyncio
+async def test_revision_change_between_summary_batches_stops_further_model_io(
+    monkeypatch, model_boundary
+):
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+    provider, _ = model_boundary
+    monkeypatch.setattr(
+        windows,
+        "get_context_window_manager",
+        lambda: windows.ContextWindowManager(token_budget=3000),
+    )
+    stored = {"turns": [], "revision": 3}
+    monkeypatch.setattr(memory, "_read", lambda *_: stored)
+    complete = provider.chat_completion
+
+    async def revoke_after_summary(**request):
+        result = await complete(**request)
+        stored["revision"] = 4
+        return result
+
+    monkeypatch.setattr(provider, "chat_completion", revoke_after_summary)
+    context = {
+        "local_user_id": 1,
+        "session_id": "recalled-between-batches",
+        "_chat_history_source": "sql",
+        "_chat_history_revision": 3,
+    }
+    with pytest.raises(ConversationRevisionError):
+        await gateway._prepare_model_messages(
+            provider, context, [*long_history(), {"role": "user", "content": "continue"}], 500, {}
+        )
+    assert len(provider.summaries) == 1 and not provider.requests
+    assert stored.get("summary") is None
 
 
 def test_batch_attachment_import_fits_default_budget_with_every_file(monkeypatch, model_boundary):
@@ -138,8 +340,15 @@ async def test_platform_alias_full_catalog_reaches_original_provider(monkeypatch
         "get_context_window_manager",
         lambda: windows.ContextWindowManager(token_budget=8192),
     )
-    with pytest.raises(windows.ContextWindowExceeded):
-        await gateway._prepare_model_messages(provider, {}, messages, 4096, extra)
+    tight_context = {}
+    try:
+        await gateway._prepare_model_messages(provider, tight_context, messages, 4096, extra)
+    except windows.ContextWindowExceeded:
+        pass
+    else:
+        # #3423 slim + catalog trim may fit the 8192 cap; still require an explicit trim,
+        # never a silent drop of the overflow path.
+        assert tight_context.get("_context_budget", {}).get("tool_catalog_trimmed") is True
     assert not provider.requests and not provider.summaries
 
     monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
@@ -214,7 +423,9 @@ async def test_scoped_sdk_budgets_and_calls_the_same_selected_route(
             )
         assert request.url.path == "/api/llm/chat/stream"
         requests.append(json.loads(request.content))
-        return httpx.Response(200, text='data: {"delta":"收到"}\n\ndata: [DONE]\n\n')
+        return httpx.Response(
+            200, text='data: {"delta":"收到"}\n\ndata: {"finish_reason":"stop"}\n\ndata: [DONE]\n\n'
+        )
 
     client_type = httpx.Client
     monkeypatch.setattr(
@@ -455,6 +666,55 @@ def test_generate_sends_middle_fact_and_reuses_persisted_summary(monkeypatch, mo
     assert "FACT_85" in json.dumps(provider.requests[-1]["messages"], ensure_ascii=False)
 
 
+def test_goal_review_uses_shared_provider_budget_and_keeps_early_evidence(
+    monkeypatch, model_boundary
+):
+    from app.application.workflow.goal_coverage import review_goal_coverage
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    provider, manager = model_boundary
+    rows = long_history(40)
+    monkeypatch.setattr(memory, "_read", lambda *_: {"turns": rows, "summary": None})
+    response = {
+        "goals": [
+            {
+                "goal_id": "query",
+                "source": "查询 A1",
+                "outcome": "execute",
+                "node_ids": ["query"],
+            }
+        ],
+        "violations": [],
+    }
+
+    async def respond(**request):
+        provider.requests.append(copy.deepcopy(request))
+        return {"choices": [{"message": {"content": json.dumps(response)}}]}
+
+    monkeypatch.setattr(provider, "chat_completion", respond)
+    context = {"local_user_id": 1, "session_id": "review-budget"}
+    plan = PlanGraph(
+        plan_id="p",
+        intent="query",
+        nodes=[WorkflowNode("query", "products", "query", {"keyword": "A1"})],
+    )
+    review, error = review_goal_coverage(
+        plan,
+        "查询 A1",
+        context,
+        lambda **kwargs: gateway.request_planner_completion(ai_service=SimpleNamespace(), **kwargs),
+    )
+    assert error is None and review is not None
+    request = provider.requests[-1]
+    wire = json.dumps(request["messages"], ensure_ascii=False)
+    assert "FACT_0" in wire
+    assert all(row["content"] in wire for row in rows)
+    assert "conversation_history" not in json.loads(request["messages"][-1]["content"])
+    assert windows.estimate_messages_tokens(request["messages"]) + request["max_tokens"] <= (
+        manager.token_budget
+    )
+
+
 @pytest.mark.parametrize("count", [60, 120, 121, 240])
 def test_old_excerpt_cache_never_discards_unsummarized_middle_or_120_boundary(count):
     rows = long_history(count)
@@ -646,7 +906,7 @@ def test_light_history_readback_falls_through_to_full_workflow(monkeypatch, mode
                     }
                 ],
             )
-        return {"choices": [{"message": {"content": json.dumps(payload)}}]}
+        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload)}}]}
 
     monkeypatch.setattr(provider, "chat_completion", complete)
     planner = generation.LlmPlanGeneration(

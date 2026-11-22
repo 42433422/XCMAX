@@ -23,6 +23,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository, tool_permission
+
 # 真实模块路径:``app.fastapi_routes.materials``(2026-04-20 backend→app 结构迁移完成后)。
 from app.fastapi_routes import materials as materials_module
 
@@ -49,7 +51,9 @@ def fake_service() -> MagicMock:
     )
     svc.update_material = MagicMock(return_value={"success": True, "data": {}})
     svc.delete_material = MagicMock(return_value=None)
-    svc.batch_delete_materials = MagicMock(return_value=None)
+    svc.batch_delete_materials = MagicMock(
+        return_value={"success": True, "message": "已删除 3 条记录", "deleted_count": 3}
+    )
     svc.get_low_stock_materials = MagicMock(
         side_effect=lambda threshold=None: {
             "success": True,
@@ -63,15 +67,44 @@ def fake_service() -> MagicMock:
 
 
 @pytest.fixture
-def client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-receipts.sqlite3"))
+    tool_permission.clear_idempotent_replay_for_tests()
     monkeypatch.setattr(
         "app.fastapi_routes.materials.get_material_application_service",
         lambda: fake_service,
     )
+    runs = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: runs
+    )
     app = FastAPI()
+    app.state.agent_runs = runs
     app.include_router(materials_module.router)
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
+    tool_permission.clear_idempotent_replay_for_tests()
+
+
+def _assert_unverified_mutation(client: TestClient, response, action: str) -> tuple[dict, dict]:
+    """A service mock supplies a receipt, not independent business proof."""
+    assert response.status_code == 400, response.text
+    body = response.json()
+    assert body["success"] is False
+    assert body["error_code"] == "result_verification_inconclusive"
+    assert body["outcome"] == "unknown"
+    assert body["reconciliation_required"] is True and body["retryable"] is False
+    assert body["agent_run_id"] == body["run_id"]
+    run = client.app.state.agent_runs.get(body["run_id"])
+    assert run is not None and run.status == "blocked"
+    assert len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert call.tool_id == "materials" and call.action == action
+    assert call.output["success"] is True
+    assert call.metadata["verification"]["accepted"] is False
+    assert call.metadata["verification"]["code"] == "result_verifier_unavailable"
+    assert "run.completed" not in {event.event_type for event in run.events}
+    return body, call.output
 
 
 # ---------------------------------------------------------------------------
@@ -79,13 +112,16 @@ def client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClie
 # ---------------------------------------------------------------------------
 
 
-def test_add_material_success(client: TestClient, sample_data_factory, local_tools) -> None:
+def test_add_material_success(
+    client: TestClient, fake_service: MagicMock, sample_data_factory, local_tools
+) -> None:
     data = sample_data_factory.material()
     r = client.post("/api/materials", json=data)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["success"] is True
+    body, receipt = _assert_unverified_mutation(client, r, "create")
     assert body["data"]["name"] == data["name"]
+    assert receipt["data"] == body["data"]
+    fake_service.create_material.assert_called_once()
+    assert fake_service.create_material.call_args.args[0]["name"] == data["name"]
 
 
 def test_add_material_empty_name(client: TestClient) -> None:
@@ -184,25 +220,22 @@ def test_get_materials_with_sql_injection_attempt(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_update_material_success(client: TestClient, sample_data_factory, local_tools) -> None:
+def test_update_material_success(
+    client: TestClient, fake_service: MagicMock, sample_data_factory, local_tools
+) -> None:
     data = sample_data_factory.material({"name": "更新后的原材料"})
     r = client.put("/api/materials/1", json=data)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["success"] is True
-    assert "更新成功" in body["message"]
-    assert body["data"]["id"] == 1
-    assert body["data"]["name"] == data["name"]
+    body, receipt = _assert_unverified_mutation(client, r, "update")
+    assert body["data"] == receipt["data"] == {}
+    fake_service.update_material.assert_called_once_with(1, **data)
 
 
 def test_update_material_partial_applies_fields(
     client: TestClient, fake_service: MagicMock, local_tools
 ) -> None:
     r = client.put("/api/materials/1", json={"quantity": 50.0})
-    assert r.status_code == 200
-    fake_service.update_material.assert_called_once()
-    material_id = fake_service.update_material.call_args.args[0]
-    assert material_id == 1
+    _assert_unverified_mutation(client, r, "update")
+    fake_service.update_material.assert_called_once_with(1, quantity=50.0)
 
 
 def test_update_material_string_id_returns_404_or_422(client: TestClient) -> None:
@@ -215,12 +248,11 @@ def test_update_material_string_id_returns_404_or_422(client: TestClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_delete_material_success(client: TestClient, local_tools) -> None:
+def test_delete_material_success(client: TestClient, fake_service: MagicMock, local_tools) -> None:
     r = client.delete("/api/materials/1")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["success"] is True
-    assert "删除成功" in body["message"]
+    _, receipt = _assert_unverified_mutation(client, r, "delete")
+    assert receipt["message"] == "删除成功"
+    fake_service.delete_material.assert_called_once_with(1)
 
 
 def test_delete_material_string_id_returns_404_or_422(client: TestClient) -> None:
@@ -233,34 +265,71 @@ def test_delete_material_string_id_returns_404_or_422(client: TestClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_batch_delete_success(client: TestClient) -> None:
+def test_batch_delete_success(client: TestClient, fake_service: MagicMock, local_tools) -> None:
     r = client.post("/api/materials/batch-delete", json={"ids": [1, 2, 3]})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["success"] is True
-    assert "已删除 3 条记录" in body["message"]
-    assert body.get("deleted_count") == 3
+    body, receipt = _assert_unverified_mutation(client, r, "batch_delete")
+    assert receipt["message"] == "已删除 3 条记录"
+    assert body["deleted_count"] == receipt["deleted_count"] == 3
+    fake_service.batch_delete_materials.assert_called_once_with([1, 2, 3])
 
 
-def test_batch_delete_empty_ids(client: TestClient) -> None:
+@pytest.mark.parametrize("deleted_count", [0, 1])
+def test_batch_delete_reports_service_count_not_requested_ids(
+    client: TestClient, fake_service: MagicMock, local_tools, deleted_count: int
+) -> None:
+    fake_service.batch_delete_materials.return_value = {
+        "success": True,
+        "message": f"已删除 {deleted_count} 条记录",
+        "deleted_count": deleted_count,
+    }
+    # Distinct input IDs keep these independent cases out of prior request replay.
+    ids = [21 + deleted_count, 31 + deleted_count, 41 + deleted_count]
+    response = client.post("/api/materials/batch-delete", json={"ids": ids})
+    body, receipt = _assert_unverified_mutation(client, response, "batch_delete")
+    assert body["deleted_count"] == receipt["deleted_count"] == deleted_count
+    assert receipt["message"] == f"已删除 {deleted_count} 条记录"
+    fake_service.batch_delete_materials.assert_called_once_with(ids)
+
+
+def test_batch_delete_empty_ids(client: TestClient, fake_service: MagicMock, local_tools) -> None:
+    fake_service.batch_delete_materials.return_value = {
+        "success": True,
+        "message": "已删除 0 条记录",
+        "deleted_count": 0,
+    }
     r = client.post("/api/materials/batch-delete", json={"ids": []})
-    assert r.status_code == 200
-    assert "已删除 0 条记录" in r.json()["message"]
+    body, receipt = _assert_unverified_mutation(client, r, "batch_delete")
+    assert body["deleted_count"] == 0 and receipt["message"] == "已删除 0 条记录"
+    fake_service.batch_delete_materials.assert_called_once_with([])
 
 
-def test_batch_delete_missing_ids(client: TestClient) -> None:
+def test_batch_delete_missing_ids(client: TestClient, fake_service: MagicMock, local_tools) -> None:
+    fake_service.batch_delete_materials.return_value = {
+        "success": True,
+        "message": "已删除 0 条记录",
+        "deleted_count": 0,
+    }
     r = client.post("/api/materials/batch-delete", json={})
-    assert r.status_code == 200
-    assert "已删除 0 条记录" in r.json()["message"]
+    body, receipt = _assert_unverified_mutation(client, r, "batch_delete")
+    assert body["deleted_count"] == 0 and receipt["message"] == "已删除 0 条记录"
+    fake_service.batch_delete_materials.assert_called_once_with([])
 
 
-def test_batch_delete_with_non_numeric_ids_are_filtered(client: TestClient) -> None:
+def test_batch_delete_with_non_numeric_ids_are_filtered(
+    client: TestClient, fake_service: MagicMock, local_tools
+) -> None:
+    fake_service.batch_delete_materials.return_value = {
+        "success": True,
+        "message": "已删除 2 条记录",
+        "deleted_count": 2,
+    }
     r = client.post(
         "/api/materials/batch-delete",
         json={"ids": [1, "abc", None, 2, 2]},
     )
-    assert r.status_code == 200
-    assert r.json().get("deleted_count") == 3
+    body, receipt = _assert_unverified_mutation(client, r, "batch_delete")
+    assert body["deleted_count"] == receipt["deleted_count"] == 2
+    fake_service.batch_delete_materials.assert_called_once_with([1, 2, 2])
 
 
 def test_batch_delete_prefers_material_ids_over_ids(

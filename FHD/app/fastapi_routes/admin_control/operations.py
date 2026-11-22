@@ -109,7 +109,7 @@ class Operations:
             result = write_runtime_inventory_projection(host="127.0.0.1")
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("runtime inventory probe failed: %s", exc)
-            return {"success": False, "error": str(exc)}
+            return {"success": False, "error": "运行状态暂时无法核验"}
         snapshot = result.get("snapshot") or {}
         return {"success": True, "data": snapshot, "publication": result.get("publication") or {}}
 
@@ -152,7 +152,9 @@ class Operations:
             return {"success": bool(data.get("success", True)), "data": data}
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("ops_staffing_install_local failed: %s", exc)
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+            return JSONResponse(
+                {"success": False, "message": "员工配置安装失败，请查看服务日志"}, status_code=500
+            )
 
     async def ops_staffing_close_gap(
         self,
@@ -194,8 +196,13 @@ class Operations:
                         }
                     )
                 except self._errors.recoverable() as exc:
+                    self._errors.logger.warning("employee configuration install failed: %s", exc)
                     install_results.append(
-                        {"employee_id": employee_id, "success": False, "message": str(exc)}
+                        {
+                            "employee_id": employee_id,
+                            "success": False,
+                            "message": "员工配置安装失败，请查看服务日志",
+                        }
                     )
         after = build_ops_closure_status(await self._duty_health(request))
         onboard_ok = True

@@ -1,6 +1,6 @@
 <template>
   <div class="chat-messages-shell">
-    <Teleport to="#chat-history-nav-slot" :disabled="!historyNavTarget">
+    <Teleport :to="historyNavTarget || '#chat-history-nav-slot'" :disabled="!historyNavTarget">
       <nav v-if="hasEarlier || messages.length > CHAT_HISTORY_WINDOW" :class="['chat-history-navigation', { 'is-header': historyNavTarget }]" aria-label="聊天历史分页">
         <button type="button" :disabled="loadingEarlier || (windowStart === 0 && !hasEarlier)" @click="showEarlier">{{ loadingEarlier ? '正在加载…' : '更早消息' }}</button>
         <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，已载入 {{ messages.length }} 条</span>
@@ -469,9 +469,12 @@ function approveMessage(message: ChatMessage) {
 
 const messagesHostRef = ref<HTMLElement | null>(null)
 /** 顶部快捷按钮行里的分页挂载点；独立挂载（如测试）时回退到消息区顶部。 */
-const historyNavTarget = ref(false)
+// The sibling header is not in document during the initial parent render.
+// Change `to` to its mounted element as well as enabling Teleport: toggling
+// disabled alone would reuse the initial null target and interrupt rendering.
+const historyNavTarget = ref<HTMLElement | null>(null)
 onMounted(() => {
-  historyNavTarget.value = !!document.getElementById('chat-history-nav-slot')
+  historyNavTarget.value = document.getElementById('chat-history-nav-slot')
 })
 const copyLabels = ref(new Map<ChatMessage, string>())
 const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =

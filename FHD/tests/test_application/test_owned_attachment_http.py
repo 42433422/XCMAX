@@ -27,7 +27,7 @@ def test_authenticated_http_resolves_owned_upload_and_rejects_changed_owner(tmp_
 
     def completion(**kwargs):
         request = json.loads(kwargs["messages"][-1]["content"])
-        if request.get("task") == "audit_goal_coverage":
+        if request.get("task") in {"audit_goal_coverage", "audit_reply"}:
             reviews.append(request)
             assert kwargs["context"]["file_context"]["verified_uploads"] == seen[0]
             return goal_review_response(
@@ -111,7 +111,7 @@ def test_real_chat_routes_resolve_owned_attachment_before_model(tmp_path, endpoi
 
     def completion(**kwargs):
         request = json.loads(kwargs["messages"][-1]["content"])
-        if request.get("task") == "audit_goal_coverage":
+        if request.get("task") in {"audit_goal_coverage", "audit_reply"}:
             reviews.append(request)
             assert kwargs["context"]["file_context"]["verified_uploads"] == seen[0]
             return goal_review_response(

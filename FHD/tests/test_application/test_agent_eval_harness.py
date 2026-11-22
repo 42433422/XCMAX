@@ -22,6 +22,21 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
     assert result["passed"] == 123
     assert len(result["results"]) == 123
     assert result["score"] == 1.0
+    assert result["coverage"] == {
+        "fixture_contract_passed": 123,
+        "business_effect_verified": 15,
+        "artifact_integrity_verified": 2,
+        "task_admission_verified": 1,
+        "read_only_contract": 8,
+        "unverified": 69,
+        "not_exercised": 28,
+    }
+    dispatch_only = [
+        row for row in result["results"] if row["coverage_scope"] == "dispatch_contract_only"
+    ]
+    assert len(dispatch_only) == 63
+    assert all(row["business_goal_expected"] for row in dispatch_only)
+    assert all(row["result_coverage"] == "unverified" for row in dispatch_only)
     missing_spec = next(
         row
         for row in result["results"]
@@ -44,6 +59,29 @@ def test_memory_planner_eval_requires_its_explicit_review(monkeypatch, invalid_r
     result = run_eval()
     assert result["failed"] == 1
     assert result["results"][0]["passed"] is False
+
+
+@pytest.mark.parametrize("invalid_review", ["missing", "foreign_reply", "foreign_user"])
+def test_owned_attachment_reply_review_is_bound_to_its_explicit_fixture(invalid_review) -> None:
+    from evals.owned_attachment_eval import _scripted_model_response
+
+    task = next(
+        row
+        for row in eval_module.load_tasks()
+        if row["id"] == "multimodal_ocr_artifact_autonomous_plan"
+    )
+    prompt = {
+        "task": "audit_reply",
+        "user_message": task["message"],
+        "reply": task["model_response"]["reply"],
+    }
+    if invalid_review == "missing":
+        task.pop("reply_review")
+    elif invalid_review == "foreign_reply":
+        prompt["reply"] = "unrelated reply"
+    else:
+        prompt["user_message"] = "unrelated request"
+    assert _scripted_model_response(task, prompt) is None
 
 
 @pytest.mark.parametrize("fail_task", [False, True])

@@ -1,12 +1,14 @@
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, test, type ElectronApplication, type Frame, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { preserveElectronDiagnostics } from './diagnostics'
 
 // 实际 Electron + stub 后端覆盖启动、preload 与 IPC 往返；不代替安装包业务验收。
 
 let electronApp: ElectronApplication
+let electronProcess: ReturnType<ElectronApplication['process']> | undefined
 let page: Page
 let userDataDir: string
 let backendPort: number
@@ -45,9 +47,7 @@ async function findFreePort(): Promise<number> {
   })
 }
 
-test.beforeAll(async () => {
-  backendPort = await findFreePort()
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-e2e-userdata-'))
+async function launchApp(): Promise<void> {
   electronApp = await electron.launch({
     args: ['-r', path.join(__dirname, 'patch-backend.cjs'), '.'],
     cwd: path.resolve(__dirname, '..'),
@@ -57,24 +57,31 @@ test.beforeAll(async () => {
       XCAGI_DESKTOP_E2E: '1',
       XCAGI_DESKTOP_PORT: String(backendPort),
       XCAGI_DESKTOP_USER_DATA_DIR: userDataDir,
-      // dev 模式后端可执行文件 → 指向 E2E stub（node shebang 脚本）
-      PYTHON: path.resolve(__dirname, 'stub-backend.mjs'),
     },
   })
+  electronProcess = electronApp.process()
   page = await electronApp.firstWindow()
   page.on('console', msg => {
     if (msg.type() === 'error') {
       console.info(`[renderer console.error] ${msg.text()}`)
     }
   })
+}
+
+test.beforeAll(async () => {
+  backendPort = await findFreePort()
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-e2e-userdata-'))
+  await launchApp()
 })
 
-test.afterAll(async () => {
-  if (electronApp) {
-    await electronApp.close()
-  }
-  if (userDataDir) {
-    fs.rmSync(userDataDir, { recursive: true, force: true })
+test.afterAll(async ({}, testInfo) => {
+  try {
+    if (electronApp) await electronApp.close()
+  } finally {
+    if (userDataDir) {
+      preserveElectronDiagnostics(electronProcess, userDataDir, testInfo)
+      fs.rmSync(userDataDir, { recursive: true, force: true })
+    }
   }
 })
 
@@ -123,4 +130,89 @@ test('真实 IPC 往返：剪贴板写入后可读回', async () => {
     (window as unknown as { xcagiDesktop: XcagiDesktopBridge }).xcagiDesktop.clipboardReadText(),
   )
   expect(text).toBe(token)
+})
+
+async function expectRetiredWorkspaceCapability(target: Page | Frame): Promise<void> {
+  // The normal stub 404 observes headers; it does not assert Python route retirement.
+  const capability = await target.evaluate(async () => {
+    const response = await fetch('/api/local-workspace/status', { headers: { 'X-XCAGI-Desktop-Local': '1' } })
+    return response.headers.get('X-E2E-Workspace-Capability-Present')
+  })
+  expect(capability).toBe('false')
+}
+
+test('退役工作区能力不再注入任何窗口或子框架，未登记窗口仍被 IPC 拒绝', async () => {
+  await expectRetiredWorkspaceCapability(page)
+  const opened = electronApp.waitForEvent('window')
+  await page.evaluate(() => (window as unknown as { xcagiDesktop: { openWindow: (url: string) => Promise<unknown> } })
+    .xcagiDesktop.openWindow(window.location.origin))
+  const auxiliary = await opened
+  try {
+    await auxiliary.waitForURL(`http://127.0.0.1:${backendPort}/`)
+    await expectRetiredWorkspaceCapability(auxiliary)
+    expect(await auxiliary.evaluate(() => (window as unknown as { xcagiDesktop: XcagiDesktopBridge }).xcagiDesktop.getDataDir())).toBe(userDataDir)
+  } finally { await auxiliary.close() }
+  await page.evaluate(() => {
+    const iframe = document.createElement('iframe')
+    iframe.id = 'retired-workspace-probe'
+    iframe.src = '/'
+    document.body.append(iframe)
+  })
+  try {
+    await expect.poll(() => page.frames().length).toBe(2)
+    const iframe = page.frames().find(frame => frame !== page.mainFrame())!
+    await iframe.waitForURL(`http://127.0.0.1:${backendPort}/`)
+    await expectRetiredWorkspaceCapability(iframe)
+  } finally { await page.evaluate(() => document.getElementById('retired-workspace-probe')?.remove()) }
+  const unregistered = electronApp.waitForEvent('window')
+  await electronApp.evaluate(async ({ app, BrowserWindow }, port) => {
+    const unrelated = new BrowserWindow({ show: false, webPreferences: {
+      sandbox: true, contextIsolation: true, preload: process.getBuiltinModule('path').join(app.getAppPath(), 'dist/preload.js'),
+    } })
+    await unrelated.loadURL(`http://127.0.0.1:${port}/`)
+  }, backendPort)
+  const unrelated = await unregistered
+  try {
+    await expectRetiredWorkspaceCapability(unrelated)
+    expect(await unrelated.evaluate(() => (window as unknown as { xcagiDesktop: XcagiDesktopBridge }).xcagiDesktop.getDataDir()))
+      .toEqual({ ok: false, reason: 'untrusted_sender' })
+  } finally { await unrelated.close() }
+})
+
+async function backendIdentity(restart = false) {
+  return electronApp.evaluate(async ({ app }, { port, restart }) => {
+    const requireFromApp = process.getBuiltinModule('module').createRequire(
+      process.getBuiltinModule('path').join(app.getAppPath(), 'package.json'),
+    )
+    const state = requireFromApp('./dist/runtime-state.js')
+    const backend = requireFromApp('./dist/backend-process.js')
+    let invalidated = false
+    if (restart) {
+      await backend.stopBackend()
+      invalidated = !state.hasVerifiedDesktopBackend()
+      await backend.startBackend()
+      await backend.waitForBackendPing(port, 15_000)
+    }
+    return { invalidated, verified: state.hasVerifiedDesktopBackend(), pid: state.desktopRuntime.backendProcess?.pid,
+      fingerprint: process.getBuiltinModule('crypto').createHash('sha256')
+        .update(requireFromApp('./dist/backend-env.js').desktopWorkspaceToken).digest('hex') }
+  }, { port: backendPort, restart })
+}
+
+test('后端重启重新验证子进程，主进程重启轮换身份且不恢复工作区能力', async () => {
+  const before = await backendIdentity()
+  expect(before.verified).toBe(true)
+  const restarted = await backendIdentity(true)
+  expect(restarted).toMatchObject({ invalidated: true, verified: true, fingerprint: before.fingerprint })
+  expect(restarted.pid).not.toBe(before.pid)
+  await expectRetiredWorkspaceCapability(page)
+  await electronApp.close()
+  electronApp = undefined!
+  await launchApp()
+  await page.waitForURL(`http://127.0.0.1:${backendPort}/?shell=1`, { timeout: 90_000 })
+  await expect(page.locator('#e2e-marker')).toHaveText('XCAGI_E2E_OK')
+  const relaunched = await backendIdentity()
+  expect(relaunched.verified).toBe(true)
+  expect(relaunched.fingerprint).not.toBe(before.fingerprint)
+  await expectRetiredWorkspaceCapability(page)
 })

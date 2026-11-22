@@ -16,6 +16,15 @@ def _scripted_model_response(task: dict, prompt: dict) -> dict | None:
     if prompt.get("user_message") != task["message"]:
         return None
     response = task["model_response"]
+    if prompt.get("task") == "audit_reply":
+        review = task.get("reply_review")
+        if (
+            response.get("mode") != "reply"
+            or prompt.get("reply") != response.get("reply")
+            or not isinstance(review, dict)
+        ):
+            return None
+        return {"choices": [{"message": {"content": json.dumps(review, ensure_ascii=False)}}]}
     if prompt.get("task") == "audit_goal_coverage":
         review = task.get("goal_review")
         if not isinstance(review, dict):
@@ -171,17 +180,17 @@ def run_owned_attachment_task(task):
         stack.enter_context(patch("app.bootstrap.get_products_service", return_value=products))
         stack.enter_context(patch("app.bootstrap.get_customer_app_service", return_value=customers))
         if task.get("mock_office_document"):
+            from docx import Document
+
             office = task["mock_office_document"]
+            document = Document()
+            document.add_paragraph("Policy summary: human review and tenant scoped citations.")
+            generated = io.BytesIO()
+            document.save(generated)
             stack.enter_context(
                 patch(
-                    "app.services.kitten_ai_document.generate.generate_office_file",
-                    return_value=(b"fixture generated document", office["file_name"]),
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.services.kitten_ai_document.pickup.store_document_pickup",
-                    return_value=office["pickup_token"],
+                    "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
+                    return_value=(generated.getvalue(), office["file_name"]),
                 )
             )
         from app.application.dataset_rag_app_service import get_dataset_rag_app_service

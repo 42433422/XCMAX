@@ -57,6 +57,8 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         input_data: _facade().Dict[str, _facade().Any] = None,
         *,
         user_id: int = 0,
+        expected_graph_fingerprint: str | None = None,
+        execution_id: int | None = None,
     ) -> _facade().Dict[str, _facade().Any]:
         """执行工作流（仅运行业务图，不写入 workflow_executions；由 API 层落库）。"""
         SessionFactory = _facade().get_session_factory()
@@ -75,6 +77,8 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 mock_employees=False,
                 collect_trace=False,
                 user_id=user_id,
+                expected_graph_fingerprint=expected_graph_fingerprint,
+                execution_id=execution_id,
             )
             return output
 
@@ -87,6 +91,8 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         mock_employees: bool = True,
         validate_only: bool = False,
         user_id: int = 0,
+        expected_graph_fingerprint: str | None = None,
+        execution_id: int | None = None,
     ) -> _facade().Dict[str, _facade().Any]:
         """
         沙盒运行：不写入执行表。
@@ -121,12 +127,14 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 mock_employees=mock_employees,
                 collect_trace=True,
                 user_id=user_id,
+                expected_graph_fingerprint=expected_graph_fingerprint,
+                execution_id=execution_id,
             )
         except WorkflowGraphError as exc:
             return {
                 "ok": False,
                 "validate_only": False,
-                "errors": [str(exc)],
+                "errors": ["workflow did not reach end"],
                 "warnings": topo_warnings + exc.evidence["warnings"],
                 "steps": exc.evidence["steps"],
                 "output": exc.evidence["partial_output"],
@@ -149,6 +157,8 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         mock_employees: bool,
         collect_trace: bool,
         user_id: int = 0,
+        expected_graph_fingerprint: str | None = None,
+        execution_id: int | None = None,
     ) -> _facade().Tuple[
         _facade().Dict[str, _facade().Any],
         _facade().List[_facade().Dict[str, _facade().Any]],
@@ -174,6 +184,21 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             .filter(_facade().WorkflowEdge.workflow_id == workflow.id)
             .all()
         )
+        if expected_graph_fingerprint is not None:
+            from modstore_server.workflow_sandbox_state import (
+                GRAPH_GUARD_FAILED,
+                loaded_graph_fingerprint,
+            )
+
+            if (
+                workflow.user_id != user_id
+                or loaded_graph_fingerprint(nodes, edges) != expected_graph_fingerprint
+            ):
+                raise ValueError(GRAPH_GUARD_FAILED)
+            # Retain this admitted graph even if a node commits the session;
+            # expiration must not reload a concurrently edited node or edge.
+            for graph_object in [*nodes, *edges]:
+                session.expunge(graph_object)
         node_map = {node.id: node for node in nodes}
         source_to_targets: _facade().Dict[int, _facade().List[_facade().WorkflowEdge]] = {}
         for edge in edges:
@@ -231,6 +256,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 workflow_id=workflow.id,
                 mock_employee=mock_employees,
                 user_id=user_id,
+                execution_id=execution_id,
             )
             duration_ms = round((_facade().time.perf_counter() - t0) * 1000, 3)
             if collect_trace:
@@ -332,6 +358,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         workflow_id: int,
         mock_employee: bool,
         user_id: int = 0,
+        execution_id: int | None = None,
     ) -> _facade().Dict[str, _facade().Any]:
         executor = self.executors.get(node.node_type)
         if not executor:
@@ -358,6 +385,8 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             return self._execute_parallel_mock(node, data, config)
         if node.node_type == "sub_workflow" and mock_employee:
             return self._execute_sub_workflow_mock(node, data, config)
+        if node.node_type == "employee" and execution_id is not None:
+            return executor(node, data, config, user_id=user_id, execution_id=execution_id)
         if node.node_type in ("employee", "openapi_operation", "knowledge_search", "sub_workflow"):
             return executor(node, data, config, user_id=user_id)
         if node.node_type == "eskill":

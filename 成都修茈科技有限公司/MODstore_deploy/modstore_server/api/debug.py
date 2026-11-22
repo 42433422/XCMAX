@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import uuid
@@ -17,6 +18,7 @@ from modstore_server.infrastructure import library_paths
 from modstore_server.models import User
 
 router = APIRouter(tags=["debug"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/api/debug/sandbox")
@@ -25,10 +27,10 @@ def api_debug_sandbox(body: SandboxDTO, user: User = Depends(require_user)):
     mod_id = body.mod_id.strip()
     try:
         validated_src = library_paths.mod_dir(mod_id)
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
-    except FileNotFoundError as e:
-        raise HTTPException(404, str(e)) from e
+    except ValueError:
+        raise HTTPException(400, "Mod 标识无效") from None
+    except FileNotFoundError:
+        raise HTTPException(404, "Mod 不存在") from None
     lib = library_paths.lib().resolve()
     # Choose the source from the server-owned directory enumeration. The
     # request value is only an equality selector and never becomes a path.
@@ -62,8 +64,9 @@ def api_debug_sandbox(body: SandboxDTO, user: User = Depends(require_user)):
                 shutil.copytree(src, dst)
         else:
             shutil.copytree(src, dst)
-    except OSError as e:
-        raise HTTPException(500, f"创建沙箱失败: {e}") from e
+    except OSError:
+        logger.exception("debug sandbox creation failed")
+        raise HTTPException(500, "创建沙箱失败，请查看服务日志") from None
     path_str = str(mods_root)
     library_paths.save_state(
         {
@@ -118,9 +121,10 @@ def api_fhd_db_tokens_status():
         with httpx.Client(timeout=10.0) as client:
             r = client.get(url)
     except httpx.RequestError as e:
+        logger.warning("XCAGI debug proxy request failed: %s", e)
         return {
             "ok": False,
-            "error": str(e),
+            "error": "xcagi_proxy_unavailable",
             "url": url,
             "data": None,
         }
@@ -147,9 +151,10 @@ def api_xcagi_loading_status():
         with httpx.Client(timeout=10.0) as client:
             r = client.get(url)
     except httpx.RequestError as e:
+        logger.warning("XCAGI status proxy request failed: %s", e)
         return {
             "ok": False,
-            "error": str(e),
+            "error": "xcagi_proxy_unavailable",
             "url": url,
             "data": None,
         }

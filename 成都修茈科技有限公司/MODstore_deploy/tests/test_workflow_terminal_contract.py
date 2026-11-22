@@ -26,6 +26,8 @@ def workflow_database(tmp_path, monkeypatch):
         models.WorkflowNode,
         models.WorkflowEdge,
         models.WorkflowExecution,
+        models.WorkflowSandboxRun,
+        models.OutboxEvent,
     ]
     models.Base.metadata.create_all(engine, tables=[model.__table__ for model in tables])
     sf = sessionmaker(bind=engine)

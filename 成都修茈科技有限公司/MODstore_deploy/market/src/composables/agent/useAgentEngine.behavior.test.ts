@@ -1,6 +1,8 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAgentStore } from '../../stores/agent'
+import { useAuthStore } from '../../stores/auth'
+import { xiaocLifeApi, type XiaoCLifeState } from '../../application/xiaocLifeApi'
 import type { AgentSkill, LLMToolCall, SkillResult } from '../../types/agent'
 import { useAgentEngine } from './useAgentEngine'
 
@@ -70,14 +72,34 @@ describe('useAgentEngine behavior', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     document.title = 'Market test'
-    mocks.matchByIntent.mockReturnValue(null)
-    mocks.getById.mockReturnValue(undefined)
-    mocks.agentButlerChat.mockResolvedValue({ text: 'LLM reply', tool_calls: [] })
+    mocks.matchByIntent.mockReset().mockReturnValue(null)
+    mocks.getById.mockReset().mockReturnValue(undefined)
+    mocks.agentButlerChat.mockReset().mockResolvedValue({ text: 'LLM reply', tool_calls: [] })
     mocks.captureViewport.mockResolvedValue({
       ok: true,
       kind: 'image',
       dataUrl: 'data:image/png;base64,capture',
     })
+  })
+
+  it('管理端 L2 拒绝多工具批次，L1 也不能经离线技能绕过限制', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
+    mocks.agentButlerChat.mockResolvedValue({ tool_calls: [tool('navigate', { name: 'plans' }), tool('click', { selector: '#buy' })] })
+    const engine = useAgentEngine()
+    await engine.handleInput('执行两个操作')
+    expect(mocks.executor.navigate).not.toHaveBeenCalled()
+    expect(mocks.executor.click).not.toHaveBeenCalled()
+    expect(latestReply()).toContain('多步骤')
+    const execute = vi.fn(async () => ({ success: true, message: 'should not run' }))
+    mocks.matchByIntent.mockReturnValue({ id: 'builtin:navigate', execute } as unknown as AgentSkill)
+    read.mockResolvedValue({ scope: 'enterprise', level: 1 } as XiaoCLifeState)
+    mocks.agentButlerChat.mockResolvedValue({ text: '当前为对话模式，可以为你说明页面入口。', tool_calls: [] })
+    await engine.handleInput('打开页面')
+    expect(execute).not.toHaveBeenCalled()
+    expect(latestReply()).toContain('可以为你说明页面入口')
   })
 
   it('ignores empty input and executes an offline skill without calling the LLM', async () => {
@@ -102,7 +124,7 @@ describe('useAgentEngine behavior', () => {
   it('builds text and uploaded-image LLM requests and persists the conversation id', async () => {
     mocks.agentButlerChat
       .mockResolvedValueOnce({ text: 'plain answer', conversation_id: 42 })
-      .mockResolvedValueOnce({ text: '', tool_calls: [] })
+      .mockResolvedValueOnce({ text: 'image answer', tool_calls: [] })
     const engine = useAgentEngine()
 
     await engine.handleInput('plain request')
@@ -118,10 +140,10 @@ describe('useAgentEngine behavior', () => {
       { type: 'text', text: '[图片]' },
       { type: 'image_url', image_url: { url: 'data:image/png;base64,upload', detail: 'low' } },
     ])
-    expect(latestReply()).toBe('好的。')
+    expect(latestReply()).toBe('image answer')
   })
 
-  it('captures a requested screenshot and tolerates an unavailable capture', async () => {
+  it('captures a requested screenshot and reports an unavailable capture before calling the model', async () => {
     const engine = useAgentEngine()
     await engine.handleInput('inspect screenshot', { withScreenshot: true })
     expect(mocks.captureViewport).toHaveBeenCalledOnce()
@@ -131,11 +153,22 @@ describe('useAgentEngine behavior', () => {
     ])
 
     mocks.captureViewport.mockRejectedValueOnce(new Error('capture unavailable'))
-    await engine.handleInput('continue without image', { withScreenshot: true })
-    expect(mocks.agentButlerChat.mock.calls[1]?.[0].messages.at(-1)).toEqual({
-      role: 'user',
-      content: 'continue without image',
-    })
+    await engine.handleInput('inspect the missing screenshot', { withScreenshot: true })
+    expect(mocks.agentButlerChat).toHaveBeenCalledOnce()
+    expect(latestReply()).toContain('页面截图未取得')
+    expect(useAgentStore().mode).toBe('error')
+  })
+
+  it.each([
+    { ok: false, message: 'capture blocked', textFallback: 'page summary' },
+    { ok: true, kind: 'text-snapshot', dataUrl: 'data:application/json;base64,summary' },
+    { ok: true, kind: 'image', dataUrl: '' },
+  ])('does not substitute text or an empty image for an explicitly requested screenshot: %j', async (capture) => {
+    mocks.captureViewport.mockResolvedValueOnce(capture)
+    await useAgentEngine().handleInput('read this screenshot', { withScreenshot: true })
+    expect(mocks.agentButlerChat).not.toHaveBeenCalled()
+    expect(latestReply()).toContain('页面截图未取得')
+    expect(useAgentStore().isLoading).toBe(false)
   })
 
   it.each([
@@ -191,23 +224,24 @@ describe('useAgentEngine behavior', () => {
     expect(latestReply()).toBe('未知工具：missing:tool')
   })
 
-  it('falls back to a skill or a connection message when the LLM fails', async () => {
+  it('keeps a failed conversation available for a real model retry without error text in its history', async () => {
     const execute = vi.fn(async () => ({ success: true, message: 'fallback result' }))
-    mocks.agentButlerChat.mockRejectedValue(new Error('offline'))
-    mocks.matchByIntent
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce({ execute } as unknown as AgentSkill)
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce(null)
+    mocks.agentButlerChat.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ text: 'recovered reply' })
+    mocks.matchByIntent.mockReturnValue({ execute } as unknown as AgentSkill)
     const engine = useAgentEngine()
     const store = useAgentStore()
     store.currentConversationId = 9
 
     await engine.handleInput('fallback-capable request')
-    expect(latestReply()).toBe('fallback result')
+    expect(latestReply()).toBe('出错了：offline')
+    expect(execute).not.toHaveBeenCalled()
 
-    await engine.handleInput('no fallback available')
-    expect(latestReply()).toContain('无法连接到 AI 大脑')
+    await engine.handleInput('retry our conversation')
+    expect(latestReply()).toBe('recovered reply')
+    expect(mocks.agentButlerChat.mock.calls[1]?.[0].conversation_id).toBe(9)
+    expect(
+      mocks.agentButlerChat.mock.calls[1]?.[0].messages.some((message: { content: string }) => message.content.includes('offline')),
+    ).toBe(false)
   })
 
   it('surfaces preprocessing errors and resets loading state', async () => {
@@ -220,5 +254,164 @@ describe('useAgentEngine behavior', () => {
     expect(latestReply()).toBe('出错了：DOM failed')
     expect(useAgentStore().mode).toBe('error')
     expect(useAgentStore().isLoading).toBe(false)
+  })
+
+  it('sends each user turn once and keeps loading placeholders out of model history', async () => {
+    const engine = useAgentEngine()
+    await engine.handleInput('first question')
+    expect(mocks.agentButlerChat.mock.calls[0]?.[0].messages.slice(1)).toEqual([{ role: 'user', content: 'first question' }])
+    await engine.handleInput('second question')
+    expect(mocks.agentButlerChat.mock.calls[1]?.[0].messages.slice(1)).toEqual([
+      { role: 'user', content: 'first question' },
+      { role: 'assistant', content: 'LLM reply' },
+      { role: 'user', content: 'second question' },
+    ])
+  })
+
+  it('reuses a preinserted turn without repeating its user message', async () => {
+    const store = useAgentStore()
+    store.addMessage({ id: 'existing-user', role: 'user', content: 'already inserted', timestamp: 1 })
+    store.addMessage({ id: 'existing-reply', role: 'assistant', content: '…', timestamp: 2, isLoading: true })
+    await useAgentEngine().handleInput('already inserted', { skipUserInsert: true })
+    expect(mocks.agentButlerChat.mock.calls[0]?.[0].messages.slice(1)).toEqual([{ role: 'user', content: 'already inserted' }])
+    expect(store.messages.map((message) => message.id)).toEqual(['existing-user', 'existing-reply'])
+    expect(latestReply()).toBe('LLM reply')
+  })
+
+  it('allows a real L1 conversation when a keyword also matches a page skill', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 1 } as XiaoCLifeState)
+    const execute = vi.fn(async () => ({ success: true, message: 'must not execute' }))
+    mocks.matchByIntent.mockReturnValue({ id: 'builtin:navigate', execute } as unknown as AgentSkill)
+    mocks.agentButlerChat.mockResolvedValue({ text: '可以这样设计跳转按钮的代码。', tool_calls: [] })
+
+    await useAgentEngine().handleInput('帮我写打开页面的按钮代码')
+
+    expect(execute).not.toHaveBeenCalled()
+    expect(mocks.agentButlerChat).toHaveBeenCalledOnce()
+    expect(latestReply()).toBe('可以这样设计跳转按钮的代码。')
+  })
+
+  it('does not mark an empty model reply as a completed answer', async () => {
+    mocks.agentButlerChat.mockResolvedValue({ text: '   ', tool_calls: [] })
+    await useAgentEngine().handleInput('write an explanation')
+    expect(latestReply()).toContain('未收到有效回复')
+    expect(useAgentStore().mode).toBe('error')
+    expect(useAgentStore().isLoading).toBe(false)
+  })
+
+  it('does not run a replacement skill after a dispatched model request fails', async () => {
+    const execute = vi.fn(async () => ({ success: true, message: 'unexpected side effect' }))
+    mocks.matchByIntent.mockReturnValue({ id: 'builtin:navigate', execute } as unknown as AgentSkill)
+    mocks.agentButlerChat.mockRejectedValue(new Error('provider unavailable'))
+    useAgentStore().currentConversationId = 9
+
+    await useAgentEngine().handleInput('continue our discussion of page navigation')
+
+    expect(execute).not.toHaveBeenCalled()
+    expect(latestReply()).toContain('provider unavailable')
+    expect(useAgentStore().mode).toBe('error')
+    expect(useAgentStore().currentConversationId).toBe(9)
+  })
+
+  it('ignores concurrent submissions while the original turn is still pending', async () => {
+    let finish!: (value: { text: string }) => void
+    mocks.agentButlerChat.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const engine = useAgentEngine()
+    const first = engine.handleInput('first question')
+    const second = engine.handleInput('second via Enter or quick action')
+    const count = mocks.agentButlerChat.mock.calls.length
+    const messages = [...useAgentStore().messages]
+    finish({ text: 'first answer' })
+    await Promise.all([first, second])
+
+    expect(count).toBe(1)
+    expect(messages).toHaveLength(2)
+    expect(useAgentStore().messages.map((message) => message.content)).toEqual(['first question', 'first answer'])
+  })
+
+  it('keeps a cleared conversation and its new pending turn separate from a late receipt', async () => {
+    let finishOld!: (value: { text: string; conversation_id: number }) => void
+    let finishNew!: (value: { text: string; conversation_id: number }) => void
+    mocks.agentButlerChat
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishOld = resolve
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishNew = resolve
+        }),
+      )
+    const engine = useAgentEngine()
+    const store = useAgentStore()
+    const old = engine.handleInput('old question')
+    store.clearMessages()
+    const fresh = engine.handleInput('new question')
+    finishOld({ text: 'old answer', conversation_id: 101 })
+    await old
+    const pending = { messages: [...store.messages], conversation: store.currentConversationId, loading: store.isLoading }
+    finishNew({ text: 'new answer', conversation_id: 202 })
+    await fresh
+
+    expect(pending.conversation).toBeNull()
+    expect(pending.loading).toBe(true)
+    expect(pending.messages.at(-1)?.isLoading).toBe(true)
+    expect(pending.messages.some((message) => message.content === 'old answer')).toBe(false)
+    expect(store.currentConversationId).toBe(202)
+    expect(store.messages.map((message) => message.content)).toEqual(['new question', 'new answer'])
+  })
+
+  it('clears account A data and rejects its late tool receipt after switching to account B', async () => {
+    let finish!: (value: { text: string; conversation_id: number; tool_calls: LLMToolCall[] }) => void
+    mocks.agentButlerChat.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'A', is_admin: false }
+    const engine = useAgentEngine()
+    const store = useAgentStore()
+    const request = engine.handleInput('account A question')
+    auth.user = { id: 22, username: 'B', is_admin: false }
+    const messagesAfterSwitch = [...store.messages]
+    finish({ text: 'account A private reply', conversation_id: 101, tool_calls: [tool('navigate', { name: 'plans' })] })
+    await request
+
+    expect(messagesAfterSwitch).toEqual([])
+    expect(store.messages).toEqual([])
+    expect(store.currentConversationId).toBeNull()
+    expect(mocks.executor.navigate).not.toHaveBeenCalled()
+    expect(store.isLoading).toBe(false)
+  })
+
+  it('stops receiving the original turn and never executes its late tools', async () => {
+    let finish!: (value: { text: string; tool_calls: LLMToolCall[] }) => void
+    mocks.agentButlerChat.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const store = useAgentStore()
+    const request = useAgentEngine().handleInput('pending request')
+    const signal = mocks.agentButlerChat.mock.calls[0]?.[1] as AbortSignal | undefined
+    const stop = (store as unknown as { stopRequest?: () => void }).stopRequest
+    stop?.()
+    finish({ text: '', tool_calls: [tool('navigate', { name: 'plans' })] })
+    await request
+
+    expect(stop).toBeTypeOf('function')
+    expect(signal?.aborted).toBe(true)
+    expect(mocks.executor.navigate).not.toHaveBeenCalled()
+    expect(latestReply()).toContain('已停止接收')
+    expect(store.isLoading).toBe(false)
   })
 })

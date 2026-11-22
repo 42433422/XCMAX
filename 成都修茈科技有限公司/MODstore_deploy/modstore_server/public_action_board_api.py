@@ -23,6 +23,6 @@ async def get_public_action_board(
     try:
         data = build_public_action_board(day=day)
         return {"ok": True, "data": data}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("public action board failed")
-        return {"ok": False, "error": str(exc), "data": None}
+        return {"ok": False, "error": "action_board_unavailable", "data": None}

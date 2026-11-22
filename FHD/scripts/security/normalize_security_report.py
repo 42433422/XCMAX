@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -186,20 +187,37 @@ def _flatten_pages(data: Any) -> list[Any]:
     return data
 
 
+def _is_ancestor(ancestor: str, descendant: str) -> bool:
+    """Return True when ``ancestor`` is reachable from ``descendant``."""
+
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 def _validate_codeql_provenance(
     data: Any,
     *,
     release_sha: str,
     required_categories: list[str],
     now: datetime | None = None,
-) -> str:
-    """Prove that CodeQL findings came from the exact release commit.
+    allow_ancestor: bool = False,
+) -> tuple[str, str]:
+    """Prove that CodeQL findings cover the frozen release commit.
 
     The alerts API is repository-global.  Without checking the analyses API, a
     scan can accidentally export findings from the previous main commit and
-    relabel them with the requested release SHA.  Require the newest analysis
-    for every configured language category to match the frozen commit and be
-    no older than 24 hours.
+    relabel them with the requested release SHA.
+
+    CodeQL 由 push 异步触发,分析提交通常落后 main HEAD。每日体检允许接受目标
+    SHA 的祖先分析(24 小时内)并标记 ``ancestor``;发布门禁保持 ``exact`` 严格
+    模式,未开启 ``allow_ancestor`` 时只接受同一提交的分析。
     """
 
     rows = [row for row in _flatten_pages(data) if isinstance(row, dict)]
@@ -209,27 +227,43 @@ def _validate_codeql_provenance(
     if not expected:
         raise ValueError("CodeQL release SHA is empty")
     current = (now or datetime.now(UTC)).astimezone(UTC)
-    latest_by_category: dict[str, dict[str, Any]] = {}
+    latest_by_category: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         category = str(row.get("category") or "").strip()
+        commit_sha = str(row.get("commit_sha") or "").strip().lower()
         created_at = str(row.get("created_at") or "")
-        if not category or not created_at:
+        if not category or not created_at or not commit_sha:
             continue
-        previous = latest_by_category.get(category)
-        if previous is None or created_at > str(previous.get("created_at") or ""):
-            latest_by_category[category] = row
+        latest_by_category.setdefault(category, []).append(row)
     categories = required_categories or sorted(latest_by_category)
     if not categories:
         raise ValueError("CodeQL analysis categories are empty")
+    coverages: set[str] = set()
     for category in categories:
-        row = latest_by_category.get(category)
-        if row is None:
+        candidates = sorted(
+            latest_by_category.get(category, []),
+            key=lambda row: str(row.get("created_at") or ""),
+            reverse=True,
+        )
+        if not candidates:
             raise ValueError(f"CodeQL analysis category missing: {category}")
-        if str(row.get("commit_sha") or "").strip().lower() != expected:
+        chosen: dict[str, Any] | None = None
+        coverage = ""
+        for row in candidates:
+            if str(row.get("commit_sha") or "").strip().lower() == expected:
+                chosen, coverage = row, "exact"
+                break
+        if chosen is None:
+            for row in candidates:
+                commit_sha = str(row.get("commit_sha") or "").strip().lower()
+                if allow_ancestor and _is_ancestor(commit_sha, expected):
+                    chosen, coverage = row, "ancestor"
+                    break
+        if chosen is None:
             raise ValueError(f"CodeQL analysis SHA mismatch: {category}")
         try:
             created = datetime.fromisoformat(
-                str(row.get("created_at") or "").replace("Z", "+00:00")
+                str(chosen.get("created_at") or "").replace("Z", "+00:00")
             )
         except ValueError as exc:
             raise ValueError(f"CodeQL analysis timestamp invalid: {category}") from exc
@@ -238,7 +272,8 @@ def _validate_codeql_provenance(
         age = current - created.astimezone(UTC)
         if age.total_seconds() < 0 or age.total_seconds() > 24 * 60 * 60:
             raise ValueError(f"CodeQL analysis stale: {category}")
-    return expected
+        coverages.add(coverage)
+    return expected, ("exact" if coverages == {"exact"} else "ancestor")
 
 
 def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
@@ -554,11 +589,17 @@ def main() -> int:
     parser.add_argument("--release-sha", required=True)
     parser.add_argument("--provenance-input", type=Path)
     parser.add_argument("--required-codeql-category", action="append", default=[])
+    parser.add_argument(
+        "--allow-ancestor-codeql",
+        action="store_true",
+        help="接受目标 SHA 祖先提交的 CodeQL 分析(仅每日体检使用;发布门禁保持严格)",
+    )
     args = parser.parse_args()
     available = args.input.is_file()
     findings: list[dict[str, Any]] = []
     error = ""
     source_sha = args.release_sha.strip().lower()
+    codeql_coverage = ""
     if available:
         try:
             native_payload = _load(args.input)
@@ -566,10 +607,11 @@ def main() -> int:
             if args.kind == "codeql":
                 if not args.provenance_input or not args.provenance_input.is_file():
                     raise ValueError("CodeQL analysis provenance is missing")
-                source_sha = _validate_codeql_provenance(
+                source_sha, codeql_coverage = _validate_codeql_provenance(
                     _load(args.provenance_input),
                     release_sha=args.release_sha,
                     required_categories=args.required_codeql_category,
+                    allow_ancestor=args.allow_ancestor_codeql,
                 )
             findings = normalize(args.kind, native_payload)
             if args.scanner == "gitleaks":
@@ -590,6 +632,7 @@ def main() -> int:
         "scanned_at": datetime.now(UTC).isoformat(),
         "available": available,
         "error": error,
+        "codeql_coverage": codeql_coverage,
         "findings": findings,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

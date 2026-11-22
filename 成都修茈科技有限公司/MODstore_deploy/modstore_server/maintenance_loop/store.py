@@ -7,7 +7,8 @@ import os
 import socket
 from collections import deque
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Dict, List, Optional, Tuple
@@ -152,6 +153,9 @@ def _append_ledger(record: Dict[str, Any]) -> None:
     record.setdefault("ledger_schema_version", 2)
     path = ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    durable_outcome = record.get("phase") == "complete" and isinstance(
+        record.get("policy_decision"), dict
+    )
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     with os.fdopen(fd, "a", encoding="utf-8") as fh:
         if hasattr(os, "fchmod"):
@@ -163,6 +167,24 @@ def _append_ledger(record: Dict[str, Any]) -> None:
         except (ImportError, OSError):
             pass
         fh.write(_dumps_ledger(record) + "\n")
+        if durable_outcome or record.get("event") in {
+            "deploy_dispatch_intent",
+            "deploy_dispatch_bound",
+            "post_deploy_verified",
+            "delivery_reconciled",
+        }:
+            fh.flush()
+            os.fsync(fh.fileno())
+    if (
+        durable_outcome
+        or record.get("event")
+        in {"deploy_dispatch_intent", "post_deploy_verified", "delivery_reconciled"}
+    ) and os.name != "nt":
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
 
 def _read_ledger(
@@ -189,6 +211,195 @@ def _read_ledger(
         config.logger.exception("failed to read self-maintenance ledger")
         return []
     return list(rows)[-limit:]
+
+
+def _has_recorded_outcome(final: Dict[str, Any]) -> bool:
+    """Read a lost append acknowledgement without double-counting completion."""
+    path = ledger_path()
+    if not path.exists():
+        return False
+    expected = json.loads(_dumps_ledger(final))
+    found = False
+    with path.open("r", encoding="utf-8") as handle:
+        try:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+        except ImportError:
+            pass
+        while raw := handle.readline(2 * 1024 * 1024 + 1):
+            if len(raw) > 2 * 1024 * 1024 or not raw.endswith("\n"):
+                raise ValueError("outcome_ledger_incomplete")
+            if not raw.strip():
+                continue
+            row = json.loads(raw)
+            if not isinstance(row, dict):
+                raise ValueError("outcome_ledger_invalid")
+            if row.get("phase") != "complete" or row.get("run_id") != final.get("run_id"):
+                continue
+            observed = {
+                key: value
+                for key, value in row.items()
+                if key not in {"correlation_id", "ledger_schema_version"}
+            }
+            if observed != expected:
+                raise ValueError("outcome_ledger_identity_conflict")
+            found = True
+    return found
+
+
+DELIVERY_RECOVERY_ROWS = 256
+DELIVERY_RECOVERY_BYTES = 2 * 1024 * 1024
+DELIVERY_RECOVERY_RUNS = 20
+_DELIVERY_BINDING = ("run_id", "para_task_id", "branch", "branch_head_sha")
+
+
+def _read_delivery_row(handle: Any, end: int, budget: dict[str, int]) -> dict[str, Any] | None:
+    """Read one complete snapshot row without unbounded line or page allocation."""
+    if not budget["rows"] or not budget["bytes"] or handle.tell() >= end:
+        return None
+    start = handle.tell()
+    raw = handle.readline(min(end - start, budget["bytes"]))
+    if not raw.endswith(b"\n"):
+        handle.seek(start)
+        if len(raw) == budget["bytes"] and budget["bytes"] < DELIVERY_RECOVERY_BYTES:
+            budget["bytes"] = 0
+            return None
+        raise ValueError("delivery recovery ledger has an incomplete or oversized row")
+    budget["rows"] -= 1
+    budget["bytes"] -= len(raw)
+    row = json.loads(raw)
+    if not isinstance(row, dict):
+        raise TypeError("delivery recovery ledger row is not an object")
+    return row
+
+
+def _pending_delivery_page(cursor: Any = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Discover and verify a bounded page against the original append-only ledger.
+
+    Verification has its own durable cursor; it never rescans an entire ledger
+    in one tick. Only a page checked through the current EOF becomes actionable.
+    Every finished page advances discovery even when its tasks remain unknown.
+    """
+    path = ledger_path()
+    if not path.exists():
+        return [], {}
+    with path.open("rb") as handle:
+        stat = os.fstat(handle.fileno())
+        identity = [stat.st_dev, stat.st_ino]
+        state = deepcopy(cursor) if isinstance(cursor, dict) else {}
+        if state.get("file") != identity or stat.st_size < max(
+            int(state.get(key) or 0) for key in ("end", "offset", "verify_offset")
+        ):
+            state = {"file": identity, "offset": 0, "end": stat.st_size}
+        if not state.get("end"):
+            state["end"] = stat.st_size
+        if state["end"]:
+            handle.seek(state["end"] - 1)
+            if handle.read(1) != b"\n":
+                # A snapshot taken mid-append must resume at the completed row,
+                # not remain pinned to the old partial-line boundary forever.
+                state["end"] = stat.st_size
+        budget = {"rows": DELIVERY_RECOVERY_ROWS, "bytes": DELIVERY_RECOVERY_BYTES}
+        candidates = state.get("candidates") or []
+        if not candidates:
+            handle.seek(int(state.get("offset") or 0))
+            while len(candidates) < DELIVERY_RECOVERY_RUNS:
+                row = _read_delivery_row(handle, state["end"], budget)
+                if row is None:
+                    break
+                if (
+                    row.get("event") == "merge_requested"
+                    and row.get("ok") is True
+                    and row.get("status") == "pending"
+                    and all(str(row.get(key) or "").strip() for key in _DELIVERY_BINDING[:3])
+                    and not any(item["run_id"] == row["run_id"] for item in candidates)
+                ):
+                    candidates.append(
+                        {
+                            **{key: str(row.get(key) or "").strip() for key in _DELIVERY_BINDING},
+                            **(
+                                {"deployment_scope": row["deployment_scope"]}
+                                if isinstance(row.get("deployment_scope"), dict)
+                                else {}
+                            ),
+                        }
+                    )
+            state["offset"] = handle.tell()
+            if not candidates:
+                if state["offset"] >= state["end"]:
+                    return [], {}
+                return [], state
+            state.update(candidates=candidates, verify_offset=0)
+        by_run = {item["run_id"]: item for item in candidates}
+        handle.seek(state["verify_offset"])
+        end = os.fstat(handle.fileno()).st_size
+        while budget["rows"] and budget["bytes"]:
+            row = _read_delivery_row(handle, end, budget)
+            if row is None:
+                break
+            item = by_run.get(str(row.get("run_id") or "").strip())
+            if item is None:
+                continue
+            event = row.get("event")
+            policy = row.get("policy_decision") or {}
+            scope = row.get("deployment_scope") or (
+                policy.get("deployment_scope") if isinstance(policy, dict) else None
+            )
+            if (
+                (row.get("phase") == "complete" or event == "merge_requested")
+                and isinstance(scope, dict)
+                and all(
+                    str(row.get(key) or "").strip() == item[key] for key in _DELIVERY_BINDING[:3]
+                )
+            ):
+                item["conflict"] = item.get("conflict") or (
+                    "deployment_scope" in item and item["deployment_scope"] != scope
+                )
+                item["deployment_scope"] = scope
+            if event == "merge_requested":
+                matches = all(
+                    str(row.get(key) or "").strip() == item[key] for key in _DELIVERY_BINDING
+                )
+                item["seen"] = item.get("seen") or matches
+                item["conflict"] = item.get("conflict") or not matches
+            elif (
+                event in {"merge_completed", "delivery_reconciled"}
+                and row.get("ok") is True
+                and row.get("status") == "completed_merged"
+                and all(
+                    str(row.get(key) or "").strip() == item[key] for key in _DELIVERY_BINDING[:3]
+                )
+            ):
+                item["terminal"] = True
+            sha = str(row.get("merge_sha") or "").strip()
+            if row.get("phase") == "deployment" and sha:
+                item["conflict"] = item.get("conflict") or bool(
+                    item.get("merge_sha") and item["merge_sha"] != sha
+                )
+                item["merge_sha"] = sha
+        state["verify_offset"] = handle.tell()
+        if state["verify_offset"] < os.fstat(handle.fileno()).st_size:
+            return [], state
+        ready = [
+            {
+                **{key: item[key] for key in _DELIVERY_BINDING},
+                "status": "completed_merge_requested",
+                "delivery_merge_sha": item.get("merge_sha", ""),
+                **(
+                    {"deployment_scope": item["deployment_scope"]}
+                    if "deployment_scope" in item
+                    else {}
+                ),
+            }
+            for item in candidates
+            if item.get("seen") and not item.get("terminal") and not item.get("conflict")
+        ]
+        state.pop("candidates")
+        state.pop("verify_offset")
+        if state["offset"] >= state["end"]:
+            state = {}
+        return ready, state
 
 
 def _ledger_row_timestamp(
@@ -219,8 +430,8 @@ def _ledger_row_timestamp(
         except ValueError:
             continue
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
     return None
 
 
@@ -240,7 +451,7 @@ def _select_recent_milestone_rows(
     excluded, and evidence expires after ``window_days`` so an old success can
     never prove current autonomy forever.
     """
-    current = (now or config._utc_now()).astimezone(timezone.utc)
+    current = (now or config._utc_now()).astimezone(UTC)
     bounded_days = max(1, min(int(window_days or config.DEFAULT_EVIDENCE_WINDOW_DAYS), 90))
     bounded_runs = max(1, min(int(run_limit or config.DEFAULT_EVIDENCE_RUN_LIMIT), 64))
     bounded_rows = max(1, min(int(row_limit or config.DEFAULT_EVIDENCE_ROW_LIMIT), 512))
@@ -338,10 +549,10 @@ def _load_loop_memory() -> Dict[str, Any]:
     try:
         with path.open("r", encoding="utf-8") as fh:
             data = json.load(fh)
-        return data if isinstance(data, dict) else {}
+        return data if isinstance(data, dict) else {"execution_state_unavailable": True}
     except RECOVERABLE_ERRORS:
         config.logger.exception("failed to read self-maintenance memory")
-        return {}
+        return {"execution_state_unavailable": True}
 
 
 def _read_governance_audit(
@@ -392,4 +603,12 @@ def _write_loop_memory(memory: Dict[str, Any]) -> None:
     with tmp.open("w", encoding="utf-8") as fh:
         fh.write(_dumps_ledger(memory, indent=2))
         fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
     tmp.replace(path)
+    if hasattr(os, "O_DIRECTORY"):
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)

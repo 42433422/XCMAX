@@ -99,7 +99,7 @@ export function useLoginViewActions(
 
   let loginAttempt = 0
 
-  async function submitLogin(_event?: Event) {
+  async function submitLogin(_event?: Event, offline = false) {
     if (!canSubmit.value) {
       errorMessage.value = t('login.errNeedUsernamePassword')
       return
@@ -110,7 +110,9 @@ export function useLoginViewActions(
     const invitation = invitationCode.value.trim()
     const invitationForRequest = invitation && invitation !== password.value ? invitation : ''
     try {
-      const result = await authApi.login(username.value.trim(), password.value, accountKind.value, invitationForRequest)
+      const result = offline
+        ? await authApi.offlineLogin(username.value.trim(), password.value)
+        : await authApi.login(username.value.trim(), password.value, accountKind.value, invitationForRequest)
       if (attempt !== loginAttempt) return
       const raw = result as unknown as Record<string, unknown>
       const ok = raw?.success === true || (raw?.data as Record<string, unknown> | undefined)?.success === true
@@ -167,6 +169,7 @@ export function useLoginViewActions(
     formatLoginFailurePayload,
     selectAdminLogin,
     submitLogin,
+    submitOfflineLogin: () => submitLogin(undefined, true),
     startOidcLogin,
   }
 }

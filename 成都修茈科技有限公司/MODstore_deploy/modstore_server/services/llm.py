@@ -179,7 +179,7 @@ async def chat_dispatch_via_session(
             consume_llm_credit(session, uid, 1, charge=charge)
         except RECOVERABLE_ERRORS:
             pass
-    return result
+    return dict(result)
 
 
 # ── Platform-only bench helpers ───────────────────────────────────────────────
@@ -214,13 +214,31 @@ _BENCH_DEFAULT_MODELS: dict[str, str] = {
 }
 
 
+async def _resolve_platform_gateway_default() -> tuple[str, str] | tuple[None, None]:
+    from fastapi import HTTPException
+
+    from modstore_server.llm_api import resolve_default_llm_route
+    from modstore_server.models import get_session_factory
+
+    with get_session_factory()() as session:
+        try:
+            route = await resolve_default_llm_route(session, 0, platform_only=True)
+        except HTTPException:
+            # The canonical resolver rejected every eligible platform chat route.
+            # Do not invent a gateway model that is absent from its runtime catalog.
+            return None, None
+    return str(route["provider"]), str(route["model"])
+
+
 def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
     """Resolve provider + model for bench evaluation using platform keys only.
 
     Priority:
     1. Runtime route selected from the canonical platform model catalog
-    2. Env ``MODSTORE_EMPLOYEE_BENCH_PROVIDER`` + ``MODSTORE_EMPLOYEE_BENCH_MODEL``
-    3. First ``KNOWN_PROVIDERS`` entry with a ``platform_api_key`` configured,
+    2. With a unified gateway: explicit bench env override, then the same
+       platform-only default resolver and runtime model catalog used by chat
+    3. Without a gateway: saved platform default, then explicit bench env override
+    4. First ``KNOWN_PROVIDERS`` entry with a ``platform_api_key`` configured,
        paired with the ``_BENCH_DEFAULT_MODELS`` fallback for that provider.
 
     Returns ``(provider, model)`` or ``(None, None)`` when no platform key is
@@ -247,14 +265,25 @@ def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
 
     from modstore_server.platform_model_config import default_config, stored_config
 
+    env_prov = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_PROVIDER") or "").strip()
+    env_mdl = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_MODEL") or "").strip()
+    env_route = bool(env_prov and env_mdl and platform_api_key(env_prov))
+
+    if platform_api_key("litellm"):
+        if env_route:
+            return env_prov, env_mdl
+        from modstore_server.runtime_async import run_coro_sync
+
+        route: tuple[str, str] | tuple[None, None] = run_coro_sync(
+            _resolve_platform_gateway_default()
+        )
+        return route
+
     configured_default = default_config()
     if configured_default:
         return configured_default["provider"], configured_default["model"]
 
-    env_prov = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_PROVIDER") or "").strip()
-    env_mdl = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_MODEL") or "").strip()
-
-    if env_prov and env_mdl and platform_api_key(env_prov):
+    if env_route:
         return env_prov, env_mdl
 
     for prov in KNOWN_PROVIDERS:
@@ -278,11 +307,13 @@ async def chat_dispatch_via_platform_only(
     messages: list[dict[str, Any]],
     *,
     max_tokens: Optional[int] = None,
+    allow_fallback: bool = True,
 ) -> dict[str, Any]:
     """Call ``chat_dispatch`` using the server-side platform API key only.
 
     Does not consult user BYOK credentials.  Used for bench evaluation so
-    costs are attributed to the platform, not individual users.
+    costs are attributed to the platform, not individual users. Route health
+    probes disable the employee fallback to test only the requested route.
     """
     from modstore_server.llm_chat_proxy import chat_dispatch
     from modstore_server.llm_key_resolver import (
@@ -303,7 +334,7 @@ async def chat_dispatch_via_platform_only(
         base_url = platform_base_url(provider)
 
     fallback_kwargs: dict[str, Any] = {}
-    fallback_enabled = os.environ.get(
+    fallback_enabled = allow_fallback and os.environ.get(
         "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_ENABLED", "1"
     ).strip().lower() not in {"0", "false", "no", "off"}
     fallback_provider = (
@@ -340,19 +371,45 @@ async def chat_dispatch_via_platform_only(
             ),
         }
 
-    result = await chat_dispatch(
-        provider,
-        api_key=api_key,
-        base_url=base_url,
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-        **fallback_kwargs,
+    from modstore_server.llm_chat_proxy import normalize_model
+    from modstore_server.strategic_portfolio_usage import (
+        complete_platform_call,
+        platform_call_reservation,
+        prepare_platform_call,
     )
-    if result.get("_fallback_used"):
-        result["_fallback_provider"] = fallback_provider
-        result["_fallback_model"] = fallback_model
-    return result
+
+    model = normalize_model(provider, model, base_url)
+    reservation = prepare_platform_call(provider, model, messages, max_tokens)
+    if reservation is not None:
+        max_tokens = reservation["max_tokens"]
+        # A hidden second provider call has no separate budget reservation.
+        # The strategic runtime may select another approved route on a new call.
+        fallback_kwargs = {}
+    result = None
+    try:
+        call = chat_dispatch(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            **fallback_kwargs,
+        )
+        if reservation is not None:
+            import asyncio
+
+            with platform_call_reservation(reservation):
+                result = await asyncio.wait_for(call, timeout=reservation["timeout_seconds"])
+        else:
+            result = await call
+    finally:
+        # Preserve cancellation/error propagation while retaining unresolved usage.
+        complete_platform_call(reservation, result)
+    if result.get("_fallback_used") and fallback_kwargs:
+        result.setdefault("_fallback_provider", fallback_provider)
+        result.setdefault("_fallback_model", fallback_model)
+    return dict(result)
 
 
 _LOCK = Lock()

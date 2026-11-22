@@ -26,6 +26,17 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _legacy_builtin_tool_unit_scope(monkeypatch):
+    """Exercise built-in tool handlers without querying an unrelated tenant tool DB."""
+    from app.application import agent_tool_lifecycle
+
+    monkeypatch.setattr(
+        agent_tool_lifecycle, "execute_if_registered", lambda *_args, **_kwargs: None
+    )
+
+
 from app.application.tools.workflow import (
     _excel_cell_as_clean_str,
     _excel_cell_as_float,
@@ -46,20 +57,19 @@ from app.application.tools.workflow import (
 
 
 def _patch_excel_text_to_pandas(translate_return=None, translate_side_effect=None):
-    """构造一个注入 sys.modules 的 fake ExcelTextToPandas 模块。
-
-    app.legacy.excel_text_to_pandas 在本仓库不存在，run_natural_language_pandas
-    通过 from ... import 延迟导入；测试需要用 patch.dict 注入 fake 模块。
-    """
+    """替换自然语言 pandas 翻译器（避免测试依赖真实 LLM）。"""
     mock_converter = MagicMock()
     if translate_side_effect is not None:
         mock_converter.translate.side_effect = translate_side_effect
     else:
         mock_converter.translate.return_value = translate_return
-    fake_module = MagicMock(ExcelTextToPandas=MagicMock(return_value=mock_converter))
-    return patch.dict(
-        "sys.modules", {"app.legacy.excel_text_to_pandas": fake_module}
-    ), mock_converter
+    return (
+        patch(
+            "app.application.tools.workflow.adapters.translate_pandas",
+            side_effect=mock_converter.translate,
+        ),
+        mock_converter,
+    )
 
 
 class TestRunNaturalLanguagePandas:
@@ -111,12 +121,13 @@ class TestRunNaturalLanguagePandas:
         assert result["returned_rows"] == 10
 
     def test_import_error_sets_error_msg(self) -> None:
-        """app.legacy.excel_text_to_pandas 不存在时 ImportError 被捕获。"""
+        """翻译器不可用（ImportError）时按可恢复错误兜底。"""
         df = pd.DataFrame({"a": [1, 2]})
-        # 不注入 fake 模块，让真实 import 失败
-        with patch.dict("sys.modules", {"app.legacy.excel_text_to_pandas": None}):
+        patch_ctx, _ = _patch_excel_text_to_pandas(
+            translate_side_effect=ImportError("translator missing")
+        )
+        with patch_ctx:
             result = run_natural_language_pandas(df, "x")
-        # ImportError 属于 RECOVERABLE_ERRORS，会被捕获并设置 error
         assert "error" in result
         assert result["generated_code"] == ""
 
@@ -910,6 +921,7 @@ class TestExecuteWorkflowToolMisc:
         assert data["tool"] == "totally_unknown"
 
     def test_template_preview_empty_action_defaults_to_view(self) -> None:
+        context = {"user_id": "17"}
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -927,14 +939,20 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
-                return_value={"result": "ok"},
-                create=True,
-            ),
+                "app.application.tools.registered_capabilities.execute_registered_capability",
+                return_value=json.dumps({"result": "ok"}),
+            ) as registered,
         ):
-            result = execute_workflow_tool("template_preview", {"action": ""})
+            result = execute_workflow_tool(
+                "template_preview", {"action": ""}, runtime_context=context
+            )
         data = json.loads(result)
         assert "result" in data
+        registered.assert_called_once_with(
+            {"tool_id": "template_preview", "action": "view", "params": {"action": ""}},
+            workspace_root=None,
+            runtime_context=context,
+        )
 
     def test_employee_planner_tool_returned(self) -> None:
         with (
@@ -957,7 +975,7 @@ class TestExecuteWorkflowToolMisc:
             result = execute_workflow_tool("some_tool", {})
         assert "emp" in result
 
-    def test_planner_native_tool_error_swallowed(self) -> None:
+    def test_planner_native_tool_error_stops_dispatch(self) -> None:
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -968,18 +986,21 @@ class TestExecuteWorkflowToolMisc:
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 side_effect=ImportError("no planner"),
                 create=True,
-            ),
+            ) as native,
             patch(
                 "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
-            ),
+            ) as legacy,
         ):
             result = execute_workflow_tool("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["execution_state"] == data["outcome"] == "unknown"
+        assert data["retryable"] is False and data["reconciliation_required"] is True
+        native.assert_called_once()
+        legacy.assert_not_called()
 
-    def test_employee_planner_tool_error_swallowed(self) -> None:
+    def test_employee_planner_tool_error_stops_dispatch(self) -> None:
         with (
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",
@@ -995,11 +1016,13 @@ class TestExecuteWorkflowToolMisc:
                 "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 side_effect=RuntimeError("fail"),
                 create=True,
-            ),
+            ) as legacy,
         ):
             result = execute_workflow_tool("excel_chart_recommend", {})
         data = json.loads(result)
-        assert "suggestions" in data
+        assert data["execution_state"] == data["outcome"] == "unknown"
+        assert data["retryable"] is False and data["reconciliation_required"] is True
+        legacy.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

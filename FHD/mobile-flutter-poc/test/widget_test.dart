@@ -5455,13 +5455,16 @@ void main() {
     expect(find.text('发送失败'), findsOneWidget);
     expect(find.text('连接不到电脑工具，已尝试通过云端中继，请稍后重试'), findsOneWidget);
     expect(find.textContaining('failed to connect'), findsNothing);
-    expect(find.text('重发'), findsOneWidget);
+    expect(find.text('核对结果'), findsOneWidget);
 
-    await tester.tap(find.text('重发'));
+    await tester.tap(find.text('核对结果'));
     await tester.pumpAndSettle();
 
-    expect(repository.calls, ['继续', '继续']);
-    expect(find.text('重发成功'), findsOneWidget);
+    expect(repository.calls, ['继续', '']);
+    expect(repository.resumeFlags, [false, true]);
+    expect(repository.turnKeys[0], isNotEmpty);
+    expect(repository.turnKeys[1], repository.turnKeys[0]);
+    expect(find.text('原任务核对完成'), findsOneWidget);
     expect(find.text('发送失败'), findsNothing);
     expect(find.text('继续'), findsOneWidget);
   });
@@ -5895,6 +5898,8 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
 
   @override
   Future<String> streamMessage({
+    String idempotencyKey = '',
+    bool resumeOnly = false,
     required ConversationItem conversation,
     required String body,
     bool cacheUserMessage = true,
@@ -5931,9 +5936,13 @@ class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
         );
 
   final calls = <String>[];
+  final resumeFlags = <bool>[];
+  final turnKeys = <String>[];
 
   @override
   Future<String> streamMessage({
+    String idempotencyKey = '',
+    bool resumeOnly = false,
     required ConversationItem conversation,
     required String body,
     bool cacheUserMessage = true,
@@ -5944,11 +5953,12 @@ class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
     bool Function()? isCancelled,
   }) async {
     calls.add(body);
+    resumeFlags.add(resumeOnly);
+    turnKeys.add(idempotencyKey);
     if (calls.length == 1) {
       throw const MobileRepositoryException('failed to connect to desktop');
     }
-    onToken?.call('重发');
-    return '重发成功';
+    return '原任务核对完成';
   }
 }
 

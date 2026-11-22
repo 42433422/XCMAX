@@ -232,6 +232,12 @@ class RateLimitedProvider:
     def is_configured(self) -> bool:
         return bool(self._inner.is_configured)
 
+    @property
+    def supports_streaming(self) -> bool:
+        from app.infrastructure.llm.response_completion import provider_supports_streaming
+
+        return provider_supports_streaming(self._inner)
+
     async def chat_completion(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
         with model_call_slot(self._inner):
             admit_model_call(self._inner, kwargs=kwargs)
