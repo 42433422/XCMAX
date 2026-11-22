@@ -34,6 +34,10 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。
+
+Smoke 与真实 API E2E 使用官方 [setup-uv 6.8.0](https://github.com/astral-sh/setup-uv/tree/d0cc045d04ccac9d8b7881df0226f9e82c39688e)（MIT）缓存依赖下载，每次仍从当前检出源码安装并校验依赖；离线 Agent 评测通过 Python 标准库输出脱敏 JUnit，由官方 [upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)（MIT）按源码、运行和重试身份保存。过期 CI 清理复用官方 [github-script 9.0.0](https://github.com/actions/github-script/tree/3a2844b7e9c422d3c10d287c895573f7108da1b3)（MIT，Node 24）；清理调用 GitHub REST 2022-11-28 的 [force-cancel](https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#force-cancel-a-workflow-run)，本仓只增加 PR、运行和提交身份核验。可信主线的 `pull_request_target` 不检出或执行 PR 内容，仅在普通取消已有证据且同 PR 旧运行仍未结束时调用；当前提交的 `always()` 门禁保留。新增 Action 引用固定完整提交。真实 API E2E 的随机端口是构建输入，因此仍独立严格构建。
+
 自主编程继续调用已集成的 [OpenAI Codex `rust-v0.153.4`](https://github.com/openai/codex/tree/rust-v0.153.4)（Apache-2.0），GitHub worker 的版本由既有 manifest/lock 固定；本机设备记录实际探测到的 CLI 版本，不能用云端锁版代替本机身份。`cli_output_stream.mjs` 依据同版原生 JSONL 事件与进程退出共同形成回执；`turn.completed`、退出码 0、完整事件流须同时成立，单条工具完成或文本不是整轮成功。保留可内部重试的错误事件，最终仍核对原生终态。旧安装入口转发同一 Para 执行器，真实执行开始后不因配额或工具失败重放；失败补丁保留用于核对，不能进入发布。版本、thread、usage 和执行回执沿原任务报告/outbox 回传。
 
 Para 首次派工先核对 `/api/health` 的 `task_request_recovery_version=1`，冻结全部设备计划和每次原请求正文。`POST /api/tasks` 与 `GET /api/tasks/by-request/:client_request_id` 都核对服务端计算的正文 SHA-256、原 task/subtask/device；消息轮询只读恢复，获授权的原调用续接只派发尚未发送的设备。配套服务 `42433422/devfleet-private` 沿用 SQLite 原生事务、唯一约束和既有重连调度，不能只升级客户端。客户端复用已固定的 [filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT）单例可重入文件锁，保留跨进程原请求互斥；未知结果不切换 webhook/CLI 重做。新任务须配置原 Para 地址、账号令牌、仓库与在线设备，旧服务在创建前停止；历史已知 task 仍可读取。

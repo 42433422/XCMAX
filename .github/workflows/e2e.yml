@@ -9,19 +9,37 @@ on:
       - "FHD/app/**"
       - ".github/workflows/e2e.yml"
       - ".github/workflows/e2e-playwright-reusable.yml"
+      - "FHD/scripts/dev/e2e-full.sh"
+      - "FHD/scripts/dev/e2e_supervise.py"
+      - "FHD/scripts/dev/check_requirements_lock.py"
+      - "FHD/requirements-server-api.txt"
+      - "FHD/ops/deploy/requirements*.txt"
+      - "FHD/uv.lock"
+      - "FHD/pyproject.toml"
+      - "FHD/packages/xcagi_langgraph_*/**"
   pull_request:
     branches: [main, master]
     paths:
       - "FHD/frontend/**"
       - "FHD/app/**"
+      - ".github/workflows/e2e.yml"
+      - ".github/workflows/e2e-playwright-reusable.yml"
+      - "FHD/scripts/dev/e2e-full.sh"
+      - "FHD/scripts/dev/e2e_supervise.py"
+      - "FHD/scripts/dev/check_requirements_lock.py"
+      - "FHD/requirements-server-api.txt"
+      - "FHD/ops/deploy/requirements*.txt"
+      - "FHD/uv.lock"
+      - "FHD/pyproject.toml"
+      - "FHD/packages/xcagi_langgraph_*/**"
   workflow_dispatch:
   schedule:
     # 每日 22:50（北京时间）
     - cron: "50 14 * * *"
 
 concurrency:
-  group: e2e-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Candidate tests never inherit repository-wide write permissions.
 permissions:

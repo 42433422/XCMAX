@@ -1,9 +1,15 @@
 name: retort-engine
 on:
   pull_request:
-    paths: ["packages/retort_engine/**", ".github/workflows/retort-engine.yml"]
+    paths: ["packages/retort_engine/**", "FHD/packages/xcagi_langgraph_*/**", ".github/workflows/retort-engine.yml"]
   push:
-    paths: ["packages/retort_engine/**", ".github/workflows/retort-engine.yml"]
+    branches: [main, develop, master]
+    tags: ['**']
+    paths: ["packages/retort_engine/**", "FHD/packages/xcagi_langgraph_*/**", ".github/workflows/retort-engine.yml"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 # Candidate tests never inherit repository-wide write permissions.
 permissions:
   contents: read

@@ -19,7 +19,7 @@ ENTERPRISE_SHELL = "enterprise"
 
 
 def client_shell_from_request(request: HTTPConnection) -> str:
-    headers = getattr(request, "headers", None) or {}
+    headers = getattr(request, "headers", {}) or {}
     raw = str(headers.get(CLIENT_SHELL_HEADER) or "").strip().lower()
     if raw == ADMIN_SHELL:
         return ADMIN_SHELL

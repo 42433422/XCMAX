@@ -233,14 +233,14 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
     quality, shard, gate = (
         jobs[name] for name in ("backend-quality", "backend-test-shard", "backend-test")
     )
-    prerequisites = {"guard-temp-scripts", "classify"}
+    prerequisites = {"guard-temp-scripts"}
     assert set(quality["needs"]) == set(shard["needs"]) == prerequisites
-    assert shard["if"] == "needs.classify.outputs.backend == 'true'"
+    assert shard["if"] == "needs.guard-temp-scripts.outputs.backend == 'true'"
     assert shard["runs-on"] == "ubuntu-latest"
     assert shard["strategy"] == {
         "fail-fast": False,
         "max-parallel": 8,
-        "matrix": "${{ fromJSON(needs.classify.outputs.backend_matrix) }}",
+        "matrix": "${{ fromJSON(needs.guard-temp-scripts.outputs.backend_matrix) }}",
     }
     assert set(gate["needs"]) == prerequisites | {
         "ssot-drift-gate",
@@ -249,7 +249,7 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
         "agent-postgres-transactions",
     }
     assert gate["if"] == "always()"
-    assert gate["outputs"]["skip"] == "${{ needs.classify.outputs.backend_skip }}"
+    assert gate["outputs"]["skip"] == "${{ needs.guard-temp-scripts.outputs.backend_skip }}"
     preflight = gate["steps"][0]
     assert preflight["working-directory"] == "."
     assert 'test "$QUALITY" = success' in preflight["run"]
@@ -392,7 +392,6 @@ def test_aggregate_shell_result_semantics(quality, shards, skip, passed):
             os.environ,
             GUARD="success",
             SSOT="success",
-            CLASSIFY="success",
             VALID="true",
             SOURCE_SHA="a" * 40,
             EXPECTED_SOURCE_SHA="a" * 40,
@@ -411,9 +410,9 @@ def test_aggregate_shell_result_semantics(quality, shards, skip, passed):
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("CLASSIFY", "failure"),
-        ("CLASSIFY", "cancelled"),
-        ("CLASSIFY", "skipped"),
+        ("GUARD", "failure"),
+        ("GUARD", "cancelled"),
+        ("GUARD", "skipped"),
         ("VALID", "false"),
         ("VALID", ""),
         ("SOURCE_SHA", "b" * 40),
@@ -426,7 +425,6 @@ def test_aggregate_shell_rejects_unbound_classification(field, value):
         os.environ,
         GUARD="success",
         SSOT="success",
-        CLASSIFY="success",
         VALID="true",
         SOURCE_SHA="a" * 40,
         EXPECTED_SOURCE_SHA="a" * 40,
@@ -538,7 +536,7 @@ def test_dynamic_production_configuration_keeps_full_and_behavior():
     assert (
         shard["env"]["BACKEND_SHARD_TOTAL"]
         == gate["env"]["BACKEND_SHARD_TOTAL"]
-        == "${{ needs.classify.outputs.backend_total }}"
+        == "${{ needs.guard-temp-scripts.outputs.backend_total }}"
     )
     assert shard["env"]["BACKEND_TIMINGS_FILE"] == gate["env"]["BACKEND_TIMINGS_FILE"]
     assert shard["env"]["BACKEND_TIMINGS_FILE"] == "metrics/backend_test_timings.json"

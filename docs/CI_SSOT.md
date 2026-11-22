@@ -178,12 +178,14 @@ PR Fast CI
 
 否则默认继续执行本 SSOT。普通 bug fix 的目标为「修改 → 快测 → PR 验证 → 合并」尽量在分钟级完成，开发速度以**有效修复数量 / 单位时间**衡量，而非「跑了多少次 CI」。
 
-## 分片执行与耗时观测（2026-11-01）
+## 分片执行与耗时观测（2026-11-22）
 
-本轮保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`backend-test`、`frontend-test` 仍是最终聚合门禁；质量检查与分片只等待 `guard-temp-scripts` 和分类完成；`SSOT Drift Gate` 同时运行，两个最终聚合门禁仍显式要求守卫与 SSOT 均成功。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
+保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`guard-temp-scripts` 在同一次检出中完成临时文件守卫、统一分类和分片计划，质量检查与分片只等待这一任务；`SSOT Drift Gate` 同时运行，`backend-test`、`frontend-test` 最终聚合仍显式要求守卫与 SSOT 均成功。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
 
 | 环节 | 执行与验证口径 |
 | --- | --- |
+| 事件去重 | Flutter、Android smoke、Market E2E 和 Retort 的分支 push 限定 main/develop/master，特性分支由 PR 验证；保留 tag、手动及既有定时入口。源 workflow 与根镜像的触发路径分别保留，生成器仅重写精确的根路径。 |
+| 旧轮取消 | 无副作用的 PR 测试和守卫按 workflow/PR 分组取消旧轮；非 PR 以 run_id 隔离。可信主线的 `cancel-superseded-ci.yml` 在同仓 PR synchronize 后只读元数据，仅对同 PR、同主 CI、旧 head、已有 cancelled job 且仍未完成的运行使用官方 force-cancel；取消前复查事件 head、live PR、run/attempt 和完整 jobs，身份缺失或漂移即停止。它不检出 PR 内容，也不修改检查结论；当前 head 的 `always()` 聚合仍失败阻断。发布、部署及缓存预热沿用各自策略。Mac 专项分类精确补取 base/head 后读取 diff，缺失时仍保守全跑。 |
 | 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
 | 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，各片只收集自己的文件。汇总从同版源码独立重算文件全集与分配，逐文件核对收集回执、用例和执行结果，保留 run/attempt/source 与文件哈希校验。 |
 | 后端安装 | uv 使用同一 Python 安装现有 requirements 和锁定 pytest；缓存绑定 requirements、uv.lock 及本地包声明。安装后校验依赖一致性，每片保存解析版本。更换解析器不代表间接依赖版本必然相同，以实际清单和回归为准。 |
@@ -193,6 +195,10 @@ PR Fast CI
 | 无关变更 | 只有守卫和 SSOT 均成功、有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip；空输出或未知状态均失败。 |
 
 原 `Vitest (173 文件 · jsdom)` 与 `frontend-smoke` 检查名称保留为轻量兼容任务，显式要求 `frontend-test` 聚合成功；上游失败、取消或跳过均拒绝。兼容任务和镜像结果转接任务使用 `!cancelled()`，在整次工作流被取消时释放旧 PR 并发槽；两道必需的前后端聚合门禁仍使用 `always()` 核对证据，取消不会产生成功。`frontend-smoke` 还运行原仓库卫生检查。独立重复 Vitest、smoke 子集和 mock E2E 已移除；真实全栈 E2E、严格构建、安全扫描及覆盖率门禁保留。当前 `coverage_ramp` 为零时，后端复用已验证的 full 结果作为 behavior 结果，不重复执行测试。
+
+独立 `Smoke Tests` 将仓库卫生检查合并为 `backend-smoke` 安装前的第一道检查，保留失败阻断，减少一次串行排队与检出。Smoke 和真实 API E2E 复用官方 setup-uv 下载缓存及当前源码安装校验。离线 Agent 评测的可选 `--junitxml` 保留原退出码和公开摘要，只保存用例 ID、类型、失败检查名及 SHA/run/attempt；fixture 内容与凭证不进入报告，开始执行前删除同路径旧报告。`always()` 上传用于诊断，缺失报告不能将失败改成成功。
+
+构建复用须同时匹配源码、构建配置及 run/attempt。现有服务器打包产物继续供同轮下游使用；真实 API E2E 将随机 API 端口编入前端，因此不能复用其他配置的 dist。测试结果、整套虚拟环境及不同身份的报告不作为下载缓存复用。
 
 测试去重须核对实现、输入、夹具和独有断言，保留有效场景；不以文件名或执行条数判断质量。现有 `test_bloat_report.py --check` 同时拒绝后端测试的字面 `assert True` 和同一状态码集合同时接受成功与服务器错误。业务回归应核对精确状态、响应及副作用；ELT 全栈闭环验证预演不写入、未确认拒绝、执行后读回及重复提交拒绝，模型闭环使用真实会话与适配器、仅替代外部 HTTP 传输，不调用付费模型。
 

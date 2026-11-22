@@ -419,6 +419,32 @@ def _patched_llm_env(env: dict[str, str]) -> Iterator[None]:
                 os.environ[key] = value
 
 
+def _write_junitxml(result: dict[str, Any], path: Path) -> None:
+    """Publish identifiers, not fixture payloads, in the standard CI report format."""
+    from xml.etree import ElementTree as ET
+
+    suite = ET.Element(
+        "testsuite",
+        name="agent_platform_minimum",
+        tests=str(result["total"]),
+        failures=str(result["failed"]),
+        errors="0",
+    )
+    properties = ET.SubElement(suite, "properties")
+    ET.SubElement(properties, "property", name="execution_mode", value="fixture_local")
+    for name in ("GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"):
+        ET.SubElement(properties, "property", name=name, value=os.environ.get(name, ""))
+    for row in result["results"]:
+        case = ET.SubElement(suite, "testcase", name=row["id"], classname=row["kind"])
+        if not row["passed"]:
+            # Some check names append expected fragments after ':'; omit those too.
+            names = dict.fromkeys(check["name"].split(":", 1)[0] for check in row["failed_checks"])
+            ET.SubElement(case, "failure", message=", ".join(names) or "contract failed")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(suite)
+    ET.ElementTree(suite).write(path, encoding="utf-8", xml_declaration=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run offline agent contract fixtures.")
     parser.add_argument(
@@ -427,7 +453,10 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_TASKS_PATH,
         help="Path to JSONL eval tasks.",
     )
+    parser.add_argument("--junitxml", type=Path, help="Write sanitized JUnit contract diagnostics.")
     args = parser.parse_args(argv)
+    if args.junitxml:
+        args.junitxml.unlink(missing_ok=True)
     result = run_eval(args.tasks)
     public_summary = {
         "suite": "agent_platform_minimum",
@@ -438,4 +467,6 @@ def main(argv: list[str] | None = None) -> int:
     if "coverage" in result:
         public_summary["coverage"] = result["coverage"]
     print(json.dumps(public_summary, ensure_ascii=False, indent=2))
+    if args.junitxml:
+        _write_junitxml(result, args.junitxml)
     return 0 if result["failed"] == 0 else 1

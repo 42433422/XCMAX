@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -163,6 +164,76 @@ def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:
         "score": 1.0,
     }
     assert "must-not-be-printed" not in output
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_agent_eval_junit_preserves_result_identity_without_fixture_payloads(
+    monkeypatch, capsys, tmp_path, failed
+) -> None:
+    secret = "fixture-payload-must-not-be-published"
+    result = {
+        "total": 1,
+        "passed": int(not failed),
+        "failed": int(failed),
+        "score": float(not failed),
+        "results": [
+            {
+                "id": "case<&>",
+                "kind": "offline_contract",
+                "passed": not failed,
+                "failed_checks": [
+                    {
+                        "name": f"context_not_contains:{secret}",
+                        "actual": secret,
+                        "expected": secret,
+                    },
+                    {"name": "task", "actual": secret, "expected": "pass"},
+                ],
+                "details": {"api_key": secret},
+            }
+        ],
+    }
+    identity = {"GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2"}
+    for name, value in identity.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(eval_module, "run_eval", lambda _path: result)
+    report = tmp_path / "reports/junit.xml"
+
+    assert eval_module.main(["--junitxml", str(report)]) == int(failed)
+    output = capsys.readouterr().out
+    assert json.loads(output)["failed"] == int(failed)
+    suite = ET.parse(report).getroot()
+    assert suite.attrib == {
+        "name": "agent_platform_minimum",
+        "tests": "1",
+        "failures": str(int(failed)),
+        "errors": "0",
+    }
+    assert {p.attrib["name"]: p.attrib["value"] for p in suite.findall("properties/property")} == {
+        "execution_mode": "fixture_local",
+        **identity,
+    }
+    case = suite.find("testcase")
+    assert case is not None and case.attrib == {"name": "case<&>", "classname": "offline_contract"}
+    failure = case.find("failure")
+    if failed:
+        assert failure is not None and failure.attrib["message"] == "context_not_contains, task"
+    else:
+        assert failure is None
+    assert secret not in output + report.read_text()
+
+
+def test_agent_eval_crash_cannot_publish_stale_junit(monkeypatch, tmp_path) -> None:
+    report = tmp_path / "junit.xml"
+    report.write_text("evidence from a previous attempt")
+
+    def crash(_path):
+        raise RuntimeError("fixture setup failed")
+
+    monkeypatch.setattr(eval_module, "run_eval", crash)
+    with pytest.raises(RuntimeError, match="fixture setup failed"):
+        eval_module.main(["--junitxml", str(report)])
+    assert not report.exists()
 
 
 def test_route_fixture_uses_real_session_and_restores_auth_boundary() -> None:
