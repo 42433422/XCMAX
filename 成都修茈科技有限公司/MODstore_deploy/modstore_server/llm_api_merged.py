@@ -169,21 +169,15 @@ async def resolve_default_llm_route(
         if selected:
             return selected
         invalid("账户所选供应商没有可用聊天模型或密钥，请重新选择；未切换到收费平台")
-    # 账户保存的偏好可能已失效（如模型改为非聊天模型）。此时静默回落到平台默认，
-    # 不让历史偏好阻断对话；仅显式指定的供应商/模型才返回 400。
+    # Invalid saved model kinds require explicit recovery. Never silently
+    # replace an incompatible preference with a platform-billed chat model.
     if mode != "platform" and (pref_p or pref_m):
         if pref_p in _facade().KNOWN_PROVIDERS and not (
             mode == "byok" and credentials[pref_p][2] != "user_override"
         ):
-            try:
-                selected = await select(pref_p, pref_m, "preference")
-            except _facade().HTTPException as exc:
-                detail = exc.detail if isinstance(exc.detail, dict) else {}
-                if exc.status_code != 400 or detail.get("code") != "INVALID_CHAT_PREFERENCE":
-                    raise
-            else:
-                if selected:
-                    return selected
+            selected = await select(pref_p, pref_m, "preference")
+            if selected:
+                return selected
     byok = [p for p, (_, _, source) in credentials.items() if source == "user_override"]
     if mode != "platform" and byok:
         for p in byok:
