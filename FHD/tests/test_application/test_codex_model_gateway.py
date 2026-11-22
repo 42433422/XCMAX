@@ -16,6 +16,7 @@ from app.infrastructure.billing import model_usage as ledger
 from app.infrastructure.billing.model_reservation import settle_model_usage
 from app.infrastructure.codex.model_gateway import MODEL_PATH, _finish, response_usage, router
 from app.infrastructure.codex.policy import ModelRoute
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 class Store:
@@ -807,3 +808,68 @@ def test_cancellation_between_retries_stops_before_second_provider_attempt(gatew
     assert post(client).status_code == 409 and len(calls) == 1
     assert ledger.get_model_wallet("71")["balance_units"] == 100
     assert not store.binding.metadata.get("model_reconciliation_required")
+
+
+def test_sql_model_call_budget_survives_repository_reopen_and_new_generation(
+    gateway, trusted_actor
+):
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.infrastructure.codex.binding import CodexBindingStore
+    from tests.test_application.test_codex_binding import make_binding
+
+    client, _, calls, response, app = gateway
+    actor = trusted_actor(user_id=71)
+    route = replace(app.state.codex_model_route, max_model_calls=2)
+    store, parent, grant = make_binding(actor, runtime_config=route.runtime_identity())
+    app.state.codex_binding_store = store
+    app.state.codex_model_route = route
+    app.state.codex_run_id = parent.run_id
+
+    def successful(request):
+        assert ledger.get_model_wallet("71")["balance_units"] == 68 - 2 * len(calls)
+        calls.append(request)
+        return httpx.Response(200, json=response)
+
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(successful), **kwargs
+    )
+
+    def invoke(token):
+        return client.post(
+            MODEL_PATH,
+            headers={"authorization": f"Bearer {token}"},
+            json={"model": route.model, "input": "test"},
+        )
+
+    assert invoke(grant.model_token).status_code == 200
+    assert invoke(grant.model_token).status_code == 200
+    saved = store.repository.get(parent.run_id)
+    metadata = saved.metadata["codex_runtime"]
+    deadline = metadata["deadline_at"]
+    requests = metadata["model_requests"]
+    llm_calls = [call.to_dict() for call in saved.llm_calls]
+    assert len(requests) == len(llm_calls) == 2
+    assert {item["state"] for item in requests.values()} == {"completed"}
+
+    for new_generation in (False, True):
+        store = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=actor.factory))
+        token = grant.model_token
+        if new_generation:
+            generation = grant.binding.metadata["generation"]
+            store.close(parent.run_id, "waiting_user", generation=generation)
+            replacement = store.create(parent.run_id, runtime_config=route.runtime_identity())
+            assert replacement.binding.metadata["generation"] == generation + 1
+            assert replacement.model_token != token
+            token = replacement.model_token
+        app.state.codex_binding_store = store
+        rejected = invoke(token)
+        assert rejected.status_code == 429 and "call limit" in rejected.json()["detail"]
+        assert len(calls) == 2
+        saved = store.repository.get(parent.run_id)
+        assert saved.metadata["codex_runtime"]["deadline_at"] == deadline
+        assert saved.metadata["codex_runtime"]["model_requests"] == requests
+        assert [call.to_dict() for call in saved.llm_calls] == llm_calls
+        assert saved.metadata["reserved_cost_units"] == 0
+        assert saved.metadata["ai_cost_units_total"] == 4
+        assert ledger.get_model_wallet("71")["balance_units"] == 96
+        assert [run.run_id for run in store.repository.list_recent()] == [parent.run_id]
