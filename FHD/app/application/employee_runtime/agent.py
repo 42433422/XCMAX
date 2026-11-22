@@ -663,7 +663,7 @@ def restore_codex_employee_gate(
     fields. A changed pack or tool schema requires a new authorization; this
     helper cannot silently widen an existing run's permissions.
     """
-    from app.application.employee_runtime.agent_loop import _codex_employee_tool_scope
+    from app.application.employee_runtime.agent_runner import _codex_employee_tool_scope
     from app.mod_sdk.product_plane import employee_execution_block_reason
 
     if not employee_id or original_runtime_context.get("employee_id") != employee_id:

@@ -1772,16 +1772,33 @@ def test_unified_public_chat_never_turns_model_failure_or_import_words_into_succ
         patch.object(svc, "_persist_recallable_chat_turn"),
         patch("app.application.ai_chat.dialogue_memory.prepare_chat_turn", return_value=None),
         patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
+        patch(
+            "app.application.agent_runtime.gateway.run_runtime_task",
+            return_value={
+                "ok": False,
+                "business_completed": False,
+                "verified_operations": False,
+                "execution_state": "failed",
+                "exit_status": "planning_unavailable",
+                "error_code": "planning_unavailable",
+                "error": "模型未返回可验证的任务目标",
+            },
+        ) as runtime,
     ):
         result = svc.process_chat("u1", message, source="pro")
     assert result["success"] is False
     assert not result.get("toolCall")
     assert not svc._pending_workflows
+    completion.assert_not_called()
     if message:
-        completion.assert_called_once()
-        assert result["data"]["execution_started"] is False
+        runtime.assert_called_once()
+        assert runtime.call_args.kwargs["task"] == message
+        assert runtime.call_args.kwargs["admit_goal"] is True
+        assert result["execution_state"] == "failed"
+        assert result["business_completed"] is False
+        assert result["data"]["error_code"] == "planning_unavailable"
     else:
-        completion.assert_not_called()
+        runtime.assert_not_called()
 
 
 @pytest.mark.parametrize("source", ["pro", "normal", "admin", "user:7"])

@@ -13,10 +13,12 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from app.application.ai_chat_app_service import AIChatApplicationService
-from app.application.workflow.planner import LLMWorkflowPlanner
-from app.application.workflow.workflow_types import PlanGraph
+from app.application.workflow.workflow_types import PlanGraph, plan_to_dict
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
+from app.infrastructure.codex.policy import RuntimeSettings
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_http_runtime import compiled_chat_runtime as compiled_chat_runtime
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
 from tests.fixtures.planner_model import goal_review_response
 
 ISSUE_MESSAGE = "客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5"
@@ -81,7 +83,9 @@ def _no_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_stream_entry_stages_order_with_explicit_quantity_and_price(monkeypatch):
+def test_stream_entry_stages_order_with_explicit_quantity_and_price(
+    monkeypatch, compiled_chat_runtime, local_tools
+):
     from app.application.workflow.workflow_types import WorkflowNode
 
     service = AIChatApplicationService()
@@ -109,26 +113,47 @@ def test_stream_entry_stages_order_with_explicit_quantity_and_price(monkeypatch)
             )
         ],
     )
-    monkeypatch.setattr(
-        "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", lambda *_args: plan
-    )
     body = _body(message=ISSUE_MESSAGE.replace("数量24", "数量24kg"), user_id="u-2067")
-    service.workflow_planner = LLMWorkflowPlanner(
-        completion=lambda **kwargs: goal_review_response(
-            json.loads(kwargs["messages"][1]["content"]),
-            source=body.message,
-            node_ids=["generate"],
-            outcome="execute",
-        )
-    )
+
+    def completion(**kwargs):
+        prompt = json.loads(kwargs["messages"][-1]["content"])
+        if prompt.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                prompt, source=body.message, node_ids=["generate"], outcome="execute"
+            )
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "mode": "workflow",
+                                "intent": plan.intent,
+                                "nodes": plan_to_dict(plan)["nodes"],
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    state = compiled_chat_runtime
+    state.completion = completion
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment_svc):
         events = _events(
             b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
         )
     assert events[-1]["type"] == "done"
-    assert events[-1]["result"]["message"] == "等待确认"
-    pending = next(iter(service._pending_workflows.values()))
-    assert pending["plan"].nodes[-1].params == plan.nodes[-1].params
+    result = events[-1]["result"]
+    assert result["runtime"] == "codex" and result["requires_confirmation"] is True, result
+    parent = state.repository.get(result["run_id"])
+    frozen = parent.metadata["runtime_frozen_plan"]
+    assert frozen["nodes"][-1]["params"] == plan.nodes[-1].params
+    assert frozen["nodes"][-1]["risk"] == "high"
+    child_id = result["data"]["data"]["approval_card"]["run_id"]
+    child = state.repository.get(child_id)
+    assert child.status == "waiting_user" and not child.tool_calls
+    assert len(state.transports) == 1 and not service._pending_workflows
     shipment_svc.generate_shipment_document.assert_not_called()
 
 
@@ -162,6 +187,7 @@ def test_stream_entry_hands_shipment_to_the_same_chat_service(
 )
 def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, case):
     _no_llm(monkeypatch)
+    monkeypatch.setattr("app.application.agent_runtime.chat.runtime_settings", RuntimeSettings)
     service = AIChatApplicationService()
     monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
     from app.application.agent_task_context import scoped_conversation_user_id
@@ -213,7 +239,17 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
     result = _events(
         b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     )[-1]["result"]
-    assert result["data"]["action"] == "clarification_required"
+    if case in {"absent", "cross_session"}:
+        # No original task exists in this conversation. A deployment without a
+        # qualified fixed executor must refuse, never revive the retired planner
+        # or treat a different conversation's plan as this user's approval.
+        assert result["success"] is False
+        assert result["data"]["error_code"] == "runtime_policy_blocked"
+        assert "qualification is missing" in result["response"]
+        assert result["business_completed"] is False
+        assert result["requires_confirmation"] is False
+    else:
+        assert result["data"]["action"] == "clarification_required"
     execute.assert_not_called()
     assert (
         not service._pending_workflows
@@ -222,7 +258,9 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
     )
 
 
-def test_stream_missing_spec_requests_clarification_without_document(monkeypatch):
+def test_stream_missing_spec_requests_clarification_without_document(
+    monkeypatch, compiled_chat_runtime
+):
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.workflow.clarification_lifecycle import build_clarify_node
     from app.application.workflow.workflow_types import WorkflowNode
@@ -242,18 +280,35 @@ def test_stream_missing_spec_requests_clarification_without_document(monkeypatch
             )
         ],
     )
-    monkeypatch.setattr(
-        "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", lambda *_args: plan
-    )
     service = AIChatApplicationService()
-    service.workflow_planner = LLMWorkflowPlanner(
-        completion=lambda **kwargs: goal_review_response(
-            json.loads(kwargs["messages"][1]["content"]),
-            source=ISSUE_MESSAGE,
-            node_ids=["clarify_shipment_unit", "generate"],
-            outcome="clarify",
-        )
-    )
+
+    def completion(**kwargs):
+        prompt = json.loads(kwargs["messages"][-1]["content"])
+        if prompt.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                prompt,
+                source=ISSUE_MESSAGE,
+                node_ids=["clarify_shipment_unit", "generate"],
+                outcome="clarify",
+            )
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "mode": "workflow",
+                                "intent": plan.intent,
+                                "nodes": plan_to_dict(plan)["nodes"],
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    state = compiled_chat_runtime
+    state.completion = completion
     monkeypatch.setattr(
         "app.application.workflow.planning_graph_policy.build_clarify_node",
         lambda question, ambient: build_clarify_node(
@@ -267,9 +322,13 @@ def test_stream_missing_spec_requests_clarification_without_document(monkeypatch
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment):
         raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     result = _events(raw)[-1]["result"]
-    assert result["message"] == "需要澄清"
+    assert result["runtime"] == "codex" and result["needs_user_input"] is True, result
     assert "计量单位" in result["response"]
     assert "已生成" not in result["response"]
+    parent = state.repository.get(result["run_id"])
+    assert parent.metadata.get("runtime_frozen_plan") is None
+    assert parent.status == "waiting_user" and not parent.tool_calls
+    assert state.transports == [] and not service._pending_workflows
     generator.generate.assert_not_called()
 
 
@@ -293,6 +352,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
     tmp_path,
     authenticated_stream,
     endpoint,
+    compiled_chat_runtime,
 ):
     from app.application.elt.service_uploads import UploadServiceMixin
     from app.db.models.elt import EltUpload
@@ -323,7 +383,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
         }
 
     service = AIChatApplicationService()
-    service.workflow_planner = LLMWorkflowPlanner(completion=completion)
+    compiled_chat_runtime.completion = completion
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(
@@ -363,7 +423,12 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
                 "context": {"attachment_upload_ids": [upload["upload_id"]]},
             },
         )
-        assert "attachment_reupload_required" in denied.text
+        assert "重新上传" in denied.text
+        denied_payload = (
+            _events(denied.content)[-1]["result"] if endpoint.endswith("/stream") else denied.json()
+        )
+        assert denied_payload["needs_user_input"] is True
+        assert denied_payload["requires_confirmation"] is False
         assert len(seen) == 1
         assert len(reviewed) == 1
         raw_path = client.post(

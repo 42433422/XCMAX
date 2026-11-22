@@ -430,16 +430,16 @@ class SQLAlchemyTaskExecutionRepository:
         from app.application.agent_orchestrator.run_sql_repository import (
             SQLAlchemyAgentRunRepository,
         )
-        from app.application.agent_runtime.receipt_projection import (
-            project_receipt_state,
-            projection_allowed,
-        )
         from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
         from app.domain.task_lifecycle.control import SessionBook, remember
         from app.infrastructure.codex.binding import (
             CodexBinding,
             CodexBindingError,
             CodexBindingStore,
+        )
+        from app.infrastructure.codex.receipt_projection import (
+            project_receipt_state,
+            projection_allowed,
         )
         from app.infrastructure.codex.tools import read_call_receipt
 

@@ -154,7 +154,7 @@ def internal_error_response(operation: str) -> JSONResponse:
 def run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
     if run_owned_by(run, principal):
         from app.application.agent_orchestrator.run_repository import get_agent_run_repository
-        from app.application.agent_runtime.receipt_projection import refresh_codex_receipts
+        from app.infrastructure.codex.receipt_projection import refresh_codex_receipts
 
         parent = run if run.metadata.get("runtime_type") == "codex" else None
         context = run.metadata.get("runtime_context") or {}

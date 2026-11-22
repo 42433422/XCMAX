@@ -15,6 +15,9 @@ import ipaddress
 import json
 import math
 import os
+import secrets
+import subprocess
+import sys
 import tempfile
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -22,7 +25,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from app.infrastructure.codex.launcher import launch_arguments
+from app.infrastructure.codex.launcher import WindowsRuntimeJob, launch_arguments
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 CODEX_SDK_VERSION = "0.171.0"
@@ -126,18 +129,46 @@ def _deny_runtime_approval(method: str, _params: dict | None) -> dict:
     return {}  # No affirmative authorization for an unknown server request.
 
 
-def _close_sdk_client(client: Any) -> None:
-    # 0.171.0 leaves stdout/stderr open after close(). Keep this version-bound
-    # resource shim until upstream closes all pipes; do not suppress warnings.
-    process = client._proc
+def _close_sdk_client(client: Any, job: WindowsRuntimeJob | None = None) -> None:
+    # SDK 0.171.0 waits indefinitely for a reader response, and close() does not
+    # wake those waiters. Release callers before terminating owned processes.
+    from openai_codex.errors import TransportClosedError
+
+    # Prevent a late to_thread worker from creating a new live request after
+    # fail_all(). SDK writes fail closed once its process reference is detached.
+    process, client._proc = client._proc, None
+    client._router.fail_all(TransportClosedError("Codex transport closed"))
+    client.close()
     try:
-        client.close()
+        if job is not None:
+            job.close()
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=3)
     finally:
         if process is not None:
-            process.wait(timeout=3)
-            for stream in (process.stdin, process.stdout, process.stderr):
-                if stream is not None:
+            # A surviving pipe writer can leave a reader holding the buffered
+            # stream lock. Never block close() on that lock after a timeout.
+            streams = (
+                (process.stdout, client._reader_thread),
+                (process.stderr, client._stderr_thread),
+            )
+            for stream, reader in streams:
+                if reader is not None and reader.is_alive():
+                    reader.join(timeout=0.5)
+                if stream is not None and (reader is None or not reader.is_alive()):
                     stream.close()
+            # The SDK serializes every stdin write with this lock. Do not wait
+            # on a blocked writer when a descendant still owns the pipe reader.
+            if process.stdin is not None and client._lock.acquire(blocking=False):
+                try:
+                    process.stdin.close()
+                finally:
+                    client._lock.release()
 
 
 class CodexTransport:
@@ -151,6 +182,7 @@ class CodexTransport:
         self.thread_id = ""
         self.turn_id = ""
         self._client: Any = None
+        self._job: WindowsRuntimeJob | None = None
         self._streaming = False
         self._scope_hash = scope_hash
 
@@ -268,6 +300,8 @@ class CodexTransport:
                     "codex_runtime_unavailable", "Pinned Codex runtime is unavailable"
                 )
             plan_path = self._prepare()
+            if sys.platform == "win32":
+                self._job = WindowsRuntimeJob()
             _write_private(
                 plan_path,
                 json.dumps(
@@ -277,6 +311,7 @@ class CodexTransport:
                         "workspace": str(self.workspace),
                         "provider_token": self.config.provider_token,
                         "mcp_token": self.config.mcp_token,
+                        "job_name": self._job.name if self._job is not None else None,
                     }
                 ),
             )
@@ -505,8 +540,11 @@ class CodexTransport:
 
     async def close(self) -> None:
         client, self._client = self._client, None
+        job, self._job = self._job, None
         if client is not None:
-            await asyncio.to_thread(_close_sdk_client, client)
+            await asyncio.to_thread(_close_sdk_client, client, job)
+        elif job is not None:
+            job.close()
         (self.runtime_dir / "launch.json").unlink(missing_ok=True)
 
 
@@ -518,23 +556,31 @@ def verify_packaged_runtime() -> None:
     business qualification; it cannot write a qualification receipt.
     """
     with tempfile.TemporaryDirectory(prefix="xcagi-codex-probe-") as temporary:
-        # Probe credentials are ephemeral. No fixed token is shipped in source.
-        probe_nonce = os.urandom(24).hex()
         config = CodexTransportConfig(
             runtime_root=Path(temporary).resolve(),
             scope_id="packaged-protocol-probe",
             model="packaging-probe-no-model-call",
             provider_url="http://127.0.0.1:1/v1",
-            provider_token=probe_nonce,
+            provider_token=secrets.token_urlsafe(32),
             mcp_url="http://127.0.0.1:1/mcp",
-            mcp_token=probe_nonce,
+            mcp_token=secrets.token_urlsafe(32),
             context_window=32768,
             timeout_seconds=15,
         )
 
         async def initialize() -> None:
-            async with CodexTransport(config):
-                pass
+            runtime = CodexTransport(config)
+            try:
+                async with runtime:
+                    pass
+            finally:
+                diagnostic = runtime.runtime_dir / "launcher-status.json"
+                if diagnostic.is_file():
+                    print(
+                        "[frozen-runtime-probe] launcher " + diagnostic.read_text(encoding="utf-8"),
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
         asyncio.run(initialize())
     print(f"[frozen-runtime-probe] Codex SDK/CLI {CODEX_RUNTIME_VERSION} initialize OK")

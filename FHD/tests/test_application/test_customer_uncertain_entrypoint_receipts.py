@@ -1,4 +1,4 @@
-"""Real authenticated entrypoints; only classification/ASR and DB faults are injected."""
+"""Real entrypoints, host compilation, approval, MCP/SQL receipts and DB faults."""
 
 import asyncio
 import json
@@ -15,21 +15,23 @@ from starlette.requests import Request
 
 from app.db.models import PurchaseUnit
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_http_runtime import compiled_chat_runtime as compiled_chat_runtime
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.planner_model import goal_review_response
 
 
 @pytest.mark.parametrize("entrypoint", ["chat", "voice"])
 @pytest.mark.parametrize("failure", [OperationalError, RuntimeError])
 def test_committed_customer_uncertainty_survives_real_entrypoint(
-    trusted_actor, monkeypatch, entrypoint, failure
+    trusted_actor, compiled_chat_runtime, local_tools, monkeypatch, entrypoint, failure
 ):
     from app.application import get_ai_chat_app_service
-    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
-    from app.application.facades.tools_facade import execute_registered_workflow_tool
-    from app.application.workflow.workflow_types import PlanGraph
     from app.fastapi_routes import ai_intent, voice_routes
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(permissions=["customer.edit"])
+    runtime = compiled_chat_runtime
+    runtime.client.headers.update(actor.headers)
     engine = actor.factory.kw["bind"]
     request = Request(
         {
@@ -40,9 +42,9 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
     )
     name = f"uncertain-{entrypoint}-{failure.__name__}"
     message = f"新增单位 {name}"
-    # Real service composition, authentication, dispatcher, customer store and
-    # response formatting remain intact. No model/server request is performed.
-    app = get_ai_chat_app_service()
+    # Only external model/ASR I/O is scripted. Compiler/review, authenticated
+    # child approval, worker, customer store and receipt formatting remain real.
+    get_ai_chat_app_service()
 
     monkeypatch.setattr("app.application.customer_app_service.get_customers_session", actor.factory)
     monkeypatch.setattr(
@@ -53,25 +55,66 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
         voice_routes, "_platform_transcribe", AsyncMock(return_value={"text": message})
     )
 
-    def planned(user_id, message, source, context, file_context):
-        runtime = app._merge_tool_runtime_context(user_id, message, context)
-        output = execute_registered_workflow_tool(
-            "customers", "ensure_exists", {"unit_name": name, "_runtime_context": runtime}
-        )
-        step = AgentStep(
-            node_id="customer",
-            tool_id="customers",
-            action="ensure_exists",
-            status="failed",
-            output=output,
-        )
-        run = AgentRun(user_id=user_id, message=message, status="blocked", steps=[step])
-        return app._format_agent_run_response(
-            PlanGraph(plan_id="customer", intent="customer_write"), run
-        )
+    def respond(**kwargs):
+        prompt = json.loads(kwargs["messages"][-1]["content"])
+        if prompt.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                prompt, source=message, node_ids=["customer"], outcome="execute"
+            )
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "mode": "workflow",
+                                "intent": "customer_write",
+                                "nodes": [
+                                    {
+                                        "node_id": "customer",
+                                        "tool_id": "customers",
+                                        "action": "ensure_exists",
+                                        "params": {"unit_name": name},
+                                        "risk": "medium",
+                                        "idempotent": True,
+                                    }
+                                ],
+                            }
+                        )
+                    }
+                }
+            ]
+        }
 
-    monkeypatch.setattr(app, "_try_handle_dynamic_workflow", planned)
+    runtime.completion = respond
     state = {"inserts": 0, "committed": False, "postcommit_reads": 0, "faults": 0}
+
+    def approve_while_turn_waits(binding):
+        # The external runtime waits while the real owner approves the frozen
+        # child through HTTP. Its next MCP poll reuses the same call identity.
+        bridge = runtime.servers[-1].state.codex_tool_bridge
+        token = runtime.transports[-1].config.mcp_token
+        operation = binding.run.metadata["runtime_expected_operations"][0]
+        waiting = bridge.invoke(
+            token, "execute_plan", {"call_id": "compiled-fixture-plan", **operation["params"]}
+        )
+        assert waiting["pending_approval"] is True, waiting
+        assert state["inserts"] == 0
+        child_id = waiting["run_id"]
+        approval = runtime.client.get(f"/api/agent/runs/{child_id}")
+        assert approval.status_code == 200, approval.text
+        approved = runtime.client.post(
+            f"/api/agent/runs/{child_id}/continue",
+            json={"approval_grant": approval.json()["approval"]["grant"]},
+        )
+        assert approved.status_code == 202, approved.text
+        assert state["inserts"] == 0
+        child = runtime.drain(child_id)
+        assert child.status == "blocked", (state, [step.output for step in child.steps])
+        assert child.steps[0].output["outcome"] == "unknown"
+        assert child.steps[0].output["retryable"] is False
+
+    runtime.on_turn = approve_while_turn_waits
 
     def business_db(connection):
         return connection.engine.url.database == engine.url.database
@@ -131,6 +174,8 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
         assert state["committed"] and state["faults"] == 1
         assert state["postcommit_reads"] == 1
         assert state["inserts"] == 1  # No automatic duplicate within this request.
+        assert len(runtime.admissions) == len(runtime.transports) == 1
+        assert len(runtime.model_requests) == 2
     finally:
         event.remove(Engine, "after_cursor_execute", after_sql)
         event.remove(Engine, "before_cursor_execute", before_sql)

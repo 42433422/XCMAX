@@ -9,9 +9,9 @@ import pytest
 
 from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
 from app.application.agent_runtime import gateway
-from app.application.agent_runtime.queued_runtime import execute_queued_runtime
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
 from app.infrastructure.codex.binding import CodexBindingStore
+from app.infrastructure.codex.queued_runtime import execute_queued_runtime
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
 
@@ -140,7 +140,7 @@ def test_expired_claim_cannot_admit_a_turn_and_fresh_claim_recovers_generation_z
 def test_lost_queue_finish_reads_returned_runtime_result_without_another_turn(
     runtime_entry, queue_result_saved
 ):
-    from app.application.agent_runtime.queued_runtime import _ClaimedRuntimeRepository
+    from app.infrastructure.codex.queued_runtime import _ClaimedRuntimeRepository
 
     state = runtime_entry
     run_id = create(state)

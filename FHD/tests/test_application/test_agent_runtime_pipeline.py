@@ -5,7 +5,6 @@
 - agent_orchestrator 接线：memory_recall → run.memory_references、
   知识召回 RetrievalCall、终态 runtime.memory_writeback 事件
 - planner_llm_gateway 计量（source=agent_planner）
-- employee agent_loop 每轮计量（source=employee_agent_loop）
 """
 
 from __future__ import annotations

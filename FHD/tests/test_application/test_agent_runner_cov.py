@@ -14,7 +14,7 @@ from app.application.employee_runtime.agent_runner import (
     run_agent_handler,
 )
 
-AGENT_LOOP_PATH = "app.application.employee_runtime.agent_loop.run_employee_agent_loop"
+AGENT_LOOP_PATH = "app.application.employee_runtime.agent_runner.run_employee_agent_loop"
 
 
 class TestRunAsync:

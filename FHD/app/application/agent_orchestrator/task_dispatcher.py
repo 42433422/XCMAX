@@ -231,7 +231,7 @@ class AgentTaskDispatcher:
             orchestrator = self._orchestrator_factory(repository)
             preview = self._run_repo.get(execution.run_id)
             if preview is not None and preview.metadata.get("runtime_type") == "codex":
-                from app.application.agent_runtime.queued_runtime import execute_queued_runtime
+                from app.infrastructure.codex.queued_runtime import execute_queued_runtime
 
                 codex_run = True
                 if not isinstance(self._run_repo, SQLAlchemyAgentRunRepository):

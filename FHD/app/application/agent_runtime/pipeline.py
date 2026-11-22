@@ -2,7 +2,7 @@
 
 接缝与调用方：
 - ``recall_knowledge_context``：agent_orchestrator ``_plan``（pre-plan 知识库召回）
-- ``meter_llm_call`` / ``completion_usage``：planner_llm_gateway、employee agent_loop、
+- ``meter_llm_call`` / ``completion_usage``：planner_llm_gateway、保留的单次认知调用、
   其它此前绕过计费的 LLM 调用点（计费不受开关限制，始终生效）
 - ``remember_run_outcome``：agent_orchestrator 终态（completed/failed）回写记忆
 

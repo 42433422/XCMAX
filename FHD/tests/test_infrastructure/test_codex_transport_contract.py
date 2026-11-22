@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
+import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -320,3 +323,134 @@ def test_inherited_instruction_sources_are_rejected(config, fake_runtime):
     assert not any(
         json.loads(line).get("method") == "turn/start" for line in log.read_text().splitlines()
     )
+
+
+@pytest.mark.parametrize("orphan_writer", [False, True])
+def test_initialize_timeout_releases_sdk_waiters_and_exits_process(tmp_path, orphan_writer):
+    """Bound asyncio.run itself, including its non-daemon SDK request thread."""
+    if os.name == "nt":
+        pytest.skip("POSIX orphan-pipe fixture; the frozen Windows probe exercises its job")
+    binary = tmp_path / "silent-runtime"
+    descendant_pid = tmp_path / "descendant.pid"
+    binary.write_text(
+        f"#!{sys.executable}\n"
+        "import os, pathlib, subprocess, sys, time\n"
+        "sys.stdin.readline()\n"
+        + (
+            "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], "
+            "stdin=subprocess.DEVNULL, start_new_session=True)\n"
+            f"pathlib.Path({str(descendant_pid)!r}).write_text(str(child.pid))\n"
+            if orphan_writer
+            else "time.sleep(30)\n"
+        ),
+        encoding="utf-8",
+    )
+    binary.chmod(0o700)
+    scenario = """
+import asyncio, secrets, sys
+from pathlib import Path
+from app.infrastructure.codex import CodexTransport, CodexTransportConfig, CodexTransportError
+async def check():
+    config = CodexTransportConfig(
+        runtime_root=Path(sys.argv[2]), scope_id="timeout-probe", model="no-model",
+        provider_url="http://127.0.0.1:1/v1", provider_token=secrets.token_urlsafe(32),
+        mcp_url="http://127.0.0.1:1/mcp", mcp_token=secrets.token_urlsafe(32),
+        context_window=32768, timeout_seconds=0.2, codex_bin=sys.argv[1],
+    )
+    try:
+        async with CodexTransport(config):
+            raise AssertionError("silent runtime initialized")
+    except CodexTransportError as exc:
+        assert exc.code == "codex_timeout", exc.code
+asyncio.run(check())
+print("request worker released; asyncio.run exited")
+"""
+    runner = subprocess.Popen(
+        [sys.executable, "-c", scenario, str(binary), str(tmp_path / "runtime")],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = runner.communicate(timeout=10)
+        assert runner.returncode == 0, stderr
+        assert "asyncio.run exited" in stdout
+    finally:
+        groups = [runner.pid]
+        if descendant_pid.is_file():
+            groups.append(int(descendant_pid.read_text()))
+        for group in groups:
+            try:
+                os.killpg(group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        runner.wait(timeout=3)
+
+
+@pytest.mark.parametrize("pipe_available", [True, False])
+def test_windowed_launcher_uses_only_sdk_win32_pipes_and_owned_job(
+    monkeypatch, tmp_path, pipe_available
+):
+    from app.infrastructure.codex import launcher
+
+    events, spawned = [], []
+    plan = {
+        "state_dir": str(tmp_path),
+        "workspace": str(tmp_path),
+        "job_name": "owned-job",
+        "binary": "C:\\managed\\codex.exe",
+        "provider_token": "scope",
+        "mcp_token": "scope",
+    }
+    kernel = SimpleNamespace(
+        OpenJobObjectW=lambda *_: events.append("open") or 99,
+        AssignProcessToJobObject=lambda *_: events.append("assign") or True,
+        GetCurrentProcess=lambda: -1,
+        CloseHandle=lambda *_: events.append("close") or True,
+        SetDllDirectoryW=lambda *_: events.append("dll") or True,
+        GetStdHandle=lambda number: {-10: 100, -11: 101, -12: 102}[number],
+        GetFileType=lambda handle: 3 if pipe_available or handle != 100 else 0,
+    )
+
+    def create_process(arguments, **kwargs):
+        events.append("spawn")
+        spawned.append((arguments, kwargs))
+        return SimpleNamespace(pid=4242, wait=lambda: 0)
+
+    monkeypatch.setattr(launcher, "_windows_kernel", lambda: kernel)
+    monkeypatch.setattr(subprocess, "Popen", create_process)
+    monkeypatch.setattr(
+        subprocess, "STARTUPINFO", lambda: SimpleNamespace(dwFlags=0), raising=False
+    )
+    monkeypatch.setattr(subprocess, "STARTF_USESTDHANDLES", 0x100, raising=False)
+    monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    monkeypatch.setattr(os, "get_handle_inheritable", lambda _: False, raising=False)
+    monkeypatch.setattr(os, "set_handle_inheritable", lambda *_: None, raising=False)
+    with monkeypatch.context() as windowed:
+        windowed.setattr(sys, "platform", "win32")
+        windowed.setattr(sys, "frozen", True, raising=False)
+        for stream in ("stdin", "stdout", "stderr"):
+            windowed.setattr(sys, stream, None)
+        with pytest.raises(SystemExit) as stopped:
+            launcher._run_windows(plan, plan["binary"], {"PATH": "managed"})
+    assert stopped.value.code == (0 if pipe_available else 1)
+    if not pipe_available:
+        assert not spawned
+        assert json.loads((tmp_path / "launcher-status.json").read_text())["phase"] == "failed"
+        return
+    assert events == ["open", "assign", "close", "dll", "spawn"]
+    arguments, options = spawned[0]
+    assert arguments == [plan["binary"], "app-server", "--listen", "stdio://"]
+    assert options["env"] == {"PATH": "managed"}
+    assert options["cwd"] == plan["workspace"]
+    assert options["close_fds"] is True
+    assert options["creationflags"] == 0x08000000
+    startup = options["startupinfo"]
+    assert startup.dwFlags & 0x100
+    assert [startup.hStdInput, startup.hStdOutput, startup.hStdError] == [100, 101, 102]
+    assert startup.lpAttributeList == {"handle_list": [100, 101, 102]}
+    diagnostic = json.loads((tmp_path / "launcher-status.json").read_text())
+    assert diagnostic["stdio_pipes"] == [True, True, True]
+    assert diagnostic["cli_pid"] == 4242
+    assert not {"provider_token", "mcp_token", "job_name", "env"} & diagnostic.keys()

@@ -66,6 +66,8 @@ def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
     assert "requirements-langgraph-runtime.txt" in apply
     assert "xcagi_vendored_langgraph.pth" in apply and "_xcagi_root=next" in apply
     assert "assert_vendored_sources" in apply
+    assert "from app.infrastructure.codex.launcher import verify_installation" in apply
+    assert "assert_vendored_sources()\nverify_installation()" in apply
     assert "FHD_SERVICE_PYTHON" in apply
 
 

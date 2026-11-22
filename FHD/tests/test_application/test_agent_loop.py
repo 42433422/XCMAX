@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from app.application.employee_runtime.agent_loop import default_employee_tools
+from app.application.employee_runtime.agent_runner import default_employee_tools
 
 
 class TestDefaultEmployeeTools:

@@ -748,7 +748,7 @@
     "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py",
       "base_blob": "303826db7dd8563c884ec980ee1bb2b966766be1",
-      "head_blob": "1ff558563b6c6cf64eebf020ca532e7005b1a5df",
+      "head_blob": "20fc10e18c6bd98a99a5f6b71eb8d14cb2e89aba",
       "before_lines": 711,
       "after_lines": 839,
       "reason": "审查请求：原子任务审批执行完毕后，原父任务和队列仍可能停留等待；增加仅依据原始回执的受限对账事务。",

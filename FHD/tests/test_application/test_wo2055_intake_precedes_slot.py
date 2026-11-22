@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import json
-import logging
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from app.application.agent_orchestrator import set_agent_run_repository_for_tests
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.ai_chat_app_service import AIChatApplicationService
-from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_http_runtime import compiled_chat_runtime as compiled_chat_runtime
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
 from tests.fixtures.planner_model import goal_review_response
 
 SERVICE = "app.application.planner_compat_service"
@@ -47,16 +48,18 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
     local_tools,
     tmp_path,
     restart,
+    compiled_chat_runtime,
 ):
     from app.infrastructure.auth.dependencies import session_id_from_request
     from app.legacy.routes.conversation.compat_routes import router
-    from evals.run_agent_eval import _isolated_task_execution_queue
 
+    state = compiled_chat_runtime
     actor = trusted_actor(user_id=2055, tenant_id=7, role="user", permissions=[])
+    state.client.headers.update(actor.headers)
     calls = []
     planned = []
     reviewed = []
-    repo = InMemoryAgentRunRepository()
+    repo = state.repository
 
     async def submit(request, context, original, reply):
         calls.append((session_id_from_request(request), str(context["tenant_id"]), original))
@@ -103,12 +106,14 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
 
     monkeypatch.setattr(STREAM + "._classify_and_submit_client_issue_async", submit)
     service = AIChatApplicationService()
-    service.workflow_planner = LLMWorkflowPlanner(completion=completion)
+    state.completion = completion
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     app = FastAPI()
     app.include_router(router, prefix="/api")
+
+    context = {"session_id": "issue-2055", "tenant_id": 99, "user_id": 99}
 
     def send(client, text):
         response = client.post(
@@ -117,70 +122,59 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
                 "message": text,
                 "mode": "online",
                 "user_id": "untrusted-client-alias",
-                "context": {"session_id": "issue-2055", "tenant_id": 99, "user_id": 99},
+                "context": context,
             },
         )
         assert response.status_code == 200, response.text
         events = [
             json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
         ]
-        return next(event["result"] for event in events if event["type"] == "done")
+        result = next(event["result"] for event in events if event["type"] == "done")
+        context.update(result.get("runtime_context_update") or {})
+        return result
 
-    with _isolated_task_execution_queue(tmp_path), TestClient(app, headers=actor.headers) as client:
-        monkeypatch.setattr(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
-        )
+    with TestClient(app, headers=actor.headers) as client:
         result = send(client, message)
         assert len(planned) == 1
         assert len(reviewed) == 1
         assert calls == [], "medium-risk submit must wait for explicit approval"
-        assert result["message"] == "等待确认", result
+        assert result["runtime"] == "codex" and result["requires_confirmation"] is True, result
+        parent_id = result["run_id"]
+        frozen = repo.get(parent_id).metadata["runtime_frozen_plan"]
+        assert frozen["nodes"][0]["risk"] == "high"
+        assert frozen["nodes"][0]["params"] == {}
         result = send(client, "确认")
         assert result["data"]["action"] == "approval_pending"
+        assert result["run_id"] == parent_id
         assert calls == [], "chat confirmation alone is not workbench approval"
-        from app.application.agent_orchestrator import AgentOrchestrator
-        from app.application.approval_workspace.protocols import WorkflowBackends
-        from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
-        from app.application.workflow.approval_persistence import (
-            load_durable_workflow_snapshot,
-            load_workflow_snapshot_for_execution,
+        run_id = result["data"]["data"]["approval_card"]["run_id"]
+        assert run_id != parent_id
+        if restart:
+            repo = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+            set_agent_run_repository_for_tests(repo)
+        durable_plan = plan_from_dict(repo.get(run_id).metadata["plan"])
+        assert plan_fingerprint(durable_plan) == plan_fingerprint(plan_from_dict(frozen))
+        approval = state.client.get(f"/api/agent/runs/{run_id}")
+        assert approval.status_code == 200, approval.text
+        grant = approval.json()["approval"]["grant"]
+        approval_result = state.client.post(
+            f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
         )
-        from app.infrastructure.tenant_scope import tenant_scope
-
-        request_id = result["data"]["data"]["approval_request_ids"][0]
-        run_id = result["data"]["data"]["agent_run_id"]
-        from app.application.workflow.approval_service import ApprovalService
-
-        approvals = ApprovalService() if restart else service.approval_service
-        bridge = WorkflowApprovalBridge(
-            WorkflowBackends(
-                approvals=lambda: approvals,
-                pending_snapshot=load_durable_workflow_snapshot,
-                execution_snapshot=load_workflow_snapshot_for_execution,
-                agent=lambda: AgentOrchestrator(repository=repo),
-                load_run=repo.get,
-            ),
-            (RuntimeError,),
-            logging.getLogger(__name__),
-        )
-        with tenant_scope(7):
-            durable = load_workflow_snapshot_for_execution(request_id)
-            assert durable is not None
-            memory_plan = service.approval_service.get_pending_workflow(request_id)["plan"]
-            assert plan_fingerprint(memory_plan) == plan_fingerprint(durable["plan"])
-            assert memory_plan.nodes[0].risk == "high"
-            approval_result = bridge.resume(
-                request_no=request_id, opinion="同意", approved_by=str(actor.user_id)
-            )
+        assert approval_result.status_code == 202, approval_result.text
+        assert calls == [], "durable approval enqueues the same child before execution"
+        state.drain(run_id)
         before_replay = list(calls)
-        with tenant_scope(7):
-            replay = bridge.resume(
-                request_no=request_id, opinion="同意", approved_by=str(actor.user_id)
-            )
+        replay = state.client.post(
+            f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
+        )
         assert calls == before_replay
-        assert replay["workflow_executed"] is False
+        assert replay.status_code == 409, replay.text
         run = repo.get(run_id)
         assert run is not None, approval_result
+        assert state.client.get(f"/api/agent/runs/{parent_id}").status_code == 200
+        parent = repo.get(parent_id)
+        assert parent.metadata["runtime_frozen_plan"] == frozen
+        assert len(state.transports) == 1 and not service._pending_workflows
         result = service._format_agent_run_response(
             plan_from_dict(run.metadata["plan"]),
             run,
@@ -194,6 +188,9 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
     )
     assert len(planned) == 1, "confirmation resumes the frozen plan, not a new model plan"
     assert len(reviewed) == 1, "approval resumes the reviewed plan without new model calls"
+    assert parent.final_output["codex_result"]["business_completed"] is (
+        guide["state"] != "OWNER_ROUTE_UNAVAILABLE"
+    )
     text = str(result)
     assert "当前没有采购订单。" not in text
     assert run is not None and len(run.tool_calls) == 1

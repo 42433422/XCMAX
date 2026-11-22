@@ -447,7 +447,7 @@ async def run_runtime_task_async(
             "answer_to_waiting_input": answer_to_waiting_input,
         }
         if start_queued:
-            from app.application.agent_runtime.queued_runtime import (
+            from app.infrastructure.codex.queued_runtime import (
                 durable_queue,
                 stage_queued_request,
             )
@@ -663,7 +663,7 @@ async def run_runtime_task_async(
                 from app.application.agent_orchestrator.task_dispatcher import (
                     notify_agent_task_dispatcher,
                 )
-                from app.application.agent_runtime.queued_runtime import enqueue_resume
+                from app.infrastructure.codex.queued_runtime import enqueue_resume
 
                 queued = enqueue_resume(store, parent, claim)
                 admitted = True
@@ -675,7 +675,7 @@ async def run_runtime_task_async(
                     claimed.run, claimed.run.metadata["runtime_requests"][request_key]
                 )
             if answer_to_waiting_input:
-                from app.application.agent_runtime.reference_answers import answer_reference_input
+                from app.application.agent_runtime.chat import answer_reference_input
 
                 try:
                     answered = answer_reference_input(store, run_id=resolved_id, text=task)

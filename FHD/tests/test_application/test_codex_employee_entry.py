@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, Mock
 import pytest
 
 from app.application.agent_runtime import gateway
-from app.application.employee_runtime import agent_loop, agent_runner, executor
+from app.application.employee_runtime import agent_runner, executor
 from app.application.tools.workflow_business_db import business_db_tool_specs
 from app.application.tools.workflow_tools.catalog_excel import excel_tool_specs
 from app.infrastructure.codex import policy
@@ -55,7 +55,7 @@ def runtime_boundary(monkeypatch):
 
 
 def _run(**kwargs):
-    return agent_loop.run_employee_agent_loop(
+    return agent_runner.run_employee_agent_loop(
         employee_id="clerk",
         system_prompt="employee instructions",
         task="read data",
@@ -439,7 +439,7 @@ def test_default_and_erp_employee_scopes_have_real_canonical_actions(
 
     monkeypatch.setattr("app.application.agent_tool_lifecycle.discovery_for_runtime", lambda _: [])
     declared = resolve_employee_tools("clerk", manifest, config)
-    actions, _ = agent_loop._codex_employee_tool_scope(declared, _allow)
+    actions, _ = agent_runner._codex_employee_tool_scope(declared, _allow)
     assert expected.issubset(actions)
     assert all("products_bulk_import" not in action for action in actions)
 

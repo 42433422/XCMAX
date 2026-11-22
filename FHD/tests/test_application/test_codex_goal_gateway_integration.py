@@ -72,8 +72,8 @@ def test_real_cli_auto_goal_admission_executes_one_frozen_graph_and_settles_pare
     from app.application.agent_orchestrator.task_execution_sql_repository import (
         SQLAlchemyTaskExecutionRepository,
     )
-    from app.application.agent_runtime import queued_runtime
     from app.infrastructure.billing import model_usage as ledger
+    from app.infrastructure.codex import queued_runtime
 
     actor = trusted_actor(permissions=["product.view"])
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)

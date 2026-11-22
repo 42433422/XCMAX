@@ -17,15 +17,18 @@ from app.db.models import AIConversation, AIConversationSession
 from app.domain.shared_services.conversation_service import ConversationRevisionError
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_http_runtime import compiled_chat_runtime as compiled_chat_runtime
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.planner_model import goal_review_response
 
 
 @pytest.fixture
-def runtime(trusted_actor, monkeypatch, tmp_path):
+def runtime(compiled_chat_runtime, monkeypatch, tmp_path):
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.domain.shared_services.conversation_service import ConversationService
     from app.fastapi_routes import xcagi_compat_chat_helpers as facade
 
-    actor = trusted_actor(user_id=1, tenant_id=1)
+    actor = compiled_chat_runtime.actor
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "memory"))
     monkeypatch.setattr(
         "app.application.attachment_artifacts.store._default_root", lambda: tmp_path / "artifacts"
@@ -48,6 +51,7 @@ def runtime(trusted_actor, monkeypatch, tmp_path):
     service._inject_excel_vector_context = lambda **kw: kw["context"]
     service._inject_wechat_contact_context = lambda **kw: kw["context"]
     service._persist_recallable_chat_turn = lambda **kw: None
+    service._try_handle_dynamic_workflow = Mock(side_effect=AssertionError("retired new-task path"))
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setattr("app.application.chat_turn_guard.admit_chat_turn", lambda *args: None)
     monkeypatch.setattr(
@@ -72,10 +76,27 @@ def runtime(trusted_actor, monkeypatch, tmp_path):
         monkeypatch.setattr(module, "planner_workflow_interrupt_reply", lambda message: None)
     monkeypatch.setattr(compat, "assert_p2_elevated_claim_or_raise", lambda request: None)
     monkeypatch.setattr(compat, "resolve_ai_tier", lambda request: "standard")
-    yield SimpleNamespace(actor=actor, service=service, conversation=conversation)
+    yield SimpleNamespace(
+        actor=actor, service=service, conversation=conversation, compiled=compiled_chat_runtime
+    )
     for lease in tuple(memory._INFLIGHT.values()):
         lease.release()
     memory._INFLIGHT.clear()
+
+
+def _script_reply(runtime, message, reply):
+    def completion(**kwargs):
+        prompt = json.loads(kwargs["messages"][-1]["content"])
+        assert prompt["user_message"] == message
+        if prompt.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                prompt, source=message, node_ids=["model_reply"], outcome="reply"
+            )
+        return {
+            "choices": [{"message": {"content": json.dumps({"mode": "reply", "reply": reply})}}]
+        }
+
+    runtime.compiled.completion = completion
 
 
 def _body(**overrides):
@@ -150,7 +171,7 @@ def test_ingress_replaces_client_epoch_but_prepare_never_advances_it(runtime, tr
     with pytest.raises(ConversationRevisionError):
         memory.prepare_chat_turn(body.message, body.context)
     assert body.context["_conversation_revision"] == 0 and _rows(runtime) == []
-    other = trusted_actor(user_id=2, tenant_id=1)
+    other = trusted_actor(user_id=2, tenant_id=runtime.actor.tenant_id)
     with pytest.raises(PermissionError):
         compat._prepare_compat_chat_body(other.request, _body())
 
@@ -195,12 +216,11 @@ async def test_real_dispatch_captures_epoch_for_json_and_sse(
     monkeypatch.setattr(
         compat, "_business_action", lambda message, **kw: execute(message, kw["runtime_context"])
     )
-    runtime.service._try_handle_dynamic_workflow = lambda **kw: execute(
-        kw["message"], kw["context"]
-    )
     persist = Mock(wraps=runtime.service._persist_chat_turn)
     runtime.service._persist_chat_turn = persist
     body = _body(mode=mode)
+    _script_reply(runtime, body.message, "reply")
+    runtime.compiled.on_turn = lambda binding: execute(binding.run.message, binding.context)
     if streaming:
         chunks = [
             chunk async for chunk in compat.compat_chat_stream_async(runtime.actor.request, body)
@@ -214,6 +234,8 @@ async def test_real_dispatch_captures_epoch_for_json_and_sse(
     else:
         payload = await compat.execute_compat_chat(runtime.actor.request, body)
     assert len(contexts) == 1 and persist.call_count == 1
+    assert len(runtime.compiled.transports) == (1 if mode == "online" else 0)
+    runtime.service._try_handle_dynamic_workflow.assert_not_called()
     assert payload["history_persistence"]["status"] == ("invalidated" if withdraw else "saved")
     assert _rows(runtime) == ([] if withdraw else [("user", body.message), ("assistant", "reply")])
     with runtime.actor.factory() as db:
@@ -298,7 +320,10 @@ async def test_attachment_context_keeps_full_evidence_and_original_turn_identity
         observed.append(kw["context"])
         return {"success": True, "response": "attachment reply"}
 
-    runtime.service._try_handle_dynamic_workflow = execute
+    _script_reply(runtime, original.message, "attachment reply")
+    runtime.compiled.on_turn = lambda binding: execute(
+        message=binding.run.message, context=binding.context
+    )
     if streaming:
         chunks = [
             chunk
@@ -314,6 +339,11 @@ async def test_attachment_context_keeps_full_evidence_and_original_turn_identity
         payload = await compat.execute_compat_chat(runtime.actor.request, original)
     assert payload["history_persistence"]["status"] == "saved"
     assert len(observed) == 1 and collect.await_args.kwargs["user_id"] == "1"
+    assert len(runtime.compiled.model_requests) == 2
+    assert all(
+        "FINAL-EVIDENCE-MARKER" in json.dumps(prompt) for prompt in runtime.compiled.model_requests
+    )
+    runtime.service._try_handle_dynamic_workflow.assert_not_called()
     assert _rows(runtime) == [("user", original.message), ("assistant", "attachment reply")]
     replay = memory.prepare_chat_turn(original.message, observed[0])
     assert replay["data"]["replay"] and replay["response"] == "attachment reply"
@@ -322,10 +352,7 @@ async def test_attachment_context_keeps_full_evidence_and_original_turn_identity
 @pytest.mark.asyncio
 async def test_failed_ack_stays_cached_until_explicit_save_only_repair(runtime):
     message = " \npassword=fixture-repair\n" + "long source " * 1000 + "  \n"
-    runtime.service._try_handle_dynamic_workflow = lambda **kw: {
-        "success": True,
-        "response": "receipt",
-    }
+    _script_reply(runtime, message, "receipt")
     actual_persist = runtime.service._persist_chat_turn
 
     def lost_ack(*args):

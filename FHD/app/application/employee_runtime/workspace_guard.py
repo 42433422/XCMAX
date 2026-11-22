@@ -7,7 +7,7 @@
 - ``scope_globs``：对「写类」工具与「输出路径」参数强制（避免误读上传文件被错杀）。
 - ``read_only`` 员工：直接拒绝写库类工具。
 
-gate 签名与 ``agent_loop.GateFn`` 一致：``(tool_name, args) -> {"ok": bool, "reason": str}``。
+gate 签名与 ``agent_runner.GateFn`` 一致：``(tool_name, args) -> {"ok": bool, "reason": str}``。
 """
 
 from __future__ import annotations

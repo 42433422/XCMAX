@@ -52,11 +52,11 @@ def test_is_session_market_admin(mock_load: MagicMock) -> None:
 
 
 @patch.object(AIChatApplicationService, "_persist_chat_turn")
-@patch.object(AIChatApplicationService, "_try_handle_dynamic_workflow")
+@patch("app.application.agent_runtime.chat.try_runtime_chat")
 def test_process_chat_returns_workflow_without_llm(
-    mock_wf: MagicMock, _mock_persist: MagicMock
+    mock_runtime: MagicMock, _mock_persist: MagicMock
 ) -> None:
-    mock_wf.return_value = {
+    mock_runtime.return_value = {
         "success": True,
         "message": "处理完成",
         "response": "工作流结果",
@@ -66,6 +66,7 @@ def test_process_chat_returns_workflow_without_llm(
     out = svc.process_chat("u1", "导入数据库", source="pro", context={})
     assert out["success"] is True
     assert "工作流" in out["response"]
+    mock_runtime.assert_called_once()
     mock_ai.chat.assert_not_called()
 
 

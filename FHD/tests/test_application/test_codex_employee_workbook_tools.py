@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-from app.application.employee_runtime.agent_loop import _codex_employee_tool_scope
+from app.application.employee_runtime.agent_runner import _codex_employee_tool_scope
 from app.application.employee_runtime.workspace_guard import build_employee_gate
 from app.application.tools.workflow_tools.catalog_excel import excel_tool_specs
 from app.domain.shared_services.tools_workflow_excel_ocr import (
