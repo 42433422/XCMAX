@@ -233,13 +233,30 @@ def test_runtime_context_override_and_foreign_principal_are_rejected(control_set
             "reconciliation_required",
             "原任务执行结果尚需核对，暂不能恢复或重试",
         ),
-        ("owner_changed", "owner_changed", "任务身份或授权已变化，请确认当前账号与原任务的业务范围"),
-        ("identity_override", "identity_override", "续跑不能修改原任务的运行范围，请从原任务继续操作"),
+        (
+            "owner_changed",
+            "owner_changed",
+            "任务身份或授权已变化，请确认当前账号与原任务的业务范围",
+        ),
+        (
+            "identity_override",
+            "identity_override",
+            "续跑不能修改原任务的运行范围，请从原任务继续操作",
+        ),
         ("run_inactive", "run_inactive", "终态任务不能恢复；重新执行业务请提交新任务"),
-        ("binding_conflict", "binding_conflict", "任务操作未完成，请刷新原任务并核对状态、授权和执行结果"),
+        (
+            "binding_conflict",
+            "binding_conflict",
+            "任务操作未完成，请刷新原任务并核对状态、授权和执行结果",
+        ),
         (None, "runtime_control_denied", "任务操作未完成，请刷新原任务并核对状态、授权和执行结果"),
         (
             "traceback private internal details",
+            "runtime_control_denied",
+            "任务操作未完成，请刷新原任务并核对状态、授权和执行结果",
+        ),
+        (
+            ["private internal error code"],
             "runtime_control_denied",
             "任务操作未完成，请刷新原任务并核对状态、授权和执行结果",
         ),

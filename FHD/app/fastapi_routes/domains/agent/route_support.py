@@ -683,8 +683,9 @@ def control_codex_run(
             "Codex run control denied: action=%s run_id=%s", action, run.run_id, exc_info=True
         )
         # Exception attributes can contain internal details; only static public codes cross HTTP.
+        raw_error_code = getattr(exc, "code", None)
         error_code = _CODEX_PUBLIC_CONTROL_CODES.get(
-            getattr(exc, "code", None), "runtime_control_denied"
+            raw_error_code if isinstance(raw_error_code, str) else "", "runtime_control_denied"
         )
         return JSONResponse(
             {
