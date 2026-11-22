@@ -181,18 +181,6 @@
       "follow_up": "由 @42433422 按本记录精确 identity 复核后再决定是否合入；本记录只请求架构评审，不表示评审已批准。未纳入项（含未批准的旧727、#3447/+33、#3398/+18 及 drafts）见集成 PR 正文。",
       "review_owner": "@42433422"
     },
-    "FHD/app/application/workflow/llm_plan_generation.py": {
-      "base_file": "FHD/app/application/workflow/llm_plan_generation.py",
-      "base_blob": "cb0e99baa21defb84c7ed86beee5f1dbea21cf9e",
-      "head_blob": "6f91341481677bf3cacdca2720a05a81c64f4a0b",
-      "before_lines": 927,
-      "after_lines": 975,
-      "reason": "本记录是评审请求，不是审批证据。集成树保留 #3423 规划目录裁剪（slim schema、不把 output_schema 送入规划 prompt）与 #3433 仅在与 JSON Schema 不一致时保留 legacy required_params，按独特合并 blob 重算。",
-      "boundary": "规划目录只使用 slim 输入合同；不把未批准的目标覆盖截断 +98 或其它增量算入本文件。",
-      "validation": "将运行 test_planner_context_continuity 等规划回归；远端 CI 待本集成 PR，本说明不是通过证明。",
-      "follow_up": "identity 已按 main@203930f76273f0d648b64ca51596ea2db012470f 与当前 head 精确重算。 若规划目录继续增长，仍在本文件与既有预算链路内调整并重新登记。",
-      "review_owner": "@42433422"
-    },
     "FHD/frontend/src/components/chat/ChatMessageList.vue": {
       "base_file": "FHD/frontend/src/components/chat/ChatMessageList.vue",
       "base_blob": "a0117e8d12c078385565a52268d58f77d05f0123",
