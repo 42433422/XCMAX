@@ -746,7 +746,7 @@ def execute_with_tool_deadline(
                     str(step.params.get("operation") or "create"),
                     result,
                 )
-            return result
+            return cast("dict[str, Any]", result)
     worker_exited = isinstance(result, dict) and result.get("error_code") == "tool_worker_exited"
     return {
         "success": False,
