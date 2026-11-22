@@ -76,8 +76,6 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | 执行卡片 | [shadcn-vue v2.9.0](https://github.com/unovue/shadcn-vue/tree/39cb0b277f009e47de2dc62c4217755fb9a27eec/apps/v4/registry/bases/reka/ui/trace)，MIT | `frontend/src/components/ui/trace/` 保留上游 Trace / Collapsible 结构及许可；仅替换样式、图标和 Vue getter，使用已有 Reka UI 2.11.0，无额外 CSS 框架。 |
 | 消息状态 | [Vercel AI SDK 7.0.173](https://github.com/vercel/ai)，Apache-2.0，版本由前端 lockfile 固定 | `readUIMessageStream` 组装文本和工具事件，`ChatStatus` 提供会话状态。参考 [Open WebUI 的会话任务事件](https://docs.openwebui.com/features/extensibility/plugin/development/events/) 按会话分发，产品层只绑定账号、Mod、会话和审批回执。 |
 | SSE 解析 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
-
-| SSE 解析 | [eventsource-parser 3.1.1](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
 | 员工办公室 | [Pixel Agents v1.6.0](https://github.com/pixel-agents-hq/pixel-agents/tree/4dd14d612fd37d89ffbbc977959f572395c4eec8)，MIT | 固定提交 `4dd14d612fd37d89ffbbc977959f572395c4eec8` 的 Canvas 2D 渲染、工位、精灵与动画核心；仅加 Vue/部门/任务胶水，异步加载，无新增运行时依赖。角色来源为 MetroCity CC0，原许可、源文件校验和可复现导入脚本见 [third_party/pixel-agents](third_party/pixel-agents/README.md)。 |
 | 员工任务与图谱 | [Vue Flow 1.48.2](https://github.com/bcakmakoglu/vue-flow) / [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)，MIT，已有 lockfile 固定 | 复用现有流程图、表单、对话框、执行记录与产物面板；空间、工作台和图谱共同读取原任务账本及认证事件流，不引入上游独立执行器。 |
 
@@ -333,7 +331,7 @@ MODstore `VIBE_AGENT_V2` 保持默认关闭。脚本循环沿用原 AgentLoop �
 | 并发准入、版本比较和原子回滚 | [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)，MIT，`uv.lock` | 复用事务、唯一键和条件更新；owner/tenant/Mod 与原 task 身份是产品侧必须保留的适配。 |
 | thread/turn/item 状态和只读恢复语义 | [OpenAI Codex](https://github.com/openai/codex/tree/1145028ae47e8119955323d38ce34122d418f951)，Apache-2.0，固定提交 `1145028ae47e8119955323d38ce34122d418f951` | 对照 SDK 事件及 app-server 原 thread/turn 恢复与审批测试；本次没有引入整个 Codex runtime，item 结束不等于 turn 成功。 |
 | 外部副作用重试与未知结果边界 | [Temporal Python SDK 1.36.1](https://github.com/temporalio/sdk-python/tree/1.36.1)，MIT | 参考持久活动和幂等约束，继续使用现有执行队列；不引入 Temporal 服务或声称复用了其完整服务端能力。 |
-| Web 流式解析和原回执展示 | [eventsource-parser 3.1.1](https://github.com/rexxars/eventsource-parser)，MIT，`frontend/package-lock.json` | 继续使用现有 SSE 组件；修正消费侧的受理、等待、未知和完成判断。 |
+| Web 流式解析和原回执展示 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT，`frontend/package-lock.json` | 继续使用现有 SSE 组件；修正消费侧的受理、等待、未知和完成判断。 |
 | 手机离线队列和请求身份恢复 | [Drift 2.35.4](https://github.com/simolus3/drift)，MIT，`mobile-flutter-poc/pubspec.lock` | 复用现有 SQLite/outbox 及迁移机制保存原 turn；已发送任务只能读取原回执。 |
 
 通用开源运行时不能替本仓决定授权主体、审批计划指纹、父子任务归属或业务写回凭证，因此这些校验保留在现有接缝中。缺少原回执时保留 `unknown`；本地测试不代表真实模型、移动端构建、生产 PostgreSQL 或已部署产品验收。
@@ -355,7 +353,7 @@ MODstore `VIBE_AGENT_V2` 保持默认关闭。脚本循环沿用原 AgentLoop �
 | 并发准入、版本比较和原子回滚 | [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)，MIT，`uv.lock` | 复用事务、唯一键和条件更新；owner/tenant/Mod 与原 task 身份是产品侧必须保留的适配。 |
 | thread/turn/item 状态和只读恢复语义 | [OpenAI Codex](https://github.com/openai/codex/tree/1145028ae47e8119955323d38ce34122d418f951)，Apache-2.0，固定提交 `1145028ae47e8119955323d38ce34122d418f951` | 对照 SDK 事件及 app-server 原 thread/turn 恢复与审批测试；本次没有引入整个 Codex runtime，item 结束不等于 turn 成功。 |
 | 外部副作用重试与未知结果边界 | [Temporal Python SDK 1.36.1](https://github.com/temporalio/sdk-python/tree/1.36.1)，MIT | 参考持久活动和幂等约束，继续使用现有执行队列；不引入 Temporal 服务或声称复用了其完整服务端能力。 |
-| Web 流式解析和原回执展示 | [eventsource-parser 3.1.1](https://github.com/rexxars/eventsource-parser)，MIT，`frontend/package-lock.json` | 继续使用现有 SSE 组件；修正消费侧的受理、等待、未知和完成判断。 |
+| Web 流式解析和原回执展示 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT，`frontend/package-lock.json` | 继续使用现有 SSE 组件；修正消费侧的受理、等待、未知和完成判断。 |
 | 手机离线队列和请求身份恢复 | [Drift 2.35.4](https://github.com/simolus3/drift)，MIT，`mobile-flutter-poc/pubspec.lock` | 复用现有 SQLite/outbox 及迁移机制保存原 turn；已发送任务只能读取原回执。 |
 
 通用开源运行时不能替本仓决定授权主体、审批计划指纹、父子任务归属或业务写回凭证，因此这些校验保留在现有接缝中。缺少原回执时保留 `unknown`；本地测试不代表真实模型、移动端构建、生产 PostgreSQL 或已部署产品验收。
