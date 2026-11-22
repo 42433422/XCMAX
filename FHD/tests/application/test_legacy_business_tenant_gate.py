@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.infrastructure.auth import business_scope_gate as gate
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
@@ -60,17 +62,37 @@ def client(monkeypatch):
         ("POST", "/api/excel/data/import/customers"),
     ],
 )
-def test_two_tenant_founders_and_member_cannot_reach_unscoped_business(client, method, path):
+def test_two_tenant_founders_and_member_cannot_reach_unscoped_business(
+    client, method, path, request, monkeypatch
+):
     http, principal = client
+    owned_customer = (method, path) == ("POST", "/api/customers")
+    if owned_customer:
+        create_actor = request.getfixturevalue("trusted_actor")
+        legacy_write = MagicMock(side_effect=AssertionError("unscoped customer write reached"))
+        monkeypatch.setattr(
+            "app.fastapi_routes.domains.customer.customer_routes._customer_pg_insert", legacy_write
+        )
     for user in (
         SimpleNamespace(id=11, role="user", tier="enterprise", tenant_id=7),
         SimpleNamespace(id=22, role="user", tier="enterprise", tenant_id=8),
         SimpleNamespace(id=23, role="tenant:8:member", tier="enterprise", tenant_id=8),
     ):
         principal[0] = user
-        response = http.request(method, path, json={} if method == "POST" else None)
+        headers = (
+            create_actor(
+                user_id=user.id, tenant_id=user.tenant_id, role=user.role, permissions=[]
+            ).headers
+            if owned_customer
+            else {}
+        )
+        response = http.request(
+            method, path, json={} if method == "POST" else None, headers=headers
+        )
         assert response.status_code == 403, (method, path, user, response.text)
-        assert "租户数据隔离" in response.text
+        assert ("权限不足" if owned_customer else "租户数据隔离") in response.text
+    if owned_customer:
+        legacy_write.assert_not_called()
 
 
 def test_anonymous_enterprise_request_cannot_bypass_tenant_gate(client, monkeypatch):

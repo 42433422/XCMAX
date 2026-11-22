@@ -120,18 +120,28 @@ describe('super employee dispatch and conversation transitions', () => {
     await s.onDutyEmployeeSend()
     const original = s.activeDutyEmployeeMessages.value.at(-1)!
     m.get.mockResolvedValue({ success: true, execution_state: 'completed', idempotency_key: original.request_key, run_id: original.run_id, data: { message: 'original result confirmed' } })
-    await vi.advanceTimersByTimeAsync(3000)
-    // Receipt reads hash the request binding with WebCrypto, which resolves on
-    // the libuv thread pool rather than the microtask queue. Wait for that
-    // asynchronous work instead of assuming the timer tick drained it.
-    await vi.waitFor(() => {
-      expect(s.activeDutyEmployeeMessages.value.at(-1)).toMatchObject({
-        id: original.id, body: 'original result confirmed', status: '已回复', run_id: 'original-run',
-      })
+    // Fake time starts polling but cannot settle the native WebCrypto work.
+    const nativeDigest = webcrypto.subtle.digest.bind(webcrypto.subtle)
+    let releaseDigest!: () => void
+    const digestReady = new Promise<void>(resolve => { releaseDigest = resolve })
+    const pollDigest = vi.spyOn(webcrypto.subtle, 'digest').mockImplementationOnce(async (...args) => {
+      await digestReady
+      return nativeDigest(...args)
     })
-    expect(s.activeDutyEmployeeMessages.value).toHaveLength(2)
+    try {
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(pollDigest).toHaveBeenCalledOnce()
+      expect(m.get).not.toHaveBeenCalled()
+      expect(s.activeDutyEmployeeMessages.value.at(-1)).toMatchObject({ id: original.id, status: '待核对', run_id: 'original-run' })
+    } finally { releaseDigest() }
+    await vi.waitFor(() => {
+      expect(s.activeDutyEmployeeMessages.value).toHaveLength(2)
+      expect(s.activeDutyEmployeeMessages.value.at(-1)).toMatchObject({ id: original.id, body: 'original result confirmed', status: '已回复', run_id: 'original-run' })
+    })
     expect(m.post).toHaveBeenCalledTimes(1)
-    expect(m.get).toHaveBeenCalledWith(expect.stringContaining('/runs?idempotency_key='), {}, { retry: false, quiet: true })
+    expect(m.get).toHaveBeenCalledTimes(1)
+    expect(m.get).toHaveBeenCalledWith(`/api/xcmax/local/employees/${encodeURIComponent(duty.id)}/runs?idempotency_key=${encodeURIComponent(original.request_key!)}`, {}, { retry: false, quiet: true })
+    expect(localStorage.length).toBe(0)
     s.stopDutyReceiptPolling()
   })
   it('recovers a persisted original key when reopening the employee conversation', async () => {

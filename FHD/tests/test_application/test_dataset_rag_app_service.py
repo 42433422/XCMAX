@@ -1340,7 +1340,9 @@ def test_rebuild_admission_does_not_claim_completion_or_borrow_an_old_job(
 
 
 @pytest.mark.parametrize("entry", ["http", "agent"])
-def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, entry) -> None:
+def test_rebuild_survives_tool_exit_and_is_owned_by_host(
+    tmp_path, monkeypatch, entry, dataset_http_actor
+) -> None:
     import multiprocessing
     import threading
     import time
@@ -1350,12 +1352,9 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app)
-    headers = {
-        "X-Dataset-Tenant-ID": "host-tenant",
-        "X-Dataset-Permissions": "dataset.read,dataset.write",
-    }
+    headers = dataset_http_actor.headers
     original_children = {p.pid for p in multiprocessing.active_children()}
-    assert client.post(
+    ingested = client.post(
         "/api/knowledge/v1/datasets/host-queue/documents",
         headers=headers,
         json={
@@ -1363,7 +1362,9 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
             "source": "host.md",
             "chunk_strategy": "fixed",
         },
-    ).json()["success"]
+    ).json()
+    assert ingested["success"] is True, ingested
+    assert ingested["document"]["tenant_id"] == str(dataset_http_actor.tenant_id)
     service = _host_service()
     started, release = threading.Event(), threading.Event()
 
@@ -1394,8 +1395,10 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
                     params={"dataset_id": "host-queue", "background": True},
                 ),
                 runtime_context={
+                    **dataset_http_actor.context,
                     "dataset_access_context": {
-                        "tenant_id": "host-tenant",
+                        "actor_id": str(dataset_http_actor.user_id),
+                        "tenant_id": str(dataset_http_actor.tenant_id),
                         "permissions": ["dataset.read", "dataset.write"],
                     },
                 },

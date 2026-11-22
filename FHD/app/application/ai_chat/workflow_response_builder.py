@@ -313,11 +313,7 @@ class AIChatWorkflowResponseMixin:
             )
             or pending == "unknown"
             or any(
-                execution_result_outcome_unknown(
-                    agent_node_output(
-                        agent_run, step.node_id, include_verification_projection=False
-                    )
-                )
+                execution_result_outcome_unknown(agent_node_output(agent_run, step.node_id))
                 for step in getattr(agent_run, "steps", []) or []
             )
         )

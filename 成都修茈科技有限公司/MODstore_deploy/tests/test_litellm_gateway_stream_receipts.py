@@ -132,6 +132,9 @@ async def test_real_gateway_stream_keeps_unverified_attempts_reserved(
     )
 
     def respond(request):
+        assert request.headers["authorization"] == (
+            f"Bearer {llm_key_resolver.platform_api_key('litellm')}"
+        )
         wire_requests.append(json.loads(request.content))
         assert stream_tests._calls(gateway_mandate)[1][0]["status"] == "pending"
         headers = {

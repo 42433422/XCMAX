@@ -19,6 +19,7 @@ from modstore_server import llm_litellm_router as router
 from modstore_server import strategic_portfolio as portfolio
 from modstore_server import strategic_portfolio_runtime as runtime
 from modstore_server import strategic_portfolio_usage as usage
+from modstore_server.platform_model_config import PlatformApiKey
 
 
 @pytest.fixture
@@ -41,6 +42,18 @@ def real_router_runtime(monkeypatch):
         with pytest.raises(UserWarning, match="unrelated runtime warning"):
             warnings.warn("unrelated runtime warning", UserWarning, stacklevel=1)
         yield litellm
+
+
+def _gateway_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_DATA_DIR", str(tmp_path / "platform-config"))
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "platform-test-key")
+    monkeypatch.delenv("XCMAX_LITELLM_MASTER_KEY", raising=False)
+    monkeypatch.setenv("LITELLM_BASE_URL", "http://127.0.0.1:14000/v1")
+    key = llm_key_resolver.platform_credentials("litellm")[0]
+    assert isinstance(key, PlatformApiKey)
+    assert key.configuration["provider"] == "litellm"
+    assert key.configuration["source"] == "environment"
+    return key
 
 
 @pytest.fixture
@@ -125,8 +138,23 @@ def mandate(tmp_path, monkeypatch, request):
     )
     portfolio.plan_portfolio(decision_id)
     task = runtime._claim(decision_id, 7)
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "platform-test-key")
-    monkeypatch.setattr(llm_key_resolver, "platform_base_url", lambda _: None)
+    _gateway_environment(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        llm_key_resolver,
+        "platform_api_key",
+        lambda provider: (
+            llm_key_resolver.platform_credentials(provider)[0]
+            if provider == "litellm"
+            else "platform-test-key"
+        ),
+    )
+    monkeypatch.setattr(
+        llm_key_resolver,
+        "platform_base_url",
+        lambda provider: (
+            llm_key_resolver.platform_credentials(provider)[1] if provider == "litellm" else None
+        ),
+    )
     monkeypatch.setattr(router, "available", lambda: False)
     yield decision_id, task, factory
     engine.dispose()

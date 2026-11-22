@@ -19,6 +19,12 @@ def _client() -> TestClient:
 def _assert_publication_not_business_completion(run, payload) -> None:
     # emit=True is a publication receipt, not OCR/printer/ERP readback.
     assert payload["agent_status"] == run.status == "blocked"
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["verification_code"] == "result_verifier_unavailable"
+    assert payload["outcome"] == "unknown"
+    assert payload["reconciliation_required"] is True
+    assert payload["retryable"] is False
+    assert len(run.tool_calls) == 1 and run.tool_calls[0].output["success"] is True
     receipt = run.tool_calls[0].metadata["verification"]
     assert receipt["status"] == "inconclusive" and receipt["accepted"] is False
     assert receipt["code"] == "result_verifier_unavailable"
@@ -57,7 +63,7 @@ def test_business_ocr_route_publishes_event_through_agent_orchestrator(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["request_id"] == "ocr-req-1"
     assert payload["event"] == "ocr.requested"
     assert payload["published"] is True
@@ -111,7 +117,7 @@ def test_business_print_label_route_runs_through_agent_orchestrator(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["job_id"] == "print-job-1"
     assert payload["event"] == "print.job.submitted"
     assert payload["agent_run_id"] == payload["run_id"]
@@ -170,7 +176,7 @@ def test_business_inventory_update_route_runs_through_agent_orchestrator(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["event"] == "inventory.changed"
     inventory_domain.emit_stock_changed.assert_called_once_with(
         product_id="sku-1",
@@ -222,7 +228,7 @@ def test_business_shipment_create_route_runs_through_agent_orchestrator(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["event"] == "shipment.created"
     assert payload["published"] is True
     publish.assert_called_once_with(

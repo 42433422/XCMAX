@@ -20,6 +20,7 @@ from tests import test_strategic_pr_repair as original
 # These are the same real company approval, Mac HTTP and model gateway fixtures.
 database = original.database
 configured = original.configured
+upstream_master = original.upstream_master
 gateway = original.gateway
 work = original.work
 REPO = original.REPO

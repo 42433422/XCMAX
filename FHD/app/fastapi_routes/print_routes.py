@@ -365,27 +365,13 @@ def workflow_label_print_dispatch(
     request: Request,
     data: dict[str, Any] = Body(default_factory=dict),
 ):
-    """工作流标签打印调度接口——幂等，同一 idempotency_key 重复调用仅执行一次打印。"""
+    """同一 client key 复用持久工具回执；未知结果不能重复打印或改称成功。"""
     idempotency_key = str(data.get("idempotency_key") or "").strip()
     model_number = str(data.get("model_number") or "").strip()
     quantity = max(1, min(100, int(data.get("quantity") or 1)))
 
     if not model_number:
         return JSONResponse({"success": False, "message": "model_number 不能为空"}, status_code=400)
-
-    # 检查幂等缓存（5 分钟 TTL，与打印确认 token 同机制）
-    if idempotency_key:
-        cached = _print_confirm_cache.get(f"wf_lp:{idempotency_key}")
-        if cached and float(cached.get("expires_at", 0)) > time.time():
-            return JSONResponse(
-                {"success": True, "message": "已在幂等窗口内执行过，跳过重复打印", "skipped": True},
-                status_code=200,
-            )
-        # 写入幂等标记
-        _print_confirm_cache[f"wf_lp:{idempotency_key}"] = {
-            "model_number": model_number,
-            "expires_at": time.time() + _PRINT_CONFIRM_TTL_SECONDS,
-        }
 
     try:
         result = _run_print_agent(

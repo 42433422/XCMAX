@@ -84,6 +84,9 @@ async def test_gateway_real_wire_preserves_unknown_attempts(
 
     def responder(transport):
         def respond(request):
+            assert request.headers["authorization"] == (
+                f"Bearer {llm_key_resolver.platform_api_key('litellm')}"
+            )
             wire.append(json.loads(request.content))
             assert _calls(mandate)[1][0]["status"] == "pending"
             return transport.Response(
@@ -223,7 +226,7 @@ async def test_gateway_stream_model_drift_keeps_original_reservation(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("verified", [False, True], ids=["unknown", "single"])
 async def test_gateway_planning_receipt_settles_original_company_and_call_rows(
-    configured, monkeypatch, verified
+    configured, tmp_path, monkeypatch, verified
 ):
     identity = company_fixtures.budget(
         configured,
@@ -237,12 +240,12 @@ async def test_gateway_planning_receipt_settles_original_company_and_call_rows(
             }
         ],
     )
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "platform-test-key")
-    monkeypatch.setattr(llm_key_resolver, "platform_base_url", lambda _: None)
+    key = stream_fixtures._gateway_environment(tmp_path, monkeypatch)
     monkeypatch.setattr(router, "available", lambda: False)
     wire = []
 
     def respond(request):
+        assert request.headers["authorization"] == f"Bearer {key}"
         wire.append(json.loads(request.content))
         assert company_fixtures.totals(identity)["slots"] == 1
         assert company_fixtures.totals(identity)["held"]["tokens"] > 0
@@ -272,7 +275,7 @@ async def test_gateway_planning_receipt_settles_original_company_and_call_rows(
     with usage.planning_usage_scope(7, admission) as context:
         await llm_chat_proxy.chat_dispatch(
             "litellm",
-            api_key="platform-test-key",
+            api_key=key,
             base_url=None,
             model="approved-model",
             messages=[{"role": "user", "content": "next approved objective"}],

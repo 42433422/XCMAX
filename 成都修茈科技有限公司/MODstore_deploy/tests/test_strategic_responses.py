@@ -9,6 +9,7 @@ from contextvars import Context
 
 import pytest
 
+from modstore_server import llm_key_resolver
 from modstore_server import strategic_portfolio as portfolio
 from modstore_server import strategic_portfolio_usage as budget
 from modstore_server import strategic_responses as responses
@@ -16,6 +17,7 @@ from tests import test_strategic_stream_usage as stream_tests
 from tests.test_strategic_stream_usage import _calls
 
 mandate = stream_tests.mandate
+real_router_runtime = stream_tests.real_router_runtime
 
 
 def _payload(**changes):
@@ -82,6 +84,8 @@ def _http(
 ):
     import openai
 
+    api_key = llm_key_resolver.platform_api_key(provider)
+    assert api_key
     client_type = openai.DefaultAsyncHttpxClient
     transport = importlib.import_module(client_type.__mro__[1].__module__.split(".")[0])
     seen = {
@@ -132,7 +136,7 @@ def _http(
         assert not state["halted"]
         budget.require_call_reservation(provider=provider, model="approved-model")
         assert request.url.path == "/v1/responses"
-        assert request.headers["authorization"] == "Bearer platform-test-key"
+        assert request.headers["authorization"] == f"Bearer {api_key}"
         if status != 200:
             response = transport.Response(
                 status, json={"error": {"message": "upstream unavailable"}}, request=request
@@ -406,7 +410,7 @@ async def test_schema_bytes_cannot_exceed_the_approved_call_budget(mandate, monk
     ],
 )
 async def test_native_gateway_controls_and_raw_attempt_headers(
-    mandate, monkeypatch, stream, headers, verified
+    mandate, monkeypatch, stream, headers, verified, real_router_runtime
 ):
     seen = _http(monkeypatch, mandate, provider="litellm", headers=headers)
 
@@ -429,6 +433,9 @@ async def test_native_gateway_controls_and_raw_attempt_headers(
     state, calls = _calls(mandate)
     assert len(seen["requests"]) == len(calls) == 1
     # The real SDK flattens only server-controlled extra_body into the wire body.
+    assert seen["requests"][0].headers["authorization"] == (
+        f"Bearer {llm_key_resolver.platform_api_key('litellm')}"
+    )
     body = json.loads(seen["requests"][0].content)
     assert body["num_retries"] == 0 and body["disable_fallbacks"] is True
     assert "extra_body" not in body and "gateway_attempts_verified" not in body

@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from modstore_server import customer_ticket_github, llm_key_resolver, mac_control_transport
+from modstore_server import customer_ticket_github, mac_control_transport
 from modstore_server import para_github_repair as repair
 from modstore_server import strategic_portfolio as p
 from modstore_server import strategic_portfolio_runtime as runtime
@@ -35,6 +35,7 @@ from tests.test_strategic_responses import _http, _payload
 
 database = company.database
 configured = company.configured
+upstream_master = accounting.upstream_master
 gateway = accounting.gateway
 TOKEN = "original-pr-dispatch-token-" * 3
 REPO = "owner/repo"
@@ -45,7 +46,6 @@ SOURCE, CONTROLLER, CANDIDATE = "a" * 40, "c" * 40, "b" * 40
 def work(configured, gateway, monkeypatch):
     import_module("litellm.proxy.spend_tracking.usage_capture")
     monkeypatch.setattr(accounting, "MODEL", "approved-model")
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "platform-test-key")
     monkeypatch.setattr(remote, "get_session_factory", lambda: configured)
     for name, value in {
         "DEVFLEET_FORCE_OPENCODE": "1",

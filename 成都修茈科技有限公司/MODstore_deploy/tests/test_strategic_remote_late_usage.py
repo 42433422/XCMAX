@@ -25,6 +25,7 @@ from tests.test_strategic_responses import _http, _payload
 
 database = base.database
 configured = company.configured
+upstream_master = accounting.upstream_master
 gateway = accounting.gateway
 
 
@@ -59,6 +60,8 @@ def original_remote(request, database, gateway, monkeypatch):
     monkeypatch.setattr(company, "budget", budget)
     monkeypatch.setattr(accounting, "MODEL", "approved-model")
     monkeypatch.setattr(scheduler, "get_session_factory", lambda: database)
+    platform_api_key = llm_key_resolver.platform_api_key
+    platform_base_url = llm_key_resolver.platform_base_url
     kind = request.param
     fixture = (
         engineering.workspace.__wrapped__(request.getfixturevalue("configured"), monkeypatch)
@@ -67,9 +70,8 @@ def original_remote(request, database, gateway, monkeypatch):
     )
     with_fixture = next(fixture)
     try:
-        monkeypatch.setattr(
-            llm_key_resolver, "platform_base_url", lambda _: "https://gateway.test/v1"
-        )
+        monkeypatch.setattr(llm_key_resolver, "platform_api_key", platform_api_key)
+        monkeypatch.setattr(llm_key_resolver, "platform_base_url", platform_base_url)
         with_fixture.kind = kind
         if kind == "workspace":
             with_fixture.allocation["provider"] = "litellm"

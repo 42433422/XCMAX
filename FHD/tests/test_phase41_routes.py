@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application import approval_workspace_app_service as approval_svc
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.db.db_base import Base
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalStatus
 from app.fastapi_routes import approval as approval_routes
@@ -61,10 +62,15 @@ def mock_shipment_svc() -> MagicMock:
 def shipment_client(
     mock_shipment_svc: MagicMock, monkeypatch: pytest.MonkeyPatch, trusted_actor
 ) -> TestClient:
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
     monkeypatch.setattr(
         shipment_routes, "get_shipment_application_service_core", lambda: mock_shipment_svc
     )
     app = FastAPI()
+    app.state.agent_runs = repo
     app.include_router(shipment_routes.router)
     return TestClient(
         app, raise_server_exceptions=False, headers=trusted_actor(tenant_id=None).headers
@@ -400,9 +406,23 @@ def test_shipment_generate_success(
         "order_number": "ACCEPT-42",
     }
     r = shipment_client.post("/api/shipment/generate", json=payload)
-    assert r.status_code == 200
-    assert r.json()["file_path"] == "/tmp/p41.xlsx"
+    assert r.status_code == 500, r.text
+    output = r.json()
+    assert output["success"] is False and output["outcome"] == "unknown"
+    assert output["agent_status"] == "blocked"
+    assert output["error_code"] == "result_verification_inconclusive"
+    assert output["verification_code"] == "result_verifier_unavailable"
+    assert output["reconciliation_required"] is True and output["retryable"] is False
+    assert output["file_path"] == "/tmp/p41.xlsx"
     mock_shipment_svc.generate_shipment_document.assert_called_once_with(**payload)
+    run = shipment_client.app.state.agent_runs.get(output["run_id"])
+    assert run.status == "blocked" and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert (call.tool_id, call.action) == ("shipment_orders", "generate")
+    assert call.output == mock_shipment_svc.generate_shipment_document.return_value
+    assert call.metadata["verification"]["accepted"] is False
+    assert run.steps[0].attempt_count == 1
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
 
 
 def test_shipment_orders_latest_alias(

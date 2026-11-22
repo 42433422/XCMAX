@@ -673,9 +673,12 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_ac
 
     assert completed is not None
     assert completed["success"] is False
-    assert completed["execution_state"] == "blocked"
+    assert completed["execution_state"] == "unknown"
+    assert completed["requires_reconciliation"] is True
+    assert completed["retryable"] is False
+    assert completed["execution"]["effect"] == completed["execution"]["outcome"] == "unknown"
     assert completed["run_id"] == result["run_id"]
-    assert completed["data"]["action"] == "workflow_blocked"
+    assert completed["data"]["action"] == "workflow_unknown"
     assert result is not None
     assert repo.get(result["run_id"]).status == "blocked"
     retained = repo.get(result["run_id"])
@@ -942,9 +945,14 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, t
     assert result is not None
     assert completed is not None
     assert completed["success"] is False
-    assert completed["execution_state"] == "blocked"
+    assert completed["execution_state"] == "unknown"
+    assert completed["requires_reconciliation"] is True
+    assert completed["retryable"] is False
+    assert completed["execution"]["effect"] == completed["execution"]["outcome"] == "unknown"
+    assert completed["data"]["action"] == "workflow_unknown"
     assert completed["run_id"] == result["run_id"]
     retained = repo.get(result["run_id"])
+    assert retained.status == "blocked"
     assert retained.tool_calls[0].output["success"] is True
     assert retained.metadata["verification"]["accepted"] is False
     mock_dispatch.assert_called_once()
@@ -998,10 +1006,15 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     assert result is not None
     assert completed is not None
     assert completed["success"] is False
-    assert completed["execution_state"] == "blocked"
+    assert completed["execution_state"] == "unknown"
+    assert completed["requires_reconciliation"] is True
+    assert completed["retryable"] is False
+    assert completed["execution"]["effect"] == completed["execution"]["outcome"] == "unknown"
+    assert completed["data"]["action"] == "workflow_unknown"
     assert completed["run_id"] == result["run_id"]
     assert "Excel 分析上下文" not in result["response"]
     retained = repo.get(result["run_id"])
+    assert retained.status == "blocked"
     assert retained.tool_calls[0].output["success"] is True
     assert retained.metadata["verification"]["accepted"] is False
     mock_dispatch.assert_called_once()

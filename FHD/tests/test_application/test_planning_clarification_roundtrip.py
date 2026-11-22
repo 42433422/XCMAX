@@ -247,10 +247,16 @@ def test_incomplete_knowledge_receipt_stays_unverified_after_clarification(round
     result = roundtrip.send(roundtrip.service(), "A")
     assert result["run_id"] == first["run_id"]
     assert result["success"] is not True
-    assert result["execution_state"] == "blocked"
+    assert result["execution_state"] == "unknown"
+    assert result["data"]["action"] == "workflow_unknown"
+    assert result["requires_reconciliation"] is True
+    assert result["retryable"] is False
+    assert result["execution"]["effect"] == result["execution"]["outcome"] == "unknown"
     run = roundtrip.repository.get(first["run_id"])
     assert run.status == "blocked"
     assert "独立结果核验尚未通过" in (run.error or "")
+    assert len(run.tool_calls) == 1 and run.tool_calls[0].output["success"] is True
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is False
     assert roundtrip.executor.execute_with_deadline.call_count == 1
 
 
