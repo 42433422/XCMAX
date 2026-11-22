@@ -156,6 +156,23 @@ def test_stale_non_chat_preference_falls_back_to_platform(database, chat_client)
     assert response.json()["model"] == "mimo-v2.6-flash"
 
 
+
+def test_saved_byok_without_personal_key_never_uses_platform_route(database, chat_client):
+    from modstore_server.models import User
+
+    save("xiaomi", base_url=BASE, model="mimo-v2.6-flash")
+    user = database.get(User, 1)
+    before = json.dumps({"mode": "byok", "provider": "xiaomi", "model": "mimo-v2.6-flash"})
+    user.default_llm_json = before
+    database.commit()
+    response = chat_client.get("/api/llm/resolve-chat-default")
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "NO_BYOK_CHAT_MODEL"
+    assert "route_token" not in response.text
+    database.refresh(user)
+    assert user.default_llm_json == before
+
+
 def test_chat_default_openapi_exposes_optional_platform_only(chat_client):
     operation = chat_client.app.openapi()["paths"]["/api/llm/resolve-chat-default"]["get"]
     query = {p["name"]: p for p in operation["parameters"] if p["in"] == "query"}
