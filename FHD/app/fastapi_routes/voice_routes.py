@@ -632,8 +632,10 @@ async def voice_command(
             details = result.get("data") or {}
             if not isinstance(details, dict):
                 details = {}
-            inner = details.get("data") if isinstance(details.get("data"), dict) else {}
-            node_results = inner.get("node_results") if isinstance(inner, dict) else []
+            inner = details.get("data")
+            if not isinstance(inner, dict):
+                inner = {}
+            node_results = inner.get("node_results")
             execution = result.get("execution") or inner.get("execution")
             executed = (isinstance(execution, dict) and execution.get("committed") is True) or any(
                 isinstance(node, dict) and node.get("success") is True
