@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import runpy
 import subprocess
 import sys
 import tomllib
@@ -124,11 +125,15 @@ def test_tarball_codex_probe_rejects_unusable_runtime(monkeypatch, tmp_path, mod
         binary = Path(sys.executable) if mode == "executable" else tmp_path / "missing-codex"
         monkeypatch.setattr(codex_cli_bin, "bundled_codex_path", lambda: binary)
 
+    # Run the extracted release probe as a real Python file in this process, so
+    # patched SDK metadata and executable paths match the deployment check.
+    probe_path = tmp_path / "fhd-apply-release-codex-probe.py"
+    probe_path.write_text(probe + "\n", encoding="utf-8")
     if mode == "installed":
-        exec(compile(probe, "fhd-apply-release.sh:runtime-probe", "exec"), {})
+        runpy.run_path(str(probe_path))
     else:
         with pytest.raises(FileNotFoundError if mode == "missing" else RuntimeError):
-            exec(compile(probe, "fhd-apply-release.sh:runtime-probe", "exec"), {})
+            runpy.run_path(str(probe_path))
 
 
 def test_server_release_archive_strips_macos_extended_attributes() -> None:
