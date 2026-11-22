@@ -43,6 +43,12 @@ logger = logging.getLogger(__name__)
 PUBLIC_AGENT_ERROR = "Agent 执行失败，详细信息已记录"
 PUBLIC_AGENT_SERVICE_ERROR = "Agent 服务暂时不可用，请稍后重试"
 PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹配"
+_CODEX_CONTROL_MESSAGES = {
+    "reconciliation_required": "原任务执行结果尚需核对，暂不能恢复或重试",
+    "owner_changed": "任务身份或授权已变化，请确认当前账号与原任务的业务范围",
+    "identity_override": "续跑不能修改原任务的运行范围，请从原任务继续操作",
+    "run_inactive": "终态任务不能恢复；重新执行业务请提交新任务",
+}
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
 _TaskResult = TypeVar("_TaskResult", AgentRun, AgentTask)
 
@@ -410,9 +416,14 @@ def guard_codex_child_control(
     if context.get("source") != "codex_runtime" or not parent_id:
         return None
     code = "codex_child_retry_forbidden" if action == "retry" else "codex_parent_control_required"
+    message = (
+        "请先核对原父任务；不能绕过父任务预算重新执行子任务"
+        if action == "retry"
+        else "请从原父任务恢复，原子任务授权或预算不能单独重建"
+    )
     try:
         if action == "retry":
-            raise CodexBindingError(code, "请先核对原父任务；不能绕过父任务预算重新执行子任务")
+            raise CodexBindingError(code, message)
         store = CodexBindingStore(orchestrator._repo)
         binding = store.get(parent_id)
         parent, metadata = binding.run, binding.metadata
@@ -442,10 +453,17 @@ def guard_codex_child_control(
             or requires_retry_reconciliation(parent)
             or metadata.get("model_reconciliation_required")
         ):
-            raise CodexBindingError(code, "请从原父任务恢复，原子任务授权或预算不能单独重建")
-    except CodexBindingError as exc:
+            raise CodexBindingError(code, message)
+    except CodexBindingError:
+        logger.warning(
+            "Codex child control denied: action=%s run_id=%s parent_run_id=%s",
+            action,
+            run.run_id,
+            parent_id,
+            exc_info=True,
+        )
         return JSONResponse(
-            {"success": False, "error_code": code, "parent_run_id": parent_id, "message": str(exc)},
+            {"success": False, "error_code": code, "parent_run_id": parent_id, "message": message},
             status_code=409,
         )
     return None
@@ -628,11 +646,17 @@ def control_codex_run(
         )
         return JSONResponse(response, status_code=code)
     except (CodexBindingError, ValueError) as exc:
+        logger.warning(
+            "Codex run control denied: action=%s run_id=%s", action, run.run_id, exc_info=True
+        )
+        error_code = getattr(exc, "code", "runtime_control_denied")
         return JSONResponse(
             {
                 "success": False,
-                "error_code": getattr(exc, "code", "runtime_control_denied"),
-                "message": str(exc),
+                "error_code": error_code,
+                "message": _CODEX_CONTROL_MESSAGES.get(
+                    error_code, "任务操作未完成，请刷新原任务并核对状态、授权和执行结果"
+                ),
             },
             status_code=409,
         )
