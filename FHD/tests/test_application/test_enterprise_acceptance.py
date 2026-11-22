@@ -163,11 +163,11 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(tmp_path / "memory.json"))
-    # The workflow writes through the module-level memory singleton; reset it
-    # together with the store classes so reads see the same configured path.
-    monkeypatch.setattr(user_memory_service, "_user_memory_service", None)
+    # The independent verifier reads the module-level memory service.
+    # Reset every cache so writes and independent reads use this test's JSON.
     monkeypatch.setattr(user_memory_service.UserMemoryStore, "_instance", None)
     monkeypatch.setattr(user_memory_service.UserMemoryService, "_instance", None)
+    monkeypatch.setattr(user_memory_service, "_user_memory_service", None)
     actor = trusted_actor(role="admin")
     # Configure test-owned stores; no permission, source, execution or outcome
     # response is replaced by a test double.
@@ -177,6 +177,8 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
     projection = ProjectionService(session_factory=actor.factory)
     goals = GoalService(actor.factory, projections=projection)
     memory = user_memory_service.UserMemoryService()
+    assert user_memory_service.get_user_memory_service() is memory
+    assert memory._store._repository._backend.path == tmp_path / "memory.json"
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
     # Use the original in-process execution method so the isolated SQLite and
@@ -341,3 +343,26 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
         reviewed = verify(case, {"success": True, "data": replay})
         assert reviewed["accepted"]
         assert reviewed["checks"][0]["evidence"]["memory_status"] == "active"
+
+
+def test_order_acceptance_keeps_a_prewarmed_memory_store_isolated(
+    trusted_actor, tmp_path, monkeypatch
+):
+    prior_path = tmp_path / "prior-memory.json"
+    monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(prior_path))
+    monkeypatch.setattr(user_memory_service.UserMemoryStore, "_instance", None)
+    monkeypatch.setattr(user_memory_service.UserMemoryService, "_instance", None)
+    monkeypatch.setattr(user_memory_service, "_user_memory_service", None)
+    prior = user_memory_service.get_user_memory_service()
+    prior.add_preference("prior-owner", "warmup", "real-prior-store")
+    assert prior._store._repository._backend.path == prior_path
+    original_bytes = prior_path.read_bytes()
+
+    current_path = tmp_path / "current"
+    current_path.mkdir()
+    test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
+        trusted_actor, current_path, monkeypatch
+    )
+
+    assert user_memory_service.get_user_memory_service() is not prior
+    assert prior_path.read_bytes() == original_bytes
