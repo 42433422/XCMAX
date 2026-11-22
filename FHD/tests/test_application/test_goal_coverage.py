@@ -195,8 +195,7 @@ def test_format_retry_budget_is_shared_across_replanned_candidates():
     assert all(node.tool_id == "clarify" for node in plan.nodes)
     assert completion.call_count == 5
     prompts = [
-        json.loads(call.kwargs["messages"][1]["content"])
-        for call in completion.call_args_list
+        json.loads(call.kwargs["messages"][1]["content"]) for call in completion.call_args_list
     ]
     for index in (1, 2, 4):
         assert prompts[index]["task"] == "audit_goal_coverage"
