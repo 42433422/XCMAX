@@ -67,7 +67,6 @@ def long_history(count=180):
     ]
 
 
-
 @pytest.fixture
 def platform_failover(monkeypatch):
     from app.application.workflow.retry_policy import planning_model_call, planning_request_scope
