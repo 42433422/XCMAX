@@ -19,12 +19,13 @@ ENTERPRISE_SHELL = "enterprise"
 
 
 def client_shell_from_request(request: HTTPConnection) -> str:
-    raw = str(request.headers.get(CLIENT_SHELL_HEADER) or "").strip().lower()
+    headers = getattr(request, "headers", None) or {}
+    raw = str(headers.get(CLIENT_SHELL_HEADER) or "").strip().lower()
     if raw == ADMIN_SHELL:
         return ADMIN_SHELL
     if raw in (ENTERPRISE_SHELL, "enterprise", "desktop", "web"):
         return ENTERPRISE_SHELL
-    referer = str(request.headers.get("referer") or "").lower()
+    referer = str(headers.get("referer") or "").lower()
     if ":5011/admin" in referer or referer.rstrip("/").endswith(":5011/admin"):
         return ADMIN_SHELL
     return ENTERPRISE_SHELL
