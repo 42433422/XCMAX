@@ -18,6 +18,49 @@ publisher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(publisher)
 
 
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize(
+    "renderer,component,source_name,out_name",
+    [
+        ("_render_fhd", "FHD", "ci-mobile-flutter.yml", "fhd-ci-mobile-flutter.yml"),
+        ("_render_fhd", "FHD", "neuro_migration_check.yml", "fhd-neuro-migration-check.yml"),
+        (
+            "_render_mod",
+            "成都修茈科技有限公司/MODstore_deploy",
+            "market-e2e.yml",
+            "modstore-market-e2e.yml",
+        ),
+        (
+            "_render_mod",
+            "成都修茈科技有限公司/MODstore_deploy",
+            "ci-backend-python.yml",
+            "modstore-ci-backend-python.yml",
+        ),
+    ],
+)
+def test_workflow_reference_rewrite_preserves_source_paths_and_lookalikes(
+    tmp_path, quote, renderer, component, source_name, out_name
+):
+    root_path = f".github/workflows/{source_name}"
+    source_path = f"{component}/{root_path}"
+    paths = [root_path, source_path, source_path + ".bak", root_path + ".disabled"]
+    source = tmp_path / source_name
+    source.write_text(
+        "on:\n  pull_request:\n    paths:\n"
+        + "".join(f"      - {quote}{value}{quote}\n" for value in paths)
+        + "jobs:\n  verify:\n    runs-on: ubuntu-latest\n    steps: []\n"
+    )
+
+    rendered = getattr(publisher, renderer)(source)
+
+    assert rendered is not None and rendered[0] == out_name
+    workflow = yaml.load(rendered[1], Loader=yaml.BaseLoader)
+    assert workflow["on"]["pull_request"]["paths"] == [
+        f".github/workflows/{out_name}",
+        *paths[1:],
+    ]
+
+
 def test_cvm_watcher_root_render_has_no_precheckout_working_directory() -> None:
     source = REPO_ROOT / "FHD" / ".github" / "workflows" / "cvm-autonomy-watcher.yml"
 
