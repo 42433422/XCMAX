@@ -21,22 +21,44 @@ class _McpResponse(Response):
         self.token, self.store, self.bridge = token, store, bridge
 
     async def __call__(self, scope, receive, send) -> None:
+        from jsonschema import ValidationError, validate
+        from mcp.server import ServerRequestContext
         from mcp.server.lowlevel import Server
         from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-        from mcp.types import CallToolResult, TextContent
+        from mcp.types import (
+            CallToolRequestParams,
+            CallToolResult,
+            ListToolsResult,
+            PaginatedRequestParams,
+            TextContent,
+        )
 
-        server = Server("xcmax-controlled-business-tools", version="1")
+        definitions = mcp_tool_definitions()
+        input_schemas = {
+            tool.name: tool.model_dump(by_alias=True)["inputSchema"] for tool in definitions
+        }
 
-        @server.list_tools()
-        async def list_tools():
+        async def list_tools(
+            _ctx: ServerRequestContext, _params: PaginatedRequestParams | None
+        ) -> ListToolsResult:
             await anyio.to_thread.run_sync(self.store.authenticate, self.token, "mcp")
-            return mcp_tool_definitions()
+            return ListToolsResult(tools=definitions)
 
-        @server.call_tool()
-        async def call_tool(name: str, arguments: dict):
+        async def call_tool(
+            _ctx: ServerRequestContext, params: CallToolRequestParams
+        ) -> CallToolResult:
             try:
+                arguments = params.arguments or {}
+                schema = input_schemas.get(params.name)
+                if schema is not None:
+                    try:
+                        validate(arguments, schema)
+                    except ValidationError as exc:
+                        raise CodexBindingError(
+                            "invalid_arguments", "工具参数不满足已发布的能力契约"
+                        ) from exc
                 result = await anyio.to_thread.run_sync(
-                    self.bridge.invoke, self.token, name, arguments
+                    self.bridge.invoke, self.token, params.name, arguments
                 )
             except CodexBindingError as exc:
                 result = {
@@ -47,9 +69,17 @@ class _McpResponse(Response):
                 }
             return CallToolResult(
                 content=[TextContent(type="text", text=json.dumps(result, ensure_ascii=False))],
-                structuredContent=result,
-                isError=result.get("success") is False,
+                structured_content=result,
+                is_error=result.get("success") is False,
             )
+
+        # MCP SDK 2.x registers lowlevel handlers at construction, not via decorators.
+        server = Server(
+            "xcmax-controlled-business-tools",
+            version="1",
+            on_list_tools=list_tools,
+            on_call_tool=call_tool,
+        )
 
         # Each request owns its SDK session. No connection-local identity or
         # tool-result cache can survive into another account's HTTP request.
