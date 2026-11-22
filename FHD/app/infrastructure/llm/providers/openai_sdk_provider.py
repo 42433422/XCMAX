@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import httpx
+import httpx2
 
 from app.application.tool_execution_deadline import (
     check_invocation_deadline,
@@ -27,26 +28,29 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from ..reasoning_stream import publish_reasoning, reasoning_from_message
 
 
-def _bounded_sdk_timeout(timeout: Any, remaining: float) -> httpx.Timeout:
-    """Respect both the model client's phase timeouts and the invocation deadline.
+def _bounded_sdk_timeout(timeout: Any, remaining: float) -> httpx.Timeout | httpx2.Timeout:
+    """Cap each SDK timeout phase without changing its HTTP transport family.
 
-    SDK defaults may contain a nested httpx.Timeout phase; comparing that object
-    to seconds raises TypeError. Normalize it before applying the deadline cap.
-    Unknown timeout types remain invalid rather than bypassing the deadline.
+    OpenAI 3.x uses httpx2.Timeout, which legacy httpx.Timeout treats as an
+    opaque scalar. Preserve the native timeout type so the SDK can enforce
+    bounded connect/read/write/pool phases rather than failing requests.
     """
-    configured = httpx.Timeout(timeout)
+    configured = (
+        timeout
+        if isinstance(timeout, (httpx.Timeout, httpx2.Timeout))
+        else httpx2.Timeout(timeout)
+    )
     phases: dict[str, float] = {}
     for name, value in configured.as_dict().items():
-        if isinstance(value, httpx.Timeout):
+        if isinstance(value, (httpx.Timeout, httpx2.Timeout)):
             value = value.as_dict()[name]
         if value is None:
             phases[name] = remaining
-        elif isinstance(value, (int, float)) and not math.isnan(value) and value >= 0:
+        elif isinstance(value, (int, float)) and math.isfinite(value) and value >= 0:
             phases[name] = min(float(value), remaining)
         else:
             raise ValueError(f"invalid {name} timeout for SDK request")
-    return httpx.Timeout(**phases)
-
+    return type(configured)(**phases)
 
 async def _sdk_responses(client: Any, request: dict[str, Any], *, stream: bool):
     """Bridge sync SDK I/O without leaving an asyncio executor job on cancellation."""
