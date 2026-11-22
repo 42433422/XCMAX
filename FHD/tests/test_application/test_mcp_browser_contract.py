@@ -52,7 +52,7 @@ def register_browser(monkeypatch, *, persistent=True):
     return config, schema
 
 
-def test_browser_schema_reaches_planner_and_rejects_invalid_action(monkeypatch):
+def test_browser_schema_reaches_canonical_catalog_and_rejects_invalid_action(monkeypatch):
     _config, schema = register_browser(monkeypatch)
     catalog = registry.merge_mcp_tools({})
     monkeypatch.setattr(
@@ -60,8 +60,11 @@ def test_browser_schema_reaches_planner_and_rejects_invalid_action(monkeypatch):
     )
     contracts = tool_spec.build_tool_specs_v2()
     click = contracts[("mcp__browser", "browser_click")]
-    assert click.input_schema == schema
-    assert click.description == "Click an observed element"
+    for name, original in schema["properties"].items():
+        assert click.input_schema["properties"][name] == original
+    assert set(click.input_schema["required"]) == {*schema["required"], "verification"}
+    assert click.description.startswith("Click an observed element")
+    assert "verification" in click.description
     assert click.risk == "high"
     assert not click.idempotent
     snapshot = contracts[("mcp__browser", "browser_snapshot")]
@@ -69,18 +72,13 @@ def test_browser_schema_reaches_planner_and_rejects_invalid_action(monkeypatch):
     assert not tool_spec.validate_tool_call(
         "mcp__browser", "browser_click", {"target": "button", "button": "middle"}
     ).ok
-    from app.application.workflow.llm_plan_generation import _tool_specs
-
-    # Planner catalog is slim by contract (#3423): types, enums, required fields, and
-    # short names, and the closed-object boundary. Official minLength stays on
-    # the complete tool spec and is enforced by validate_tool_call above.
-    prompts = _tool_specs(catalog)
-    planner_schema = prompts[0]["actions"][0]["input_schema"]
-    assert planner_schema["type"] == schema["type"]
-    assert planner_schema["required"] == schema["required"]
-    assert planner_schema["properties"]["target"]["type"] == "string"
-    assert planner_schema["properties"]["button"]["enum"] == ["left", "right"]
-    assert planner_schema["additionalProperties"] is schema["additionalProperties"] is False
+    # Codex capability discovery uses the complete canonical schema, including
+    # original minLength/enums/closed objects. No second planner compresses it.
+    for name, original in schema["properties"].items():
+        assert click.input_schema["properties"][name] == original
+    assert set(click.input_schema["required"]) == {*schema["required"], "verification"}
+    assert click.input_schema["properties"]["button"]["enum"] == ["left", "right"]
+    assert click.input_schema["additionalProperties"] is False
 
 
 @pytest.mark.parametrize("context", [{}, {"tenant_id": "1", "run_id": "run-one"}])

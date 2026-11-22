@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
@@ -57,6 +59,20 @@ class ToolActionSpecV2:
     read_only: bool = False
     read_only_if_unset: list[str] = field(default_factory=list)
     owner_mod_id: str = ""
+
+    @property
+    def schema_digest(self) -> str:
+        """Bind discovery and dispatch to the same host-owned action contract."""
+        contract = {
+            key: value
+            for key, value in self.to_dict().items()
+            if key not in {"description", "contract_samples", "test_fixtures"}
+        }
+        return hashlib.sha256(
+            json.dumps(
+                contract, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+        ).hexdigest()
 
     def is_read_only_call(self, params: dict[str, Any]) -> bool:
         """Resolve host-declared effects from the validated call, before dispatch."""
@@ -181,7 +197,10 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "elt.read"
     if tool_id in {"template_preview", "document_template"}:
         return "elt.template.manage"
-    if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
+    if (
+        tool_id == "excel_analysis"
+        and action in {"read", "structure", "query", "aggregate", "statistics"}
+    ) or tool_id == "excel_join_compare":
         return "tool.excel_analysis.read"
     fixed = PERMISSION_OVERRIDES.get(tool_id)
     if fixed is not None:
@@ -308,10 +327,14 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
                 "pattern": r"[\s\S]*\S[\s\S]*",
                 "description": "必须显式指定已绑定的屏幕会话，后续 ui_verify 使用完全相同的 session_id。",
             }
+            from app.application.aiopen.agent_bridge import screen_verification_schema
+
+            properties["verification"] = screen_verification_schema()
             description += (
-                " Agent 写入要求：显式提供非空 session_id，并在同一任务计划中安排"
-                "使用相同 session_id 的后续 aiopen.ui_verify；通过 depends_on 或 next"
-                "连接为无条件下游，计划不得包含 branches。ui_verify 必须检查本次写入的预期结果。"
+                " Agent 写入要求：显式提供非空 session_id。动态动作必须提供同会话 verification"
+                "（aiopen.ui_verify 参数），与动作一并审批冻结，宿主执行后独立回读；点击、上传的预期结果"
+                "在执行前必须尚未成立。确定性多步计划也可通过 depends_on/next 无条件连接同会话后续"
+                " ui_verify，计划不得包含 branches。页面核验仅证明可见状态，不代表外部业务已完成。"
             )
             for sample in fixture:
                 sample["input"]["session_id"] = "screen-session-1"
@@ -339,9 +362,13 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
     global _TOOL_SPECS_CACHE
     if _TOOL_SPECS_CACHE is not None:
         return _TOOL_SPECS_CACHE
+    from app.application.agent_orchestrator.tool_spec_data.input_schemas import (
+        workbook_input_schemas,
+    )
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
+    input_schemas = {**_SPECIAL_INPUT_SCHEMAS, **workbook_input_schemas()}
     specs: dict[tuple[str, str], ToolActionSpecV2] = {}
     for tool_id, tool_meta in registry.items():
         actions = tool_meta.get("actions") if isinstance(tool_meta, dict) else None
@@ -357,7 +384,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             risk = _risk_value(action_meta.get("risk"))
             declared_input = action_meta.get("input_schema")
             declared_output = action_meta.get("output_schema")
-            input_schema = _SPECIAL_INPUT_SCHEMAS.get(
+            input_schema = input_schemas.get(
                 (str(tool_id), normalized_action),
                 declared_input
                 if isinstance(declared_input, dict)
@@ -372,10 +399,25 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 _default_fixture(str(tool_id), normalized_action, input_schema, output_schema),
             )
             conditional_reads = action_meta.get("read_only_if_unset")
+            description = str(action_meta.get("description") or tool_description)
+            if str(tool_id) in {"excel_analysis", "excel_join_compare"}:
+                description += (
+                    " file_path 可直接使用当前账号的上传 ID/文件名或同原任务已核验产物 URI；"
+                    "宿主按账号、租户和原文件哈希读取。read 返回 has_more 时用 next_offset 继续读取。"
+                )
+            if (str(tool_id), normalized_action) == ("employee", "execute"):
+                from app.domain.workbook_write_contract import WORKBOOK_WRITER
+
+                description += (
+                    f" Excel 模板写入使用已安装受信员工 {WORKBOOK_WRITER}，"
+                    "input.template_path 为当前账号上传 ID/文件名或同原任务已核验产物 URI；"
+                    "input.plan 按下方精确 schema 提交，经过原审批、真实写出和独立 QC。"
+                    "公式按文本保存，不能宣称数值已重算。先用 employee.list 查看可用员工。"
+                )
             spec = ToolActionSpecV2(
                 tool_id=str(tool_id),
                 action=normalized_action,
-                description=str(action_meta.get("description") or tool_description),
+                description=description,
                 input_schema=deepcopy(input_schema),
                 output_schema=deepcopy(output_schema),
                 risk=risk,

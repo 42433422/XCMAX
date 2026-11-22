@@ -174,6 +174,7 @@ def apply_clarification_answer(
     parameters: dict[str, Any],
     confirmed: bool = False,
     allowed_fields: set[str] | None = None,
+    answered_by: str | None = None,
 ) -> None:
     """Apply a bounded answer to the exact clarification node in the durable plan."""
     step = next((item for item in run.steps if item.step_id == step_id), None)
@@ -188,6 +189,22 @@ def apply_clarification_answer(
     target = next((item for item in run.steps if item.node_id == target_id), None)
     if target is None or target.status != "pending":
         raise ClarificationAnswerError("澄清目标已变化，请重新规划任务")
+    reference_receipts = run.metadata.get("reference_clarifications", {})
+    if not isinstance(reference_receipts, dict):
+        raise ClarificationAnswerError("原引用澄清凭据无效")
+    reference_receipt = reference_receipts.get(step.step_id)
+    if reference_receipt is not None and (
+        not isinstance(reference_receipt, dict)
+        or reference_receipt.get("target_node_id") != target.node_id
+        or reference_receipt.get("target_params") != target.params
+        or reference_receipt.get("question_params") != step.params
+        or reference_receipt.get("answer") is not None
+        or (
+            (run.metadata.get("runtime_context") or {}).get("source") == "codex_runtime"
+            and str(answered_by or "") != run.user_id
+        )
+    ):
+        raise ClarificationAnswerError("原引用澄清凭据或答复身份已变化")
     spec = get_tool_action_spec(target.tool_id, target.action)
     missing = set(missing_tool_fields(target.tool_id, target.action, target.params))
     from app.application.shipment_inputs import shipment_call_payload
@@ -325,7 +342,12 @@ def apply_clarification_answer(
             candidate.update(deepcopy(parameters))
         if not confirmed and detail.get("requires_confirmation", True):
             raise ClarificationAnswerError("请明确回答该操作的澄清问题")
-    if confirmed and spec is not None and isinstance(spec.input_schema, dict):
+    if (
+        confirmed
+        and reference_receipt is None
+        and spec is not None
+        and isinstance(spec.input_schema, dict)
+    ):
         properties = spec.input_schema.get("properties") or {}
         if "confirmed" in properties:
             candidate["confirmed"] = True
@@ -408,6 +430,12 @@ def apply_clarification_answer(
         raise ClarificationAnswerError(f"补充信息后计划校验失败：{plan_error}")
     # Invalid answers leave both the pending request and full plan untouched.
     target.params = candidate
+    if reference_receipt is not None:
+        reference_receipt["answer"] = {
+            "answered_by": str(answered_by or ""),
+            "parameters": deepcopy(parameters),
+            "result_params": deepcopy(candidate),
+        }
     step.params = deepcopy(candidate_clarification.params)
     run.metadata["plan"] = plan_to_dict(candidate_plan)
     step.status = "completed"
@@ -662,6 +690,23 @@ def pause_for_ambiguous_target(
             "candidates": candidates,
         },
     )
+    if reference and field_path:
+        from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+        receipts = run.metadata.setdefault("reference_clarifications", {})
+        receipts[clarify_step.step_id] = {
+            "version": 1,
+            "sequence": len(receipts),
+            "node_id": clarify_node_id,
+            "target_node_id": step.node_id,
+            "target_params": deepcopy(step.params),
+            "question_params": deepcopy(params),
+            "source_outputs": {
+                source.node_id: canonical_digest(source.output)
+                for source in run.steps
+                if source.node_id in step.depends_on and source.status == "completed"
+            },
+        }
     index = next(
         (position for position, item in enumerate(run.steps) if item.step_id == step.step_id),
         len(run.steps),

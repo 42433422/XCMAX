@@ -379,8 +379,23 @@ def _execution_source_hash(db: Session, run: EltRun) -> str:
     return digest.hexdigest()
 
 
+def _execution_run_ids(params: dict[str, Any]) -> list[str]:
+    from app.domain.shared_services.tools_workflow_elt import _split_run_ids
+
+    return _split_run_ids(params.get("run_ids")) or _split_run_ids(params.get("run_id"))
+
+
 def capture_agent_execution(step: Any, context: dict[str, Any]) -> dict[str, Any]:
-    """Freeze an owned single-run SQL preview before the existing execute dispatch."""
+    """Freeze every original target before dispatch, retaining single-run contracts."""
+    run_ids = _execution_run_ids(step.params)
+    if not run_ids:
+        return {}
+    if len(run_ids) == 1:
+        return _capture_execution_target(run_ids[0], context)
+    return {"targets": {run_id: _capture_execution_target(run_id, context) for run_id in run_ids}}
+
+
+def _capture_execution_target(run_id: str, context: dict[str, Any]) -> dict[str, Any]:
     from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
     from app.application.elt.service_history import HistoryServiceMixin
     from app.domain.shared_services.tools_workflow_elt import _companion_summary
@@ -391,7 +406,7 @@ def capture_agent_execution(step: Any, context: dict[str, Any]) -> dict[str, Any
             row = (
                 db.query(EltRun)
                 .filter_by(
-                    id=step.params.get("run_id"),
+                    id=run_id,
                     tenant_id=tenant,
                     owner_user_id=int(context["user_id"]),
                 )
@@ -577,6 +592,100 @@ def verify_agent_execution(
         idempotency_scope_key,
     )
     from app.application.agent_orchestrator.verification_readback import _report
+    from app.domain.task_lifecycle.results import (
+        execution_result_error,
+        execution_result_requires_reconciliation,
+    )
+
+    baseline = (call.metadata.get("verification_contract") or {}).get("elt_execution_baseline")
+    if not isinstance(baseline, dict) or not baseline:
+        return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
+    key = idempotency_scope_key(context, step.tool_id, step.action, step.params)
+    claim = _reread_claim(key, durable_read_only=True)
+    if claim is None or claim.get("inflight") or not isinstance(claim.get("output"), dict):
+        return _report("inconclusive", "result_receipt_unavailable", "tool_idempotency")
+    receipt_sha256 = canonical_hash(claim["output"])
+    if claim.get("fingerprint") != _fingerprint(
+        step.params, context
+    ) or receipt_sha256 != canonical_hash(output):
+        return _report("failed", "result_receipt_mismatch", "tool_idempotency")
+    run_ids = _execution_run_ids(step.params)
+    if not run_ids:
+        return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
+    baselines = {run_ids[0]: baseline} if len(run_ids) == 1 else baseline.get("targets")
+    if not isinstance(baselines, dict) or set(baselines) != set(run_ids):
+        return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
+    items = output.get("results") if len(run_ids) > 1 else [output]
+    if (
+        not isinstance(items, list)
+        or len(items) != len(run_ids)
+        or any(not isinstance(item, dict) for item in items)
+        or (
+            len(run_ids) > 1
+            and (
+                output.get("batch") is not True
+                or any(not isinstance(item.get("run_id"), str) for item in items)
+                or {item.get("run_id") for item in items} != set(run_ids)
+            )
+        )
+    ):
+        return _report("failed", "result_scope_mismatch", "elt_execution")
+    checks = []
+    for item in items:
+        run_id = item["run_id"] if len(run_ids) > 1 else run_ids[0]
+        target = baselines[run_id]
+        if not isinstance(target, dict) or not target:
+            return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
+        if step.params.get("run_ids") or len(run_ids) > 1:
+            revisions = step.params.get("preview_revisions")
+            if not isinstance(revisions, dict) or revisions.get(run_id) != target.get(
+                "preview_revision"
+            ):
+                return _report("failed", "result_preview_changed", "elt_execution")
+        if (
+            item.get("success") is not True
+            or execution_result_error(item)
+            or execution_result_requires_reconciliation(item)
+        ):
+            return _report("inconclusive", "result_receipt_unavailable", "elt_execution")
+        report = _verify_execution_target(
+            {**step.params, "run_id": run_id},
+            target,
+            item,
+            context,
+            receipt_sha256,
+        )
+        if report["status"] != "verified" or len(run_ids) == 1:
+            return report
+        checks.extend(report["checks"])
+    if (
+        output.get("success") is not True
+        or execution_result_error(output)
+        or execution_result_requires_reconciliation(output)
+        or output.get("committed") is not True
+        or output.get("done_count") != len(run_ids)
+        or output.get("run_count") != len(run_ids)
+        or output.get("pending_count") != 0
+        or output.get("deferred_count") != 0
+        or output.get("deferred") is not False
+        or output.get("deferred_run_ids") != []
+        or not isinstance(output.get("data"), dict)
+        or output["data"].get("executed_rows")
+        != sum(check["evidence"]["executed_rows"] for check in checks)
+    ):
+        return _report("failed", "result_business_state_mismatch", "elt_execution")
+    return {"status": "verified", "code": "result_verified", "checks": checks}
+
+
+def _verify_execution_target(
+    params: dict[str, Any],
+    baseline: dict[str, Any],
+    output: dict[str, Any],
+    context: dict[str, Any],
+    receipt_sha256: str,
+) -> dict[str, Any]:
+    """Reuse the original single-target SQL proof after binding the whole durable receipt."""
+    from app.application.agent_orchestrator.verification_readback import _report
     from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
     from app.application.elt.batch_continuation import (
         _legacy_completed_receipt,
@@ -586,19 +695,8 @@ def verify_agent_execution(
     from app.application.elt.service_history import HistoryServiceMixin
     from app.domain.shared_services.tools_workflow_elt import _summary
 
-    baseline = (call.metadata.get("verification_contract") or {}).get("elt_execution_baseline")
-    if not isinstance(baseline, dict) or not baseline:
-        return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
-    key = idempotency_scope_key(context, step.tool_id, step.action, step.params)
-    claim = _reread_claim(key, durable_read_only=True)
-    if claim is None or claim.get("inflight") or not isinstance(claim.get("output"), dict):
-        return _report("inconclusive", "result_receipt_unavailable", "tool_idempotency")
-    if claim.get("fingerprint") != _fingerprint(step.params, context) or canonical_hash(
-        claim["output"]
-    ) != canonical_hash(output):
-        return _report("failed", "result_receipt_mismatch", "tool_idempotency")
     returned = output.get("data")
-    if not isinstance(returned, dict) or returned.get("run_id") != step.params.get("run_id"):
+    if not isinstance(returned, dict) or returned.get("run_id") != params.get("run_id"):
         return _report("failed", "result_scope_mismatch", "elt_execution")
     if returned.get("knowledge") or returned.get("template"):
         return _report("inconclusive", "result_auxiliary_verification_required", "elt_execution")
@@ -607,7 +705,7 @@ def verify_agent_execution(
             row = (
                 db.query(EltRun)
                 .filter_by(
-                    id=step.params.get("run_id"),
+                    id=params.get("run_id"),
                     tenant_id=tenant,
                     owner_user_id=int(context["user_id"]),
                 )
@@ -626,7 +724,7 @@ def verify_agent_execution(
                 or details.get(CONFIRMATION_KEY)
                 != {
                     "preview_revision": revision,
-                    "valid_rows_only": step.params.get("valid_rows_only") is True,
+                    "valid_rows_only": params.get("valid_rows_only") is True,
                 }
                 or _execution_source_hash(db, row) != baseline["source_sha256"]
                 or not unchanged_source_upload(db, row)
@@ -678,7 +776,7 @@ def verify_agent_execution(
                 owner_id=row.owner_user_id,
                 preview_revision=revision,
                 executed_rows=row.executed_rows,
-                receipt_sha256=canonical_hash(claim["output"]),
+                receipt_sha256=receipt_sha256,
                 scope="current_elt_business_rows",
                 business_effect_verified=True,
             )

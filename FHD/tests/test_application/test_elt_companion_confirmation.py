@@ -2,10 +2,12 @@
 
 import copy
 import json
+import sqlite3
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
 from openpyxl import Workbook
 from sqlalchemy import event
 
@@ -25,9 +27,309 @@ from app.db.models import Product, PurchaseUnit, ShipmentRecord
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.db.models.user import Session as UserSession
 from app.infrastructure.auth.agent_principal import require_agent_principal
+from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_codex_business_targets import _elt_preview
+from tests.test_application.test_codex_business_targets import elt_runtime as elt_runtime
 from tests.test_application.test_etl_preview_task_boundaries import preview_store as preview_store
 from tests.test_application.test_etl_preview_task_boundaries import snapshot
+
+
+@pytest.mark.parametrize("target_count", [2, 1])
+def test_approved_elt_batch_has_independent_readback_without_replaying(
+    elt_runtime, monkeypatch, target_count
+):
+    state = elt_runtime
+    previews = [_elt_preview(state.elt, product=f"批次已审产品-{i}") for i in range(target_count)]
+    params = {
+        "run_ids": [preview["id"] for preview in previews],
+        "preview_revisions": {preview["id"]: preview["preview_revision"] for preview in previews},
+        "accept_suggested": True,
+    }
+    submitted = Mock(wraps=state.elt.service.execute)
+    monkeypatch.setattr(state.elt.service, "execute", submitted)
+    pending = state.execute("verified-batch", "elt_import", "execute", params)
+    result = state.approve("verified-batch", pending)
+    child = state.repository.get(result["run_id"])
+    assert child.tool_calls[0].output["success"] is True, child.tool_calls[0].output
+    with state.elt.factory() as db:
+        assert {row.product_name for row in db.query(ShipmentRecord)} == {
+            f"批次已审产品-{i}" for i in range(target_count)
+        }
+        assert db.query(ShipmentRecord).count() == target_count
+        assert {db.get(EltRun, preview["id"]).status for preview in previews} == {"completed"}
+    assert result["verified"] is True, (result, child.tool_calls[0].metadata["verification"])
+    assert child.status == "completed"
+    assert submitted.call_count == target_count
+
+    from app.application.agent_orchestrator.verification_readback import verify_independent_result
+
+    step, call = child.steps[0], child.tool_calls[0]
+    context = {
+        **child.metadata["runtime_context"],
+        **task_execution_context(child, step),
+        "run_id": child.run_id,
+        "step_id": step.step_id,
+    }
+    mutations = []
+    engine = state.elt.factory.kw["bind"]
+
+    def observe(_conn, _cursor, statement, _params, _context, _many):
+        if statement.lstrip().split()[0].upper() in {
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "CREATE",
+            "DROP",
+            "ALTER",
+        }:
+            mutations.append(statement)
+
+    event.listen(engine, "before_cursor_execute", observe)
+    try:
+        report = verify_independent_result(
+            run=child, step=step, call=call, output=call.output, context=context
+        )
+        assert report["status"] == "verified", report
+        assert mutations == []
+    finally:
+        event.remove(engine, "before_cursor_execute", observe)
+    repeated = state.execute("verified-batch-repeat", "elt_import", "execute", params)
+    assert repeated["run_id"] == child.run_id
+    assert repeated["verified"] is True
+    assert submitted.call_count == target_count
+
+
+def test_batch_readback_requires_every_original_target_and_durable_receipt(
+    elt_runtime, monkeypatch
+):
+    from app.application.agent_orchestrator.result_verification import (
+        bind_execution_receipt,
+        verify_step_result,
+    )
+    from app.application.agent_orchestrator.tool_permission import (
+        _idempotency_path,
+        idempotency_scope_key,
+    )
+    from app.application.agent_orchestrator.verification_readback import verify_independent_result
+
+    state = elt_runtime
+    previews = [_elt_preview(state.elt, product=f"核验边界产品-{i}") for i in range(2)]
+    ids = [preview["id"] for preview in previews]
+    params = {
+        "run_ids": ids,
+        "preview_revisions": {preview["id"]: preview["preview_revision"] for preview in previews},
+        "accept_suggested": True,
+    }
+    submitted = Mock(wraps=state.elt.service.execute)
+    monkeypatch.setattr(state.elt.service, "execute", submitted)
+    pending = state.execute("guarded-batch", "elt_import", "execute", params)
+    result = state.approve("guarded-batch", pending)
+    child = state.repository.get(result["run_id"])
+    assert result["verified"] is True, child.tool_calls
+    step, call = child.steps[0], child.tool_calls[0]
+    context = {
+        **child.metadata["runtime_context"],
+        **task_execution_context(child, step),
+        "run_id": child.run_id,
+        "step_id": step.step_id,
+    }
+    baseline = call.metadata["verification_contract"]["elt_execution_baseline"]
+    assert set(baseline["targets"]) == set(ids)
+    key = idempotency_scope_key(context, step.tool_id, step.action, step.params)
+
+    def readback(output=None):
+        candidate = copy.deepcopy(child)
+        if output is not None:
+            candidate.steps[0].output = copy.deepcopy(output)
+            candidate.tool_calls[0].output = copy.deepcopy(output)
+            bind_execution_receipt(candidate.tool_calls[0])
+        return verify_step_result(
+            run=candidate, step=candidate.steps[0], call=candidate.tool_calls[0], context=context
+        )
+
+    # Model a buggy writer that persists the same malformed batch receipt in
+    # both places. These cases must reach the target checks, not merely fail
+    # because the returned output differs from the durable claim's hash.
+    with sqlite3.connect(_idempotency_path(create_parent=False)) as claims:
+        original = claims.execute(
+            "select fingerprint, inflight, output_json from tool_idempotency where scope_key = ?",
+            (key,),
+        ).fetchone()
+        assert original is not None
+        changes = {
+            "missing": lambda out: out["results"].pop(),
+            "duplicate": lambda out: out["results"].__setitem__(
+                1, copy.deepcopy(out["results"][0])
+            ),
+            "extra": lambda out: out["results"].append(copy.deepcopy(out["results"][0])),
+            "list_id": lambda out: out["results"][1].__setitem__("run_id", [ids[1]]),
+            "dict_id": lambda out: out["results"][1].__setitem__("run_id", {"id": ids[1]}),
+            "other_id": lambda out: out["results"][1].__setitem__("run_id", "unapproved-run"),
+            "wrong_data_id": lambda out: out["results"][1]["data"].__setitem__("run_id", ids[0]),
+            "unknown": lambda out: out["results"][1].__setitem__("outcome", "unknown"),
+            "failed": lambda out: out["results"][1].__setitem__("success", False),
+            "deferred": lambda out: out.__setitem__("deferred_count", 1),
+            "truncated": lambda out: out.__setitem__("deferred_run_ids", [ids[1]]),
+            "wrong_total": lambda out: out["data"].__setitem__("executed_rows", 999),
+        }
+        try:
+            for label, change in changes.items():
+                altered = copy.deepcopy(call.output)
+                change(altered)
+                claims.execute(
+                    "update tool_idempotency set output_json = ? where scope_key = ?",
+                    (json.dumps(altered), key),
+                )
+                claims.commit()
+                report = readback(altered)
+                assert report["accepted"] is False, (label, report)
+                if label in {
+                    "missing",
+                    "duplicate",
+                    "extra",
+                    "list_id",
+                    "dict_id",
+                    "other_id",
+                    "wrong_data_id",
+                }:
+                    assert report["code"] == "result_scope_mismatch", (label, report)
+            claims.execute(
+                "update tool_idempotency set output_json = ? where scope_key = ?",
+                (original[2], key),
+            )
+            claims.commit()
+            altered = copy.deepcopy(call.output)
+            altered["data"]["executed_rows"] = 999
+            assert readback(altered)["code"] == "result_receipt_mismatch"
+            for column, value, code in (
+                ("fingerprint", "wrong-input-digest", "result_receipt_mismatch"),
+                ("inflight", 1, "result_receipt_unavailable"),
+                ("output_json", "null", "result_receipt_unavailable"),
+            ):
+                claims.execute(
+                    f"update tool_idempotency set {column} = ? where scope_key = ?", (value, key)
+                )
+                claims.commit()
+                assert readback()["code"] == code
+                claims.execute(
+                    "update tool_idempotency set fingerprint = ?, inflight = ?, output_json = ? where scope_key = ?",
+                    (*original, key),
+                )
+                claims.commit()
+        finally:
+            claims.execute(
+                "update tool_idempotency set fingerprint = ?, inflight = ?, output_json = ? where scope_key = ?",
+                (*original, key),
+            )
+            claims.commit()
+
+    incomplete = copy.deepcopy(child)
+    incomplete.tool_calls[0].metadata["verification_contract"]["elt_execution_baseline"][
+        "targets"
+    ].pop(ids[1])
+    assert (
+        verify_independent_result(
+            run=incomplete,
+            step=incomplete.steps[0],
+            call=incomplete.tool_calls[0],
+            output=incomplete.tool_calls[0].output,
+            context=context,
+        )["code"]
+        == "result_verifier_unavailable"
+    )
+    changed_input = copy.deepcopy(child)
+    changed_input.steps[0].params["preview_revisions"][ids[1]] = "0" * 64
+    changed_input.tool_calls[0].params = copy.deepcopy(changed_input.steps[0].params)
+    assert (
+        verify_step_result(
+            run=changed_input,
+            step=changed_input.steps[0],
+            call=changed_input.tool_calls[0],
+            context=context,
+        )["code"]
+        == "verification_binding_invalid"
+    )
+
+    # Damage the second target, proving that a verified first target cannot
+    # promote an inaccessible, failed, unknown, changed or miswritten peer.
+    for attr, value in (
+        ("tenant_id", 2),
+        ("owner_user_id", 8),
+        ("status", "failed"),
+        ("status", "outcome_unknown"),
+    ):
+        with state.elt.factory.begin() as db:
+            row = db.get(EltRun, ids[1])
+            before = getattr(row, attr)
+            setattr(row, attr, value)
+        try:
+            assert readback()["accepted"] is False, (attr, value)
+        finally:
+            with tenant_scope(value if attr == "tenant_id" else 1), state.elt.factory.begin() as db:
+                setattr(db.get(EltRun, ids[1]), attr, before)
+    with state.elt.factory.begin() as db:
+        row = db.get(EltRun, ids[1])
+        before = row.summary_json
+        details = json.loads(before)
+        details["execution_confirmation"]["preview_revision"] = "0" * 64
+        row.summary_json = json.dumps(details)
+    assert readback()["code"] == "result_preview_changed"
+    with state.elt.factory.begin() as db:
+        db.get(EltRun, ids[1]).summary_json = before
+        shipment = db.query(ShipmentRecord).filter_by(product_name="核验边界产品-1").one()
+        shipment_id = shipment.id
+        shipment.product_name = "未审批内容"
+    assert readback()["code"] == "result_business_state_mismatch"
+    with state.elt.factory.begin() as db:
+        db.get(ShipmentRecord, shipment_id).product_name = "核验边界产品-1"
+        source = Path(db.get(EltUpload, previews[1]["upload_id"]).storage_path)
+    original_bytes, mode = source.read_bytes(), source.stat().st_mode
+    source.chmod(mode | 0o200)
+    try:
+        source.write_bytes(original_bytes + b"changed")
+        assert readback()["code"] == "result_preview_changed"
+    finally:
+        source.write_bytes(original_bytes)
+        source.chmod(mode)
+    assert readback()["accepted"] is True
+    repeated = state.execute("guarded-batch-repeat", "elt_import", "execute", params)
+    assert repeated["run_id"] == child.run_id and repeated["verified"] is True
+    assert submitted.call_count == 2
+    with state.elt.factory() as db:
+        assert db.query(ShipmentRecord).count() == 2
+
+
+def test_batch_readback_preserves_linked_parent_and_companion_row_counts(elt_runtime, monkeypatch):
+    state = elt_runtime
+    parent, companion = _linked_preview(state.elt, monkeypatch)
+    params = {
+        "run_ids": [parent["id"], companion["id"]],
+        "preview_revisions": {row["id"]: row["preview_revision"] for row in (parent, companion)},
+        "valid_rows_only": True,
+        "accept_suggested": True,
+    }
+    submitted = Mock(wraps=state.elt.service.execute)
+    monkeypatch.setattr(state.elt.service, "execute", submitted)
+    pending = state.execute("linked-batch", "elt_import", "execute", params)
+    result = state.approve("linked-batch", pending)
+    child = state.repository.get(result["run_id"])
+    assert result["verified"] is True, (result, child.tool_calls)
+    assert child.tool_calls[0].output["data"]["executed_rows"] == 2
+    assert {
+        check["evidence"]["run_id"]
+        for check in child.tool_calls[0].metadata["verification"]["checks"]
+    } == {parent["id"], companion["id"]}
+    with state.elt.factory() as db:
+        assert (
+            db.query(ShipmentRecord).count()
+            == db.query(PurchaseUnit).count()
+            == db.query(Product).count()
+            == 1
+        )
+    repeated = state.execute("linked-batch-repeat", "elt_import", "execute", params)
+    assert repeated["run_id"] == child.run_id and repeated["verified"] is True
+    assert submitted.call_count == 2
 
 
 def _linked_preview(store, monkeypatch):
@@ -131,7 +433,12 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
         runtime_context=actor.context,
         plan=plan(
             "shipment-request",
-            {"run_id": parent["id"], "valid_rows_only": True, "accept_suggested": True},
+            {
+                "run_id": parent["id"],
+                "preview_revision": parent["preview_revision"],
+                "valid_rows_only": True,
+                "accept_suggested": True,
+            },
         ),
     )
     submitted.assert_not_called()
@@ -170,7 +477,9 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
             ),
             runtime_context=actor.context,
         )
-        assert denied["error_code"] == "ELT_PREVIEW_CHANGED", denied
+        assert denied["error_code"] == (
+            "ELT_PREVIEW_CHANGED" if revision else "schema_validation_failed"
+        ), denied
         assert submitted.call_count == 1
 
     child_pending = orchestrator.start_run_from_plan(

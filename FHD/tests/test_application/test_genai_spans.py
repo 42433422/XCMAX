@@ -190,9 +190,6 @@ def step_execution(monkeypatch):
         action_spec=action_spec,
         validate=lambda tool, action, _: ToolValidationResult(True, tool, action),
         refresh_budget=lambda _: None,
-        repair_enabled=lambda *_: False,
-        repair_limit=lambda *_: 0,
-        request_repair=lambda *_: {},
     )
     executor = SimpleNamespace()
     repository = InMemoryAgentRunRepository()

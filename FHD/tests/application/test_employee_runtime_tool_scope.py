@@ -165,7 +165,7 @@ class TestResolveEmployeeTools:
         manifest = {"employee": {"capabilities": ["批量导入入库"]}}
         names = ts.employee_tool_names("e", manifest, {})
         assert "import_excel_to_database" in names
-        assert "products_bulk_import" in names
+        assert "products_bulk_import" not in names
 
     def test_import_keyword_readonly_excludes_write(self, fake_base):
         manifest = {
@@ -179,7 +179,7 @@ class TestResolveEmployeeTools:
     def test_no_keywords_uses_fallback(self, fake_base):
         names = ts.employee_tool_names("e", {"employee": {"capabilities": ["无关词"]}}, {})
         assert "excel_analysis" in names
-        assert "excel_schema_understand" in names
+        assert "excel_schema_understand" not in names
         assert "generate_office_document" in names
 
     def test_employee_tool_names_empty_when_resolve_none(self, monkeypatch):

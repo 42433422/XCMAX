@@ -1,13 +1,10 @@
-"""Allowed browser actions and bounded autonomy rules, independent of adapters."""
+"""Allowed browser actions and parameter boundaries, independent of adapters."""
 
 from __future__ import annotations
 
 from typing import Any
 from urllib.parse import urlsplit
 
-MAX_BROWSER_STEPS = 32
-MAX_BROWSER_DECISIONS = 12
-MAX_BROWSER_SECONDS = 300
 BROWSER_ACTIONS = frozenset(
     {
         "browser_navigate",

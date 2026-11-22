@@ -31,8 +31,8 @@ from app.application.tool_execution_deadline import (
     invocation_deadline,
     invocation_requires_reconciliation,
 )
-from app.application.workflow.retry_policy import is_transport_error
 from app.domain.task_lifecycle.results import normalize_execution_result
+from app.infrastructure.llm.retry_policy import is_transport_error
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -48,6 +48,8 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "purchase",
         # Upload reads and imports restore the original tenant in background runs.
         "excel_analysis",
+        "excel_join_compare",
+        # 导入会按当前租户写入客户/产品/订单，同样需要恢复租户。
         "import_excel_to_database",
         "elt_import",
         "finance",
@@ -238,6 +240,76 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
             factory.engine.dispose()
 
 
+def _employee_runtime_gate_denial(
+    tool_id: str, action: str, params: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Rebuild the original employee gate before a persisted child effect."""
+    parent_id = str(context.get("parent_run_id") or "")
+    employee_bound = bool(context.get("_employee_gate_contract"))
+    if not parent_id and not employee_bound:
+        return None
+    denied = {
+        "success": False,
+        "error_code": "employee_gate_denied",
+        "retryable": False,
+        "execution_status": "not_started",
+        "message": "原员工工具或工作空间授权无法恢复，未执行本次操作",
+    }
+    try:
+        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+
+        parent = get_agent_run_repository().get(parent_id) if parent_id else None
+        if parent is None or parent.metadata.get("runtime_type") != "codex":
+            return denied if employee_bound else None
+        if not parent.metadata.get("runtime_gate_required"):
+            return denied if employee_bound else None
+        original = parent.metadata.get("runtime_context") or {}
+        if (
+            parent.status in {"cancelled", "failed", "completed", "unknown"}
+            or any(
+                context.get(key) != original.get(key)
+                for key in (
+                    "user_id",
+                    "local_user_id",
+                    "tenant_id",
+                    "mod_id",
+                    "active_mod_id",
+                    "_actor_authorization",
+                    "_mod_authorization",
+                    "workspace_root",
+                    "employee_id",
+                    "employee_tool_allowlist",
+                    "_employee_gate_contract",
+                )
+            )
+            or any(
+                original.get(key) is not None and context.get(key) != original.get(key)
+                for key in (
+                    "session_id",
+                    "conversation_id",
+                    "_conversation_revision",
+                    "workspace_id",
+                )
+            )
+        ):
+            return denied
+        from app.application.employee_runtime.agent import restore_codex_employee_gate
+
+        actions, gate = restore_codex_employee_gate(
+            str(original.get("employee_id") or ""),
+            original,
+            input_data=parent.metadata.get("_codex_input_data"),
+        )
+        if actions != parent.metadata.get("runtime_allowed_actions"):
+            return denied
+        verdict = gate(tool_id, action, dict(params))
+        if not isinstance(verdict, dict) or verdict.get("ok") is not True:
+            return denied
+    except RECOVERABLE_ERRORS:
+        return denied
+    return None
+
+
 def _validate_local_mutation_input(
     tool_id: str, action: str, params: dict[str, Any]
 ) -> dict[str, Any] | None:
@@ -403,6 +475,17 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action,
             }
+        expected_schema = context.get("tool_schema_digest")
+        if expected_schema is not None and (
+            validation.spec is None or expected_schema != validation.spec.schema_digest
+        ):
+            return {
+                "success": False,
+                "error_code": "schema_changed",
+                "execution_status": "not_started",
+                "retryable": False,
+                "message": "原调用发现的工具契约已变化，本次未执行，请重新读取契约。",
+            }
         if validation.spec is not None and validation.spec.availability == "aiopen":
             from app.application.aiopen.agent_bridge import supports_aiopen_step
 
@@ -449,6 +532,11 @@ class AgentToolExecutor:
         )
         if approval_denied is not None:
             return approval_denied
+        employee_denied = _employee_runtime_gate_denial(
+            validation.tool_id, validation.action or step.action, params, context
+        )
+        if employee_denied is not None:
+            return employee_denied
         refusal = _validate_local_mutation_input(validation.tool_id, guard_action, params)
         if refusal is not None:
             return refusal
@@ -761,8 +849,20 @@ def execute_with_tool_deadline(
     timeout = float(timeout_seconds)
     if not math.isfinite(timeout) or timeout <= 0:
         return {"success": False, "error_code": "invalid_tool_timeout", "retryable": False}
+    from app.application.tool_execution_deadline import remaining_invocation_seconds
+
     started = time.monotonic()
-    deadline = started + timeout
+    ceiling = started + remaining_invocation_seconds(math.inf)
+    deadline = min(started + timeout, ceiling)
+    if deadline <= started:
+        return {
+            "success": False,
+            "error_code": "tool_deadline_expired",
+            "execution_status": "not_started",
+            "outcome": "not_started",
+            "retryable": False,
+        }
+    timeout = deadline - started
     from app.application.agent_orchestrator.tool_timeouts import uses_elt_file_deadlines
 
     file_deadlines = isinstance(executor, AgentToolExecutor) and uses_elt_file_deadlines(
@@ -807,7 +907,15 @@ def execute_with_tool_deadline(
         with tool_execution_slot(
             f"{step.tool_id}.{step.action}", tenant_id=str(tenant_id)
         ) as record_result:
-            with invocation_deadline(math.inf if file_deadlines else deadline) as invocation:
+            with invocation_deadline(ceiling if file_deadlines else deadline) as invocation:
+                if time.monotonic() >= deadline:
+                    return {
+                        "success": False,
+                        "error_code": "tool_deadline_expired",
+                        "execution_status": "not_started",
+                        "outcome": "not_started",
+                        "retryable": False,
+                    }
                 result = (
                     bounded(step, runtime_context=context, deadline_monotonic=deadline)
                     if callable(bounded)
@@ -845,7 +953,7 @@ def execute_with_tool_deadline(
             "exception_type": type(exc).__name__,
         }
     else:
-        completed_in_time = file_deadlines or time.monotonic() <= deadline
+        completed_in_time = time.monotonic() <= (ceiling if file_deadlines else deadline)
         if (
             completed_in_time
             and isinstance(result, dict)

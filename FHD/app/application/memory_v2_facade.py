@@ -167,13 +167,17 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
     no_change = (
         step.action == "delete"
         and before.get("status") == "deleted"
+        or step.action == "reject"
+        and before.get("status") == "rejected"
         or step.action == "confirm"
         and before.get("status") == "active"
         and before.get("eligible") is True
         and not correction
     )
     if no_change:
-        return before == _memory_record_proof(record)
+        return before == _memory_record_proof(record) and (
+            step.action != "reject" or record.get("eligible_for_planner") is False
+        )
     history = record.get("history")
     if not isinstance(history, list) or not history or not isinstance(history[-1], dict):
         return False
@@ -184,7 +188,9 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
         or canonical_hash(previous) != before.get("sha256")
         or canonical_hash(history[:-1]) != before.get("history_sha256")
         or last.get("action")
-        != {"confirm": "confirm", "correct": "correct", "delete": "deleted"}[step.action]
+        != {"confirm": "confirm", "correct": "correct", "reject": "rejected", "delete": "deleted"}[
+            step.action
+        ]
         or not record.get("updated_at")
         or last.get("at") != record["updated_at"]
     ):
@@ -224,12 +230,14 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
             status="active", eligible_for_planner=True, confirmed_at=record["updated_at"]
         )
     else:
-        expected.update(
-            status="deleted", eligible_for_planner=False, deleted_at=record["updated_at"]
-        )
+        if previous.get("status") == "deleted":
+            return False
+        status = "rejected" if step.action == "reject" else "deleted"
+        expected.update(status=status, eligible_for_planner=False)
+        expected[f"{status}_at"] = record["updated_at"]
         reason = str(step.params.get("reason") or "")
         if reason:
-            expected["deleted_reason"] = reason
+            expected[f"{status}_reason"] = reason
     if step.action in {"correct", "confirm"}:
         if not str(expected.get("key") or "").strip():
             return False

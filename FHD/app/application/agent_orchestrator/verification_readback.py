@@ -680,6 +680,9 @@ def verify_independent_result(
     file_action = action in _FILE_ACTIONS or (
         action == ("employee", "execute") and employee in _GENERATORS
     )
+    from app.domain.workbook_write_contract import WORKBOOK_WRITER
+
+    workbook_write = action == ("employee", "execute") and employee == WORKBOOK_WRITER
     catalog_action = step.tool_id == "catalog_products_v1" and step.action in {
         "append_price",
         "correct_price",
@@ -738,10 +741,13 @@ def verify_independent_result(
         "batch_delete",
     }
     elt_preview = action == ("elt_import", "preview")
-    elt_execution = action == ("elt_import", "execute") and bool(step.params.get("run_id"))
+    elt_execution = action == ("elt_import", "execute") and bool(
+        step.params.get("run_id") or step.params.get("run_ids")
+    )
     memory_action = step.tool_id == "memory_v2" and step.action in {
         "propose_candidate",
         "confirm",
+        "reject",
         "correct",
         "delete",
     }
@@ -749,6 +755,7 @@ def verify_independent_result(
         action == ("customers", "create")
         or catalog_action
         or file_action
+        or workbook_write
         or sales_action
         or sales_closed_loop
         or purchase_action
@@ -793,6 +800,10 @@ def verify_independent_result(
             )
 
             return verify_surface_result(run, step, call, output, context)
+        if workbook_write:
+            from app.application.agent_orchestrator.verification_workbook import verify_workbook
+
+            return verify_workbook(run, step, call, output, context)
         if employee_completion:
             return _employee_completion(run, step, call, output, context, employee)
         if employee_admission:

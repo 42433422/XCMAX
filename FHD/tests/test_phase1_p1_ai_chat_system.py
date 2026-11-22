@@ -12,31 +12,12 @@ from fastapi.testclient import TestClient
 
 from app.application.ai_chat_app_service import (
     AIChatApplicationService,
-    _skip_pro_excel_deterministic_import,
 )
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # ai_chat helpers
 # ---------------------------------------------------------------------------
-
-
-def test_skip_pro_excel_deterministic_import_defaults() -> None:
-    assert _skip_pro_excel_deterministic_import(None) is False
-    assert _skip_pro_excel_deterministic_import({}) is False
-
-
-def test_skip_pro_excel_ai_decides(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert _skip_pro_excel_deterministic_import({"excel_import_ai_decides": True}) is True
-    monkeypatch.setenv("XCAGI_EXCEL_IMPORT_AI_DECIDES", "1")
-    assert _skip_pro_excel_deterministic_import({}) is True
-
-
-def test_skip_pro_excel_force_shortcut() -> None:
-    assert (
-        _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True})
-        is False
-    )
 
 
 @patch("app.services.get_ai_conversation_service")

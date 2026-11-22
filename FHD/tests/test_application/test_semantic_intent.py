@@ -70,30 +70,32 @@ def test_router_failure_is_swallowed(semantic_on, monkeypatch):
     assert semantic_intent.classify_intents("主页按键不明显") == []
 
 
-def test_planner_intents_only_accept_a_clear_winner(monkeypatch):
-    from app.application.workflow import planner_prompt_profile as profile
-
-    monkeypatch.setattr(
-        intent_pkg,
-        "classify_intents",
-        lambda text, limit=3: [
-            SimpleNamespace(intent="product_issue", confidence=0.64),
-            SimpleNamespace(intent="customer", confidence=0.58),
-            SimpleNamespace(intent="employee", confidence=0.56),
-        ],
+@pytest.mark.parametrize(
+    "choices,min_confidence,expected",
+    [
+        (
+            [("product_issue", 0.64), ("customer", 0.58), ("employee", 0.56)],
+            None,
+            ("product_issue", 0.64),
+        ),
+        ([("customer", 0.52), ("sales", 0.73)], None, ("sales", 0.73)),
+        ([("product_issue", 0.54)], None, None),
+        ([("product_issue", 0.55)], None, ("product_issue", 0.55)),
+        ([("product_issue", 0.64)], 0.7, None),
+        ([("product_issue", 0.64)], 0.64, ("product_issue", 0.64)),
+    ],
+)
+def test_best_intent_returns_only_the_highest_match_above_threshold(
+    semantic_on, monkeypatch, choices, min_confidence, expected
+):
+    monkeypatch.setenv("XCAGI_INTENT_THRESHOLD", "0.55")
+    router = _FakeRouter(
+        [SimpleNamespace(name=name, confidence=confidence) for name, confidence in choices]
     )
-    # 模糊的「那你去提交一下呀」不能顺带注入员工/客户规则。
-    assert profile.detect_intents("那你去提交一下呀。") == {"product_issue"}
-
-    monkeypatch.setattr(
-        intent_pkg,
-        "classify_intents",
-        lambda text, limit=3: [
-            SimpleNamespace(intent="sales", confidence=0.73),
-            SimpleNamespace(intent="customer", confidence=0.52),
-        ],
-    )
-    assert profile.detect_intents("这个月出了多少货") == {"sales"}
+    monkeypatch.setattr(semantic_intent, "_load_router", lambda: router)
+    match = semantic_intent.best_intent("当前请求", min_confidence=min_confidence)
+    assert (None if match is None else (match.intent, match.confidence)) == expected
+    assert router.queries == ["当前请求"]
 
 
 def test_ticket_resolution_accepts_semantic_product_issue(monkeypatch):
@@ -112,39 +114,3 @@ def test_ticket_resolution_accepts_semantic_product_issue(monkeypatch):
     }
     resolved = intake.resolve_issue_report_message("那你去提交一下呀。", context)
     assert "电话按键" in resolved
-
-
-def test_unknown_short_turn_preserves_tools_and_always_hides_direct_import(monkeypatch):
-    from app.application.workflow import planner_prompt_profile as profile
-
-    monkeypatch.setattr(profile, "_semantic_intents", lambda text: set())
-    registry = {
-        name: {}
-        for name in ("conversation", "elt_import", "foo-employee", "import_excel_to_database")
-    }
-    for text in ("第二个", "无法识别的请求" * 10, "交给员工"):
-        selected = profile.select_tools_for_prompt(registry, text)
-        assert selected == {
-            key: value for key, value in registry.items() if key != "import_excel_to_database"
-        }
-    assert profile.select_tools_for_prompt({"import_excel_to_database": {}}, "你好") == {}
-
-
-def test_history_does_not_change_current_turn_scene(monkeypatch):
-    from app.application.workflow import planner_prompt_profile as profile
-
-    monkeypatch.setattr(profile, "_semantic_intents", lambda text: set())
-    history = {"recent_messages": [{"role": "user", "content": "导出表格并交接员工"}]}
-    assert profile.detect_intents("查询客户", history) == {"customer"}
-    assert profile.select_rules_for_prompt("查询客户", history) == profile.select_rules_for_prompt(
-        "查询客户"
-    )
-
-
-def test_unresolved_followup_keeps_business_field_contracts(monkeypatch):
-    from app.application.workflow import planner_prompt_profile as profile
-
-    monkeypatch.setattr(profile, "_semantic_intents", lambda text: set())
-    rules = profile.select_rules_for_prompt("换成上个月")
-    assert any("payment_state" in rule for rule in rules)
-    assert all(rule in rules for rule in profile.BASE_RULES)

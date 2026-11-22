@@ -23,7 +23,7 @@ def dispatch_customer_tool_payload(
     _hdr = hdr_getter
     _ = parse_order_text_fn
     if tool_id == "customers":
-        # pro 模式下 action 往往是固定的“执行”，但 TaskAgent/前端 params 里会携带真正的子动作（如 search/query）
+        # 旧客户工具入口可在 params.action 中携带查询等子动作。
         effective_action = action
         if (str(action) or "") in ("执行", "exec", "run") and params.get("action"):
             effective_action = str(params.get("action") or "")

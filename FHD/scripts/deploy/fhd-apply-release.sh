@@ -356,9 +356,11 @@ PY
   install -m 0644 "$pth_tmp" "$purelib/xcagi_vendored_langgraph.pth"
 
   PYTHONPATH="$DEPLOY_ROOT" "$service_python" - <<'PY'
+from app.infrastructure.codex.launcher import verify_installation
 from app.infrastructure.workflow.langgraph_assert import assert_vendored_sources
 
 assert_vendored_sources()
+verify_installation()
 PY
   deploy_emit pip ok "scope=vendored_langgraph"
 }

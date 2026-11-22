@@ -366,13 +366,6 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 )
-            if isinstance(task.get("llm_repair_response"), dict):
-                env_patch.update(
-                    {
-                        "LLM_PROVIDER": "xcauto",
-                        "XCAUTO_API_KEY": "eval-xcauto-token",  # credential-guard: allow eval fixture
-                    }
-                )
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             Path(env_patch["WORKSPACE_ROOT"]).mkdir()
             if any(
@@ -418,13 +411,6 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                     side_effect=fake_execute,
                 )
             )
-            if isinstance(task.get("llm_repair_response"), dict):
-                stack.enter_context(
-                    patch(
-                        "app.application.agent_orchestrator.repair_advisor.chat_completion_openai_format",
-                        AsyncMock(return_value=dict(task.get("llm_repair_response") or {})),
-                    )
-                )
             orchestrator = AgentOrchestrator(repository=repo)
             run = orchestrator.start_run_from_plan(
                 user_id=actor_id,

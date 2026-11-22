@@ -225,7 +225,7 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
 ):
     import logging
     from pathlib import Path
-    from unittest.mock import Mock, patch
+    from unittest.mock import Mock
 
     from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
 
@@ -233,13 +233,12 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
 
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
-    from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.approval_workspace.protocols import WorkflowBackends
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
     from app.application.inventory_app_service import InventoryAppService
     from app.application.workflow.approval_persistence import load_workflow_snapshot_for_execution
     from app.application.workflow.approval_service import ApprovalService
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_from_dict
     from app.db.models import InventoryLedger, Product, User, Warehouse
     from app.db.models.permission import DEFAULT_ROLES
 
@@ -327,11 +326,11 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
                 depends_on=["shipment"],
             ),
         ],
+        metadata={"approval_required_node_ids": ["stock", "shipment"]},
     )
     repo = SQLAlchemyAgentRunRepository(session_factory=factory)
     agent = AgentOrchestrator(repository=repo)
     approvals = ApprovalService()
-    service = object.__new__(AIChatApplicationService)
     context = {
         **actor.context,
         "local_user_id": 11,
@@ -339,15 +338,6 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         "message": "生成出货记录并导出",
         "service_source": "fastapi_shipment_records_route",
     }
-    service._pending_workflows = {
-        "11": {
-            "plan": plan,
-            "runtime_context": context,
-            "approval_required": True,
-            "approval_nodes": [{"node_id": "stock"}, {"node_id": "shipment"}],
-        }
-    }
-    service.approval_service = approvals
     unexpected = Mock(side_effect=AssertionError("alternate path"))
     bridge = WorkflowApprovalBridge(
         WorkflowBackends(
@@ -362,14 +352,25 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         (RuntimeError,),
         logging.getLogger(__name__),
     )
-    with (
-        tenant_scope(7),
-        patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=agent),
-    ):
-        handled, reply = service._resume_pending_dynamic_workflow("11", "确认", "确认")
-        assert handled and reply["success"], reply
+    with tenant_scope(7):
+        waiting = agent.start_run_from_plan(
+            user_id="11", message="生成出货记录并导出", plan=plan, runtime_context=context
+        )
+        assert waiting.status == "waiting_user", waiting.to_dict()
+        stored_plan = plan_from_dict(waiting.metadata["plan"])
+        assert stored_plan is not None
+        request = approvals.create_approval_request(
+            plan_id=stored_plan.plan_id,
+            node=stored_plan.nodes[0],
+            runtime_context={**context, "_approval_agent_run_required": True},
+            plan=stored_plan,
+            require_persistence=True,
+        )
+        request_no = request.request_id
+        assert approvals.attach_pending_agent_run(
+            request_no, agent_run_id=waiting.run_id, approved_step_id="stock"
+        )
         assert shipment.get_shipment_records() == []
-        request_no = reply["data"]["data"]["approval_request_ids"][0]
         outcome = bridge.resume(request_no=request_no, opinion="同意", approved_by="11")
         assert outcome.get("waiting_approval") is True, outcome
         with factory() as db:

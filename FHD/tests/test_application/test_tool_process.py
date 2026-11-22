@@ -46,28 +46,12 @@ class FixtureExecutor(AgentToolExecutor):
                 **({"unserializable": object()} if step.params.get("invalid_result") else {}),
             }
         if step.action == "llm":
-            from app.application.agent_orchestrator.repair_advisor import request_llm_repair
-            from app.application.agent_orchestrator.run_models import AgentRun
-            from app.application.employee_runtime.agent_loop import run_employee_agent_loop
-            from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
-            from app.application.workflow.planner_llm_gateway import request_planner_completion
+            from app.infrastructure.llm.client import get_llm_client, resolve_chat_model
 
-            planner = request_planner_completion(ai_service=None, context={}, messages=[])
-            agent = run_employee_agent_loop(
-                employee_id="fixture", system_prompt="test", task="test", tools=[]
+            result = get_llm_client().chat.completions.create(
+                model=resolve_chat_model(), messages=[]
             )
-            cognition = _run_async(_chat_completion([]))
-            repair = request_llm_repair(
-                AgentRun(user_id="owner", message="test"),
-                AgentStep(node_id="repair", tool_id="customers", action="query", params={}),
-                {},
-            )
-            return {
-                "success": agent["ok"],
-                "planner_model": planner["model"],
-                "cognition_model": cognition["model"],
-                "critic_model": repair["llm_call"].model,
-            }
+            return {"success": bool(result.choices), "model": result.model}
         if step.tool_id == "business_db":
             return {"success": True, "business_verification": {"verified": True, "record_id": 42}}
         if step.action == "typed_result":
@@ -263,7 +247,7 @@ def test_follow_up_memory_never_queries_database_or_infers_an_unverified_record(
 
 
 @pytest.mark.parametrize("client_kind", ["openai", "modstore"])
-def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_credentials(
+def test_spawned_non_agent_model_call_keeps_each_requests_model_and_credentials(
     monkeypatch, client_kind
 ):
     import threading
@@ -354,9 +338,7 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
                     client.close()
             assert result == {
                 "success": True,
-                "planner_model": owner,
-                "cognition_model": owner,
-                "critic_model": owner,
+                "model": owner,
             }
 
         try:
@@ -365,9 +347,7 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
         finally:
             server.shutdown()
             thread.join()
-    assert sorted(seen) == [
-        (f"Bearer fake-{owner}", owner) for owner in ["owner-a", "owner-b"] for _ in range(4)
-    ]
+    assert sorted(seen) == [(f"Bearer fake-{owner}", owner) for owner in ["owner-a", "owner-b"]]
 
 
 def test_default_adapter_refuses_unserializable_or_expired_start_without_dispatch():

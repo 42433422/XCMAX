@@ -42,24 +42,12 @@ class DurableExecutionLeaseMixin:
         run.metadata["execution"] = execution
         self._repo.save(run)
         try:
-            from app.application.agent_orchestrator.browser_loop import (
-                browser_round_expired,
-                browser_round_ready,
-            )
-
             with observe_run_phase(run, "execution"):
-                while True:
-                    if browser_round_expired(run):
-                        break
-                    self._execute_ready_steps(
-                        run,
-                        runtime_context=runtime_context,
-                        approved_step_id=approved_step_id,
-                    )
-                    if not browser_round_ready(run) or self._apply_requested_control(run):
-                        break
-                    # An approval is bound to its original step, never the next page action.
-                    approved_step_id = ""
+                self._execute_ready_steps(
+                    run,
+                    runtime_context=runtime_context,
+                    approved_step_id=approved_step_id,
+                )
         finally:
             try:
                 self._apply_requested_control(run)
@@ -75,14 +63,20 @@ class DurableExecutionLeaseMixin:
     def _release_browser_run_resources(
         run: AgentRun, *, runtime_context: dict[str, Any] | None = None
     ) -> None:
-        if not run.metadata.get("browser_loop") or run.status not in {
+        if run.status not in {
             "completed",
             "failed",
             "cancelled",
-            "blocked",
             "rejected",
         }:
             return
+        if run.status == "failed":
+            from app.application.agent_orchestrator.run_lifecycle import (
+                requires_retry_reconciliation,
+            )
+
+            if requires_retry_reconciliation(run):
+                return
         from app.application.tools.mcp.registry import release_run_browser_sessions
 
         scope = {

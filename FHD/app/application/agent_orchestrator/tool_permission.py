@@ -914,6 +914,7 @@ def begin_idempotent_replay(
         owns_elt_step,
         owns_handoff_read,
         worker_claim_guard,
+        worker_claim_owns_run,
     )
     from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
 
@@ -925,7 +926,9 @@ def begin_idempotent_replay(
         with worker_claim_guard() if safe_read or elt else nullcontext() as claim:
             if (
                 claim is not None
-                and str(context.get("run_id") or context.get("agent_run_id") or "") != claim[0]
+                and not worker_claim_owns_run(
+                    str(context.get("run_id") or context.get("agent_run_id") or "")
+                )
                 and not (safe_read and owns_handoff_read(context, tool_id, action, params))
             ):
                 raise WorkerLeaseLost("tool claim does not belong to the current task")

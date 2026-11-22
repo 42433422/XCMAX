@@ -40,6 +40,9 @@ from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.domain.shared_services import user_memory_service
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.codex_http_runtime import fixture_goal_review
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
 
 
 def _seed_order(actor):
@@ -89,49 +92,6 @@ def _seed_order(actor):
         return order.id, item.id, warehouse.id, ledger.id
 
 
-class OrderPlanner:
-    """Only the LLM boundary is controlled; every business and evidence owner is real."""
-
-    def __init__(self, order_id, item_id, warehouse_id):
-        self.order_id, self.item_id, self.warehouse_id = order_id, item_id, warehouse_id
-        self.calls = 0
-
-    def plan(self, user_id, message, registry, context):
-        self.calls += 1
-        return PlanGraph(
-            plan_id="enterprise-order-acceptance",
-            intent="fulfill_existing_order",
-            nodes=[
-                WorkflowNode("confirm", "sales", "confirm", {"order_id": self.order_id}),
-                WorkflowNode(
-                    "deliver",
-                    "sales",
-                    "deliver",
-                    {
-                        "order_id": self.order_id,
-                        "item_id": self.item_id,
-                        "quantity": 10,
-                        "warehouse_id": self.warehouse_id,
-                    },
-                    depends_on=["confirm"],
-                ),
-            ],
-            metadata={
-                "goal_coverage": {
-                    "goals": [
-                        {
-                            "goal_id": "fulfilment",
-                            "source": message,
-                            "outcome": "execute",
-                            "node_ids": ["confirm", "deliver"],
-                        }
-                    ],
-                    "violations": [],
-                }
-            },
-        )
-
-
 def _approve_and_execute(actor, repository, queue, dispatcher, run):
     grant = issue_approval_grant(run, principal_id=str(actor.user_id))
     assert grant is not None
@@ -157,7 +117,7 @@ def _approve_and_execute(actor, repository, queue, dispatcher, run):
 
 
 def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
-    trusted_actor, tmp_path, monkeypatch
+    trusted_actor, tmp_path, monkeypatch, dynamic_chat_runtime
 ):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
@@ -168,7 +128,8 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
     monkeypatch.setattr(user_memory_service.UserMemoryStore, "_instance", None)
     monkeypatch.setattr(user_memory_service.UserMemoryService, "_instance", None)
     monkeypatch.setattr(user_memory_service, "_user_memory_service", None)
-    actor = trusted_actor(role="admin")
+    state = dynamic_chat_runtime
+    actor = state.actor
     # Configure test-owned stores; no permission, source, execution or outcome
     # response is replaced by a test double.
     monkeypatch.setattr("app.db.SessionLocal", actor.factory)
@@ -179,8 +140,7 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
     memory = user_memory_service.UserMemoryService()
     assert user_memory_service.get_user_memory_service() is memory
     assert memory._store._repository._backend.path == tmp_path / "memory.json"
-    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
-    queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
+    repository, queue = state.repository, state.queue
     # Use the original in-process execution method so the isolated SQLite and
     # JSON configuration remain in the same test process.
     executor = SimpleNamespace(execute=AgentToolExecutor().execute)
@@ -192,8 +152,44 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
             repository=repo, tool_executor=executor
         ),
     )
-    planner = OrderPlanner(order_id, item_id, warehouse_id)
-    execution = EnterpriseExecutionService(goals=goals, orchestrator=orchestrator, planner=planner)
+    execution = EnterpriseExecutionService(goals=goals, orchestrator=orchestrator)
+    state.actions = [
+        {
+            "tool_id": "sales",
+            "action": "confirm",
+            "params": {"order_id": order_id},
+            "call_id": "confirm",
+        },
+        {
+            "tool_id": "sales",
+            "action": "deliver",
+            "params": {
+                "order_id": order_id,
+                "item_id": item_id,
+                "quantity": 10,
+                "warehouse_id": warehouse_id,
+            },
+            "call_id": "deliver",
+        },
+    ]
+
+    def review(prompt):
+        result = fixture_goal_review(prompt, kind="write")
+        result["goals"].append(
+            {
+                "goal_id": "original-business-objective",
+                "source_id": "objective",
+                "source": prompt["host_constraints"]["objective"],
+                "kind": "constraint",
+                "status": "satisfied",
+                "evidence_ids": [row["evidence_id"] for row in prompt["evidence"]],
+                "reason": "Verify the original order remaining quantity against independently read delivery receipts",
+            }
+        )
+        return result
+
+    state.review = review
+    state.reply = "原订单已按两次原任务审批完成确认和交付。"
     outcomes = OutcomeService(repository=repository, projection=projection, memory_service=memory)
     owner = scoped_personal_memory_id(scope)
 
@@ -222,8 +218,8 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
         assert run.metadata["task_context"]["workspace_id"] == task_id
         assert run.metadata["task_context"]["conversation_id"] == ""
         baseline = run.metadata["runtime_context"]["enterprise_cognition"]
-        assert run.status == "waiting_user" and not run.tool_calls
-        assert [step.status for step in run.steps] == ["waiting_user", "pending"]
+        assert run.status == "queued" and not run.steps and not run.tool_calls
+        assert state.transports == [] and state.model_requests == []
         assert Decimal(baseline["baseline"]["state"]["remaining_quantity"]) == 10
         with actor.factory() as db:
             assert db.get(SalesOrder, order_id).state == "quote"
@@ -233,38 +229,55 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
         assert outcomes.evaluate(run.run_id, **scope)["status"] == "unknown"
         assert memory.list_memories(owner) == []
 
-        confirmed, _ = _approve_and_execute(actor, repository, queue, dispatcher, run)
-        assert confirmed.status == "waiting_user", confirmed.to_dict()
-        assert [step.status for step in confirmed.steps] == ["completed", "waiting_user"]
+        waiting = state.drain(run.run_id)
+        assert waiting.status == "waiting_user", waiting.to_dict()
+        confirm_id = waiting.metadata["codex_runtime"]["calls"]["confirm"]["child_run_id"]
+        confirm_child = repository.get(confirm_id)
+        assert confirm_child.steps[0].risk == "high" and not confirm_child.tool_calls
+        confirmed, _ = _approve_and_execute(actor, repository, queue, dispatcher, confirm_child)
+        assert confirmed.status == "completed", confirmed.to_dict()
         assert len(confirmed.tool_calls) == 1
         with actor.factory() as db:
             assert db.get(SalesOrder, order_id).state == "confirmed"
             assert db.get(InventoryLedger, ledger_id).available_quantity == 20
             assert db.query(InventoryTransaction).count() == 0
         assert memory.list_memories(owner) == []
+        assert state.model_requests == [], "one successful child is not the full original goal"
 
-        completed, last_grant = _approve_and_execute(
-            actor, repository, queue, dispatcher, confirmed
+        waiting = state.drain(run.run_id)
+        assert waiting.status == "waiting_user", waiting.to_dict()
+        deliver_id = waiting.metadata["codex_runtime"]["calls"]["deliver"]["child_run_id"]
+        deliver_child = repository.get(deliver_id)
+        assert deliver_child.steps[0].risk == "high" and not deliver_child.tool_calls
+        delivered, last_grant = _approve_and_execute(
+            actor, repository, queue, dispatcher, deliver_child
         )
-        assert completed.status == "completed", completed.to_dict()
-        assert all(step.status == "completed" for step in completed.steps)
-        assert len(completed.tool_calls) == 2
-        assert all(call.status == "completed" for call in completed.tool_calls)
-        approvals = [event for event in completed.events if event.event_type == "step.approved"]
-        assert len(approvals) == 2
-        assert {event.data["task_id"] for event in approvals} == {task_id}
-        steps = {step.step_id: step for step in completed.steps}
-        assert all(
-            event.data["params_sha256"] == canonical_hash(steps[event.data["step_id"]].params)
-            and event.data["plan_sha256"] == completed.metadata["plan_sha256"]
-            for event in approvals
-        )
+        assert delivered.status == "completed", delivered.to_dict()
+        assert len(delivered.tool_calls) == 1
+        completed = state.drain(run.run_id)
+        assert completed.status == "completed", completed.final_output
+        assert completed.final_output["codex_result"]["business_completed"] is True
+        assert len(state.model_requests) == 1
+        for child in (confirmed, delivered):
+            approvals = [event for event in child.events if event.event_type == "step.approved"]
+            assert len(approvals) == 1
+            step = child.steps[0]
+            assert approvals[0].data["task_id"] == child.metadata["task_context"]["task_id"]
+            assert approvals[0].data["params_sha256"] == canonical_hash(step.params)
+            assert approvals[0].data["plan_sha256"] == child.metadata["plan_sha256"]
+            binding = child.metadata["runtime_context"]["enterprise_cognition"]
+            assert (
+                binding["baseline"] == baseline["baseline"] and binding["goal"] == baseline["goal"]
+            )
+            assert child.metadata["plan"]["metadata"]["enterprise_cognition"] == binding
+            assert (
+                child.metadata["approval_receipt"]["task_id"]
+                == child.metadata["task_context"]["task_id"]
+            )
         assert completed.metadata["runtime_context"]["enterprise_cognition"] == baseline
-        assert completed.metadata["plan"]["metadata"]["enterprise_cognition"] == baseline
-        assert completed.metadata["approval_receipt"]["task_id"] == task_id
 
         report = outcomes.evaluate(completed.run_id, **scope)
-        assert report["status"] == "improved", report
+        assert report["status"] == "improved", str(report)
         assert report["observation_verified"] and report["target_met"]
         assert Decimal(report["before"]["value"]) == 10
         assert Decimal(report["after"]["value"]) == 0
@@ -282,14 +295,14 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
 
         retry = execution.plan(*arguments, **scope, runtime_context=actor.context)
         replay = outcomes.evaluate(completed.run_id, **scope)
-        assert retry.run_id == completed.run_id and planner.calls == 1
+        assert retry.run_id == completed.run_id and len(state.transports) == 3
         assert replay["observation_id"] == report["observation_id"]
         assert replay["memory_id"] == report["memory_id"] and not replay["memory_created"]
         with pytest.raises(ApprovalGrantError):
             approve_and_enqueue(
                 repository,
                 queue,
-                run_id=completed.run_id,
+                run_id=delivered.run_id,
                 token=last_grant,
                 principal_id=str(actor.user_id),
                 runtime_context={},
@@ -298,7 +311,7 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
         assert queue.claim("retry-worker", run_id=completed.run_id, lease_seconds=30) is None
         assert len(memory.list_memories(owner)) == 1
         with actor.factory() as db:
-            assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
+            assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 3
             assert db.query(SalesOrder).count() == 1
             assert db.get(SalesOrderItem, item_id).delivered_quantity == 10
             assert db.get(InventoryLedger, ledger_id).available_quantity == 10
@@ -346,7 +359,7 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
 
 
 def test_order_acceptance_keeps_a_prewarmed_memory_store_isolated(
-    trusted_actor, tmp_path, monkeypatch
+    trusted_actor, tmp_path, monkeypatch, dynamic_chat_runtime
 ):
     prior_path = tmp_path / "prior-memory.json"
     monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(prior_path))
@@ -361,7 +374,7 @@ def test_order_acceptance_keeps_a_prewarmed_memory_store_isolated(
     current_path = tmp_path / "current"
     current_path.mkdir()
     test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
-        trusted_actor, current_path, monkeypatch
+        trusted_actor, current_path, monkeypatch, dynamic_chat_runtime
     )
 
     assert user_memory_service.get_user_memory_service() is not prior

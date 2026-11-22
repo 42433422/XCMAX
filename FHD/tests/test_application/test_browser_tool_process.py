@@ -33,7 +33,7 @@ def browser(tmp_path, monkeypatch, trusted_actor):
         _SERVER.replace(
             "server.run(transport=",
             """
-@server.tool()
+@server.tool(annotations=ToolAnnotations(read_only_hint=True))
 async def browser_wait_for(text: str) -> dict:
     with log.open("a") as stream:
         stream.write("hang-entered\\n")
@@ -43,6 +43,13 @@ async def browser_wait_for(text: str) -> dict:
     return dict(state)
 
 server.run(transport=""",
+        ).replace(
+            "async def browser_snapshot() -> dict:\n    return dict(state)",
+            """async def browser_snapshot() -> CallToolResult:
+    page = "### Page\\n- Page URL: " + state["url"]
+    snapshot = "\\n### Snapshot\\n```yaml\\n- button \\\"Save\\\" [ref=e1]\\n- generic: clicks: " + str(state["clicks"]) + "\\n```"
+    return CallToolResult(content=[TextContent(type="text", text=page + snapshot)],
+                          structured_content=dict(state), result_type="complete")""",
         ),
         encoding="utf-8",
     )
@@ -60,7 +67,7 @@ server.run(transport=""",
                         "browser": True,
                         "timeout_seconds": 10,
                         "max_sessions": 2,
-                        "read_only_tools": ["browser_snapshot"],
+                        "read_only_tools": ["browser_snapshot", "browser_wait_for"],
                     }
                 }
             }
@@ -105,12 +112,11 @@ def state(result):
 
 
 def test_actual_executor_keeps_browser_across_steps_and_reaps_entire_tree(browser):
-    first = call(browser, "browser_navigate", {"url": "https://example.test/original"})
-    clicked = call(browser, "browser_click", {"ref": "e1"})
+    first = call(browser, "browser_snapshot")
     current = call(browser, "browser_snapshot")
-    assert state(current)["url"] == "https://example.test/original"
-    assert state(current)["clicks"] == 1
-    assert first["session_id"] == clicked["session_id"] == current["session_id"]
+    assert state(current)["url"] == "about:blank"
+    assert state(current)["clicks"] == 0
+    assert first["session_id"] == current["session_id"]
     pid = state(current)["pid"]
     assert pid != os.getpid() and psutil.pid_exists(pid)
     scope = registry.mcp_session_scope(browser[1])
@@ -124,15 +130,131 @@ def test_actual_executor_keeps_browser_across_steps_and_reaps_entire_tree(browse
     assert browser[2].read_bytes() == events
 
 
+def test_direct_unapproved_input_cannot_use_an_existing_browser_process(browser):
+    state(call(browser, "browser_snapshot"))
+    denied = call(
+        browser,
+        "browser_click",
+        {
+            "ref": "e1",
+            "verification": {
+                "kind": "text",
+                "expected": "clicks: 1",
+                "observation_call_id": "absent",
+            },
+        },
+    )
+    assert denied["success"] is False
+    assert "clicked" not in browser[2].read_text()
+
+
+def test_dynamic_children_share_the_original_sql_parent_and_real_worker_generation(
+    browser, monkeypatch, tmp_path
+):
+    from app.application.agent_orchestrator import set_agent_run_repository_for_tests
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+    from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+    from app.infrastructure.codex.binding import CodexBindingStore
+    from app.infrastructure.codex.tools import CodexToolBridge
+
+    tool, _context, log, actor = browser
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    set_agent_run_repository_for_tests(repository)
+    parent = AgentRun(str(actor.user_id), "Click the observed save button once", status="running")
+    parent.metadata.update(runtime_type="codex", runtime_context=actor.context)
+    contract = build_goal_contract(parent)
+    parent.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
+    repository.save(parent)
+    store = CodexBindingStore(repository)
+    grant = store.create(parent.run_id)
+    bridge = CodexToolBridge(store, AgentOrchestrator(repository=repository))
+
+    def invoke(action, params, identity):
+        spec = bridge.invoke(
+            grant.mcp_token, "capability_describe", {"tool_id": tool, "action": action}
+        )["capability"]
+        return bridge.invoke(
+            grant.mcp_token,
+            "execute_action",
+            {
+                "tool_id": tool,
+                "action": action,
+                "params": params,
+                "call_id": identity,
+                "schema_digest": spec["schema_digest"],
+            },
+        )
+
+    try:
+        first = invoke("browser_snapshot", {}, "observe")
+        assert first["verified"] is True, first
+        generation = first["tool_calls"][0]["output"]["session_id"]
+        original_pid = state(first["tool_calls"][0]["output"])["pid"]
+        opened = log.read_text().count("opened")  # Discovery also opens a short-lived SDK session.
+        pending = invoke(
+            "browser_click",
+            {
+                "ref": "e1",
+                "verification": {
+                    "kind": "text",
+                    "expected": "clicks: 1",
+                    "observation_call_id": "observe",
+                },
+            },
+            "click",
+        )
+        assert pending["pending_approval"] is True and "clicked" not in log.read_text()
+        child = repository.get(pending["run_id"])
+        approval = issue_approval_grant(child, principal_id=str(actor.user_id))
+        queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
+        approve_and_enqueue(
+            repository,
+            queue,
+            run_id=child.run_id,
+            token=approval["grant"],
+            principal_id=str(actor.user_id),
+            runtime_context=actor.context,
+            authenticated_actor_binding=actor.context["_actor_authorization"],
+        )
+        claimed = queue.claim("browser-worker", lease_seconds=30)
+        assert claimed is not None
+        AgentTaskDispatcher(execution_repository=queue, run_repository=repository)._execute_claim(
+            claimed, "browser-worker"
+        )
+        receipt = store.receipt_snapshot(parent.run_id)[-1]["receipt"]
+        assert receipt["verified"] is True, (repository.get(child.run_id).error, receipt)
+        latest = invoke("browser_snapshot", {}, "after")
+        assert latest["verified"] is True
+        current = latest["tool_calls"][0]["output"]
+        assert current["session_id"] == generation and state(current)["clicks"] == 1
+        assert state(current)["pid"] == original_pid
+        assert log.read_text().count("opened") == opened
+        assert log.read_text().count("clicked") == 1
+        scope = registry.mcp_session_scope({**actor.context, "run_id": parent.run_id})
+        assert workers.close_browser_worker_scope(scope) == 1
+    finally:
+        set_agent_run_repository_for_tests(None)
+
+
 def test_actual_executor_rechecks_revoked_host_session_between_steps(browser):
     from app.db.models.user import Session
 
-    first = call(browser, "browser_navigate", {"url": "https://example.test"})
+    first = call(browser, "browser_snapshot")
     assert state(first)["clicks"] == 0
     actor = browser[3]
     with actor.factory.begin() as db:
         db.delete(db.get(Session, actor.session_row_id))
-    denied = call(browser, "browser_click", {"ref": "e1"})
+    denied = call(browser, "browser_snapshot")
     assert denied["success"] is False and denied["error_code"] == "tool_identity_required"
     assert "clicked" not in browser[2].read_text()
 
@@ -145,7 +267,7 @@ def test_conflicting_original_generations_never_choose_or_recreate_a_session(bro
         "session_id": "different-original-generation",
     }
     events = browser[2].read_bytes()
-    rejected = call(browser, "browser_click", {"ref": "e1"})
+    rejected = call(browser, "browser_snapshot")
     assert rejected["error_code"] == "mcp_session_lost"
     assert rejected["outcome"] == "unknown" and rejected["retryable"] is False
     assert "session_id" not in rejected

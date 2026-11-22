@@ -124,6 +124,9 @@ def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
     chat_payload = final_output.get("chat_payload")
     if isinstance(chat_payload, dict):
         payloads.append(chat_payload)
+    codex_result = final_output.get("codex_result")
+    if isinstance(codex_result, dict):
+        payloads.append(codex_result)
     return payloads
 
 
@@ -185,56 +188,12 @@ def _catalog_rejection_summary(run: Any) -> str:
     return ""
 
 
-def _verified_browser_result(run: Any) -> dict[str, Any] | None:
-    state = (getattr(run, "metadata", {}) or {}).get("browser_loop")
-    result = (getattr(run, "final_output", {}) or {}).get("browser")
-    if (
-        getattr(run, "status", "") != "completed"
-        or not isinstance(state, dict)
-        or state.get("phase") != "verified"
-        or not isinstance(result, dict)
-        or result.get("scope") != "visible_page_text"
-        or result != state.get("result")
-        or not isinstance(result.get("text"), str)
-        or not result["text"]
-    ):
-        return None
-    verification = state.get("verification")
-    if not isinstance(verification, dict) or any(
-        result.get(key) != verification.get(key)
-        for key in ("text", "node_id", "snapshot_node_id", "session_id")
-    ):
-        return None
-    steps = list(getattr(run, "steps", []) or [])
-    wait = next((step for step in steps if step.node_id == result.get("node_id")), None)
-    if (
-        wait is None
-        or wait.action != "browser_wait_for"
-        or wait.params.get("text") != result["text"]
-        or not steps
-        or steps[-1].node_id != result.get("snapshot_node_id")
-        or steps[-1].action != "browser_snapshot"
-        or steps[-1].depends_on != [wait.node_id]
-        or any(
-            step.status != "completed"
-            or step.tool_id != state.get("tool_id")
-            or step.output.get("success") is not True
-            or step.output.get("session_id") != result.get("session_id")
-            for step in (wait, steps[-1])
-        )
-    ):
-        return None
-    return result
-
-
 def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
     status = _text(getattr(run, "status", ""), limit=32)
     metadata = getattr(run, "metadata", {}) or {}
     terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
     if terminal_catalog:
         return terminal_catalog
-    if browser := _verified_browser_result(run):
-        return f"页面文本已验证：{browser['text']}"
     if status in {"failed", "cancelled", "blocked", "paused"} and (
         metadata.get("non_retryable")
         or (metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
@@ -263,6 +222,7 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
         for candidate in (
             payload.get("response"),
             payload.get("message"),
+            payload.get("output") if payload.get("runtime") == "codex" else None,
             nested.get("message"),
             nested.get("summary"),
         ):
@@ -500,15 +460,23 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         return {}
     final_output = getattr(run, "final_output", {})
     final_output = dict(final_output) if isinstance(final_output, dict) else {}
+    runtime_result = next(
+        (
+            value
+            for key in ("codex_result", "chat_payload")
+            if isinstance(value := final_output.get(key), dict) and value.get("runtime") == "codex"
+        ),
+        None,
+    )
+    reply_only = runtime_result is not None and runtime_result.get("business_completed") is not True
     terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
     if terminal_catalog:
         status = "failed"  # Workflow completion is not success of a rejected/historical save.
     admissions = _verified_task_admissions(run) if status == "completed" else []
     existing = final_output.get("business_result")
-    browser = _verified_browser_result(run)
     if (
         not terminal_catalog
-        and browser is None
+        and runtime_result is None
         and not admissions
         and isinstance(existing, dict)
         and existing.get("protocol") == BUSINESS_HARNESS_PROTOCOL
@@ -528,9 +496,8 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     # 审批门后的业务动作**未执行**：此处报 success=true 正是界面谎称
     # 「智能任务执行完成」的来源。终态以审批事实为准，而非外层对话是否正常结束。
     unexecuted = (
-        mark_unexecuted_order_run(run, str(getattr(run, "message", "") or ""))
-        or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
-    )
+        not reply_only and mark_unexecuted_order_run(run, str(getattr(run, "message", "") or ""))
+    ) or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
     if unexecuted:
         status = "failed"
     result_status = (
@@ -544,6 +511,25 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         summary = "任务已登记并通过原账本核验；子任务的业务结果尚未确认。"
     else:
         summary = _result_summary(run, payloads)
+    if runtime_result is not None and reply_only and not pending and status == "completed":
+        # Completing a reply or some verified actions cannot prove the user's
+        # whole business goal. The reply and business projections stay distinct.
+        result_status = "reply_completed"
+        summary = (
+            "本轮回复已完成；已有操作回执通过核验，整体业务目标尚待核对"
+            if runtime_result.get("verified_operations") is True
+            else "本轮回复已完成，尚未核验业务目标完成"
+        )
+        if runtime_result.get("reconciliation_required") or runtime_result.get(
+            "requires_reconciliation"
+        ):
+            result_status = "unknown"
+            summary = "已有调用的结果尚待核对，请勿重复提交业务操作"
+        elif runtime_result.get("ok", runtime_result.get("success")) is not True:
+            result_status = _text(runtime_result.get("execution_state"), limit=32) or "failed"
+            if result_status == "completed":
+                result_status = "goal_verification_required"
+            summary = _text(runtime_result.get("error"), limit=800) or "业务目标尚未通过核验"
     result = {
         "protocol": BUSINESS_HARNESS_PROTOCOL,
         "status": result_status,
@@ -581,11 +567,13 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         },
         "projection_key": f"{BUSINESS_HARNESS_PROTOCOL}:{identity['run_id']}:{result_status}",
     }
-    if browser is not None and result_status == "completed":
-        result["scope"] = "visible_page_text"
-        result["evidence"]["browser"] = {
-            key: browser[key] for key in ("text", "node_id", "snapshot_node_id", "session_id")
-        }
+    if runtime_result is not None:
+        result.update(
+            business_completed=result["success"]
+            and runtime_result.get("business_completed") is True,
+            verified_operations=runtime_result.get("verified_operations") is True,
+            reply_completed=result_status == "reply_completed",
+        )
     final_output["business_result"] = result
     run.final_output = final_output
     return result
@@ -655,6 +643,7 @@ def visible_chat_business_result(
         or _completed_tool_count(result) > 0
         or result.get("pending_approval")
         or result.get("requires_reconciliation")
+        or result.get("verified_operations")
         or status in _VISIBLE_BUSINESS_RESULT_STATUSES
         or (
             status == "completed"

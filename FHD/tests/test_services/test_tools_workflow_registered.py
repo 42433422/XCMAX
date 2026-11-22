@@ -480,6 +480,7 @@ class TestExecuteRegisteredWorkflowTool:
             "excel_analysis",
             "excel_analyzer",
             "excel_toolkit",
+            "excel_join_compare",
             "excel_import",
             "excel_vector_index",
             "generate_office_document",

@@ -391,7 +391,7 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
         unexpected_dispatches.append((args, kwargs))
         raise AssertionError("an unknown original write must never reach planning or tool dispatch")
 
-    monkeypatch.setattr(AgentOrchestrator, "_plan", forbidden)
+    monkeypatch.setattr(AgentOrchestrator, "_execute_with_durable_lease", forbidden)
     finished = threading.Event()
     original_finish = queue.finish
 

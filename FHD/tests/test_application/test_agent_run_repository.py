@@ -43,9 +43,7 @@ def test_retry_reuses_saved_chat_plan_without_another_model_request(monkeypatch)
     )
     original.status = "failed"
     service.save_run(original)
-    monkeypatch.setattr(
-        service, "_plan", lambda *_a, **_k: pytest.fail("retry must reuse the saved plan")
-    )
+    assert not hasattr(service, "_plan")
     retried = service.retry_run(original.run_id, requested_by="7", auto_execute=False)
     assert retried.status == "queued"
     assert retried.run_id == original.run_id

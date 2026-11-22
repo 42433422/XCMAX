@@ -78,11 +78,7 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
                 headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
+    payload, run, checks = _route_agent_checks(response, expected, repo, check_agent_status=False)
     _check_equal(checks, "payload.event", payload.get("event"), expected.get("event"))
     _check_equal(checks, "payload.published", payload.get("published"), expected.get("published"))
     for name, actual in (
@@ -90,22 +86,6 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
         ("publish_call_count", publish.call_count),
     ):
         _check_equal(checks, name, actual, expected.get(name), skip_when_expected_missing=True)
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
         task,
         checks,
@@ -637,21 +617,7 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             else:
                 response = client.post(path, json=body, headers=headers)
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     _check_equal(
         checks,
         "payload.deleted_count",
@@ -659,15 +625,6 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         expected.get("deleted_count"),
         skip_when_expected_missing=True,
     )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
         task,
         checks,
@@ -1354,15 +1311,19 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def _route_agent_checks(response, expected, repo):
+def _route_agent_checks(response, expected, repo, *, check_agent_status=True, check_events=True):
     payload = response.json()
     run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
+    if check_agent_status:
+        _check_equal(
+            checks,
+            "payload.agent_status",
+            payload.get("agent_status"),
+            expected.get("agent_status"),
+        )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -1378,7 +1339,8 @@ def _route_agent_checks(response, expected, repo):
             checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
         )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+        if check_events:
+            _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return payload, run, checks
 
 
@@ -1789,29 +1751,7 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo, check_events=False)
     return _result(
         task,
         checks,
@@ -1905,22 +1845,10 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
                 headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
+    payload, run, checks = _route_agent_checks(
+        response, expected, repo, check_agent_status=False, check_events=False
     )
-    _check_equal(checks, "run_attached", run is not None, True)
     if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
         _check_equal(
             checks,
             "artifact_count",
@@ -1928,10 +1856,6 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
             expected.get("artifact_count"),
             skip_when_expected_missing=True,
         )
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     return _result(
         task,
         checks,
@@ -1988,29 +1912,7 @@ def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo, check_events=False)
     return _result(
         task,
         checks,
@@ -2088,29 +1990,7 @@ def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
                 headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
-    payload = response.json()
-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
-    checks: list[dict[str, Any]] = []
-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(
-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
-    )
-    _check_equal(
-        checks,
-        "payload.run_id_present",
-        bool(payload.get("run_id") and payload.get("agent_run_id")),
-        expected.get("run_id_present"),
-        skip_when_expected_missing=True,
-    )
-    _check_equal(checks, "run_attached", run is not None, True)
-    if run is not None:
-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(
-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
-        )
-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+    payload, run, checks = _route_agent_checks(response, expected, repo, check_events=False)
     return _result(
         task,
         checks,
@@ -2419,69 +2299,68 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
+    """The legacy catalog name now exercises the unique Codex goal/context entry."""
     from starlette.requests import Request
 
-    from app.application.agent_task_context import scoped_conversation_user_id
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.agent_task_context import scoped_personal_memory_id
+    from app.domain.shared_services.user_memory_service import UserMemoryService, UserMemoryStore
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
 
     try:
-        from evals.owned_attachment_eval import _scripted_model_response
+        from evals.owned_attachment_eval import codex_eval_runtime
     except ModuleNotFoundError:
-        from owned_attachment_eval import _scripted_model_response
+        from owned_attachment_eval import codex_eval_runtime
 
     client = SimpleNamespace(headers={})
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
-    active_summary = str(task.get("active_summary") or "")
-    captured_context: dict[str, Any] = {}
-
-    def fake_react(
-        plan_id: str,
-        user_id: str,
-        message: str,
-        tool_registry: dict[str, Any],
-        context: dict[str, Any],
-    ) -> PlanGraph:
-        del user_id, message, tool_registry
-        captured_context.update(dict(context or {}))
-        return PlanGraph(
-            plan_id=plan_id,
-            intent="product_query",
-            nodes=[
-                WorkflowNode(
-                    node_id="query_products",
-                    tool_id="products",
-                    action="query",
-                    params={"keyword": "ACME 5003"},
-                )
-            ],
-            metadata={
-                "memory_v2_summary": dict(context.get("memory_v2") or {}).get("summary", ""),
-            },
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as root, ExitStack() as stack:
+        stack.enter_context(_authenticated_route_fixture(client))
+        stack.enter_context(patch.object(UserMemoryService, "_instance", None))
+        stack.enter_context(patch.object(UserMemoryStore, "_instance", None))
+        stack.enter_context(patch.dict(os.environ, {"XCAGI_LONG_TERM_MEMORY_BACKEND": "legacy"}))
+        from app.application.user_memory_vector_app_service import (
+            UserMemoryRagApplicationService,
+            UserMemoryVectorIngestApplicationService,
+        )
+        from app.infrastructure.persistence.user_memory_vector_store import (
+            SQLiteUserMemoryVectorStore,
         )
 
-    memory_service = SimpleNamespace(format_memory_v2_for_prompt=lambda **_: active_summary)
-    with (
-        _authenticated_route_fixture(client),
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        patch(
-            "app.application.workflow.planner.resolve_tool_execution_profile",
-            return_value="full",
-        ),
-        patch(
-            "app.domain.shared_services.user_memory_service.get_user_memory_service",
-            return_value=memory_service,
-        ),
-    ):
+        vector_store = SQLiteUserMemoryVectorStore(str(Path(root) / "memory.sqlite"))
+        rag = UserMemoryRagApplicationService(vector_store=vector_store)
+        ingest = UserMemoryVectorIngestApplicationService(vector_store=vector_store)
+        stack.enter_context(
+            patch(
+                "app.application.user_memory_vector_app_service.get_user_memory_rag_app_service",
+                return_value=rag,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.user_memory_vector_app_service.get_user_memory_vector_ingest_app_service",
+                return_value=ingest,
+            )
+        )
+        memory_service = UserMemoryService(storage_type="memory")
+        stack.enter_context(
+            patch(
+                "app.domain.shared_services.user_memory_service.get_user_memory_service",
+                return_value=memory_service,
+            )
+        )
+        recalled = stack.enter_context(
+            patch.object(
+                memory_service,
+                "format_memory_v2_for_prompt",
+                wraps=memory_service.format_memory_v2_for_prompt,
+            )
+        )
+        runtime = codex_eval_runtime(stack, Path(root), client, task)
         request = Request(
             {
                 "type": "http",
-                "method": "POST",
-                "path": "/api/agent/plan",
                 "headers": [(b"x-session-id", client.headers["X-Session-ID"].encode())],
             }
         )
@@ -2489,61 +2368,63 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
         context = authenticated_runtime_context(
             {"conversation_id": str(task.get("user_id") or "eval-memory-user")}, principal
         )
-        namespace = scoped_conversation_user_id(principal.user_id, context)
-        planner = LLMWorkflowPlanner(
-            completion=lambda **kwargs: _scripted_model_response(
-                task, json.loads(kwargs["messages"][-1]["content"])
-            )
+        namespace = scoped_personal_memory_id(context)
+        active = memory_service.propose_memory_candidate(
+            namespace,
+            "preference",
+            "favorite_customer",
+            "ACME Trading",
+            source="agent_eval",
+            confidence=0.9,
         )
-        with patch.object(planner, "_plan_with_llm", side_effect=fake_react):
-            plan = planner.plan(
-                namespace,
-                str(task.get("message") or "query product"),
-                {"products": {"actions": {"query": {"risk": "low", "idempotent": True}}}},
-                context,
-            )
-
-    summary = str(dict(captured_context.get("memory_v2") or {}).get("summary") or "")
-    _check_equal(checks, "context_has_memory_v2", bool(summary), True)
-    _check_equal(checks, "plan_metadata_memory_v2", plan.metadata.get("memory_v2_summary"), summary)
-    if expected.get("summary_contains"):
-        fragment = str(expected.get("summary_contains") or "")
-        checks.append(
-            {
-                "name": "summary_contains",
-                "passed": fragment in summary,
-                "actual": summary,
-                "expected": fragment,
-            }
+        assert memory_service.confirm_memory_candidate(namespace, active["candidate"]["memory_id"])[
+            "success"
+        ]
+        memory_service.propose_memory_candidate(
+            namespace, "preference", "pending_customer", "PENDING LTD"
         )
-    if expected.get("summary_not_contains"):
-        fragment = str(expected.get("summary_not_contains") or "")
-        checks.append(
-            {
-                "name": "summary_not_contains",
-                "passed": fragment not in summary,
-                "actual": summary,
-                "expected": f"not {fragment}",
-            }
+        foreign = memory_service.propose_memory_candidate(
+            "foreign-owner", "preference", "foreign_customer", "FOREIGN LTD"
         )
-    return _result(
-        task,
-        checks,
-        {
-            "captured_context": captured_context,
-            "plan": {
-                "plan_id": plan.plan_id,
-                "intent": plan.intent,
-                "metadata": plan.metadata,
-                "nodes": [
-                    {
-                        "node_id": node.node_id,
-                        "tool_id": node.tool_id,
-                        "action": node.action,
-                        "params": node.params,
-                    }
-                    for node in plan.nodes
-                ],
-            },
-        },
-    )
+        assert memory_service.confirm_memory_candidate(
+            "foreign-owner", foreign["candidate"]["memory_id"]
+        )["success"]
+        run = runtime.start(context)
+        evidence = (
+            run.metadata.get("runtime_goal_contract", {})
+            .get("request", {})
+            .get("context_evidence", [])
+        )
+        memory = next((row for row in evidence if row.get("source") == "memory_v2"), {})
+        summary = str(memory.get("summary") or "")
+        _check_equal(checks, "host_recalled_scoped_memory_once", recalled.call_count, 1)
+        _check_equal(
+            checks,
+            "host_recalled_scope",
+            recalled.call_args.kwargs if recalled.call_args else {},
+            {"user_id": namespace, "max_items": 6},
+        )
+        _check_equal(
+            checks,
+            "foreign_memory_absent",
+            "FOREIGN LTD" in json.dumps(evidence, ensure_ascii=False),
+            False,
+        )
+        _check_equal(checks, "memory_owner", memory.get("owner_id"), namespace)
+        _check_equal(checks, "context_has_memory_v2", bool(summary), True)
+        _check_equal(
+            checks,
+            "same_context_reaches_codex",
+            bool(
+                runtime.inputs
+                and json.dumps(summary, ensure_ascii=False)[1:-1] in runtime.inputs[0]
+            ),
+            True,
+        )
+        _check_equal(checks, "original_goal_verified", run.status, "completed")
+        _check_equal(checks, "runtime", run.metadata.get("runtime_type"), "codex")
+        for key, present in (("summary_contains", True), ("summary_not_contains", False)):
+            if expected.get(key):
+                fragment = str(expected[key])
+                _check_equal(checks, key, fragment in summary, present)
+        return _result(task, checks, {"run": run.to_dict(), "context_evidence": evidence})

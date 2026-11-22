@@ -45,7 +45,10 @@ def test_etl_batch_arrays_truncate_instead_of_rejecting_the_plan():
     assert validation.ok, validation.message
     planner = validate_tool_call("elt_import", "preview", params, allow_references_from=set())
     assert planner.ok, planner.message
-    runs = {"run_ids": [f"r{i}" for i in range(60)]}
+    runs = {
+        "run_ids": [f"r{i}" for i in range(60)],
+        "preview_revisions": {f"r{i}": "a" * 64 for i in range(60)},
+    }
     assert validate_tool_call("elt_import", "execute", runs).ok
 
 

@@ -670,12 +670,10 @@ class TestActionsFhdDeep:
                 None,
                 agent_tools=tools,
                 agent_gate=gate,
-                agent_max_iterations=5,
             )
             call_kwargs = mock_run.call_args[1]
             assert call_kwargs["tools"] == tools
             assert call_kwargs["gate"] == gate
-            assert call_kwargs["max_iterations"] == 5
 
     def test_direct_python_with_runtime(self, tmp_path) -> None:
         employees = tmp_path / "backend" / "employees"

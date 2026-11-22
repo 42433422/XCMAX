@@ -69,7 +69,7 @@ class McpToolInfo:
 class McpClientError(RuntimeError):
     """MCP 连接或调用失败；调用方按工具失败处理。"""
 
-    def __init__(self, message: str, *, retryable: bool = True) -> None:
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
         super().__init__(message)
         self.retryable = retryable
 
@@ -102,7 +102,7 @@ def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) ->
         return future.result(timeout=timeout)
     except FutureTimeout as exc:
         future.cancel()
-        raise McpClientError("MCP 服务器响应超时") from exc
+        raise McpClientError("MCP 服务器响应超时", retryable=False) from exc
 
 
 async def _oauth_header(config: McpServerConfig) -> dict[str, str]:
@@ -133,11 +133,11 @@ async def _oauth_header(config: McpServerConfig) -> dict[str, str]:
         response.raise_for_status()
         payload = response.json()
     except RECOVERABLE_ERRORS as exc:
-        from app.application.workflow.retry_policy import is_transport_error
+        from app.infrastructure.llm.retry_policy import is_safe_transport_retry
 
         raise McpClientError(
             "MCP 授权服务器不可用",
-            retryable=is_transport_error(exc) and not isinstance(exc, PermissionError),
+            retryable=is_safe_transport_retry(exc),
         ) from exc
     token = payload.get("access_token") if isinstance(payload, dict) else None
     if not isinstance(token, str) or not token.strip():
@@ -341,13 +341,11 @@ def _run_with_reconnect(
 
 
 def _retryable_transport_error(error: BaseException) -> bool:
-    from app.application.workflow.retry_policy import is_transport_error
+    from app.infrastructure.llm.retry_policy import is_safe_transport_retry
 
     if isinstance(error, McpClientError):
         return error.retryable
-    return not isinstance(
-        error, (PermissionError, FileNotFoundError, IsADirectoryError, NotADirectoryError)
-    ) and is_transport_error(error)
+    return is_safe_transport_retry(error)
 
 
 def call_tool(
@@ -451,6 +449,18 @@ def call_tool(
             **({"session_id": exc.session_id} if exc.session_id else {}),
         }
     except BOUNDARY_ERRORS as exc:  # The external SDK is an isolated plugin boundary.
+        from app.infrastructure.llm.retry_policy import is_transport_error
+
+        if not _retryable_transport_error(exc) and (
+            is_transport_error(exc)
+            or exc.__cause__ is not None
+            and is_transport_error(exc.__cause__)
+        ):
+            uncertain = {
+                "outcome": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
+            }
         logger.warning("MCP 工具 %s.%s 调用失败：%s", config.name, tool_name, type(exc).__name__)
         return {
             "success": False,

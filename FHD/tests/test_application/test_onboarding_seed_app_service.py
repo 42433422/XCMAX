@@ -10,7 +10,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.planner_model import goal_review_response
+from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.codex_http_runtime import fixture_goal_review
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
 
 
 def test_seed_demo_is_idempotent_and_visible_to_business_tools(tmp_path, monkeypatch) -> None:
@@ -59,26 +61,18 @@ def test_seed_demo_is_idempotent_and_visible_to_business_tools(tmp_path, monkeyp
     ("source", "profile"), [(None, "normal"), (None, "pro_default"), ("pro", "pro_default")]
 )
 def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirmation(
-    tmp_path, monkeypatch, trusted_actor, source, profile
+    monkeypatch, dynamic_chat_runtime, source, profile
 ) -> None:
-    """Real model-plan parsing, authenticated tools, confirmation and durable shipment."""
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    """Real host review, authenticated MCP child, approval and durable shipment."""
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.onboarding_seed_app_service import seed_onboarding_demo_data
-    from app.application.workflow.planner import LLMWorkflowPlanner
     from app.db.models.shipment import ShipmentRecord
     from app.infrastructure.tenant_scope import tenant_scope
 
-    actor = trusted_actor(tenant_id=1, role="admin")
-    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "shipment-claims.sqlite"))
-    monkeypatch.setattr("app.db.SessionLocal", actor.factory)
-    repository = InMemoryAgentRunRepository()
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.run_repository._agent_run_repository", repository
-    )
-    with tenant_scope(1):
-        seeded = seed_onboarding_demo_data(tenant_id=1, industry_id="通用")
+    state = dynamic_chat_runtime
+    actor, repository = state.actor, state.repository
+    with tenant_scope(actor.tenant_id):
+        seeded = seed_onboarding_demo_data(tenant_id=actor.tenant_id, industry_id="通用")
     customer, product = seeded["customer"]["name"], seeded["product"]["name"]
     plan = {
         "mode": "workflow",
@@ -127,74 +121,81 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
     }
     prompt = f"查询客户{customer}和商品{product}，创建数量为1的演示出货单；涉及写入先让我确认。"
 
-    def respond(**kwargs):
-        request = json.loads(kwargs["messages"][-1]["content"])
-        if request.get("task") == "audit_goal_coverage":
-            return goal_review_response(
-                request,
-                source=prompt,
-                node_ids=["customer", "product", "shipment"],
-                outcome="execute",
-            )
-        return {"choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]}
-
-    completion = Mock(side_effect=respond)
-    conversation = Mock(get_context=Mock(return_value=None))
-    with patch(
-        "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=conversation
-    ):
-        chat = AIChatApplicationService()
-    chat.workflow_planner = LLMWorkflowPlanner(ai_service=conversation, completion=completion)
-    for method in ("_persist_chat_turn", "_persist_recallable_chat_turn", "_persist_plan_state"):
+    state.actions = [
+        {
+            "tool_id": node["tool_id"],
+            "action": node["action"],
+            "params": node["params"],
+            "call_id": node["node_id"],
+        }
+        for node in plan["nodes"]
+    ]
+    state.review = lambda prompt: fixture_goal_review(prompt, kind="write")
+    state.reply = "已核对客户和产品，并按原审批创建演示出货单。"
+    chat = AIChatApplicationService()
+    for method in ("_persist_chat_turn", "_persist_recallable_chat_turn"):
         monkeypatch.setattr(chat, method, Mock())
     context = {**actor.context, "tool_execution_profile": profile, "memory_capture_enabled": False}
-    with tenant_scope(1):
+    with tenant_scope(actor.tenant_id):
         waiting_payload = chat.process_chat(
             str(actor.user_id), prompt, source=source, context=context
         )
-        assert waiting_payload["data"]["action"] == "workflow_confirmation_required", (
-            waiting_payload
+        assert waiting_payload["data"]["action"] == "approval_pending", str(
+            {"payload": waiting_payload, "receipts": state.receipts}
         )
         assert waiting_payload["execution_state"] == "waiting_user"
-        assert waiting_payload["execution_started"] is False
-        assert len(repository.list_recent(limit=10)) == 1
-        trace = repository.get(waiting_payload["run_id"])
-        assert trace.status == "waiting_user"
-        assert not trace.tool_calls
+        parent_id = waiting_payload["run_id"]
+        run_id = waiting_payload["data"]["data"]["approval_card"]["run_id"]
+        assert run_id != parent_id
+        assert len(repository.list_recent(limit=10)) == 4
+        parent = repository.get(parent_id)
+        contract = parent.metadata["runtime_goal_contract"]
+        assert contract["request"]["text"] == prompt
+        assert parent.status == "waiting_user"
+        assert len(state.transports) == 1
         with actor.factory() as db:
             assert db.query(ShipmentRecord).count() == 0
-        completed_payload = chat.process_chat(
+        context.update(waiting_payload["runtime_context_update"])
+        confirmed_payload = chat.process_chat(
             str(actor.user_id), "确认", source=source, context=context
         )
-        assert completed_payload["data"]["action"] == "approval_pending", completed_payload
-        inner = completed_payload["data"]["data"]
-        run_id = inner["agent_run_id"]
+        assert confirmed_payload["data"]["action"] == "approval_pending", confirmed_payload
+        assert confirmed_payload["run_id"] == parent_id
+        assert confirmed_payload["data"]["data"]["approval_card"]["run_id"] == run_id
         waiting = repository.get(run_id)
         assert waiting.status == "waiting_user"
         assert waiting.metadata["runtime_context"]["_conversation_revision"] == 0
-        assert [call.status for call in waiting.tool_calls] == ["completed", "completed"]
+        assert not waiting.tool_calls, "the exact write child remains unexecuted before approval"
         assert waiting.steps[-1].params["products"][0]["tin_spec"] == 1
         with actor.factory() as db:
             assert db.query(ShipmentRecord).count() == 0
-        from app.application.approval_workspace_app_service import approve_request
-
-        monkeypatch.setattr(
-            "app.application.approval_workspace_app_service.notify_mobile_user",
-            lambda *a, **kw: None,
+        approval = state.client.get(f"/api/agent/runs/{run_id}")
+        assert approval.status_code == 200, approval.text
+        grant = approval.json()["approval"]["grant"]
+        approved = state.client.post(
+            f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
         )
-        approved = approve_request(
-            inner["approval_requests"][0]["id"], actor.request, body={"opinion": "同意"}
+        assert approved.status_code == 202, approved.text
+        with actor.factory() as db:
+            assert db.query(ShipmentRecord).count() == 0
+        completed = state.drain(run_id)
+        assert completed.status == "completed", str(
+            [(call.output, call.metadata.get("verification")) for call in completed.tool_calls]
         )
-        assert isinstance(approved, dict), getattr(approved, "body", b"{}").decode()
-        assert approved["success"] is True, approved
-        completed = repository.get(run_id)
-        assert completed.status == "completed", completed.error
-        assert len(completed.tool_calls) == 3
-        assert completion.call_count == 2
-        assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
-            "audit_goal_coverage"
+        assert len(completed.tool_calls) == 1
+        assert state.client.get(f"/api/agent/runs/{parent_id}").status_code == 200
+        parent = repository.get(parent_id)
+        assert parent.status != "completed", (
+            "status reads cannot run a model or mint goal completion"
         )
-        conversation.chat.assert_not_called()
+        assert state.model_requests == []
+        parent = state.drain(parent_id)
+        assert parent.status == "completed", parent.final_output
+        assert parent.final_output["codex_result"]["business_completed"] is True
+        assert parent.metadata["runtime_goal_contract"] == contract
+        assert len(state.model_requests) == 1
+        assert len(state.transports) == 2
+        assert not hasattr(chat, "_pending_workflows")
         with actor.factory() as db:
             shipment = (
                 db.query(ShipmentRecord).filter(ShipmentRecord.purchase_unit == customer).one()
@@ -202,7 +203,7 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
             assert shipment.product_name == product
             assert shipment.quantity_tins == shipment.tin_spec == 1
             assert shipment.unit_price == shipment.amount == 99
-            assert shipment.tenant_id == 1
+            assert shipment.tenant_id == actor.tenant_id
 
 
 @pytest.fixture

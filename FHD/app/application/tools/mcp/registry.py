@@ -14,13 +14,10 @@ import threading
 import time
 from copy import deepcopy
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from app.domain.autonomy.browser_policy import (
-    BROWSER_ACTIONS,
-    MAX_BROWSER_DECISIONS,
-    MAX_BROWSER_SECONDS,
-    MAX_BROWSER_STEPS,
+    BROWSER_OBSERVATIONS,
     browser_action_allowed,
 )
 from app.infrastructure.mcp.client import (
@@ -31,9 +28,6 @@ from app.infrastructure.mcp.client import (
 )
 from app.infrastructure.mcp.config import McpServerConfig, load_server_configs, mcp_enabled
 from app.utils.operational_errors import BOUNDARY_ERRORS
-
-if TYPE_CHECKING:
-    from app.application.workflow.workflow_types import PlanGraph
 
 logger = logging.getLogger(__name__)
 
@@ -91,20 +85,39 @@ _RESOURCE_ACTION_SPECS: dict[str, dict[str, Any]] = {
 
 
 def _action_spec(info: McpToolInfo, config: McpServerConfig) -> dict[str, Any]:
-    read_only = _is_read_only(info, config)
-    schema = info.input_schema if isinstance(info.input_schema, dict) else {}
+    read_only = _is_read_only(info, config) and (
+        not config.browser or info.name in BROWSER_OBSERVATIONS
+    )
+    wire_schema = info.input_schema if isinstance(info.input_schema, dict) else {}
+    schema = deepcopy(wire_schema)
     required = schema.get("required")
     required_params = (
         [str(item) for item in required if str(item).strip()] if isinstance(required, list) else []
     )
+    description = info.description
+    if config.browser and info.name not in BROWSER_OBSERVATIONS:
+        from app.domain.autonomy.browser_evidence import BROWSER_POSTCONDITION_SCHEMA
+
+        properties = schema.setdefault("properties", {})
+        if "verification" in properties:
+            raise ValueError("Browser wire schema collides with host verification field")
+        properties["verification"] = deepcopy(BROWSER_POSTCONDITION_SCHEMA)
+        required_params.append("verification")
+        schema["required"] = list(required_params)
+        description += (
+            " 动作须附 verification 并经原审批。navigate 使用 kind=url 且 expected 等于请求 URL；"
+            "其他写动作使用 kind=text，observation_call_id 引用同一父任务最新已核验 browser_snapshot。"
+            "宿主写前回读确认文本尚不存在、ref仍有效，写后独立读取同一会话；仅证明可见页面状态。"
+        )
     return {
         "risk": "low" if read_only else "high",
         "idempotent": read_only,
         "read_only": read_only,
         "input_schema": deepcopy(schema),
+        "wire_input_schema": deepcopy(wire_schema),
         "required_params": required_params,
         "availability": "shared",
-        "description": info.description,
+        "description": description,
         "timeout_seconds": config.timeout_seconds,
         **({} if read_only else {"requires_write_approval": True}),
     }
@@ -157,9 +170,8 @@ def _discover(
             "description": (
                 f"外部 MCP 服务器 {config.name}（{len(actions)} 个工具）"
                 + (
-                    "。AI 浏览器任务：仅规划一个 browser_navigate 或 browser_snapshot 起始节点，"
-                    "不得预先猜测页面 ref 或混入其他工具。原目标由同一 AgentRun 按最新页面逐步操作，"
-                    "每次动作使用现有权限审批，最终必须回读验证；请在原用户任务中明确完成条件。"
+                    "。Codex 按实际 browser_snapshot 发现 ref 并逐个提交明确动作；"
+                    "同一受信父任务共享会话，每次写入独立审批和回读，不能猜测 ref 或重放未知结果。"
                     if config.browser and config.session_mode == "persistent"
                     else ""
                 )
@@ -249,6 +261,51 @@ def call_mcp_tool(
             "message": message,
             "retryable": False,
         }
+    if config.browser and action not in BROWSER_OBSERVATIONS:
+        try:
+            from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+            from app.application.agent_orchestrator.verification_surface import (
+                execution_surface_binding,
+            )
+            from app.application.tools.surface_authority import require_surface_authority
+
+            _actor, run = require_surface_authority(
+                tool_id, action, arguments, runtime_context or {}, approval_required=True
+            )
+            binding = execution_surface_binding(run, arguments, runtime_context or {})
+            call = next(
+                (item for item in run.tool_calls if item.call_id == binding.get("call_id")), None
+            )
+            acceptance = (
+                (call.metadata.get("verification_contract") or {}).get("surface_acceptance")
+                if call
+                else None
+            )
+            if (
+                not isinstance(acceptance, dict)
+                or acceptance.get("scope") != "live_page_assertion"
+                or acceptance.get("config_sha256") != canonical_hash(asdict(config))
+                or acceptance.get("session_scope") != mcp_session_scope(runtime_context or {})
+            ):
+                raise PermissionError("browser has no original frozen postcondition")
+        except (ValueError, PermissionError):
+            return {
+                "success": False,
+                "error_code": "mcp_browser_verification_required",
+                "execution_status": "not_started",
+                "retryable": False,
+                "message": "浏览器动作缺少当前账号的原审批、页面观察或有效后置条件，未执行。",
+            }
+        arguments.pop("verification", None)
+        valid, message = validate_schema_object(spec.get("wire_input_schema") or {}, arguments)
+        if not valid:
+            return {
+                "success": False,
+                "error_code": "mcp_arguments_invalid",
+                "execution_status": "not_started",
+                "message": message,
+                "retryable": False,
+            }
     options: dict[str, Any] = {"retry_safe": spec.get("idempotent") is True}
     if config.session_mode == "persistent":
         context = dict(runtime_context or {})
@@ -261,10 +318,22 @@ def call_mcp_tool(
                 "retryable": False,
             }
         options["session_scope"] = scope
-        outputs = context.get("node_outputs")
+        try:
+            outputs = (
+                browser_session_outputs(context, str(tool_id))
+                if config.browser
+                else list((context.get("node_outputs") or {}).values())
+            )
+        except (PermissionError, ValueError):
+            return {
+                "success": False,
+                "error_code": "mcp_session_scope_required",
+                "execution_status": "not_started",
+                "retryable": False,
+            }
         generations = {
             value["session_id"]
-            for value in (outputs.values() if isinstance(outputs, dict) else [])
+            for value in outputs
             if isinstance(value, dict)
             and value.get("server") == config.name
             and isinstance(value.get("session_id"), str)
@@ -286,7 +355,29 @@ def call_mcp_tool(
 def mcp_session_scope(context: dict[str, Any]) -> str:
     """Only trusted executor context can bind a browser; model arguments cannot."""
     identity = [str(context.get(key) or "").strip() for key in ("tenant_id", "user_id", "run_id")]
+    if context.get("source") == "codex_runtime" and context.get("parent_run_id"):
+        from app.infrastructure.codex.receipts import action_parent
+
+        try:
+            parent = action_parent(context)
+        except (ValueError, PermissionError):
+            return ""
+        if parent is None:
+            return ""
+        identity[2] = parent[1].run_id
     return hashlib.sha256(json.dumps(identity).encode()).hexdigest() if all(identity) else ""
+
+
+def browser_session_outputs(context: dict, tool_id: str) -> list[dict]:
+    from app.infrastructure.codex.receipts import browser_action_receipts
+
+    outputs = context.get("node_outputs")
+    current = [
+        value
+        for value in (outputs.values() if isinstance(outputs, dict) else [])
+        if isinstance(value, dict)
+    ]
+    return [row["record"].output for row in browser_action_receipts(context, tool_id)] + current
 
 
 def browser_server_config(tool_id: str) -> McpServerConfig | None:
@@ -298,53 +389,13 @@ def browser_server_config(tool_id: str) -> McpServerConfig | None:
     return config if config and config.browser and config.session_mode == "persistent" else None
 
 
-def browser_execution_contract(plan: PlanGraph) -> dict[str, Any] | None:
-    """Describe only a local, valid controller entry; plan claims never enable it."""
-    if len(plan.nodes) != 1:
-        return None
-    seed = plan.nodes[0]
-    if (
-        not seed.tool_id.startswith("mcp__")
-        or seed.action not in {"browser_navigate", "browser_snapshot"}
-        or seed.depends_on
-        or seed.next
-        or seed.branches
-        or not browser_action_allowed(seed.action, seed.params)
-    ):
-        return None
-    if browser_server_config(seed.tool_id) is None:
-        return None
-    return {
-        "seed_node_id": seed.node_id,
-        "tool_id": seed.tool_id,
-        "actions": sorted(BROWSER_ACTIONS),
-        "limits": {
-            "steps": MAX_BROWSER_STEPS,
-            "model_decisions": MAX_BROWSER_DECISIONS,
-            "scheduling_deadline_seconds": MAX_BROWSER_SECONDS,
-        },
-        "semantics": (
-            "这个本地认可的单节点是原 AgentRun 的浏览器控制入口，不是任务完成声明。"
-            "执行层每次读取实际页面，再向同一图追加一个动作，重新经过原权限、审批和预算。"
-            "用户授权的同一连续浏览器交互可作为一个控制目标映射到该入口；"
-            "该目标仍必须完整保留原话中的对象、范围、否定、条件和先后顺序。"
-        ),
-        "verification_scope": (
-            "终态仅证明 browser_wait_for 对非空文本成功，随后同会话新快照读回该文本；"
-            "不能证明未读回的业务数据库、付款或外部投递成功。"
-        ),
-        "handoff": "登录、验证码、外部发送、付款和不支持的操作须暂停询问，不能宣称完成。",
-        "review_requirement": (
-            "必须独立判断整个原始目标是否能由这些动作及页面文本验证覆盖。"
-            "不能遗漏不属于该连续浏览器交互的其他目标，不能因为存在控制入口就判通过；"
-            "若目标超出能力，沿用原 violations/unsupported/clarification_question 规则。"
-        ),
-    }
-
-
 def release_run_browser_sessions(context: dict[str, Any]) -> int:
     from app.application.agent_orchestrator.browser_tool_process import close_browser_worker_scope
     from app.infrastructure.mcp.client import close_scope
+
+    if context.get("source") == "codex_runtime" and context.get("parent_run_id"):
+        # A dynamic child does not own the shared parent session lifetime.
+        return 0
 
     scope = mcp_session_scope(context)
     if not scope:

@@ -20,8 +20,8 @@ _current_request_ctx: contextvars.ContextVar[Optional[Request]] = contextvars.Co
 )
 
 
-def set_current_request(request: Request):
-    """设置当前请求到 ContextVar，返回 token 用于复位。"""
+def set_current_request(request: Request | None):
+    """设置或清空当前请求到 ContextVar，返回 token 用于复位。"""
     return _current_request_ctx.set(request)
 
 

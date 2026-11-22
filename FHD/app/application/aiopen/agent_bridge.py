@@ -10,6 +10,7 @@ from contextlib import suppress
 from urllib.parse import urlsplit
 
 import httpx
+from jsonschema import Draft202012Validator
 
 from app.application.tools.surface_authority import require_surface_authority
 from app.domain.aiopen.principal import ScreenPrincipal
@@ -22,6 +23,35 @@ def supports_aiopen_step(action: str) -> bool:
     from app.application.aiopen.definitions import _UI_ACTIONS
 
     return action == "ui_sessions" or action in _UI_ACTIONS
+
+
+def screen_verification_schema() -> dict:
+    """The existing read-only screen contract, embedded in an approved action."""
+    from app.application.aiopen.definitions import TOOL_DEFINITIONS
+
+    schema = copy.deepcopy(
+        dict(next(row["inputSchema"] for row in TOOL_DEFINITIONS if row["name"] == "ui_verify"))
+    )
+    schema.update(
+        required=["session_id"],
+        additionalProperties=False,
+        anyOf=[{"required": [key]} for key in ("ref", "selector", "text", "url_contains")],
+    )
+    for name, prop in schema["properties"].items():
+        if name != "value":
+            prop.update(minLength=1, pattern=r"[\s\S]*\S[\s\S]*")
+    return schema
+
+
+def inline_verification(params: dict) -> dict:
+    condition = params.get("verification")
+    if (
+        not isinstance(condition, dict)
+        or not Draft202012Validator(screen_verification_schema()).is_valid(condition)
+        or condition.get("session_id") != params.get("session_id")
+    ):
+        return {}
+    return copy.deepcopy(condition)
 
 
 def _host_url() -> str:
@@ -57,6 +87,17 @@ def downstream_verification(run, params: dict, context: dict) -> dict:
     current = next((step for step in run.steps if step.step_id == context["step_id"]), None)
     if current is None:
         return {}
+    # Dynamic Codex actions have one original business node. The condition is
+    # part of that node's exact approved parameters, never a mutable run flag.
+    node = next((item for item in ordered if item.node_id == current.node_id), None)
+    if (
+        node is not None
+        and (node.tool_id, node.action, node.params, node.depends_on)
+        == (current.tool_id, current.action, current.params, current.depends_on)
+        and current.params == params
+        and (condition := inline_verification(params))
+    ):
+        return {"node_id": current.node_id, "params": condition}
     reachable = {current.node_id}
     for node in ordered:
         if node.node_id not in reachable and not reachable.intersection(node.depends_on):
@@ -150,7 +191,7 @@ def execute_aiopen_step(action: str, params: dict, context: dict) -> dict:
                 "error_code": "aiopen_agent_verification_required",
                 "execution_status": "not_started",
                 "retryable": False,
-                "message": "屏幕写入必须指定会话，并在无条件分支的原任务中安排同会话后续 ui_verify 校验。",
+                "message": "屏幕写入必须冻结同会话 verification，或在原任务安排同会话后续 ui_verify。",
             }
         principal = ScreenPrincipal.from_ids(actor.id, context.get("tenant_id"))
         if principal is None:
@@ -172,7 +213,10 @@ def execute_aiopen_step(action: str, params: dict, context: dict) -> dict:
             "message": "屏幕操作未绑定当前任务、账号或审批，未执行。",
         }
     try:
-        result = _request_screen(action, params, principal, timeout)
+        # This field belongs to the host's independent readback, not the page
+        # action protocol. The original parameters remain frozen in its receipt.
+        wire_params = {key: value for key, value in params.items() if key != "verification"}
+        result = _request_screen(action, wire_params, principal, timeout)
         if action not in _READS and not result["success"]:
             # A DOM action can fail after dispatching an input/click event. A
             # negative acknowledgement alone does not prove no effect occurred.

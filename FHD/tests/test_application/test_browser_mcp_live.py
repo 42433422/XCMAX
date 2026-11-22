@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import threading
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,37 +25,27 @@ from urllib.parse import parse_qs
 
 import pytest
 
-from app.application.agent_orchestrator.approval_grant import (
-    consume_approval_grant,
-    issue_approval_grant,
-)
-from app.application.agent_orchestrator.result_verification import (
-    bind_execution_receipt,
-    freeze_verification_contract,
-    verify_step_result,
-)
-from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
+from app.application.agent_orchestrator import set_agent_run_repository_for_tests
+from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+from app.application.agent_orchestrator.result_verification import verify_step_result
+from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_repository import SQLAlchemyAgentRunRepository
-from app.application.agent_orchestrator.task_background import (
-    apply_approved_step,
-    task_execution_context,
+from app.application.agent_orchestrator.task_background import task_execution_context
+from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+from app.application.agent_orchestrator.task_execution_sql_repository import (
+    SQLAlchemyTaskExecutionRepository,
 )
-from app.application.agent_orchestrator.tool_executor import (
-    AgentToolExecutor,
-    execute_with_tool_deadline,
-)
-from app.application.agent_orchestrator.tool_spec import (
-    get_tool_action_spec,
-    invalidate_tool_specs_cache,
-)
+from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
 from app.application.tools.mcp import registry
-from app.db import HostSessionLocal, get_host_engine
-from app.db.db_base import Base
 from app.db.models.user import Session as UserSession
-from app.db.models.user import User
-from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
+from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+from app.infrastructure.codex.binding import CodexBindingStore
+from app.infrastructure.codex.tools import CodexToolBridge
 from app.infrastructure.mcp.config import McpServerConfig
 from app.utils.time import utc_now_naive
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 pytestmark = [
     pytest.mark.e2e,
@@ -118,7 +108,12 @@ class LiveRuntime:
     config: McpServerConfig
     repository: SQLAlchemyAgentRunRepository
     run_ids: tuple[str, str]
-    actor_session_row_id: int
+    actor: object
+    store: CodexBindingStore
+    bridge: CodexToolBridge
+    tokens: tuple[str, str]
+    queue: SQLAlchemyTaskExecutionRepository
+    receipts: dict[int, dict] = field(default_factory=dict)
 
     def context(self, run_index: int) -> dict:
         run = self.repository.get(self.run_ids[run_index])
@@ -130,7 +125,7 @@ class LiveRuntime:
 
 
 @pytest.fixture
-def browser_runtime(tmp_path, monkeypatch):
+def browser_runtime(tmp_path, monkeypatch, trusted_actor):
     node = shutil.which("node")
     entry = _RUNTIME / "node_modules/@playwright/mcp/cli.js"
     assert node and entry.is_file(), "Run npm ci in scripts/autonomy/runtime_tools/browser_mcp_deps"
@@ -171,51 +166,51 @@ def browser_runtime(tmp_path, monkeypatch):
     config_file.write_text(json.dumps({"servers": {config.name: asdict(config)}}), encoding="utf-8")
     monkeypatch.setenv("XCAGI_MCP_ENABLED", "1")
     monkeypatch.setenv("XCAGI_MCP_SERVERS_FILE", str(config_file))
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'host.sqlite'}")
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
     monkeypatch.setenv("XCAGI_TOOL_SANDBOX", "1")
     monkeypatch.setenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", "1")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     registry.reset_mcp_cache_for_tests()
     invalidate_tool_specs_cache()
-    engine = get_host_engine()
-    Base.metadata.create_all(engine)
-    session_token = uuid.uuid4().hex
-    with HostSessionLocal() as db:
-        db.add(
-            User(
-                id=71,
-                username="browser-fixture-actor",
-                password="unused",
-                role="admin",
-                tenant_id=7,
+    tool = registry.tool_id_for(config.name)
+    actor = trusted_actor(
+        user_id=71,
+        permissions=[
+            f"tool.{tool}.{action}"
+            for action in (
+                "browser_navigate",
+                "browser_snapshot",
+                "browser_type",
+                "browser_click",
+                "browser_wait_for",
             )
-        )
-        db.flush()
-        row = UserSession(
-            session_id=session_token,
-            user_id=71,
-            expires_at=utc_now_naive() + timedelta(hours=1),
-        )
-        db.add(row)
-        db.flush()
-        session_row_id = row.id
-        db.commit()
-    context = {
-        "tenant_id": "7",
-        "user_id": "71",
-        "actor_id": "71",
-        "_actor_authorization": bind_agent_actor_scope(session_id=session_token, user_id="71"),
-        "employee_tool_allowlist": [registry.tool_id_for(config.name)],
-    }
-    repository = SQLAlchemyAgentRunRepository(session_factory=HostSessionLocal)
+        ],
+    )
+    context = {**actor.context, "employee_tool_allowlist": [tool]}
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    set_agent_run_repository_for_tests(repository)
     runs = tuple(
         AgentRun(user_id="71", message="Submit and verify the controlled fixture", status="running")
         for _ in range(2)
     )
     for run in runs:
-        run.metadata["runtime_context"] = context
+        run.metadata.update(runtime_type="codex", runtime_context=context)
+        contract = build_goal_contract(run)
+        run.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
         repository.save(run)
-    runtime = LiveRuntime(config, repository, (runs[0].run_id, runs[1].run_id), session_row_id)
+    store = CodexBindingStore(repository)
+    runtime = LiveRuntime(
+        config,
+        repository,
+        (runs[0].run_id, runs[1].run_id),
+        actor,
+        store,
+        CodexToolBridge(store, AgentOrchestrator(repository=repository)),
+        (store.create(runs[0].run_id).mcp_token, store.create(runs[1].run_id).mcp_token),
+        SQLAlchemyTaskExecutionRepository(session_factory=actor.factory),
+    )
     try:
         yield runtime
     finally:
@@ -223,7 +218,7 @@ def browser_runtime(tmp_path, monkeypatch):
             runtime.close(index)
         registry.reset_mcp_cache_for_tests()
         invalidate_tool_specs_cache()
-        engine.dispose()
+        set_agent_run_repository_for_tests(None)
 
 
 def _dispatch(
@@ -232,92 +227,77 @@ def _dispatch(
     action: str,
     arguments: dict,
     *,
-    verify=False,
     assertion="",
+    before_worker=None,
 ) -> dict:
-    # Reopen the persisted run for every step; do not pass a browser/client handle
-    # between calls or replace the production facade, authorization or worker.
-    run = runtime.repository.get(runtime.run_ids[run_index])
-    assert run is not None
+    # The model choice is synthetic; discovery, durable single-action submission,
+    # original SQL approval, dispatcher and the pinned MCP browser are real.
     tool_id = registry.tool_id_for(runtime.config.name)
-    spec = get_tool_action_spec(tool_id, action)
-    assert spec is not None, f"Official MCP tool discovery did not register {action}"
-    step = AgentStep(
-        node_id=f"browser_{len(run.steps) + 1}",
-        tool_id=tool_id,
-        action=action,
-        params=arguments,
-        risk=spec.risk,
-        idempotent=spec.idempotent,
+    token = runtime.tokens[run_index]
+    capability = runtime.bridge.invoke(
+        token,
+        "capability_describe",
+        {
+            "tool_id": tool_id,
+            "action": action,
+        },
+    )["capability"]
+    arguments = dict(arguments)
+    if action == "browser_navigate":
+        arguments["verification"] = {"kind": "url", "expected": arguments["url"]}
+    elif not capability["read_only"]:
+        assert assertion, "Every browser input must declare its visible postcondition"
+        previous = runtime.store.receipt_snapshot(runtime.run_ids[run_index])[-1]
+        assert previous["action"] == "browser_snapshot" and previous["receipt"]["verified"]
+        arguments["verification"] = {
+            "kind": "text",
+            "expected": assertion,
+            "observation_call_id": previous["call_id"],
+        }
+    receipt = runtime.bridge.invoke(
+        token,
+        "execute_action",
+        {
+            "tool_id": tool_id,
+            "action": action,
+            "params": arguments,
+            "schema_digest": capability["schema_digest"],
+            "call_id": f"action-{uuid.uuid4().hex}",
+        },
     )
-    run.steps.append(step)
-    if spec.risk == "high":
-        # Fixture authorization is action-bound and durably consumed, using the
-        # same server issuance functions as the approved AgentRun continuation.
-        run.status, step.status = "waiting_user", "waiting_user"
-        runtime.repository.save(run)
-        grant = issue_approval_grant(run, principal_id=run.user_id)
+    if receipt.get("pending_approval"):
+        child = runtime.repository.get(receipt["run_id"])
+        assert child is not None
+        grant = issue_approval_grant(child, principal_id=child.user_id)
         assert grant is not None
-        consume_approval_grant(grant["grant"], run=run, principal_id=run.user_id)
-        apply_approved_step(run, step, approved_by=run.user_id)
-    run.status, step.status = "running", "running"
-    context = {
-        **run.metadata["runtime_context"],
-        "run_id": run.run_id,
-        "step_id": step.step_id,
-        "node_id": step.node_id,
-        "node_outputs": {prior.node_id: prior.output for prior in run.steps if prior.output},
-        **task_execution_context(run, step),
-    }
-    call = None
-    if verify:
-        if assertion:
-            before = next(
-                item
-                for item in reversed(run.steps)
-                if item.action == "browser_snapshot" and item.status == "completed"
-            )
-            run.metadata.setdefault("browser_loop", {}).setdefault("postconditions", {})[
-                step.node_id
-            ] = {
-                "kind": "text",
-                "expected": assertion,
-                "before_snapshot_node_id": before.node_id,
-            }
-        call = ToolCall(
-            step_id=step.step_id,
-            node_id=step.node_id,
-            tool_id=tool_id,
-            action=action,
-            params=arguments,
-            metadata={"idempotency_key": context["idempotency_key"]},
+        approve_and_enqueue(
+            runtime.repository,
+            runtime.queue,
+            run_id=child.run_id,
+            token=grant["grant"],
+            principal_id=child.user_id,
+            runtime_context=runtime.actor.context,
+            authenticated_actor_binding=runtime.actor.context["_actor_authorization"],
         )
-        run.tool_calls.append(call)
-        freeze_verification_contract(run, step, call, spec, context)
-    runtime.repository.save(run)
-    result = execute_with_tool_deadline(
-        AgentToolExecutor(),
-        step,
-        runtime_context=context,
-        timeout_seconds=30,
+        if before_worker is not None:
+            before_worker()
+        claimed = runtime.queue.claim("live-browser-worker", lease_seconds=60)
+        assert claimed is not None
+        AgentTaskDispatcher(
+            execution_repository=runtime.queue, run_repository=runtime.repository
+        )._execute_claim(claimed, "live-browser-worker")
+        receipt = runtime.store.receipt_snapshot(runtime.run_ids[run_index])[-1]["receipt"]
+    runtime.receipts[run_index] = receipt
+    child = runtime.repository.get(receipt["run_id"])
+    assert child is not None and len(child.steps) == 1
+    assert child.steps[0].output == (
+        child.tool_calls[-1].output if child.tool_calls else child.steps[0].output
     )
-    step.output = result
-    step.status = "completed" if result.get("success") is True else "failed"
-    if call is not None:
-        call.output = result
-        bind_execution_receipt(call)
-    runtime.repository.save(run)
-    if call is not None:
-        report = verify_step_result(run=run, step=step, call=call, context=context)
-        assert report["accepted"] is True, report
-        runtime.repository.save(run)
-    stored = runtime.repository.get(run.run_id)
-    assert stored is not None and stored.steps[-1].output == result
-    return stored.steps[-1].output
+    return child.steps[0].output
 
 
-def _call(runtime, run_index, tool, arguments, session_id=None):
-    result = _dispatch(runtime, run_index, tool, arguments)
+def _call(runtime, run_index, tool, arguments, session_id=None, *, assertion=""):
+    result = _dispatch(runtime, run_index, tool, arguments, assertion=assertion)
     if result.get("success") is not True:
         evidence = result.get("reconciliation_evidence") or result
         pytest.fail(
@@ -325,6 +305,7 @@ def _call(runtime, run_index, tool, arguments, session_id=None):
             f"{result.get('error_code')}, cause={evidence.get('error_code')}\n"
             f"{evidence.get('message') or evidence.get('content') or evidence}"
         )
+    assert runtime.receipts[run_index]["verified"] is True, runtime.receipts[run_index]
     assert result.get("session_id")
     if session_id:
         assert result["session_id"] == session_id
@@ -354,6 +335,7 @@ def test_live_scopes_preserve_state_and_submit_once(browser_runtime, fixture_sit
             "text": reference,
         },
         session_a,
+        assertion=reference,
     )
     snapshot = _call(runtime, 0, "browser_snapshot", {}, session_a)["content"]
     assert reference in snapshot
@@ -370,6 +352,7 @@ def test_live_scopes_preserve_state_and_submit_once(browser_runtime, fixture_sit
             "target": _target(snapshot, "button", "Submit fixture"),
         },
         session_a,
+        assertion=f"Submitted: {reference}",
     )
     _call(runtime, 0, "browser_wait_for", {"text": f"Submitted: {reference}", "time": 2}, session_a)
     receipt = _call(runtime, 0, "browser_snapshot", {}, session_a)["content"]
@@ -393,7 +376,8 @@ def test_live_missing_evidence_and_lost_generation_fail_closed(browser_runtime, 
     assert missing["success"] is False and missing["error_code"] == "mcp_tool_error"
     assert missing["session_id"] == session_id
     assert runtime.close(0) >= 1
-    resumed = _dispatch(runtime, 0, "browser_navigate", {"url": url})
+    # A new action must not silently recreate the lost original generation.
+    resumed = _dispatch(runtime, 0, "browser_navigate", {"url": url + "#resume"})
     assert resumed["success"] is False and resumed["error_code"] == "mcp_session_lost"
     assert resumed["session_id"] == session_id
     assert resumed["outcome"] == "unknown"
@@ -416,14 +400,17 @@ def test_live_worker_rechecks_revoked_actor_before_next_browser_action(
         "browser_type",
         {"target": _target(snapshot, "textbox", "Fixture reference"), "text": "REVOKED"},
         session_id,
+        assertion="REVOKED",
     )
     snapshot = _call(runtime, 0, "browser_snapshot", {}, session_id)["content"]
     assert "REVOKED" in snapshot
-    with HostSessionLocal() as db:
-        session = db.get(UserSession, runtime.actor_session_row_id)
-        assert session is not None
-        session.expires_at = utc_now_naive() - timedelta(seconds=1)
-        db.commit()
+
+    def revoke_after_approval():
+        with runtime.actor.factory.begin() as db:
+            session = db.get(UserSession, runtime.actor.session_row_id)
+            assert session is not None
+            session.expires_at = utc_now_naive() - timedelta(seconds=1)
+
     denied = _dispatch(
         runtime,
         0,
@@ -431,8 +418,13 @@ def test_live_worker_rechecks_revoked_actor_before_next_browser_action(
         {
             "target": _target(snapshot, "button", "Submit fixture"),
         },
+        assertion="Submitted: REVOKED",
+        before_worker=revoke_after_approval,
     )
-    assert denied["success"] is False and denied["error_code"] == "tool_identity_required"
+    assert denied.get("success") is not True and runtime.receipts[0]["verified"] is False
+    child = runtime.repository.get(runtime.receipts[0]["run_id"])
+    assert child is not None and child.status != "completed"
+    assert not any(call.output.get("success") for call in child.tool_calls)
     assert submissions == []
 
 
@@ -441,32 +433,34 @@ def test_live_host_verifier_reads_original_worker_without_resubmitting(
 ):
     runtime = browser_runtime
     url, submissions = fixture_site
-    _dispatch(runtime, 0, "browser_navigate", {"url": url}, verify=True)
+    _call(runtime, 0, "browser_navigate", {"url": url})
     snapshot = _call(runtime, 0, "browser_snapshot", {})["content"]
     reference = f"VERIFY-{uuid.uuid4().hex}"
-    _dispatch(
+    _call(
         runtime,
         0,
         "browser_type",
         {"target": _target(snapshot, "textbox", "Fixture reference"), "text": reference},
-        verify=True,
         assertion=reference,
     )
     snapshot = _call(runtime, 0, "browser_snapshot", {})["content"]
-    _dispatch(
+    _call(
         runtime,
         0,
         "browser_click",
         {"target": _target(snapshot, "button", "Submit fixture")},
-        verify=True,
         assertion=f"Submitted: {reference}",
     )
-    run = runtime.repository.get(runtime.run_ids[0])
+    run = runtime.repository.get(runtime.receipts[0]["run_id"])
+    assert run is not None
     step, call = run.steps[-1], run.tool_calls[-1]
     context = {
         **run.metadata["runtime_context"],
         "run_id": run.run_id,
         "step_id": step.step_id,
+        "node_id": step.node_id,
+        "call_id": call.call_id,
+        "input_sha256": call.metadata["verification_contract"]["input_sha256"],
         **task_execution_context(run, step),
     }
     for _ in range(2):

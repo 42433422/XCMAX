@@ -40,6 +40,7 @@ from app.application.workflow.approval_persistence import (
 from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
 from app.db.db_base import Base
 from app.db.models.approval import ApprovalRequest, ApprovalStatus
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture(params=["sqlite", "postgresql"])
@@ -408,7 +409,7 @@ def _valid_business_data(tenant_id=1, plan_id="plan-1", params=None):
 
 
 @pytest.fixture
-def db(tmp_path):
+def db(tmp_path, monkeypatch):
     """Real persistent SQLAlchemy session isolated through ``SessionLocal``.
 
     Patching the context-manager symbol itself can be captured by another module's
@@ -431,9 +432,12 @@ def db(tmp_path):
     Base.metadata.create_all(engine)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
+    # Authentication fixtures also patch this factory. Share their restoration
+    # stack so teardown cannot reinstall this disposed database after restoring
+    # the production router.
+    monkeypatch.setattr("app.db.session.SessionLocal", TestingSession)
     try:
-        with patch("app.db.session.SessionLocal", TestingSession):
-            yield TestingSession
+        yield TestingSession
     finally:
         engine.dispose()
 
@@ -938,15 +942,15 @@ class TestAtomicTerminalStateNotOverwrittenByStaleSession:
 
 
 @pytest.mark.parametrize("reject_second", [False, True])
-def test_full_plan_survives_restart_between_two_approvals(db, monkeypatch, reject_second):
+def test_full_plan_survives_restart_between_two_approvals(
+    db, monkeypatch, reject_second, trusted_actor
+):
     import logging
     from types import SimpleNamespace
-    from unittest.mock import Mock
 
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-    from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.approval_workspace.protocols import WorkflowBackends
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
     from app.application.workflow.approval_persistence import load_workflow_snapshot_for_execution
@@ -963,12 +967,20 @@ def test_full_plan_survives_restart_between_two_approvals(db, monkeypatch, rejec
     with db() as session:
         session.add(User(id=41, username="synthetic-approval-user", password="test", tenant_id=1))
         session.commit()
+    actor = trusted_actor(
+        user_id=41,
+        tenant_id=1,
+        permissions=["tool.business_db.read", "customer.view", "product.view"],
+    )
+    # Keep host authentication isolated while approval snapshots use this
+    # test's original business database and survive repository recreation.
+    monkeypatch.setattr("app.db.session.SessionLocal", db)
     monkeypatch.setattr(
         "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
         lambda: SimpleNamespace(execute=AgentToolExecutor().execute),
     )
-    # This test exercises durable plan resumption with a synthetic actor and a
-    # mocked dispatcher; real tool authorization has its own isolation tests.
+    # Only business query I/O is synthetic. The original authenticated actor,
+    # durable plan and workspace approval service remain real across restart.
     monkeypatch.setattr(
         "app.application.agent_orchestrator.tool_executor._reviewed_query_tenant",
         lambda *_args: (None, None),
@@ -1005,18 +1017,10 @@ def test_full_plan_survives_restart_between_two_approvals(db, monkeypatch, rejec
                 depends_on=["second"],
             ),
         ],
+        metadata={"approval_required_node_ids": ["first", "second"]},
     )
     approvals = ApprovalService()
-    service = object.__new__(AIChatApplicationService)
-    service._pending_workflows = {
-        "41": {
-            "plan": plan,
-            "runtime_context": {"local_user_id": 41, "tenant_id": 1, "message": "依次查询"},
-            "approval_required": True,
-            "approval_nodes": [{"node_id": "first"}, {"node_id": "second"}],
-        }
-    }
-    service.approval_service = approvals
+    context = {**actor.context, "local_user_id": 41, "message": "依次查询"}
     calls = []
 
     def execute(_tool, _action, params):
@@ -1041,20 +1045,30 @@ def test_full_plan_survives_restart_between_two_approvals(db, monkeypatch, rejec
     with (
         tenant_scope(1),
         patch(
-            "app.application.agent_orchestrator.AgentOrchestrator",
-            return_value=AgentOrchestrator(repository=repo),
-        ),
-        patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             side_effect=execute,
         ),
     ):
-        handled, result = service._resume_pending_dynamic_workflow("41", "确认", "确认")
-        assert handled and result["success"] is True, result
-        first = result["data"]["data"]["approval_request_ids"][0]
+        waiting_run = AgentOrchestrator(repository=repo).start_run_from_plan(
+            user_id="41", message="依次查询", plan=plan, runtime_context=context
+        )
+        assert waiting_run.status == "waiting_user" and calls == [], waiting_run.to_dict()
+        persisted_plan = plan_from_dict(waiting_run.metadata["plan"])
+        assert persisted_plan is not None
+        request = approvals.create_approval_request(
+            plan_id=persisted_plan.plan_id,
+            node=persisted_plan.nodes[0],
+            runtime_context={**context, "_approval_agent_run_required": True},
+            plan=persisted_plan,
+            require_persistence=True,
+        )
+        first = request.request_id
+        assert approvals.attach_pending_agent_run(
+            first, agent_run_id=waiting_run.run_id, approved_step_id="first"
+        )
         durable = load_workflow_snapshot_for_execution(first)
-        waiting_run = repo.get(result["data"]["data"]["agent_run_id"])
-        assert durable is not None, (first, result)
+        waiting_run = repo.get(waiting_run.run_id)
+        assert durable is not None, first
         assert waiting_run is not None and waiting_run.status == "waiting_user"
         persisted_plan = plan_from_dict(waiting_run.metadata.get("plan"))
         assert persisted_plan is not None

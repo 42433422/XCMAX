@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import multiprocessing
 import os
 import shutil
@@ -388,6 +389,7 @@ def _worker(
     initialize=True,
     retain=False,
     browser=False,
+    invocation_ceiling: float = math.inf,
 ):
     from app.application.agent_orchestrator.business_write_guard import restore_worker_claim
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
@@ -491,7 +493,7 @@ def _worker(
             restore_catalog_claim(catalog_claim),
             restore_worker_claim(elt_claim, elt_step_id=step.step_id if elt_claim else ""),
             restore_worker_claim(surface_claim),
-            invocation_deadline(deadline) as budget,
+            invocation_deadline(min(deadline, invocation_ceiling)) as budget,
             llm_client_factory_scope(restore_llm_scope) if llm_scope is not None else nullcontext(),
             _worker_stream(stream_connection) as finish_stream,
         ):
@@ -499,7 +501,9 @@ def _worker(
 
                 def renew_file_deadline(phase: str) -> float:
                     marker = ELT_FILE_PHASES[phase]
-                    renewed_deadline = time.monotonic() + ELT_FILE_WATCHDOG_SECONDS[marker]
+                    renewed_deadline = min(
+                        time.monotonic() + ELT_FILE_WATCHDOG_SECONDS[marker], invocation_ceiling
+                    )
                     budget.deadline = renewed_deadline
                     control.send_bytes(marker)
                     return renewed_deadline
@@ -750,6 +754,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
         ELT_FILE_WATCHDOG_SECONDS,
         uses_elt_file_deadlines,
     )
+    from app.application.tool_execution_deadline import remaining_invocation_seconds
     from app.infrastructure.chat_stream_lifetime import current_lifetime
     from app.infrastructure.llm.client import capture_worker_llm_scope, record_worker_route_metadata
 
@@ -802,6 +807,8 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
     relay = None
     folder = tempfile.mkdtemp(prefix="xcagi-tool-")
     llm_scope = capture_worker_llm_scope(context)
+    # Trusted in-process budget, never a serialized caller context deadline.
+    invocation_ceiling = time.monotonic() + remaining_invocation_seconds(math.inf)
     process = ctx.Process(
         target=_worker,
         args=(
@@ -819,6 +826,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
             surface_claim,
             memory_limit is not None,
         ),
+        kwargs={"invocation_ceiling": invocation_ceiling},
     )
     armed = False
     early_exit = False
@@ -831,7 +839,7 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
         nonlocal deadline
         if (seconds := ELT_FILE_WATCHDOG_SECONDS.get(marker)) is None:
             return 0.0
-        deadline = time.monotonic() + seconds
+        deadline = min(time.monotonic() + seconds, invocation_ceiling)
         return deadline
 
     file_deadlines = uses_elt_file_deadlines(step.tool_id, step.action, step.params or {})

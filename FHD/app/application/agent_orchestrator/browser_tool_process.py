@@ -52,9 +52,11 @@ def _worker_loop(executor_type, folder, commands, control, start, stream, scope,
             raw = commands.recv_bytes(_PAYLOAD_LIMIT)
             request = json.loads(raw)
             payload = json.loads(request["payload"])
-            if (mcp_session_scope(payload["context"]), payload["step"]["tool_id"]) != (
-                scope,
-                tool_id,
+            # The first boundary invocation restores the caller's SQL namespace.
+            # Its executor checks the durable parent before touching the session;
+            # consulting SQL here before initialization would use a different DB.
+            if payload["step"]["tool_id"] != tool_id or (
+                not first and mcp_session_scope(payload["context"]) != scope
             ):
                 raise ValueError("browser worker scope changed")
             start.clear()
@@ -86,6 +88,7 @@ def _worker_loop(executor_type, folder, commands, control, start, stream, scope,
 class _BrowserWorker:
     def __init__(self, executor, config, scope, tool_id, fingerprint):
         self.executor, self.config = executor, config
+        self.scope, self.tool_id = scope, tool_id
         self.fingerprint = fingerprint
         self.lock, self.cleanup_lock = threading.Lock(), threading.Lock()
         self.lost = False
@@ -229,12 +232,15 @@ class _BrowserWorker:
             raise OSError("browser worker request transport failed")
 
     def call(self, step, context, deadline, business_url, *, readback=False) -> dict[str, Any]:
+        from app.application.tools.mcp.registry import mcp_session_scope
         from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
         from app.infrastructure.llm.client import (
             capture_worker_llm_scope,
             record_worker_route_metadata,
         )
 
+        if (mcp_session_scope(context), step.tool_id) != (self.scope, self.tool_id):
+            return _failure("mcp_session_scope_changed", unknown=False)
         if not self.lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
             return _failure("mcp_session_busy", unknown=False)
         stopped, drained, failed = (threading.Event() for _ in range(3))
@@ -321,7 +327,7 @@ class _BrowserWorker:
 def execute_browser_isolated(
     executor, step, context, deadline: float, config: McpServerConfig
 ) -> dict[str, Any]:
-    from app.application.tools.mcp.registry import mcp_session_scope
+    from app.application.tools.mcp.registry import browser_session_outputs, mcp_session_scope
 
     if getattr(executor, "_tool_cleanup_failed", False):
         return _failure("tool_cleanup_unresolved")
@@ -334,10 +340,13 @@ def execute_browser_isolated(
         fingerprint, business_url = _connection_identity(config, context)
     except BOUNDARY_ERRORS:
         return _failure("tool_scope_unavailable", unknown=False)
-    outputs = context.get("node_outputs")
+    try:
+        outputs = browser_session_outputs(context, step.tool_id)
+    except (PermissionError, ValueError):
+        return _failure("mcp_session_scope_required", unknown=False)
     generations = {
         value["session_id"]
-        for value in (outputs.values() if isinstance(outputs, dict) else [])
+        for value in outputs
         if isinstance(value, dict)
         and value.get("server") == config.name
         and isinstance(value.get("session_id"), str)
