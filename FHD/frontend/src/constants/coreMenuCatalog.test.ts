@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { ADMIN_OPERATOR_VISIBLE_CORE_KEYS } from '../../../admin-console/src/constants/adminOperatorNav'
 import catalog from '../../../config/core_navigation.json'
 import { ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN, CORE_MENU_ITEMS_BASE, INDUSTRY_DELIVERY_CORE_ITEMS, pinMenuKeyFirst, PRIMARY_CHAT_MENU_KEY, sidebarLayoutSeedKeys } from './coreMenuCatalog'
 import { MENU_DEFAULT_NAMES } from '../utils/coreNavLabel'
 import { MOD_MENU_ID_TO_HOST_NAV_KEY } from './genericModPack'
-import { TENANT_SCOPED_BUSINESS_PATHS } from '../utils/roleMenuProfile'
+import { canShowCoreMenuKey, TENANT_SCOPED_BUSINESS_PATHS, type RoleMenuProfile } from '../utils/roleMenuProfile'
 import { SHELL_VIEW_TITLE_BASE } from '../utils/shellMenuLabels'
 
 describe('coreMenuCatalog', () => {
@@ -22,6 +23,14 @@ describe('coreMenuCatalog', () => {
   it('keeps the admin workflow subgroup separate from employee navigation', () => {
     expect(ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN.map(item => item.key)).toEqual([])
     expect(CORE_MENU_ITEMS_BASE.flatMap(item => item.children || []).map(item => item.key)).toEqual(['employee-workbench', 'workflow-employee-space', 'workflow-employee-stitch-full'])
+    const adminProfile: RoleMenuProfile = {
+      role: 'local-admin', canSeeAdminMenus: true, canSeeDeveloperMenus: true,
+      visibleCoreKeys: new Set(ADMIN_OPERATOR_VISIBLE_CORE_KEYS),
+    }
+    expect(canShowCoreMenuKey(adminProfile, 'employee-workflow')).toBe(true)
+    const children = CORE_MENU_ITEMS_BASE.find(item => item.key === 'employee-workflow')?.children || []
+    expect(children.filter(item => canShowCoreMenuKey(adminProfile, item.key)).map(item => item.key)).toEqual(['employee-workbench', 'workflow-employee-space', 'workflow-employee-stitch-full'])
+    expect(canShowCoreMenuKey(adminProfile, 'orders')).toBe(false)
   })
   it('exposes business docking as a core menu item', () => {
     expect(CORE_MENU_ITEMS_BASE).toContainEqual(expect.objectContaining({ key: 'business-docking', name: '数据对接中心' }))
