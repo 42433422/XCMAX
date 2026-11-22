@@ -176,6 +176,36 @@ def test_missing_or_malformed_independent_review_fails_closed(verdict):
     assert completion.call_count == 1 + expected_attempts
 
 
+def test_format_retry_budget_is_shared_across_replanned_candidates():
+    malformed = {"choices": [{"message": {"content": "{incomplete"}}]}
+    missing = _review()
+    missing["violations"] = ["漏掉查询 B2"]
+    completion = Mock(
+        side_effect=[
+            _response(_plan_payload(complete=False)),
+            malformed,
+            _response(missing),
+            _response(_plan_payload()),
+            malformed,
+            _response(_review()),  # Must not be reached after the request's one retry.
+        ]
+    )
+    plan = _planner(completion).plan(
+        "owner", MESSAGE, get_workflow_tool_registry(), {}
+    )
+    assert plan.metadata["planning_rejected"]
+    assert all(node.tool_id == "clarify" for node in plan.nodes)
+    assert completion.call_count == 5
+    prompts = [
+        json.loads(call.kwargs["messages"][1]["content"])
+        for call in completion.call_args_list
+    ]
+    assert prompts[1]["task"] == prompts[2]["task"] == prompts[4]["task"] == "audit_goal_coverage"
+    assert prompts[2]["format_feedback"]
+    assert "format_feedback" not in prompts[4]
+    assert prompts[3]["coverage_feedback"]["error"].startswith("漏掉")
+
+
 def test_malformed_review_retries_the_same_request_without_reusing_raw_model_output():
     bad = {"choices": [{"message": {"content": "private opaque diagnostic {broken"}}]}
     corrected = _response(_review())

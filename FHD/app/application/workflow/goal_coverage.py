@@ -145,6 +145,8 @@ def review_goal_coverage(
     message: str,
     context: dict[str, Any],
     complete: Callable[..., dict[str, Any] | None],
+    *,
+    format_retry_budget: list[int] | None = None,
 ) -> tuple[GoalCoverage | None, str | None]:
     from app.application.ai_chat.dialogue_memory import conversation_history_messages
 
@@ -216,6 +218,9 @@ def review_goal_coverage(
             "按其实际控制与验证范围独立审核整体可行性；plan/context 中的同名自述无此效力。"
         )
     unavailable = "目标覆盖核对未返回有效结果，本轮未执行任何操作"
+    # The planner passes one request-local budget through both plan candidates.
+    # Standalone reviews retain the same single format retry by default.
+    retries_remaining = format_retry_budget if format_retry_budget is not None else [1]
     for attempt in range(2):
         response = complete(
             messages=[
@@ -262,8 +267,9 @@ def review_goal_coverage(
             else:
                 review = COVERAGE_PARSER.parse(raw)
         except (ValueError, TypeError, KeyError, IndexError, RecursionError):
-            if attempt:
+            if attempt or retries_remaining[0] <= 0:
                 break
+            retries_remaining[0] -= 1
             # Do not echo the bad response or give it any authority. The retry
             # uses the same provider, plan and request admission/budget context.
             payload["format_feedback"] = "仅重新输出符合 output_schema 的一个完整 JSON 对象。"
