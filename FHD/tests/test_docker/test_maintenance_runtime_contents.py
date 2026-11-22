@@ -14,13 +14,22 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 
 def test_image_can_register_admin_maintenance_without_source_checkout(tmp_path: Path) -> None:
     image = tmp_path / "image"
-    shutil.copytree(FHD_ROOT / "app", image / "app", ignore=shutil.ignore_patterns("__pycache__"))
     dockerfile = (FHD_ROOT / "ops/docker/Dockerfile.fhd-api").read_text()
     production = dockerfile.split(" AS production", 1)[1]
     for line in production.splitlines():
         if not line.startswith("COPY "):
             continue
         tokens = [token for token in shlex.split(line)[1:] if not token.startswith("--")]
+        # Route registration also imports resources and managed package sources.
+        # Reproduce those existing production COPY directives in the isolated image.
+        if len(tokens) == 2 and tokens[0] in {"app", "resources", "packages", "XCAGI"}:
+            assert tokens[1] == f"/app/{tokens[0]}"
+            shutil.copytree(
+                FHD_ROOT / tokens[0],
+                image / tokens[0],
+                ignore=shutil.ignore_patterns("__pycache__"),
+            )
+            continue
         if tokens[-1] != "/app/scripts/autonomy/":
             continue
         target = image / "scripts/autonomy"

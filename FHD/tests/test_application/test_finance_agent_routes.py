@@ -21,15 +21,20 @@ def _assert_finance_run(repo: InMemoryAgentRunRepository, run_id: str, action: s
     run = repo.get(run_id)
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    # Dispatch-only service mocks do not provide an independent transaction receipt.
+    assert run.status == "blocked"
     assert run.intent == f"finance_{action}"
     assert run.tool_calls[0].tool_id == "finance"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.finance.{action}"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-        event.event_type for event in run.events
-    }
+    assert len(run.tool_calls) == 1
+    assert run.tool_calls[0].output["success"] is True
+    report = run.tool_calls[0].metadata["verification"]
+    assert report["accepted"] is False and report["code"] == "result_verifier_unavailable"
+    events = {event.event_type for event in run.events}
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
 
 
 def test_finance_transaction_mutation_routes_execute_through_agent_orchestrator(

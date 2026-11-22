@@ -123,6 +123,42 @@ def test_plan_graph_log_requires_multistep(tmp_path, monkeypatch):
     assert rec["node_count"] == 2
 
 
+def test_plan_graph_log_redacts_nested_credentials_without_mutating_input(tmp_path, monkeypatch):
+    path = tmp_path / "plans.jsonl"
+    monkeypatch.setenv("XCAGI_PLAN_GRAPH_LOG", str(path))
+    plan = {
+        "plan_id": "original-plan",
+        "nodes": [{"node_id": "n1"}, {"node_id": "n2"}],
+        "todo_steps": ["inspect", "token=private-todo-token"],
+    }
+    extra = {
+        "status": "unknown",
+        "api_key": "private-api-key",
+        "nested": [{"password": "private-password", "authorization": "Bearer private-bearer"}],
+    }
+    original = json.dumps({"plan": plan, "extra": extra})
+    assert append_plan_graph(plan, phase="failed", trace_id="original-trace", extra=extra)
+    text = path.read_text()
+    assert all(
+        secret not in text
+        for secret in (
+            "private-todo-token",
+            "private-api-key",
+            "private-password",
+            "private-bearer",
+        )
+    )
+    record = json.loads(text)
+    assert (record["plan_id"], record["trace_id"], record["phase"], record["node_count"]) == (
+        "original-plan",
+        "original-trace",
+        "failed",
+        2,
+    )
+    assert record["extra"]["status"] == "unknown" and "[REDACTED]" in text
+    assert json.dumps({"plan": plan, "extra": extra}) == original
+
+
 def test_learning_feedback_reward_bounds():
     low = FeedbackEvent(kind="user_correction", success=False).reward()
     high = FeedbackEvent(kind="task_outcome", success=True, confidence=0.9).reward()

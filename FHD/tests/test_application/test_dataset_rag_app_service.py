@@ -18,6 +18,24 @@ from app.infrastructure.rag.dataset_vector_index import (
     DatasetVectorSQLiteIndex,
 )
 from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_dataset_rag_component_boundaries import (
+    _recheck_inline,
+)
+from tests.test_application.test_dataset_rag_component_boundaries import (
+    verified_inline_ingest as verified_inline_ingest,
+)
+
+
+@pytest.fixture
+def dataset_http_actor(trusted_actor, tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "dataset-claims.sqlite"))
+    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
+    monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", None)
+    return trusted_actor(
+        tenant_id=7, role="dataset-writer", permissions=["dataset.read", "dataset.write"]
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -887,33 +905,31 @@ def test_dataset_rebuild_queue_governance_cancel_drain_and_reload(tmp_path: Path
     assert reload_status["rebuild_queue"]["cancelled"] == 1
 
 
-def test_knowledge_v1_dataset_routes_use_dataset_service(tmp_path: Path) -> None:
+def test_knowledge_v1_dataset_routes_use_dataset_service(
+    tmp_path: Path, dataset_http_actor
+) -> None:
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
-    client.headers.update(
-        {
-            "X-Dataset-Actor-ID": "route-test",
-            "X-Dataset-Tenant-ID": "tenant-route",
-            "X-Dataset-Permissions": "dataset.read,dataset.write",
-        }
-    )
+    client.headers.update(dataset_http_actor.headers)
     svc = DatasetRagApplicationService(
         embedder=None,
         allowed_roots=[tmp_path],
         storage_path=tmp_path / "dataset_store.json",
     )
 
-    with patch(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-        return_value=svc,
+    with (
+        patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=svc
+        ),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", svc),
     ):
         ingest = client.post(
             "/api/knowledge/v1/datasets/route-docs/documents",
             json={
                 "text": "Route dataset evidence says XCauto is the server model.",
                 "source": "route-policy.md",
-                "tenant_id": "tenant-route",
+                "tenant_id": "7",
                 "chunk_strategy": "fixed",
                 "metadata": {"doc_type": "route_policy"},
             },
@@ -923,7 +939,7 @@ def test_knowledge_v1_dataset_routes_use_dataset_service(tmp_path: Path) -> None
             json={
                 "query": "What is the server model?",
                 "top_k": 1,
-                "tenant_id": "tenant-route",
+                "tenant_id": "7",
                 "version": "latest",
                 "metadata_filter": {"doc_type": "route_policy"},
                 "rerank": True,
@@ -939,19 +955,19 @@ def test_knowledge_v1_dataset_routes_use_dataset_service(tmp_path: Path) -> None
     assert body["citations"][0]["source_url"] == "route-policy.md"
 
 
-def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> None:
+def test_knowledge_v1_dataset_routes_enforce_access_context(
+    tmp_path: Path, dataset_http_actor, trusted_actor
+) -> None:
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
-    admin_headers = {"X-Dataset-Admin": "true"}
-    tenant_a_read_headers = {
-        "X-Dataset-Tenant-ID": "tenant-a",
-        "X-Dataset-Permissions": "dataset.read",
-    }
-    tenant_a_write_headers = {
-        "X-Dataset-Tenant-ID": "tenant-a",
-        "X-Dataset-Permissions": "dataset.read,dataset.write",
-    }
+    tenant_a_write_headers = dataset_http_actor.headers
+    tenant_a_read_headers = trusted_actor(
+        tenant_id=7, role="dataset-reader", permissions=["dataset.read"]
+    ).headers
+    tenant_b_write_headers = trusted_actor(
+        tenant_id=8, role="dataset-writer", permissions=["dataset.read", "dataset.write"]
+    ).headers
 
     # Spawned tools and direct status routes must use the same real persisted store.
     with (
@@ -960,21 +976,21 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
     ):
         tenant_a = client.post(
             "/api/knowledge/v1/datasets/secure-route/documents",
-            headers=admin_headers,
+            headers=tenant_a_write_headers,
             json={
                 "text": "Tenant A route policy uses XCauto.",
                 "source": "route-policy.md",
-                "tenant_id": "tenant-a",
+                "tenant_id": "7",
                 "chunk_strategy": "fixed",
             },
         )
         client.post(
             "/api/knowledge/v1/datasets/secure-route/documents",
-            headers=admin_headers,
+            headers=tenant_b_write_headers,
             json={
                 "text": "Tenant B route policy mentions DeepSeek.",
                 "source": "route-policy.md",
-                "tenant_id": "tenant-b",
+                "tenant_id": "8",
                 "chunk_strategy": "fixed",
             },
         )
@@ -988,7 +1004,7 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
             headers=tenant_a_read_headers,
             json={
                 "query": "Which model does tenant B mention?",
-                "tenant_id": "tenant-b",
+                "tenant_id": "8",
             },
         )
         read_only_ingest = client.post(
@@ -1007,10 +1023,7 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
         )
         delete_cross = client.delete(
             f"/api/knowledge/v1/datasets/secure-route/documents/{tenant_a.json()['document']['document_id']}",
-            headers={
-                "X-Dataset-Tenant-ID": "tenant-b",
-                "X-Dataset-Permissions": "dataset.read,dataset.write",
-            },
+            headers=tenant_b_write_headers,
         )
 
     assert tenant_a.status_code == 200
@@ -1024,25 +1037,21 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
     assert read_only_ingest.json()["success"] is False
     assert read_only_ingest.status_code == 403
     assert read_only_ingest.json()["required_permission"] == "dataset.write"
-    assert own_ingest.json()["document"]["tenant_id"] == "tenant-a"
+    assert own_ingest.json()["document"]["tenant_id"] == "7"
     assert status.json()["document_count"] == 2
-    assert status.json()["tenant_ids"] == ["tenant-a"]
+    assert status.json()["tenant_ids"] == ["7"]
     assert delete_cross.json()["success"] is False
     assert delete_cross.status_code == 403
     assert delete_cross.json()["error_code"] == "dataset_permission_denied"
 
 
-def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> None:
+def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(
+    tmp_path: Path, dataset_http_actor
+) -> None:
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
-    client.headers.update(
-        {
-            "X-Dataset-Actor-ID": "route-test",
-            "X-Dataset-Tenant-ID": "tenant-route",
-            "X-Dataset-Permissions": "dataset.read,dataset.write",
-        }
-    )
+    client.headers.update(dataset_http_actor.headers)
 
     # Spawned tools and direct status routes must use the same real persisted store.
     with (
@@ -1054,7 +1063,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
             json={
                 "text": "Route policy v1 says local model.",
                 "source": "route-policy.md",
-                "tenant_id": "tenant-route",
+                "tenant_id": "7",
                 "chunk_strategy": "fixed",
                 "metadata": {"doc_type": "route_policy"},
             },
@@ -1064,7 +1073,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
             json={
                 "text": "Route policy v2 says XCauto model.",
                 "source": "route-policy.md",
-                "tenant_id": "tenant-route",
+                "tenant_id": "7",
                 "chunk_strategy": "fixed",
                 "metadata": {"doc_type": "route_policy"},
             },
@@ -1073,7 +1082,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
             "/api/knowledge/v1/datasets/route-versioned/versions/diff",
             json={
                 "source": "route-policy.md",
-                "tenant_id": "tenant-route",
+                "tenant_id": "7",
                 "from_version": "1",
                 "to_version": "latest",
             },
@@ -1082,7 +1091,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
             "/api/knowledge/v1/datasets/route-versioned/versions/rollback",
             json={
                 "source": "route-policy.md",
-                "tenant_id": "tenant-route",
+                "tenant_id": "7",
                 "target_version": "1",
                 "metadata": {"rollback_reason": "route test"},
             },
@@ -1090,7 +1099,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
         rebuild = client.post(
             "/api/knowledge/v1/datasets/route-versioned/index/rebuild",
             json={
-                "tenant_id": "tenant-route",
+                "tenant_id": "7",
                 "metadata_filter": {"doc_type": "route_policy"},
                 "background": False,
             },
@@ -1117,7 +1126,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
 
 
 def test_knowledge_v1_dataset_rebuild_cancel_route(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dataset_http_actor
 ) -> None:
     app = FastAPI()
     app.include_router(knowledge_router)
@@ -1135,10 +1144,7 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(
     )
     assert previous.ingest_document(dataset_id="previous", text="Earlier dataset")["success"]
     monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", previous)
-    headers = {
-        "X-Dataset-Tenant-ID": "tenant-route",
-        "X-Dataset-Permissions": "dataset.read,dataset.write",
-    }
+    headers = dataset_http_actor.headers
 
     with (
         patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "dataset_store.json")),
@@ -1187,8 +1193,156 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(
     assert dataset_rag_module._dataset_rag_app_service is previous
 
 
+@pytest.fixture
+def verified_rebuild(verified_inline_ingest):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    actor, service, repo, _ = verified_inline_ingest
+    orchestrator = AgentOrchestrator(repository=repo)
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="Rebuild the approved dataset",
+        plan=PlanGraph(
+            plan_id="verified-rebuild",
+            intent="rebuild",
+            nodes=[
+                WorkflowNode(
+                    node_id="rebuild",
+                    tool_id="dataset_rag",
+                    action="rebuild_index",
+                    params={"dataset_id": "verified", "background": False},
+                )
+            ],
+        ),
+        runtime_context=actor.context,
+    )
+    if run.status == "waiting_user":
+        run = orchestrator.continue_run(
+            run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
+        )
+    assert run.status == "completed", run.error
+    assert run.tool_calls[0].output["job"]["status"] == "completed"
+    return actor, service, repo, run
+
+
+def test_rebuild_readback_is_pure_and_preserves_original_job(verified_rebuild, monkeypatch):
+    import copy
+
+    _actor, service, _repo, run = verified_rebuild
+    original = copy.deepcopy(run.tool_calls[0].output)
+    stored = service._storage_path.read_bytes()
+    for target, method in (
+        (service, "start_rebuild_index"),
+        (service._repository, "_load_persisted_state"),
+        (service._repository, "_persist_locked"),
+        (service._vector, "_sync_vector_index_locked"),
+    ):
+        monkeypatch.setattr(target, method, lambda *args, **kwargs: pytest.fail("readback wrote"))
+    report = _recheck_inline(run)
+    assert report["accepted"] is True
+    assert report["checks"][0]["evidence"]["scope"] == "rebuild_job_state"
+    assert service._storage_path.read_bytes() == stored
+    assert run.tool_calls[0].output == original and len(run.tool_calls) == 1
+
+
+@pytest.mark.parametrize(
+    "change", ["missing_claim", "tenant", "metadata_filter", "status", "read_permission"]
+)
+def test_rebuild_readback_rejects_changed_or_missing_authority(verified_rebuild, change):
+    import copy
+    import json
+    import os
+    import sqlite3
+
+    actor, service, _repo, run = verified_rebuild
+    original = copy.deepcopy(run.tool_calls[0].output)
+    if change == "missing_claim":
+        with sqlite3.connect(os.environ["XCAGI_TOOL_IDEMPOTENCY_PATH"]) as db:
+            db.execute("delete from tool_idempotency")
+    elif change == "read_permission":
+        from app.db.models.permission import Role
+
+        with actor.factory.begin() as db:
+            role = db.query(Role).filter_by(name="knowledge-writer").one()
+            role.permissions = [item for item in role.permissions if item.code != "dataset.read"]
+    else:
+        stored = json.loads(service._storage_path.read_text())
+        job = stored["datasets"]["verified"]["rebuild_jobs"][original["job"]["job_id"]]
+        if change == "tenant":
+            job["tenant_id"] = "foreign"
+        elif change == "metadata_filter":
+            job["metadata_filter"] = {"source": "foreign"}
+        else:
+            job["status"] = "failed"
+        service._storage_path.write_text(json.dumps(stored))
+    stored = service._storage_path.read_bytes()
+    report = _recheck_inline(run)
+    assert report["accepted"] is False, report
+    assert service._storage_path.read_bytes() == stored
+    assert run.tool_calls[0].output == original and len(run.tool_calls) == 1
+
+
+@pytest.mark.parametrize("borrow_original", [False, True])
+def test_rebuild_admission_does_not_claim_completion_or_borrow_an_old_job(
+    verified_rebuild, monkeypatch, borrow_original
+):
+    import copy
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    actor, service, repo, original = verified_rebuild
+    if borrow_original:
+        monkeypatch.setattr(
+            service,
+            "start_rebuild_index",
+            lambda **kwargs: copy.deepcopy(original.tool_calls[0].output),
+        )
+    monkeypatch.setattr("app.domain.app_pure.dataset_rag_queue.ensure_host_worker", lambda: None)
+    orchestrator = AgentOrchestrator(repository=repo)
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="Admit another rebuild",
+        plan=PlanGraph(
+            plan_id="new-rebuild-admission",
+            intent="rebuild",
+            nodes=[
+                WorkflowNode(
+                    node_id="admit",
+                    tool_id="dataset_rag",
+                    action="rebuild_index",
+                    params={"dataset_id": "verified", "background": True},
+                )
+            ],
+        ),
+        runtime_context=actor.context,
+    )
+    if run.status == "waiting_user":
+        run = orchestrator.continue_run(
+            run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
+        )
+    report = run.tool_calls[0].metadata["verification"]
+    if borrow_original:
+        assert run.status == "blocked" and report["accepted"] is False
+        assert report["code"] == "result_rebuild_identity_mismatch"
+    else:
+        assert run.status == "completed" and report["accepted"] is True
+        evidence = report["checks"][0]["evidence"]
+        assert evidence["scope"] == "task_admission"
+        assert evidence["admission_verified"] is True
+        assert evidence["business_effect_verified"] is False
+        assert run.final_output["business_result"]["success"] is False
+        assert (
+            run.final_output["business_result"]["evidence"]["admitted_tasks"][0]["source"]
+            == "dataset_rebuild_store"
+        )
+
+
 @pytest.mark.parametrize("entry", ["http", "agent"])
-def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, entry) -> None:
+def test_rebuild_survives_tool_exit_and_is_owned_by_host(
+    tmp_path, monkeypatch, entry, dataset_http_actor
+) -> None:
     import multiprocessing
     import threading
     import time
@@ -1198,12 +1352,9 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app)
-    headers = {
-        "X-Dataset-Tenant-ID": "host-tenant",
-        "X-Dataset-Permissions": "dataset.read,dataset.write",
-    }
+    headers = dataset_http_actor.headers
     original_children = {p.pid for p in multiprocessing.active_children()}
-    assert client.post(
+    ingested = client.post(
         "/api/knowledge/v1/datasets/host-queue/documents",
         headers=headers,
         json={
@@ -1211,7 +1362,9 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
             "source": "host.md",
             "chunk_strategy": "fixed",
         },
-    ).json()["success"]
+    ).json()
+    assert ingested["success"] is True, ingested
+    assert ingested["document"]["tenant_id"] == str(dataset_http_actor.tenant_id)
     service = _host_service()
     started, release = threading.Event(), threading.Event()
 
@@ -1242,8 +1395,10 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
                     params={"dataset_id": "host-queue", "background": True},
                 ),
                 runtime_context={
+                    **dataset_http_actor.context,
                     "dataset_access_context": {
-                        "tenant_id": "host-tenant",
+                        "actor_id": str(dataset_http_actor.user_id),
+                        "tenant_id": str(dataset_http_actor.tenant_id),
                         "permissions": ["dataset.read", "dataset.write"],
                     },
                 },

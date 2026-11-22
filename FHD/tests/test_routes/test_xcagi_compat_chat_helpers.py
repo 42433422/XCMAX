@@ -36,6 +36,66 @@ def _sse_payloads(chunks):
     return [json.loads(c.decode("utf-8")[len("data: ") :].strip()) for c in chunks]
 
 
+@pytest.mark.parametrize("entry", ["admission", "compat_sse", "conversation_sse"])
+@pytest.mark.parametrize("with_file", [False, True])
+@pytest.mark.parametrize(
+    "message",
+    [
+        "解释一下向量数据库与普通数据库的区别",
+        "Python 列表索引超出范围怎么修复？请给示例代码",
+        "什么是 embedding？",
+        "Explain semantic search in plain language",
+        "不要建立索引，只解释它的作用",
+        "给这个 Excel 建立向量索引",
+    ],
+)
+def test_vector_words_reach_model_selection_without_eager_tool_execution(
+    entry, with_file, message, monkeypatch
+):
+    from app.application import planner_compat_service as compat
+    from app.application.planner_compat.protocols import ChatTurn
+    from app.fastapi_routes.domains.conversation import helpers
+
+    surface = {"admission": compat, "compat_sse": ch, "conversation_sse": helpers}[entry]
+    module = compat if entry == "admission" else ch
+    context = {"excel_file_path": "/previous/报价.xlsx"} if with_file else {}
+    request = MagicMock(headers={}, cookies={})
+    body = ch.XcagiCompatChatBody(message=message, context=context, mode="online")
+    service = MagicMock()
+    service.process_chat.return_value = {
+        "success": True,
+        "response": "模型已接收原始问题",
+        "data": {"action": "model_reply"},
+    }
+    execute = MagicMock(side_effect=AssertionError("chat admission must not execute tools"))
+    monkeypatch.setattr("app.mod_sdk.planner_tools.resolve_planner_tool_executor", execute)
+    monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
+    monkeypatch.setattr(module, "_ensure_chat_db_read_authorized", lambda *a, **kw: (True, None))
+    monkeypatch.setattr(module, "_message_requires_db_read_token", lambda _message: False)
+    monkeypatch.setattr(module, "planner_workflow_interrupt_reply", lambda _message: None)
+    monkeypatch.setattr(module, "runtime_context_with_tier", lambda context, _tier: context)
+    monkeypatch.setattr(module, "_runtime_context_with_authenticated_actor", lambda _r, c: c)
+    monkeypatch.setattr(
+        "app.application.ai_chat.chat_evidence.prepare_chat_evidence", lambda _r, c, _m: c
+    )
+    if entry == "admission":
+        turn = ChatTurn(
+            body=body, message=message, context=context, kitten_extra={}, channel="compat_chat"
+        )
+        assert compat._admission().check(request, turn).payload is None
+    else:
+        events = _sse_payloads(
+            list(surface._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+        )
+        assert not [event for event in events if event.get("type") == "error"]
+        assert any(event.get("type") == "done" for event in events)
+        service.process_chat.assert_called_once()
+        call = service.process_chat.call_args.kwargs
+        assert call["message"] == message
+        assert call["context"].get("excel_file_path") == context.get("excel_file_path")
+    execute.assert_not_called()
+
+
 def test_runtime_context_uses_authenticated_session_actor(trusted_actor):
     actor = trusted_actor(user_id=17, tenant_id=7)
     context = ch._runtime_context_with_authenticated_actor(
@@ -195,7 +255,6 @@ def test_stream_controls_and_business_writes_always_use_stateful_mainline(messag
         patch.object(ch, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(ch, "_message_requires_db_read_token", return_value=False),
         patch.object(ch, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(ch, "_ensure_vector_index_if_needed", return_value=None),
         patch(
             "app.fastapi_routes.xcagi_compat_chat_stream._classify_and_submit_client_issue",
             return_value=None,
@@ -612,28 +671,6 @@ class TestMergeRuntimeContextWithMessagePaths:
         assert len(ctx["excel_file_paths"]) >= 1
 
 
-# ---------------------------------------------------------------------------
-# _looks_like_vector_request
-# ---------------------------------------------------------------------------
-
-
-class TestLooksLikeVectorRequest:
-    def test_vector_keyword(self):
-        assert ch._looks_like_vector_request("建立向量索引") is True
-
-    def test_embedding_keyword(self):
-        assert ch._looks_like_vector_request("embedding search") is True
-
-    def test_semantic_search(self):
-        assert ch._looks_like_vector_request("semantic search") is True
-
-    def test_normal_message(self):
-        assert ch._looks_like_vector_request("今天天气") is False
-
-    def test_empty(self):
-        assert ch._looks_like_vector_request("") is False
-
-
 @pytest.mark.parametrize(
     "helper,key,value,expected",
     [
@@ -698,6 +735,30 @@ class TestSseEventLine:
         assert result.startswith(b"data: ")
         assert result.endswith(b"\n\n")
         assert b"hello" in result
+
+    def test_trace_is_shared_without_promoting_done_to_success(self):
+        import json
+
+        from app.neuro_bus.tracer import TraceContext
+
+        payload = {"type": "done", "result": {"execution_state": "waiting_approval"}}
+        with TraceContext("a" * 32, "b" * 16, request_id="request-stream"):
+            encoded = json.loads(ch._sse_event_line(payload)[6:])
+        assert encoded["trace_id"] == "a" * 32
+        assert encoded["span_id"] == "b" * 16
+        assert encoded["request_id"] == "request-stream"
+        assert encoded["result"] == payload["result"]
+        assert "trace_id" not in payload
+
+    def test_replayed_trace_is_not_mixed_with_current_request_span(self):
+        import json
+
+        from app.neuro_bus.tracer import TraceContext
+
+        payload = {"type": "tool_call", "trace_id": "c" * 32, "duration_ms": 0}
+        with TraceContext("c" * 32, "b" * 16, request_id="new-request"):
+            encoded = json.loads(ch._sse_event_line(payload)[6:])
+        assert encoded == payload
 
 
 # ---------------------------------------------------------------------------

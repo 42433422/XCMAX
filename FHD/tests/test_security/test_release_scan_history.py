@@ -28,10 +28,10 @@ def test_full_scan_history_contract_and_generated_mirror():
     checkout, guard = steps[:2]
     assert checkout["uses"] == "actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
     assert checkout["with"]["fetch-depth"] == 0
-    assert checkout["with"]["ref"] == "${{ inputs.release_sha }}"
+    assert checkout["with"]["ref"] == "${{ inputs.release_sha || 'main' }}"
     assert checkout["with"]["persist-credentials"] is False
     assert guard["id"] == "scan-source"
-    assert guard["env"]["RELEASE_SHA"] == "${{ inputs.release_sha }}"
+    assert guard["env"]["RELEASE_SHA"] == "${{ inputs.release_sha || '' }}"
     assert not guard.get("continue-on-error", False)
     assert "secrets." not in yaml.safe_dump(steps[:2])
     for step in steps[2:]:
@@ -46,11 +46,30 @@ def test_full_scan_history_contract_and_generated_mirror():
     assert mirror.splitlines(keepends=True)[2:] == source_lines
 
 
+def test_trend_artifacts_cannot_be_downloaded_as_release_clearance():
+    job = yaml.safe_load(SOURCE.read_text(encoding="utf-8"))["jobs"]["scan-and-gate"]
+    assert job["name"] == (
+        "${{ github.event_name == 'schedule' && 'security-trend-check' || 'security-release-gate' }}"
+    )
+    uploads = [
+        step for step in job["steps"] if step.get("uses", "").startswith("actions/upload-artifact@")
+    ]
+    for kind, upload in zip(("reports", "native"), uploads, strict=True):
+        assert upload["with"]["name"] == (
+            "${{ github.event_name == 'schedule' && 'xcagi-security-trend-"
+            + kind
+            + "' || 'xcagi-security-release-"
+            + kind
+            + "' }}"
+        )
+
+
 @pytest.mark.parametrize(
     "depth,case",
     [
         (None, "main"),
         (None, "ancestor"),
+        (None, "auto"),
         (None, "unmerged"),
         (1, "main"),
         (None, "wrong_sha"),
@@ -88,7 +107,7 @@ def test_release_checkout_guard_rejects_untrusted_history(tmp_path, depth, case)
         _git(clone, "update-ref", "-d", "refs/remotes/origin/main")
     head = _git(clone, "rev-parse", "HEAD")
     lock = next(s for s in _steps() if s.get("name") == "Lock scan checkout to exact SHA")
-    release_sha = ancestor if case == "wrong_sha" else head
+    release_sha = "" if case == "auto" else (ancestor if case == "wrong_sha" else head)
     if case == "invalid_sha":
         release_sha = "$(touch guard-injection)"
     evidence = tmp_path / "evidence"
@@ -104,12 +123,14 @@ def test_release_checkout_guard_rejects_untrusted_history(tmp_path, depth, case)
             "GITHUB_REF": "refs/heads/candidate" if case == "nonmain_ref" else "refs/heads/main",
             "GITHUB_SERVER_URL": tmp_path.as_uri(),
             "GITHUB_REPOSITORY": "other" if case == "wrong_repository" else "origin",
+            "GITHUB_OUTPUT": str(tmp_path / "github_output"),
         },
     )
-    accepted = depth is None and case in {"main", "ancestor"}
+    accepted = depth is None and case in {"main", "ancestor", "auto"}
     assert (result.returncode == 0) is accepted, result.stderr
     assert evidence.exists() is accepted
     assert not (clone / "guard-injection").exists()
     if result.returncode == 0:
         assert not (clone / "removed.txt").exists()
+        assert (tmp_path / "github_output").read_text(encoding="utf-8").strip() == f"sha={head}"
         assert marker in _git(clone, "log", "-p", "--full-history", "HEAD")

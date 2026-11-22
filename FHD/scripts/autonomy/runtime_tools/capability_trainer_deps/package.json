@@ -1,0 +1,8 @@
+{
+  "name": "xcmax-capability-trainer-deps",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "0.0.83",
+    "promptfoo": "0.126.0"
+  }
+}

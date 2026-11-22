@@ -18,6 +18,65 @@ class ClarificationAnswerError(ValueError):
     """The answer does not resolve the currently pending input request."""
 
 
+def _control_binding(run: AgentRun, step: AgentStep) -> dict[str, Any]:
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.result_verification import _scope
+
+    return {
+        "scope": _scope(run, run.metadata.get("runtime_context") or {}),
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+        "tool_id": step.tool_id,
+        "action": step.action,
+        "input_sha256": canonical_hash(step.params),
+        "output_sha256": canonical_hash(step.output),
+    }
+
+
+def control_verification_report(run: AgentRun, step: AgentStep) -> dict[str, Any] | None:
+    """An original host answer is a control decision, never a business receipt."""
+    if (
+        (step.tool_id, step.action, step.status) != ("clarify", "ask", "completed")
+        or step.output.get("answer_confirmed") is not True
+        or any(call.step_id == step.step_id for call in run.tool_calls)
+    ):
+        return None
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.result_verification import PROTOCOL
+
+    try:
+        expected = _control_binding(run, step)
+        for event in reversed(run.events):
+            if (
+                event.run_id == run.run_id
+                and event.event_type
+                in {"step.plan_confirmation_answered", "step.clarification_answered"}
+                and event.data.get("answered_by") == run.user_id
+                and expected in (event.data.get("control_receipts") or [])
+            ):
+                return {
+                    "protocol": PROTOCOL,
+                    "status": "not_required",
+                    "accepted": True,
+                    "code": "host_control_answer_confirmed",
+                    "checks": [
+                        {
+                            "check_id": "original_control_answer",
+                            "status": "passed",
+                            "source": "host_confirmation_event",
+                            "evidence": {
+                                "event_id": event.event_id,
+                                "binding_sha256": canonical_hash(expected),
+                                "business_effect_verified": False,
+                            },
+                        }
+                    ],
+                }
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return None
+
+
 def find_waiting_step(run: AgentRun, *, approved_step_id: str = "") -> AgentStep | None:
     """Select the pending interaction, optionally constrained to an approved step."""
     wanted = str(approved_step_id or "").strip()
@@ -99,7 +158,12 @@ def apply_plan_confirmation(run: AgentRun, *, step_id: str, confirmed: bool) -> 
     run.add_event(
         "step.plan_confirmation_answered",
         "计划级确认已答复",
-        {"step_id": step.step_id, "confirmed": bool(confirmed)},
+        {
+            "step_id": step.step_id,
+            "confirmed": bool(confirmed),
+            "answered_by": run.user_id,
+            "control_receipts": [_control_binding(run, step)] if confirmed else [],
+        },
     )
 
 
@@ -353,6 +417,7 @@ def apply_clarification_answer(
         "requires_confirmation": False,
         "confirmed": bool(confirmed),
     }
+    answered_steps = [step]
     for other in run.steps:
         detail = other.params.get("clarification") or {}
         if (
@@ -373,6 +438,7 @@ def apply_clarification_answer(
             if not unresolved:
                 other.status = "completed"
                 other.output = {"answer_confirmed": True, "resolved_by_step_id": step.step_id}
+                answered_steps.append(other)
     run.final_output = {}
     run.error = ""
     run.add_event(
@@ -383,6 +449,8 @@ def apply_clarification_answer(
             "target_node_id": target.node_id,
             "fields": sorted(parameters),
             "plan_sha256": plan_fingerprint(candidate_plan),
+            "answered_by": run.user_id,
+            "control_receipts": [_control_binding(run, answered) for answered in answered_steps],
         },
     )
 

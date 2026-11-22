@@ -72,6 +72,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -239,6 +240,7 @@ class GitHubClient:
     ) -> list[dict[str, Any]]:
         """Read the complete REST collection, or fail closed at the API bound."""
         items: list[dict[str, Any]] = []
+        expected_total, ids = None, set()
         for page in range(1, API_MAX_PAGES + 1):
             response = self.client.get(
                 f"{GITHUB_API}/repos/{self.repo}/{path}",
@@ -252,11 +254,29 @@ class GitHubClient:
             batch = payload.get(key) if key else payload
             if not isinstance(batch, list) or any(not isinstance(x, dict) for x in batch):
                 raise ValueError(f"invalid_collection:{path}")
+            if key == "workflow_runs":
+                for item in batch:
+                    identity = item.get("id")
+                    if type(identity) is not int or identity < 1 or identity in ids:
+                        raise ValueError(f"invalid_collection_identity:{path}")
+                    ids.add(identity)
             items.extend(batch)
             total = payload.get("total_count") if isinstance(payload, dict) else None
+            if total is not None:
+                if (
+                    type(total) is not int
+                    or total < 0
+                    or (expected_total is not None and total != expected_total)
+                ):
+                    raise ValueError(f"collection_changed:{path}")
+                expected_total = total
+                if len(items) > total:
+                    raise ValueError(f"incomplete_collection:{path}")
             has_next = "next" in response.links
-            if not has_next and (total is not None and len(items) >= total or len(batch) < 100):
-                if total is not None and len(items) < total:
+            if not has_next and (
+                expected_total is not None and len(items) == expected_total or len(batch) < 100
+            ):
+                if expected_total is not None and len(items) != expected_total:
                     raise ValueError(f"incomplete_collection:{path}")
                 return items
         raise ValueError(f"pagination_limit:{path}")
@@ -570,6 +590,10 @@ class GitHubClient:
                 or state.get("pr") != pr_number
                 or not _valid_sha(state.get("head_sha", ""))
                 or set(state.get("workflows", {})) != set(POST_MERGE_WORKFLOWS)
+                or (
+                    state.get("request_id")
+                    and str(uuid.UUID(state["request_id"])) != state["request_id"]
+                )
             ):
                 raise ValueError("invalid_delivery_receipt")
             state["comment_id"] = comment["id"]
@@ -607,6 +631,12 @@ class GitHubClient:
                 "version": 1,
                 "pr": pr.number,
                 "head_sha": pr.head_sha,
+                "request_id": str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        f"https://github.com/{self.repo}/pull/{pr.number}@{pr.head_sha}",
+                    )
+                ),
                 "merge_sha": "",
                 "created_at": time.time(),
                 "status": "pending",
@@ -649,29 +679,49 @@ class GitHubClient:
             if "pull_request" in item
         ]
 
-    @staticmethod
-    def _delivery_run_matches(run: dict[str, Any], workflow: str, sha: str) -> bool:
+    def _delivery_run_matches(
+        self, run: dict[str, Any], workflow: str, sha: str, request_id: str = ""
+    ) -> bool:
         prefix = POST_MERGE_RUN_TITLES[POST_MERGE_WORKFLOWS.index(workflow)]
+        title = f"{prefix} {sha}" + (f" [delivery:{request_id}]" if request_id else "")
         return (
-            run.get("event") == "workflow_dispatch"
+            type(run.get("id")) is int
+            and run["id"] > 0
+            and type(run.get("run_attempt")) is int
+            and run["run_attempt"] > 0
+            and _valid_sha(run.get("head_sha"))
+            and (run.get("repository") or {}).get("full_name", "").casefold()
+            == self.repo.casefold()
+            and run.get("event") == "workflow_dispatch"
             and run.get("head_branch") == "main"
             and str(run.get("path", "")).split("@", 1)[0] == f".github/workflows/{workflow}"
-            and str(run.get("display_title", "")).strip() == f"{prefix} {sha}"
+            and str(run.get("display_title", "")).strip() == title
         )
 
     def find_delivery_run(
-        self, workflow: str, sha: str, receipt: dict[str, Any], since: float
+        self,
+        workflow: str,
+        sha: str,
+        receipt: dict[str, Any],
+        since: float,
+        request_id: str = "",
     ) -> dict[str, Any] | None:
         if receipt.get("run_id"):
             response = self.client.get(
                 f"{GITHUB_API}/repos/{self.repo}/actions/runs/{int(receipt['run_id'])}"
             )
-            if response.status_code != 404:
-                response.raise_for_status()
-                run = response.json()
-                if not self._delivery_run_matches(run, workflow, sha):
-                    raise ValueError("delivery_run_identity_mismatch")
-                return run
+            if response.status_code == 404:
+                return None  # An observed run cannot be replaced by a different execution.
+            response.raise_for_status()
+            run = response.json()
+            if (
+                not self._delivery_run_matches(run, workflow, sha, request_id)
+                or run["id"] != receipt["run_id"]
+                or receipt.get("dispatch_head_sha", run["head_sha"]) != run["head_sha"]
+                or run["run_attempt"] < receipt.get("run_attempt", 1)
+            ):
+                raise ValueError("delivery_run_identity_mismatch")
+            return run
         runs = self._pages(
             f"actions/workflows/{workflow}/runs",
             key="workflow_runs",
@@ -681,20 +731,12 @@ class GitHubClient:
                 "created": ">=" + datetime.fromtimestamp(since, UTC).isoformat(),
             },
         )
-        matched = [run for run in runs if self._delivery_run_matches(run, workflow, sha)]
-        # Never dispatch over an already observed active or successful run.
-        return (
-            max(
-                matched,
-                key=lambda run: (
-                    run.get("conclusion") == "success",
-                    run.get("status") != "completed",
-                    run.get("id", 0),
-                ),
-            )
-            if matched
-            else None
-        )
+        matched = [
+            run for run in runs if self._delivery_run_matches(run, workflow, sha, request_id)
+        ]
+        if len(matched) > 1:
+            raise ValueError("delivery_run_identity_ambiguous")
+        return matched[0] if matched else None
 
     def reconcile_delivery(self, pr_number: int, *, expected_merge_sha: str = "") -> str:
         """Recover after merge/POST/crash; serialized by the existing workflow concurrency."""
@@ -731,7 +773,10 @@ class GitHubClient:
                 try:
                     self._reconcile_delivery_workflows(state, _parse_iso(pr["merged_at"]))
                 except ValueError as exc:
-                    if str(exc) != "delivery_run_identity_mismatch":
+                    if str(exc) not in {
+                        "delivery_run_identity_mismatch",
+                        "delivery_run_identity_ambiguous",
+                    }:
                         raise
                     state.update(status="blocked", error=str(exc))
         self.save_delivery(state)
@@ -755,12 +800,15 @@ class GitHubClient:
             if now - merged_at >= DELIVERY_MAX_AGE_SECONDS:
                 receipt.update(status="blocked", error="delivery_deadline_exceeded")
                 continue
-            run = self.find_delivery_run(workflow, state["merge_sha"], receipt, merged_at)
+            run = self.find_delivery_run(
+                workflow, state["merge_sha"], receipt, merged_at, state.get("request_id", "")
+            )
             if run:
                 receipt.update(
                     run_id=run["id"],
                     run_url=run.get("html_url", ""),
                     dispatch_head_sha=run.get("head_sha", ""),
+                    run_attempt=run["run_attempt"],
                 )
                 receipt["status"] = (
                     ("succeeded" if run.get("conclusion") == "success" else "failed")
@@ -805,7 +853,15 @@ class GitHubClient:
             self.save_delivery(state)
             try:
                 ok, reason, run_id = self.dispatch_workflow(
-                    workflow, inputs={"release_sha": state["merge_sha"]}
+                    workflow,
+                    inputs={
+                        "release_sha": state["merge_sha"],
+                        **(
+                            {"delivery_request_id": state["request_id"]}
+                            if state.get("request_id")
+                            else {}
+                        ),
+                    },
                 )
                 receipt.update(
                     status=(

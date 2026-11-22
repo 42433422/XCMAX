@@ -126,6 +126,7 @@ _SCENARIO_KEYWORDS: dict[str, tuple[str, ...]] = {
     "knowledge": ("知识库", "资料", "文档库", "dataset", "检索资料"),
     "employee": ("员工", "派活", "专员", "助手", "交接", "让谁", "哪个员工"),
     "memory": ("记住", "偏好", "习惯", "上次说"),
+    "image": ("生成图片", "画一张", "画个", "画一个", "生图", "出图", "绘制图片"),
     "reset": ("初始化", "全部业务数据", "业务数据清空", "清空业务数据", "重置业务"),
 }
 
@@ -181,22 +182,72 @@ _DOCUMENT_TOOL_PREFIXES = (
     "csv-",
 )
 
-# 始终保留的核心工具（裁剪时不受影响，按前缀匹配）。
+# 始终保留的通用工具（与具体业务域无关，按前缀匹配）。
 _CORE_TOOL_PREFIXES = (
     "conversation",
-    "business_db",
-    "employee",
-    "list_",
-    "sales",
-    "products",
-    "customers",
-    "materials",
-    "shipment_records",
-    "reports",
-    "dataset_rag",
     "clarify",
-    "excel_analysis",
+    "image_generate",
+    "list_",
 )
+
+# 意图 → 工具域：命中意图时只注入对应业务工具，避免全量目录挤占上下文。
+_INTENT_TOOL_DOMAINS: dict[str, tuple[str, ...]] = {
+    "customer": ("customers", "sales", "shipment_orders"),
+    "sales": (
+        "sales",
+        "shipment_orders",
+        "shipment_records",
+        "products",
+        "materials",
+        "finance",
+        "print",
+        "printer_list",
+    ),
+    "database": (
+        "customers",
+        "products",
+        "materials",
+        "inventory",
+        "purchase",
+        "sales",
+        "finance",
+        "mrp",
+        "shipment_orders",
+        "shipment_records",
+        "suppliers",
+        "business_db",
+        "reports",
+        "catalog_products_v1",
+    ),
+    "document": (
+        "excel_analysis",
+        "excel_analyzer",
+        "excel_toolkit",
+        "excel_import",
+        "excel_vector_index",
+        "elt_import",
+        "import_excel_to_database",
+        "generate_office_document",
+        "document_template",
+        "template_preview",
+        "label_template_generator",
+        "ocr",
+        "print",
+        "printer_list",
+        "unit_products_import",
+        "template_extract",
+        "business_docking",
+    ),
+    "knowledge": ("dataset_rag",),
+    "employee": ("employee",),
+    "memory": ("memory_v2",),
+    "image": ("image_generate",),
+    "reset": ("system_maintenance", "customers", "products", "materials", "shipment_records"),
+}
+
+
+def _matches_domain(tool_id: str, domains: set[str]) -> bool:
+    return any(tool_id == domain or tool_id.startswith(f"{domain}_") for domain in domains)
 
 
 def is_employee_tool(tool_id: str) -> bool:
@@ -243,6 +294,9 @@ def detect_intents(message: str, context: dict[str, Any] | None = None) -> set[s
     for intent, keywords in _SCENARIO_KEYWORDS.items():
         if any(keyword.lower() in text for keyword in keywords):
             intents.add(intent)
+    # 「生成一张…图片」这类语序不连续命中关键词，按"图片 + 生成动作"共现补充。
+    if "图片" in text and any(action in text for action in ("生成", "画", "绘制", "出图")):
+        intents.add("image")
     intents.update(_semantic_intents(text))
     return intents
 
@@ -288,6 +342,9 @@ def select_tools_for_prompt(
     if "employee" in intents:
         return tool_registry
     allow_document = "document" in intents
+    allowed_domains: set[str] = set()
+    for intent in intents:
+        allowed_domains.update(_INTENT_TOOL_DOMAINS.get(intent, ()))
     filtered: dict[str, Any] = {}
     for tool_id, spec in tool_registry.items():
         key = str(tool_id or "")
@@ -298,8 +355,18 @@ def select_tools_for_prompt(
             continue
         if not allow_document and key.startswith(_DOCUMENT_TOOL_PREFIXES):
             continue
+        if allowed_domains and not _matches_domain(key, allowed_domains):
+            continue
         filtered[tool_id] = spec
-    return filtered or tool_registry
+    if filtered:
+        return filtered
+    # 已知意图但没有任何工具命中时，回退也只保留通用工具与非文档工具，
+    # 避免把仅因注册表较窄而被筛掉的表格/导入工具重新注入。
+    return {
+        key: spec
+        for key, spec in tool_registry.items()
+        if _is_core_tool(key) or not key.startswith(_DOCUMENT_TOOL_PREFIXES)
+    }
 
 
 def select_rules_for_prompt(

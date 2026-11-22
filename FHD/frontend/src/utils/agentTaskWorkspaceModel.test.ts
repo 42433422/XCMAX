@@ -117,7 +117,8 @@ describe('groupAgentRunsIntoTasks', () => {
       ['completed', 'success', '任务完成'],
       ['failed', 'failed', '执行失败'],
       ['cancelled', 'cancelled', '已中断'],
-      ['future_state', 'queued', '状态待同步'],
+      ['unknown', 'blocked', '结果待核对，请查看原任务回执'],
+      ['future_state', 'blocked', '状态待同步'],
     ] as const
     const runs = cases.map(([status], index) =>
       run({
@@ -141,6 +142,15 @@ describe('groupAgentRunsIntoTasks', () => {
       expect(task?.status).toBe(expectedStatus)
       expect(task?.stage).toBe(expectedStage)
     })
+  })
+
+  it('keeps an uncertain completion out of success and disables replay controls', () => {
+    const [task] = groupAgentRunsIntoTasks([run({
+      final_output: { node_outputs: { write: { success: true, requires_reconciliation: true } } },
+    })])
+    expect(task.status).toBe('blocked')
+    expect(task.payload).toMatchObject({ rawRunStatus: 'unknown', capabilities: { retry: false, approve: false, evidence: true } })
+    expect(task.summary).not.toContain('已完成')
   })
 
   it('uses safe runtime fallbacks, keeps evidence, and ignores invalid run identities', () => {

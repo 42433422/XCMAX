@@ -57,9 +57,17 @@ def load_tasks(path: Path = DEFAULT_TASKS_PATH) -> list[dict[str, Any]]:
 
 
 def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
-    # Offline parent-process mocks are contracts, not process/runtime acceptance.
+    """Run offline fixtures and report their contract and result coverage separately.
+
+    Parent-process mocks cover dispatch, approval and charging. A mocked write
+    receipt cannot prove a business effect: those cases keep the original goal
+    in business_goal_expected and require the exact unverified terminal state.
+    Positive SQL/file/admission cases use real isolated authority stores; the
+    score is still a fixture contract score, never process/runtime acceptance.
+    """
     from app.application.agent_orchestrator import tool_permission
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.domain.shared_services.kitten_ai_document import pickup
 
     class FixtureToolExecutor(AgentToolExecutor):
         def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
@@ -74,11 +82,13 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
             "DATASET_RAG_VECTOR_INDEX_PATH": str(tmp_path / "dataset-rag" / "vectors.sqlite3"),
             "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "model-usage.json"),
             "XCAGI_TOOL_IDEMPOTENCY_PATH": str(tmp_path / "tool-idempotency.sqlite"),
+            "KITTEN_PICKUP_DIR": str(tmp_path / "document-pickup"),
         }
         with (
             patch.dict(os.environ, isolated_env, clear=False),
             patch.object(tool_permission, "_IDEMPOTENCY", {}),
             patch.object(tool_permission, "_LIVE_OWNERS", set()),
+            patch.object(pickup, "_CACHED_BASE", None),
             _isolated_task_execution_queue(tmp_path),
             patch(
                 "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
@@ -88,6 +98,17 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
             results = [run_task(task) for task in load_tasks(path)]
     passed = sum(1 for result in results if result["passed"])
     total = len(results)
+    coverage = {
+        name: sum(result.get("result_coverage") == name for result in results)
+        for name in (
+            "business_effect_verified",
+            "artifact_integrity_verified",
+            "task_admission_verified",
+            "read_only_contract",
+            "unverified",
+            "not_exercised",
+        )
+    }
     return {
         "suite": "agent_platform_minimum",
         "execution_mode": "fixture_local",
@@ -96,6 +117,7 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
         "passed": passed,
         "failed": total - passed,
         "score": round(passed / total, 4) if total else 0.0,
+        "coverage": {"fixture_contract_passed": passed, **coverage},
         "results": results,
     }
 
@@ -123,7 +145,7 @@ def _isolated_task_execution_queue(root: Path):
 
 
 @contextmanager
-def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
+def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user", permissions=()):
     """Real test-owned host session; never bypass the production principal verifier."""
     from datetime import timedelta
     from uuid import uuid4
@@ -148,9 +170,10 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
         with factory.begin() as db:
             role = Role(name=role_name)
             # Route contracts call OCR through the live permission check.
-            role.permissions = [
-                Permission(code=p["code"], name=p["name"]) for p in DEFAULT_PERMISSIONS
-            ] + [Permission(code="tool.ocr.request", name="请求 OCR")]
+            grants = {p["code"]: p["name"] for p in DEFAULT_PERMISSIONS}
+            grants.update({"tool.ocr.request": "请求 OCR"})
+            grants.update({code: code for code in permissions})
+            role.permissions = [Permission(code=code, name=name) for code, name in grants.items()]
             db.add(role)
             user = User(
                 username="fixture-" + sid,
@@ -172,6 +195,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user"):
         try:
             with (
                 patch.object(host_db, "HostSessionLocal", factory),
+                patch.object(host_db, "SessionLocal", factory),
                 patch("app.db.session.SessionLocal", factory),
                 patch("app.application.facades.session_facade.get_session_service", SessionService),
             ):
@@ -268,10 +292,12 @@ def run_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
+    from starlette.requests import Request
+
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
-    from starlette.requests import Request
 
     checks: list[dict[str, Any]] = []
     expected = dict(task.get("expected") or {})
@@ -292,6 +318,15 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
         )
         if dispatch_index < len(mock_results):
             return dict(mock_results[dispatch_index])
+        if (tool_id, action) in {
+            ("business_db", "write"),
+            ("employee", "execute"),
+            ("generate_office_document", "execute"),
+        }:
+            # Approval/budget fixtures still enter the real executor. Successful
+            # business writes must leave the production transaction and receipt
+            # in this fixture's isolated SQL store for independent readback.
+            return execute_registered_workflow_tool(tool_id, action, params)
         return dict(task.get("mock_result") or {"success": True})
 
     repo = InMemoryAgentRunRepository()
@@ -312,6 +347,7 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
             wallet_backend = str(task.get("wallet_backend") or "audit").strip().lower() or "audit"
             env_patch = {
                 "XCAGI_PRODUCT_SKU": "enterprise",
+                "WORKSPACE_ROOT": str(Path(tmp_dir) / "workspace"),
                 "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "model_usage.json"),
                 "MODEL_USAGE_WALLET_BACKEND": wallet_backend,
                 "MODEL_USAGE_WALLET_REQUIRED": "1" if task.get("wallet_required") else "",
@@ -338,6 +374,25 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                     }
                 )
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+            Path(env_patch["WORKSPACE_ROOT"]).mkdir()
+            if any(
+                node.get("tool_id") == "generate_office_document"
+                for node in (task.get("plan") or {}).get("nodes", [])
+            ):
+                import io
+
+                from docx import Document
+
+                document = Document()
+                document.add_paragraph("Approved fixture contract for Acme Trading.")
+                content = io.BytesIO()
+                document.save(content)
+                stack.enter_context(
+                    patch(
+                        "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
+                        return_value=(content.getvalue(), "contract.docx"),
+                    )
+                )
             if "wallet_balance_units" in task:
                 from app.infrastructure.billing.model_usage import set_model_wallet_balance
 

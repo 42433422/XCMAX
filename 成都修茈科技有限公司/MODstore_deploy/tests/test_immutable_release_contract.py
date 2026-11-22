@@ -18,12 +18,22 @@ except ModuleNotFoundError:  # Python 3.10 release-gate runner.
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 RELEASE_SCRIPT = ROOT / "scripts/xcmax-immutable-release.sh"
+
+
+def release_source():
+    return (
+        (ROOT / "scripts/immutable_release_runtime.sh").read_text()
+        + "\n"
+        + RELEASE_SCRIPT.read_text()
+    )
+
+
 UPGRADE_DATABASE_SCRIPT = ROOT / "scripts/upgrade_database.py"
 PYPROJECT = ROOT / "pyproject.toml"
 
 
 def test_private_delivery_migration_uses_persistent_library_and_stopped_window():
-    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    script = release_source()
     assert 'LIBRARY_DIR="${MODMAN_LIBRARY:-${RUNTIME_DIR%/}/library}"' in script
     assert "MODMAN_LIBRARY=%s" in script
     preflight = script.index("migrate_delivery_state true")
@@ -45,7 +55,7 @@ def test_private_delivery_migration_uses_persistent_library_and_stopped_window()
 
 @pytest.mark.parametrize("external", [False, True], ids=["release-library", "stable-library"])
 def test_delivery_library_selector_preserves_existing_stable_root(tmp_path, external):
-    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    script = release_source()
     start = script.index("select_library_target() {")
     end = script.index("\n}\n", start) + 3
     releases = tmp_path / "releases"
@@ -72,7 +82,7 @@ def test_delivery_library_selector_preserves_existing_stable_root(tmp_path, exte
 
 
 def _compiler_probe(release: Path, node: str) -> subprocess.CompletedProcess[str]:
-    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    script = release_source()
     start = script.index("verify_runtime_mod_compiler() {")
     end = script.index('\n[[ "$TARGET_SHA"', start)
     probe = script[start:end] + '\nverify_runtime_mod_compiler "$1" "$2"\n'
@@ -154,7 +164,7 @@ def test_runtime_mod_compiler_rejects_unusable_release(
 
 
 def test_private_mod_compiler_is_retained_and_verified_before_release_promotion() -> None:
-    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    script = release_source()
     install = script.index('npm ci --prefix "$BUILD_ROOT/FHD/frontend"')
     prepared_probe = script.index('verify_runtime_mod_compiler "$BUILD_ROOT"')
     promoted_probe = script.index('verify_runtime_mod_compiler "$FINAL_ROOT"')
@@ -173,7 +183,7 @@ def test_private_mod_compiler_is_retained_and_verified_before_release_promotion(
 
 
 def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
-    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    script = release_source()
     upgrade_script = UPGRADE_DATABASE_SCRIPT.read_text(encoding="utf-8")
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
@@ -187,7 +197,8 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
         "applying database migrations"
     )
     assert 'PRODUCT_VERSION="$PREVIOUS_VERSION"' in script
-    assert '"$PREVIOUS_RELEASE_ID" && return 0' in script
+    assert 'verify_health_identity "$SCHEDULER_HEALTH_URL" "$PREVIOUS_SHA"' in script
+    assert '"$PREVIOUS_RELEASE_ID"; then' in script
     assert 'FINAL_ROOT="${RELEASES_DIR}/${TARGET_SHA}"' in script
     assert 'chmod 0555 "$FINAL_ROOT"' in script
     assert script.index('chmod 0555 "$FINAL_ROOT"') < script.index(
@@ -335,7 +346,7 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
 
 
 def test_stopped_service_resolves_current_release_catalog(tmp_path: Path) -> None:
-    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    script = release_source()
     start = script.index('ACTIVE_CATALOG_DIR="$(python3 -')
     start = script.index("<<'PY'\n", start) + len("<<'PY'\n")
     probe = script[start : script.index("\nPY", start)]
@@ -487,6 +498,7 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "XCMAX_GITHUB_REPOSITORY" in rendered
         assert "XCMAX_PRODUCT_VERSION" in rendered
         assert "xcmax-immutable-release.sh" in rendered
+        assert "immutable_release_submit.py" in rendered
         assert "export XCMAX_PRESERVE_RELEASE_HISTORY=" in rendered
         assert "${CONTROLLER_SHA}:ops/dr/$file" in rendered
         assert "modstore-deployment-correlation" in rendered
@@ -714,7 +726,7 @@ def test_fixed_release_guard_rejects_production_advance(tmp_path: Path) -> None:
     fake_bin.mkdir()
     (fake_bin / "curl").write_text('#!/bin/sh\ncat "$CURRENT_LINK/health.json"\n')
     (fake_bin / "curl").chmod(0o755)
-    script = RELEASE_SCRIPT.read_text()
+    script = release_source()
     start = script.index("verify_fixed_release_approval() {")
     guard = script[start : script.index('\nif [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA', start)]
     for deployed, running, expected in [

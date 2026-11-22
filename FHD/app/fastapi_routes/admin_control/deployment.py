@@ -54,7 +54,10 @@ class Deployment:
             return {"success": True, "data": job.to_dict()}
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("admin deploy push failed to start: %s", exc)
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=409)
+            return JSONResponse(
+                {"success": False, "message": "部署任务暂时无法启动，请核对当前发布状态"},
+                status_code=409,
+            )
 
     async def admin_deploy_job(self, request: Request, job_id: str):
         """查询管理端更新包推送任务。"""

@@ -271,27 +271,27 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     path = "/api/knowledge/v1/datasets/platform-docs/query"
     if action == "query":
         body.setdefault("query", "Which model should AI routes use?")
-        body.setdefault("tenant_id", "tenant-a")
+        body.setdefault("tenant_id", "7")
         body.setdefault("include_answer", True)
     elif action == "ingest_document":
         path = "/api/knowledge/v1/datasets/platform-docs/documents"
         body.setdefault("source", "policy.pdf")
         body.setdefault("text", "AI routes should use AgentOrchestrator.")
-        body.setdefault("tenant_id", "tenant-a")
+        body.setdefault("tenant_id", "7")
     elif action == "diff_versions":
         path = "/api/knowledge/v1/datasets/platform-docs/versions/diff"
         body.setdefault("source", "policy.pdf")
-        body.setdefault("tenant_id", "tenant-a")
+        body.setdefault("tenant_id", "7")
         body.setdefault("from_version", "v1")
         body.setdefault("to_version", "latest")
     elif action == "rollback_version":
         path = "/api/knowledge/v1/datasets/platform-docs/versions/rollback"
         body.setdefault("source", "policy.pdf")
-        body.setdefault("tenant_id", "tenant-a")
+        body.setdefault("tenant_id", "7")
         body.setdefault("target_version", "v1")
     elif action == "rebuild_index":
         path = "/api/knowledge/v1/datasets/platform-docs/index/rebuild"
-        body.setdefault("tenant_id", "tenant-a")
+        body.setdefault("tenant_id", "7")
         body.setdefault("background", True)
     elif action == "cancel_rebuild":
         path = "/api/knowledge/v1/datasets/platform-docs/index/rebuild/rag_rebuild_1/cancel"
@@ -358,11 +358,11 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         headers = {
-            "X-User-Id": str(task.get("user_id") or "eval-user"),
-            "X-Dataset-Tenant-ID": str(task.get("tenant_id") or "tenant-a"),
+            "X-Dataset-Tenant-ID": "7",
             "X-Dataset-Permissions": "dataset.read,dataset.write",
         }
         with ExitStack() as stack:
+            stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -419,6 +419,8 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "usage.json"),
             "MODEL_USAGE_WALLET_BACKEND": "audit",
             "MODEL_USAGE_WALLET_REQUIRED": "",
+            "XCAGI_USER_MEMORY_DIR": str(memory_dir),
+            "XCAGI_USER_MEMORY_JSON_PATH": str(memory_dir / "memory_store.json"),
         }
         with ExitStack() as stack:
             user_id = str(stack.enter_context(_authenticated_route_fixture(client)))
@@ -483,6 +485,9 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     )
                 else:
                     response = client.request(method, path, json=body)
+                # Read the real local authority before teardown, independently
+                # of the service cache and the returned tool receipt.
+                memory_snapshot = json.loads(memory_mod.configured_memory_path().read_text())
             finally:
                 memory_mod.reset_user_memory_service()
 
@@ -512,6 +517,38 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         expected.get("memory_status"),
         skip_when_expected_missing=True,
     )
+    record = memory_payload or candidate_payload
+    owned = memory_snapshot.get(memory_owner) or {}
+    _check_equal(checks, "memory_authority.owners", sorted(memory_snapshot), [memory_owner])
+    _check_equal(
+        checks,
+        "memory_authority.original_record",
+        [
+            item
+            for item in owned.get("memory_v2_records", [])
+            if item.get("memory_id") == record.get("memory_id")
+        ],
+        [record],
+    )
+    _check_equal(
+        checks,
+        "memory_authority.revision",
+        record.get("revision"),
+        expected.get("memory_revision"),
+        skip_when_expected_missing=True,
+    )
+    _check_equal(
+        checks,
+        "memory_authority.preference_projection",
+        {
+            key: item.get("value")
+            for key, item in (owned.get("preferences") or {}).items()
+            if item.get("memory_id") == record.get("memory_id")
+        },
+        {record["key"]: record.get("value")}
+        if record.get("status") == "active" and record.get("memory_type") == "preference"
+        else {},
+    )
     _check_equal(checks, "run_attached", run is not None, True)
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
@@ -521,6 +558,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+        _check_equal(checks, "tool_attempts", [step.attempt_count for step in run.steps], [1])
     return _result(
         task,
         checks,
@@ -720,6 +758,15 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(
+                _authenticated_route_fixture(
+                    client,
+                    permissions=[
+                        f"tool.inventory.{action}",
+                        "tool.inventory.query_transactions",
+                    ],
+                )
+            )
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -758,32 +805,34 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+    from datetime import date
+
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
+    from app import db as host_db
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.db.models import Product, PurchaseOrder, PurchaseOrderItem, Supplier, Warehouse
+    from app.domain.shared_services.purchase_service import PurchaseService
     from app.fastapi_routes import purchase as purchase_routes
+    from app.infrastructure.tenant_scope import owned_tenant_scope
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create_order").strip().lower()
     body = dict(task.get("body") or {})
     user_id = str(task.get("user_id") or "eval-purchase-user")
     repo = InMemoryAgentRunRepository()
-    service = Mock()
+    verifies_sql = action in {
+        "create_order",
+        "update_order",
+        "approve_order",
+        "cancel_order",
+        "create_inbound",
+    }
+    service = Mock(wraps=PurchaseService()) if verifies_sql else Mock()
     service.create_supplier.return_value = {"success": True, "data": {"id": 7}}
     service.update_supplier.return_value = {"success": True, "data": {"id": 7}}
     service.delete_supplier.return_value = {"success": True}
-    service.create_purchase_order.return_value = {"success": True, "data": {"id": 9}}
-    service.update_purchase_order.return_value = {"success": True, "data": {"id": 9}}
-    service.approve_purchase_order.return_value = {
-        "success": True,
-        "data": {"status": "approved"},
-    }
-    service.cancel_purchase_order.return_value = {
-        "success": True,
-        "data": {"status": "cancelled"},
-    }
-    service.create_purchase_inbound.return_value = {"success": True, "data": {"id": 5}}
 
     method = "POST"
     path = "/api/purchase/orders"
@@ -800,6 +849,8 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     elif action == "create_order":
         path = "/api/purchase/orders"
         body.setdefault("supplier_id", 7)
+        body.setdefault("warehouse_id", 1)
+        body.setdefault("items", [{"product_id": 1, "quantity": 2, "unit_price": 10}])
     elif action == "update_order":
         method = "PUT"
         path = f"/api/purchase/orders/{int(task.get('order_id') or 9)}"
@@ -811,6 +862,11 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     elif action == "create_inbound":
         path = "/api/purchase/inbounds"
         body.setdefault("order_id", 9)
+        body.setdefault("supplier_id", 7)
+        body.setdefault("warehouse_id", 1)
+        body.setdefault(
+            "items", [{"order_item_id": 1, "product_id": 1, "quantity": 2, "unit_price": 10}]
+        )
     else:
         return _failed(task, f"unsupported purchase route action: {action}")
 
@@ -820,12 +876,65 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
+            "XCAGI_PRODUCT_SKU": "enterprise",
             "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
             "MODEL_USAGE_WALLET_BACKEND": "audit",
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+            stack.enter_context(
+                _authenticated_route_fixture(
+                    client,
+                    role_name="admin",
+                    permissions=[
+                        f"tool.purchase.{name}"
+                        for name in (
+                            "create_supplier",
+                            "update_supplier",
+                            "delete_supplier",
+                            "create_order",
+                            "update_order",
+                            "approve_order",
+                            "cancel_order",
+                            "create_inbound",
+                            "query_orders",
+                            "query_inbounds",
+                        )
+                    ],
+                )
+            )
+            if verifies_sql:
+                with owned_tenant_scope(7), host_db.SessionLocal.begin() as db:
+                    db.add(Supplier(id=7, code="eval-supplier", name="星光供应商", status="active"))
+                    db.add(Product(id=1, name="资源物料"))
+                    db.add(Warehouse(id=1, code="eval-warehouse", name="仓库"))
+                    db.flush()
+                    if action != "create_order":
+                        db.add(
+                            PurchaseOrder(
+                                id=9,
+                                order_no="eval-original-purchase",
+                                supplier_id=7,
+                                warehouse_id=1,
+                                order_date=date.today(),
+                                total_amount=100,
+                                status="approved" if action == "create_inbound" else "draft",
+                            )
+                        )
+                        db.flush()
+                        db.add(
+                            PurchaseOrderItem(
+                                id=1,
+                                order_id=9,
+                                product_id=1,
+                                quantity=10,
+                                unit_price=10,
+                                amount=100,
+                                received_quantity=0,
+                                status="pending",
+                            )
+                        )
             stack.enter_context(
                 patch(
                     "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
@@ -1129,10 +1238,10 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
 def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
 
+    from app import db as host_db
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.application.customer_app_service import CustomerApplicationService
     from app.db.models.purchase_unit import PurchaseUnit
     from app.fastapi_routes.domains.customer import routes as customer_routes
 
@@ -1141,21 +1250,18 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     body = dict(task.get("body") or {})
     user_id = str(task.get("user_id") or "eval-customers-user")
     repo = InMemoryAgentRunRepository()
+    service = Mock(wraps=CustomerApplicationService())
     deleted_ids: list[int] = []
-
     method = "POST"
     path = "/customers"
-    name = str(body.get("unit_name") or body.get("customer_name") or "星光贸易")
-    contact_person = str(body.get("contact_person") or "张三")
-    contact_phone = str(body.get("contact_phone") or "13900000000")
-    contact_address = str(body.get("contact_address") or "上海")
-    if action == "create":
-        path = "/customers"
-        body.setdefault("unit_name", name)
-    elif action == "update":
-        method = "PUT"
-        path = f"/customers/{int(task.get('customer_id') or 7)}"
-        body.setdefault("unit_name", name)
+    if action in {"create", "update"}:
+        body.setdefault("unit_name", "星光贸易")
+        body.setdefault("contact_person", "张三")
+        body.setdefault("contact_phone", "13900000000")
+        body.setdefault("contact_address", "上海")
+        if action == "update":
+            method = "PUT"
+            path = f"/customers/{int(task.get('customer_id') or 7)}"
     elif action == "delete":
         method = "DELETE"
         path = f"/customers/{int(task.get('customer_id') or 7)}"
@@ -1168,101 +1274,64 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     app = FastAPI()
     app.include_router(customer_routes.router)
     client = TestClient(app, raise_server_exceptions=False)
-
-    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
-        env_patch = {
-            "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
-            "MODEL_USAGE_WALLET_BACKEND": "audit",
-            "MODEL_USAGE_WALLET_REQUIRED": "",
-            "XCAGI_PRODUCT_SKU": "enterprise"
-            if action in {"delete", "batch_delete"}
-            else "personal",
-        }
-        with ExitStack() as stack:
-            engine = create_engine("sqlite:///" + str(Path(tmp_dir) / "customers.sqlite"))
-            stack.callback(engine.dispose)
-            PurchaseUnit.__table__.create(engine)
-            customer_sessions = sessionmaker(bind=engine)
-            if action in {"delete", "batch_delete"}:
-                with customer_sessions.begin() as db:
-                    db.add_all(
-                        [
-                            PurchaseUnit(id=value, tenant_id=7, unit_name=f"Customer {value}")
-                            for value in (7, 8)
-                        ]
-                    )
-                stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
-
-            def _insert_customer(name, contact, phone, address):
-                with customer_sessions.begin() as db:
-                    row = PurchaseUnit(
-                        id=7,
-                        tenant_id=7,
-                        unit_name=name,
-                        contact_person=contact,
-                        contact_phone=phone,
-                        address=address,
-                    )
-                    db.add(row)
-                    db.flush()
-                    return {"id": row.id, "unit_name": row.unit_name}
-
-            stack.enter_context(
-                patch(
-                    "app.application.customer_app_service.get_customers_session", customer_sessions
-                )
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir, ExitStack() as stack:
+        stack.enter_context(
+            patch.dict(
+                os.environ,
+                {
+                    "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
+                    "MODEL_USAGE_WALLET_BACKEND": "audit",
+                    "MODEL_USAGE_WALLET_REQUIRED": "",
+                    "XCAGI_PRODUCT_SKU": "enterprise",
+                },
+                clear=False,
             )
-            stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
-            stack.enter_context(
-                patch(
-                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-                    return_value=repo,
+        )
+        stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
+        customer_sessions = host_db.SessionLocal
+        engine = customer_sessions.kw["bind"]
+        if action != "create":
+            with customer_sessions.begin() as db:
+                db.add_all(
+                    PurchaseUnit(id=value, tenant_id=7, unit_name=f"Customer {value}")
+                    for value in (7, 8)
                 )
+        stack.enter_context(
+            patch("app.application.customer_app_service.get_customers_session", customer_sessions)
+        )
+        stack.enter_context(
+            patch(
+                "app.infrastructure.persistence.compat_db.compat_db_base.get_sync_engine",
+                return_value=engine,
             )
-            stack.enter_context(
-                patch(
-                    "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
-                    return_value=False,
-                )
+        )
+        stack.enter_context(patch("app.application.get_customer_app_service", return_value=service))
+        stack.enter_context(
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
             )
-            stack.enter_context(patch.object(customer_routes, "_customers_write_raise"))
-            stack.enter_context(
-                patch.object(
-                    customer_routes,
-                    "_customer_body_name_contact",
-                    return_value=(name, contact_person, contact_phone, contact_address),
-                )
+        )
+        stack.enter_context(
+            patch(
+                "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
+                return_value=False,
             )
-            insert_customer = stack.enter_context(
-                patch.object(
-                    customer_routes,
-                    "_customer_pg_insert",
-                    side_effect=_insert_customer,
-                )
-            )
-            update_customer = stack.enter_context(
-                patch.object(
-                    customer_routes,
-                    "_customer_pg_update",
-                    return_value={"id": 7, "unit_name": name},
-                )
-            )
-            headers = {"X-User-Id": user_id}
-            if method == "DELETE":
-                response = client.delete(path, headers=headers)
-            elif method == "PUT":
-                response = client.put(path, json=body, headers=headers)
-            else:
-                response = client.post(path, json=body, headers=headers)
-            if action in {"delete", "batch_delete"}:
-                with customer_sessions() as db:
-                    remaining_ids = {
-                        row[0]
-                        for row in db.connection()
-                        .exec_driver_sql("SELECT id FROM purchase_units")
-                        .fetchall()
-                    }
-                deleted_ids = sorted({7, 8} - remaining_ids)
+        )
+        headers = {"X-User-Id": user_id}
+        if method == "DELETE":
+            response = client.delete(path, headers=headers)
+        elif method == "PUT":
+            response = client.put(path, json=body, headers=headers)
+        else:
+            response = client.post(path, json=body, headers=headers)
+        if action in {"delete", "batch_delete"}:
+            with customer_sessions() as db:
+                remaining_ids = {
+                    row[0]
+                    for row in db.connection().exec_driver_sql("SELECT id FROM purchase_units")
+                }
+            deleted_ids = sorted({7, 8} - remaining_ids)
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
     if action in {"delete", "batch_delete"}:
@@ -1276,8 +1345,9 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "response": payload,
             "run": run.to_dict() if run is not None else None,
             "service_calls": {
-                "customer_pg_insert": insert_customer.call_count,
-                "customer_pg_update": update_customer.call_count,
+                "create": service.create.call_count,
+                "update": service.update.call_count,
+                "batch_delete": service.batch_delete.call_count,
                 "deleted_customer_rows": len(deleted_ids),
             },
         },
@@ -1316,8 +1386,11 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
+    from app import db as host_db
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.db.models.shipment import ShipmentRecord
     from app.fastapi_routes import shipment_orders
+    from app.infrastructure.tenant_scope import tenant_scope
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower()
@@ -1328,6 +1401,8 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
     service.create_shipment.return_value = {"success": True, "data": {"id": 7}}
     service.update_shipment_record.return_value = {"success": True, "data": {"id": 7}}
     service.delete_shipment_record.return_value = {"success": True, "deleted_count": 1}
+    authority_before = []
+    authority_after = []
 
     method = "POST"
     path = "/api/shipment/shipment-records/record"
@@ -1353,6 +1428,28 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
         }
         with ExitStack() as stack:
             stack.enter_context(_authenticated_route_fixture(client))
+            if action in {"update", "delete"}:
+                # Seed the real target so an inert mock cannot accidentally
+                # satisfy a delete postcondition merely because the DB is empty.
+                with tenant_scope(7), host_db.SessionLocal.begin() as db:
+                    db.add(
+                        ShipmentRecord(
+                            id=body["id"],
+                            tenant_id=7,
+                            purchase_unit="Fixture customer",
+                            product_name="Unchanged product",
+                            quantity_kg=3,
+                            quantity_tins=1,
+                            status="pending",
+                        )
+                    )
+                with host_db.SessionLocal() as db:
+                    authority_before = [
+                        list(row)
+                        for row in db.connection().exec_driver_sql(
+                            "SELECT id, tenant_id, product_name, status FROM shipment_records"
+                        )
+                    ]
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1368,13 +1465,27 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
                 response = client.patch(path, json=body, headers=headers)
             else:
                 response = client.post(path, json=body, headers=headers)
+            if action in {"update", "delete"}:
+                with host_db.SessionLocal() as db:
+                    authority_after = [
+                        list(row)
+                        for row in db.connection().exec_driver_sql(
+                            "SELECT id, tenant_id, product_name, status FROM shipment_records"
+                        )
+                    ]
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
+    if action in {"update", "delete"}:
+        _check_equal(
+            checks, "authoritative_mock_write_unchanged", authority_after, authority_before
+        )
     return _result(
         task,
         checks,
         {
             "response": payload,
+            "authority_before": authority_before,
+            "authority_after": authority_after,
             "run": run.to_dict() if run is not None else None,
             "service_calls": {
                 "create_shipment": service.create_shipment.call_count,
@@ -2308,12 +2419,11 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
     from starlette.requests import Request
 
     from app.application.agent_task_context import scoped_conversation_user_id
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
 

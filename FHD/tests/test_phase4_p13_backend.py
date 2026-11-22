@@ -19,7 +19,16 @@ from app.domain.shared_services.purchase_service import PurchaseService
 def _fluent(*, all_=None, first=None, count=0) -> MagicMock:
     """A query mock whose chain methods return self."""
     q = MagicMock()
-    for attr in ("filter", "filter_by", "order_by", "join", "offset", "limit", "options"):
+    for attr in (
+        "filter",
+        "filter_by",
+        "order_by",
+        "join",
+        "offset",
+        "limit",
+        "options",
+        "with_for_update",
+    ):
         getattr(q, attr).return_value = q
     q.all.return_value = list(all_ or [])
     q.first.return_value = first

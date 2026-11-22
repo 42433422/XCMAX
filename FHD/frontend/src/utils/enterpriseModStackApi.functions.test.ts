@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { mockFetchWorkspacePrefs, mockFetchOnboardingIndustryCatalog, mockFetchIndustryBaseline, mockBuildEnterpriseModStack } = vi.hoisted(
+const { mockFetchWorkspacePrefs, mockFetchOnboardingIndustryCatalog, mockFetchIndustryBaseline, mockBuildEnterpriseModStack, owner } = vi.hoisted(
   () => ({
     mockFetchWorkspacePrefs: vi.fn(),
     mockFetchOnboardingIndustryCatalog: vi.fn(),
     mockFetchIndustryBaseline: vi.fn(),
     mockBuildEnterpriseModStack: vi.fn(),
+    owner: { scope: 'account-a' },
   }),
 )
+
+vi.mock('@/api/employeeDirectory', () => ({ employeeDirectoryScope: () => owner.scope }))
 
 vi.mock('./workspacePrefsApi', () => ({
   fetchWorkspacePrefs: mockFetchWorkspacePrefs,
@@ -41,6 +44,7 @@ function makeStack(overrides: Record<string, unknown> = {}) {
 
 describe('enterpriseModStackApi', () => {
   beforeEach(() => {
+    owner.scope = 'account-a'
     mockFetchWorkspacePrefs.mockReset()
     mockFetchOnboardingIndustryCatalog.mockReset()
     mockFetchIndustryBaseline.mockReset()
@@ -87,6 +91,24 @@ describe('enterpriseModStackApi', () => {
       await resolveEnterpriseModStack()
       await resolveEnterpriseModStack(true)
 
+      expect(mockFetchWorkspacePrefs).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not reuse or overwrite another account\'s industry stack', async () => {
+      let resolveOld!: (value: unknown) => void
+      mockFetchWorkspacePrefs.mockResolvedValue({ data: { selected_industry_id: 'retail' } })
+      mockFetchIndustryBaseline.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve }))
+      const pending = resolveEnterpriseModStack()
+      await Promise.resolve()
+      owner.scope = 'account-b'
+      const currentStack = makeStack({ industryId: 'food' })
+      mockFetchIndustryBaseline.mockResolvedValueOnce({ industry_id: 'food' })
+      mockBuildEnterpriseModStack.mockReturnValueOnce(currentStack)
+      expect(await resolveEnterpriseModStack()).toBe(currentStack)
+      mockBuildEnterpriseModStack.mockReturnValueOnce(makeStack())
+      resolveOld({ industry_id: 'retail' })
+      await expect(pending).rejects.toThrow('上下文已变更')
+      expect(await resolveEnterpriseModStack()).toBe(currentStack)
       expect(mockFetchWorkspacePrefs).toHaveBeenCalledTimes(2)
     })
 

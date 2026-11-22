@@ -3,7 +3,7 @@
     <div class="page-content">
       <header class="ews-page-head">
         <div class="ews-page-head-text">
-          <h2 class="ews-page-title">员工工作台</h2>
+          <h2 class="ews-page-title">员工工作空间</h2>
         </div>
       </header>
 

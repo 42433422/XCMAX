@@ -117,6 +117,24 @@ def test_legacy_status_on_later_page_also_blocks_merge():
     )
 
 
+@pytest.mark.parametrize("fault", ["changed_total", "duplicate_id", "overflow"])
+def test_delivery_run_inventory_requires_one_complete_stable_collection(fault):
+    def handle(request):
+        first = request.url.params["page"] == "1"
+        rows = [{"id": i} for i in range(1, 101)] if first else [{"id": 101}]
+        total = 101
+        if fault == "changed_total" and not first:
+            total = 100
+        if fault == "duplicate_id" and not first:
+            rows[0]["id"] = 1
+        if fault == "overflow":
+            total = 99
+        return httpx.Response(200, json={"workflow_runs": rows, "total_count": total})
+
+    with pytest.raises(ValueError, match="collection"):
+        client_with_transport(handle)._pages("actions/runs", key="workflow_runs")
+
+
 def test_review_uses_latest_current_head_across_all_pages():
     def handle(request):
         assert request.url.params["head_sha"] == HEAD
@@ -133,7 +151,12 @@ def test_review_uses_latest_current_head_across_all_pages():
         }
         return httpx.Response(
             200,
-            json={"total_count": 101, "workflow_runs": [run] * 100 if first else [run]},
+            json={
+                "total_count": 101,
+                "workflow_runs": [{**run, "id": index} for index in range(1, 101)]
+                if first
+                else [run],
+            },
         )
 
     ok, reason = client_with_transport(handle).get_workflow_run_conclusion(HEAD, "AI Review")
@@ -312,10 +335,14 @@ class GitHubState:
                     },
                 )
             if path == f"actions/workflows/{workflow}/dispatches":
+                identity = self.state().get("request_id", "")
                 assert body == {
                     "ref": "main",
                     "return_run_details": True,
-                    "inputs": {"release_sha": MERGE},
+                    "inputs": {
+                        "release_sha": MERGE,
+                        **({"delivery_request_id": identity} if identity else {}),
+                    },
                 }
                 mode = self.dispatch_modes.get(workflow, "200")
                 if mode == "403":
@@ -333,8 +360,13 @@ class GitHubState:
                     "event": "workflow_dispatch",
                     "head_branch": "main",
                     "head_sha": NEW_MAIN,
+                    "run_attempt": 1,
+                    "repository": {"full_name": "test/repo"},
                     "path": f".github/workflows/{workflow}",
-                    "display_title": f"{sla.POST_MERGE_RUN_TITLES[index]} {MERGE}",
+                    "display_title": (
+                        f"{sla.POST_MERGE_RUN_TITLES[index]} {MERGE}"
+                        + (f" [delivery:{identity}]" if identity else "")
+                    ),
                     "status": "queued",
                     "conclusion": None,
                     "html_url": "https://github.com/test/repo/actions/runs/100",
@@ -408,6 +440,73 @@ def test_observed_run_disappearing_never_authorizes_redispatch(github):
     assert all(
         receipt["status"] == "unavailable" for receipt in github.state()["workflows"].values()
     )
+
+
+def test_original_run_disappearance_cannot_adopt_another_success(github):
+    github.prepare()
+    github.client().reconcile_delivery(1)
+    original = github.state()["workflows"]
+    for runs in github.runs.values():
+        runs[0].update(id=runs[0]["id"] + 1000, status="completed", conclusion="success")
+    assert github.client().reconcile_delivery(1) == "pending"
+    state = github.state()
+    assert all(
+        receipt["status"] == "unavailable" and receipt["run_id"] == original[name]["run_id"]
+        for name, receipt in state["workflows"].items()
+    )
+    assert len(github.dispatches()) == 2
+
+
+def test_unknown_dispatch_multiple_matching_runs_cannot_choose_success(github):
+    github.prepare()
+    github.dispatch_modes = dict.fromkeys(sla.POST_MERGE_WORKFLOWS, "204")
+    github.client().reconcile_delivery(1)
+    first = github.runs[sla.POST_MERGE_WORKFLOWS[0]]
+    first.append({**first[0], "id": 999, "status": "completed", "conclusion": "success"})
+    assert github.client().reconcile_delivery(1) == "blocked"
+    assert github.state()["error"] == "delivery_run_identity_ambiguous"
+    assert len(github.dispatches()) == 2
+
+
+def test_unknown_dispatch_recovers_only_the_original_request(github):
+    github.prepare()
+    github.dispatch_modes = dict.fromkeys(sla.POST_MERGE_WORKFLOWS, "204")
+    github.client().reconcile_delivery(1)
+    expected = {name: runs[0]["id"] for name, runs in github.runs.items()}
+    for runs in github.runs.values():
+        runs.append(
+            {
+                **runs[0],
+                "id": runs[0]["id"] + 1000,
+                "display_title": runs[0]["display_title"].split(" [delivery:")[0],
+                "status": "completed",
+                "conclusion": "success",
+            }
+        )
+    assert github.client().reconcile_delivery(1) == "pending"
+    assert all(
+        row["status"] == "running" and row["run_id"] == expected[name]
+        for name, row in github.state()["workflows"].items()
+    )
+    assert len(github.dispatches()) == 2
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"repository": {"full_name": "other/repo"}},
+        {"head_sha": ""},
+        {"run_attempt": 0},
+        {"run_attempt": True},
+    ],
+)
+def test_original_delivery_run_requires_native_identity(github, changes):
+    github.prepare()
+    github.client().reconcile_delivery(1)
+    github.runs[sla.POST_MERGE_WORKFLOWS[0]][0].update(changes)
+    assert github.client().reconcile_delivery(1) == "blocked"
+    assert github.state()["error"] == "delivery_run_identity_mismatch"
+    assert len(github.dispatches()) == 2
 
 
 def test_partial_failure_retries_only_missing_workflow_then_tracks_completion(github):

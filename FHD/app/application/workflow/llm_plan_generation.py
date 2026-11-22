@@ -27,10 +27,17 @@ from app.application.workflow.workflow_types import (
     WorkflowNode,
     normalize_workflow_risk,
 )
+from app.infrastructure.llm.response_completion import (
+    model_payload as _model_payload,
+)
+from app.infrastructure.llm.response_completion import (
+    sanitize_model_json as _sanitize_model_json,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .model_response_metrics import observe_model_response, record_response_error
-from .tool_calling import PLAN_PARSER, PLAN_SCHEMA, SubmitWorkflowPlan
+from .tool_calling import PLAN_PARSER, PLAN_SCHEMA, SubmitWorkflowPlan, completion_is_incomplete
+from .tool_calling import tool_specs as _tool_specs
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +45,6 @@ _MODEL_SECRET_TEXT = re.compile(
     r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
     r"(\bBearer\s+)[A-Za-z0-9._~+/=-]+"
 )
-# 模型偶尔在 JSON 字符串值里输出裸控制字符（\x00-\x1f），json.loads 会直接拒绝。
-_BARE_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
-
-
-def _sanitize_model_json(raw: str) -> str:
-    """清洗模型输出中的裸控制字符，保留换行与制表符，避免合法计划被误拒。"""
-    return _BARE_CONTROL_CHARS.sub("", raw)
-
-
 _MODEL_CONTEXT_PRIVATE_KEYS = (
     "authorization",
     "access_token",
@@ -99,7 +97,15 @@ def _model_context_value(
             key = str(raw_key)
             lowered = key.lower()
             if (
-                key in {"recent_messages", "chat_owned_history", "chat_history_summary"}
+                key
+                in {
+                    "recent_messages",
+                    "chat_owned_history",
+                    "chat_history_summary",
+                    # The complete, server-bound answer ledger is user_message.
+                    # A second, truncated projection must not compete with it.
+                    "planning_clarification",
+                }
                 or key.startswith("_")
                 or any(part in lowered for part in _MODEL_CONTEXT_PRIVATE_KEYS)
             ):
@@ -164,6 +170,13 @@ _LIGHT_SYSTEM = "你是平台对话助手。只输出约定 JSON。"
 
 class _LightReplyUnavailable(Exception):
     """轻量轮次的模型调用已失败，不再重复调用完整规划。"""
+
+
+def _mark_incomplete_response(context: dict[str, Any], prefix: str = "") -> None:
+    context["planning_failure_kind"] = "model_unavailable"
+    context["planning_failure_reason"] = "模型回复未完整生成，请重试。"
+    context["_planning_failure_code"] = "model_response_incomplete"
+    context["_planning_partial_reply"] = prefix
 
 
 _LIGHT_RULES = (
@@ -254,84 +267,19 @@ async def _consume_reply_stream(stream, on_prefix: Callable[[str], None]) -> tup
     """消费模型增量，确认是普通回复后把正文前缀实时推给前端。"""
     chunks: list[str] = []
     emitted_text = ""
-    try:
-        async for delta in stream:
-            if not delta:
-                continue
-            chunks.append(delta)
-            prefix = _reply_prefix("".join(chunks))
-            if prefix is None or len(prefix) <= len(emitted_text):
-                continue
-            on_prefix(prefix[len(emitted_text) :])
-            emitted_text = prefix
-    except RECOVERABLE_ERRORS:  # 流中断：保留下发内容，交给已发送前缀收尾
-        record_response_error()
-        logger.warning("planner reply stream interrupted", exc_info=True)
+    async for delta in stream:
+        if not delta:
+            continue
+        chunks.append(delta)
+        prefix = _reply_prefix("".join(chunks))
+        if prefix is None:
+            continue
+        prefix = prefix.strip()
+        if len(prefix) <= len(emitted_text):
+            continue
+        on_prefix(prefix[len(emitted_text) :])
+        emitted_text = prefix
     return "".join(chunks), emitted_text
-
-
-def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
-    from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
-
-    contracts = build_tool_specs_v2()
-    result = []
-    for tool_id, spec in tool_registry.items():
-        actions = spec.get("actions", {})
-        action_specs = []
-        for name, metadata in actions.items():
-            contract = contracts.get((str(tool_id), str(name)))
-            raw_schema = getattr(contract, "input_schema", {})
-            action_specs.append(
-                {
-                    "action": name,
-                    "description": str(
-                        getattr(contract, "description", "") or spec.get("description") or ""
-                    )[:240],
-                    "risk": metadata.get("risk", "low"),
-                    "idempotent": bool(metadata.get("idempotent", False)),
-                    "output_schema": getattr(contract, "output_schema", {}),
-                    "required_params": metadata.get("required_params", []),
-                    "input_schema": raw_schema,
-                }
-            )
-        result.append(
-            {
-                "tool_id": tool_id,
-                "description": spec.get("description", ""),
-                "actions": action_specs,
-            }
-        )
-    return result
-
-
-def _load_model_json(raw: str) -> Any:
-    """严格 JSON 优先；失败时用 json-repair 容忍模型常见截断/尾逗号。"""
-    try:
-        return json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        try:
-            from json_repair import loads as repair_loads
-        except ImportError:
-            return None
-        try:
-            return repair_loads(raw)
-        except (ValueError, TypeError):
-            return None
-
-
-def _model_payload(response_data: dict[str, Any]) -> tuple[Any, str]:
-    """返回（解析后的 JSON, 原始正文）；不校验业务结构。"""
-    choices = response_data.get("choices")
-    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        return None, ""
-    message = choices[0].get("message")
-    if not isinstance(message, dict):
-        return None, ""
-    raw = str(message.get("content") or "").strip()
-    if not raw:
-        return None, ""
-    raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    return _load_model_json(_sanitize_model_json(raw)), raw
 
 
 def model_plan_schema_error(payload: Any) -> str | None:
@@ -353,9 +301,18 @@ def _has_native_tool_calls(payload: Any) -> bool:
 
 
 def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[WorkflowNode]] | None:
+    if completion_is_incomplete(payload):
+        return None
     parsed, _raw = _model_payload(payload)
     if not isinstance(parsed, dict):
         return None
+    if parsed.get("mode") == "reply":
+        try:
+            # Repair may restore JSON structure, but cannot invent the unseen
+            # remainder of an answer. A new model response must supply it.
+            json.loads(_sanitize_model_json(_raw))
+        except ValueError:
+            return None
     model_message = payload["choices"][0]["message"]
     if model_message.get("tool_calls") or model_message.get("function_call"):
         return None
@@ -476,22 +433,36 @@ class LlmPlanGeneration:
         if stream is None:
             return None
 
+        emitted: list[str] = []
+
         def emit(delta: str) -> None:
+            emitted.append(delta)
             lifetime.publish_delta(delta)
 
         try:
             from app.application.employee_runtime.agent_runner import _run_async
 
             text, streamed = _run_async(_consume_reply_stream(stream, emit))
+            if not text.strip():
+                raise ValueError("model stream returned no answer")
+            raw = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
+            # EOF and JSON repair cannot certify a streamed answer. Once any
+            # text has been published, validate that exact answer and never
+            # start another model call to replace it.
+            parsed = json.loads(raw)
+            if streamed and (
+                not isinstance(parsed, dict)
+                or parsed.get("mode") != "reply"
+                or not isinstance(parsed.get("reply"), str)
+                or parsed["reply"].strip() != streamed
+                or _decode_completion({"choices": [{"message": {"content": text}}]}) is None
+            ):
+                raise ValueError("streamed answer changed or failed validation")
         except RECOVERABLE_ERRORS:
             record_response_error()
-            logger.warning("planner streaming failed, falling back", exc_info=True)
-            return None
-        if not text.strip():
-            return None
-        if streamed and not text.rstrip().endswith("}"):
-            # 流被截断：以已下发内容为准，避免前端出现重复正文。
-            text = json.dumps({"mode": "reply", "reply": streamed}, ensure_ascii=False)
+            logger.warning("planner reply stream incomplete", exc_info=True)
+            _mark_incomplete_response(context, "".join(emitted))
+            raise _LightReplyUnavailable from None
         return {"choices": [{"message": {"content": text}}]}
 
     def _light_reply(self, plan_id: str, message: str, context: dict[str, Any]) -> PlanGraph | None:
@@ -543,6 +514,9 @@ class LlmPlanGeneration:
                 raise _LightReplyUnavailable from exc
         if response is None:
             # 模型调用本身失败：轻量轮次已经花掉一次调用，不再重复打一次完整规划。
+            raise _LightReplyUnavailable
+        if completion_is_incomplete(response):
+            _mark_incomplete_response(context)
             raise _LightReplyUnavailable
         if _has_native_tool_calls(response):
             context["planning_failure_reason"] = "轻量回复包含未授权工具调用，本轮未执行任何操作"
@@ -637,9 +611,7 @@ class LlmPlanGeneration:
             history_messages = conversation_history_messages(context)
             # Historical messages resolve references; only this turn selects tool scope.
             routing_message = message
-            if coverage_feedback is None and _conversational_turn(
-                "\n".join([item["content"] for item in recent_messages] + [message]), context
-            ):
+            if coverage_feedback is None and _conversational_turn(message, context):
                 try:
                     light = self._light_reply(plan_id, message, context)
                 except _LightReplyUnavailable:
@@ -696,6 +668,9 @@ class LlmPlanGeneration:
                 "tool_registry": tool_specs,
                 "output_schema": _PLAN_OUTPUT_SCHEMA_DOC,
             }
+            # Freeze the evidence actually supplied to this candidate. Review
+            # must not replace it with a shorter or newly hydrated history.
+            context["_planning_snapshot"] = (history_messages, prompt["context"])
             if coverage_feedback is not None:
                 prompt["coverage_feedback"] = _model_context_value(coverage_feedback)
                 prompt["task"] = (
@@ -743,6 +718,7 @@ class LlmPlanGeneration:
                     if not extra or not unsupported_tool_parameter(exc):
                         raise
                     # 兼容不接受额外参数的旧 completion 实现（含测试替身）。
+                    extra = {}
                     response_data = call_with_retry(
                         lambda: self.completion(
                             ai_service=self.conversation,
@@ -757,8 +733,11 @@ class LlmPlanGeneration:
                     "model_unavailable" if response_data is None else "plan_format_invalid"
                 )
                 return None
+            if completion_is_incomplete(response_data):
+                _mark_incomplete_response(context)
+                return None
             try:
-                native_payload = native_plan_payload(response_data)
+                native_payload = native_plan_payload(response_data, allow_text_reply=bool(extra))
             except (ValueError, TypeError):
                 context["planning_failure_reason"] = (
                     "原生调用未提交有效的完整依赖图，本轮未执行任何操作"

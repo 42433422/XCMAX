@@ -171,13 +171,48 @@ def test_missing_or_malformed_independent_review_fails_closed(verdict):
     assert completion.call_count == 2
 
 
+@pytest.mark.parametrize("review_available", [False, True])
+def test_requested_vector_index_still_requires_business_goal_review(review_available):
+    message = "为 /data/prices.xlsx 建立向量索引"
+    plan_payload = {
+        "mode": "workflow",
+        "nodes": [
+            {
+                "node_id": "index",
+                "tool_id": "excel_vector_index",
+                "action": "execute",
+                "params": {"file_path": "/data/prices.xlsx"},
+            }
+        ],
+    }
+    review = {
+        "goals": [{"goal_id": "g", "source": message, "outcome": "execute", "node_ids": ["index"]}],
+        "violations": [],
+    }
+    completion = Mock(
+        side_effect=[_response(plan_payload), _response(review) if review_available else None]
+    )
+    plan = _planner(completion).plan("owner", message, get_workflow_tool_registry(), {})
+    assert bool(plan.metadata.get("planning_rejected")) is not review_available
+    if review_available:
+        assert [(node.tool_id, node.action) for node in plan.nodes] == [
+            ("excel_vector_index", "execute")
+        ]
+    else:
+        assert not any(node.tool_id == "excel_vector_index" for node in plan.nodes)
+    completion.assert_called()
+    assert completion.call_count == 2
+    assert (
+        json.loads(completion.call_args.kwargs["messages"][1]["content"])["task"]
+        == "audit_goal_coverage"
+    )
+
+
 def test_business_reply_cannot_claim_unexecuted_work_completed():
     bad_reply = {"mode": "reply", "reply": "已经完成查询和删除"}
     failure = {
-        "goals": [
-            {"goal_id": "query", "source": "查询 A1", "outcome": "unsupported", "node_ids": []}
-        ],
         "violations": ["无工具结果且用户禁止删除，回复虚构完成"],
+        "clarification_question": None,
     }
     completion = Mock(side_effect=[_response(bad_reply), _response(failure)] * 2)
     plan = _planner(completion).plan("owner", MESSAGE, get_workflow_tool_registry(), {})
@@ -280,16 +315,49 @@ def test_provider_message_shape_failure_returns_controlled_rejection(choice):
 
 
 def test_english_business_request_is_not_exempt_as_smalltalk():
-    completion = Mock(side_effect=[_response({"mode": "reply", "reply": "Done"}), None])
+    completion = Mock(
+        side_effect=[
+            _response({"mode": "reply", "reply": "Done"}),
+            _response({"violations": ["No receipt supports the completion claim"]}),
+        ]
+        * 2
+    )
     plan = _planner(completion).plan(
         "owner", "Create customer Acme and export orders", get_workflow_tool_registry(), {}
     )
     assert plan.metadata["planning_rejected"]
-    assert completion.call_count == 2
+    assert completion.call_count == 4
     assert (
-        json.loads(completion.call_args.kwargs["messages"][1]["content"])["task"]
-        == "audit_goal_coverage"
+        json.loads(completion.call_args.kwargs["messages"][1]["content"])["task"] == "audit_reply"
     )
+
+
+@pytest.mark.parametrize(
+    "message,answer",
+    [
+        ("解释一下向量数据库的原理", "它把内容映射成数值向量，用距离衡量相似性。"),
+        ("写一段春天的散文", "春风拂过枝头，嫩叶在日光中舒展。"),
+        ("请给 Python 列表索引的示例代码", "```python\nitems = [1, 2]\nprint(items[0])\n```"),
+    ],
+)
+def test_plain_replies_use_evidence_review_without_business_dag_contract(message, answer):
+    completion = Mock(
+        side_effect=[
+            _response({"mode": "reply", "reply": answer}),
+            _response({"violations": [], "clarification_question": None}),
+        ]
+    )
+    plan = _planner(completion).plan("owner", message, get_workflow_tool_registry(), {})
+    assert not plan.metadata.get("planning_rejected")
+    assert plan.metadata["response_mode"] == "reply"
+    assert len(plan.nodes) == 1
+    assert (plan.nodes[0].tool_id, plan.nodes[0].action) == ("conversation", "reply")
+    assert plan.nodes[0].params == {"response": answer}
+    assert completion.call_count == 2
+    review = json.loads(completion.call_args.kwargs["messages"][1]["content"])
+    assert review["task"] == "audit_reply" and review["reply"] == answer
+    assert "plan" not in review
+    assert set(review["output_schema"]["properties"]) == {"violations", "clarification_question"}
 
 
 def test_semantic_replan_provider_error_stays_a_controlled_rejection():

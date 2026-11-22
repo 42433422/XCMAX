@@ -17,6 +17,7 @@ def _facade():
 class StepStatus(str, _facade().Enum):
     PENDING = "pending"
     RUNNING = "running"
+    WAITING_EVIDENCE = "waiting_evidence"
     AWAITING_APPROVAL = "awaiting_approval"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -123,21 +124,14 @@ def _step_status_map(
 
 
 def get_five_line_status() -> _facade().Dict[str, _facade().Any]:
-    """五线独立自动化率 + 步骤映射（baseline 与实时 completed 取较大展示值）。"""
+    """Only observed completion contributes; legacy baselines remain labeled metadata."""
     pipeline = _facade().get_production_line_orchestrator().get_pipeline_status()
     statuses = _facade()._step_status_map(pipeline)
     lines: _facade().List[_facade().Dict[str, _facade().Any]] = []
     for defn in _facade().FIVE_LINE_DEFINITIONS:
         mapped = [sid for sid in defn.step_ids if sid in statuses]
         completed = sum((1 for sid in mapped if statuses[sid] == "completed"))
-        live_rate = (
-            round(completed / len(mapped) * 100, 1) if mapped else defn.baseline_automation_rate
-        )
-        display_rate = (
-            max(live_rate, defn.baseline_automation_rate)
-            if mapped
-            else defn.baseline_automation_rate
-        )
+        live_rate = round(completed / len(mapped) * 100, 1) if mapped else 0.0
         entry: _facade().Dict[str, _facade().Any] = {
             "line_id": defn.line_id.value,
             "name": defn.name,
@@ -145,7 +139,7 @@ def get_five_line_status() -> _facade().Dict[str, _facade().Any]:
             "step_ids": list(defn.step_ids),
             "steps_completed": completed,
             "steps_total": len(mapped),
-            "automation_rate": display_rate,
+            "automation_rate": live_rate,
             "live_automation_rate": live_rate,
             "baseline_automation_rate": defn.baseline_automation_rate,
         }

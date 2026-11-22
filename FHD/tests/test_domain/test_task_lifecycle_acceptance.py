@@ -245,7 +245,7 @@ def test_open_effect_is_verified_instead_of_replayed() -> None:
         is None
     )
     stored = repo.get(run.run_id)
-    assert stored.state == "failed" and stored.last_error_code == "needs_verification"
+    assert stored.state == "unknown" and stored.last_error_code == "needs_verification"
 
 
 def test_approval_resumes_the_same_task_and_timeout_rejects() -> None:

@@ -8,30 +8,51 @@ from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import inventory as inventory_routes
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch, actor=None) -> TestClient:
     monkeypatch.setattr(inventory_routes, "_svc", lambda: fake_service)
     app = FastAPI()
     app.include_router(inventory_routes.router)
-    client = TestClient(app, raise_server_exceptions=False)
-    client.app_state["tenant_id"] = 7
-    return client
+    return TestClient(
+        app, raise_server_exceptions=False, headers=actor.headers if actor is not None else {}
+    )
 
 
 def _assert_inventory_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
     run = repo.get(run_id)
-    assert run is not None and run.user_id == "tenant-a"
-    assert run.status == "completed"
+    assert run is not None and run.user_id == "17"
+    assert run.status == "blocked"
     assert run.intent == f"inventory_{action}"
-    assert run.metadata["runtime_context"]["tenant_id"] == 7
+    assert run.metadata["runtime_context"]["tenant_id"] == "7"
+    assert run.metadata["runtime_context"]["_actor_authorization"]
     assert run.tool_calls[0].tool_id == "inventory"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.inventory.{action}"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-        event.event_type for event in run.events
-    }
+    assert len(run.tool_calls) == 1 and run.steps[0].attempt_count == 1
+    assert run.tool_calls[0].output["success"] is True
+    report = run.tool_calls[0].metadata["verification"]
+    assert report["accepted"] is False and report["status"] == "inconclusive"
+    assert report["code"] == (
+        "result_inventory_identity_missing"
+        if action in {"stock_in", "stock_out"}
+        else "result_verifier_unavailable"
+    )
+    assert all(check["status"] != "passed" for check in report["checks"])
+    events = {event.event_type for event in run.events}
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
+
+
+def _assert_unverified_payload(response) -> None:
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["success"] is False
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["retryable"] is False and payload["reconciliation_required"] is True
+    assert payload["outcome"] == "unknown"
 
 
 @pytest.mark.parametrize(
@@ -82,11 +103,17 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
     expected,
     result,
     local_tools,
+    trusted_actor,
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
     getattr(svc, action).return_value = result
-    client = _client(svc, monkeypatch)
+    client = _client(
+        svc,
+        monkeypatch,
+        trusted_actor(user_id=17, permissions=[f"tool.inventory.{action}"]),
+    )
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -97,20 +124,33 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
         response = client.request(
             method, "/api/inventory" + path, json=payload, headers={"X-User-Id": "tenant-a"}
         )
-    assert response.status_code == 200
+    _assert_unverified_payload(response)
     getattr(svc, action).assert_called_once_with(*expected)
     _assert_inventory_run(repo, response.json()["run_id"], action)
 
 
 def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
     svc.inventory_in.return_value = {"success": True}
     svc.inventory_out.return_value = {"success": True}
     svc.inventory_transfer.return_value = {"success": True}
-    client = _client(svc, monkeypatch)
+    client = _client(
+        svc,
+        monkeypatch,
+        trusted_actor(
+            user_id=17,
+            permissions=[
+                "tool.inventory.stock_in",
+                "tool.inventory.stock_out",
+                "tool.inventory.transfer",
+                "tool.inventory.query_transactions",
+            ],
+        ),
+    )
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
 
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -141,7 +181,11 @@ def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert all(response.status_code == 200 for response in (stock_in, stock_out, transfer))
+    for response in (stock_in, stock_out, transfer):
+        _assert_unverified_payload(response)
+    svc.inventory_in.assert_called_once()
+    svc.inventory_out.assert_called_once()
+    svc.inventory_transfer.assert_called_once()
 
     assert svc.inventory_in.call_args.kwargs["unit_price"] is None
     assert svc.inventory_in.call_args.kwargs["quantity"] == 3.0
@@ -152,3 +196,39 @@ def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
     _assert_inventory_run(repo, stock_in.json()["run_id"], "stock_in")
     _assert_inventory_run(repo, stock_out.json()["run_id"], "stock_out")
     _assert_inventory_run(repo, transfer.json()["run_id"], "transfer")
+
+
+@pytest.mark.parametrize("authenticated", [False, True])
+def test_inventory_mutation_rejects_missing_session_or_permission(
+    authenticated, monkeypatch, trusted_actor, local_tools
+) -> None:
+    svc = MagicMock()
+    actor = (
+        trusted_actor(user_id=17, permissions=["tool.inventory.query_transactions"])
+        if authenticated
+        else None
+    )
+    client = _client(svc, monkeypatch, actor)
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    repo = InMemoryAgentRunRepository()
+    with patch(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        return_value=repo,
+    ):
+        response = client.post(
+            "/api/inventory/in",
+            json={"product_id": 1, "warehouse_id": 2, "quantity": 3, "user_id": 17},
+            headers={"X-User-Id": "17"},
+        )
+    svc.inventory_in.assert_not_called()
+    if not authenticated:
+        assert response.status_code == 401
+    else:
+        assert response.status_code == 200, response.text
+        run = repo.get(response.json()["run_id"])
+        assert run is not None and run.status == "blocked" and not run.tool_calls
+        assert any(
+            event.event_type == "workflow.plan_audit_rejected"
+            and event.data["error_code"] == "tool_permission_denied"
+            for event in run.events
+        )

@@ -30,13 +30,21 @@ def cascade_tenant(context):
     return tenant
 
 
+def valid_customer_delete_ids(ids: Any) -> bool:
+    return (
+        isinstance(ids, (list, tuple))
+        and bool(ids)
+        and all(type(value) is int and value > 0 for value in ids)
+    )
+
+
 def delete_customers(session, ids, *, force=False, runtime_context=None) -> dict[str, Any]:
     from app.db.models.product import Product
     from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.shipment import ShipmentRecord
     from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
-    if not ids or any(type(value) is not int or value <= 0 for value in ids):
+    if not valid_customer_delete_ids(ids):
         return {"success": False, "message": "客户 ID 必须为非空正整数列表", "deleted_count": 0}
     if not runtime_context and not (owned_tenant_id() or current_tenant_id()):
         raise PermissionError("删除客户缺少可信身份或企业范围")

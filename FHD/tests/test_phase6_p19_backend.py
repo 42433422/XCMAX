@@ -1035,6 +1035,35 @@ def _excel_vector_client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.fixture
+def vector_runs(monkeypatch):
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
+    return repo
+
+
+def _assert_unverified_vector_ingest(response, repo, index_id):
+    assert response.status_code == 400
+    body = response.json()
+    assert body["success"] is False and body["agent_status"] == "blocked"
+    assert body["error_code"] == "result_verification_inconclusive"
+    assert body["verification_code"] == "result_verifier_unavailable"
+    assert body["retryable"] is False and body["reconciliation_required"] is True
+    run = repo.get(body["run_id"])
+    assert run is not None and run.status == "blocked" and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert call.tool_id == "excel_vector_index" and call.action == "execute"
+    assert call.cost_units == 1 and call.output["success"] is True
+    assert call.output["index_id"] == body["index_id"] == index_id
+    assert call.metadata["verification"]["accepted"] is False
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+    return call
+
+
 class TestExcelVectorIngest:
     """Cover ``ingest_excel_vector`` route."""
 
@@ -1059,7 +1088,7 @@ class TestExcelVectorIngest:
             r = client.post("/api/excel/vector/ingest", json={"file_path": ""})
         assert r.status_code == 400
 
-    def test_ingest_json_valid_file_path(self, local_tools):
+    def test_ingest_json_valid_file_path(self, local_tools, vector_runs):
         mock_svc = MagicMock()
         mock_svc.ingest_excel.return_value = {"success": True, "index_id": "abc"}
         with patch(
@@ -1071,8 +1100,10 @@ class TestExcelVectorIngest:
                 "/api/excel/vector/ingest",
                 json={"file_path": "/tmp/test.xlsx", "index_name": "test"},
             )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
+        _assert_unverified_vector_ingest(r, vector_runs, "abc")
+        mock_svc.ingest_excel.assert_called_once_with(
+            file_path="/tmp/test.xlsx", index_name="test", index_id=None
+        )
 
     def test_ingest_json_ingest_fails_returns_400(self, local_tools):
         mock_svc = MagicMock()
@@ -1118,7 +1149,7 @@ class TestExcelVectorIngest:
             )
         assert r.status_code == 400
 
-    def test_ingest_multipart_valid_file(self, tmp_dir, local_tools):
+    def test_ingest_multipart_valid_file(self, tmp_dir, local_tools, vector_runs):
         mock_svc = MagicMock()
         mock_svc.ingest_excel.return_value = {"success": True, "index_id": "x"}
         with (
@@ -1139,7 +1170,12 @@ class TestExcelVectorIngest:
                     )
                 },
             )
-        assert r.status_code == 200
+        call = _assert_unverified_vector_ingest(r, vector_runs, "x")
+        mock_svc.ingest_excel.assert_called_once_with(
+            file_path=call.params["file_path"], index_name=None, index_id=None
+        )
+        assert Path(call.params["file_path"]).parent == Path(tmp_dir).resolve()
+        assert not Path(call.params["file_path"]).exists()
 
 
 class TestExcelVectorQuery:

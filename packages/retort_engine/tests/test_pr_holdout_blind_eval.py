@@ -32,7 +32,9 @@ def test_holdout_blind_eval_records_single_pr_failure_without_aborting(
 
     def reviewer(url: str) -> dict[str, object]:
         if url.endswith("/2"):
-            raise RuntimeError("network down")
+            raise RuntimeError(
+                "network down: /private/credentials token=private-review-token"
+            )
         return _reviewer(url)
 
     result = build_pr_holdout_blind_eval(
@@ -42,6 +44,9 @@ def test_holdout_blind_eval_records_single_pr_failure_without_aborting(
     assert result["status"] == "needs_more_evidence"
     assert result["summary"]["reviewed_pr_count"] == 2
     assert result["summary"]["failed_pr_count"] == 1
+    assert result["cases"][1]["error"] == "review_failed"
+    assert "private-review-token" not in json.dumps(result)
+    assert "/private/credentials" not in json.dumps(result)
     assert [case["status"] for case in result["cases"]] == [
         "reviewed",
         "failed",

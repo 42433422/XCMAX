@@ -22,15 +22,20 @@ def _assert_print_run(repo: InMemoryAgentRunRepository, run_id: str, action: str
     run = repo.get(run_id)
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == f"print_{action}"
     assert run.tool_calls[0].tool_id == "print"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.print.{action}"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-        event.event_type for event in run.events
-    }
+    assert run.tool_calls[0].output["success"] is True
+    receipt = run.tool_calls[0].metadata["verification"]
+    assert receipt["accepted"] is False and receipt["code"] == "result_verifier_unavailable"
+    assert run.steps[0].attempt_count == 1
+    assert all(check["status"] != "passed" for check in receipt["checks"])
+    events = {event.event_type for event in run.events}
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
 
 
 def test_print_routes_execute_side_effects_through_agent_orchestrator(
@@ -97,10 +102,12 @@ def test_print_routes_execute_side_effects_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert selection.status_code == 200
-    assert document_print.status_code == 200
-    assert label_print.status_code == 200
-    assert test_print.status_code == 200
+    for response in (selection, document_print, label_print, test_print):
+        assert response.status_code == 400
+        payload = response.json()
+        assert payload["success"] is False
+        assert payload["error_code"] == "result_verification_inconclusive"
+        assert payload["retryable"] is False and payload["reconciliation_required"] is True
 
     svc.save_printer_selection.assert_called_once_with(
         document_printer="DocPrinter",
@@ -111,9 +118,12 @@ def test_print_routes_execute_side_effects_through_agent_orchestrator(
     svc.test_printer.assert_called_once_with("DocPrinter")
 
     assert selection.json()["document"] == ["DocPrinter"]
-    assert document_print.json()["message"] == "文档已提交打印"
+    assert (
+        repo.get(document_print.json()["run_id"]).tool_calls[0].output["message"]
+        == "文档已提交打印"
+    )
     assert label_print.json()["require_confirm"] is False
-    assert test_print.json()["message"] == "测试页已发送"
+    assert repo.get(test_print.json()["run_id"]).tool_calls[0].output["message"] == "测试页已发送"
 
     _assert_print_run(repo, selection.json()["run_id"], "save_printer_selection")
     _assert_print_run(repo, document_print.json()["run_id"], "print_document")
@@ -163,7 +173,7 @@ def test_workflow_label_dispatch_route_executes_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 400
     product_service.search_products.assert_called_once_with(keyword="M-1", filters={"per_page": 1})
     print_app.print_single_label.assert_called_once_with(
         product_name="产品M1",
@@ -173,5 +183,8 @@ def test_workflow_label_dispatch_route_executes_through_agent_orchestrator(
         quantity=2,
     )
     payload = response.json()
-    assert payload["message"] == "标签已打印"
+    assert payload["success"] is False
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["retryable"] is False and payload["reconciliation_required"] is True
+    assert repo.get(payload["run_id"]).tool_calls[0].output["message"] == "标签已打印"
     _assert_print_run(repo, payload["run_id"], "workflow_label_dispatch")

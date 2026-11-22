@@ -1,11 +1,12 @@
 name: desktop-security-scan
 
 # 桌面端 Electron 安全扫描(electronegativity)
-# 与 gitleaks / codeql 同级,作为 PR 门禁;每周一全量扫描一次。
+# 与 gitleaks / codeql 同级,作为 PR 门禁快速反馈。
 # 扫描对象: FHD/desktop/(剔除 node_modules/dist/build/coverage/.vitest-cache)
 # 失败门禁: 任何 HIGH 严重程度 finding 即阻断合并(可用 -x 在源码中按需排除并写明理由)。
 # 报告: SARIF 上传 GitHub Code Scanning + CSV/HTML artifact 保留 30 天。
 # 误报抑制: .github/electronegativity-suppressions.json (带 expires 过期强制复审)。
+# 全仓定期安全检查由 fhd-security-full-scan.yml 承担(每日夜间,含桌面预发布扫描),此处不再重复定时。
 
 on:
   pull_request:
@@ -22,8 +23,6 @@ on:
       - ".github/workflows/desktop-security-scan.yml"
       - ".github/scripts/parse-electronegativity-csv.js"
       - ".github/electronegativity-suppressions.json"
-  schedule:
-    - cron: "0 3 * * 1"  # 每周一 03:00 UTC 全量扫描
   workflow_dispatch:
     inputs:
       gate_severity:
@@ -63,7 +62,7 @@ jobs:
       - name: Build, scan, validate reports, and gate
         id: gate
         env:
-          GATE_SEVERITY: ${{ github.event.inputs.gate_severity || (github.event_name == 'schedule' && 'medium' || 'high') }}
+          GATE_SEVERITY: ${{ github.event.inputs.gate_severity || 'high' }}
           ELECTRONEGATIVITY_REPORT_DIR: /tmp/en-report
         run: |
           bash scripts/security-scan.sh --gate-severity "${GATE_SEVERITY}"

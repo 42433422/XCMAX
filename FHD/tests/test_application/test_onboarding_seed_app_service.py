@@ -71,6 +71,8 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
 
     actor = trusted_actor(tenant_id=1, role="admin")
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "shipment-claims.sqlite"))
+    monkeypatch.setattr("app.db.SessionLocal", actor.factory)
     repository = InMemoryAgentRunRepository()
     monkeypatch.setattr(
         "app.application.agent_orchestrator.run_repository._agent_run_repository", repository
@@ -201,6 +203,156 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
             assert shipment.quantity_tins == shipment.tin_spec == 1
             assert shipment.unit_price == shipment.amount == 99
             assert shipment.tenant_id == 1
+
+
+@pytest.fixture
+def verified_shipment(trusted_actor, monkeypatch, tmp_path):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.application.shipment_app_service import ShipmentApplicationService
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    actor = trusted_actor(role="admin")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "shipment-claims.sqlite"))
+    monkeypatch.setattr("app.db.SessionLocal", actor.factory)
+    orchestrator = AgentOrchestrator(
+        repository=InMemoryAgentRunRepository(),
+        tool_executor=SimpleNamespace(execute=AgentToolExecutor().execute),
+    )
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="Create the original two-item shipment",
+        runtime_context=actor.context,
+        plan=PlanGraph(
+            plan_id="shipment-proof",
+            intent="shipment_create",
+            nodes=[
+                WorkflowNode(
+                    node_id="shipment",
+                    tool_id="shipment_records",
+                    action="create",
+                    params={
+                        "unit_name": "Current tenant customer",
+                        "products": [
+                            {
+                                "product_name": "Item A",
+                                "quantity_tins": 2,
+                                "tin_spec": 2,
+                                "unit_price": 3,
+                                "amount": 12,
+                            },
+                            {
+                                "product_name": "Item B",
+                                "quantity_tins": 1,
+                                "tin_spec": 5,
+                                "unit_price": 4,
+                                "amount": 20,
+                            },
+                        ],
+                    },
+                )
+            ],
+        ),
+    )
+    assert run.status == "waiting_user" and not run.tool_calls
+    run = orchestrator.continue_run(run.run_id, approved_by=str(actor.user_id))
+    assert run.status == "completed", run.error
+    monkeypatch.setattr(
+        ShipmentApplicationService,
+        "create_shipment",
+        lambda *_args, **_kwargs: pytest.fail("Readback must not create another shipment"),
+    )
+    return actor, run
+
+
+@pytest.mark.parametrize(
+    "change", [None, "receipt", "tenant", "quantity", "second_item", "permission"]
+)
+def test_shipment_readback_checks_every_persisted_item_without_writes(verified_shipment, change):
+    import copy
+    import sqlite3
+
+    from sqlalchemy import event
+
+    from app.application.agent_orchestrator.result_verification import verify_step_result
+    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.application.agent_orchestrator.tool_permission import _idempotency_path
+    from app.db.models.permission import Role
+    from app.db.models.shipment import ShipmentRecord
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    actor, run = verified_shipment
+    step, call = run.steps[0], run.tool_calls[0]
+    original = copy.deepcopy(call.output)
+    if change == "receipt":
+        with sqlite3.connect(_idempotency_path(create_parent=False)) as db:
+            db.execute("DELETE FROM tool_idempotency")
+    elif change is not None:
+        with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+            row = db.get(ShipmentRecord, original["shipment"]["id"])
+            if change == "tenant":
+                row.tenant_id = actor.tenant_id + 1
+            elif change == "quantity":
+                row.quantity_kg = 42
+            elif change == "second_item":
+                parsed = json.loads(row.parsed_data)
+                parsed["items"][1]["amount"] = 1
+                row.parsed_data = json.dumps(parsed)
+            elif change == "permission":
+                role = db.query(Role).filter_by(name="admin").one()
+                role.permissions = [
+                    permission
+                    for permission in role.permissions
+                    if permission.code != "shipment.view"
+                ]
+    writes = []
+
+    def observe(_connection, _cursor, statement, _params, _context, _many):
+        if statement.split()[0].upper() in {"INSERT", "UPDATE", "DELETE"}:
+            writes.append(statement)
+
+    engine = actor.factory.kw["bind"]
+    event.listen(engine, "before_cursor_execute", observe)
+    try:
+        for _ in range(2):
+            report = verify_step_result(
+                run=run,
+                step=step,
+                call=call,
+                context={
+                    **run.metadata["runtime_context"],
+                    "run_id": run.run_id,
+                    "step_id": step.step_id,
+                    **task_execution_context(run, step),
+                },
+            )
+            assert report["accepted"] is (change is None), report
+            assert report["code"] != "verification_binding_invalid"
+            if change is None:
+                assert report["checks"][0]["evidence"]["item_count"] == 2
+        assert writes == []
+        assert call.output == original and len(run.tool_calls) == 1
+    finally:
+        event.remove(engine, "before_cursor_execute", observe)
+
+
+def test_shipment_claimed_success_cannot_borrow_an_existing_aggregate(verified_shipment):
+    import copy
+
+    from tests.test_application.test_verification_readback import invocation, verify
+
+    actor, original = verified_shipment
+    case = invocation(
+        actor,
+        tool="shipment_records",
+        action="create",
+        params=copy.deepcopy(original.steps[0].params),
+    )
+    report = verify(case, {**copy.deepcopy(original.tool_calls[0].output), "verified": True})
+    assert report["status"] != "verified"
+    assert report["code"] == "result_receipt_unavailable"
 
 
 @pytest.mark.parametrize("industry", ["考勤", "考勤排班", "attendance", "attendance-industry"])

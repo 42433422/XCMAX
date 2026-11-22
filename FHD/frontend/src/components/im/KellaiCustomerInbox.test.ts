@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import KellaiCustomerInbox from './KellaiCustomerInbox.vue'
+import KellaiMessageComposer from './kellaiInbox/KellaiMessageComposer.vue'
+import { deliveryTargetKey, useKellaiStore } from '@/stores/kellai'
 
 const kellaiMocks = vi.hoisted(() => ({
   status: vi.fn(),
@@ -16,6 +19,8 @@ const kellaiMocks = vi.hoisted(() => ({
   createFollowUpTask: vi.fn(),
   decideFollowUpTask: vi.fn(),
   disconnect: vi.fn(),
+  sendReceipt: vi.fn(),
+  sendMessage: vi.fn(),
 }))
 
 vi.mock('@/api/kellaiBinding', () => ({
@@ -34,6 +39,7 @@ const connectedStatus = {
 
 describe('KellaiCustomerInbox', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     Object.values(kellaiMocks).forEach(mock => mock.mockReset())
 
     kellaiMocks.status.mockResolvedValue(connectedStatus)
@@ -142,6 +148,61 @@ describe('KellaiCustomerInbox', () => {
 
     const messageText = wrapper.find('.kellai-inbox__messages').text()
     expect(messageText.indexOf('请问什么时候可以交付？')).toBeLessThan(messageText.indexOf('我来确认交付时间。'))
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['accepted', undefined, '渠道已受理', true],
+    ['accepted', 'accepted', '渠道已受理', true],
+    ['accepted', 'sent', '渠道确认已发出', true],
+    ['accepted', 'delivered', '渠道确认送达', false],
+    ['accepted', 'read', '渠道确认已读', false],
+    ['accepted', 'failed', '发送失败', false],
+    ['unknown', 'delivered', '发送结果未知', false],
+    ['sending', 'read', '发送处理中', false],
+    ['failed', 'delivered', '发送失败', false],
+  ])('renders ledger %s with provider %s without inventing delivery confirmation', async (status, providerState, label, awaitingDelivery) => {
+    const store = useKellaiStore()
+    store.activeCustomerId = 7
+    const key = deliveryTargetKey({ customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9' })
+    store.deliveries['request-original-123'] = {
+      request_id: 'request-original-123', target_key: key, checking: false, error: '',
+      receipt: { request_id: 'request-original-123', status: status as string, provider_state: providerState as string | undefined },
+    }
+    const wrapper = mount(KellaiMessageComposer)
+    await flushPromises()
+    const receipt = wrapper.get('.kellai-composer__receipt')
+    expect(receipt.get('strong').text()).toBe(label)
+    expect(receipt.text().includes('尚无送达确认')).toBe(awaitingDelivery)
+    if (status === 'unknown' || status === 'sending') {
+      expect(receipt.text()).toContain('请查询原请求回执，暂不重复发送')
+      expect(receipt.text()).not.toContain('渠道确认送达')
+      expect(receipt.text()).not.toContain('渠道确认已读')
+    }
+    expect(store.deliveries['request-original-123'].receipt.status).toBe(status)
+    wrapper.unmount()
+  })
+
+  it('shows and queries each receipt independently for consecutive messages to the same target', async () => {
+    const store = useKellaiStore()
+    store.binding = { state: 'connected', connection: { connection_id: 'paired', authorized_scopes: ['messages.send'] } }
+    store.activeCustomerId = 7
+    const targetKey = deliveryTargetKey({ customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9' })
+    for (const id of ['first-request-123', 'second-request-123']) {
+      store.deliveries[id] = { request_id: id, target_key: targetKey, checking: false, error: '', receipt: { request_id: id, status: 'accepted' } }
+    }
+    kellaiMocks.sendReceipt.mockResolvedValue({ request_id: 'first-request-123', status: 'accepted', provider_state: 'delivered' })
+    const wrapper = mount(KellaiMessageComposer)
+    expect(wrapper.findAll('.kellai-composer__receipt')).toHaveLength(2)
+    await wrapper.findAll('.kellai-composer__receipt')[0].get('button').trigger('click')
+    await flushPromises()
+    expect(kellaiMocks.sendReceipt).toHaveBeenCalledExactlyOnceWith('first-request-123')
+    const receipts = wrapper.findAll('.kellai-composer__receipt')
+    expect(receipts[0].text()).toContain('first-request-123')
+    expect(receipts[0].get('strong').text()).toBe('渠道确认送达')
+    expect(receipts[1].text()).toContain('second-request-123')
+    expect(receipts[1].get('strong').text()).toBe('渠道已受理')
+    expect(kellaiMocks.sendMessage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

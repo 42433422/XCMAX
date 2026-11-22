@@ -218,6 +218,19 @@ def test_post_apply(client: TestClient) -> None:
     assert res.json() == {"patch_id": "p-9", "applied": True}
 
 
+def test_invalid_patch_hides_parser_exception(client: TestClient, monkeypatch) -> None:
+    from vibe_coding.agent.patch import ProjectPatch
+
+    def fail_parse(*args, **kwargs):
+        raise ValueError("/private/credentials token=private-patch-token")
+
+    monkeypatch.setattr(ProjectPatch, "from_dict", fail_parse)
+    response = client.post("/api/apply", json={"patch": {}, "root": "."})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid patch"
+    assert "private-patch-token" not in response.text
+
+
 def test_post_heal(client: TestClient) -> None:
     res = client.post(
         "/api/heal",

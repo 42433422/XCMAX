@@ -115,7 +115,8 @@ async def test_sse_resumes_from_last_delivered_cursor_after_store_failure(monkey
     payloads = [json.loads(item.removeprefix("data: ")) for item in events]
     assert payloads[0]["type"] == "connected"
     assert payloads[1]["cursor"] == 17
-    assert payloads[2] == {"type": "error", "message": "temporary read failure"}
+    assert payloads[2] == {"type": "error", "message": "同步数据暂时不可用"}
+    assert "temporary read failure" not in "".join(events)
     assert payloads[3]["cursor"] == 19
     assert calls == [(12, 50), (17, 50), (17, 50)]
     assert sleep.await_count == 3
@@ -334,14 +335,19 @@ def test_entitlement_snapshot_resolver_failure_does_not_enable_legacy_fallback(
 
 
 @pytest.mark.parametrize(
-    ("failure", "status", "error_key"),
+    ("failure", "status", "error_key", "message"),
     [
-        (HTTPException(status_code=503, detail="identity unavailable"), 503, "detail"),
-        (RuntimeError("identity unavailable"), 500, "message"),
+        (
+            HTTPException(status_code=503, detail="identity unavailable"),
+            503,
+            "detail",
+            "identity unavailable",
+        ),
+        (RuntimeError("identity unavailable"), 500, "message", "当前账号权益同步失败"),
     ],
 )
 def test_entitlement_snapshot_preserves_non_authentication_errors(
-    entitlements_client, monkeypatch, failure, status, error_key
+    entitlements_client, monkeypatch, failure, status, error_key, message
 ):
     from app.infrastructure.auth import dependencies
 
@@ -355,4 +361,6 @@ def test_entitlement_snapshot_preserves_non_authentication_errors(
         "/api/xcmax/sync/entitlements/current", headers={"X-Session-ID": "snapshot-session"}
     )
     assert response.status_code == status
-    assert response.json()[error_key] == "identity unavailable"
+    assert response.json()[error_key] == message
+    if status == 500:
+        assert "identity unavailable" not in response.text

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from modstore_server.llm_gateway_contract import gateway_single_attempt
 from modstore_server.platform_model_transport import llm_http_response, redact_key
 
 
@@ -35,6 +36,10 @@ async def chat_openai_compatible(
     forbid_reasoning_fallback: bool = False,
     response_format: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
+    from modstore_server.llm_litellm_router import fallback_receipt_from_headers
+    from modstore_server.strategic_portfolio_usage import require_call_reservation
+
+    require_call_reservation(provider=provider, model=model, start_transport=True)
     url = f"{base_url.rstrip('/')}/chat/completions"
     body = _facade()._openai_chat_body(
         provider,
@@ -53,6 +58,16 @@ async def chat_openai_compatible(
     ) as r:
         text = r.text if r.status_code < 300 else ""
         data = redact_key(_json_dict(text), api_key) if text else None
+        fallback = fallback_receipt_from_headers(getattr(r, "headers", None))
+        gateway = (
+            {
+                "gateway_attempts_verified": gateway_single_attempt(
+                    getattr(r, "headers", {}) or {}
+                ),
+            }
+            if provider == "litellm"
+            else {}
+        )
     if r.status_code >= 300:
         return {
             "ok": False,
@@ -83,6 +98,10 @@ async def chat_openai_compatible(
                 "content": "",
                 "usage": data.get("usage") or {},
                 "raw": data,
+                "provider": provider,
+                "model": data.get("model"),
+                **fallback,
+                **gateway,
             }
             if reasoning_trace:
                 out_fail["reasoning_trace"] = reasoning_trace
@@ -93,8 +112,13 @@ async def chat_openai_compatible(
     out: Dict[str, Any] = {
         "ok": True,
         "content": text_out,
+        "finish_reason": choice0.get("finish_reason"),
         "usage": data.get("usage") or {},
         "raw": data,
+        "provider": provider,
+        "model": data.get("model"),
+        **fallback,
+        **gateway,
     }
     if reasoning_trace:
         out["reasoning_trace"] = reasoning_trace
@@ -119,6 +143,11 @@ async def stream_openai_compatible(
       {"type": "toolcall", "choices": [{"index":0,"delta":{"tool_calls":[...]},"finish_reason":"tool_calls"}]}
       {"type": "usage", "usage": {...}} when upstream provides stream_options.include_usage
     """
+    from modstore_server.llm_litellm_router import fallback_receipt_from_headers
+    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
+
+    budgeted = scope_active()
+    require_call_reservation(provider=provider, model=model, start_transport=True)
     url = f"{base_url.rstrip('/')}/chat/completions"
     body = _facade()._openai_chat_body(
         provider,
@@ -145,6 +174,9 @@ async def stream_openai_compatible(
                 "error": "模型供应商请求失败，请检查密钥、模型、额度或服务状态",
             }
             return
+        fallback = fallback_receipt_from_headers(getattr(r, "headers", None))
+        reported_model = None
+        usage_reported = False
         tool_calls_accum: dict[int, dict[str, Any]] = {}
         async for line in r.aiter_lines():
             if not line:
@@ -160,8 +192,31 @@ async def stream_openai_compatible(
                 data = redact_key(json.loads(raw), api_key)
             except json.JSONDecodeError:
                 continue
+            # Preserve the first conflicting raw identity for this reservation;
+            # a later approved alias cannot make earlier consumption known.
+            if data.get("model") and reported_model in (None, model):
+                reported_model = data["model"]
+            if budgeted and usage_reported and reported_model not in (None, model):
+                # A usage event is only a snapshot. Invalidate an earlier valid
+                # snapshot if a later raw frame changes the execution identity.
+                yield {"type": "error", "error": "上游模型身份发生变化，原调用用量尚未核验"}
+                return
             if data.get("usage"):
-                yield {"type": "usage", "usage": data.get("usage") or {}}
+                usage_reported = True
+                yield {
+                    "type": "usage",
+                    "usage": data.get("usage") or {},
+                    "provider": provider,
+                    "model": reported_model,
+                    **fallback,
+                    **(
+                        {
+                            "gateway_attempts_verified": gateway_single_attempt(r.headers),
+                        }
+                        if provider == "litellm"
+                        else {}
+                    ),
+                }
             choice0 = (data.get("choices") or [{}])[0] or {}
             delta = choice0.get("delta") or {}
             content = delta.get("content")
@@ -275,6 +330,7 @@ async def chat_anthropic_compatible(
     return {
         "ok": True,
         "content": "\n".join(parts),
+        "finish_reason": data.get("stop_reason"),
         "usage": data.get("usage") or {},
         "raw": data,
     }
@@ -298,13 +354,18 @@ def _oai_to_gemini(messages: List[Dict[str, str]]) -> List[Dict[str, Any]]:
     return contents
 
 
-async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+async def chat_google(
+    api_key: str, model: str, messages: List[Dict[str, str]], *, max_tokens: Optional[int] = None
+) -> Dict[str, Any]:
     contents = _facade()._oai_to_gemini(messages)
+    payload: Dict[str, Any] = {"contents": contents}
+    if max_tokens is not None:
+        payload["generationConfig"] = {"maxOutputTokens": max_tokens}
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     async with _facade().httpx.AsyncClient(
         timeout=_facade()._LLM_TIMEOUT, limits=_facade()._LLM_LIMITS
     ) as client:
-        r = await client.post(url, params={"key": api_key}, json={"contents": contents})
+        r = await client.post(url, params={"key": api_key}, json=payload)
         text = r.text
     if r.status_code >= 400:
         return {"ok": False, "status": r.status_code, "error": text[:2000]}
@@ -325,4 +386,20 @@ async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) 
     parts = content_block.get("parts") or []
     texts = [str(p.get("text") or "") for p in parts if isinstance(p, dict)]
     usage = data.get("usageMetadata") or data.get("usage") or {}
-    return {"ok": True, "content": "\n".join(texts), "usage": usage, "raw": data}
+    if isinstance(usage, dict):
+        prompt, total = usage.get("promptTokenCount"), usage.get("totalTokenCount")
+        if type(prompt) is int and type(total) is int and 0 <= prompt <= total:
+            # Includes thinking/tool-use tokens in total; never infer missing usage as zero.
+            usage = {
+                **usage,
+                "prompt_tokens": prompt,
+                "completion_tokens": total - prompt,
+                "total_tokens": total,
+            }
+    return {
+        "ok": True,
+        "content": "\n".join(texts),
+        "finish_reason": first.get("finishReason"),
+        "usage": usage,
+        "raw": data,
+    }

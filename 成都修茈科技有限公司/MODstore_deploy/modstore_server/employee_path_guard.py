@@ -10,6 +10,7 @@ hard 约束（本模块）：actions 执行后检查 changed_files 是否在 sco
 from __future__ import annotations
 
 import fnmatch
+from pathlib import Path
 from typing import Any, Dict, List
 
 
@@ -25,7 +26,7 @@ def _normalize_repo_path(p: str) -> str:
     return s
 
 
-def _extract_changed_files_from_output(out: Any) -> List[str]:
+def _extract_changed_files_from_output(out: Any, *, project_root: Path | None = None) -> List[str]:
     """从单个 handler output 抽取它声明改/写/创建的文件路径。
 
     兼容多种字段命名：files_changed / changed_files / file_path / path /
@@ -61,6 +62,12 @@ def _extract_changed_files_from_output(out: Any) -> List[str]:
             paths.append(v)
     # 特殊处理：output 字段是 LLM 输出 JSON 字符串，里面可能含 files_changed
     output_field = out.get("output")
+    if out.get("handler") == "direct_python" and isinstance(output_field, dict):
+        # FileEmployeeSupport emits concrete file outputs under output.items.
+        items = output_field.get("items") or []
+        for item in [output_field, *(items if isinstance(items, list) else [])]:
+            if isinstance(item, dict) and isinstance(item.get("output_path"), str):
+                paths.append(item["output_path"])
     if isinstance(output_field, str) and output_field.strip().startswith("{"):
         import json as _json
 
@@ -90,7 +97,23 @@ def _extract_changed_files_from_output(out: Any) -> List[str]:
                         paths.append(v)
         except (ValueError, TypeError):
             pass
-    return paths
+    if project_root is not None:
+        root = project_root.resolve()
+        normalized = []
+        for raw in paths:
+            path = Path(raw)
+            try:
+                normalized.append(
+                    (path if path.is_absolute() else root / path)
+                    .resolve()
+                    .relative_to(root)
+                    .as_posix()
+                )
+            except (OSError, ValueError):
+                # Keep out-of-root declarations for the guard to reject.
+                normalized.append(raw)
+        paths = normalized
+    return list(dict.fromkeys(paths))
 
 
 def _matches_any(path: str, globs: List[str]) -> bool:
@@ -121,6 +144,7 @@ def check_path_guard(
     config: Dict[str, Any],
     result: Dict[str, Any],
     employee_id: str,
+    project_root: Path | None = None,
 ) -> Dict[str, Any]:
     """检查 actions 结果里 changed_files 是否在 scope 内、不命中 forbidden。
 
@@ -167,7 +191,7 @@ def check_path_guard(
         if not isinstance(out, dict):
             continue
         handler_name = str(out.get("handler") or "")
-        files = _extract_changed_files_from_output(out)
+        files = _extract_changed_files_from_output(out, project_root=project_root)
         for f in files:
             all_files.append(f)
             file_to_handler[f] = handler_name
@@ -175,6 +199,25 @@ def check_path_guard(
     violations: List[Dict[str, Any]] = []
     for path in all_files:
         norm = _normalize_repo_path(path)
+        if project_root is not None:
+            candidate = Path(path)
+            try:
+                norm = (
+                    (candidate if candidate.is_absolute() else project_root / candidate)
+                    .resolve()
+                    .relative_to(project_root.resolve())
+                    .as_posix()
+                )
+            except (OSError, ValueError):
+                violations.append(
+                    {
+                        "path": path,
+                        "reason": "outside_project_root",
+                        "matched_glob": "",
+                        "handler": file_to_handler.get(path, ""),
+                    }
+                )
+                continue
         if not norm:
             continue
         # 先检查 forbidden（高优先级）

@@ -25,16 +25,20 @@ def _assert_material_run(repo: InMemoryAgentRunRepository, run_id: str, action: 
     run = repo.get(run_id)
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == f"materials_{action}"
     assert run.tool_calls[0].tool_id == "materials"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.materials.{action}"
     assert run.tool_calls[0].metadata["authorization_permission"] == "material.edit"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-        event.event_type for event in run.events
-    }
+    call = run.tool_calls[0]
+    assert call.output["success"] is True
+    assert call.metadata["verification"]["accepted"] is False
+    assert call.metadata["verification"]["code"] == "result_verifier_unavailable"
+    events = {event.event_type for event in run.events}
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
 
 
 def test_material_mutation_routes_execute_through_agent_orchestrator(
@@ -76,20 +80,23 @@ def test_material_mutation_routes_execute_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert create.status_code == 200
-    assert update.status_code == 200
-    assert delete.status_code == 200
-    assert batch.status_code == 200
+    for response in (create, update, delete, batch):
+        assert response.status_code == 400
+        payload = response.json()
+        assert payload["success"] is False
+        assert payload["error_code"] == "result_verification_inconclusive"
+        assert payload["reconciliation_required"] is True
+        assert payload["retryable"] is False
 
     create_payload = create.json()
     update_payload = update.json()
     delete_payload = delete.json()
     batch_payload = batch.json()
     assert create_payload["agent_run_id"] == create_payload["run_id"]
-    assert update_payload["data"]["name"] == "树脂 v2"
-    assert delete_payload["message"] == "删除成功"
+    assert update_payload["data"] == {"id": 1}
+    assert repo.get(delete_payload["run_id"]).tool_calls[0].output["message"] == "删除成功"
     assert batch_payload["deleted_count"] == 2
-    assert batch_payload["message"] == "已删除 2 条记录"
+    assert repo.get(batch_payload["run_id"]).tool_calls[0].output["message"] == "已删除 2 条记录"
 
     svc.create_material.assert_called_once()
     assert svc.create_material.call_args.args[0]["min_stock"] == 12
@@ -131,7 +138,17 @@ def test_material_create_failure_is_recorded_on_agent_run(
     assert payload["message"] == "duplicate"
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.status == "failed"
+    assert run.status == "blocked"
     assert run.tool_calls[0].tool_id == "materials"
     assert run.tool_calls[0].action == "create"
     assert run.tool_calls[0].status == "failed"
+    assert run.tool_calls[0].output == {
+        "success": False,
+        "message": "duplicate",
+        "outcome": "unknown",
+        "reconciliation_required": True,
+        "retryable": False,
+    }
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is False
+    assert run.tool_calls[0].metadata["verification"]["code"] == "execution_receipt_not_successful"
+    assert "run.completed" not in {event.event_type for event in run.events}

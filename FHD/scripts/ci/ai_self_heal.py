@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import time
+import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -967,6 +968,8 @@ def dispatch_issue_implementation(
         "control_task_id": control_task_id,
         "status": "pending",
         "dispatch_run_id": 0,
+        "dispatch_request_id": str(uuid.uuid4()),
+        "requested_at": time.time(),
     }
     try:
         # Persist intent first. A lost response must not become a fresh control task.
@@ -981,6 +984,7 @@ def dispatch_issue_implementation(
         inputs = {
             "issue_number": match.group("number"),
             "target_branch": receipt["base_branch"],
+            "dispatch_request_id": receipt["dispatch_request_id"],
         }
         if control_task_id:
             inputs["control_task_id"] = control_task_id

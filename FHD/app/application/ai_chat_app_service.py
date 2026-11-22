@@ -428,8 +428,10 @@ class AIChatApplicationService(
             approval=getattr(self, "approval_service", None),
         )
 
-    def _hydrate_pending_workflow(self, user_id: str, session_id: str) -> bool:
-        return self._workflow_session().hydrate_pending_workflow(user_id, session_id)
+    def _hydrate_pending_workflow(
+        self, user_id: str, session_id: str, context: dict[str, Any] | None = None
+    ) -> bool:
+        return self._workflow_session().hydrate_pending_workflow(user_id, session_id, context)
 
     def _persist_plan_state(
         self,

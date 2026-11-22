@@ -151,9 +151,11 @@ class PlannedWorkflowDispatch:
             "success": True,
             "message": "回复完成",
             "response": text,
+            "execution": PlannedWorkflowDispatch._no_write_execution(context),
             "data": {
                 "text": text,
                 "action": "model_reply",
+                "execution_started": False,
                 "workflow_runtime": "xcagi-langgraph",
                 "plan_audit": result.final_context.get("plan_audit") or {},
                 "workflow_trace": result.final_context.get("workflow_trace") or [],
@@ -187,6 +189,7 @@ class PlannedWorkflowDispatch:
                     "workflow_confirmation_stale",
                     "原澄清计划缺失，未执行本次操作。",
                     runtime_context,
+                    continuation=continuation,
                 )
             agent_run = orchestrator.continue_planning_clarification(
                 original.run_id,
@@ -203,6 +206,7 @@ class PlannedWorkflowDispatch:
                     "workflow_confirmation_stale",
                     "原澄清已被处理或发生变化，本次未重复执行；请查看原任务。",
                     runtime_context,
+                    continuation=continuation,
                 )
             plan = plan_from_dict(agent_run.metadata.get("plan")) or plan
         else:
@@ -282,10 +286,15 @@ class PlannedWorkflowDispatch:
             user_id, message, text, context
         )
         planning_continuation = (pending_result or {}).get("_planning_clarification")
+        continuation_reference = {}
         if isinstance(planning_continuation, dict):
             from app.application.agent_orchestrator.tool_permission import overlay_resume_context
 
             original = planning_continuation["run"]
+            continuation_reference = {
+                "run_id": original.run_id,
+                "agent_run_id": original.run_id,
+            }
             incoming = context
             context = overlay_resume_context(original.metadata.get("runtime_context"), incoming)
             # This answer is a new chat turn, never a replay of the question's turn.
@@ -303,13 +312,16 @@ class PlannedWorkflowDispatch:
             context["planning_clarification"] = {
                 "original_request": original.message,
                 "exchanges": [
-                    *exchanges[-11:],
+                    *exchanges,
                     {
                         "question": planning_continuation["question"],
                         "answer": planning_continuation["answer"],
                     },
                 ],
             }
+            # Accepted answers are durable task facts, not a rolling chat tail.
+            # Keep this whole request in the gateway's protected latest turn:
+            # if it cannot fit, preserve the wait instead of forgetting scope.
             message = json.dumps(context["planning_clarification"], ensure_ascii=False)
             pending_handled = False
         plan = None
@@ -387,6 +399,7 @@ class PlannedWorkflowDispatch:
             if recent_target is None:
                 return {
                     "success": True,
+                    **continuation_reference,
                     "message": "需要澄清",
                     "response": "当前会话没有可安全引用的上一条数据库记录，请提供实体名称和唯一 ID。",
                     "data": {
@@ -411,6 +424,16 @@ class PlannedWorkflowDispatch:
         from app.infrastructure.chat_stream_lifetime import publish_stream_note
 
         if plan is None:
+            from app.application.ai_chat.dialogue_memory import last_assistant_question
+            from app.application.workflow.clarification_selection import (
+                build_continuation_message,
+                looks_like_continuation_reply,
+            )
+
+            if looks_like_continuation_reply(message):
+                prior_question = last_assistant_question(context)
+                if prior_question:
+                    planner_message = build_continuation_message(planner_message, prior_question)
             publish_stream_note("正在分析需求，生成执行计划…")
             plan = self.planner.plan(
                 user_id=user_id,
@@ -431,6 +454,7 @@ class PlannedWorkflowDispatch:
             return {
                 "success": False,
                 "execution_state": "failed",
+                **continuation_reference,
                 "message": message_text,
                 "response": message_text,
                 "execution": self._no_write_execution(context),
@@ -452,6 +476,10 @@ class PlannedWorkflowDispatch:
             deterministic = (plan.metadata or {}).get("planning_source") == "deterministic_command"
             if deterministic and reason:
                 message_text = reason
+            elif failure_code == "model_response_incomplete":
+                warning = "模型回复未完整生成，请重试。"
+                prefix = str((plan.metadata or {}).get("partial_reply") or "")
+                message_text = f"{prefix}\n\n{warning}" if prefix else warning
             elif coverage_rejected:
                 message_text = (
                     "这次任务的目标、条件或先后顺序尚未核对完整，本次没有执行任何业务操作。"
@@ -484,6 +512,7 @@ class PlannedWorkflowDispatch:
             return {
                 "success": False,
                 "execution_state": "failed",
+                **continuation_reference,
                 "message": message_text,
                 "response": message_text,
                 "execution": self._no_write_execution(context),
@@ -492,6 +521,8 @@ class PlannedWorkflowDispatch:
                     "action": "workflow_planning_failed",
                     "error_code": "workflow_goal_coverage_rejected"
                     if coverage_rejected
+                    else "model_response_incomplete"
+                    if failure_code == "model_response_incomplete"
                     else "context_window_exceeded"
                     if failure_code == "context_window_exceeded"
                     else "workflow_plan_unavailable"
@@ -530,7 +561,12 @@ class PlannedWorkflowDispatch:
         try:
             bind_durable_batch(plan, context)
         except BatchContinuationBlocked as exc:
-            return self._risk_rejection("elt_attachment_binding_failed", str(exc), context)
+            return self._risk_rejection(
+                "elt_attachment_binding_failed",
+                str(exc),
+                context,
+                continuation=planning_continuation,
+            )
         node_labels = [f"{node.tool_id}.{node.action}" for node in plan.nodes]
         publish_stream_note(f"已生成 {len(node_labels)} 步执行计划：" + "、".join(node_labels))
         from app.domain.autonomy.autonomy_guard import ProhibitedActionError
@@ -542,6 +578,7 @@ class PlannedWorkflowDispatch:
                 "workflow_action_prohibited",
                 str(getattr(exc, "reason", "操作命中禁止边界")),
                 context,
+                continuation=planning_continuation,
             )
         plan_node_ids = {str(node.node_id) for node in plan.nodes}
         denied_nodes = decision.denied_nodes or []
@@ -549,7 +586,12 @@ class PlannedWorkflowDispatch:
         if not isinstance(denied_nodes, (list, tuple, set, frozenset)) or not isinstance(
             blocking_nodes, (list, tuple, set, frozenset)
         ):
-            return self._risk_rejection("workflow_risk_denied", "风险审核结果格式无效", context)
+            return self._risk_rejection(
+                "workflow_risk_denied",
+                "风险审核结果格式无效",
+                context,
+                continuation=planning_continuation,
+            )
         denied_ids = {str(node_id) for node_id in denied_nodes if str(node_id)}
         blocking_ids = {str(node_id) for node_id in blocking_nodes if str(node_id)}
         if (
@@ -562,6 +604,7 @@ class PlannedWorkflowDispatch:
                 "workflow_risk_denied",
                 str(decision.reason or "计划未通过自主执行风险策略"),
                 context,
+                continuation=planning_continuation,
             )
         runtime_ctx = self.callbacks._merge_tool_runtime_context(user_id, message, context)
         runtime_ctx.update(continuation_task)
@@ -686,12 +729,19 @@ class PlannedWorkflowDispatch:
 
     @staticmethod
     def _risk_rejection(
-        code: str, reason: str, context: dict[str, Any] | None = None
+        code: str,
+        reason: str,
+        context: dict[str, Any] | None = None,
+        *,
+        continuation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         message = "计划未通过系统风险审核，本次没有执行任何业务操作。"
+        # Only the verified durable continuation supplies identity, never client context.
+        original = continuation["run"] if continuation else None
         return {
             "success": False,
             "execution_state": "blocked",
+            **({"run_id": original.run_id, "agent_run_id": original.run_id} if original else {}),
             "message": message,
             "response": message,
             "execution": PlannedWorkflowDispatch._no_write_execution(context or {}),

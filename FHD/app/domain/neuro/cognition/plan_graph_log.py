@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.security.secrets_redactor import redact_obj
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -138,7 +139,7 @@ def append_plan_graph(
     path = _log_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(record, ensure_ascii=False)
+        line = json.dumps(redact_obj(record), ensure_ascii=False)
         with _lock:
             with path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")

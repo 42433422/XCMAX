@@ -1847,15 +1847,6 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                     "collab report (meeting minutes) failed record_id=%s", record_id
                 )
         if record_id:
-            try:
-                from modstore_server.release_train import bump_release_train
-
-                bump_release_train(record_id=int(record_id), digest_day=day)
-            except RECOVERABLE_ERRORS:
-                _facade().logger.exception(
-                    "daily digest: release_train bump failed record_id=%s", record_id
-                )
-        if record_id:
             _facade()._run_scheduled_digest_vibe_prep(
                 record_id=record_id,
                 day=day,
@@ -1876,6 +1867,16 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                     record_node_run(nid, ok=digest_ok, source="daily_digest", meta=meta)
             except RECOVERABLE_ERRORS:
                 _facade().logger.exception("daily digest: time_rail runtime record failed")
+        if record_id:
+            # 时间线节点落盘之后再 bump：只有当日节点全部 ok 才算真实闭环。
+            try:
+                from modstore_server.release_train import bump_release_train
+
+                bump_release_train(record_id=int(record_id), digest_day=day)
+            except RECOVERABLE_ERRORS:
+                _facade().logger.exception(
+                    "daily digest: release_train bump failed record_id=%s", record_id
+                )
         identity_tokens = [
             t for t in token_batch or [] if getattr(t, "kind", None) == "digest_identity"
         ]

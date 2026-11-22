@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, Optional
@@ -64,7 +64,7 @@ def record_node_run(
     if not nid:
         return {"ok": False, "reason": "empty node_id"}
 
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     row = {
         "last_run": now,
         "ok": bool(ok) if ok is not None else None,

@@ -13,6 +13,273 @@ from app.application.dataset_rag.retrieval import DatasetRetrieval
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.application.dataset_rag_app_service import DatasetRagApplicationService
 from app.infrastructure.rag import SemanticChunker
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@pytest.fixture
+def verified_inline_ingest(tmp_path, monkeypatch, trusted_actor, local_tools):
+    from app.application import dataset_rag_app_service as service_module
+    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    actor = trusted_actor(role="knowledge-writer", permissions=["dataset.read", "dataset.write"])
+    service = DatasetRagApplicationService(
+        storage_path=tmp_path / "verified-documents.json",
+        embedder=lambda text: [1.0],
+        vector_index_backend_name="none",
+        rebuild_workers_enabled=False,
+    )
+    monkeypatch.setattr(service_module, "_dataset_rag_app_service", service)
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "document-claims.sqlite"))
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+    repo = InMemoryAgentRunRepository()
+    orchestrator = AgentOrchestrator(repository=repo)
+    plan = PlanGraph(
+        plan_id="inline-proof",
+        intent="dataset-ingest",
+        nodes=[
+            WorkflowNode(
+                node_id="ingest",
+                tool_id="dataset_rag",
+                action="ingest_document",
+                params={
+                    "dataset_id": "verified",
+                    "source": "policy.txt",
+                    "text": "Approved inline policy. Human review is required. Evidence remains tenant scoped.",
+                    "chunk_strategy": "fixed",
+                    "chunk_size": 35,
+                    "chunk_overlap": 5,
+                },
+            )
+        ],
+    )
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="Store approved policy",
+        plan=plan,
+        runtime_context=actor.context,
+    )
+    assert run.status == "waiting_user"
+    run = orchestrator.continue_run(
+        run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
+    )
+    assert run is not None and run.status == "completed", run.error if run else "missing run"
+    return actor, service, repo, run
+
+
+def _recheck_inline(run):
+    from app.application.agent_orchestrator.result_verification import verify_step_result
+    from app.application.agent_orchestrator.task_background import task_execution_context
+
+    step = run.steps[0]
+    return verify_step_result(
+        run=run,
+        step=step,
+        call=run.tool_calls[0],
+        context={
+            **run.metadata["runtime_context"],
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            **task_execution_context(run, step),
+        },
+    )
+
+
+def test_inline_ingest_verifies_committed_chunks_without_writer_initialization(
+    verified_inline_ingest, monkeypatch
+):
+    import copy
+
+    _actor, service, _repo, run = verified_inline_ingest
+    stored = service._storage_path.read_bytes()
+    original = copy.deepcopy(run.tool_calls[0].output)
+    service._repository.datasets = {}
+    for target, name in (
+        (service, "ingest_document"),
+        (service._repository, "_persist_locked"),
+        (service._repository, "_load_persisted_state"),
+        (service._vector, "_sync_vector_index_locked"),
+    ):
+        monkeypatch.setattr(
+            target, name, lambda *args, **kwargs: pytest.fail("readback must not run writers")
+        )
+    report = _recheck_inline(run)
+    assert report["accepted"] is True
+    evidence = report["checks"][0]["evidence"]
+    assert evidence["scope"] == "current_inline_document_storage"
+    assert evidence["vector_index_verified"] is False and evidence["chunk_count"] > 1
+    assert service._storage_path.read_bytes() == stored
+    assert run.tool_calls[0].output == original and len(run.tool_calls) == 1
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "tenant",
+        "version",
+        "chunk_text",
+        "missing_chunk",
+        "source_hash",
+        "read_permission",
+        "store_path",
+        "missing_claim",
+        "file_corruption",
+    ],
+)
+def test_inline_ingest_rejects_changed_or_unavailable_evidence(
+    verified_inline_ingest, monkeypatch, tmp_path, change
+):
+    import copy
+    import json
+    import os
+    import sqlite3
+
+    actor, service, _repo, run = verified_inline_ingest
+    original = copy.deepcopy(run.tool_calls[0].output)
+    if change == "read_permission":
+        from app.db.models.permission import Role
+
+        with actor.factory.begin() as db:
+            role = db.query(Role).filter_by(name="knowledge-writer").one()
+            role.permissions = [
+                permission for permission in role.permissions if permission.code != "dataset.read"
+            ]
+    elif change == "missing_claim":
+        with sqlite3.connect(os.environ["XCAGI_TOOL_IDEMPOTENCY_PATH"]) as db:
+            db.execute("delete from tool_idempotency")
+    elif change == "store_path":
+        copied = tmp_path / "another-store.json"
+        copied.write_bytes(service._storage_path.read_bytes())
+        monkeypatch.setattr(service._repository, "storage_path", copied)
+    elif change == "file_corruption":
+        service._storage_path.write_bytes(b"not a committed JSON document")
+    else:
+        stored = json.loads(service._storage_path.read_text())
+        dataset = stored["datasets"]["verified"]
+        document = dataset["documents"][original["document"]["document_id"]]
+        if change == "tenant":
+            document["tenant_id"] = "another-tenant"
+        elif change == "version":
+            document["version"] += 1
+        elif change == "source_hash":
+            document["metadata"]["document_content_hash"] = "0" * 64
+        elif change == "chunk_text":
+            dataset["chunks"][0]["text"] = "forged policy"
+        else:
+            dataset["chunks"].pop()
+        service._storage_path.write_text(json.dumps(stored))
+    report = _recheck_inline(run)
+    assert report["accepted"] is False, report
+    assert run.tool_calls[0].output == original and len(run.tool_calls) == 1
+
+
+def test_inline_ingest_rejects_forged_success_borrowing_an_old_document(verified_inline_ingest):
+    import copy
+    from unittest.mock import MagicMock
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.workflow_types import plan_from_dict
+
+    actor, _service, repo, original = verified_inline_ingest
+    executor = MagicMock()
+    executor.execute_with_deadline.return_value = {
+        **copy.deepcopy(original.tool_calls[0].output),
+        "verification": {"verified": True},
+    }
+    orchestrator = AgentOrchestrator(repository=repo, tool_executor=executor)
+    plan = plan_from_dict(original.metadata["plan"])
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="forged new request",
+        plan=plan,
+        runtime_context=actor.context,
+    )
+    run = orchestrator.continue_run(
+        run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
+    )
+    assert run.status == "blocked"
+    assert run.tool_calls[0].metadata["verification"]["code"] == "result_receipt_unavailable"
+
+
+@pytest.mark.parametrize(
+    "change", [None, "old_document", "old_chunk", "new_chunk", "missing_baseline"]
+)
+def test_rollback_verifies_the_original_target_and_new_document_without_replay(
+    verified_inline_ingest, monkeypatch, change
+):
+    import copy
+    import json
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    actor, service, repo, initial = verified_inline_ingest
+    original_id = initial.tool_calls[0].output["document"]["document_id"]
+    orchestrator = AgentOrchestrator(repository=repo)
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="Restore approved original policy",
+        runtime_context=actor.context,
+        plan=PlanGraph(
+            plan_id="rollback-proof",
+            intent="dataset-rollback",
+            nodes=[
+                WorkflowNode(
+                    node_id="rollback",
+                    tool_id="dataset_rag",
+                    action="rollback_version",
+                    params={
+                        "dataset_id": "verified",
+                        "source": "policy.txt",
+                        "target_version": "1",
+                    },
+                )
+            ],
+        ),
+    )
+    assert run.status == "waiting_user"
+    run = orchestrator.continue_run(
+        run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
+    )
+    assert run.status == "completed", run.error
+    original = copy.deepcopy(run.tool_calls[0].output)
+    assert original["rolled_back_from"]["document_id"] == original_id
+    monkeypatch.setattr(
+        service,
+        "rollback_document_version",
+        lambda **kwargs: pytest.fail("verification cannot roll back again"),
+    )
+    if change == "missing_baseline":
+        # A host contract produced before target-baseline support has no proof
+        # of which version existed before the write, even with a real receipt.
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+        contract = run.tool_calls[0].metadata["verification_contract"]
+        contract.pop("rollback_target")
+        contract["contract_sha256"] = canonical_hash(
+            {key: value for key, value in contract.items() if key != "contract_sha256"}
+        )
+    elif change:
+        raw = json.loads(service._storage_path.read_text())
+        dataset = raw["datasets"]["verified"]
+        if change == "old_document":
+            dataset["documents"][original_id]["metadata"]["document_content_hash"] = "0" * 64
+        else:
+            target = original_id if change == "old_chunk" else original["document"]["document_id"]
+            next(
+                chunk for chunk in dataset["chunks"] if chunk["metadata"]["document_id"] == target
+            )["text"] = "changed"
+        service._storage_path.write_text(json.dumps(raw))
+    report = _recheck_inline(run)
+    assert report["accepted"] is (change is None)
+    if change is None:
+        evidence = report["checks"][0]["evidence"]
+        assert evidence["scope"] == "current_rollback_document_storage"
+        assert evidence["target_document_id"] == original_id
+        assert evidence["vector_index_verified"] is False
+    assert run.tool_calls[0].output == original and len(run.tool_calls) == 1
 
 
 def _overlapping_ingests(tmp_path, *, slow_request, concurrent_request):

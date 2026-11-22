@@ -55,13 +55,21 @@ __all__ = [
 async def _customer_permission(request: Request):
     path = request.url.path.rstrip("/")
     parent, _, tail = path.rpartition("/")
-    owned_delete = (
+    owned_mutation = (
         request.method == "POST"
-        and path in {"/customers/batch-delete", "/api/customers/batch-delete"}
+        and path
+        in {
+            "/customers",
+            "/api/customers",
+            "/customers/batch-delete",
+            "/api/customers/batch-delete",
+        }
     ) or (
-        request.method == "DELETE" and parent in {"/customers", "/api/customers"} and tail.isdigit()
+        request.method in {"PUT", "DELETE"}
+        and parent in {"/customers", "/api/customers"}
+        and tail.isdigit()
     )
-    if owned_delete:
+    if owned_mutation:
         from app.infrastructure.auth.business_scope_gate import check_owned_business_permission
         from app.infrastructure.auth.dependencies import get_logged_in_user
         from app.infrastructure.tenant_scope import owned_tenant_scope
@@ -87,6 +95,7 @@ async def _customer_permission(request: Request):
                 yield user
             return
         tenant = check_owned_business_permission(user, "customer.edit")
+        request.state.customer_owned_mutation = True
         with owned_tenant_scope(tenant):
             yield user
         return
@@ -100,6 +109,24 @@ logger = logging.getLogger(__name__)
 def _execute_customers_route_action(
     action: str, params: dict[str, Any], *, runtime_context=None
 ) -> dict[str, Any]:
+    if action in {"create", "update"} and (runtime_context or {}).get("tenant_id"):
+        from app.application import get_customer_app_service
+
+        payload = {
+            "customer_name": str(
+                params.get("customer_name") or params.get("unit_name") or params.get("name") or ""
+            ).strip(),
+            "contact_person": str(params.get("contact_person") or ""),
+            "contact_phone": str(params.get("contact_phone") or ""),
+            "contact_address": str(params.get("contact_address") or params.get("address") or ""),
+        }
+        service = get_customer_app_service()
+        if action == "create":
+            return service.create(payload)
+        customer_id = int(params.get("id") or params.get("customer_id") or 0)
+        if customer_id <= 0:
+            return {"success": False, "message": "缺少 id"}
+        return service.update(customer_id, payload)
     if action == "create":
         name = str(
             params.get("customer_name") or params.get("unit_name") or params.get("name") or ""
@@ -338,7 +365,8 @@ def customers_create(request: Request, body: dict = Body(default_factory=dict)) 
         raise
     except RECOVERABLE_ERRORS:
         logger.debug("customers create via service skipped", exc_info=True)
-    _customers_write_raise(request)
+    if not getattr(request.state, "customer_owned_mutation", False):
+        _customers_write_raise(request)
     name, cp, ph, addr = _customer_body_name_contact(body)
     if not name:
         raise HTTPException(status_code=400, detail="客户名称不能为空")
@@ -388,7 +416,8 @@ def customers_update(
         raise
     except RECOVERABLE_ERRORS:
         logger.debug("customers update via service skipped", exc_info=True)
-    _customers_write_raise(request)
+    if not getattr(request.state, "customer_owned_mutation", False):
+        _customers_write_raise(request)
     name, cp, ph, addr = _customer_body_name_contact(body)
     if not name:
         raise HTTPException(status_code=400, detail="客户名称不能为空")

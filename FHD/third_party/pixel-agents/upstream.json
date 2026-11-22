@@ -1,0 +1,191 @@
+{
+  "repository": "https://github.com/pixel-agents-hq/pixel-agents",
+  "version": "v1.6.0",
+  "commit": "4dd14d612fd37d89ffbbc977959f572395c4eec8",
+  "files": {
+    "core/src/assets/characterSheet.ts": {
+      "sha256": "13a976bab1334499255172c5a4d7706eed2ffa64d79ad5d3957f7112266d495f",
+      "modified": false
+    },
+    "core/src/assets/colorUtils.ts": {
+      "sha256": "c943c0416bbd17b34a30400902afcb35c1efd2b47a2ef83359b9234fb78473e3",
+      "modified": false
+    },
+    "core/src/assets/constants.ts": {
+      "sha256": "2ddb88b781b263030b46c8326a3093fc6954665df46893efbc3b390afe31332d",
+      "modified": false
+    },
+    "core/src/assets/seatedFrame.ts": {
+      "sha256": "2b49c239722138dd25efb80b5cab6aef826d3d26dc69f2e811ada1f926f03fc8",
+      "modified": false
+    },
+    "core/src/assets/types.ts": {
+      "sha256": "4e57264a112b9a1b5b20c604122400f5f2f611f7f3d47e840389767291aa94ed",
+      "modified": false
+    },
+    "core/src/characterProfiles.ts": {
+      "sha256": "533b8958961f8786697053e8c6b4bcb745a16af558ab45db1ef8d694d0d3b881",
+      "modified": false
+    },
+    "core/src/defaultCharacterProfiles.ts": {
+      "sha256": "53d8c7e22917796ba64f10bb424c6e5de349ed14f6eca65a3fa8437ea809befe",
+      "modified": false
+    },
+    "core/src/directoryCharacters.ts": {
+      "sha256": "8754313f941eba330de6517b45b3feeada2b987dd1abd7b5ca9b900d598b2bf1",
+      "modified": false
+    },
+    "core/src/isRecord.ts": {
+      "sha256": "e41e001ca56e5e5653adad36a65f1b5d2751f4f96c107767546ad86a0cc806b5",
+      "modified": false
+    },
+    "core/src/localId.ts": {
+      "sha256": "0e5677490e567c63c3fe5b0811943bb1f0bc607a30b194e2791a421acf54780b",
+      "modified": false
+    },
+    "core/src/messages.ts": {
+      "sha256": "cfb51f3aced6de15bef7fb8eec48efb0f7dfc57c5071f431871dd7b4379f6624",
+      "modified": false
+    },
+    "core/src/paletteUtils.ts": {
+      "sha256": "aec444cd5f19a6d8ea49944e4016016255014f092f74d6329631b718aea127e8",
+      "modified": false
+    },
+    "webview-ui/src/components/ui/pixelGrid.ts": {
+      "sha256": "5748ee679a51d899a38a697b9ab1c2545717eeba70d78bd7548f11e2f61090de",
+      "modified": false
+    },
+    "webview-ui/src/components/ui/pixelIcons.ts": {
+      "sha256": "7d9ee0ce21b9e9c1986ec8f3fba308a350183aa579c26ffc80ce4ed78d2e3657",
+      "modified": false
+    },
+    "webview-ui/src/components/ui/pixelSnap.ts": {
+      "sha256": "009a7cd39e8866d65f282b9c5b3c0813a8ba80ff85e2549adb326ab57ed97edf",
+      "modified": false
+    },
+    "webview-ui/src/components/ui/types.ts": {
+      "sha256": "7a9ade9267557821ac33bca98ecf035ee6067fb2d9e6aa843e3faa823b5a2abf",
+      "modified": false
+    },
+    "webview-ui/src/constants.ts": {
+      "sha256": "15aae4b39bd4ecc81a8f3cacefc48df62e0d820916fd5ed1badd71c8472f3511",
+      "modified": false
+    },
+    "webview-ui/src/office/colorize.ts": {
+      "sha256": "4c1839b31821a8b81979dbcc0e9c8cfa3111d9eb4c7fd3ced1bfa1e49d0a4c97",
+      "modified": false
+    },
+    "webview-ui/src/office/contextGauge.ts": {
+      "sha256": "11bd03afedc798029280cc4cdcc0815b4e12e6abad279d56d487a5a0090f9599",
+      "modified": true
+    },
+    "webview-ui/src/office/editor/editorState.ts": {
+      "sha256": "8a2facca36d6b3ee1c5483052fd7dcd73f98b967648acb295836e2a41d8825de",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/blink.ts": {
+      "sha256": "a3cec380e35bf7cafa05e098c731b777a05bccda7335721f2f61dfe6e9b6ebd7",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/characters.ts": {
+      "sha256": "74e08aca261b69ca0891d07f6e8e533c82dcdf89973589bf5f60b43a78edb568",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/gameLoop.ts": {
+      "sha256": "db41b31356f1a4acd4cc242ede68de0bbb5d9be3c1328a01742ab4be8e05499d",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/matrixEffect.ts": {
+      "sha256": "96913fedebf4d3c07e78b1868a667059f19a0f110cfefd83fa1cd27863fd4070",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/matrixEffectState.ts": {
+      "sha256": "55c4508949d14b5dc05498744eaee2e23acdab0275122750221f814c2e1b78a0",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/officeState.ts": {
+      "sha256": "c1696e7b54e133d2fe6498514e7208ae869bdca2be7acc460f23308b02e8373b",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/petEntity.ts": {
+      "sha256": "fb6edcd6a72a81712bfff227a36b8bea8c2f96e640aabc093c738ad35c4211b9",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/renderer.ts": {
+      "sha256": "d485696f0122a8ef3e6eea341dc8b475415aec795a8ba307d510fe9920c726a0",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/seatPlacement.ts": {
+      "sha256": "cef18fb154b31040f112a00d3cb916a77544cf9c0dc5223bd1673d3c0706db6b",
+      "modified": false
+    },
+    "webview-ui/src/office/engine/selectionButtons.ts": {
+      "sha256": "136c98fe39e9a6f3fa485262d160d4440d6926440428997f44398bc0b0c9baa6",
+      "modified": false
+    },
+    "webview-ui/src/office/floorTiles.ts": {
+      "sha256": "86a1279b5119b8059771daa3a59540ede8fdcc1e761a328c280b43eafa22a2be",
+      "modified": false
+    },
+    "webview-ui/src/office/layout/furnitureCatalog.ts": {
+      "sha256": "26c9feacfcf4b6db18a7cdffe5fb10053703ed5398ae5fbeb0f8048fbc6c98c4",
+      "modified": false
+    },
+    "webview-ui/src/office/layout/layoutSerializer.ts": {
+      "sha256": "baffda0115c0604c0081766562be44605b6ddae25d2efec0159b5b19209ed109",
+      "modified": false
+    },
+    "webview-ui/src/office/layout/tileMap.ts": {
+      "sha256": "0564fec7ad749668ab9a2317fb658eb3e5d0cf2aecc9b5c4f63d82a475b54790",
+      "modified": false
+    },
+    "webview-ui/src/office/layout/workstations.ts": {
+      "sha256": "6b5b3e27de54204ea14d7f2ff74d2b88748a0dc6c848f7cb1a954d61532259cb",
+      "modified": false
+    },
+    "webview-ui/src/office/projection.ts": {
+      "sha256": "dfa409f8f18b10930fe401fa7cc5cf05c22e83061cdcff9a0ce78f44ff58b7ce",
+      "modified": false
+    },
+    "webview-ui/src/office/sprites/bubble-permission.json": {
+      "sha256": "c1c5843455f8a4201eef1aa4d15d3bae41ef30f209ba6936004606f2adc7d8df",
+      "modified": false
+    },
+    "webview-ui/src/office/sprites/bubble-pet.json": {
+      "sha256": "d5254d4fdcd1ed0daa471951d56bed5b33afa263272efa5efcbc8ddd2cdede53",
+      "modified": false
+    },
+    "webview-ui/src/office/sprites/bubble-waiting.json": {
+      "sha256": "58cadd14f6b18c2f773a8bf3a8b25da82da81333d93d17fff6ce10dd20410c32",
+      "modified": false
+    },
+    "webview-ui/src/office/sprites/carpetTiles.ts": {
+      "sha256": "cc09f55aff372298badb346ffd0df510780a46c8b86ed1aadb81043b66b30985",
+      "modified": false
+    },
+    "webview-ui/src/office/sprites/petSpriteData.ts": {
+      "sha256": "4d972482c1ad20e36b08d6be191f3a7c38d5657684228d3d8166cdf172d169fe",
+      "modified": false
+    },
+    "webview-ui/src/office/sprites/spriteCache.ts": {
+      "sha256": "fd615d74508e9dc32ecda030a087a0de2bf0a06b5e242e5cee93e8525b268e60",
+      "modified": false
+    },
+    "webview-ui/src/office/sprites/spriteData.ts": {
+      "sha256": "a8554003a2e891b9a3d88806bf31cb65c32efd9964246ef390dd892f263af0b4",
+      "modified": false
+    },
+    "webview-ui/src/office/toolUtils.ts": {
+      "sha256": "223c39a91a551ad88b03ea83e31890f3564d3844276614953dc0d31c92d08092",
+      "modified": false
+    },
+    "webview-ui/src/office/types.ts": {
+      "sha256": "53c4a52165e48a1c2a5ef49eb6de5845435f98f61d3f7a8c4528a69ed3d7d21a",
+      "modified": false
+    },
+    "webview-ui/src/office/wallTiles.ts": {
+      "sha256": "a292703da788ddb5586c432376a0b9f8ce3e085a672112d63270776240bc188e",
+      "modified": false
+    }
+  }
+}

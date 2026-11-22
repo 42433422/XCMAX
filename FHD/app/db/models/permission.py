@@ -101,6 +101,7 @@ DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
     {"name": "创建销售订单", "code": "tool.sales.create_order", "module": "sales"},
     {"name": "销售出库", "code": "tool.inventory.stock_out", "module": "inventory"},
     {"name": "登记财务流水", "code": "tool.finance.create_transaction", "module": "finance"},
+    {"name": "查看财务流水", "code": "tool.finance.ledger_query", "module": "finance"},
 ]
 
 DEFAULT_ROLES: list[_RoleSeed] = [

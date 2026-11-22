@@ -437,7 +437,9 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
             assert len(payload["tool_calls"]) == 1
             assert reopened.execute("SELECT status FROM agent_tasks").fetchall() == [("failed",)]
         execution = queue.get(run.run_id)
-        assert execution.state == "failed"
+        assert execution.state == "unknown"
+        assert execution.last_error_code == "needs_verification"
+        assert not execution.finished_at and not execution.lease_owner
         assert execution.execution_count == 2 and execution.recovery_count == 1
     finally:
         dispatcher.stop()

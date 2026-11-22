@@ -167,21 +167,19 @@ class TestMergeToolRuntimeContext:
 class TestResolveExcelPathForImport:
     """Cover _resolve_excel_path_for_import."""
 
-    def test_from_excel_analysis(self):
+    def test_from_excel_analysis(self, tmp_path):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        result = AIChatApplicationService._resolve_excel_path_for_import(
-            {"file_path": "/tmp/a.xlsx"}, {}
-        )
-        assert result == "/tmp/a.xlsx"
+        path = str(tmp_path / "a.xlsx")
+        result = AIChatApplicationService._resolve_excel_path_for_import({"file_path": path}, {})
+        assert result == path
 
-    def test_fallback_to_preview_data(self):
+    def test_fallback_to_preview_data(self, tmp_path):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        result = AIChatApplicationService._resolve_excel_path_for_import(
-            {}, {"file_path": "/tmp/b.xlsx"}
-        )
-        assert result == "/tmp/b.xlsx"
+        path = str(tmp_path / "b.xlsx")
+        result = AIChatApplicationService._resolve_excel_path_for_import({}, {"file_path": path})
+        assert result == path
 
     def test_empty_returns_empty(self):
         from app.application.ai_chat_app_service import AIChatApplicationService

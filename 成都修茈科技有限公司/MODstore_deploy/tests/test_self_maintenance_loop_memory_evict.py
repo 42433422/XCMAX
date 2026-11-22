@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 
+import pytest
+
 import modstore_server.maintenance_loop.store as _maintenance_store
 from modstore_server.maintenance_loop.config import (
     LOOP_EVICT_AGE_OUT_SECONDS,
@@ -17,7 +19,7 @@ from modstore_server.maintenance_loop.config import (
     _iso,
     _utc_now,
 )
-from modstore_server.maintenance_loop.memory import evict_loop_memory_items
+from modstore_server.maintenance_loop.memory import close_loop_memory_items, evict_loop_memory_items
 from modstore_server.maintenance_loop.outcomes import _update_loop_memory
 from modstore_server.maintenance_loop.store import (
     _load_loop_memory,
@@ -50,6 +52,63 @@ def _stuck_failed_step(run_id, age_seconds, retry_count=3):
         "run_id": run_id,
         "steps": ["code"],
     }
+
+
+@pytest.mark.parametrize("operation", ["close", "evict"])
+def test_memory_writer_does_not_replace_an_active_execution(monkeypatch, tmp_path, operation):
+    memory_path = tmp_path / "loop_memory.json"
+    audit_path = tmp_path / "governance_audit.jsonl"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEASE_FILE", str(tmp_path / "loop.lock"))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT", str(audit_path))
+    pending = {"request_id": "original-request", "task_id": "original-task"}
+    memory_path.write_text(
+        json.dumps(
+            {
+                "pending_execution": pending,
+                "open_items": [_stuck_failed_step("old-run", LOOP_EVICT_AGE_OUT_SECONDS + 60)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    before = memory_path.read_bytes()
+
+    def update():
+        if operation == "close":
+            return close_loop_memory_items(run_ids=["old-run"], resolution_reason="verified")
+        return evict_loop_memory_items()
+
+    with _maintenance_store._exclusive_loop_lease() as acquired:
+        assert acquired
+        result = update()
+        assert result["ok"] is False
+        assert result["status"] == "skipped_active_lease"
+        assert result["changed"] is False
+        assert memory_path.read_bytes() == before
+        assert not audit_path.exists()
+
+    assert update()["ok"] is True
+    memory = _load_loop_memory()
+    assert memory["pending_execution"] == pending
+    assert memory["open_items"] == []
+
+
+@pytest.mark.parametrize("operation", ["close", "evict"])
+def test_memory_writer_keeps_unreadable_execution_state(monkeypatch, tmp_path, operation):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEASE_FILE", str(tmp_path / "loop.lock"))
+    memory_path.write_text('{"pending_execution":', encoding="utf-8")
+    before = memory_path.read_bytes()
+    result = (
+        close_loop_memory_items(run_ids=["old-run"], resolution_reason="verified")
+        if operation == "close"
+        else evict_loop_memory_items()
+    )
+    assert result["ok"] is False
+    assert result["status"] == "waiting_reconciliation"
+    assert result["changed"] is False
+    assert memory_path.read_bytes() == before
 
 
 # ---------------------------------------------------------------------------

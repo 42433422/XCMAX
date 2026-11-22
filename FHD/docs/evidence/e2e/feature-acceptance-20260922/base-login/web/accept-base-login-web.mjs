@@ -153,7 +153,20 @@ async function connectBrowser() {
   return s;
 }
 async function inPage(fn, ...args) {
-  return await inPageEval(`(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(',')})`);
+  const objectGroup = `base-login-${crypto.randomUUID()}`;
+  try {
+    const context = await s.send('Runtime.evaluate', { expression: 'globalThis', objectGroup });
+    const objectId = context.result?.objectId;
+    if (!objectId) throw new Error('page execution context unavailable');
+    const r = await s.send('Runtime.callFunctionOn', {
+      objectId, objectGroup, functionDeclaration: fn.toString(), arguments: args.map((value) => ({ value })),
+      returnByValue: true, awaitPromise: true, userGesture: true,
+    });
+    if (r.exceptionDetails) throw new Error('in-page function failed');
+    return r.result?.value;
+  } finally {
+    await s.send('Runtime.releaseObjectGroup', { objectGroup }).catch(() => log('page object release failed'));
+  }
 }
 async function apiFetch(apiPath, init = null, token = '') {
   for (let attempt = 1; attempt <= 5; attempt++) {
@@ -242,8 +255,8 @@ async function shotFull(name) {
 // Real keyboard input: focus the field with a real click, select existing content (Ctrl+A),
 // then replace it via Input.insertText. Verifies the resulting value without logging it.
 async function typeReal(selector, value) {
-  const read = async () => await inPageEval(
-    `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? el.value : null; })()`);
+  const read = async () => await inPage(
+    (field) => { const el = document.querySelector(field); return el ? el.value : null; }, selector);
   await clickReal(selector);
   for (const type of ['keyDown', 'keyUp']) {
     await s.send('Input.dispatchKeyEvent', {
@@ -254,10 +267,10 @@ async function typeReal(selector, value) {
   await sleep(250);
   if ((await read()) !== value) {
     log(`type: field did not match after real input (selector=${selector}) -> clearing and retrying once`);
-    await inPageEval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+    await inPage((field) => { const el = document.querySelector(field);
       if (!el) return false;
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-      set.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+      set.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })); return true; }, selector);
     await clickReal(selector);
     await s.send('Input.insertText', { text: value });
     await sleep(250);

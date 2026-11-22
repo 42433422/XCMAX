@@ -89,13 +89,13 @@ class AccountProfile:
         content = await file.read(self.max_avatar_bytes + 1)
         try:
             self.save_avatar(user.id, content, ext)
-        except ValueError as exc:
-            return JSONResponse(error_envelope(INVALID_FILE, str(exc)), status_code=400)
-        except OSError as exc:
-            self.logger.exception("avatar save failed user_id=%s", user.id)
+        except ValueError:
             return JSONResponse(
-                error_envelope(SAVE_FAILED, f"头像保存失败：{exc}"), status_code=500
+                error_envelope(INVALID_FILE, "头像文件无效，请检查图片格式与大小"), status_code=400
             )
+        except OSError:
+            self.logger.exception("avatar save failed user_id=%s", user.id)
+            return JSONResponse(error_envelope(SAVE_FAILED, "头像保存失败"), status_code=500)
         with self.database() as db:
             row = db.query(User).filter(User.id == user.id).first()
             if row is not None:

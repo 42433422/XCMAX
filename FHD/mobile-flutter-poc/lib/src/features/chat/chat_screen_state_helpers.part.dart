@@ -20,8 +20,6 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   final _attachments = <MobileChatAttachment>[];
   final _failedAttachments = <XFile>[];
   List<MobileChatAttachment> _lastSentAttachments = const [];
-  String _lastAttachmentTurnId = '';
-  String _lastAttachmentOutgoing = '';
   var _runningGitOp = false;
   String? _selectedGitBranch;
   ChatMessage? _replyTo;
@@ -77,6 +75,7 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
       text: message.body,
       status: switch (message.status) {
         ChatDeliveryStatus.sent => MessageStatus.sent,
+        ChatDeliveryStatus.pending => MessageStatus.sent,
         ChatDeliveryStatus.sending => MessageStatus.sending,
         ChatDeliveryStatus.queued => MessageStatus.sending,
         ChatDeliveryStatus.failed => MessageStatus.error,
@@ -125,6 +124,7 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
       status: current.status,
       quote: current.quote,
       cacheTimestampMs: current.cacheTimestampMs,
+      turnId: current.turnId,
     );
     _syncFlyerChat();
   }
@@ -149,6 +149,7 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
       status: status ?? current.status,
       quote: current.quote,
       cacheTimestampMs: current.cacheTimestampMs,
+      turnId: current.turnId,
     );
     _syncFlyerChat();
   }

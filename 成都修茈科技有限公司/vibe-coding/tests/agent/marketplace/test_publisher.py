@@ -349,7 +349,7 @@ def test_publisher_records_error_on_http_failure(sample_skill: CodeSkill, tmp_pa
             409,
             "Conflict",
             hdrs=None,  # type: ignore[arg-type]
-            fp=io.BytesIO(b"already exists"),
+            fp=io.BytesIO(b"private-upstream-token /private/credentials"),
         )
 
     with _patched_urlopen(handler):
@@ -359,3 +359,5 @@ def test_publisher_records_error_on_http_failure(sample_skill: CodeSkill, tmp_pa
         )
     assert result.published is False
     assert "409" in result.error
+    assert "private-upstream-token" not in str(result.to_dict())
+    assert "/private/credentials" not in str(result.to_dict())

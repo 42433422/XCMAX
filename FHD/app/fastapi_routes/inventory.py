@@ -40,6 +40,7 @@ def _run_inventory_agent(
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("inventory") or {}).get("actions") or {}).get(action)
@@ -50,8 +51,23 @@ def _run_inventory_agent(
             "agent_status": "failed",
         }
 
+    params = {
+        key: value
+        for key, value in params.items()
+        if key not in {"tenant_id", "tenantId", "user_id", "userId"}
+    }
+    runtime_context = request_runtime_context(
+        request,
+        {
+            "source": "inventory_route",
+            "route": route_path,
+            "request_path": str(request.url.path),
+            "route_confirmed": True,
+            "service_source": "fastapi_inventory_route",
+        },
+    )
     node_id = f"inventory_{action}"
-    user_id = _inventory_agent_user_id(request, params)
+    user_id = str(runtime_context["user_id"])
     plan = PlanGraph(
         plan_id=node_id,
         intent=node_id,
@@ -70,15 +86,6 @@ def _run_inventory_agent(
         risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
         metadata={"source": "inventory_route", "route": route_path},
     )
-    runtime_context = {
-        "source": "inventory_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "tenant_id": getattr(request.state, "tenant_id", None),
-        "route_confirmed": True,
-        "service_source": "fastapi_inventory_route",
-    }
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,

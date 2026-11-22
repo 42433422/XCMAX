@@ -844,8 +844,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
     def test_llm_empty_content_returns_none(self) -> None:
         return _assert_shared_llm_empty_content_returns_none_0(self, "")
 
-    def test_llm_invalid_json_returns_none(self) -> None:
-        return _assert_shared_llm_empty_content_returns_none_0(self, "not json{")
+    def test_llm_truncated_plan_json_returns_none(self) -> None:
+        return _assert_shared_llm_empty_content_returns_none_0(self, '{"nodes":[')
 
     def test_llm_valid_plan(self) -> None:
         mock_response = Mock()
@@ -1335,29 +1335,32 @@ class TestRunNaturalLanguagePandas:
 
     def test_empty_df(self) -> None:
         df = pd.DataFrame()
-        result = run_natural_language_pandas(df, "select all")
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
+            result = run_natural_language_pandas(df, "select all")
         assert result["row_count"] == 0
         assert result["result_kind"] == "dataframe"
 
     def test_with_valid_df(self) -> None:
         df = pd.DataFrame({"a": [1, 2, 3]})
-        result = run_natural_language_pandas(df, "select all")
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
+            result = run_natural_language_pandas(df, "select all")
         assert result["row_count"] == 3
         assert "columns" in result
 
     def test_with_error(self) -> None:
-        # ``app.legacy.excel_text_to_pandas`` is not shipped in this repo, so
-        # the import inside ``run_natural_language_pandas`` raises ImportError
-        # (a RECOVERABLE_ERROR) and the function returns the original df with
-        # an ``error`` key.
         df = pd.DataFrame({"a": [1, 2]})
-        result = run_natural_language_pandas(df, "select all")
-        assert "error" in result
+        with patch(
+            "app.application.tools.workflow.adapters.translate_pandas",
+            side_effect=RuntimeError("llm unavailable"),
+        ):
+            result = run_natural_language_pandas(df, "select all")
+        assert result["error"] == "excel_query_failed"
         assert result["row_count"] == 2
 
     def test_truncation(self) -> None:
         df = pd.DataFrame({"a": list(range(300))})
-        result = run_natural_language_pandas(df, "select all", max_rows=200)
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
+            result = run_natural_language_pandas(df, "select all", max_rows=200)
         assert result["truncated"] is True
         assert result["returned_rows"] == 200
         assert result["next_offset"] == 200

@@ -4,6 +4,7 @@ import { ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN, CORE_MENU_ITEMS_BASE, INDUSTRY_D
 import { MENU_DEFAULT_NAMES } from '../utils/coreNavLabel'
 import { MOD_MENU_ID_TO_HOST_NAV_KEY } from './genericModPack'
 import { TENANT_SCOPED_BUSINESS_PATHS } from '../utils/roleMenuProfile'
+import { SHELL_VIEW_TITLE_BASE } from '../utils/shellMenuLabels'
 
 describe('coreMenuCatalog', () => {
   it('shares routes, labels and Mod aliases with the mobile catalog', () => {
@@ -24,6 +25,13 @@ describe('coreMenuCatalog', () => {
   })
   it('exposes business docking as a core menu item', () => {
     expect(CORE_MENU_ITEMS_BASE).toContainEqual(expect.objectContaining({ key: 'business-docking', name: '数据对接中心' }))
+  })
+
+  it('keeps legacy menu keys while naming the unified Kellai module', () => {
+    expect(catalog.industry.find(item => item.key === 'data-sources')).toMatchObject({ name: '客来来', path: '/kellai' })
+    expect(MOD_MENU_ID_TO_HOST_NAV_KEY['mod-erp-data-sources']).toBe('data-sources')
+    expect(MOD_MENU_ID_TO_HOST_NAV_KEY['mod-kellai']).toBe('data-sources')
+    expect(SHELL_VIEW_TITLE_BASE['data-sources']).toBe('客来来')
   })
 
   it('pinMenuKeyFirst moves chat to front', () => {

@@ -22,6 +22,41 @@ PRODUCT_ROW = {"id": 7, "name": "交付闭环升级标记产品-UP-20260930-OLD-
 
 
 @pytest.mark.parametrize(
+    "fault", ["forward", "unknown", "malformed", "duplicate", "outer", "other_action"]
+)
+def test_employee_chain_deferral_never_hides_invalid_or_host_references(fault):
+    from app.application.agent_orchestrator.param_references import (
+        host_reference_params,
+        unresolved_placeholders,
+    )
+    from tests.fixtures.employee_business_chain import business_plan
+
+    params = {
+        "employee_id": "employee-a",
+        "task": "Sales report",
+        "continuity_action": "chain",
+        "input": business_plan(),
+    }
+    action = "execute"
+    if fault == "forward":
+        params["input"]["steps"][0]["params"] = {"keyword": "{{summary.data[0].amount}}"}
+    elif fault == "unknown":
+        params["input"]["steps"][1]["params"]["customer_id"] = "{{foreign.data[0].id}}"
+    elif fault == "malformed":
+        params["input"]["steps"][1]["params"]["customer_id"] = "{{customer.data[0].id}"
+    elif fault == "duplicate":
+        params["input"]["steps"][1]["step_id"] = params["input"]["steps"][0]["step_id"]
+    elif fault == "outer":
+        params["task"] = "{{customer.data[0].id}}"
+    else:
+        action = "unrelated"
+    host, deferred = host_reference_params("employee", action, params)
+    assert unresolved_placeholders(host)
+    if fault != "outer":
+        assert deferred == [] and host == params
+
+
+@pytest.mark.parametrize(
     "template",
     ["{{query_product.data_preview[0].id}}", "{{query_product.id}}", "{{ query_product.data.id }}"],
 )

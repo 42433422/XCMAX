@@ -101,6 +101,98 @@ def test_planner_does_not_mix_global_history_into_an_explicit_conversation():
     assert "FOREIGN_SESSION_MARKER" not in json.dumps(captured["recent_messages"])
 
 
+@pytest.mark.parametrize("context_field", ["session_id", "conversation_id", "trace_id"])
+def test_planner_log_uses_host_plan_identity_without_context_credentials(
+    tmp_path, monkeypatch, context_field
+):
+    from uuid import UUID
+
+    path = tmp_path / "plans.jsonl"
+    historical = '{"plan_id":"wp-legacy-session-id","trace_id":"old-trace"}\n'
+    path.write_text(historical)
+    monkeypatch.setenv("XCAGI_PLAN_GRAPH_LOG", str(path))
+    context = {"source": "normal", context_field: "opaque-credential-without-redaction-markers"}
+    original_context = dict(context)
+    message = "查询产品 A1，然后查询产品 B2"
+    model_plan = {
+        "mode": "workflow",
+        "intent": "product_lookup",
+        "todo_steps": ["查询产品 A1", "查询产品 B2"],
+        "nodes": [
+            {
+                "node_id": "n1",
+                "tool_id": "products",
+                "action": "query",
+                "params": {"keyword": "A1"},
+            },
+            {
+                "node_id": "n2",
+                "tool_id": "products",
+                "action": "query",
+                "params": {"keyword": "B2"},
+                "depends_on": ["n1"],
+            },
+        ],
+    }
+
+    def scripted_completion(**kwargs):
+        payload = json.loads(kwargs["messages"][1]["content"])
+        if payload.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                payload, source=message, node_ids=["n1", "n2"], outcome="execute"
+            )
+        return {"choices": [{"message": {"content": json.dumps(model_plan)}}]}
+
+    completion = Mock(side_effect=scripted_completion)
+    planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+    plan = planner.plan("7", message, get_tool_registry(), context)
+
+    assert not plan.metadata.get("planning_rejected")
+    assert plan.plan_id.startswith("wp-") and UUID(plan.plan_id[3:]).version == 4
+    assert completion.call_count == 2
+    text = path.read_text()
+    assert text.startswith(historical)
+    assert context[context_field] not in text
+    record = json.loads(text.splitlines()[1])
+    assert record["plan_id"] == record["trace_id"] == plan.plan_id
+    assert record["phase"] == "planned" and record["intent"] == model_plan["intent"]
+    assert record["todo_steps"] == model_plan["todo_steps"]
+    assert record["node_count"] == 2
+    assert record["nodes"] == [
+        {key: node.get(key, []) for key in ("node_id", "tool_id", "action", "depends_on")}
+        for node in model_plan["nodes"]
+    ]
+    assert record["extra"] == {"source": "platform_model"}
+    assert context == original_context
+
+
+def test_current_greeting_keeps_light_reply_with_existing_history(monkeypatch, tmp_path):
+    from app.application.workflow.llm_plan_generation import LlmPlanGeneration
+
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
+    completion = Mock(
+        return_value={"choices": [{"message": {"content": '{"mode":"reply","reply":"你好"}'}}]}
+    )
+    history = [{"role": "user", "content": "上轮解释向量概念"}]
+    context = {
+        "local_user_id": 31,
+        "tenant_id": 5,
+        "conversation_id": "greeting-history",
+        "_chat_evidence_authorized": True,
+        "chat_owned_history": history,
+    }
+    generator = LlmPlanGeneration(Mock(get_context=Mock(return_value=None)), completion, Mock())
+    plan = generator.generate("p1", "u1", "你好", {}, context)
+    assert plan.metadata["planning_tier"] == "light"
+    request = json.loads(completion.call_args.kwargs["messages"][1]["content"])
+    assert request["user_message"] == "你好"
+    assert request["conversation_history"] == history
+    assert "tools" not in completion.call_args.kwargs
+    completion.assert_called_once()
+
+
 @pytest.mark.parametrize("light_reply", [False, True])
 def test_long_history_keeps_latest_constraints_in_order(light_reply, monkeypatch, tmp_path):
     from app.application.workflow.llm_plan_generation import LlmPlanGeneration
@@ -545,6 +637,9 @@ class TestPlanWithLLM:
         assert result["success"] is True
         assert result["response"] == "你好，我可以帮你查询业务数据。"
         assert result["data"]["workflow_runtime"] == "xcagi-langgraph"
+        assert result["data"]["execution_started"] is False
+        assert result["execution"]["effect"] == "none"
+        assert result["execution"]["committed"] is False
 
     def test_reply_plan_failure_declares_no_business_write(self):
         from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch

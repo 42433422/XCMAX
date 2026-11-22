@@ -19,6 +19,7 @@ from app.domain.auth.ports import (
     LoginBackend,
     MarketFirstLogin,
     MarketPasswordLogin,
+    OfflineLogin,
     RouteResult,
 )
 from app.http.error_codes import (
@@ -33,6 +34,7 @@ class CredentialLogin:
     product_sku: Callable[[], str | None]
     normalize_kind: Callable[[object, str], AccountKind]
     run_login: MarketFirstLogin
+    run_offline: OfflineLogin
     login_market: MarketPasswordLogin
     jit_create: JitCreate
     market_email: Callable[[object], str]
@@ -76,21 +78,53 @@ class CredentialLogin:
         if err:
             self.observe_login("password", self.clock() - login_start)
             return err
-        if result and result.get("success"):
-            _u = result.get("user") or {}
-            if _u.get("id") is not None:
-                try:
-                    result["web_tokens"] = self.issue_tokens(
-                        int(_u["id"]),
-                        str(_u.get("username") or ""),
-                        str(result.get("account_kind") or "enterprise"),
-                        str(result.get("session_id") or ""),
-                    )
-                except self.infra_errors():
-                    self.logger.exception("issue web tokens failed")
+        self._issue_web_tokens(result)
         resp = self.attach_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
         self.observe_login("password", self.clock() - login_start)
         return resp
+
+    async def offline(
+        self, request: Request, body: JsonObject, background_tasks: BackgroundTasks | None
+    ) -> RouteResult:
+        """桌面离线登录：只校验本机账号密码。"""
+        login_start = self.clock()
+        username = (body.get("username") or "").strip()
+        password = body.get("password", "")
+        if not username or not password:
+            self.observe_login("offline", self.clock() - login_start)
+            return JSONResponse(
+                error_envelope(INVALID_INPUT, "用户名和密码不能为空"), status_code=200
+            )
+        result, err = await self.run_offline(
+            username=username,
+            password=password,
+            auth_app_service=self.backend(),
+            sku=self.product_sku() or "enterprise",
+            background_tasks=background_tasks,
+        )
+        if err:
+            self.observe_login("offline", self.clock() - login_start)
+            return err
+        self._issue_web_tokens(result)
+        resp = self.attach_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+        self.observe_login("offline", self.clock() - login_start)
+        return resp
+
+    def _issue_web_tokens(self, result: JsonObject | None) -> None:
+        if not (result and result.get("success")):
+            return
+        user = result.get("user") or {}
+        if user.get("id") is None:
+            return
+        try:
+            result["web_tokens"] = self.issue_tokens(
+                int(user["id"]),
+                str(user.get("username") or ""),
+                str(result.get("account_kind") or "enterprise"),
+                str(result.get("session_id") or ""),
+            )
+        except self.infra_errors():
+            self.logger.exception("issue web tokens failed")
 
     async def phone_code(
         self, request: Request, body: JsonObject, background_tasks: BackgroundTasks | None

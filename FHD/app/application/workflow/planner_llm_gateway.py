@@ -66,6 +66,56 @@ def _compact_tool_registry(prompt: dict[str, Any]) -> None:
         )
 
 
+def _drop_non_core_tools(prompt: dict[str, Any]) -> bool:
+    """预算不足时把工具目录裁到通用工具，避免整轮规划直接失败。"""
+    from app.application.workflow.planner_prompt_profile import _is_core_tool
+
+    tools = prompt.get("tool_registry")
+    if not isinstance(tools, list) or not tools:
+        return False
+    kept = [
+        tool
+        for tool in tools
+        if isinstance(tool, dict) and _is_core_tool(str(tool.get("tool_id") or ""))
+    ]
+    if not kept or len(kept) == len(tools):
+        return False
+    prompt["tool_registry"] = kept
+    schemas = prompt.get("tool_schemas")
+    if isinstance(schemas, dict):
+        used: set[str] = set()
+        for tool in kept:
+            for action in tool.get("actions") or []:
+                if not isinstance(action, dict):
+                    continue
+                for key in ("input_schema_ref", "output_schema_ref"):
+                    ref = action.get(key)
+                    if isinstance(ref, str):
+                        used.add(ref)
+        prompt["tool_schemas"] = {name: schema for name, schema in schemas.items() if name in used}
+    prompt["tool_catalog_note"] = (
+        "工具目录已按上下文预算裁剪，仅保留通用工具；无法规划的业务操作请如实说明并建议分批处理。"
+    )
+    return True
+
+
+def _shrink_planner_prompt(outbound: list[dict[str, Any]]) -> bool:
+    if not outbound:
+        return False
+    last = outbound[-1]
+    try:
+        prompt = json.loads(str(last.get("content") or ""))
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(prompt, dict) or not _drop_non_core_tools(prompt):
+        return False
+    outbound[-1] = {
+        **last,
+        "content": json.dumps(prompt, ensure_ascii=False, separators=(",", ":")),
+    }
+    return True
+
+
 def planner_max_tokens() -> int:
     raw = (os.environ.get(_ENV_MAX_TOKENS) or "").strip()
     try:
@@ -175,6 +225,33 @@ async def _prepare_model_messages(
         if schemas
         else 0
     )
+    if context is not None:
+        if state is None:
+            state = SimpleNamespace(
+                conversation_history=[],
+                summary=None,
+                summary_covered_until=-1,
+                summary_fingerprint="",
+            )
+        # Only local ownership/revision fields reach the compaction guard; the
+        # snapshot is never part of model messages or the persisted summary.
+        state.metadata = {
+            "request_context": {
+                key: context[key]
+                for key in (
+                    "local_user_id",
+                    "actor_id",
+                    "tenant_id",
+                    "mod_id",
+                    "conversation_id",
+                    "session_id",
+                    "_conversation_revision",
+                    "_chat_history_source",
+                    "_chat_history_revision",
+                )
+                if key in context
+            }
+        }
     limits = model_limits or await resolve_model_limits(
         provider, extra.get("model"), extra.get("provider"), messages=messages
     )
@@ -190,8 +267,9 @@ async def _prepare_model_messages(
     }
     if context is not None:
         context["_context_budget"] = diagnostics
-    try:
-        result = await get_context_window_manager().compress(
+
+    async def _compress_once():
+        return await get_context_window_manager().compress(
             outbound,
             provider=provider,
             context=state,
@@ -201,11 +279,32 @@ async def _prepare_model_messages(
             output_tokens=max_tokens,
             external_tokens=schema_tokens,
         )
+
+    try:
+        result = await _compress_once()
     except ContextWindowExceeded as exc:
-        diagnostics.update(exc.diagnostics)
-        diagnostics["reason"] = exc.reason
-        logger.warning("planner context budget rejected: %s", diagnostics)
-        raise
+        # 工具目录过大时先降到通用工具重试，仍超限才把带能力来源的诊断交给上层。
+        if not _shrink_planner_prompt(outbound):
+            diagnostics.update(exc.diagnostics)
+            diagnostics["reason"] = exc.reason
+            logger.warning("planner context budget rejected: %s", diagnostics)
+            raise
+        logger.warning("planner tool catalog trimmed to fit context budget")
+        try:
+            from app.utils import metrics
+
+            metrics.context_window_overflow_total.labels(stage="tool_catalog_trimmed").inc()
+        except (ImportError, OSError):
+            logger.debug("planner context overflow metric unavailable")
+        diagnostics["message_tokens"] = estimate_messages_tokens(outbound)
+        diagnostics["tool_catalog_trimmed"] = True
+        try:
+            result = await _compress_once()
+        except ContextWindowExceeded as retry_exc:
+            diagnostics.update(retry_exc.diagnostics)
+            diagnostics["reason"] = retry_exc.reason
+            logger.warning("planner context budget rejected after catalog trim: %s", diagnostics)
+            raise
     diagnostics["post_message_tokens"] = result.post_estimated_tokens
     diagnostics["compression_strategy"] = result.strategy
     limits.assert_current()
@@ -213,6 +312,8 @@ async def _prepare_model_messages(
         save_conversation_summary(
             context, history, result.summary_covered_count, result.summary_text
         )
+    if context is not None:
+        conversation_summary(context)  # Revalidate after routing/compression awaits, before IO.
     return result.messages
 
 
@@ -228,10 +329,13 @@ def stream_planner_completion(
     """Stream through the same context/output/schema budget as normal completion."""
     from app.infrastructure.llm.model_admission import model_rate_limit_scope
     from app.infrastructure.llm.providers.registry import get_active_provider
+    from app.infrastructure.llm.response_completion import provider_supports_streaming
 
     provider = get_active_provider(conversation_service=ai_service)
-    stream = getattr(provider, "stream_chat_completion", None) if provider is not None else None
-    if stream is None:
+    if provider is None or not provider_supports_streaming(provider):
+        return None
+    stream = getattr(provider, "stream_chat_completion", None)
+    if not callable(stream):
         return None
 
     async def generate():
@@ -305,13 +409,20 @@ def request_planner_completion(
                     **{**extra, **limits.request_options},
                 )
                 limits.assert_current()
+                if isinstance(result, dict) and isinstance(result.get("choices"), list):
+                    # Keep missing terminal evidence explicit at the real IO
+                    # boundary; internal legacy completion ports may omit it.
+                    for choice in result["choices"]:
+                        if isinstance(choice, dict):
+                            choice.setdefault("finish_reason", None)
                 return result
 
             result = _run_async(complete())
     except RECOVERABLE_ERRORS as exc:
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
 
-        if isinstance(exc, ContextWindowExceeded):
+        if isinstance(exc, (ContextWindowExceeded, ConversationRevisionError)):
             raise
         from .retry_policy import retry_manages_transport_error
         from .tool_calling import unsupported_tool_parameter

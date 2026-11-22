@@ -237,7 +237,8 @@ def _actor(factory, user_id):
                 )
             )
             role = Role(name="admin")
-            for code in next(r["permissions"] for r in DEFAULT_ROLES if r["name"] == "admin"):
+            permissions = next(r["permissions"] for r in DEFAULT_ROLES if r["name"] == "admin")
+            for code in [*permissions, "tool.finance.ledger_query"]:
                 role.permissions.append(Permission(code=code, name=code))
             db.add(role)
     request = Request(

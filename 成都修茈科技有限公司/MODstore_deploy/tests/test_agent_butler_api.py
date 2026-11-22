@@ -11,10 +11,16 @@ from __future__ import annotations
 import asyncio
 import json
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+from tests.test_xiaoc_life_chat import life_database as life_database
+from tests.test_xiaoc_life_chat import state as state
+
+pytestmark = pytest.mark.usefixtures("life_database")
 
 # ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -67,6 +73,114 @@ def _auth_overrides(app, mock_user, mock_db):
     return app
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("kind", ["text", "empty", "length", "tool_calls"])
+async def test_admin_chat_completion_preserves_l1_and_l2_paths(
+    monkeypatch, mock_user, mock_db, state, stream, kind
+):
+    from fastapi import HTTPException, Request
+
+    from modstore_server import agent_butler_api as butler
+    from modstore_server import xiaoc_admin_context
+    from modstore_server.infrastructure import http_clients
+
+    mock_user.is_admin = True
+    state["level"] = 2 if kind == "tool_calls" else 1
+    wallet = SimpleNamespace(release=AsyncMock(), settle=AsyncMock())
+    monkeypatch.setattr(butler, "JavaWalletClient", lambda: wallet)
+    monkeypatch.setattr(
+        butler,
+        "_resolve_butler_credentials",
+        lambda *_: ("openai", "test-model", "test-key", "user_override", "https://test.invalid/v1"),
+    )
+    monkeypatch.setattr(xiaoc_admin_context, "admin_context_for_chat", AsyncMock(return_value=""))
+    messages = [{"role": "user", "content": "打开套餐页面"}]
+    monkeypatch.setattr(butler, "_build_messages", lambda *args, **kwargs: messages)
+    monkeypatch.setattr(butler, "enforce_risk_limits", lambda *_: None)
+    monkeypatch.setattr(butler, "_get_or_create_conversation", lambda *args: SimpleNamespace(id=81))
+    saved, failed = MagicMock(), MagicMock()
+    monkeypatch.setattr(butler, "save_success_log", saved)
+    monkeypatch.setattr(butler, "save_failure_log", failed)
+    text = "" if kind == "empty" else "实际模型答复"
+    plain = AsyncMock(
+        return_value={
+            "ok": True,
+            "content": text,
+            "finish_reason": "length" if kind == "length" else "stop",
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+    )
+    monkeypatch.setattr(butler, "chat_dispatch", plain)
+    native_stream = MagicMock(
+        side_effect=AssertionError("admin SSE must use its checked sync result")
+    )
+    monkeypatch.setattr(butler, "chat_dispatch_stream", native_stream)
+    tool_response = {
+        "choices": [
+            {
+                "message": {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "function": {"name": "navigate", "arguments": '{"name":"plans"}'},
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+    post = AsyncMock(return_value=SimpleNamespace(status_code=200, json=lambda: tool_response))
+    monkeypatch.setattr(http_clients, "get_external_client", lambda: SimpleNamespace(post=post))
+    request = Request({"type": "http", "headers": []})
+    body = butler.ButlerChatDTO(messages=messages, conversation_id=81)
+    invoke = butler.butler_chat_stream if stream else butler.butler_chat
+
+    if kind in {"empty", "length"}:
+        with pytest.raises(HTTPException) as error:
+            await invoke(request, body, db=mock_db, user=mock_user)
+        assert error.value.status_code == 500
+        assert "本轮未完成" in error.value.detail
+        saved.assert_not_called()
+        failed.assert_called_once()
+        wallet.release.assert_awaited_once()
+    else:
+        response = await invoke(request, body, db=mock_db, user=mock_user)
+        if stream:
+            events = [
+                json.loads(frame.removeprefix("data: ").strip())
+                async for frame in response.body_iterator
+            ]
+            assert sum(event.get("done") is True for event in events) == 1
+            assert not any("error" in event for event in events)
+            result = {**events[-1], "text": "".join(event.get("text", "") for event in events)}
+        else:
+            result = response
+        assert result["conversation_id"] == 81
+        if kind == "tool_calls":
+            assert result["text"] == ""
+            assert result["tool_calls"] == [
+                {"id": "call-1", "name": "navigate", "args": {"name": "plans"}}
+            ]
+        else:
+            assert result["text"] == text and result["tool_calls"] == []
+        saved.assert_called_once()
+        failed.assert_not_called()
+        wallet.release.assert_not_awaited()
+    wallet.settle.assert_not_awaited()  # BYOK keeps this protocol check independent of wallet transport.
+    native_stream.assert_not_called()
+    if kind == "tool_calls":
+        plain.assert_not_awaited()
+        post.assert_awaited_once()
+        assert post.await_args.kwargs["json"]["tools"]
+    else:
+        plain.assert_awaited_once()
+        post.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     "stream,failed,byok,reported_usage",
     [
@@ -84,6 +198,12 @@ def _auth_overrides(app, mock_user, mock_db):
     + [
         pytest.param(True, False, False, False, id="stream-estimated-full-text"),
         pytest.param(True, "interrupted", False, True, id="stream-interrupted"),
+        pytest.param(True, "eof", False, True, id="stream-missing-finish"),
+    ]
+    + [
+        pytest.param(stream, failure, False, True, id=f"{'stream' if stream else 'chat'}-{failure}")
+        for stream in (False, True)
+        for failure in ("empty", "whitespace", "length", "content_filter", "missing")
     ],
 )
 def test_butler_wallet_contract(
@@ -126,19 +246,31 @@ def test_butler_wallet_contract(
     monkeypatch.setattr(butler, "_partition_butler_tool_calls", lambda *a, **kw: ([], ""))
     conversation = butler.ChatConversation(id=81, user_id=mock_user.id)
     mock_db.query.return_value.filter.return_value.first.return_value = conversation
-    answer = "answer " * 8
-    upstream = {"ok": True, "content": answer}
+    answer = "" if failed == "empty" else " \n " if failed == "whitespace" else "answer " * 8
+    upstream = {"ok": True, "content": answer, "finish_reason": "stop"}
+    if failed in ("length", "content_filter", "missing"):
+        upstream["finish_reason"] = None if failed == "missing" else failed
     if reported_usage:
         upstream["usage"] = {
             "prompt_tokens": 2,
             "completion_tokens": 1,
             "total_tokens": 3,
         }
-    error = RuntimeError("controlled upstream failure")
+    incomplete = failed in ("length", "content_filter", "missing", "eof")
+    invalid_reply = failed in ("empty", "whitespace") or incomplete
+    error = RuntimeError(
+        "模型回复未完整结束，本轮未完成"
+        if incomplete
+        else "模型未返回有效正文，本轮未完成" if invalid_reply else "controlled upstream failure"
+    )
     monkeypatch.setattr(
         butler,
         "chat_dispatch",
-        AsyncMock(side_effect=error) if failed else AsyncMock(return_value=upstream),
+        (
+            AsyncMock(side_effect=error)
+            if failed and not invalid_reply
+            else AsyncMock(return_value=upstream)
+        ),
     )
 
     async def chunks(
@@ -158,8 +290,12 @@ def test_butler_wallet_contract(
             yield {"type": "usage", "usage": upstream["usage"]}
         if failed == "interrupted":
             raise error
-        if failed:
+        if incomplete and failed != "eof":
+            yield {"type": "finish", "finish_reason": upstream["finish_reason"]}
+        elif failed and not invalid_reply:
             yield {"type": "error", "error": str(error)}
+        elif failed != "eof":
+            yield {"type": "finish", "finish_reason": "stop"}
 
     stream_dispatch = create_autospec(butler.chat_dispatch_stream, side_effect=chunks)
     monkeypatch.setattr(butler, "chat_dispatch_stream", stream_dispatch)

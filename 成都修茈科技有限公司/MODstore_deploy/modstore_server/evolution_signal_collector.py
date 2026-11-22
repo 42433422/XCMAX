@@ -468,6 +468,12 @@ def aggregate_signals() -> Dict[str, Any]:
 
     # Intent benchmark: 准确率 < 0.80 触发
     intent_acc = _finite_number(intent.get("accuracy"))
+    if intent_acc is None:
+        # 报告实际形状是 rule.counts.{core,semantic}，用计数算总体准确率。
+        counts = (intent.get("rule") or {}).get("counts") or {}
+        correct = sum(int((row or {}).get("correct") or 0) for row in counts.values())
+        total = sum(int((row or {}).get("total") or 0) for row in counts.values())
+        intent_acc = correct / total if total else None
     intent_below = intent_acc is not None and 0 <= intent_acc < _INTENT_ACCURACY_THRESHOLD
     intent_score = (
         max(0.0, _INTENT_ACCURACY_THRESHOLD - intent_acc)

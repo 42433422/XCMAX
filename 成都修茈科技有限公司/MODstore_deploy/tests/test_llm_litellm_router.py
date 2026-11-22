@@ -41,7 +41,10 @@ def test_web_installs_the_same_pinned_litellm_as_the_router_extra():
     project = Path(__file__).resolve().parents[1] / "pyproject.toml"
     extras = tomllib.loads(project.read_text(encoding="utf-8"))["project"]["optional-dependencies"]
     web_pin = [dependency for dependency in extras["web"] if dependency.startswith("litellm")]
-    assert web_pin == extras["llm-router"] == [f"litellm=={version('litellm')}"]
+    router_pin = [
+        dependency for dependency in extras["llm-router"] if dependency.startswith("litellm")
+    ]
+    assert web_pin == router_pin == [f"litellm=={version('litellm')}"]
 
 
 def test_deployment_maps_openai_compatible_provider():
@@ -169,9 +172,15 @@ def test_router_passes_mature_fallback_and_cooldown_params(monkeypatch):
     assert captured["routing_strategy"]
 
 
-def test_normalize_response_marks_fallback():
+@pytest.mark.parametrize("finish_reason", ["stop", "length", "content_filter"])
+def test_normalize_response_marks_fallback(finish_reason):
     response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="hello", reasoning_content=None))],
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content="hello", reasoning_content=None),
+                finish_reason=finish_reason,
+            )
+        ],
         usage={"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
         model="deepseek-chat",
         _hidden_params={"additional_headers": {"x-litellm-attempted-fallbacks": "1"}},
@@ -183,6 +192,7 @@ def test_normalize_response_marks_fallback():
 
     assert out["ok"] is True
     assert out["content"] == "hello"
+    assert out["finish_reason"] == finish_reason
     assert out["fallback_used"] is True
     assert out["usage"]["total_tokens"] == 3
 

@@ -1,0 +1,135 @@
+name: Complete cancellation of superseded CI
+
+on:
+  pull_request_target:
+    types: [synchronize]
+
+permissions: {}
+
+concurrency:
+  group: cancel-superseded-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  complete-cancellation:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      # Metadata only: never check out or execute code from the pull request.
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          retries: 0
+          script: |
+            const positive = value => Number.isSafeInteger(value) && value > 0;
+            const sha = value => typeof value === 'string' && /^[0-9a-f]{40}$/.test(value);
+            const timestamp = value => {
+              if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)) return NaN;
+              const parsed = Date.parse(value);
+              return Number.isFinite(parsed) && new Date(parsed).toISOString() === value.replace('Z', '.000Z') ? parsed : NaN;
+            };
+            const {owner, repo} = context.repo;
+            const scope = {owner, repo, headers: {'X-GitHub-Api-Version': '2022-11-28'}};
+            const repository = context.payload.repository;
+            const eventPR = context.payload.pull_request;
+            const number = eventPR?.number;
+            const expectedHead = eventPR?.head?.sha;
+            const branch = eventPR?.head?.ref;
+            const repositoryId = repository?.id;
+            const since = timestamp(eventPR?.created_at);
+            const cutoff = timestamp(eventPR?.updated_at);
+            const currentPR = pr => pr?.id === eventPR.id && pr.number === number && pr.state === 'open'
+              && pr.base?.repo?.id === repositoryId && pr.head?.repo?.id === repositoryId
+              && pr.head.sha === expectedHead && pr.head.ref === branch && pr.created_at === eventPR.created_at;
+            if (context.eventName !== 'pull_request_target' || context.payload.action !== 'synchronize'
+                || !positive(repositoryId) || repository.full_name !== `${owner}/${repo}`
+                || !positive(eventPR?.id) || !positive(number) || context.payload.number !== number
+                || !sha(expectedHead) || typeof branch !== 'string' || !branch
+                || !Number.isFinite(since) || !Number.isFinite(cutoff) || cutoff < since || !currentPR(eventPR)) {
+              core.info('Unverified same-repository synchronize event; no cancellation.');
+              return;
+            }
+            const livePRMatches = async () => currentPR((await github.rest.pulls.get({...scope, pull_number: number})).data);
+            if (!await livePRMatches()) return;
+            const workflow = (await github.rest.actions.getWorkflow({...scope, workflow_id: 'fhd-ci-cd.yml'})).data;
+            const workflowPath = '.github/workflows/fhd-ci-cd.yml';
+            if (!positive(workflow?.id) || workflow.path !== workflowPath) throw new Error('Unverified main CI workflow.');
+            const active = new Set(['queued', 'in_progress', 'requested', 'waiting', 'pending']);
+            const eligible = run => {
+              const linked = run?.pull_requests;
+              const created = timestamp(run?.created_at);
+              const started = timestamp(run?.run_started_at);
+              return positive(run?.id) && run.workflow_id === workflow.id && run.path === workflowPath
+                && run.event === 'pull_request' && run.repository?.id === repositoryId
+                && run.head_repository?.id === repositoryId && run.head_branch === branch
+                && sha(run.head_sha) && run.head_sha !== expectedHead && positive(run.run_attempt)
+                && active.has(run.status) && run.conclusion === null
+                && Number.isFinite(created) && Number.isFinite(started)
+                && created >= since && started >= created && started <= cutoff
+                && Array.isArray(linked) && linked.length === 1 && linked[0]?.id === eventPR.id
+                && linked[0].number === number && linked[0].base?.repo?.id === repositoryId
+                && linked[0].head?.repo?.id === repositoryId;
+            };
+            const sameAttempt = (snapshot, run) => eligible(run)
+              && ['id', 'head_sha', 'run_attempt', 'created_at', 'run_started_at'].every(key => snapshot[key] === run[key]);
+            async function readAll(method, params, maximum = Infinity) {
+              const items = [];
+              let total;
+              for await (const {data} of github.paginate.iterator(method, {...scope, ...params, per_page: 100})) {
+                if (!Array.isArray(data) || !Number.isSafeInteger(data.total_count) || data.total_count < 0
+                    || data.total_count >= maximum || data.incomplete_results === true
+                    || (total !== undefined && total !== data.total_count)) throw new Error('Incomplete or changing pagination.');
+                total = data.total_count;
+                items.push(...data);
+              }
+              if (total === undefined || items.length !== total || items.some(item => !positive(item?.id))
+                  || new Set(items.map(item => item.id)).size !== total) throw new Error('Missing or duplicate pagination results.');
+              return items;
+            }
+            const readRun = async id => (await github.rest.actions.getWorkflowRun({...scope, run_id: id})).data;
+            async function cancellationProof(run) {
+              const jobs = await readAll(github.rest.actions.listJobsForWorkflowRunAttempt, {
+                run_id: run.id, attempt_number: run.run_attempt
+              });
+              if (!jobs.every(job => job.run_id === run.id && job.run_attempt === run.run_attempt
+                  && job.head_sha === run.head_sha)) return null;
+              return jobs.some(job => job.status === 'completed' && job.conclusion === 'cancelled');
+            }
+            // Read every page before any write. The filtered API caps results at 1,000.
+            let pending = (await readAll(github.rest.actions.listWorkflowRuns, {
+              workflow_id: 'fhd-ci-cd.yml', event: 'pull_request', branch,
+              created: `${eventPR.created_at}..${eventPR.updated_at}`
+            }, 1000)).filter(eligible);
+            const proven = [];
+            // Native concurrency cancellation can lag synchronize. Wait at most 10 seconds total.
+            for (let round = 0; pending.length && round < 3; round++) {
+              if (round) await new Promise(resolve => setTimeout(resolve, 5000));
+              const retry = [];
+              for (const snapshot of pending) {
+                if (!await livePRMatches()) return;
+                const run = await readRun(snapshot.id);
+                if (!sameAttempt(snapshot, run)) continue;
+                const proof = await cancellationProof(run);
+                if (proof === true) proven.push(snapshot);
+                else if (proof === false) retry.push(snapshot);
+              }
+              pending = retry;
+            }
+            for (const snapshot of proven) {
+              if (!await livePRMatches()) return;
+              const run = await readRun(snapshot.id);
+              if (!sameAttempt(snapshot, run) || await cancellationProof(run) !== true) continue;
+              if (!await livePRMatches()) return;
+              if (!sameAttempt(snapshot, await readRun(snapshot.id))) continue;
+              // GitHub has no attempt-specific conditional cancel. These final reads narrow that race.
+              try {
+                await github.rest.actions.forceCancelWorkflowRun({...scope, run_id: snapshot.id});
+                core.info(`Requested completion of cancellation for run ${snapshot.id}, attempt ${snapshot.run_attempt}.`);
+              } catch (error) {
+                if (error.status !== 409) throw error;
+                const after = await readRun(snapshot.id);
+                core.info(`Run ${snapshot.id} returned 409; re-read status=${after?.status}, attempt=${after?.run_attempt}; no retry.`);
+              }
+            }

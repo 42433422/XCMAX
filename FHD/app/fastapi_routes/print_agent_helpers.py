@@ -8,6 +8,10 @@ from fastapi import Request
 
 from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.domain.task_lifecycle.results import agent_node_output as agent_node_output
+from app.infrastructure.auth.client_shell_session import (
+    session_cookie_name_for_request,
+    session_cookie_name_for_shell,
+)
 from app.middleware.request_id import ensure_request_id
 
 
@@ -78,6 +82,25 @@ def run_print_agent(
         "route_confirmed": True,
         "service_source": "fastapi_print_route",
     }
+    session_cookie = session_cookie_name_for_request(request)
+    if action == "workflow_label_dispatch" and (
+        "x-session-id" in request.headers
+        or "authorization" in request.headers
+        or any(
+            name in request.cookies
+            for name in {
+                session_cookie,
+                session_cookie_name_for_shell("admin"),
+                session_cookie_name_for_shell("enterprise"),
+            }
+        )
+    ):
+        from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+        # An invalid/revoked supplied identity must fail, never become a local
+        # anonymous request or a caller-selected X-User-ID fingerprint.
+        runtime_context = request_runtime_context(request, runtime_context)
+        user_id = str(runtime_context["user_id"])
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,

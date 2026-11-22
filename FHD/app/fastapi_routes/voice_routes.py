@@ -600,6 +600,7 @@ async def voice_command(
     if auto_execute:
         try:
             from app.application.ai_chat_app_service import get_ai_chat_app_service
+            from app.fastapi_routes.ai_intent import _public_unified_chat_payload
             from app.fastapi_routes.xcagi_compat_chat_helpers import (
                 _runtime_context_with_authenticated_actor,
             )
@@ -621,17 +622,30 @@ async def voice_command(
                 source="voice",
                 file_context={},
             )
-            result = payload if isinstance(payload, dict) else {"response": str(payload)}
+            result = (
+                _public_unified_chat_payload(payload)
+                if isinstance(payload, dict)
+                else {"response": str(payload)}
+            )
             details = result.get("data") or {}
             if not isinstance(details, dict):
                 details = {}
-            inner = details.get("data") if isinstance(details.get("data"), dict) else {}
-            node_results = inner.get("node_results") if isinstance(inner, dict) else []
-            executed = any(
+            inner = details.get("data")
+            if not isinstance(inner, dict):
+                inner = {}
+            node_results = inner.get("node_results")
+            execution = result.get("execution") or inner.get("execution")
+            executed = (isinstance(execution, dict) and execution.get("committed") is True) or any(
                 isinstance(node, dict) and node.get("success") is True
                 for node in (node_results if isinstance(node_results, list) else [])
             )
-            reason = "executed" if executed else "workflow_pending_or_not_executed"
+            reason = (
+                "requires_reconciliation"
+                if result.get("requires_reconciliation") is True
+                else "executed"
+                if executed
+                else "workflow_pending_or_not_executed"
+            )
         except RECOVERABLE_ERRORS:
             logger.exception("语音命令转智能对话主链失败")
             reason = "execution_failed"

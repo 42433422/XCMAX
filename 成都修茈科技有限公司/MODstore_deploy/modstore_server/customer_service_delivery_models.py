@@ -12,6 +12,7 @@ from modstore_server.models_cs import CustomerServiceTicket
 
 
 class CustomDeliveryCreateBody(BaseModel):
+    landing_contact_id: int | None = Field(default=None, gt=0)
     kind: str = Field(..., pattern="^(module|employee|bundle)$")
     source_mode: str = Field(default="generated", pattern="^(generated|versioned_main)$")
     title: str = Field(..., min_length=2, max_length=128)

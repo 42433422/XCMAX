@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import HTTPException
-from sqlalchemy import inspect, text
+from sqlalchemy import DateTime, bindparam, inspect, text
 
 from app.infrastructure.db.sync_engine import get_sync_engine
 from app.infrastructure.persistence.compat_db.compat_db_base import (
@@ -309,10 +309,11 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
             bind["ua"] = now
         cols_sql = ", ".join(_sql_ident(c) for c, _ in col_pairs)
         vals_sql = ", ".join(f":{bk}" for _, bk in col_pairs)
-        r = conn.execute(
-            text(_sql_insert_returning("purchase_units", cols_sql, vals_sql)),
-            bind,
-        )
+        statement = text(_sql_insert_returning("purchase_units", cols_sql, vals_sql))
+        for timestamp in ("ca", "ua"):
+            if timestamp in bind:
+                statement = statement.bindparams(bindparam(timestamp, type_=DateTime()))
+        r = conn.execute(statement, bind)
         new_id = int(r.scalar_one())
         conn.commit()
     return _customer_pg_fetch_by_id(eng, insp, new_id)
