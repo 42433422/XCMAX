@@ -15,21 +15,29 @@ name: ci-mobile-android-smoke
 
 on:
   push:
+    branches: [main, develop, master]
+    tags: ['**']
     paths:
       - "FHD/mobile-flutter-poc/**"
       - ".github/workflows/fhd-ci-mobile-android-smoke.yml"
+      - "FHD/.github/workflows/ci-mobile-android-smoke.yml"
+      - "FHD/scripts/ci/android_smoke.sh"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
   pull_request:
     paths:
       - "FHD/mobile-flutter-poc/**"
       - ".github/workflows/fhd-ci-mobile-android-smoke.yml"
+      - "FHD/.github/workflows/ci-mobile-android-smoke.yml"
+      - "FHD/scripts/ci/android_smoke.sh"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
   schedule:
     # 每日 09:00 UTC
     - cron: "0 9 * * *"
   workflow_dispatch:
 
 concurrency:
-  group: ci-mobile-android-smoke-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

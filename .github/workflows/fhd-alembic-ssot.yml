@@ -7,6 +7,10 @@ name: FHD Alembic SSOT
   push:
     branches: [main, develop]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Candidate tests never inherit repository-wide write permissions.
 permissions:
   contents: read
