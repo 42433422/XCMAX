@@ -2394,8 +2394,7 @@
           "required_params": [
             "file_path"
           ],
-          "availability": "shared",
-          "read_only": true
+          "availability": "shared"
         },
         "structure": {
           "risk": "low",
@@ -2404,8 +2403,7 @@
           "required_params": [
             "file_path"
           ],
-          "availability": "shared",
-          "read_only": true
+          "availability": "shared"
         },
         "query": {
           "risk": "low",
@@ -2415,8 +2413,7 @@
             "file_path",
             "question"
           ],
-          "availability": "shared",
-          "read_only": true
+          "availability": "shared"
         },
         "statistics": {
           "risk": "low",
@@ -2425,8 +2422,7 @@
           "required_params": [
             "file_path"
           ],
-          "availability": "shared",
-          "read_only": true
+          "availability": "shared"
         },
         "export": {
           "risk": "medium",

@@ -26,6 +26,7 @@ from app.application.tool_execution_deadline import (
     remaining_invocation_seconds,
 )
 from app.infrastructure.chat_stream_lifetime import StreamStopped, check_stream_active
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 T = TypeVar("T")
 _SAFE_TRANSPORT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
@@ -205,7 +206,8 @@ def model_call(stage: str) -> Iterator[dict[str, Any]]:
         yield entry
         check_model_budget()
         entry["outcome"] = "returned"
-    except BaseException as exc:
+    except BOUNDARY_ERRORS + (asyncio.CancelledError,) as exc:
+        # Provider boundary: record and re-raise; process teardown bypasses diagnostics.
         entry.update(
             model_failure_details(
                 exc,

@@ -10,7 +10,7 @@ import httpx
 import pytest
 from openai import APIConnectionError
 
-from app.infrastructure.chat_stream_lifetime import StreamObservationTimeout
+from app.infrastructure.chat_stream_lifetime import StreamObservationTimeout, StreamStopped
 from app.infrastructure.llm.retry_policy import (
     ModelBudgetExceeded,
     RetryPolicy,
@@ -101,6 +101,38 @@ def test_output_started_remains_unknown_even_if_later_connection_error_is_wrappe
             raise httpx.ConnectError("later connection failed")
     assert diagnostics["stages"][0]["outcome"] == "unknown"
     assert diagnostics["stages"][0]["retryable"] is False
+
+
+@pytest.mark.parametrize(
+    "failure,kind",
+    [
+        (Exception("provider failed"), "model_response_invalid"),
+        (asyncio.CancelledError("task stopped"), "cancelled"),
+        (StreamStopped("consumer stopped"), "cancelled"),
+        (KeyboardInterrupt(), None),
+        (SystemExit(1), None),
+        (GeneratorExit(), None),
+    ],
+)
+def test_callback_failures_propagate_once_and_process_teardown_is_not_provider_failure(
+    failure, kind
+):
+    diagnostics, calls = {}, []
+
+    def invoke():
+        calls.append(1)
+        raise failure
+
+    with scope(diagnostics), pytest.raises(type(failure)) as caught:
+        call_with_retry(invoke, policy=RetryPolicy(max_attempts=4, base_delay=0, jitter=0))
+    assert caught.value is failure
+    assert calls == [1] and diagnostics["model_attempts"] == 1
+    assert diagnostics["transport_retries"] == 0
+    entry = diagnostics["stages"][0]
+    assert entry.get("failure_kind") == kind
+    assert entry["outcome"] == "unknown" and entry["elapsed_ms"] >= 0
+    if kind is not None:
+        assert entry["retryable"] is False
 
 
 def test_sdk_transport_wrappers_do_not_make_unknown_reads_safe():
