@@ -562,6 +562,30 @@ def test_approved_view_reads_original_run_with_scope_and_plan_fences(db, monkeyp
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("raise_storage_errors", [False, True])
+def test_snapshot_storage_failure_does_not_log_private_request(db, caplog, raise_storage_errors):
+    from sqlalchemy.exc import OperationalError
+
+    ApprovalRequest.__table__.drop(db.kw["bind"])
+    private_request = "private-employee-result-approval-id"
+    if raise_storage_errors:
+        with pytest.raises(OperationalError):
+            load_durable_workflow_snapshot(private_request, raise_storage_errors=True)
+    else:
+        assert load_durable_workflow_snapshot(private_request) is None
+
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "app.application.workflow.approval_persistence"
+    ]
+    assert len(records) == 1 and records[0].levelname == "WARNING"
+    assert "snapshot failed" in records[0].getMessage()
+    assert private_request not in caplog.text
+    assert "SELECT approval_requests" not in caplog.text
+    assert not records[0].exc_info and not records[0].stack_info
+
+
 class TestLoaderTenantGuard:
     def test_matching_tenant_returns_snapshot(self, db):
         _insert_request(db, request_no="req-ok", business_data=_valid_business_data(tenant_id=1))

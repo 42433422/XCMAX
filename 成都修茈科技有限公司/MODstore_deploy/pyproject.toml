@@ -83,6 +83,8 @@ vibe = [
     "vibe-coding[web]>=0.1.0",
 ]
 dev = [
+  # Exercise the pinned upstream authenticator and accounting writer together.
+  "litellm[proxy]==1.109.3",
   "pytest>=9.1.1",
   "pytest-cov>=4.1",
   "pytest-asyncio>=1.4.0",

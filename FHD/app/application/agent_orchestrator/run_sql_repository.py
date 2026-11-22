@@ -1262,6 +1262,11 @@ class SQLAlchemyAgentRunRepository:
             .values(**values)
             .on_conflict_do_nothing(index_elements=["tenant_id", "user_id", "task_id"])
         )
+        if dialect == "postgresql":
+            # psycopg resets rowcount when implicit RETURNING closes its cursor.
+            return (
+                db.execute(statement.returning(AgentTaskRecord.id)).scalar_one_or_none() is not None
+            )
         return cast(CursorResult, db.execute(statement)).rowcount == 1
 
     @classmethod

@@ -79,7 +79,9 @@ def finalize_planned_graph(
 ) -> Any:
     """Validate generated plans and pause safely on rejection; never execute a fallback plan."""
     context = context or {}
-    trace_id = str(context.get("trace_id") or plan_id)
+    # Correlate these records with the host-created plan, never an opaque
+    # caller-supplied trace field that can contain a session credential.
+    trace_id = plan_id
     rejection = str(context.get("planning_failure_reason") or "模型未返回可用计划")
     if planned is not None:
         err = validate(planned)

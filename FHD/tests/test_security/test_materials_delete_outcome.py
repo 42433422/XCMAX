@@ -44,7 +44,7 @@ def test_committed_delete_with_lost_receipt_keeps_ids_and_requires_reconciliatio
         }
         result = _registered_router_materials(action, {"ids": [1, 2]}, context, "admin", "")
 
-        assert db.execute("SELECT id FROM materials ORDER BY id").fetchall() == [(2,)]
+        assert db.execute("SELECT id FROM materials ORDER BY id LIMIT 2").fetchmany(2) == [(2,)]
         assert calls == [[1, 2]]
         assert result["success"] is False
         assert execution_result_outcome_unknown(result)

@@ -12,10 +12,14 @@ export type EmployeeRequestTransport = {
 }
 const inFlight = new Map<string, Promise<Body>>()
 const requestPrefix = 'xcagi_admin_employee_request:'
-type StoredRequest = { version: 2; key: string; serverDigest: string; ownerDigest: string; employeeDigest: string; runId?: string; conflicted?: boolean }
+type RequestIdentity = { key: string; runId?: string; conflicted?: boolean }
+type StoredRequest = RequestIdentity & { version: 3; bindingDigest: string }
 type RequestScope = {
   ownerScope: string; server: string; epoch: number
-  ownerDigest: string; employeeDigest: string; serverDigest: string
+  bindingDigest: string
+}
+class RequestBindingMismatch extends Error {
+  constructor(readonly identity: RequestIdentity) { super('原员工请求绑定了其他账号或服务器，请核对原任务。') }
 }
 
 function canonical(value: unknown): unknown {
@@ -49,25 +53,27 @@ function ownerScope(ownerId?: number | null): string {
   const scope = getRuntimeTenantStorageScopeInput() || (ownerId ? { localUserId: ownerId } : null)
   return scope ? JSON.stringify(canonical(scope)) : ''
 }
-function currentServer(): string { return getApiBase() || window.location.origin }
+function legacyServer(): string { return getApiBase() || window.location.origin }
+function currentServer(): string { return new URL(getApiBase() || '/', document.baseURI).href.replace(/\/$/, '') }
 async function sha256(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 async function requestScope(scope: string, server: string, epoch: number, employeeId: string): Promise<RequestScope> {
-  const [ownerDigest, employeeDigest, serverDigest] = await Promise.all([sha256(scope), sha256(employeeId), sha256(server)])
-  return { ownerScope: scope, server, epoch, ownerDigest, employeeDigest, serverDigest }
+  // One scoped commitment avoids independently correlating an employee or owner
+  // across accounts/servers. Keep the original request key for GET-only recovery.
+  const bindingDigest = await sha256(JSON.stringify(['admin-employee-request-binding-v3', scope, server, employeeId]))
+  return { ownerScope: scope, server, epoch, bindingDigest }
 }
 function scopeCurrent(scope: RequestScope, ownerId?: number | null): boolean {
   return scope.ownerScope === ownerScope(ownerId) && scope.server === currentServer()
     && scope.epoch === productReadAccountEpoch.value
 }
 function unchanged(saved: StoredRequest, scope: RequestScope, ownerId?: number | null): boolean {
-  return saved.ownerDigest === scope.ownerDigest && saved.employeeDigest === scope.employeeDigest
-    && saved.serverDigest === scope.serverDigest && scopeCurrent(scope, ownerId)
+  return saved.bindingDigest === scope.bindingDigest && scopeCurrent(scope, ownerId)
 }
 function persistRequest(storageKey: string, saved: StoredRequest): void {
-  const encoded = JSON.stringify(saved)
+  const encoded = JSON.stringify(canonical(saved))
   localStorage.setItem(storageKey, encoded)
   if (localStorage.getItem(storageKey) !== encoded) throw new Error('无法保存员工请求身份，未提交任务。')
 }
@@ -80,24 +86,28 @@ async function loadRequest(
     || (raw.conflicted !== undefined && typeof raw.conflicted !== 'boolean')) {
     throw new Error('原员工请求身份缺失，请核对原任务。')
   }
-  let serverDigest: string
-  if (raw.version === 2) {
-    if (raw.ownerDigest !== scope.ownerDigest || raw.employeeDigest !== scope.employeeDigest
+  const identity: RequestIdentity = { key: raw.key,
+    ...(typeof raw.runId === 'string' ? { runId: raw.runId } : {}),
+    ...(raw.conflicted === true ? { conflicted: true } : {}) }
+  if (raw.version === 3) {
+    if (typeof raw.bindingDigest !== 'string' || !/^[a-f0-9]{64}$/.test(raw.bindingDigest)) {
+      throw new Error('原员工请求身份缺失，请核对原任务。')
+    }
+    if (raw.bindingDigest !== scope.bindingDigest) throw new RequestBindingMismatch(identity)
+  } else if (raw.version === 2) {
+    const expected = await Promise.all([sha256(scope.ownerScope), sha256(employeeId), sha256(legacyServer())])
+    if (raw.ownerDigest !== expected[0] || raw.employeeDigest !== expected[1]
       || typeof raw.serverDigest !== 'string' || !/^[a-f0-9]{64}$/.test(raw.serverDigest)) {
       throw new Error('原员工请求身份缺失，请核对原任务。')
     }
-    serverDigest = raw.serverDigest
+    if (raw.serverDigest !== expected[2]) throw new RequestBindingMismatch(identity)
   } else {
     if (raw.version !== undefined || raw.ownerScope !== scope.ownerScope || raw.employeeId !== employeeId
       || typeof raw.server !== 'string' || !raw.server) throw new Error('原员工请求身份缺失，请核对原任务。')
-    serverDigest = await sha256(raw.server)
+    if (raw.server !== legacyServer()) throw new RequestBindingMismatch(identity)
   }
-  const saved: StoredRequest = {
-    version: 2, key: raw.key, serverDigest, ownerDigest: scope.ownerDigest, employeeDigest: scope.employeeDigest,
-    ...(typeof raw.runId === 'string' ? { runId: raw.runId } : {}),
-    ...(raw.conflicted === true ? { conflicted: true } : {}),
-  }
-  if (raw.version !== 2) {
+  const saved: StoredRequest = { version: 3, ...identity, bindingDigest: scope.bindingDigest }
+  if (raw.version !== 3) {
     // Keep the original storage/request keys: migration is read-only recovery,
     // never permission to submit an already sent operation again.
     if (!scopeCurrent(scope, ownerId) || localStorage.getItem(storageKey) !== encoded) {
@@ -107,7 +117,7 @@ async function loadRequest(
   }
   return saved
 }
-function unknown(saved: StoredRequest): Body {
+function unknown(saved: RequestIdentity): Body {
   return { success: false, execution_state: 'unknown', retryable: false, run_id: saved.runId || '',
     requires_reconciliation: true, idempotency_key: saved.key, turn_id: saved.key,
     message: '结果待核对，请在原账号和服务器读取任务回执，勿重复提交。' }
@@ -123,7 +133,7 @@ function acceptReceipt(storageKey: string, saved: StoredRequest, result: Body): 
   }
   const state = adminEmployeeState(result)
   if (['completed', 'failed', 'cancelled', 'rejected'].includes(state)) {
-    if (localStorage.getItem(storageKey) === JSON.stringify(saved)) localStorage.removeItem(storageKey)
+    if (localStorage.getItem(storageKey) === JSON.stringify(canonical(saved))) localStorage.removeItem(storageKey)
   }
   return { ...result, execution_state: state, success: state === 'completed', retryable: false }
 }
@@ -161,7 +171,7 @@ export async function readPendingAdminEmployeeReceipts(
   return scopeCurrent(binding, ownerId) ? receipts : []
 }
 
-/** Persist only identity/digests. A sent operation can only GET its original receipt. */
+/** Persist only request identity and its joint binding. Sent operations only GET their original receipt. */
 export async function executeAdminEmployee(
   employeeId: string, body: Body, transport: EmployeeRequestTransport, ownerId?: number | null,
 ): Promise<Body> {
@@ -180,11 +190,14 @@ export async function executeAdminEmployee(
     const prior = localStorage.getItem(storageKey)
     let saved: StoredRequest
     if (prior) {
-      saved = await loadRequest(storageKey, prior, binding, employeeId, ownerId)
+      try { saved = await loadRequest(storageKey, prior, binding, employeeId, ownerId) } catch (error) {
+        if (error instanceof RequestBindingMismatch) return unknown(error.identity)
+        throw error
+      }
       if (saved.conflicted) throw conflict()
     } else {
-      saved = { version: 2, key: asString(body.idempotency_key || body.turn_id) || crypto.randomUUID(),
-        serverDigest: binding.serverDigest, ownerDigest: binding.ownerDigest, employeeDigest: binding.employeeDigest }
+      saved = { version: 3, key: asString(body.idempotency_key || body.turn_id) || crypto.randomUUID(),
+        bindingDigest: binding.bindingDigest }
       persistRequest(storageKey, saved)
     }
     if (!unchanged(saved, binding, ownerId)) return unknown(saved)

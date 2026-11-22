@@ -175,10 +175,9 @@ class LLMWorkflowPlanner:
         ):
             context.pop(key, None)
         context.pop("prior_conversation", None)
-        session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
-        plan_id = (
-            f"wp-{session_key}-{uuid.uuid4().hex[:8]}" if session_key else f"wp-{uuid.uuid4().hex}"
-        )
+        # A plan id is persisted and exposed in audit logs; it must not contain
+        # conversation identifiers or authentication material from the context.
+        plan_id = f"wp-{uuid.uuid4().hex}"
         rejected = rejected_sql_plan(message, plan_id)
         if rejected is not None:
             return rejected

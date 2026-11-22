@@ -19,7 +19,12 @@ const forward = (url, options) => {
 };
 globalThis.fetch = forward;
 const { runGithubExecutor } = await import(pathToFileURL(join(tools, 'github_para_executor.mjs')));
-const { openCodePlatformConfig, runOpenCodeLive } = await import(pathToFileURL(join(tools, 'opencode_agent.mjs')));
+const { openCodeExecutable, openCodePlatformConfig, runOpenCodeLive } = await import(pathToFileURL(join(tools, 'opencode_agent.mjs')));
+// Match the injected Live SDK executor, not the native SRT launcher. The SDK,
+// approved gateway configuration, file edit, SQL settlement and Git bundle are
+// real; host/SRT admission remains covered by the separate native-host suite.
+const isAvailable = tool => tool === 'opencode'
+  && Boolean(openCodeExecutable(process.env)) && Boolean(openCodePlatformConfig(process.env));
 let execution;
 const runAgent = async (cwd, prompt, options) => {
   assert.equal(options.reportOnly, false);
@@ -50,7 +55,14 @@ const code = await runGithubExecutor({ env, fetchStatus: forward,
     delete process.env.MODSTORE_PARA_DISPATCH_TOKEN;
     execution = (async () => {
       const { handleTask } = await import(pathToFileURL(join(tools, 'para_e2e_agent.mjs')));
-      await handleTask({ readyState: 1, send() {} }, task, { runAgent });
+      let failed = false;
+      let lastLog = '';
+      await handleTask({ readyState: 1, send(raw) {
+        const event = JSON.parse(raw);
+        if (event.type === 'task_log') lastLog = String(event.content).slice(-4000);
+        if (event.type === 'task_progress' && event.status === 'failed') failed = true;
+      } }, task, { runAgent, isAvailable });
+      assert.equal(failed, false, lastLog || 'real workspace executor failed');
     })();
     execution.catch(error => { process.stderr.write(error.stack + '\n'); child.emit('error', error); });
     return child;

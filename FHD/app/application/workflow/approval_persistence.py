@@ -526,7 +526,7 @@ def load_durable_workflow_snapshot(
                 return None
             return _validated_snapshot(persisted)
     except _APPROVAL_STORAGE_ERRORS:
-        logger.warning("load durable workflow snapshot failed request_no=%s", request_id)
+        logger.warning("load durable workflow snapshot failed")
         if raise_storage_errors:
             raise
         return None

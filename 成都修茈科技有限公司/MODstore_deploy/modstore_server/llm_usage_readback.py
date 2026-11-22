@@ -7,9 +7,9 @@ reservation. SQLAlchemy/psycopg2 own the read-only database transport.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,6 +18,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
 from modstore_server.strategic_portfolio import PortfolioError, _date, digest
+
+_MASTER_IDENTITY_SCHEME = "litellm_master_alias_v1"
 
 
 def ledger_source() -> tuple[str, str]:
@@ -33,18 +35,29 @@ def ledger_source() -> tuple[str, str]:
 
 
 def transport_identity(provider: str) -> dict[str, str]:
+    from litellm.constants import LITELLM_PROXY_MASTER_KEY_ALIAS
+
     from modstore_server.llm_chat_proxy import _normalize_openai_base
     from modstore_server.llm_key_resolver import platform_api_key, platform_base_url
+    from modstore_server.platform_model_config import PlatformApiKey
 
     key = platform_api_key(provider)
     if not key:
         raise PortfolioError("model transport credential is unavailable")
+    if (
+        provider != "litellm"
+        or not isinstance(key, PlatformApiKey)
+        or key.configuration.get("provider") != "litellm"
+        or key.configuration.get("source") != "environment"
+    ):
+        raise PortfolioError("usage readback requires the configured LiteLLM master transport")
     endpoint = _normalize_openai_base(provider, platform_base_url(provider), key)
     _, source = ledger_source()
     return {
         "endpoint_sha256": digest(endpoint.rstrip("/")),
-        # Match the original upstream accounting ledger's credential fingerprint.
-        "credential_sha256": hashlib.sha256(str(key).encode()).hexdigest(),
+        # The upstream master-key authenticator logs this non-secret alias.
+        "accounting_identity_scheme": _MASTER_IDENTITY_SCHEME,
+        "accounting_identity": LITELLM_PROXY_MASTER_KEY_ALIAS,
         "ledger_source_sha256": source,
     }
 
@@ -84,9 +97,24 @@ def _events(binding: dict[str, Any]) -> list[dict[str, Any]]:
 def read_usage(binding: dict[str, Any]) -> dict[str, Any] | None:
     """A terminal caller and its one measured original attempt must agree."""
     from litellm.accounting import InboundUsageEvent, OutboundUsageEvent
+    from litellm.constants import LITELLM_PROXY_MASTER_KEY_ALIAS
 
     if binding.get("provider") != "litellm":
         return None
+    if "accounting_identity_scheme" in binding or "accounting_identity" in binding:
+        identity = binding.get("accounting_identity")
+        if (
+            binding.get("accounting_identity_scheme") != _MASTER_IDENTITY_SCHEME
+            or identity != LITELLM_PROXY_MASTER_KEY_ALIAS
+            or "credential_sha256" in binding
+        ):
+            return None
+    else:
+        # Historical bindings retain their exact original identity and digest.
+        # A master alias cannot retroactively prove an old hash-bound call.
+        identity = binding.get("credential_sha256")
+        if not isinstance(identity, str) or re.fullmatch(r"[0-9a-f]{64}", identity) is None:
+            return None
     current = transport_identity("litellm")
     if current["endpoint_sha256"] != binding.get("endpoint_sha256"):
         return None
@@ -108,7 +136,7 @@ def read_usage(binding: dict[str, Any]) -> dict[str, Any] | None:
             return None
         dimensions = {item.name.value: item.value for item in event.dimensions}
         if (
-            dimensions.get("key") != binding["credential_sha256"]
+            dimensions.get("key") != identity
             or dimensions.get("model_group") != binding["model"]
             or event.call_type.value not in {"acompletion", "completion", "aresponses", "responses"}
             or event.started_at < _date(binding["started_at"])

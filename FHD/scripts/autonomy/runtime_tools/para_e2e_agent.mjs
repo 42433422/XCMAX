@@ -1401,7 +1401,7 @@ async function reportCancellation(ws, task) {
     workspace_preserved: true }));
 }
 
-export async function handleTask(ws, task, { runAgent = runOpenCodeAgent } = {}) {
+export async function handleTask(ws, task, { runAgent = runOpenCodeAgent, isAvailable = toolAvailable } = {}) {
   let taskDir = null;
   let workspaceGrant;
   let completed = false;
@@ -1488,9 +1488,9 @@ export async function handleTask(ws, task, { runAgent = runOpenCodeAgent } = {})
   const agentConfig = resolveAgentConfig();
   const requestedTool = requestedToolName(task, agentConfig);
   const devTool = effectiveToolName({ task, agentConfig });
-  let plan = toolAttemptPlan({ task, agentConfig, isAvailable: toolAvailable });
+  let plan = toolAttemptPlan({ task, agentConfig, isAvailable });
   if (!plan) {
-    plan = toolAvailable(devTool) ? [devTool] : [];
+    plan = isAvailable(devTool) ? [devTool] : [];
     if (!forcedToolName() && plan.length) {
       if (devTool === 'codex' && process.env.DEVFLEET_CODEX_TRAE_FAILOVER !== '0' && traeAgentAvailable()) plan.push('trae');
       if (devTool === 'trae' && process.env.DEVFLEET_TRAE_CODEX_FAILOVER !== '0' && codexAgentAvailable()) plan.push('codex');

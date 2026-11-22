@@ -49,6 +49,53 @@ def _scope_run(user_id: str, task_id: str, mod_id: str) -> AgentRun:
     return run
 
 
+@pytest.mark.parametrize("abort", [False, True])
+def test_admission_uses_native_insert_results_atomically(admission_sessions, monkeypatch, abort):
+    from sqlalchemy.dialects.postgresql import Insert
+    from sqlalchemy.orm import Session
+
+    from app.db.models.agent import AgentRunRecord, AgentTaskRecord
+
+    original_execute = Session.execute
+
+    def unknown_postgres_insert_count(db, statement, *args, **kwargs):
+        result = original_execute(db, statement, *args, **kwargs)
+        if isinstance(statement, Insert) and statement.table.name == "agent_tasks":
+            # Preserve real PostgreSQL rows/transactions while ensuring no
+            # caller depends on its optional INSERT rowcount. SQLite is unchanged.
+            result.rowcount = -1
+        return result
+
+    monkeypatch.setattr(Session, "execute", unknown_postgres_insert_count)
+    factory = admission_sessions
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    original = repo.save_in_session
+
+    def fail_after_save(db, run):
+        original(db, run)
+        db.flush()
+        raise RuntimeError("injected commit failure")
+
+    run = _scope_run("owner", "unknown-rowcount-task", "mod")
+    if abort:
+        monkeypatch.setattr(repo, "save_in_session", fail_after_save)
+        with pytest.raises(RuntimeError, match="injected commit failure"):
+            repo.create_task_run(run)
+        with factory() as db:
+            assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
+        monkeypatch.setattr(repo, "save_in_session", original)
+    saved, created = repo.create_task_run(run)
+    assert created and saved.run_id == run.run_id
+    duplicate = _scope_run("owner", "unknown-rowcount-task", "mod")
+    recovered, created = repo.create_task_run(duplicate)
+    assert not created and recovered.run_id == run.run_id
+    with factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
+        assert db.query(AgentTaskRecord).one().active_run_id == run.run_id
+    assert repo.get(run.run_id).to_dict() == recovered.to_dict()
+    assert repo.get(duplicate.run_id) is None
+
+
 @pytest.mark.parametrize("durable", [False, True])
 def test_task_projection_keeps_the_bound_run_until_a_new_attempt(tmp_path, durable):
     from app.application.agent_orchestrator import InMemoryAgentRunRepository

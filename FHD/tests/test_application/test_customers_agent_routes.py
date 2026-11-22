@@ -102,8 +102,10 @@ def test_customer_mutation_routes_execute_through_agent_orchestrator(
         with customer_sessions() as db:
             created_rows = (
                 db.connection()
-                .exec_driver_sql("SELECT id, tenant_id, unit_name FROM purchase_units ORDER BY id")
-                .fetchall()
+                .exec_driver_sql(
+                    "SELECT id, tenant_id, unit_name FROM purchase_units ORDER BY id LIMIT 3"
+                )
+                .fetchmany(3)
             )
         assert create_customer.json().get("success") is True, (create_customer.json(), created_rows)
         update_customer_resp = client.put(
@@ -143,8 +145,10 @@ def test_customer_mutation_routes_execute_through_agent_orchestrator(
     with customer_sessions() as db:
         rows = (
             db.connection()
-            .exec_driver_sql("SELECT id, tenant_id, unit_name FROM purchase_units ORDER BY id")
-            .fetchall()
+            .exec_driver_sql(
+                "SELECT id, tenant_id, unit_name FROM purchase_units ORDER BY id LIMIT 3"
+            )
+            .fetchmany(3)
         )
         assert rows == [(6, 8, "Other tenant"), (7, 7, "星光贸易二部")]
 

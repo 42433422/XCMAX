@@ -6,7 +6,7 @@ import asyncio
 import json
 import threading
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -381,11 +381,9 @@ async def test_exact_turn_get_refreshes_only_the_original_dispatch(bound_super, 
 
 @pytest.mark.parametrize("state", ["completed", "running", "missing", "wrong_task", "unbound"])
 def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
-    from app.application.message_repository import MessageRepository
-    from app.application.super_employee_service import SuperEmployeeService
+    from app.application.super_employee_service import CODEX_PROFILE, SuperEmployeeService
 
-    service = object.__new__(SuperEmployeeService)
-    service._messages = MessageRepository(tmp_path, "reader")
+    service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
     request = {
         "user_id": 71,
         "request_id": "original-dispatch",
@@ -399,6 +397,8 @@ def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
         },
     }
     service._messages.write_outbox(request, status="accepted", accepted=True, reason="")
+    outbox_path = next(service._messages.outbox_dir.glob("*.json"))
+    original_outbox = outbox_path.read_bytes()
     service._read_all_message_rows = MagicMock(
         side_effect=AssertionError("presentation rows are not dispatch authority")
     )
@@ -419,16 +419,35 @@ def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
     service.list_messages = MagicMock(side_effect=AssertionError("may backfill CLI"))
     service.invoke = MagicMock(side_effect=AssertionError("may not invoke"))
     service._compose_direct_chat_reply = MagicMock(side_effect=AssertionError("may not run CLI"))
+    service._dispatching.dispatch = MagicMock(side_effect=AssertionError("may not redispatch"))
     receipt = service.read_dispatch_receipt(
         user_id=71, request_id="original-dispatch", task_id="original-task"
     )
     assert (receipt is None) is (state in {"missing", "wrong_task", "unbound"})
+    if state in {"completed", "running"}:
+        assert receipt["dispatch"] == {
+            "request_id": "original-dispatch",
+            "task_id": "original-task",
+            "dispatcher": "para_api",
+            "status": state,
+            "task_status": state,
+        }
+        assert receipt["assistant_message"]["body"] == "task receipt"
     assert (
         service.read_dispatch_receipt(
             user_id=72, request_id="original-dispatch", task_id="original-task"
         )
         is None
     )
+    if state == "unbound":
+        service._para_request.assert_not_called()
+        service._para_token.assert_not_called()
+    else:
+        service._para_request.assert_called_once_with(
+            ANY, "https://para.test", "read-token", "GET", "/api/tasks/original-task"
+        )
+    assert outbox_path.read_bytes() == original_outbox
+    service._dispatching.dispatch.assert_not_called()
     service.list_messages.assert_not_called()
     service._read_all_message_rows.assert_not_called()
     service.invoke.assert_not_called()

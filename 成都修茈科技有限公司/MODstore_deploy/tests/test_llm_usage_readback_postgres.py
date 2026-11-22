@@ -15,7 +15,6 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.pool import NullPool
 
-from modstore_server import llm_key_resolver
 from modstore_server import llm_usage_readback as source
 from modstore_server import strategic_portfolio as portfolio
 from modstore_server import strategic_portfolio_runtime as runtime
@@ -23,13 +22,14 @@ from modstore_server import strategic_usage_reconciliation as recovery
 from tests import test_strategic_usage_reconciliation as native
 
 database = native.database
+upstream_master = native.upstream_master
 pytestmark = pytest.mark.skipif(
     not os.environ.get("RETORT_TEST_POSTGRES_DSN"), reason="isolated PostgreSQL required"
 )
 
 
 @pytest.fixture
-def pg_ledger(database, monkeypatch):
+def pg_ledger(database, monkeypatch, upstream_master):
     suffix = uuid4().hex
     schema, role, password = f"usage_{suffix}", f"usage_reader_{suffix}", secrets.token_hex(24)
     original_url = make_url(os.environ["RETORT_TEST_POSTGRES_DSN"])
@@ -72,11 +72,6 @@ def pg_ledger(database, monkeypatch):
             drivername="postgresql+psycopg2", username=role, password=password
         ).render_as_string(hide_password=False)
         monkeypatch.setenv("MODSTORE_LITELLM_ACCOUNTING_DATABASE_URL", url)
-        monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-        monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "sk-native-test-only")
-        monkeypatch.setattr(
-            llm_key_resolver, "platform_base_url", lambda _: "https://gateway.test/v1"
-        )
         decision_id, task, held, binding = native.admit(database)
         yield SimpleNamespace(
             admin=admin,

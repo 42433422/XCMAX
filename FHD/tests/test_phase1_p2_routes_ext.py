@@ -471,8 +471,10 @@ def test_customers_post_ok(
     with actor.factory() as db:
         rows = (
             db.connection()
-            .exec_driver_sql("SELECT id, tenant_id, unit_name, contact_person FROM purchase_units")
-            .fetchall()
+            .exec_driver_sql(
+                "SELECT id, tenant_id, unit_name, contact_person FROM purchase_units LIMIT 2"
+            )
+            .fetchmany(2)
         )
     assert rows == [(payload["data"]["id"], actor.tenant_id, "丙公司", "李")]
 

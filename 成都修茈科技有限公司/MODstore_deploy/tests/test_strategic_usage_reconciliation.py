@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import secrets
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
@@ -24,8 +27,62 @@ MODEL = "approved-gateway-route"
 
 
 @pytest.fixture
-def gateway(database, tmp_path, monkeypatch):
+def upstream_master(tmp_path, monkeypatch):
+    """Use the upstream master authenticator with isolated local configuration."""
     monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    monkeypatch.setenv("MODSTORE_DATA_DIR", str(tmp_path / "platform-config"))
+    monkeypatch.setenv("LITELLM_UI_PATH", str(tmp_path / "upstream-ui"))
+    key = "sk-" + secrets.token_urlsafe(32)
+    monkeypatch.setenv("LITELLM_MASTER_KEY", key)
+    monkeypatch.delenv("XCMAX_LITELLM_MASTER_KEY", raising=False)
+    monkeypatch.setenv("LITELLM_BASE_URL", "https://gateway.test/v1")
+    # Account for the pinned proxy's Swagger Field(example=...) and UI scan
+    # warnings at import, retaining the suite's warning errors everywhere else.
+    from pydantic.warnings import PydanticDeprecatedSince20
+
+    with warnings.catch_warnings(record=True) as upstream_warnings:
+        warnings.filterwarnings(
+            "always",
+            message="Using extra keyword arguments on `Field`",
+            category=PydanticDeprecatedSince20,
+            module=r"litellm\.proxy\.common_utils\.swagger_utils",
+        )
+        warnings.filterwarnings(
+            "always",
+            message="unclosed scandir iterator",
+            category=ResourceWarning,
+            module=r"litellm\.proxy\.proxy_server",
+        )
+        from litellm.proxy import proxy_server
+    assert all(
+        (
+            item.filename.endswith("litellm/proxy/common_utils/swagger_utils.py")
+            and isinstance(item.message, PydanticDeprecatedSince20)
+        )
+        or (
+            item.filename.endswith("litellm/proxy/proxy_server.py")
+            and isinstance(item.message, ResourceWarning)
+            and str(item.message).startswith("unclosed scandir iterator")
+        )
+        for item in upstream_warnings
+    )
+    from litellm.proxy.common_utils.user_api_key_cache import UserApiKeyCache
+
+    for name, value in {
+        "master_key": key,
+        "general_settings": {},
+        "user_api_key_cache": UserApiKeyCache(),
+        "prisma_client": None,
+        "llm_router": None,
+        "user_custom_auth": None,
+        "open_telemetry_logger": None,
+    }.items():
+        monkeypatch.setattr(proxy_server, name, value)
+    return proxy_server
+
+
+@pytest.fixture
+def gateway(database, tmp_path, monkeypatch, upstream_master):
     url = f"sqlite:///{tmp_path / 'upstream.db'}"
     engine = create_engine(url)
     with engine.begin() as connection:
@@ -34,8 +91,6 @@ def gateway(database, tmp_path, monkeypatch):
                 'CREATE TABLE "LiteLLM_AccountingEvent" (event_id TEXT PRIMARY KEY, kind TEXT, schema_version INTEGER, payload TEXT)'
             )
         )
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "sk-test-gateway")
-    monkeypatch.setattr(llm_key_resolver, "platform_base_url", lambda _: "https://gateway.test/v1")
     monkeypatch.setattr(source, "ledger_source", lambda: (url, "isolated-upstream"))
     monkeypatch.setattr(source, "_accounting_engine", lambda _: create_engine(url))
     yield engine
@@ -74,8 +129,48 @@ def admit(database, *, key="one"):
     return decision_id, task, reservation, call["transport_binding"]
 
 
+async def authenticate_gateway(key=None):
+    from litellm.proxy.auth.user_api_key_auth import user_api_key_auth_builder
+    from starlette.requests import Request
+
+    key = llm_key_resolver.platform_api_key("litellm") if key is None else key
+    body = json.dumps({"model": MODEL, "messages": []}).encode()
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "path": "/v1/chat/completions",
+            "headers": [(b"authorization", f"Bearer {key}".encode())],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("gateway.test", 443),
+            "client": ("127.0.0.1", 1234),
+        },
+        receive,
+    )
+    authenticated = await user_api_key_auth_builder(
+        request=request,
+        api_key=f"Bearer {key}",
+        azure_api_key_header=None,
+        anthropic_api_key_header=None,
+        google_ai_studio_api_key_header=None,
+        azure_apim_header=None,
+        request_data={"model": MODEL},
+    )
+    # Finish the upstream's local auth-cache and service-log tasks in this loop.
+    await asyncio.sleep(0)
+    return authenticated
+
+
 def upstream_events(binding, *, prompt=12, completion=7):
-    # Use the actual pinned upstream writer contract, not an invented receipt.
+    # Derive the spend identity from real authentication, never from the binding.
+    from litellm.proxy.litellm_pre_call_utils import LiteLLMProxyRequestSetup
+    from litellm.proxy.spend_tracking.spend_tracking_utils import get_logging_payload
     from litellm.proxy.spend_tracking.usage_capture import (
         UsageCaptureContext,
         usage_writes,
@@ -93,27 +188,31 @@ def upstream_events(binding, *, prompt=12, completion=7):
         ownership="attempt",
         pricing="{}",
     )
-    payload = {
-        "request_tags": "[]",
-        "status": "success",
-        "startTime": now,
-        "endTime": now,
-        "call_type": "acompletion",
-        "api_key": binding["credential_sha256"],
-        "model_group": MODEL,
-        "model": "provider-model",
-        "custom_llm_provider": "openai",
-    }
-    writes = usage_writes(
-        payload,
-        json.dumps(
-            {
+    authenticated = asyncio.run(authenticate_gateway())
+    data = LiteLLMProxyRequestSetup.add_user_api_key_auth_to_request_metadata(
+        {"metadata": {"model_group": MODEL}}, authenticated, "metadata"
+    )
+    captured = []
+    get_logging_payload(
+        {
+            "call_type": "acompletion",
+            "model": "provider-model",
+            "litellm_params": {"metadata": data["metadata"], "custom_llm_provider": "openai"},
+        },
+        {
+            "id": context.attempt_id,
+            "model": "provider-model",
+            "usage": {
                 "prompt_tokens": prompt,
                 "completion_tokens": completion,
                 "total_tokens": prompt + completion,
-            }
+            },
+        },
+        now,
+        now,
+        capture_usage=lambda payload, usage_json: captured.extend(
+            usage_writes(payload, usage_json, context)
         ),
-        context,
     )
     return [
         {
@@ -122,7 +221,7 @@ def upstream_events(binding, *, prompt=12, completion=7):
             "schema_version": 1,
             "payload": json.loads(item.envelope),
         }
-        for index, item in enumerate(writes)
+        for index, item in enumerate(captured)
     ]
 
 
@@ -140,7 +239,13 @@ def persist(engine, events):
 def test_lost_ack_settles_original_usage_and_original_execution_without_replay(
     database, gateway, monkeypatch
 ):
+    from litellm.constants import LITELLM_PROXY_MASTER_KEY_ALIAS
+
     decision_id, task, held, binding = admit(database)
+    assert binding["accounting_identity_scheme"] == "litellm_master_alias_v1"
+    assert binding["accounting_identity"] == LITELLM_PROXY_MASTER_KEY_ALIAS
+    assert "credential_sha256" not in binding
+    assert str(llm_key_resolver.platform_api_key("litellm")) not in json.dumps(binding)
     runtime._finish(task, {"ok": True, "status": "completed"}, 1)
     assert p.portfolio_status(decision_id)["tasks"]["a"]["status"] == "unknown"
     persist(gateway, upstream_events(binding))
@@ -155,6 +260,153 @@ def test_lost_ack_settles_original_usage_and_original_execution_without_replay(
     assert state["halted"] is False
     assert recovery.reconcile_pending_usage()["settled"] == 0
     assert runtime.run_portfolio_cycle(decision_id)["processed"] == 0
+
+
+@pytest.mark.parametrize(
+    "credential", ["sk-incorrect-master", "litellm_proxy_master_key", "a" * 64]
+)
+def test_upstream_authentication_rejects_alias_digest_and_wrong_bearer(upstream_master, credential):
+    from litellm.proxy._types import ProxyException
+
+    with pytest.raises(ProxyException):
+        asyncio.run(authenticate_gateway(credential))
+
+
+@pytest.mark.parametrize("configuration", ["plain", "stored", "other_provider", "missing"])
+def test_admission_requires_the_environment_master_snapshot(
+    upstream_master, monkeypatch, configuration
+):
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    original = llm_key_resolver.platform_api_key("litellm")
+    if configuration == "missing":
+        rejected = None
+    elif configuration == "plain":
+        rejected = original.encode().decode()
+    else:
+        snapshot = dict(original.configuration)
+        snapshot["source" if configuration == "stored" else "provider"] = (
+            "stored" if configuration == "stored" else "openai"
+        )
+        rejected = PlatformApiKey(original, snapshot)
+    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: rejected)
+    with pytest.raises(p.PortfolioError):
+        source.transport_identity("litellm")
+
+
+def test_server_master_environment_alias_keeps_the_same_contract(upstream_master, monkeypatch):
+    monkeypatch.delenv("LITELLM_MASTER_KEY")
+    monkeypatch.setenv("XCMAX_LITELLM_MASTER_KEY", upstream_master.master_key)
+    identity = source.transport_identity("litellm")
+    authenticated = asyncio.run(authenticate_gateway())
+    assert identity["accounting_identity"] == authenticated.api_key
+    assert authenticated.via_virtual_key is True
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"accounting_identity_scheme": "litellm_master_alias_v2"},
+        {"accounting_identity_scheme": None},
+        {"accounting_identity": "some_other_alias"},
+        {"accounting_identity": "a" * 64},
+        {"credential_sha256": "a" * 64},
+        {"credential_sha256": None},
+        {"remove": "accounting_identity_scheme"},
+        {"remove": "accounting_identity"},
+    ],
+)
+def test_ambiguous_or_unknown_identity_protocol_cannot_settle(database, gateway, change):
+    decision_id, _, held, binding = admit(database)
+    persist(gateway, upstream_events(binding))
+    changed = {**binding, **change}
+    if "remove" in changed:
+        changed.pop(changed.pop("remove"))
+
+    def historical_record(_row, _proposal, state, _session):
+        call = state["tasks"]["a"]["calls"][held["request_id"]]
+        call.update(transport_binding=changed, transport_binding_sha256=p.digest(changed))
+
+    p.mutate_portfolio(decision_id, historical_record)
+    assert source.read_usage(changed) is None
+    assert recovery.reconcile_pending_usage()["settled"] == 0
+    call = p.portfolio_status(decision_id)["tasks"]["a"]["calls"][held["request_id"]]
+    assert call["status"] == "unknown" and "actual_tokens" not in call
+
+
+@pytest.mark.parametrize("archived_identity", ["original", "different", "master_alias"])
+def test_historical_hash_binding_requires_its_original_archived_identity(
+    database, gateway, monkeypatch, archived_identity
+):
+    decision_id, _, held, binding = admit(database)
+    events = upstream_events(binding)
+    historical = {
+        key: value
+        for key, value in binding.items()
+        if key not in {"accounting_identity_scheme", "accounting_identity"}
+    }
+    # A pre-upgrade stored binding and its archived ledger share this original
+    # value. It is not recalculated from today's master or reinterpreted as one.
+    historical["credential_sha256"] = "e" * 64
+    if archived_identity != "master_alias":
+        old_key = historical["credential_sha256"] if archived_identity == "original" else "f" * 64
+        for event in events:
+            next(item for item in event["payload"]["event"]["dimensions"] if item["name"] == "key")[
+                "value"
+            ] = old_key
+
+    def historical_record(_row, _proposal, state, _session):
+        call = state["tasks"]["a"]["calls"][held["request_id"]]
+        call.update(transport_binding=historical, transport_binding_sha256=p.digest(historical))
+
+    p.mutate_portfolio(decision_id, historical_record)
+    persist(gateway, events)
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "sk-" + secrets.token_urlsafe(32))
+    monkeypatch.setattr(runtime, "_execute", lambda *_: pytest.fail("replayed employee"))
+    assert recovery.reconcile_pending_usage()["settled"] == (archived_identity == "original")
+    call = p.portfolio_status(decision_id)["tasks"]["a"]["calls"][held["request_id"]]
+    assert call["transport_binding"] == historical
+    assert call["transport_binding_sha256"] == p.digest(historical)
+    assert call["status"] == ("settled" if archived_identity == "original" else "unknown")
+    assert recovery.reconcile_pending_usage()["settled"] == 0
+
+
+@pytest.mark.parametrize("legacy_identity", [None, "", "E" * 64, "a" * 63, "g" * 64])
+def test_malformed_historical_identity_remains_unresolved(upstream_master, legacy_identity):
+    assert source.read_usage({"provider": "litellm", "credential_sha256": legacy_identity}) is None
+
+
+def test_master_rotation_preserves_original_binding_and_late_accounting(
+    database, gateway, upstream_master, monkeypatch
+):
+    decision_id, _, held, binding = admit(database)
+    original = deepcopy(binding)
+    persist(gateway, upstream_events(binding))
+    replacement = "sk-" + secrets.token_urlsafe(32)
+    monkeypatch.setenv("LITELLM_MASTER_KEY", replacement)
+    monkeypatch.setattr(upstream_master, "master_key", replacement)
+    monkeypatch.setattr(runtime, "_execute", lambda *_: pytest.fail("replayed employee"))
+    assert recovery.reconcile_pending_usage()["settled"] == 1
+    call = p.portfolio_status(decision_id)["tasks"]["a"]["calls"][held["request_id"]]
+    assert call["transport_binding"] == original
+    assert call["transport_binding_sha256"] == p.digest(original)
+    assert call["actual_tokens"] == 19
+    assert recovery.reconcile_pending_usage()["settled"] == 0
+
+
+@pytest.mark.parametrize("changed", ["endpoint", "ledger"])
+def test_changed_gateway_or_ledger_does_not_attribute_original_usage(
+    database, gateway, monkeypatch, changed
+):
+    decision_id, _, held, binding = admit(database)
+    persist(gateway, upstream_events(binding))
+    if changed == "endpoint":
+        monkeypatch.setenv("LITELLM_BASE_URL", "https://another-gateway.test/v1")
+    else:
+        monkeypatch.setattr(source, "ledger_source", lambda: (str(gateway.url), "another-ledger"))
+    assert recovery.reconcile_pending_usage()["settled"] == 0
+    call = p.portfolio_status(decision_id)["tasks"]["a"]["calls"][held["request_id"]]
+    assert call["status"] == "unknown" and "actual_tokens" not in call
 
 
 @pytest.mark.parametrize(

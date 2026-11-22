@@ -51,8 +51,9 @@ def wire_workspace(request, monkeypatch, tmp_path):
     not os.environ.get("PARA_TEST_OPENCODE_BINARY"),
     reason="requires the pinned OpenCode 1.19.6 and ws lock",
 )
+@pytest.mark.parametrize("executor_exists", [True, False], ids=["real_sdk", "missing_executor"])
 def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
-    wire_workspace, monkeypatch, tmp_path
+    wire_workspace, monkeypatch, tmp_path, executor_exists
 ):
     state = wire_workspace
     work_tests.attach(state)
@@ -108,7 +109,9 @@ def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
         "DEVFLEET_DEVICE_TOKEN": "fixture-device-token",
         "DEVFLEET_API_URL": "https://para.example.test",
         "DEVFLEET_WORKSPACE_ROOT": str(tmp_path / "workspaces"),
-        "DEVFLEET_OPENCODE_AGENT": str(binary),
+        "DEVFLEET_OPENCODE_AGENT": str(
+            binary if executor_exists else binary.with_name("missing-opencode-executor")
+        ),
         "PATH": os.environ["PATH"],
         "HOME": str(tmp_path / "home"),
         "NODE_PATH": str(binary.parents[2]),
@@ -150,11 +153,23 @@ def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
             text=True,
             timeout=60,
         )
-        assert result.returncode == 0, result.stdout + result.stderr
+        if executor_exists:
+            assert result.returncode == 0, result.stdout + result.stderr
+        else:
+            assert result.returncode != 0
+            assert "requested_executor_unavailable" in result.stderr
     finally:
         server.should_exit = True
         thread.join(timeout=5)
         sock.close()
+    if not executor_exists:
+        assert not seen
+        assert reports[-1]["status"] == "failed"
+        assert not (candidate / "manifest.json").exists()
+        assert not p.portfolio_status(state.decision_id)["tasks"]["a"]["calls"]
+        workspace_file = tmp_path / "workspaces/task-fix-sub-fix/docs/delivery.txt"
+        assert workspace_file.read_text() == "ordinary export before repair\n"
+        return
     assert len(seen) == 2
     assert reports[-1]["status"] == "completed"
     manifest = json.loads((candidate / "manifest.json").read_text())

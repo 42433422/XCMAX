@@ -220,13 +220,16 @@ GitHub 配置 `PARA_PLATFORM_POOL=1` 和 `PARA_PLATFORM_GATEWAY_URL=https://…/
 
 兼容网关接受 `Idempotency-Key`，原生对话及视频接口接受 `client_request_id`。
 
-战略组合与 L6 规划调用发送前将原调用 ID、模型、账户摘要及账本来源绑定到现有 SQL
+战略组合与 L6 规划调用发送前将原调用 ID、模型、账户标识及账本来源绑定到现有 SQL
 预留，再通过 `x-litellm-call-id` 交给网关。未知用量的后台恢复复用
 [LiteLLM 1.109.3 的原生持久会计账本](https://github.com/BerriAI/litellm/blob/v1.109.3/litellm/proxy/spend_tracking/usage_capture.py)
 （MIT），不使用普通 SpendLogs 里的估算值。启用此恢复需要网关同版本、原生
 `general_settings.accounting_capture: {}` 与 `accounting_sync_ack: true`，并将
 `MODSTORE_LITELLM_ACCOUNTING_DATABASE_URL` 指向该网关 PostgreSQL 的只读账户。
 该账户仅需读取 `LiteLLM_AccountingEvent`；无需模型输入、回答或数据库写权限。
+该平台入口使用服务端 `LITELLM_MASTER_KEY` / `XCMAX_LITELLM_MASTER_KEY`。新绑定记录
+上游认证器的 `litellm_proxy_master_key` 别名和显式协议版本，不保存主密钥摘要。
+历史摘要绑定只核对原摘要；不会改成别名或重发调用，无法匹配时继续保留未知责任。
 现有 SQLAlchemy 2.0 / psycopg2 以只读事务、连接/语句超时和有限结果读取，不新增账务框架。
 消费者要求原 caller 和唯一原 attempt 同账户/模型且明确 `usage_source=measured`；
 估算、重试/聚合、不匹配、账本缺失均保留预留。来源或端点变更不能结清旧责任。
