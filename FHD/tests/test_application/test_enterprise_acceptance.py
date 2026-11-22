@@ -163,6 +163,9 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(tmp_path / "memory.json"))
+    # The workflow writes through the module-level memory singleton; reset it
+    # together with the store classes so reads see the same configured path.
+    monkeypatch.setattr(user_memory_service, "_user_memory_service", None)
     monkeypatch.setattr(user_memory_service.UserMemoryStore, "_instance", None)
     monkeypatch.setattr(user_memory_service.UserMemoryService, "_instance", None)
     actor = trusted_actor(role="admin")
