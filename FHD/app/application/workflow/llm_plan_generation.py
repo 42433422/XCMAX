@@ -31,6 +31,7 @@ from app.application.workflow.workflow_types import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .model_context_safety import _model_context_value
 from .model_response_metrics import observe_model_response, record_response_error
 from .tool_calling import (
     PLAN_PARSER,
@@ -40,9 +41,6 @@ from .tool_calling import (
 )
 
 logger = logging.getLogger(__name__)
-
-from .model_context_safety import _model_context_value
-
 
 class ConversationHistory(Protocol):
     conversation_history: list[dict[str, Any]]
