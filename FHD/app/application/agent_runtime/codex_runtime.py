@@ -490,6 +490,9 @@ async def run_codex_agent(
                         pending = asyncio.ensure_future(anext(iterator))
                         turn_id = ""
                         try:
+                            # The outer asyncio.timeout(remaining) keeps the original task deadline.
+                            # Each 0.5s poll rechecks revocation without renewing that deadline.
+                            # EOF or turn/completed exits; finally cancels the pending read.
                             while True:
                                 done, _ = await asyncio.wait(
                                     {pending}, timeout=_CONTROL_POLL_SECONDS
