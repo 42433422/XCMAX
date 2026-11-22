@@ -31,7 +31,6 @@ def run_gate(gate, **changes):
         **os.environ,
         "GUARD": "success",
         "SSOT": "success",
-        "CLASSIFY": "success",
         "VALID": "true",
         "SOURCE_SHA": "a" * 40,
         "EXPECTED_SOURCE_SHA": "a" * 40,
@@ -52,9 +51,6 @@ def test_gate_accepts_complete_execution_or_explicit_irrelevance(gate):
 @pytest.mark.parametrize(
     "changes",
     [
-        {"CLASSIFY": "failure"},
-        {"CLASSIFY": "cancelled"},
-        {"CLASSIFY": "skipped"},
         {"VALID": ""},
         {"VALID": "false"},
         {"SOURCE_SHA": "b" * 40},
@@ -81,7 +77,7 @@ def test_gate_rejects_incomplete_or_inconsistent_evidence(gate, changes):
 
 def test_parallel_work_keeps_cheap_guards_and_publish_dependencies():
     jobs = yaml.safe_load((ROOT / ".github/workflows/fhd-ci-cd.yml").read_text())["jobs"]
-    prerequisites = {"classify", "guard-temp-scripts"}
+    prerequisites = {"guard-temp-scripts"}
     for name in (
         "backend-quality",
         "backend-test-shard",
@@ -91,7 +87,7 @@ def test_parallel_work_keeps_cheap_guards_and_publish_dependencies():
         "pack-verify",
     ):
         assert set(jobs[name]["needs"]) == prerequisites
-    assert set(jobs["container-scan"]["needs"]) == {"classify", "pack-verify"}
+    assert set(jobs["container-scan"]["needs"]) == {"guard-temp-scripts", "pack-verify"}
     assert {
         "backend-test",
         "frontend-test",

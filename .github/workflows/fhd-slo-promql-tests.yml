@@ -9,13 +9,21 @@ on:
       - "FHD/scripts/observability/collect_slo_metrics.py"
       - "FHD/scripts/observability/build_slo_promql_tests.py"
       - ".github/workflows/fhd-slo-promql-tests.yml"
+      - "FHD/.github/workflows/slo-promql-tests.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
   push:
     branches: [main]
     paths:
       - "FHD/scripts/observability/collect_slo_metrics.py"
       - "FHD/scripts/observability/build_slo_promql_tests.py"
       - ".github/workflows/fhd-slo-promql-tests.yml"
+      - "FHD/.github/workflows/slo-promql-tests.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
