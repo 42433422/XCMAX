@@ -30,6 +30,7 @@ import { preserveElectronDiagnostics } from './diagnostics'
  */
 
 let electronApp: ElectronApplication
+let electronProcess: ReturnType<ElectronApplication['process']> | undefined
 let page: Page
 let userDataDir: string
 let backendPort: number
@@ -152,6 +153,7 @@ test.beforeAll(async () => {
       XCAGI_UPDATE_ED25519_PUBLIC_KEY: TEST_PUBLIC_KEY_PEM,
     },
   })
+  electronProcess = electronApp.process()
   page = await electronApp.firstWindow()
   // firstWindow() only means BrowserWindow exists; its splash and backend may still be starting.
   await page.waitForURL(`http://127.0.0.1:${backendPort}/?shell=1`, { timeout: 90_000 })
@@ -179,7 +181,7 @@ test.afterAll(async ({}, testInfo) => {
     if (updateServer) await new Promise<void>(resolve => updateServer.close(() => resolve()))
     if (userDataDir) {
       // Preserve the first failing boundary and native crash evidence before removing the fixture.
-      preserveElectronDiagnostics(electronApp, userDataDir, testInfo)
+      preserveElectronDiagnostics(electronProcess, userDataDir, testInfo)
       fs.rmSync(userDataDir, { recursive: true, force: true })
     }
   }

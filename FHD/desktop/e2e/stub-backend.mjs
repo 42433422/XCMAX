@@ -28,6 +28,8 @@ const INDEX_HTML = `<!doctype html>
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || '/', `http://127.0.0.1:${port}`)
   res.setHeader('Server', 'uvicorn')
+  // Observe the real Chromium request; no retired workspace route is implemented here.
+  res.setHeader('X-E2E-Workspace-Capability-Present', String(Boolean(req.headers['x-xcagi-workspace-capability'])))
   if (url.pathname === '/api/ping') {
     const nonce = url.searchParams.get('desktop_challenge') || ''
     const token = process.env.XCAGI_DESKTOP_WORKSPACE_TOKEN || ''
