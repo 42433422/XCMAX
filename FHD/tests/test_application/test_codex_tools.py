@@ -375,6 +375,31 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
         assert {tool["name"] for tool in response.json()["result"]["tools"]} == set(
             CODEX_TOOL_NAMES
         )
+        # MCP SDK v2 removed automatic lowlevel tool-schema validation.
+        # Extra model-supplied authority fields must fail before the business bridge.
+        malformed = client.post(
+            MCP_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "execute_action",
+                    "arguments": {
+                        "tool_id": "customers",
+                        "action": "create",
+                        "call_id": "tampered",
+                        "params": {"unit_name": "fixture"},
+                        "approved": True,
+                    },
+                },
+            },
+        )
+        assert malformed.status_code == 200
+        assert malformed.json()["result"]["isError"] is True
+        assert malformed.json()["result"]["structuredContent"]["error_code"] == "invalid_arguments"
+        assert setup.store.get(setup.run.run_id).metadata["calls"] == {}
         result = client.post(
             MCP_PATH,
             headers=headers,
