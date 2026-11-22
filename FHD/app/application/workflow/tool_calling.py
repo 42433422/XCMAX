@@ -69,9 +69,7 @@ PLAN_SCHEMA = SubmitWorkflowPlan.model_json_schema()
 
 
 def slim_schema(schema: Any) -> Any:
-    """只保留规划所需结构：字段名、类型、枚举、必填与简短说明。
-
-    输出 schema、执行元数据与长描述不进入规划 prompt，避免工具目录挤占上下文。"""
+    """只保留规划所需结构：字段名、类型、枚举、必填与简短说明。输出 schema、执行元数据与长描述不进入规划 prompt，避免工具目录挤占上下文。"""
     if not isinstance(schema, dict):
         return {}
     slim: dict[str, Any] = {}

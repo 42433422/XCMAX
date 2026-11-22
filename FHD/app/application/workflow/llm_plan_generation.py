@@ -29,6 +29,8 @@ from app.application.workflow.workflow_types import (
 )
 from app.infrastructure.llm.response_completion import (
     model_payload as _model_payload,
+)
+from app.infrastructure.llm.response_completion import (
     sanitize_model_json as _sanitize_model_json,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
