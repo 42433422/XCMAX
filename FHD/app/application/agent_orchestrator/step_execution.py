@@ -33,6 +33,7 @@ from app.application.agent_orchestrator.verification_cognition import (
     verified_plan_admission,
 )
 from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
     execution_result_requires_reconciliation,
     normalize_execution_result,
 )
@@ -41,13 +42,13 @@ from app.infrastructure.observability.genai_spans import (
     record_tool_result,
     tool_call_span,
 )
-from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 from app.infrastructure.observability.metrics import observe_tool_call
 from app.neuro_bus.tracer import get_trace_context
 from app.security.log_redaction import redact_log_text
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
+
 
 def _confirm_customer_create(
     step: AgentStep, output: dict[str, Any], runtime_context: dict[str, Any]
@@ -493,15 +494,6 @@ class StepExecution:
                     )
                 except EltCheckpointWorkerExited:
                     raise
-                except RECOVERABLE_ERRORS as exc:
-                    record_tool_exception(span, exc)
-                    logger.exception("agent tool execution failed")
-                    output = {
-                        "success": False,
-                        "error_code": "tool_exception",
-                        "error_type": type(exc).__name__,
-                        "message": "工具执行失败",
-                    }
                 except BOUNDARY_ERRORS as exc:
                     record_tool_exception(span, exc)
                     logger.error("agent tool execution failed: %s", type(exc).__name__)

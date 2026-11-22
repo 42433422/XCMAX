@@ -338,9 +338,7 @@ class TestRunNaturalLanguagePandas:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
-        with patch(
-            "app.application.tools.workflow.adapters.translate_pandas", return_value=None
-        ):
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
             result = run_natural_language_pandas(df, "show all")
         assert result["result_kind"] == "dataframe"
         assert result["row_count"] == 2
@@ -351,9 +349,7 @@ class TestRunNaturalLanguagePandas:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": []})
-        with patch(
-            "app.application.tools.workflow.adapters.translate_pandas", return_value=None
-        ):
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
             result = run_natural_language_pandas(df, "show all")
         assert result["row_count"] == 0
 

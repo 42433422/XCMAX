@@ -38,6 +38,9 @@ import httpx
 import pytest
 
 from app.application.super_employee.cli import CliExecutionError
+
+# ───────────────────── helpers ─────────────────────
+from app.application.super_employee.dispatch import _digest
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -54,11 +57,6 @@ from app.application.super_employee_service import (
 )
 from app.domain.app_pure.execution_scope import CapabilityGrant, ExecutionScope
 from tests.pure_builders import super_employee_request as _make_request
-
-# ───────────────────── helpers ─────────────────────
-
-
-from app.application.super_employee.dispatch import _digest
 
 
 def _make_svc(
@@ -107,7 +105,6 @@ def _mock_response(
             "error", request=MagicMock(), response=resp
         )
     return resp
-
 
 
 def _para_ack_response(request, *, task_id="t1", subtask_id="s1", task_status="pending"):

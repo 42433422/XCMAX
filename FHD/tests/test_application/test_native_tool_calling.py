@@ -509,7 +509,8 @@ def test_catalog_omits_only_duplicate_required_annotation(monkeypatch):
         assert slim["properties"]["rows"]["type"] == "array"
         assert slim["properties"]["warehouse_id"] == {"type": "integer"}
         assert slim["properties"]["warehouse_name"]["type"] == "string"
-        assert "$defs" not in slim and "additionalProperties" not in slim
+        assert "$defs" not in slim
+        assert slim["additionalProperties"] is False
     assert contract.input_schema == contract.output_schema == original_schema
 
 

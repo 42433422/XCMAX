@@ -13,6 +13,8 @@ const { fetchMarketCatalog } = vi.hoisted(() => ({
 
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
+  getActiveExtensionModHeaders: () => ({}),
+  getClientModsUiOffHeader: () => ({}),
   DEFAULT_MOD_API_TIMEOUT_MS: 30000,
 }))
 vi.mock('@/api/modStore', () => ({

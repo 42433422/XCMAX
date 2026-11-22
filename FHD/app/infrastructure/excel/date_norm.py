@@ -41,7 +41,9 @@ def _resolve_year(raw: str | None, default_year: int | None) -> int | None:
 
 def _year_from_text(text: str, *, month: int, match_start: int) -> int | None:
     """区间文本（12月27-26年1月23）只在末尾写年份，起始月要回退一年。"""
-    tokens = [(token.start(), _resolve_year(token.group(1), None)) for token in _YEAR_TOKEN.finditer(text)]
+    tokens = [
+        (token.start(), _resolve_year(token.group(1), None)) for token in _YEAR_TOKEN.finditer(text)
+    ]
     tokens = [(position, year) for position, year in tokens if year is not None]
     if not tokens:
         return None
@@ -108,9 +110,7 @@ def first_date(
 def cn_date(series: pd.Series, default_year: int | None = None) -> pd.Series:
     """把中文日期列转成 datetime64；区间值取起始日，Excel 序列号自动换算。"""
     return pd.to_datetime(
-        series.map(
-            lambda value: first_date(value, default_year=default_year, allow_serial=True)
-        ),
+        series.map(lambda value: first_date(value, default_year=default_year, allow_serial=True)),
         errors="coerce",
     )
 
@@ -118,9 +118,7 @@ def cn_date(series: pd.Series, default_year: int | None = None) -> pd.Series:
 def to_number(series: pd.Series) -> pd.Series:
     """把带千分位/货币符号的文本列转成数值列。"""
     return pd.to_numeric(
-        series.map(
-            lambda value: _NUMBER_NOISE.sub("", value) if isinstance(value, str) else value
-        ),
+        series.map(lambda value: _NUMBER_NOISE.sub("", value) if isinstance(value, str) else value),
         errors="coerce",
     )
 

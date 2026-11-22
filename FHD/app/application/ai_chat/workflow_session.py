@@ -160,7 +160,6 @@ class WorkflowSession:
             return WorkflowPlanStore()
         return self.store
 
-
     def _settle_continued_run(
         self,
         user_id: str,
@@ -1552,9 +1551,7 @@ class WorkflowSession:
             if not pending and text in CONFIRM_WORDS and text not in {"继续"}:
                 from app.application.ai_chat.dialogue_memory import last_assistant_question
 
-                prior_question = last_assistant_question(
-                    context, require_explicit_request=True
-                )
+                prior_question = last_assistant_question(context, require_explicit_request=True)
                 if prior_question:
                     # 上一轮只是助手的文字提问（没有形成结构化计划），
                     # 这里不回复"没有待确认的操作"，交给规划器按续跑重新判断。

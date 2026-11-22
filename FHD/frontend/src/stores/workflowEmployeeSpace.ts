@@ -85,7 +85,13 @@ function safeParsePersisted(raw: string | null): PersistedV1 | null {
     if (o.schemaVersion !== 1) return null
     const snaps = o.snapshots
     if (!snaps || typeof snaps !== 'object') return null
-    return { schemaVersion: 1, snapshots: snaps as Record<string, WorkflowEmployeeSpaceSnapshot> }
+    return {
+      schemaVersion: 1,
+      snapshots: Object.fromEntries(Object.entries(snaps).map(([empId, snapshot]) => [empId, {
+        panelTitle: '工作流', shortName: '工作流', stage: '等待状态同步', progressLabel: '', hintLine: '',
+        ...snapshot, empId,
+      }])),
+    }
   } catch {
     return null
   }
@@ -100,7 +106,12 @@ function safeParseSessions(raw: string | null): PersistedSessionsV1 | null {
     if (o.schemaVersion !== 1) return null
     const sess = o.sessions
     if (!sess || typeof sess !== 'object') return null
-    return { schemaVersion: 1, sessions: sess as Record<string, WorkflowEmployeeSession> }
+    return {
+      schemaVersion: 1,
+      sessions: Object.fromEntries(Object.entries(sess).map(([empId, session]) => [empId, {
+        ...emptySession(empId), ...session, empId,
+      }])),
+    }
   } catch {
     return null
   }
@@ -129,6 +140,29 @@ function snapshotVisuallyBusy(payload: Record<string, unknown>): boolean {
 let persistTimer: number | null = null
 let sessionsPersistTimer: number | null = null
 
+function snapshotCache(snapshots: Record<string, WorkflowEmployeeSpaceSnapshot>) {
+  // Customer messages, names and task details stay in the live store.
+  return JSON.stringify({ schemaVersion: 1, snapshots: Object.fromEntries(
+    Object.entries(snapshots).map(([id, snapshot]) => [id, {
+      progressPct: Number(snapshot.progressPct) || 0,
+      idle: snapshot.idle === true, visuallyBusy: snapshot.visuallyBusy === true,
+      lastActivityAt: Number(snapshot.lastActivityAt) || 0, stale: true,
+    }]),
+  ) })
+}
+
+function sessionCache(sessions: Record<string, WorkflowEmployeeSession>) {
+  return JSON.stringify({ schemaVersion: 1, sessions: Object.fromEntries(
+    Object.entries(sessions).map(([id, session]) => [id, {
+      enabledAt: Number(session.enabledAt) || null,
+      firstActivityAt: Number(session.firstActivityAt) || null,
+      lastActivityAt: Number(session.lastActivityAt) || null,
+      processedCount: Number(session.processedCount) || 0,
+      lifetimeMs: Number(session.lifetimeMs) || 0,
+    }]),
+  ) })
+}
+
 function schedulePersist(snapshots: Record<string, WorkflowEmployeeSpaceSnapshot>) {
   if (typeof window === 'undefined') return
   const key = workflowEmployeeSpaceStorageKey()
@@ -136,9 +170,7 @@ function schedulePersist(snapshots: Record<string, WorkflowEmployeeSpaceSnapshot
   persistTimer = window.setTimeout(() => {
     persistTimer = null
     try {
-      const out: PersistedV1 = { schemaVersion: 1, snapshots: { ...snapshots } }
-      // empId values are public fixed workflow labels, not credentials. lgtm[js/clear-text-storage-of-sensitive-data]
-      sessionStorage.setItem(key, JSON.stringify(out))
+      sessionStorage.setItem(key, snapshotCache(snapshots))
     } catch {
       /* quota / private mode */
     }
@@ -152,10 +184,7 @@ function scheduleSessionsPersist(sessions: Record<string, WorkflowEmployeeSessio
   sessionsPersistTimer = window.setTimeout(() => {
     sessionsPersistTimer = null
     try {
-      const out: PersistedSessionsV1 = { schemaVersion: 1, sessions: { ...sessions } }
-      /** 工时累计跨页要存活，用 localStorage（与 xcagi_workflow_ai_employees 持久层一致） */
-      // empId values are public fixed workflow labels, not credentials. lgtm[js/clear-text-storage-of-sensitive-data]
-      localStorage.setItem(key, JSON.stringify(out))
+      localStorage.setItem(key, sessionCache(sessions))
     } catch {
       /* quota / private mode */
     }
@@ -172,6 +201,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
       const parsed = safeParsePersisted(sessionStorage.getItem(workflowEmployeeSpaceStorageKey(scope)))
       if (parsed?.snapshots) {
         snapshots.value = { ...parsed.snapshots }
+        sessionStorage.setItem(workflowEmployeeSpaceStorageKey(scope), snapshotCache(snapshots.value))
       } else {
         snapshots.value = {}
       }
@@ -186,6 +216,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
       const parsed = safeParseSessions(localStorage.getItem(workflowEmployeeSessionsStorageKey(scope)))
       if (parsed?.sessions) {
         sessions.value = { ...parsed.sessions }
+        localStorage.setItem(workflowEmployeeSessionsStorageKey(scope), sessionCache(sessions.value))
       } else {
         sessions.value = {}
       }

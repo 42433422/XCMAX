@@ -42,6 +42,7 @@ def build_continuation_message(message: str, question: str) -> str:
         "信息已足够时不要再追问，也不要重复要求确认。"
     )
 
+
 _PLAN_CONFIRM_PREFIXES = ("确认", "确定", "同意", "可以", "好的", "执行", "继续", "是", "对")
 _PLAN_CANCEL_PREFIXES = ("取消", "不要", "不用", "别", "停止", "算了", "否")
 

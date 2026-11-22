@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import importlib
 
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -24,7 +27,7 @@ def _register_scheduler_phase_01():
 
     _facade()._scheduler.add_job(
         run_mac_control_sync,
-        _facade().IntervalTrigger(seconds=poll_period()),
+        IntervalTrigger(seconds=poll_period()),
         id="mac_control_sync",
         replace_existing=True,
         coalesce=True,
@@ -60,7 +63,7 @@ def _register_scheduler_phase_01():
 
     _facade()._scheduler.add_job(
         _scheduler_heartbeat_job,
-        _facade().IntervalTrigger(minutes=5),
+        IntervalTrigger(minutes=5),
         id="scheduler_heartbeat",
         replace_existing=True,
         misfire_grace_time=_facade()._cleanup_misfire_grace_time(),
@@ -118,9 +121,7 @@ def _register_scheduler_phase_01():
 
     _facade()._scheduler.add_job(
         _dead_letter_reconcile_job,
-        _facade().IntervalTrigger(
-            minutes=max(1, _facade()._env_int("MODSTORE_DLQ_RECONCILE_MINUTES", 5))
-        ),
+        IntervalTrigger(minutes=max(1, _facade()._env_int("MODSTORE_DLQ_RECONCILE_MINUTES", 5))),
         id="dead_letter_reconciler",
         replace_existing=True,
         misfire_grace_time=_facade()._cleanup_misfire_grace_time(),
@@ -161,7 +162,7 @@ def _register_scheduler_phase_01():
 
     _facade()._scheduler.add_job(
         _customer_value_reconcile_job,
-        _facade().IntervalTrigger(
+        IntervalTrigger(
             minutes=max(1, _facade()._env_int("MODSTORE_CUSTOMER_VALUE_RECONCILE_MINUTES", 15))
         ),
         id="customer_value_reconciler",
@@ -184,7 +185,7 @@ def _register_scheduler_phase_01():
 
     _facade()._scheduler.add_job(
         _close_stale_orders,
-        _facade().IntervalTrigger(minutes=5),
+        IntervalTrigger(minutes=5),
         id="payment_orders_expire",
         replace_existing=True,
     )
@@ -212,7 +213,7 @@ def _register_scheduler_phase_01():
     if _env_bool("MODSTORE_RETENTION_JANITOR_ENABLED", True):
         _facade()._scheduler.add_job(
             _retention_janitor_daily,
-            _facade().CronTrigger(hour=23, minute=15),
+            CronTrigger(hour=23, minute=15),
             id="retention_janitor_daily",
             replace_existing=True,
             misfire_grace_time=_facade()._cleanup_misfire_grace_time(),
@@ -276,7 +277,7 @@ def _register_scheduler_phase_01():
 
     _facade()._scheduler.add_job(
         _incident_collect_pytest_cursor,
-        _facade().IntervalTrigger(minutes=5),
+        IntervalTrigger(minutes=5),
         id="incident_collect_pytest_cursor",
         replace_existing=True,
         max_instances=1,
@@ -285,7 +286,7 @@ def _register_scheduler_phase_01():
     )
     _facade()._scheduler.add_job(
         _incident_collect_nginx,
-        _facade().IntervalTrigger(minutes=10),
+        IntervalTrigger(minutes=10),
         id="incident_collect_nginx",
         replace_existing=True,
         max_instances=1,
@@ -322,7 +323,7 @@ def _register_scheduler_phase_01():
 
     _facade()._scheduler.add_job(
         _incident_collect_extended,
-        _facade().IntervalTrigger(minutes=5),
+        IntervalTrigger(minutes=5),
         id="incident_collect_extended",
         replace_existing=True,
         max_instances=1,

@@ -436,7 +436,6 @@ def execute_registered_capability(
                 "error_code": "capability_execution_interrupted",
                 "execution_state": "unknown",
                 "outcome": "unknown",
-                "execution_state": "unknown",
                 "retryable": False,
                 "reconciliation_required": True,
                 "tool_id": tool_id,

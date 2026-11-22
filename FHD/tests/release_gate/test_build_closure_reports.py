@@ -139,9 +139,14 @@ def test_four_reports_are_redacted_hashed_and_fail_closed(tmp_path: Path) -> Non
     del payload["verification_scope"]
     _write(rollback, payload)
     failed = mod.build_reports(
-        convergence_path=convergence, security_path=security, slo_path=slo,
-        rollback_path=rollback, customer_path=customer, output_dir=output,
-        release_sha=sha, product_version="1.0.0.1",
+        convergence_path=convergence,
+        security_path=security,
+        slo_path=slo,
+        rollback_path=rollback,
+        customer_path=customer,
+        output_dir=output,
+        release_sha=sha,
+        product_version="1.0.0.1",
     )
     reliability = json.loads((output / "production-reliability-report.json").read_text())
     assert reliability["passed"] is False
@@ -158,15 +163,25 @@ def _actions_fixture(mod, *, member="release-convergence.json"):
     records, run_ids = {}, {}
     for number, (label, (workflow, name)) in enumerate(mod.SOURCE_WORKFLOWS.items(), 1):
         run = {
-            "id": number, "run_attempt": 2, "head_sha": controller,
-            "repository": {"full_name": repo}, "head_repository": {"full_name": repo},
-            "path": ".github/workflows/" + workflow, "head_branch": "main",
-            "event": "workflow_dispatch", "status": "completed", "conclusion": "success",
-            "run_started_at": "2026-11-22T00:00:00Z", "updated_at": "2026-11-22T00:10:00Z",
+            "id": number,
+            "run_attempt": 2,
+            "head_sha": controller,
+            "repository": {"full_name": repo},
+            "head_repository": {"full_name": repo},
+            "path": ".github/workflows/" + workflow,
+            "head_branch": "main",
+            "event": "workflow_dispatch",
+            "status": "completed",
+            "conclusion": "success",
+            "run_started_at": "2026-11-22T00:00:00Z",
+            "updated_at": "2026-11-22T00:10:00Z",
         }
         artifact = {
-            "id": number + 10, "name": name, "expired": False,
-            "size_in_bytes": len(raw), "workflow_run": {"id": number, "head_sha": controller},
+            "id": number + 10,
+            "name": name,
+            "expired": False,
+            "size_in_bytes": len(raw),
+            "workflow_run": {"id": number, "head_sha": controller},
             "digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
             "created_at": "2026-11-22T00:05:00Z",
         }
@@ -174,7 +189,8 @@ def _actions_fixture(mod, *, member="release-convergence.json"):
         records[route] = run
         records[route + "/attempts/2"] = dict(run)
         records[route + "/artifacts?per_page=100&page=1"] = {
-            "total_count": 1, "artifacts": [artifact],
+            "total_count": 1,
+            "artifacts": [artifact],
         }
         run_ids[label] = str(number)
 
@@ -184,11 +200,16 @@ def _actions_fixture(mod, *, member="release-convergence.json"):
 
     def collect(directory, **kwargs):
         return mod.collect_sources(
-            repository=repo, release_sha="a" * 40, runs=run_ids, output_dir=directory,
+            repository=repo,
+            release_sha="a" * 40,
+            runs=run_ids,
+            output_dir=directory,
             api=kwargs.pop("api", records.__getitem__),
             download=kwargs.pop("download", download),
-            ancestor=lambda sha: sha in {"a" * 40, controller}, **kwargs,
+            ancestor=lambda sha: sha in {"a" * 40, controller},
+            **kwargs,
         )
+
     return records, collect
 
 
@@ -203,9 +224,18 @@ def test_original_workflow_attempt_and_archive_bytes_are_read_back(tmp_path):
     assert json.loads((tmp_path / "sources/provenance.json").read_text()) == proof
 
 
-@pytest.mark.parametrize("mutation", [
-    "other_workflow", "fork", "failed", "incomplete", "prior_attempt", "wrong_sha", "digest",
-])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "other_workflow",
+        "fork",
+        "failed",
+        "incomplete",
+        "prior_attempt",
+        "wrong_sha",
+        "digest",
+    ],
+)
 def test_unrelated_or_stale_source_cannot_satisfy_release_closure(tmp_path, mutation):
     mod = _module()
     records, collect = _actions_fixture(mod)
@@ -257,8 +287,10 @@ def test_closure_identity_step_runs_from_source_and_generated_workflow(tmp_path)
     repo = Path(__file__).resolve().parents[3]
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
     catalog = json.loads((repo / "FHD/config/download_release.json").read_text())
-    for path in (repo / "FHD/.github/workflows/closure-evidence-report.yml",
-                 repo / ".github/workflows/fhd-closure-evidence-report.yml"):
+    for path in (
+        repo / "FHD/.github/workflows/closure-evidence-report.yml",
+        repo / ".github/workflows/fhd-closure-evidence-report.yml",
+    ):
         workflow = yaml.safe_load(path.read_text())
         job = workflow["jobs"]["build-reports"]
         checkout = job["steps"][0]
@@ -268,10 +300,16 @@ def test_closure_identity_step_runs_from_source_and_generated_workflow(tmp_path)
         result = subprocess.run(
             ["bash", "-c", step["run"]],
             cwd=repo / job["defaults"]["run"]["working-directory"],
-            env={**os.environ, "RELEASE_SHA": sha, "PRODUCT_VERSION": "",
-                 "GITHUB_OUTPUT": str(output),
-                 "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"]},
-            capture_output=True, text=True, check=False,
+            env={
+                **os.environ,
+                "RELEASE_SHA": sha,
+                "PRODUCT_VERSION": "",
+                "GITHUB_OUTPUT": str(output),
+                "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+            },
+            capture_output=True,
+            text=True,
+            check=False,
         )
         assert result.returncode == 0, result.stdout + result.stderr
         assert output.read_text() == f"version={catalog['download_version']}\n"

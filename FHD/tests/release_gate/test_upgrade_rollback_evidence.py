@@ -138,9 +138,17 @@ def test_published_rollback_step_executes_from_its_workflow_directory(tmp_path) 
     assert registered["passed"] is False
     # Registering inputs is useful, but the release consumer must retain failure.
     verify = subprocess.run(
-        [sys.executable, str(repo / "FHD/scripts/release/verify_upgrade_rollback_evidence.py"),
-         "--evidence", str(tmp_path / "upgrade-rollback-raw.json"), "--release-sha", sha],
-        capture_output=True, text=True, check=False,
+        [
+            sys.executable,
+            str(repo / "FHD/scripts/release/verify_upgrade_rollback_evidence.py"),
+            "--evidence",
+            str(tmp_path / "upgrade-rollback-raw.json"),
+            "--release-sha",
+            sha,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert verify.returncode == 1
     assert json.loads(verify.stdout)["verification_scope"] == "submitted_claims"

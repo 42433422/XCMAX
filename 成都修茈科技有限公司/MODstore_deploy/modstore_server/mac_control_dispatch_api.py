@@ -1,8 +1,9 @@
-"""Dispatch-only service identity for handing GitHub tickets to Para.
+"""Authenticated CI identity for code dispatch and private training transport.
 
-The token behind this router can only create and read Mac control *code* tasks
-that it created itself. It is not an admin token: it cannot list other tasks,
-cancel, approve, read customer facts, or reach any other admin route.
+Task routes create and read only the service's own Mac control code tasks.
+Training routes return redacted operational failures and exact structured
+reproductions selected by configured cohorts and current source grants. They
+submit proposed candidates, never grant approval or general admin access.
 
 Tokens are never stored in plaintext. Production keeps only SHA-256 digests in
 ``MODSTORE_PARA_DISPATCH_TOKEN_SHA256`` (comma separated), so a token can be

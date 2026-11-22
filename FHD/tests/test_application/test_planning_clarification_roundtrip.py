@@ -67,9 +67,7 @@ def roundtrip(monkeypatch, tmp_path, trusted_actor):
         "answer": ANSWER,
         "answer_grounded": True,
         "chunks": [{"text": ANSWER, "source_url": "synthetic-purchase-fixture.xlsx"}],
-        "citations": [
-            {"index": 1, "source": "synthetic-purchase-fixture.xlsx", "chunk_index": 0}
-        ],
+        "citations": [{"index": 1, "source": "synthetic-purchase-fixture.xlsx", "chunk_index": 0}],
     }
 
     def new_orchestrator():

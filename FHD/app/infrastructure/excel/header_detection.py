@@ -19,7 +19,7 @@ try:  # openpyxl 对损坏文件抛 InvalidFileException，不属于 OSError 族
     from openpyxl.utils.exceptions import InvalidFileException
 
     _OPENPYXL_ERRORS: tuple[type[Exception], ...] = (InvalidFileException,)
-except ImportError:  # pragma: no cover - openpyxl 是必装依赖
+except ImportError:
     _OPENPYXL_ERRORS = ()
 
 _MAX_SCAN_ROWS = 20
@@ -62,12 +62,13 @@ def detect_header_row_1based(
         from openpyxl import load_workbook
 
         workbook = load_workbook(str(path), data_only=True, read_only=True)
-    except _OPENPYXL_ERRORS + RECOVERABLE_ERRORS:  # pragma: no cover
+    except _OPENPYXL_ERRORS + RECOVERABLE_ERRORS:
         logger.debug("header detection skipped: workbook unreadable", exc_info=True)
         return None
     try:
         worksheet = (
-            workbook[str(sheet_name)] if sheet_name and str(sheet_name) in workbook.sheetnames
+            workbook[str(sheet_name)]
+            if sheet_name and str(sheet_name) in workbook.sheetnames
             else workbook.worksheets[0]
         )
         best_row: int | None = None

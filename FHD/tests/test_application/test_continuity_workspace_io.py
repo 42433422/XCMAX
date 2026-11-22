@@ -1,5 +1,6 @@
 """Filesystem boundary regression tests; no provider or production side effects."""
 
+import errno
 import json
 import os
 
@@ -16,6 +17,16 @@ from app.application.employee_runtime.task_continuity import (
 
 def runtime(root):
     return TaskContinuityRuntime(ledger_path(root), workspace=root)
+
+
+def test_tool_claim_rejects_unavailable_platform_lock_before_touching_state(monkeypatch):
+    from app.application.employee_runtime import continuity_tool_wait
+
+    monkeypatch.setattr(continuity_tool_wait, "fcntl", None)
+    with pytest.raises(OSError, match="Windows workspace ledger writes are unavailable") as error:
+        with continuity_tool_wait.unlocked_claim(None, None, None, None, None):
+            pytest.fail("unsupported platform must not release a claim without a lock")
+    assert error.value.errno == errno.ENOTSUP
 
 
 def test_atomic_ledger_roundtrip_preserves_business_state(tmp_path):

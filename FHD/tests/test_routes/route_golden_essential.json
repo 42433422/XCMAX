@@ -69,6 +69,7 @@
   "/api/auth/mfa/disable",
   "/api/auth/mfa/enable",
   "/api/auth/mfa/setup",
+  "/api/auth/offline-login",
   "/api/auth/oidc/callback",
   "/api/auth/oidc/start",
   "/api/auth/oidc/status",

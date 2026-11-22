@@ -49,7 +49,9 @@ def fake_service() -> MagicMock:
     )
     svc.update_material = MagicMock(return_value={"success": True, "data": {}})
     svc.delete_material = MagicMock(return_value=None)
-    svc.batch_delete_materials = MagicMock(return_value=None)
+    svc.batch_delete_materials = MagicMock(
+        return_value={"success": True, "message": "已删除 3 条记录", "deleted_count": 3}
+    )
     svc.get_low_stock_materials = MagicMock(
         side_effect=lambda threshold=None: {
             "success": True,
@@ -233,13 +235,32 @@ def test_delete_material_string_id_returns_404_or_422(client: TestClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_batch_delete_success(client: TestClient) -> None:
+def test_batch_delete_success(client: TestClient, fake_service: MagicMock, local_tools) -> None:
     r = client.post("/api/materials/batch-delete", json={"ids": [1, 2, 3]})
     assert r.status_code == 200
     body = r.json()
     assert body["success"] is True
     assert "已删除 3 条记录" in body["message"]
     assert body.get("deleted_count") == 3
+    fake_service.batch_delete_materials.assert_called_once_with([1, 2, 3])
+
+
+@pytest.mark.parametrize("deleted_count", [0, 1])
+def test_batch_delete_reports_service_count_not_requested_ids(
+    client: TestClient, fake_service: MagicMock, local_tools, deleted_count: int
+) -> None:
+    fake_service.batch_delete_materials.return_value = {
+        "success": True,
+        "message": f"已删除 {deleted_count} 条记录",
+        "deleted_count": deleted_count,
+    }
+    # Distinct input IDs keep these independent cases out of prior request replay.
+    ids = [21 + deleted_count, 31 + deleted_count, 41 + deleted_count]
+    response = client.post("/api/materials/batch-delete", json={"ids": ids})
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == deleted_count
+    assert response.json()["message"] == f"已删除 {deleted_count} 条记录"
+    fake_service.batch_delete_materials.assert_called_once_with(ids)
 
 
 def test_batch_delete_empty_ids(client: TestClient) -> None:
@@ -254,13 +275,21 @@ def test_batch_delete_missing_ids(client: TestClient) -> None:
     assert "已删除 0 条记录" in r.json()["message"]
 
 
-def test_batch_delete_with_non_numeric_ids_are_filtered(client: TestClient) -> None:
+def test_batch_delete_with_non_numeric_ids_are_filtered(
+    client: TestClient, fake_service: MagicMock, local_tools
+) -> None:
+    fake_service.batch_delete_materials.return_value = {
+        "success": True,
+        "message": "已删除 2 条记录",
+        "deleted_count": 2,
+    }
     r = client.post(
         "/api/materials/batch-delete",
         json={"ids": [1, "abc", None, 2, 2]},
     )
     assert r.status_code == 200
-    assert r.json().get("deleted_count") == 3
+    assert r.json().get("deleted_count") == 2
+    fake_service.batch_delete_materials.assert_called_once_with([1, 2, 2])
 
 
 def test_batch_delete_prefers_material_ids_over_ids(

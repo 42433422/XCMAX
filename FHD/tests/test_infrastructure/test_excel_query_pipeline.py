@@ -37,6 +37,31 @@ def test_detect_header_row_skips_title_rows(tmp_path: Path) -> None:
     assert detect_header_row_1based(path) == 4
 
 
+@pytest.mark.parametrize("missing_dependency", [False, True])
+def test_header_detection_rejects_unreadable_workbook(tmp_path, monkeypatch, missing_dependency):
+    import builtins
+    import runpy
+    import zipfile
+
+    from app.infrastructure.excel import header_detection
+
+    path = tmp_path / "unreadable.xlsx"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("unrelated.txt", "not an Excel workbook")
+    detect = detect_header_row_1based
+    if missing_dependency:
+        original_import = builtins.__import__
+
+        def unavailable(name, *args, **kwargs):
+            if name.startswith("openpyxl"):
+                raise ImportError("optional reader unavailable")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", unavailable)
+        detect = runpy.run_path(header_detection.__file__)["detect_header_row_1based"]
+    assert detect(path) is None
+
+
 def test_read_dataframe_fills_merged_header_columns(tmp_path: Path) -> None:
     path = tmp_path / "merged.xlsx"
     from openpyxl import Workbook

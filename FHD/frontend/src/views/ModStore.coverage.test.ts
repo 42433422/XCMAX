@@ -51,6 +51,8 @@ const mockResolveEnterpriseOrgLayerForCatalogItem = vi.fn(() => null)
 
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
+  getActiveExtensionModHeaders: () => ({}),
+  getClientModsUiOffHeader: () => ({}),
   getApiBase: () => '',
   DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
 }))

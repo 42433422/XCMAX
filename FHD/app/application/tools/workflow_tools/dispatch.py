@@ -99,7 +99,6 @@ class WorkflowToolDispatcher:
                     "error_code": "tool_execution_interrupted",
                     "execution_state": "unknown",
                     "outcome": "unknown",
-                    "execution_state": "unknown",
                     "retryable": False,
                     "reconciliation_required": True,
                     "message": "工具结果待核对，未继续调用其他实现",

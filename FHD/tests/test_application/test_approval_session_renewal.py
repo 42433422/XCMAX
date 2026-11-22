@@ -707,4 +707,3 @@ def test_resume_reconciles_durable_effects_before_requeue(waiting_task, confirme
         assert SessionBook(db).get("agent", "tenant", run.run_id)["effects"] == (
             [] if confirmed else [run.steps[0].step_id]
         )
-

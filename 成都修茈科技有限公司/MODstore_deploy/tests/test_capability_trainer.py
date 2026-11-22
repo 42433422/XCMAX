@@ -1,4 +1,5 @@
 import json
+import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -247,3 +248,26 @@ def test_training_cost_bounds_and_unconfigured_model_fail_closed(tmp_path, monke
             candidate_prompt="c",
             cases=[{"task": "case"}] * 21,
         )
+
+
+@pytest.mark.parametrize("employee", ["../outside", "/outside", r"a\b", "a/b", "", "a@1"])
+def test_corpus_rejects_non_pack_paths(tmp_path, employee):
+    clusters = trainer.cluster_failures([_rec(employee=employee)], min_count=1)
+    with pytest.raises(ValueError, match="invalid_training"):
+        trainer.append_cases(tmp_path, clusters or [{"employee_id": employee}])
+    assert not list(tmp_path.iterdir())
+
+
+def test_corpus_redacts_credentials_and_tightens_existing_permissions(tmp_path):
+    path = tmp_path / "daily-orchestrator.jsonl"
+    path.write_text("", encoding="utf-8")
+    path.chmod(0o644)
+    record = _rec(reason="authorization=private-credential")
+    record["task_excerpt"] = "use password=private-password for test"
+    clusters = trainer.cluster_failures([record], min_count=1)
+    trainer.append_cases(tmp_path, clusters)
+    content = path.read_text(encoding="utf-8")
+    assert "private-credential" not in content and "private-password" not in content
+    assert "[redacted]" in content
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o777 == 0o600

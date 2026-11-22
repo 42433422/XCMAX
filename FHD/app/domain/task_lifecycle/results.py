@@ -310,7 +310,6 @@ def execution_result_pending_state(data: dict[str, Any]) -> str:
     return pending
 
 
-
 def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
     """Preserve unresolved execution through the same envelopes used by verification.
 

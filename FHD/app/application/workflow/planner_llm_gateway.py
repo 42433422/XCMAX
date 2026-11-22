@@ -92,9 +92,7 @@ def _drop_non_core_tools(prompt: dict[str, Any]) -> bool:
                     ref = action.get(key)
                     if isinstance(ref, str):
                         used.add(ref)
-        prompt["tool_schemas"] = {
-            name: schema for name, schema in schemas.items() if name in used
-        }
+        prompt["tool_schemas"] = {name: schema for name, schema in schemas.items() if name in used}
     prompt["tool_catalog_note"] = (
         "工具目录已按上下文预算裁剪，仅保留通用工具；无法规划的业务操作请如实说明并建议分批处理。"
     )
@@ -305,9 +303,7 @@ async def _prepare_model_messages(
         except ContextWindowExceeded as retry_exc:
             diagnostics.update(retry_exc.diagnostics)
             diagnostics["reason"] = retry_exc.reason
-            logger.warning(
-                "planner context budget rejected after catalog trim: %s", diagnostics
-            )
+            logger.warning("planner context budget rejected after catalog trim: %s", diagnostics)
             raise
     diagnostics["post_message_tokens"] = result.post_estimated_tokens
     diagnostics["compression_strategy"] = result.strategy

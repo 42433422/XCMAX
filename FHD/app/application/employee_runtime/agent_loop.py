@@ -698,7 +698,11 @@ def run_employee_agent_loop(
             from app.domain.task_lifecycle.results import execution_result_states
 
             if not pending and execution_result_states(result_payload) & {"timeout", "timed_out"}:
-                pending = {"execution_state": "unknown", "reconciliation_required": True, "retryable": False}
+                pending = {
+                    "execution_state": "unknown",
+                    "reconciliation_required": True,
+                    "retryable": False,
+                }
             tool_success, tool_error, verified = _tool_result_state(str(result_raw))
             if tool_success:
                 for previous in reversed(tool_trace):

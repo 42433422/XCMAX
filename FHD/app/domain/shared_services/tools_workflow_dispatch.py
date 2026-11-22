@@ -153,10 +153,12 @@ def _registered_router_image_generate(action, params, runtime_context, profile, 
         "charge_amount": str(data.get("charge_amount") or ""),
     }
 
+
 def _registered_router_kellai(action, params, runtime_context, profile, user_message):
     from app.application.tools.kellai import execute_kellai
 
     return execute_kellai(action, params, runtime_context)
+
 
 class _WorkflowRouterMap(dict):
     _hidden_keys = {"employee", "business_db"}

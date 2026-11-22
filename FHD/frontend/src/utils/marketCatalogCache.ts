@@ -22,19 +22,21 @@ export function buildMarketCatalogCacheKey(tab: string, q = ''): string {
 }
 
 export function readMarketCatalogCache(key: string, ttlMs = DEFAULT_TTL_MS): MarketCatalogCacheEntry | null {
-  const mem = memory.get(key)
+  const scopedKey = storageKey(key)
+  const mem = memory.get(scopedKey)
   if (mem && Date.now() - mem.fetchedAt <= ttlMs) {
     return mem
   }
 
   try {
-    const raw = sessionStorage.getItem(storageKey(key))
+    const raw = sessionStorage.getItem(scopedKey)
     if (!raw) return mem && mem.items.length ? mem : null
     const parsed = JSON.parse(raw) as MarketCatalogCacheEntry
     if (!parsed || !Array.isArray(parsed.items) || typeof parsed.fetchedAt !== 'number') {
       return mem && mem.items.length ? mem : null
     }
-    memory.set(key, parsed)
+    parsed.tab = key.split(':')[1] || ''
+    memory.set(scopedKey, parsed)
     if (Date.now() - parsed.fetchedAt > ttlMs) {
       return parsed.items.length ? parsed : null
     }
@@ -65,15 +67,16 @@ function persistableItems(items: ModCatalogItemUi[]): ModCatalogItemUi[] {
 }
 
 export function writeMarketCatalogCache(key: string, tab: string, items: ModCatalogItemUi[]): void {
+  const scopedKey = storageKey(key)
   const entry: MarketCatalogCacheEntry = {
     items,
     fetchedAt: Date.now(),
     tab,
   }
-  memory.set(key, entry)
+  memory.set(scopedKey, entry)
   try {
     sessionStorage.setItem(
-      storageKey(key),
+      scopedKey,
       JSON.stringify({ items: persistableItems(items), fetchedAt: entry.fetchedAt }),
     )
   } catch {
@@ -83,9 +86,10 @@ export function writeMarketCatalogCache(key: string, tab: string, items: ModCata
 
 export function clearMarketCatalogCache(key?: string): void {
   if (key) {
-    memory.delete(key)
+    const scopedKey = storageKey(key)
+    memory.delete(scopedKey)
     try {
-      sessionStorage.removeItem(storageKey(key))
+      sessionStorage.removeItem(scopedKey)
     } catch {
       /* ignore */
     }

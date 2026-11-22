@@ -7,7 +7,7 @@ import io
 import json
 import os
 import re
-import tempfile
+import stat
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -16,6 +16,11 @@ from xml.etree.ElementTree import ParseError
 from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import fromstring
 
+from app.application.shipment_excel_elt_security import (
+    _open_directory_under_root,
+    _open_elt_output_under_root,
+    _windows_open_relative,
+)
 from app.utils.path_io.path_utils import get_app_data_dir
 
 RUN_FILE_MIME_TYPES = {
@@ -82,12 +87,11 @@ def _verify_office_content(content: bytes, suffix: str) -> None:
 
 
 def artifact_path(run_id: str, artifact_id: str) -> Path:
-    # 内联字面量正则（与 label_job_service 同款）：CodeQL 将 fullmatch 校验识别为
-    # 路径注入屏障；预编译对象不被识别，会导致 py/path-injection 误报。
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", run_id):
+    run = re.fullmatch(r"[A-Za-z0-9_-]{1,160}", run_id)
+    artifact = re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id)
+    if run is None or artifact is None:
         raise ValueError("invalid run artifact identity")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id):
-        raise ValueError("invalid run artifact identity")
+    run_id, artifact_id = run.group(0), artifact.group(0)
     root = Path(get_app_data_dir()).resolve() / "agent-artifacts"
     folder = root / run_id
     suffix = "." + artifact_id.partition("_")[0]
@@ -95,6 +99,31 @@ def artifact_path(run_id: str, artifact_id: str) -> Path:
     if root.is_symlink() or folder.is_symlink() or path.is_symlink():
         raise ValueError("artifact symlinks are not permitted")
     return path
+
+
+def _read_artifact(path: Path) -> bytes:
+    root = Path(get_app_data_dir()).resolve()
+    name = re.fullmatch(r"[A-Za-z0-9_-]{1,160}\.[a-z]{2,4}", path.name)
+    if name is None:
+        raise ValueError("invalid artifact filename")
+    filename = name.group(0)
+    parent_fd = _open_directory_under_root(root, path.parent, create=False)
+    try:
+        if os.name == "nt":
+            descriptor = _windows_open_relative(
+                parent_fd, filename, directory=False, create=False, for_input=True
+            )
+        else:
+            descriptor = os.open(
+                filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd
+            )
+        with os.fdopen(descriptor, "rb") as stream:
+            metadata = os.fstat(stream.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise ValueError("artifact must be a single-link regular file")
+            return stream.read()
+    finally:
+        os.close(parent_fd)
 
 
 def store_run_file(
@@ -115,21 +144,18 @@ def store_run_file(
         _verify_bound_content(content, suffix)
     artifact_id = f"{suffix[1:]}_{digest[:32]}"
     path = artifact_path(run_id, artifact_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    output = tempfile.NamedTemporaryFile(dir=path.parent, prefix=".artifact-", delete=False)
-    temporary = Path(output.name)
     try:
-        with output:
+        previous = _read_artifact(path)
+    except FileNotFoundError:
+        # Reuse the cross-platform pinned-directory writer; a replaced parent
+        # or leaf cannot redirect publication between validation and opening.
+        with _open_elt_output_under_root(path, Path(get_app_data_dir()).resolve()) as output:
+            if hasattr(os, "fchmod"):
+                os.fchmod(output.fileno(), 0o600)
             output.write(content)
-            output.flush()
-            os.fsync(output.fileno())
-        try:
-            os.link(temporary, path)
-        except FileExistsError:
-            if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
-                raise ValueError("existing artifact content differs") from None
-    finally:
-        temporary.unlink(missing_ok=True)
+    else:
+        if hashlib.sha256(previous).hexdigest() != digest:
+            raise ValueError("existing artifact content differs")
     metadata = {"sha256": digest, "size_bytes": len(content)}
     if suffix in _OWNER_BOUND_TYPES:
         metadata.update(run_id=run_id, owner_user_id=str(owner_user_id), tenant_id=str(tenant_id))
@@ -148,7 +174,7 @@ store_spreadsheet = store_run_file
 
 def read_verified_run_file(run_id: str, artifact: dict[str, Any]) -> bytes:
     path = artifact_path(run_id, artifact["artifact_id"])
-    content = path.read_bytes()
+    content = _read_artifact(path)
     metadata = artifact.get("metadata") or {}
     if len(content) != metadata.get("size_bytes") or hashlib.sha256(
         content

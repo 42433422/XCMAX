@@ -159,8 +159,7 @@ jobs:
           cases = list(ET.parse(report).iter("testcase"))
           required = {
               "test_form_receipt_upload_and_durable_download", "test_context_isolation_between_runs",
-              "test_screenshot_masks_embedded_frame_rectangle[agent]",
-              "test_screenshot_masks_embedded_frame_rectangle[computer]",
+              "test_screenshot_masks_embedded_frame_rectangle",
               "test_browser_executes_under_default_tool_worker_resource_limits",
           }
           if not required <= {case.get("name") for case in cases}:

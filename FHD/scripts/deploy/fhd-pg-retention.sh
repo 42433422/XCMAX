@@ -41,7 +41,7 @@ fi
 [[ -n "$PG_CONTAINER" ]] || fail "找不到 MODstore Postgres 容器，请设置 FHD_MODSTORE_PG_CONTAINER"
 
 psql_db() {
-  docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -Atc "$1"
+  docker exec "$PG_CONTAINER" psql -X -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -Atc "$1"
 }
 
 [[ "$(psql_db 'SELECT 1' 2>/dev/null || echo 0)" == "1" ]] || fail "无法连接数据库 $PG_DB"
@@ -64,7 +64,7 @@ while IFS='|' read -r TABLE COLUMN DAYS BATCH; do
     continue
   fi
 
-  if ! EXISTS=$(psql_db "SELECT to_regclass('public.$TABLE') IS NOT NULL"); then
+  if ! EXISTS=$(psql_db "SELECT to_regclass('public.$TABLE') IS NOT NULL") || ! [[ "$EXISTS" == t || "$EXISTS" == f ]]; then
     log "ERROR: 表存在性查询失败: $TABLE"
     FAILED_TABLES=$((FAILED_TABLES + 1))
     continue
@@ -73,7 +73,7 @@ while IFS='|' read -r TABLE COLUMN DAYS BATCH; do
     log "WARN: 表不存在，跳过: $TABLE"
     continue
   fi
-  if ! HAS_COL=$(psql_db "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='$TABLE' AND column_name='$COLUMN')"); then
+  if ! HAS_COL=$(psql_db "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='$TABLE' AND column_name='$COLUMN')") || ! [[ "$HAS_COL" == t || "$HAS_COL" == f ]]; then
     log "ERROR: 列存在性查询失败: $TABLE.$COLUMN"
     FAILED_TABLES=$((FAILED_TABLES + 1))
     continue
@@ -106,7 +106,7 @@ while IFS='|' read -r TABLE COLUMN DAYS BATCH; do
     [[ "$N" -lt "$BATCH" ]] && break
   done
   if [[ "$DELETED" -gt 0 ]]; then
-    if ! docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -c "VACUUM (ANALYZE) $TABLE" >/dev/null; then
+    if ! docker exec "$PG_CONTAINER" psql -X -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -c "VACUUM (ANALYZE) $TABLE" >/dev/null; then
       log "ERROR: VACUUM 失败: $TABLE"
       TABLE_FAILED=1
     fi

@@ -407,6 +407,7 @@ def test_schema_only_registered_tool_never_reports_business_success(tmp_path):
     finally:
         service.reset_for_tests(None)
 
+
 def test_capability_wrapper_keeps_unknown_receipt_so_employee_cannot_replay(
     monkeypatch,
 ):

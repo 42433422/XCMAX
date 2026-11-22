@@ -235,7 +235,6 @@ class ContextWindowManager:
                 budget = min(budget, self._explicit_budget - output_tokens - external_tokens)
         return budget - max(0, int(reserved_tokens))
 
-
     @staticmethod
     def _validate_context(context) -> None:
         metadata = getattr(context, "metadata", None)

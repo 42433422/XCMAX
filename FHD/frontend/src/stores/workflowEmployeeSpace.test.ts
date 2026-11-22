@@ -126,17 +126,19 @@ describe('workflowEmployeeSpace store', () => {
   it('hydrate from storage parses persisted snapshots and sessions', () => {
     sessionStorage.setItem(
       'xcagi_workflow_employee_space_v1:t1',
-      JSON.stringify({ schemaVersion: 1, snapshots: { e: { empId: 'e', stage: 'X' } } }),
+      JSON.stringify({ schemaVersion: 1, snapshots: { e: { empId: 'e', stage: 'X', hintLine: 'private-message' } } }),
     )
     localStorage.setItem(
       'xcagi_workflow_employee_sessions_v1:t1',
       JSON.stringify({ schemaVersion: 1, sessions: { e: { empId: 'e', processedCount: 2 } } }),
     )
     const s = useWorkflowEmployeeSpaceStore()
+    expect(s.snapshots.e.stage).toBe('X')
     s.hydrateFromSessionStorage('t1')
     s.hydrateSessionsFromLocalStorage('t1')
-    expect(s.snapshots.e.stage).toBe('X')
+    expect(s.snapshots.e.stage).toBe('等待状态同步')
     expect(s.sessions.e.processedCount).toBe(2)
+    expect(sessionStorage.getItem('xcagi_workflow_employee_space_v1:t1')).not.toContain('private-message')
   })
 
   it('hydrate handles malformed and wrong schema gracefully', () => {
@@ -147,6 +149,25 @@ describe('workflowEmployeeSpace store', () => {
     s.hydrateSessionsFromLocalStorage('t1')
     expect(s.snapshots).toEqual({})
     expect(s.sessions).toEqual({})
+  })
+
+  it('persists progress and duration without customer text or arbitrary payload fields', () => {
+    const s = useWorkflowEmployeeSpaceStore()
+    s.applyReceiptBridge({ contactName: 'private-name', messageText: 'private-message' })
+    s.applyFromWorkflowPayload('private-title', {
+      employeeId: 'receipt_confirm', workflowStageLine: 'private-stage',
+      workflowProgressPct: 55, workflowCurrentHint: 'private-message',
+    })
+    s.markEnabled('receipt_confirm')
+    vi.advanceTimersByTime(300)
+    const stored = sessionStorage.getItem('xcagi_workflow_employee_space_v1:t1') || ''
+    expect(stored).not.toContain('private-')
+    expect(JSON.parse(stored).snapshots.receipt_confirm.progressPct).toBe(55)
+    s.hydrateFromSessionStorage('t1')
+    s.hydrateSessionsFromLocalStorage('t1')
+    expect(s.snapshots.receipt_confirm.empId).toBe('receipt_confirm')
+    expect(s.snapshots.receipt_confirm.hintLine).toBe('')
+    expect(s.sessions.receipt_confirm.enabledAt).not.toBeNull()
   })
 })
 

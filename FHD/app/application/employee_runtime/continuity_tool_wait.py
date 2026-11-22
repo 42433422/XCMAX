@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import fcntl
+import errno
 import math
 import os
 import signal
@@ -14,6 +14,11 @@ from dataclasses import dataclass, field
 from typing import IO, Any
 
 from app.application.tool_execution_deadline import remaining_invocation_seconds
+
+if os.name != "nt":
+    import fcntl
+else:
+    fcntl = None
 
 
 class ToolNotStarted(TimeoutError):
@@ -132,6 +137,8 @@ def unlocked_claim(runtime, task, step, call, path_lock):
     Dispatch admits only read/pause/restart while a claim is running. No caller
     may rebind its identity, replace its steps or retry its unknown side effects.
     """
+    if fcntl is None:
+        raise OSError(errno.ENOTSUP, "Windows workspace ledger writes are unavailable")
     handle = runtime._ledger_lock_handle
     identity = tuple(task[key] for key in ("task_id", "tenant_id", "user_id", "owner_employee"))
     original_tasks = dict(runtime.state["tasks"])

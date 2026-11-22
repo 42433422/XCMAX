@@ -65,6 +65,42 @@ def test_rejects_missing_or_wrong_token(setup):
     ).status_code == 401
 
 
+def test_training_failure_transport_requires_auth_and_redacts_employee_credentials(
+    setup, monkeypatch
+):
+    from modstore_server import capability_trainer
+
+    client, _ = setup
+    monkeypatch.setattr(
+        capability_trainer,
+        "mine",
+        lambda *args, **kwargs: [
+            {
+                "employee_id": "daily-orchestrator",
+                "failure_reason": "failed password=private-password",
+                "count": 2,
+                "samples": [
+                    {
+                        "task": "invoice token=private-token",
+                        "run_id": "private-run",
+                        "failure_reason": "failed password=private-password",
+                    }
+                ],
+            }
+        ],
+    )
+    rejected = client.get("/api/service/mac-control/training/failures")
+    assert rejected.status_code == 401
+    assert "private" not in rejected.text
+    response = client.get("/api/service/mac-control/training/failures", headers=auth())
+    assert response.status_code == 200
+    assert "private-password" not in response.text and "private-token" not in response.text
+    cluster = response.json()["clusters"][0]
+    assert cluster["employee_id"] == "daily-orchestrator" and cluster["count"] == 2
+    assert cluster["samples"][0]["run_id"] == "private-run"
+    assert "invoice" in cluster["samples"][0]["task"]
+
+
 def test_unconfigured_token_fails_closed(setup, monkeypatch):
     client, _ = setup
     monkeypatch.delenv("MODSTORE_PARA_DISPATCH_TOKEN_SHA256")

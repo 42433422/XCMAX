@@ -176,11 +176,18 @@ def step_execution(monkeypatch):
     from app.application.agent_orchestrator.run_usage import RunUsageLedger
     from app.application.agent_orchestrator.runtime_dependencies import RuntimeDependencies
     from app.application.agent_orchestrator.step_execution import StepExecution
-    from app.application.agent_orchestrator.tool_spec import ToolValidationResult
+    from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, ToolValidationResult
 
-    spec = SimpleNamespace(cost_units=0, permission="", timeout_seconds=5, version="test")
+    def action_spec(tool_id, action):
+        return ToolActionSpecV2(
+            tool_id=tool_id,
+            action=action,
+            timeout_seconds=5,
+            read_only=(tool_id, action) == ("observation_test", "read"),
+        )
+
     dependencies = RuntimeDependencies(
-        action_spec=lambda *_: spec,
+        action_spec=action_spec,
         validate=lambda tool, action, _: ToolValidationResult(True, tool, action),
         refresh_budget=lambda _: None,
         repair_enabled=lambda *_: False,
@@ -230,8 +237,16 @@ def test_business_failure_then_retry_has_independent_correlated_spans(exporter, 
     ):
         assert ctx["trace_id"] == call.metadata["trace_id"] == "a" * 32
         assert observed.span_id == span.context.span_id == int(call.metadata["span_id"], 16)
-        events = [event.data for event in run.events if event.data.get("call_id") == call.call_id]
-        assert len(events) == 2
+        call_events = [event for event in run.events if event.data.get("call_id") == call.call_id]
+        assert [event.event_type for event in call_events] == [
+            "tool.started",
+            "verification.failed" if attempt == 1 else "verification.not_required",
+            "tool.failed" if attempt == 1 else "tool.completed",
+        ]
+        assert call_events[1].data["verification"] == call.metadata["verification"]
+        assert call.metadata["verification"]["accepted"] is (attempt == 2)
+        assert call.metadata["verification_contract"]["read_only"] is True
+        events = [call_events[0].data, call_events[2].data]
         for event in events:
             assert event["trace_id"] == "a" * 32
             assert event["span_id"] == call.metadata["span_id"]
@@ -252,6 +267,9 @@ def test_unverified_customer_receipt_marks_actual_attempt_failed(exporter, step_
     span = exporter.get_finished_spans()[0]
     assert span.status.status_code == StatusCode.ERROR
     assert span.attributes["error.type"] == "customer_receipt_unverified"
+    assert run.tool_calls[0].metadata["verification_contract"]["read_only"] is False
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is False
+    assert run.events[-2].event_type == "verification.failed"
     assert run.events[-1].event_type == "tool.failed"
     assert run.metadata["non_retryable"] is True
 

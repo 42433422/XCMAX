@@ -148,7 +148,8 @@ def invoke_employee_gate(
         context_param = signature.parameters.get("runtime_context")
         accepts_context = (
             context_param is not None
-            and context_param.kind in (
+            and context_param.kind
+            in (
                 inspect.Parameter.POSITIONAL_OR_KEYWORD,
                 inspect.Parameter.KEYWORD_ONLY,
             )
@@ -156,9 +157,7 @@ def invoke_employee_gate(
             parameter.kind is inspect.Parameter.VAR_KEYWORD
             for parameter in signature.parameters.values()
         )
-        options: dict[str, Any] = (
-            {"runtime_context": runtime_context} if accepts_context else {}
-        )
+        options: dict[str, Any] = {"runtime_context": runtime_context} if accepts_context else {}
         signature.bind(tool_name, args, **options)
     except (TypeError, ValueError):
         return {"ok": False, "blocked": True, "reason": "工具授权接口无效，未调用"}

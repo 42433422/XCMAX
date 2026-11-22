@@ -841,9 +841,8 @@ function connect() {
       const command = new AbortController()
       commands.set(id, command)
       const timeout = msg.timeout_ms === undefined ? COMMAND_MAX_MS : msg.timeout_ms
-      let ttl = typeof timeout === 'number' && Number.isFinite(timeout) ? timeout : 0
-      if (ttl < 0) ttl = 0
-      if (ttl > COMMAND_MAX_MS) ttl = COMMAND_MAX_MS
+      const ttl = typeof timeout === 'number' && Number.isFinite(timeout)
+        ? Math.min(COMMAND_MAX_MS, Math.max(0, timeout)) : 0
       const deadline = performance.now() + ttl
       const deadlineTimer = window.setTimeout(() => command.abort(), ttl)
       const commandCurrent = () => isCurrent() && !command.signal.aborted && performance.now() < deadline

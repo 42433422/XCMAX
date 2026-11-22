@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { preserveElectronDiagnostics } from './diagnostics'
 
 // 实际 Electron + stub 后端覆盖启动、preload 与 IPC 往返；不代替安装包业务验收。
 
@@ -57,8 +58,6 @@ test.beforeAll(async () => {
       XCAGI_DESKTOP_E2E: '1',
       XCAGI_DESKTOP_PORT: String(backendPort),
       XCAGI_DESKTOP_USER_DATA_DIR: userDataDir,
-      // dev 模式后端可执行文件 → 指向 E2E stub（node shebang 脚本）
-      PYTHON: path.resolve(__dirname, 'stub-backend.mjs'),
     },
   })
   page = await electronApp.firstWindow()
@@ -69,12 +68,14 @@ test.beforeAll(async () => {
   })
 })
 
-test.afterAll(async () => {
-  if (electronApp) {
-    await electronApp.close()
-  }
-  if (userDataDir) {
-    fs.rmSync(userDataDir, { recursive: true, force: true })
+test.afterAll(async ({}, testInfo) => {
+  try {
+    if (electronApp) await electronApp.close()
+  } finally {
+    if (userDataDir) {
+      preserveElectronDiagnostics(electronApp, userDataDir, testInfo)
+      fs.rmSync(userDataDir, { recursive: true, force: true })
+    }
   }
 })
 

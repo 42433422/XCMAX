@@ -17,7 +17,7 @@ from modstore_server.workflow_scheduler import (
 )
 
 
-def test_daily_backup_defaults_to_0115_shanghai(monkeypatch) -> None:
+def test_daily_backup_defaults_to_0115_in_shanghai(monkeypatch) -> None:
     monkeypatch.delenv("MODSTORE_DAILY_BACKUP_HOUR", raising=False)
     monkeypatch.delenv("MODSTORE_DAILY_BACKUP_MINUTE", raising=False)
     monkeypatch.delenv("MODSTORE_DAILY_BACKUP_TZ", raising=False)
@@ -27,6 +27,18 @@ def test_daily_backup_defaults_to_0115_shanghai(monkeypatch) -> None:
     assert "hour='1'" in str(trigger)
     assert "minute='15'" in str(trigger)
     assert str(trigger.timezone) == "Asia/Shanghai"
+
+
+def test_daily_backup_schedule_honors_environment_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("MODSTORE_DAILY_BACKUP_HOUR", "23")
+    monkeypatch.setenv("MODSTORE_DAILY_BACKUP_MINUTE", "40")
+    monkeypatch.setenv("MODSTORE_DAILY_BACKUP_TZ", "UTC")
+
+    trigger = cron_trigger_for_backup()
+
+    assert "hour='23'" in str(trigger)
+    assert "minute='40'" in str(trigger)
+    assert str(trigger.timezone) == "UTC"
 
 
 def test_scheduler_misfire_policy_defaults() -> None:

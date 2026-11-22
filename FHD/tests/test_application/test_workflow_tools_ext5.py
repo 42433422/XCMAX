@@ -1127,9 +1127,7 @@ class TestRunNaturalLanguagePandasErrors:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": [1, 2]})
-        with patch(
-            "app.application.tools.workflow.adapters.translate_pandas", return_value=""
-        ):
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=""):
             result = run_natural_language_pandas(df, "anything")
         assert isinstance(result, dict)
         assert result["generated_code"] == ""

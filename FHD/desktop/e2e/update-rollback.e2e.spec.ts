@@ -5,6 +5,7 @@ import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { preserveElectronDiagnostics } from './diagnostics'
 
 /**
  * 真实端到端：更新签名校验链路 + 更新后回滚观察期提交链路。
@@ -146,14 +147,15 @@ test.beforeAll(async () => {
       XCAGI_DESKTOP_E2E: '1',
       XCAGI_DESKTOP_PORT: String(backendPort),
       XCAGI_DESKTOP_USER_DATA_DIR: userDataDir,
-      // dev 模式后端可执行文件 → 指向 E2E stub（node shebang 脚本）
-      PYTHON: path.resolve(__dirname, 'stub-backend.mjs'),
       // 更新链路：指向本地更新源替身 + 注入测试 Ed25519 公钥（main.ts 不会覆盖已设置的值）
       XCAGI_UPDATE_URL: `http://127.0.0.1:${updateServerPort}/`,
       XCAGI_UPDATE_ED25519_PUBLIC_KEY: TEST_PUBLIC_KEY_PEM,
     },
   })
   page = await electronApp.firstWindow()
+  // firstWindow() only means BrowserWindow exists; its splash and backend may still be starting.
+  await page.waitForURL(`http://127.0.0.1:${backendPort}/?shell=1`, { timeout: 90_000 })
+  await expect(page.locator('#e2e-marker')).toHaveText('XCAGI_E2E_OK')
   await electronApp.evaluate(({ app, BrowserWindow }) => {
     const requireFromApp = process.getBuiltinModule('module').createRequire(
       process.getBuiltinModule('path').join(app.getAppPath(), 'package.json'),
@@ -170,15 +172,16 @@ test.beforeAll(async () => {
   })
 })
 
-test.afterAll(async () => {
-  if (electronApp) {
-    await electronApp.close()
-  }
-  if (updateServer) {
-    await new Promise<void>(resolve => updateServer.close(() => resolve()))
-  }
-  if (userDataDir) {
-    fs.rmSync(userDataDir, { recursive: true, force: true })
+test.afterAll(async ({}, testInfo) => {
+  try {
+    if (electronApp) await electronApp.close()
+  } finally {
+    if (updateServer) await new Promise<void>(resolve => updateServer.close(() => resolve()))
+    if (userDataDir) {
+      // Preserve the first failing boundary and native crash evidence before removing the fixture.
+      preserveElectronDiagnostics(electronApp, userDataDir, testInfo)
+      fs.rmSync(userDataDir, { recursive: true, force: true })
+    }
   }
 })
 

@@ -19,6 +19,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from modstore_server.incident_team_handler_digest import redact_text
+
 DEFAULT_MIN_COUNT = 2
 DEFAULT_DAYS = 14
 PROMPTFOO_VERSION = "0.126.0"
@@ -81,7 +83,7 @@ def _failure_of(record: dict[str, Any]) -> dict[str, Any] | None:
         surface, resource = training_identity(record)
     except ValueError:
         return None
-    error = str(record.get("error") or record.get("failure_reason") or "").strip()
+    error = redact_text(record.get("error") or record.get("failure_reason") or "", 2000).strip()
     if not error:
         return None
     return {
@@ -104,9 +106,11 @@ def _failure_of(record: dict[str, Any]) -> dict[str, Any] | None:
         ),
         "failure_reason": error,
         "step": record.get("step") or "",
-        "task": str(record.get("task_excerpt") or record.get("report_excerpt") or "")[
-            : 20000 if surface in STRUCTURED_SURFACES else 2000
-        ],
+        "task": (
+            str(record.get("task_excerpt") or record.get("report_excerpt") or "")[:20000]
+            if surface in STRUCTURED_SURFACES
+            else redact_text(record.get("task_excerpt") or record.get("report_excerpt") or "", 2000)
+        ),
         "timestamp": record.get("timestamp") or "",
         "run_id": record.get("run_id") or "",
     }
@@ -231,14 +235,21 @@ def append_cases(
         surface, resource = training_identity(cluster)
         key = resource if surface == "employee_prompt" else f"{surface}-{resource}"
         path = corpus_dir / f"{key}.jsonl"
-        existing = set()
-        if path.is_file():
-            for line in path.read_bytes().decode("utf-8").splitlines():
+        if path.is_symlink():
+            raise ValueError("training corpus cannot be a symbolic link")
+        descriptor = os.open(
+            path, os.O_RDWR | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600
+        )
+        with os.fdopen(descriptor, "a+", encoding="utf-8") as fh:
+            if hasattr(os, "fchmod"):
+                os.fchmod(fh.fileno(), 0o600)
+            fh.seek(0)
+            existing = set()
+            for line in fh:
                 try:
                     existing.add(json.loads(line).get("case_id"))
                 except json.JSONDecodeError:
                     continue
-        with path.open("a", encoding="utf-8") as fh:
             for sample in cluster["samples"][:max_per_cluster]:
                 if not sample.get("task"):
                     continue  # An observation is not a reproduction input.
@@ -253,8 +264,12 @@ def append_cases(
                         if surface in STRUCTURED_SURFACES
                         else {}
                     ),
-                    "failure_reason": cluster["failure_reason"],
-                    "task": sample.get("task") or cluster["failure_reason"],
+                    "failure_reason": redact_text(cluster["failure_reason"], 2000),
+                    "task": (
+                        sample["task"]
+                        if surface in STRUCTURED_SURFACES
+                        else redact_text(sample["task"], 2000)
+                    ),
                     "source_run": sample.get("run_id") or "",
                     "created_at": datetime.now(UTC).isoformat(),
                 }

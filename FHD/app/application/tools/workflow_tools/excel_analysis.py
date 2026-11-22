@@ -220,7 +220,9 @@ def natural_language_query(
                 except RECOVERABLE_ERRORS:
                     error = "excel_query_failed"
             else:
-                error = "invalid_pandas_query" if isinstance(exc, ValueError) else "excel_query_failed"
+                error = (
+                    "invalid_pandas_query" if isinstance(exc, ValueError) else "excel_query_failed"
+                )
     messages = {
         "invalid_pandas_query": "查询条件无法转换为可执行的表格计算，请换一种描述。",
         "excel_query_failed": "表格查询执行失败，请核对问题描述或文件内容后重试。",

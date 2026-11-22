@@ -45,7 +45,7 @@ PG_READY=0
 cleanup() {
   local status=$?
   if [[ "$PG_READY" == "1" && -n "$DRILL_DB" ]]; then
-    if ! docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -v ON_ERROR_STOP=1 -c \
+    if ! docker exec "$PG_CONTAINER" psql -X -U "$PG_USER" -d postgres -v ON_ERROR_STOP=1 -c \
       "DROP DATABASE IF EXISTS $DRILL_DB" >/dev/null; then
       log "ERROR: 恢复演练临时库清理失败: $DRILL_DB"
       status=1
@@ -136,7 +136,7 @@ if [[ "$MODE" == "dry" ]]; then
 fi
 
 DRILL_DB="fhd_drill_$(date +%Y%m%d%H%M%S)"
-docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -c "CREATE DATABASE $DRILL_DB" >/dev/null \
+docker exec "$PG_CONTAINER" psql -X -U "$PG_USER" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $DRILL_DB" >/dev/null \
   || fail "创建临时库失败"
 PG_READY=1
 
@@ -148,7 +148,7 @@ docker exec -i "$PG_CONTAINER" pg_restore -U "$PG_USER" -d "$DRILL_DB" \
     fail "pg_restore 失败，恢复演练未通过"
   }
 
-TABLE_COUNT=$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -Atc \
+TABLE_COUNT=$(docker exec "$PG_CONTAINER" psql -X -U "$PG_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -Atc \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'") \
   || fail "恢复后表数量查询失败"
 [[ "$TABLE_COUNT" =~ ^[0-9]+$ ]] || fail "恢复后表数量无效"
@@ -160,7 +160,7 @@ ASSERTED=0
 while read -r TABLE EXPECTED; do
   [[ -n "${TABLE:-}" ]] || continue
   [[ "$TABLE" =~ ^[a-z_][a-z0-9_]*$ ]] || continue
-  ACTUAL=$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -Atc \
+  ACTUAL=$(docker exec "$PG_CONTAINER" psql -X -U "$PG_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -Atc \
     "SELECT count(*) FROM public.\"$TABLE\"") || fail "恢复库表行数查询失败: $TABLE"
   [[ "$ACTUAL" =~ ^[0-9]+$ ]] || fail "恢复库表行数无效: $TABLE"
   if [[ "$ACTUAL" != "$EXPECTED" ]]; then

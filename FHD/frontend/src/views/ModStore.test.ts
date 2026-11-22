@@ -6,6 +6,8 @@ import ModStore from './ModStore.vue'
 
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
+  getActiveExtensionModHeaders: () => ({}),
+  getClientModsUiOffHeader: () => ({}),
   getApiBase: () => '',
   DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
 }))

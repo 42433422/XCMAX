@@ -226,12 +226,18 @@ def test_pip_runtime_install_supplies_all_vendored_sources() -> None:
         assert f"{name}=={package['version']}" in project["project"]["dependencies"]
     for name in ("build-backend.sh", "build-backend.ps1"):
         script = (fhd / "scripts/package" / name).read_text()
-        install = next(
-            line
-            for line in script.splitlines()
-            if "pip install" in line and ".[server-api]" in line
-        )
-        assert "-r requirements-server-api.txt" in install
+        installs = [
+            line for line in script.splitlines() if "pip install" in line and ' -e ".[' in line
+        ]
+        assert installs, name
+        assert all("-r requirements-server-api.txt" in line for line in installs)
+        if name.endswith(".sh"):
+            assert 'BACKEND_EXTRAS="server-api"' in script
+            assert 'BACKEND_EXTRAS="server-api,computer-use"' in script
+            assert all('".[${BACKEND_EXTRAS}]"' in line for line in installs)
+        else:
+            assert any('".[server-api]"' in line for line in installs)
+            assert any('".[server-api,computer-use]"' in line for line in installs)
     jobs = yaml.safe_load((_REPO_ROOT / ".github/workflows/fhd-alembic-ssot.yml").read_text())[
         "jobs"
     ]

@@ -1335,18 +1335,14 @@ class TestRunNaturalLanguagePandas:
 
     def test_empty_df(self) -> None:
         df = pd.DataFrame()
-        with patch(
-            "app.application.tools.workflow.adapters.translate_pandas", return_value=None
-        ):
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
             result = run_natural_language_pandas(df, "select all")
         assert result["row_count"] == 0
         assert result["result_kind"] == "dataframe"
 
     def test_with_valid_df(self) -> None:
         df = pd.DataFrame({"a": [1, 2, 3]})
-        with patch(
-            "app.application.tools.workflow.adapters.translate_pandas", return_value=None
-        ):
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
             result = run_natural_language_pandas(df, "select all")
         assert result["row_count"] == 3
         assert "columns" in result
@@ -1363,9 +1359,7 @@ class TestRunNaturalLanguagePandas:
 
     def test_truncation(self) -> None:
         df = pd.DataFrame({"a": list(range(300))})
-        with patch(
-            "app.application.tools.workflow.adapters.translate_pandas", return_value=None
-        ):
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
             result = run_natural_language_pandas(df, "select all", max_rows=200)
         assert result["truncated"] is True
         assert result["returned_rows"] == 200

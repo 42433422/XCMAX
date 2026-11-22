@@ -32,9 +32,6 @@ from app.application.tool_execution_deadline import (
     invocation_requires_reconciliation,
 )
 from app.application.workflow.retry_policy import is_transport_error
-from app.application.agent_orchestrator.verification_cognition import (
-    normalize_tool_execution_result,
-)
 from app.domain.task_lifecycle.results import normalize_execution_result
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

@@ -449,4 +449,3 @@ def test_first_executor_receipt_matches_durable_unknown_replay(claims, monkeypat
         ]
         == "unknown"
     )
-

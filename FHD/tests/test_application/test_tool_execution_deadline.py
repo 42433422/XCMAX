@@ -374,13 +374,14 @@ def test_repair_override_cannot_extend_server_attempt_limit(entry):
                     "repair_overrides": {step.node_id: {"max_attempts": 99999, "retry": True}},
                 }
             }
-        }
+        },
     )
     assert not getattr(repair, entry)(run, step, runtime_context={})
 
+
 @pytest.mark.parametrize("claimed_success", [False, True])
 @pytest.mark.parametrize("condition", ["timely", "late", "unknown_io"])
-def test_reconciliation_receipt_keeps_evidence_only_when_returned_within_budget(
+def test_reconciliation_receipt_preserves_evidence_and_only_exposes_timely_artifacts(
     monkeypatch, claimed_success, condition
 ):
     from app.application.agent_orchestrator import tool_executor as tools
@@ -403,12 +404,14 @@ def test_reconciliation_receipt_keeps_evidence_only_when_returned_within_budget(
         "artifacts": [{"artifact_id": "json_receipt", "artifact_type": "file"}],
     }
     calls = []
+
     def execute(step, *, runtime_context, deadline_monotonic):
         calls.append(deadline_monotonic)
         if condition == "unknown_io":
             with invocation_deadline(deadline_monotonic) as budget:
                 budget.uncertain.append({"kind": "http_timeout", "method": "POST"})
         return receipt
+
     result = execute_with_tool_deadline(
         SimpleNamespace(execute_with_deadline=execute),
         _step(),
@@ -424,7 +427,9 @@ def test_reconciliation_receipt_keeps_evidence_only_when_returned_within_budget(
         assert result["message"] == receipt["message"]
         for key in ("artifacts", "run_id", "execution_outcome", "steps", "verification"):
             assert result[key] == receipt[key]
-        assert "reconciliation_evidence" not in result
+        # Timely receipts preserve evidence in place; only uncertain IO or late
+        # completion needs an envelope around the original result.
+        assert result == {**receipt, "success": False, "outcome": "unknown", "retryable": False}
     else:
         assert result["error_code"] == "tool_timeout_unknown"
         assert result["reconciliation_evidence"] == receipt
@@ -432,6 +437,8 @@ def test_reconciliation_receipt_keeps_evidence_only_when_returned_within_budget(
         assert result["io_reconciliation"] == (
             [{"kind": "http_timeout", "method": "POST"}] if condition == "unknown_io" else []
         )
+
+
 @pytest.mark.parametrize(
     "marker",
     [
@@ -460,4 +467,3 @@ def test_on_time_receipt_cannot_hide_unknown_effect(monkeypatch, marker):
     assert result["retryable"] is False and result["reconciliation_required"] is True
     assert result["request_id"] == "original-request" and calls == [True]
     assert raw["success"] is True  # A projection must not rewrite the original evidence.
-

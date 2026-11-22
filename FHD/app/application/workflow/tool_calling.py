@@ -73,7 +73,7 @@ def slim_schema(schema: Any) -> Any:
     if not isinstance(schema, dict):
         return {}
     slim: dict[str, Any] = {}
-    for key in ("type", "required", "enum"):
+    for key in ("type", "required", "enum", "additionalProperties"):
         if key in schema:
             slim[key] = schema[key]
     properties = schema.get("properties")

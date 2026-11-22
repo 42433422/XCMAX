@@ -368,7 +368,6 @@ class SuperEmployeeService:
             },
         }
 
-
     def _record_direct_reply(
         self,
         user_msg: dict[str, Any],
@@ -489,7 +488,7 @@ class SuperEmployeeService:
                     {
                         **dispatch,
                         "status": "failed" if failure else "completed",
-                        "accepted": False if failure else True,
+                        "accepted": not failure,
                         "queued": False,
                         "safe_to_fallback": False,
                         "para_tier": 1,

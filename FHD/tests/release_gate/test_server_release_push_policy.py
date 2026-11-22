@@ -383,6 +383,21 @@ def test_cvm_inputs_fail_before_checkout_and_expensive_jobs(tmp_path, overrides,
             assert "::error::" in result.stdout
 
 
+def test_cvm_release_does_not_dispatch_the_retired_evolution_orchestrator() -> None:
+    source = yaml.safe_load((FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8"))
+    published = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
+    )
+
+    for workflow in (source, published):
+        events = workflow.get("on", workflow.get(True))
+        assert "dispatch_evolution" not in events["workflow_dispatch"]["inputs"]
+        assert "dispatch-evolution-after-cvm" not in workflow["jobs"]
+        assert "evolution-orchestrator" not in str(workflow["jobs"])
+    assert not (FHD_ROOT / ".github/workflows/evolution-orchestrator.yml").exists()
+    assert not (REPO_ROOT / ".github/workflows/fhd-evolution-orchestrator.yml").exists()
+
+
 def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
     workflow_paths = [
         REPO_ROOT / ".github/workflows/fhd-ci-cd.yml",
@@ -505,10 +520,11 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
     )
 
     inprocess_call = script.index("if run_inprocess_with_live_env; then")
-    preflight_call = script.index("if choose_base_via_http; then")
+    preflight = script.index("if choose_base_via_http; then")
+    identity_gate = script.index('if ! DEPLOYED_SHA="$(verify_runtime_identity')
+    provenance_gate = script.index('if ! GATE_SUMMARY="$(verify_provenance_gate')
     http_call = script.index('if post_run_http "$PREFLIGHT_BASE"; then')
-    assert preflight_call < inprocess_call
-    assert inprocess_call < http_call
+    assert preflight < identity_gate < provenance_gate < inprocess_call < http_call
     assert 'REASON_FILE="${2:?reason_file}"' in script
     assert 'TOKEN_FILE="${3:-}"' in script
     assert 'rm -f -- "$REASON_FILE"' in script

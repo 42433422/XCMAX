@@ -2,9 +2,8 @@
 /**
  * E2E 专用后端替身（Playwright-Electron）。
  *
- * 桌面端 dev 模式通过 `process.env.PYTHON` 指定后端可执行文件（见 desktop-config.ts
- * backendExecutable）。本脚本以 node shebang 充当该可执行文件，忽略 run.py 等参数，
- * 提供一个最小 HTTP 服务，模拟真实后端的三条关键契约：
+ * patch-backend.cjs 用 Electron 的 Node 模式启动本脚本，提供一个最小 HTTP 服务，
+ * 模拟真实后端的三条关键契约：
  *   GET /api/ping            → 200 + uvicorn + 当前随机 challenge 的子进程 HMAC 证明
  *   GET /api/desktop/status  → { appRoutesReady: true, dbRecovery: { action: 'ok' } }
  *   GET /                    → 带 #e2e-marker 的静态页（验证主界面真实加载）
