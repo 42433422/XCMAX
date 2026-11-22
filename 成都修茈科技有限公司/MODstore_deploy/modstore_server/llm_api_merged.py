@@ -38,7 +38,7 @@ async def resolve_default_llm_route(
         platform_credentials,
         resolve_credentials,
     )
-    from modstore_server.llm_model_taxonomy import classify_model
+    from modstore_server.llm_model_taxonomy import classify_model, model_context_capabilities
     from modstore_server.llm_operation_routes import select_operation_model
     from modstore_server.models import User as UserModel, get_session_factory
     from modstore_server.platform_model_config import read_state
@@ -93,6 +93,7 @@ async def resolve_default_llm_route(
     explicit = bool(provider or model)
 
     async def select(p: str, m: str, source: str, *, platform_only: bool = False):
+        block = None
         key, base, key_source = credentials.get(p, (None, None, "none"))
         if platform_only:
             key, base = platform_credentials(p, state=state)
@@ -134,12 +135,26 @@ async def resolve_default_llm_route(
             if not m:
                 return None
         snapshot = chat_route_snapshot(p, m, key, base, key_source, source)
+        if block is None and p == "litellm":
+            # Explicit gateway aliases need the same deployment metadata as the
+            # account default. Keep the credential and route chosen above.
+            try:
+                async with asyncio.timeout(4):
+                    block = await get_models_for_credentials(
+                        uid, p, api_key=key, base_url=base, force_refresh=False
+                    )
+            except RECOVERABLE_ERRORS:
+                block = None
+        rows = (block or {}).get("models_detailed") or []
+        row = next((item for item in rows if isinstance(item, dict) and item.get("id") == m), {})
+        capabilities = model_context_capabilities(p, m, row)
         return {
             "ok": True,
             **snapshot.public_metadata(),
             "source": source,
             "operation": operation,
             "route_token": chat_route_token(snapshot, uid),
+            "model_capabilities": capabilities,
         }
 
     if explicit:
