@@ -75,7 +75,7 @@ def _assert_shipment_order_run(repo: InMemoryAgentRunRepository, run_id: str, ac
     run = repo.get(run_id)
     assert run is not None
     assert run.user_id == "17"
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == f"shipment_orders_{action}"
     assert run.tool_calls[0].tool_id == "shipment_orders"
     assert run.tool_calls[0].action == action
@@ -86,15 +86,20 @@ def _assert_shipment_order_run(repo: InMemoryAgentRunRepository, run_id: str, ac
     )
     assert run.tool_calls[0].permission == expected
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-        event.event_type for event in run.events
-    }
+    assert run.tool_calls[0].output["success"] is True
+    receipt = run.tool_calls[0].metadata["verification"]
+    assert receipt["accepted"] is False and receipt["code"] == "result_verifier_unavailable"
+    assert run.steps[0].attempt_count == 1
+    events = {event.event_type for event in run.events}
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
 
 
 def test_shipment_order_routes_execute_through_agent_orchestrator(
     tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     from app.utils.path_io.path_utils import get_shipment_output_dir
 
@@ -114,7 +119,17 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
     svc.reset_order_sequence.return_value = {"success": True, "sequence": 1}
     svc.clear_all_orders.return_value = {"success": True, "deleted_count": 5}
     svc.delete_shipment.return_value = {"success": True}
-    client = _client(svc, monkeypatch, trusted_actor(user_id=17, tenant_id=None))
+    client = _client(
+        svc,
+        monkeypatch,
+        trusted_actor(
+            user_id=17,
+            tenant_id=None,
+            role="admin",
+            tier="admin",
+            permissions=["shipment.view", "shipment.edit", "shipment.create"],
+        ),
+    )
 
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -168,14 +183,31 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert generate.status_code == 200
-    assert generate_batch.status_code == 200
-    assert print_order.status_code == 200
-    assert clear_unit.status_code == 200
-    assert set_sequence.status_code == 200
-    assert reset_sequence.status_code == 200
-    assert clear_all.status_code == 200
-    assert delete_order.status_code == 200
+    assert generate.status_code == 500, generate.text
+    assert generate_batch.status_code == 200, generate_batch.text
+    assert print_order.status_code == 500, print_order.text
+    assert clear_unit.status_code == 500, clear_unit.text
+    assert set_sequence.status_code == 500, set_sequence.text
+    assert reset_sequence.status_code == 500, reset_sequence.text
+    assert clear_all.status_code == 500, clear_all.text
+    assert delete_order.status_code == 400, delete_order.text
+    for response in (
+        generate,
+        generate_batch,
+        print_order,
+        clear_unit,
+        set_sequence,
+        reset_sequence,
+        clear_all,
+        delete_order,
+    ):
+        payload = response.json()
+        assert payload["success"] is False
+        assert payload["error_code"] == "result_verification_inconclusive"
+        assert payload["verification_code"] == "result_verifier_unavailable"
+        assert payload["retryable"] is False
+        assert payload["reconciliation_required"] is True
+        assert payload["outcome"] == "unknown"
 
     assert svc.generate_shipment_document.call_args_list[0].kwargs == {
         "unit_name": "星光贸易",

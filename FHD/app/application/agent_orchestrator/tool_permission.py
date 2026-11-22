@@ -482,7 +482,7 @@ def idempotency_scope_key(
     return f"{tenant}:{task}:{tool_id}:{action}:{raw}"
 
 
-def _idempotency_path() -> Path | None:
+def _idempotency_path(*, create_parent: bool = True) -> Path | None:
     raw = os.environ.get("XCAGI_TOOL_IDEMPOTENCY_PATH", "").strip()
     if raw.lower() in {"0", "off", "memory", "none"}:
         return None
@@ -494,7 +494,8 @@ def _idempotency_path() -> Path | None:
 
         raw = str(Path(get_app_data_dir()) / "tool-idempotency.sqlite")
     path = Path(raw)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if create_parent:
+        path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -733,9 +734,11 @@ def _customer_create_effect(
         from app.application.customer_creation_receipt import CUSTOMER_CREATE_RECEIPTS
         from app.db.models.purchase_unit import PurchaseUnit
         from app.domain.task_lifecycle.control import SessionBook
+        from app.infrastructure.tenant_scope import owned_tenant_id, tenant_scope
 
-        session = get_customers_session()
-        try:
+        if owned_tenant_id() not in (None, tenant_id):
+            return "unknown", None
+        with tenant_scope(tenant_id), get_customers_session() as session:
             receipt = SessionBook(session).get(CUSTOMER_CREATE_RECEIPTS, tenant, key)
             customer_id = receipt.get("customer_id")
             if type(customer_id) is not int or customer_id <= 0:
@@ -745,15 +748,14 @@ def _customer_create_effect(
                     select(PurchaseUnit.id)
                     .where(PurchaseUnit.unit_name == name, PurchaseUnit.tenant_id == tenant_id)
                     .limit(1)
-                    .execution_options(skip_tenant_filter=True)
                 ).first()
                 return ("absent" if existing is None else "unknown"), None
             if receipt.get("fingerprint") != fingerprint:
                 return "unknown", None
             row = session.execute(
-                select(PurchaseUnit)
-                .where(PurchaseUnit.id == customer_id, PurchaseUnit.tenant_id == tenant_id)
-                .execution_options(skip_tenant_filter=True)
+                select(PurchaseUnit).where(
+                    PurchaseUnit.id == customer_id, PurchaseUnit.tenant_id == tenant_id
+                )
             ).scalar_one_or_none()
             if row is None:
                 return "unknown", None
@@ -775,8 +777,6 @@ def _customer_create_effect(
                 "tenant_id": int(row.tenant_id),
                 "version": int(row.version),
             }
-        finally:
-            session.close()
     except lookup_errors:
         return "unknown", None
     return "matched", {
@@ -850,10 +850,20 @@ def _replace_dead_claim(key: str, owner: str, fingerprint: str, new_owner: str) 
         conn.close()
 
 
-def _reread_claim(key: str) -> dict[str, Any] | None:
-    conn = _idempotency_conn()
-    if conn is None:
-        return _IDEMPOTENCY.get(key)
+def _reread_claim(key: str, *, durable_read_only: bool = False) -> dict[str, Any] | None:
+    conn: sqlite3.Connection | None
+    if durable_read_only:
+        path = _idempotency_path(create_parent=False)
+        if path is None:
+            return None
+        try:
+            conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)
+        except (OSError, sqlite3.Error):
+            return None
+    else:
+        conn = _idempotency_conn()
+        if conn is None:
+            return _IDEMPOTENCY.get(key)
     try:
         row = conn.execute(
             "select fingerprint, owner, inflight, output_json from tool_idempotency where scope_key = ?",

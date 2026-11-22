@@ -663,12 +663,20 @@ def test_restarted_confirmation_resumes_signed_durable_agent_run(
     )
     service = object.__new__(AIChatApplicationService)
     service._pending_workflows = {}
-    service._try_handle_dynamic_workflow(chat_user, "确认", "normal", {"session_id": "sess"}, {})
+    response = service._try_handle_dynamic_workflow(
+        chat_user, "确认", "normal", {"session_id": "sess"}, {}
+    )
     completed = fresh.get(run.run_id)
     assert completed.status == "completed", completed.to_dict()
     assert completed.tool_calls and completed.tool_calls[0].output["success"]
     assert ledger_path(tmp_path).is_file()
-    assert store.load(plan.plan_id)["status"] == "succeeded"
+    # The original task was admitted once; starting a running child is not its
+    # business completion. Keep that distinction in the persisted projection.
+    assert response["execution_state"] == "pending"
+    assert store.load(plan.plan_id)["status"] == "pending"
+    evidence = completed.tool_calls[0].metadata["verification"]["checks"][0]["evidence"]
+    assert evidence["admission_verified"] is True
+    assert evidence["business_effect_verified"] is False
     receipt = ledger_path(tmp_path).read_bytes()
     handled, response = service._resume_pending_dynamic_workflow(
         chat_user, "确认", "确认", {"session_id": "sess"}

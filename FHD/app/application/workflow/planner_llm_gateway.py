@@ -332,9 +332,11 @@ def stream_planner_completion(
     from app.infrastructure.llm.response_completion import provider_supports_streaming
 
     provider = get_active_provider(conversation_service=ai_service)
-    if not provider_supports_streaming(provider):
+    if provider is None or not provider_supports_streaming(provider):
         return None
-    stream = provider.stream_chat_completion
+    stream = getattr(provider, "stream_chat_completion", None)
+    if not callable(stream):
+        return None
 
     async def generate():
         from app.infrastructure.llm.model_context_windows import resolve_model_limits

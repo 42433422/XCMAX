@@ -43,7 +43,8 @@ def transport_identity(provider: str) -> dict[str, str]:
     _, source = ledger_source()
     return {
         "endpoint_sha256": digest(endpoint.rstrip("/")),
-        "credential_sha256": hashlib.sha256(str(key).encode()).hexdigest(),  # codeql[py/weak-sensitive-data-hashing] ledger fingerprint, not password storage
+        # Match the original upstream accounting ledger's credential fingerprint.
+        "credential_sha256": hashlib.sha256(str(key).encode()).hexdigest(),
         "ledger_source_sha256": source,
     }
 

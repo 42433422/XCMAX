@@ -115,7 +115,12 @@ def test_actual_executor_keeps_browser_across_steps_and_reaps_entire_tree(browse
     scope = registry.mcp_session_scope(browser[1])
     assert workers.close_browser_worker_scope(scope) == 1
     assert not psutil.pid_exists(pid)
-    assert call(browser, "browser_snapshot")["error_code"] == "mcp_session_lost"
+    events = browser[2].read_bytes()
+    lost = call(browser, "browser_snapshot")
+    assert lost["error_code"] == "mcp_session_lost"
+    assert lost["session_id"] == first["session_id"]
+    assert lost["outcome"] == "unknown" and lost["retryable"] is False
+    assert browser[2].read_bytes() == events
 
 
 def test_actual_executor_rechecks_revoked_host_session_between_steps(browser):
@@ -129,6 +134,21 @@ def test_actual_executor_rechecks_revoked_host_session_between_steps(browser):
     denied = call(browser, "browser_click", {"ref": "e1"})
     assert denied["success"] is False and denied["error_code"] == "tool_identity_required"
     assert "clicked" not in browser[2].read_text()
+
+
+def test_conflicting_original_generations_never_choose_or_recreate_a_session(browser):
+    first = call(browser, "browser_snapshot")
+    assert state(first)["clicks"] == 0
+    browser[1]["node_outputs"]["conflicting-generation"] = {
+        **first,
+        "session_id": "different-original-generation",
+    }
+    events = browser[2].read_bytes()
+    rejected = call(browser, "browser_click", {"ref": "e1"})
+    assert rejected["error_code"] == "mcp_session_lost"
+    assert rejected["outcome"] == "unknown" and rejected["retryable"] is False
+    assert "session_id" not in rejected
+    assert browser[2].read_bytes() == events
 
 
 def test_actual_worker_timeout_reaps_delayed_side_effect_and_never_replays(browser):

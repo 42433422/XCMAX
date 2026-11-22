@@ -68,15 +68,22 @@ def _assert_ocr_publication_pending(response, repo, request_id):
     """Publication is a real effect; it does not prove an independently read OCR result."""
     assert response.status_code == 202, response.text
     body = response.json()
-    assert body["success"] is True and body["published"] is True
+    assert body["success"] is False and body["published"] is True
+    assert body["error_code"] == "result_verification_inconclusive"
+    assert body["verification_code"] == "result_verifier_unavailable"
+    assert body["retryable"] is False and body["reconciliation_required"] is True
+    assert body["outcome"] == "unknown"
     assert body["request_id"] == request_id and body["agent_status"] == "blocked"
     run = repo.get(body["run_id"])
     assert run is not None and run.status == "blocked" and len(run.tool_calls) == 1
     call = run.tool_calls[0]
     assert call.status == "completed" and call.output["request_id"] == request_id
+    assert call.output["success"] is True and call.output["published"] is True
     report = call.metadata["verification"]
     assert report["status"] == "inconclusive" and report["accepted"] is False
     assert report["code"] == "result_verifier_unavailable"
+    assert all(check["status"] != "passed" for check in report["checks"])
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
     return run
 
 

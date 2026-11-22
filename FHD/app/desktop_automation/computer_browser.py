@@ -347,6 +347,7 @@ class PlaywrightComputer:
                         from app.domain.browser_receipt import observed_assertion
 
                         timeout = budget()
+                        actual: str | bool | None
                         if assertion.kind == "url":
                             assert isinstance(assertion.expected, str)
                             expect(page).to_have_url(assertion.expected, timeout=timeout)

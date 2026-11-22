@@ -77,7 +77,17 @@ def run_execution_receipt(run: Any) -> JsonObject:
         else execution_result_pending_state(outputs)
         or _payload_status({"agent_status": str(run.status or "unknown"), **outputs})
     )
-    accepted = state in {
+    events = getattr(run, "events", [])
+    latest = events[-1] if isinstance(events, list) and events else None
+    rejection = getattr(latest, "data", {})
+    preflight_rejected = (
+        state == "blocked"
+        and getattr(latest, "event_type", "")
+        in {"approval.resume_plan_rejected", "approval.resume_proof_missing"}
+        and isinstance(rejection, dict)
+        and rejection.get("execution_started") is False
+    )
+    accepted = not preflight_rejected and state in {
         "queued",
         "pending",
         "planning",

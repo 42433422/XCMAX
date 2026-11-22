@@ -181,6 +181,7 @@ def _bump() -> None:
 
 def _cached(key: tuple[Any, ...], builder: Callable[[], T]) -> T:
     path = db_path().resolve()
+    identity: tuple[str, int | None, int | None]
     try:
         stat = path.stat()
         identity = (str(path), stat.st_dev, stat.st_ino)

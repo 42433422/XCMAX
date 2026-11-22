@@ -30,5 +30,7 @@ def test_legacy_delete_customer_without_bound_scope_cannot_delete_any_tenant(del
         )
     result = json.loads(raw)
     assert result["success"] is False
-    assert result["deleted_count"] == 0
+    assert result["error_code"] == "tool_contract_unavailable"
+    assert result["execution_status"] == "not_started"
+    assert result["retryable"] is False
     assert snapshot(full) == before

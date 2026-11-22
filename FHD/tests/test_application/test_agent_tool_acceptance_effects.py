@@ -169,6 +169,110 @@ def _approved_write(orchestrator, actor, operation, payload, *, task_id, idempot
     )
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        "missing_receipt",
+        "changed_fingerprint",
+        "other_id",
+        "other_tenant",
+        "changed_row",
+        "revoked_read",
+        "forged_verified",
+    ],
+)
+def test_business_write_readback_requires_original_receipt_and_current_scoped_row(
+    business, local_tools, change
+):
+    import copy
+    from unittest.mock import MagicMock
+
+    from app.application.agent_orchestrator.result_verification import (
+        bind_execution_receipt,
+        verify_step_result,
+    )
+    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.application.agent_orchestrator.tool_permission import idempotency_scope_key
+
+    actor, other, repo, factory = business
+    payload = {"customer_name": "readback-proof", "contact_phone": "100"}
+    orchestrator = AgentOrchestrator(repository=repo)
+    done = _approved_write(orchestrator, actor, "create", payload, task_id="proof")
+    assert done.status == "completed", done.error
+    step, call = done.steps[0], done.tool_calls[0]
+    original = copy.deepcopy(call.output)
+    context = {
+        **done.metadata["runtime_context"],
+        "run_id": done.run_id,
+        "step_id": step.step_id,
+        **task_execution_context(done, step),
+    }
+    if change == "forged_verified":
+        executor = MagicMock()
+        executor.execute_with_deadline.return_value = original
+        replay = _approved_write(
+            AgentOrchestrator(repository=repo, tool_executor=executor),
+            actor,
+            "create",
+            payload,
+            task_id="forged-new-invocation",
+        )
+        assert replay.status == "blocked"
+        assert replay.tool_calls[0].output["business_verification"]["verified"] is True
+        assert replay.tool_calls[0].metadata["verification"]["code"] == "result_receipt_unavailable"
+        assert len(_rows(factory, actor.tenant_id)) == 1
+        return
+    if change in {"missing_receipt", "changed_fingerprint"}:
+        key = idempotency_scope_key(context, step.tool_id, step.action, step.params)
+        with sqlite3.connect(os.environ["XCAGI_TOOL_IDEMPOTENCY_PATH"]) as db:
+            if change == "missing_receipt":
+                db.execute("delete from tool_idempotency where scope_key = ?", (key,))
+            else:
+                db.execute(
+                    "update tool_idempotency set fingerprint = 'different' where scope_key = ?",
+                    (key,),
+                )
+    elif change == "other_id":
+        call.output["id"] = 987654
+        call.output["data"]["id"] = 987654
+        step.output = copy.deepcopy(call.output)
+        bind_execution_receipt(call)
+    elif change == "revoked_read":
+        from app.db.models.permission import Role
+
+        with factory.begin() as db:
+            role = db.query(Role).filter_by(name="tenant-a").one()
+            role.permissions = [
+                permission for permission in role.permissions if permission.code != "customer.view"
+            ]
+    else:
+        with factory.begin() as db:
+            db.connection().exec_driver_sql(
+                "update purchase_units set tenant_id = ? where unit_name = ?"
+                if change == "other_tenant"
+                else "update purchase_units set contact_phone = ? where unit_name = ?",
+                (
+                    other.tenant_id if change == "other_tenant" else "changed",
+                    payload["customer_name"],
+                ),
+            )
+    report = verify_step_result(run=done, step=step, call=call, context=context)
+    assert report["accepted"] is False
+    assert (
+        report["code"]
+        == {
+            "missing_receipt": "result_receipt_unavailable",
+            "changed_fingerprint": "result_receipt_mismatch",
+            "other_id": "result_receipt_mismatch",
+            "other_tenant": "result_business_state_mismatch",
+            "changed_row": "result_business_state_mismatch",
+            "revoked_read": "result_read_permission_unavailable",
+        }[change]
+    )
+    if change != "other_id":
+        assert call.output == original
+
+
 def test_cross_tenant_rows_tools_and_concurrent_codes_stay_isolated(business, local_tools):
     actor, other, repo, factory = business
     orchestrator = AgentOrchestrator(repository=repo)

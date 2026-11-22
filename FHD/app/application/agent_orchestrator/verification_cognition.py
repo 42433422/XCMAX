@@ -90,8 +90,84 @@ def normalize_tool_execution_result(step, output: dict, context: dict) -> dict:
     return (
         output
         if verified_plan_admission(step, output, context)
+        or _original_employee_delegation(step, output, context)
         else normalize_execution_result(output)
     )
+
+
+def _original_employee_delegation(step, output: dict, context: dict) -> bool:
+    """Keep a known admin child wait only after reading its original host binding."""
+    from app.application.agent_orchestrator.run_audit_scope import (
+        attach_child_result,
+        project_child_results,
+    )
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.domain.task_lifecycle.results import (
+        execution_result_envelopes,
+        execution_result_outcome_unknown,
+        execution_result_pending_state,
+    )
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+    waiting = {"queued", "planning", "running", "retrying", "pending", "accepted"}
+    if (
+        (step.tool_id, step.action) != ("employee", "execute")
+        or context.get("source") != "admin_employee_execute"
+        or execution_result_pending_state(output) not in waiting
+        or execution_result_outcome_unknown(output)
+        or any(row.get("error") for row in execution_result_envelopes(output))
+    ):
+        return False
+    child_ids = {
+        str(row["agent_run_id"])
+        for row in execution_result_envelopes(output)
+        if row.get("agent_run_id")
+    }
+    if len(child_ids) != 1:
+        return False
+    try:
+        _bound_actor(context)
+        repository = get_agent_run_repository()
+        if not isinstance(repository, SQLAlchemyAgentRunRepository):
+            return False
+        parent = repository.get(str(context.get("run_id") or ""))
+        child = repository.get(next(iter(child_ids)))
+        expected = (
+            str(context.get("user_id") or ""),
+            str(context.get("tenant_id") or ""),
+            str(
+                (context.get("_mod_authorization") or {}).get("mod_id")
+                or context.get("mod_id")
+                or ""
+            ),
+        )
+        if (
+            parent is None
+            or child is None
+            or parent.run_id == child.run_id
+            or _result_scope(parent) != expected
+            or not parent.metadata.get("admin_employee_key")
+            or (parent.metadata.get("task_context") or {}).get("task_id") != context.get("task_id")
+            or len(parent.steps) != 1
+            or len(parent.tool_calls) != 1
+            or (parent.steps[0].tool_id, parent.steps[0].action) != ("employee", "execute")
+            or parent.steps[0].params != step.params
+            or parent.tool_calls[0].params != step.params
+            or parent.tool_calls[0].step_id != parent.steps[0].step_id
+            or step.params.get("employee_id") != parent.metadata.get("admin_employee_id")
+            or (child.metadata.get("runtime_context") or {}).get("parent_run_id") != parent.run_id
+            or (child.metadata.get("runtime_context") or {}).get("parent_task_id")
+            != context.get("task_id")
+            or (child.metadata.get("runtime_context") or {}).get("employee_id")
+            != parent.metadata.get("admin_employee_id")
+            or not attach_child_result(parent, child)
+        ):
+            return False
+        observed = project_child_results(parent, repository.get).get(child.run_id) or {}
+        return observed.get("execution_state") in waiting
+    except (PermissionError,) + RECOVERABLE_ERRORS:
+        return False
 
 
 @contextmanager

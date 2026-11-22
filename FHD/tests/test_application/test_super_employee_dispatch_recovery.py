@@ -221,28 +221,38 @@ def test_readback_keeps_partial_fleet_unknown_after_known_task_completes(tmp_pat
     assert receipt["dispatch"]["pending_device_id"] == "device-1"
     assert receipt["dispatch"]["devices"][0]["subtask_id"] == "sub-1"
     assert "待核对" in receipt["assistant_message"]["body"]
-    assert requests[before:] == [("GET", "para.test", "/api/tasks/task-original")]
+    observed = requests[before:]
+    assert len(observed) == 2
+    assert observed[0][:2] == ("GET", "para.test")
+    assert observed[0][2].startswith("/api/tasks/by-request/")
+    assert observed[1] == ("GET", "para.test", "/api/tasks/task-original")
     assert len(effects) == 2
     assert Path(first["dispatch"]["outbox_path"]).read_text() == original
 
 
-def test_readback_without_ack_keeps_original_unknown_without_querying(tmp_path, monkeypatch):
+def test_readback_without_ack_queries_only_original_request_and_keeps_unknown(
+    tmp_path, monkeypatch
+):
     def submit(request):
         raise httpx.ReadTimeout("first acknowledgement lost", request=request)
 
     create, requests = _service(tmp_path, monkeypatch, submit)
-    create().invoke(
+    first = create().invoke(
         user_id=7,
         message="修复登录问题",
         context={"request_id": "lost-readback", "mode": "code"},
     )
     before = len(requests)
+    original = Path(first["dispatch"]["outbox_path"]).read_bytes()
     service = create()
     receipt = service.read_dispatch_receipt(user_id=7, request_id="lost-readback", task_id="")
     assert receipt["dispatch"]["reconciliation_required"] is True
     assert receipt["dispatch"]["status"] == "dispatch_unknown"
     assert not receipt["dispatch"].get("task_id")
-    assert len(requests) == before
+    assert len(requests) == before + 1
+    assert requests[-1][:2] == ("GET", "para.test")
+    assert requests[-1][2].startswith("/api/tasks/by-request/")
+    assert Path(first["dispatch"]["outbox_path"]).read_bytes() == original
 
 
 def test_readback_after_endpoint_change_never_queries_new_target(tmp_path, monkeypatch):

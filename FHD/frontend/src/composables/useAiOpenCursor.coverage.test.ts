@@ -510,7 +510,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
           selector: '#upload-target', files: [{ name: 'private.txt', url: artifactPath }],
         } }) })
         const readback = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'read-after-upload', action: 'snapshot', params: {} }) })
-        await vi.runAllTimersAsync(); await Promise.all([uploadWork, readback])
+        await vi.advanceTimersByTimeAsync(49)
+        expect(fetchFile).toHaveBeenCalledTimes(1)
+        const signal = fetchFile.mock.calls[0][1].signal as AbortSignal
+        expect(signal.aborted).toBe(false)
+        expect(socket.send).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(1)
+        expect(signal.aborted).toBe(true)
+        await Promise.all([uploadWork, readback])
         const replies = socket.send.mock.calls.map(call => JSON.parse(call[0] as string))
         expect(replies.map(reply => reply.id)).toEqual(['hanging-upload', 'read-after-upload'])
         expect(replies[0].result).toMatchObject({ success: false, code: 'COMMAND_CANCELLED' })
@@ -545,7 +552,7 @@ describe('useAiOpenCursor - coverage ramp', () => {
         expect(await runCommand('read-after-expiry', 'snapshot', {})).toMatchObject({ success: true })
       })
 
-      it.each(['-1', 'null', '"1000"', '"invalid"', '{}', '[]', 'true', '1e309'])(
+      it.each(['0', '-0', '-1', 'null', '"1000"', '"invalid"', '{}', '[]', 'true', '1e309', '-1e309'])(
         'rejects invalid wire timeout %s before transfer or input changes', async timeout => {
           const socket = lastWs()!
           const payload = JSON.stringify({ type: 'command', id: 'invalid-timeout', action: 'upload', params: {

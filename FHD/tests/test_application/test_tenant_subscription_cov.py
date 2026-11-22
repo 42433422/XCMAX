@@ -6,7 +6,7 @@ subscription_status_for_user, apply_paid_plan_to_tenant, and apply_paid_plan_for
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +19,7 @@ from app.application.tenant_subscription_app_service import (
     subscription_status_for_user,
     sync_tenant_display_name,
 )
+from app.utils.time import utc_now_naive
 
 # ---------------------------------------------------------------------------
 # _slug_code
@@ -300,7 +301,7 @@ def test_subscription_status_paid_plan():
 
 
 def test_subscription_status_paid_trial_expires():
-    past = datetime.utcnow() - timedelta(seconds=1)
+    past = utc_now_naive() - timedelta(seconds=1)
     tenant = MagicMock(id=5, plan_id="saas-trial-30", trial_expires_at=past)
     user = MagicMock(id=1, role="user", username="alice", tenant_id=5)
     db = MagicMock()
@@ -317,7 +318,7 @@ def test_subscription_status_paid_trial_expires():
 
 
 def test_subscription_status_active_trial():
-    future = datetime.utcnow() + timedelta(days=10)
+    future = utc_now_naive() + timedelta(days=10)
     tenant = MagicMock(id=5, plan_id=None, trial_expires_at=future)
     user = MagicMock(id=1, role="user", username="alice", tenant_id=5)
     db = MagicMock()
@@ -337,7 +338,7 @@ def test_subscription_status_active_trial():
 
 
 def test_subscription_status_trial_expired():
-    past = datetime.utcnow() - timedelta(days=1)
+    past = utc_now_naive() - timedelta(days=1)
     tenant = MagicMock(id=5, plan_id=None, trial_expires_at=past)
     user = MagicMock(id=1, role="user", username="alice", tenant_id=5)
     db = MagicMock()

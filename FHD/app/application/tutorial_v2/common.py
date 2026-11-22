@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 from typing import Any
 
+from app.utils.time import utc_now_naive
+
 SALES_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"
 ACTIVE_RUN_STATUSES = {"active", "paused"}
 SAFE_HINTS = {
@@ -29,7 +31,7 @@ SAFE_HINTS = {
 
 
 def utcnow() -> datetime:
-    return datetime.utcnow()
+    return utc_now_naive()
 
 
 def json_dump(value: Any) -> str:

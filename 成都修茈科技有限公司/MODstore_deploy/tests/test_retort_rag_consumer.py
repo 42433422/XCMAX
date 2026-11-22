@@ -388,21 +388,54 @@ async def test_rollout_without_training_policy_still_rechecks_source_grants(rag_
 
 @pytest.mark.asyncio
 async def test_rag_stop_loss_counts_accounts_not_repeated_answers(rag_experiment):
+    from growthbook import Experiment, GrowthBook
+
     from modstore_server.retort_workflow_metrics import execution_queries, execution_stop_loss
 
     run = rag_experiment
-    start(run)
+    # Four random accounts need not contain two treatment assignments. Prepare
+    # enough real authorized accounts using the pinned SDK before approving traffic.
     subjects = []
-    for subject in run["users"]:
+    with get_session_factory()() as db:
+        index = 0
+        while len(subjects) < 2:
+            if index == len(run["users"]):
+                user = User(username=uuid4().hex, password_hash="test-only")
+                db.add(user)
+                db.flush()
+                run["users"].append(user.id)
+                run["spec"]["lifecycle"]["cohort_user_ids"].append(user.id)
+                db.add(
+                    KnowledgeMembership(
+                        collection_id=run["rag"]["collection"],
+                        grantee_kind="user",
+                        grantee_id=str(user.id),
+                        permission="read",
+                    )
+                )
+            subject = run["users"][index]
+            sdk = GrowthBook(attributes={"id": str(subject)})
+            try:
+                key = f"xcagi-retort-{run['id']}"
+                result = sdk.run(Experiment(key=key, seed=key, hashVersion=2, variations=[0, 1]))
+                if result.variationId == 1:
+                    subjects.append(subject)
+            finally:
+                sdk.destroy()
+            index += 1
+            assert index < 10000
+        db.commit()
+    run["spec"] = lifecycle.freeze_experiment_policy(run["spec"])
+    reapprove(run)
+    start(run)
+    for subject in subjects:
         _, assignment = runtime.select_variant(
             surface=SURFACE,
             resource_id=RESOURCE,
             subject_id=subject,
             default_value=rag_service.RAG_SYSTEM_PROMPT,
         )
-        if assignment and assignment["variation_id"] == "1":
-            subjects.append(subject)
-    assert len(subjects) >= 2
+        assert assignment and assignment["variation_id"] == "1"
     for _ in range(3):
         await run["rag"]["call"](subjects[0])
     with get_session_factory()() as db:

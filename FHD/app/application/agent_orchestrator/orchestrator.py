@@ -1386,17 +1386,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 stopped_for_interaction = True
                 return {"success": True, "requires_confirmation": True}
             original_params = copy.deepcopy(step.params)
-            if (
-                step.status == "waiting_user"
-                and isinstance(step.output, dict)
-                and isinstance(step.output.get("resume_params"), dict)
-                and approved in {step.step_id, step.node_id}
-            ):
-                # 用户确认后重跑暂停步骤时带上工具要求的续跑参数（如「仅写入正确行」）。
-                step.params.update(
-                    {str(key): value for key, value in step.output["resume_params"].items()}
-                )
-                step.output.pop("resume_params", None)
             if refuse_unresolved_step(run, step, outputs):
                 stopped_for_interaction = True
                 return dict(
@@ -1491,13 +1480,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     step.node_id,
                 } and not approval_scope_matches(run, step):
                     step.status = run.status = "waiting_user"
-                    step.output = {
-                        "success": False,
-                        "error_code": "approval_scope_changed",
-                        "retryable": False,
-                        "message": "审批后的身份范围、参数或工具契约已变化，请重新审批",
-                    }
-                    run.error = step.error = step.output["message"]
+                    run.error = step.error = "审批后的身份范围、参数或工具契约已变化，请重新审批"
+                    if not any(
+                        call.step_id == step.step_id and call.output.get("success") is True
+                        for call in run.tool_calls
+                    ):
+                        step.output = {
+                            "success": False,
+                            "error_code": "approval_scope_changed",
+                            "retryable": False,
+                            "message": run.error,
+                        }
                     (run.metadata.get("dispatch") or {}).pop("approved_step_id", None)
                     run.add_event("approval.scope_changed", run.error, {"step_id": step.step_id})
                     self._repo.save(run)
@@ -1538,6 +1531,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     # 后续依赖步骤保持未执行，避免把守卫当成「异常」。
                     step.status = "waiting_user"
                     run.status = "waiting_user"
+                    from app.application.agent_orchestrator.result_verification import (
+                        latest_step_call,
+                        preview_continuation_params,
+                    )
+
+                    receipt = latest_step_call(run, step)
+                    proposed = preview_continuation_params(run, step, receipt) if receipt else None
+                    if proposed is not None:
+                        step.params = proposed
+                        if not sync_step_plan(step, "已核实预演续跑参数，请用户确认当前提案"):
+                            return {"success": False, "error_code": "plan_node_binding_invalid"}
                     run.final_output = {
                         "clarification": {
                             "step_id": step.step_id,

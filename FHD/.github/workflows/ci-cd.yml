@@ -819,7 +819,7 @@ jobs:
   vitest:
     name: Vitest (173 文件 · jsdom)
     needs: frontend-test
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require the verified frontend result
@@ -830,7 +830,7 @@ jobs:
 
   frontend-smoke:
     needs: frontend-test
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require the verified frontend result
@@ -1356,7 +1356,7 @@ jobs:
     # Keep the existing branch-protection context tied to actual work on PRs.
     name: docker-build-fhd-api
     needs: [backend-test, docker-build-fhd-api-pr, docker-build-fhd-api]
-    if: always() && github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true'
+    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     permissions: {}
     steps:

@@ -1,5 +1,6 @@
 """Admin employee admission reuses canonical SQL task/run identity across requests."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from threading import Barrier, Event
@@ -43,6 +44,10 @@ def admin_employee(monkeypatch, trusted_actor):
     monkeypatch.setattr(run_ledger, "get_db", database)
     monkeypatch.setattr(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False),
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
         lambda: SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False),
     )
     state = SimpleNamespace(output={"success": True, "summary": "stored effect"}, error=False)
@@ -127,7 +132,10 @@ def test_concurrent_admin_requests_execute_once_and_reopen_original_receipt(
             "/employees/clerk/runs", params={"idempotency_key": "stable-request"}
         ).json()
     assert replay == read
-    assert read["execution_state"] == "completed" and read["success"] is True
+    # The local adapter wrote once, but its self-reported summary is not an
+    # independent business readback. Keep the exact original effect unreplayed.
+    assert read["execution_state"] == "unknown" and read["success"] is False
+    assert read["requires_reconciliation"] is True and read["retryable"] is False
     assert isinstance(read["employee_run_id"], int)
     assert read["agent_run_id"] == responses[0].json()["run_id"]
     original = entry.repository.get(read["run_id"])
@@ -282,7 +290,9 @@ def test_admin_first_admission_requires_registered_execution_permission(
         )
         assert receipt.status_code == (200 if can_execute else 404), receipt.text
         if can_execute:
-            assert response.json()["success"] is True
+            assert response.json()["execution_state"] == "unknown"
+            assert response.json()["success"] is False
+            assert response.json()["requires_reconciliation"] is True
             assert response.json()["run_id"] == receipt.json()["run_id"]
         else:
             _assert_permission_denial(response.json())
@@ -390,7 +400,10 @@ def test_admin_pending_receipt_is_not_reexecuted_or_completed(admin_employee, st
         ).json()
     assert not first["success"] and not repeated["success"] and not read["success"]
     assert first["run_id"] == repeated["run_id"] == read["run_id"]
-    assert read["execution_state"] == state, read
+    expected = "unknown" if state in {"queued", "blocked"} else state
+    assert read["execution_state"] == expected, read
+    if expected == "unknown":
+        assert read["requires_reconciliation"] is True and read["retryable"] is False
     assert entry.invocation.call_count == 1
     run = entry.repository.get(first["run_id"])
     assert run.tool_calls[0].status == "running" and not run.tool_calls[0].finished_at
@@ -461,33 +474,82 @@ def test_admin_read_is_owner_tenant_mod_scoped_and_runtime_input_is_untrusted(
         "missing",
         "foreign_parent",
         "foreign_mod",
+        "foreign_task",
+        "foreign_employee",
+        "missing_parent_call",
         "manual",
         "interrupted",
         "extra_effect",
         "other_child",
         "cas_lost",
+        "unverified",
+        "changed_business",
+        "unknown_io",
     ],
 )
 def test_admin_reads_current_exact_child_receipt_without_reexecution(
-    admin_employee, outcome, monkeypatch
+    admin_employee, outcome, monkeypatch, tmp_path, local_tools
 ):
-    from app.application.agent_orchestrator import AgentRun
+    from app.application.agent_orchestrator import AgentOrchestrator, AgentRun
     from app.application.agent_orchestrator.task_context import apply_task_context
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import tenant_scope
 
     entry = admin_employee
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "child-claims.sqlite"))
+    monkeypatch.setattr("app.db.SessionLocal", entry.factory)
+    monkeypatch.setattr("app.application.customer_app_service.get_customers_session", entry.factory)
+    monkeypatch.setattr(
+        "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", lambda: False
+    )
+    service = AgentOrchestrator(repository=entry.repository)
 
     def delegate(employee_id, task, payload, **kwargs):
         context = dict(kwargs["runtime_context"])
-        child = AgentRun(user_id="17", message="delegated original", status="running")
-        context.update(parent_run_id=context["run_id"], task_id="child-task")
-        child.metadata["runtime_context"] = context
-        apply_task_context(child, context)
-        entry.repository.save(child)
+        context.update(
+            parent_run_id=context["run_id"],
+            parent_task_id=context["task_id"],
+            task_id="child-task",
+        )
+        # This is a business child, not a conversational checkpoint. Its signed
+        # actor and original parent/task links retain authentication and lineage.
+        for key in ("run_id", "agent_run_id", "conversation_id", "session_id"):
+            context.pop(key, None)
+        child = service.start_run_from_plan(
+            user_id="17",
+            message="delegated original",
+            plan=PlanGraph(
+                plan_id="original-customer-child",
+                intent="customers_create",
+                nodes=[
+                    WorkflowNode(
+                        node_id="create",
+                        tool_id="customers",
+                        action="create",
+                        params={"unit_name": "original delegated customer"},
+                        risk="high",
+                        idempotent=False,
+                    )
+                ],
+            ),
+            runtime_context=context,
+            auto_execute=False,
+        )
+        assert child.status == "running"
+        if outcome == "missing_parent_call":
+            with entry.factory.begin() as db:
+                row = db.get(AgentRunRecord, context["parent_run_id"])
+                damaged = json.loads(row.payload_json)
+                damaged["tool_calls"] = []
+                row.payload_json = json.dumps(damaged)
         return {
             "success": True,
             "summary": "accepted",
             "execution_state": "queued",
             "agent_run_id": child.run_id,
+            **({"reconciliation_required": True} if outcome == "unknown_io" else {}),
         }
 
     entry.invocation.side_effect = delegate
@@ -499,15 +561,40 @@ def test_admin_reads_current_exact_child_receipt_without_reexecution(
             with entry.factory.begin() as db:
                 db.query(AgentRunRecord).filter_by(run_id=child.run_id).delete()
         else:
-            child.status = "failed" if outcome == "failed" else "completed"
-            child.final_output = {
-                "response": "original child result",
-                "success": outcome != "failed",
-            }
+            if outcome in {"failed", "unverified"}:
+                child.status = "failed" if outcome == "failed" else "completed"
+                child.final_output = {
+                    "success": outcome != "failed",
+                    "response": "original child envelope without independent proof",
+                }
+            else:
+                context = child.metadata["runtime_context"]
+                service._execute_with_durable_lease(child, runtime_context=context)
+                assert child.status == "waiting_user", child.to_dict()
+                child = service.continue_run(
+                    child.run_id,
+                    approved_by="17",
+                    approved_step_id="create",
+                    runtime_context=context,
+                )
+                assert child.status == "completed", child.to_dict()
+                assert child.tool_calls[-1].metadata["verification"]["accepted"] is True
+                with tenant_scope(7), entry.factory() as db:
+                    rows = db.query(PurchaseUnit).filter_by(tenant_id=7).all()
+                    assert [(row.unit_name, row.tenant_id) for row in rows] == [
+                        ("original delegated customer", 7)
+                    ]
+                if outcome == "changed_business":
+                    with tenant_scope(7), entry.factory.begin() as db:
+                        db.query(PurchaseUnit).filter_by(tenant_id=7).delete()
             if outcome == "foreign_parent":
                 child.metadata["runtime_context"]["parent_run_id"] = "unrelated"
             if outcome == "foreign_mod":
                 child.metadata["runtime_context"]["mod_id"] = "unrelated"
+            if outcome == "foreign_task":
+                child.metadata["runtime_context"]["parent_task_id"] = "unrelated"
+            if outcome == "foreign_employee":
+                child.metadata["runtime_context"]["employee_id"] = "unrelated"
             entry.repository.save(child)
         if outcome in {"manual", "interrupted", "extra_effect", "other_child"}:
             parent = entry.repository.get(first["run_id"])
@@ -622,7 +709,12 @@ def test_admin_first_claimed_success_requires_original_child_evidence(admin_empl
             message="original child",
             status="running" if child_state == "running" else "completed",
         )
-        context.update(parent_run_id=context["run_id"], task_id="initial-child-task")
+        context.update(
+            parent_run_id=context["run_id"],
+            parent_task_id=context["task_id"],
+            task_id="initial-child-task",
+            employee_id=employee_id,
+        )
         child.metadata["runtime_context"] = context
         apply_task_context(child, context)
         if child_state == "unknown":

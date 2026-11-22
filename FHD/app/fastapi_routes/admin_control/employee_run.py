@@ -247,7 +247,9 @@ def _refresh_receipt(service: AgentOrchestrator, run: AgentRun) -> AgentRun:
     if child_id:
         from app.application.agent_orchestrator.run_audit_scope import project_child_results
 
-        child = project_child_results(run, service.get_run).get(child_id)
+        child = project_child_results(run, service.get_run, require_verified_completion=True).get(
+            child_id
+        )
         # A child cannot settle an unrelated/open parent effect. The wrapper itself
         # is non-retryable by design; manual recovery and interruption evidence stay.
         complete_delegation = (
@@ -474,13 +476,18 @@ def execute_admitted_employee(
             and attach_child_result(run, child)
         ):
             result.update(success=False, execution_state="unknown", requires_reconciliation=True)
-        elif state not in {"unknown", "failed", "cancelled", "rejected"}:
+        elif not execution_result_outcome_unknown(result) and _payload_status(
+            result.get("data", result)
+        ) not in {"failed", "cancelled", "rejected"}:
             # Even the first response must read the exact child: a claimed success
             # cannot complete a missing, foreign, waiting or uncertain child.
-            projected = project_child_results(run, service.get_run).get(child_id) or {
-                "execution_state": "unknown"
-            }
+            projected = project_child_results(
+                run, service.get_run, require_verified_completion=True
+            ).get(child_id) or {"execution_state": "unknown"}
             result = _delegated_result(result, child_id, projected)
+    elif result.get("result_valid") is True and result.get("independent_verified") is False:
+        # A valid local envelope is not independent evidence of a business effect.
+        result.update(success=False, execution_state="unknown", requires_reconciliation=True)
     state = execution_result_pending_state(result) or _payload_status(result)
     _settle_receipt(run, result)
     run.add_event("employee.receipt", "原员工调用回执已返回", {"execution_state": state})

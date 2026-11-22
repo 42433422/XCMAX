@@ -16,15 +16,22 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def deletion(trusted_actor, monkeypatch):
+def deletion(trusted_actor, monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "customer-idempotency.sqlite"))
     weak = trusted_actor(
         tenant_id=7, role="customers-only", permissions=["customer.edit", "tool.customers.delete"]
     )
     full = trusted_actor(
         tenant_id=7,
         role="cascade-owner",
-        permissions=["customer.edit", "product.edit", "shipment.edit", "tool.customers.delete"],
+        permissions=[
+            "customer.edit",
+            "customer.view",
+            "product.edit",
+            "shipment.edit",
+            "tool.customers.delete",
+        ],
     )
     monkeypatch.setattr("app.application.customer_app_service.get_customers_session", full.factory)
     monkeypatch.setattr(
@@ -284,6 +291,98 @@ def test_delete_tool_contract_requires_customer_edit_without_lowering_approval()
         assert spec.permission == "customer.edit"
         assert spec.risk == "high"
         assert spec.idempotent is False
+
+
+@pytest.mark.parametrize(
+    "change,code",
+    [
+        ("missing_receipt", "result_receipt_unavailable"),
+        ("changed_fingerprint", "result_receipt_mismatch"),
+        ("changed_output", "result_receipt_mismatch"),
+        ("restored_row", "result_business_state_mismatch"),
+        ("revoked_read", "result_read_permission_unavailable"),
+    ],
+)
+def test_direct_customer_delete_recheck_requires_original_claim_and_absent_rows(
+    deletion, monkeypatch, local_tools, change, code
+):
+    import os
+    import sqlite3
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+    from app.application.agent_orchestrator.result_verification import (
+        bind_execution_receipt,
+        verify_step_result,
+    )
+    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.application.agent_orchestrator.tool_permission import idempotency_scope_key
+    from app.db.models.permission import Role
+    from app.fastapi_routes.domains.customer.customer_routes import router
+
+    _, actor, _ = deletion
+    with tenant_scope(7), actor.factory.begin() as db:
+        db.add(PurchaseUnit(id=4, tenant_id=7, unit_name="Second empty customer"))
+    repository = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.post(
+            "/customers/batch-delete", json={"ids": [3, 4]}, headers=actor.headers
+        )
+    assert response.status_code == 200, response.text
+    run = repository.get(response.json()["run_id"])
+    issue_approval_grant(run, principal_id=str(actor.user_id))
+    with tenant_scope(7):
+        done = AgentOrchestrator(repository=repository).continue_run(
+            run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
+        )
+    assert done.status == "completed", done.error
+    step, call = done.steps[0], done.tool_calls[0]
+    original = copy.deepcopy(call.output)
+    context = {
+        **done.metadata["runtime_context"],
+        "run_id": done.run_id,
+        "step_id": step.step_id,
+        **task_execution_context(done, step),
+    }
+    if change in {"missing_receipt", "changed_fingerprint"}:
+        key = idempotency_scope_key(context, step.tool_id, step.action, step.params)
+        with sqlite3.connect(os.environ["XCAGI_TOOL_IDEMPOTENCY_PATH"]) as db:
+            if change == "missing_receipt":
+                db.execute("delete from tool_idempotency where scope_key = ?", (key,))
+            else:
+                db.execute(
+                    "update tool_idempotency set fingerprint = 'foreign' where scope_key = ?",
+                    (key,),
+                )
+    elif change == "changed_output":
+        call.output["message"] = "A different invocation claimed success"
+        step.output = copy.deepcopy(call.output)
+        bind_execution_receipt(call)
+    elif change == "restored_row":
+        with tenant_scope(7), actor.factory.begin() as db:
+            db.add(PurchaseUnit(id=4, tenant_id=7, unit_name="Restored after deletion"))
+    else:
+        with actor.factory.begin() as db:
+            role = db.query(Role).filter_by(name="cascade-owner").one()
+            role.permissions = [
+                permission for permission in role.permissions if permission.code != "customer.view"
+            ]
+    before = snapshot(actor)
+    report = verify_step_result(run=done, step=step, call=call, context=context)
+    assert report["accepted"] is False
+    assert report["code"] == code
+    assert snapshot(actor) == before
+    if change != "changed_output":
+        assert call.output == original
 
 
 @pytest.mark.parametrize("mixed", [False, True])

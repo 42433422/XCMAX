@@ -60,6 +60,7 @@ class CanonicalEmployeeBackend:
         )
 
     def execute(self, work: EmployeeWork, run_id: int) -> JsonObject:
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
         from app.application.agent_orchestrator.run_models import AgentStep
         from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
         from app.application.agent_orchestrator.tool_spec import (
@@ -67,6 +68,8 @@ class CanonicalEmployeeBackend:
             get_tool_action_spec,
         )
         from app.application.employee_runtime.executor import execute_employee_task_local
+
+        from .employee_run import _scope
 
         class LocalInvocation:
             def execute(self, _step: AgentStep, *, runtime_context: JsonObject) -> JsonObject:
@@ -83,12 +86,25 @@ class CanonicalEmployeeBackend:
         spec = get_tool_action_spec("employee", "execute")
         return execute_with_tool_deadline(
             LocalInvocation(),
-            AgentStep(node_id=str(run_id), tool_id="employee", action="execute"),
+            AgentStep(
+                node_id=str(run_id),
+                tool_id="employee",
+                action="execute",
+                params={
+                    "employee_id": work.employee_id,
+                    "task": work.task,
+                    "input_sha256": canonical_hash(
+                        {k: v for k, v in work.payload.items() if k not in {"session_id", "run_id"}}
+                    ),
+                    "authorization": _scope(work.runtime_context),
+                },
+            ),
             runtime_context={
                 **work.runtime_context,
                 "tenant_id": work.tenant_id,
                 "user_id": work.user_id,
                 "session_id": work.session_id,
+                "employee_id": work.employee_id,
             },
             timeout_seconds=spec.timeout_seconds if spec else DEFAULT_TIMEOUT_SECONDS,
         )

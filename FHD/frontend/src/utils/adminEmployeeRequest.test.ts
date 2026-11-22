@@ -8,6 +8,10 @@ const config = vi.hoisted(() => ({ base: 'http://original.test' }))
 vi.mock('@/utils/apiBase', () => ({ getApiBase: () => config.base }))
 const body = { task: 'write once', input_data: { value: 1 } }
 const completed = (key: string) => ({ success: true, execution_state: 'completed', idempotency_key: key, run_id: 'original-run', data: { summary: 'confirmed' } })
+// Recorded key from the pre-v2 canonical identity for this owner, employee and body.
+const legacyStorageKey = 'xcagi_admin_employee_request:f4c3cdf89e6f0480328d0ccff8901ab894b9faf835ff2990d82744247f7a7401'
+const legacyRequest = { key: 'original-request', server: 'http://original.test',
+  ownerScope: '{"localUserId":17,"tenantId":7}', employeeId: 'clerk', runId: 'original-run' }
 
 beforeEach(() => {
   localStorage.clear()
@@ -47,7 +51,11 @@ describe('admin employee request ownership', () => {
     const post = vi.fn().mockRejectedValue(new Error('lost'))
     const get = vi.fn().mockRejectedValue(new Error('offline'))
     const first = await executeAdminEmployee('clerk', body, { post, get })
-    expect(JSON.stringify(localStorage)).not.toContain('write once')
+    const persisted = JSON.stringify(localStorage)
+    for (const plain of ['write once', 'clerk', 'localUserId', 'tenantId', 'http://original.test']) expect(persisted).not.toContain(plain)
+    expect(JSON.parse(localStorage.getItem(localStorage.key(0)!)!)).toMatchObject({ version: 2,
+      ownerDigest: expect.stringMatching(/^[a-f0-9]{64}$/), employeeDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      serverDigest: expect.stringMatching(/^[a-f0-9]{64}$/) })
     config.base = 'http://new.test'
     const result = await executeAdminEmployee('clerk', body, { post, get })
     expect(result.idempotency_key).toBe(first.idempotency_key)
@@ -65,6 +73,71 @@ describe('admin employee request ownership', () => {
     get.mockResolvedValue({ ...completed(String(original.idempotency_key)), execution_state: '' })
     expect((await executeAdminEmployee('clerk', body, { post, get })).execution_state).toBe('unknown')
     expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['invoke', 'reload'])('migrates the original plaintext record on %s without another POST', async mode => {
+    localStorage.setItem(legacyStorageKey, JSON.stringify(legacyRequest))
+    const post = vi.fn(), get = vi.fn().mockResolvedValue({ ...completed(legacyRequest.key), execution_state: 'queued' })
+    const result = mode === 'invoke'
+      ? await executeAdminEmployee('clerk', body, { post, get })
+      : (await readPendingAdminEmployeeReceipts('clerk', { post, get }))[0]
+    expect(result).toMatchObject({ execution_state: 'queued', idempotency_key: legacyRequest.key, run_id: legacyRequest.runId })
+    const migrated = localStorage.getItem(legacyStorageKey)!
+    expect(JSON.parse(migrated)).toMatchObject({ version: 2, key: legacyRequest.key, runId: legacyRequest.runId })
+    expect(migrated).not.toContain('clerk'); expect(migrated).not.toContain('localUserId')
+    expect(migrated).not.toContain('http://original.test')
+    expect(get).toHaveBeenCalledWith('/api/xcmax/local/employees/clerk/runs?idempotency_key=original-request')
+    expect(await readPendingAdminEmployeeReceipts('another-employee', { post, get })).toEqual([])
+    get.mockResolvedValue(completed(legacyRequest.key))
+    expect((await executeAdminEmployee('clerk', body, { post, get })).execution_state).toBe('completed')
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.getItem(legacyStorageKey)).toBeNull()
+  })
+
+  it('preserves a legacy conflict instead of dispatching or reading a different request', async () => {
+    localStorage.setItem(legacyStorageKey, JSON.stringify({ ...legacyRequest, conflicted: true }))
+    const post = vi.fn(), get = vi.fn()
+    await expect(executeAdminEmployee('clerk', body, { post, get })).rejects.toMatchObject({ status: 409 })
+    expect(JSON.parse(localStorage.getItem(legacyStorageKey)!)).toMatchObject({ version: 2, conflicted: true })
+    expect(await readPendingAdminEmployeeReceipts('clerk', { post, get })).toEqual([])
+    expect(post).not.toHaveBeenCalled(); expect(get).not.toHaveBeenCalled()
+  })
+
+  it('keeps the legacy server binding through migration and recovers only on the original server', async () => {
+    localStorage.setItem(legacyStorageKey, JSON.stringify(legacyRequest))
+    config.base = 'http://other.test'
+    const post = vi.fn(), get = vi.fn().mockResolvedValue(completed(legacyRequest.key))
+    expect((await executeAdminEmployee('clerk', body, { post, get })).execution_state).toBe('unknown')
+    expect(get).not.toHaveBeenCalled(); expect(post).not.toHaveBeenCalled()
+    config.base = legacyRequest.server
+    expect((await readPendingAdminEmployeeReceipts('clerk', { post, get }))[0].execution_state).toBe('completed')
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it.each([{ ownerScope: '' }, { ownerScope: '{"localUserId":18,"tenantId":7}' },
+    { employeeId: 'different-employee' }, { server: '' }, { key: '' }, { runId: {} }, { version: 3 }])(
+    'retains malformed or foreign legacy identity and refuses replay: %j', async changed => {
+      const original = JSON.stringify({ ...legacyRequest, ...changed })
+      localStorage.setItem(legacyStorageKey, original)
+      const post = vi.fn(), get = vi.fn()
+      await expect(executeAdminEmployee('clerk', body, { post, get })).rejects.toThrow('原员工请求身份缺失')
+      expect(await readPendingAdminEmployeeReceipts('clerk', { post, get })).toEqual([])
+      expect(localStorage.getItem(legacyStorageKey)).toBe(original)
+      expect(post).not.toHaveBeenCalled(); expect(get).not.toHaveBeenCalled()
+    },
+  )
+
+  it('retains the old request if durable migration fails and never reposts it', async () => {
+    const original = JSON.stringify(legacyRequest)
+    localStorage.setItem(legacyStorageKey, original)
+    const post = vi.fn(), get = vi.fn()
+    const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage denied') })
+    try {
+      await expect(executeAdminEmployee('clerk', body, { post, get })).rejects.toThrow('storage denied')
+      expect(await readPendingAdminEmployeeReceipts('clerk', { post, get })).toEqual([])
+      expect(localStorage.getItem(legacyStorageKey)).toBe(original)
+      expect(post).not.toHaveBeenCalled(); expect(get).not.toHaveBeenCalled()
+    } finally { storage.mockRestore() }
   })
 
   it.each(['queued', 'running', 'retrying', 'waiting_approval', 'waiting_input', 'waiting_auth', 'paused', 'blocked', 'unknown'])('keeps %s pending without a second POST', async (state) => {

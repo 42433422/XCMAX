@@ -55,13 +55,32 @@ class ToolActionSpecV2:
     contract_samples: list[dict[str, Any]] = field(default_factory=list)
     version: str = "2"
     read_only: bool = False
+    read_only_if_unset: list[str] = field(default_factory=list)
     owner_mod_id: str = ""
+
+    def is_read_only_call(self, params: dict[str, Any]) -> bool:
+        """Resolve host-declared effects from the validated call, before dispatch."""
+        if self.read_only:
+            return True
+        return (
+            bool(self.read_only_if_unset)
+            and _validate_schema_payload(self.input_schema, params, subject="工具参数")[0]
+            and all(
+                params.get(key) is None or params.get(key) == "" for key in self.read_only_if_unset
+            )
+        )
 
     @property
     def receipt_permission(self) -> str:
         """Keep action-level audit identity without changing the real RBAC gate."""
-        if self.tool_id == "document_template" or (
-            self.tool_id == "materials" and self.permission == "material.edit"
+        if (
+            self.tool_id == "document_template"
+            or (self.tool_id == "materials" and self.permission == "material.edit")
+            or (
+                self.tool_id in {"shipment_records", "shipment_orders"}
+                and self.permission == "shipment.edit"
+                and self.action != "clear"
+            )
         ):
             return f"tool.{self.tool_id}.{self.action}"
         return self.permission
@@ -86,6 +105,7 @@ class ToolActionSpecV2:
             "idempotent": self.idempotent,
             "version": self.version,
             "read_only": self.read_only,
+            "read_only_if_unset": list(self.read_only_if_unset),
             "owner_mod_id": self.owner_mod_id,
             "required_params": self.required_params,
             "availability": self.availability,
@@ -351,6 +371,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 (str(tool_id), normalized_action),
                 _default_fixture(str(tool_id), normalized_action, input_schema, output_schema),
             )
+            conditional_reads = action_meta.get("read_only_if_unset")
             spec = ToolActionSpecV2(
                 tool_id=str(tool_id),
                 action=normalized_action,
@@ -358,7 +379,10 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 input_schema=deepcopy(input_schema),
                 output_schema=deepcopy(output_schema),
                 risk=risk,
-                permission=_special_permission(str(tool_id), normalized_action),
+                permission=str(
+                    action_meta.get("permission")
+                    or _special_permission(str(tool_id), normalized_action)
+                ),
                 cost_units=_cost_units(str(tool_id), normalized_action, risk),
                 timeout_seconds=int(action_meta.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                 retry=dict(action_meta.get("retry") or DEFAULT_RETRY),
@@ -369,6 +393,12 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                         str(tool_id) == "dataset_rag"
                         and normalized_action in DATASET_RAG_READ_ACTIONS
                     )
+                ),
+                read_only_if_unset=(
+                    list(conditional_reads)
+                    if isinstance(conditional_reads, list)
+                    and all(isinstance(key, str) and key for key in conditional_reads)
+                    else []
                 ),
                 required_params=required_params,
                 availability=str(

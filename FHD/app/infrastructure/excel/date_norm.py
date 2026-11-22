@@ -42,13 +42,16 @@ def _resolve_year(raw: str | None, default_year: int | None) -> int | None:
 def _year_from_text(text: str, *, month: int, match_start: int) -> int | None:
     """区间文本（12月27-26年1月23）只在末尾写年份，起始月要回退一年。"""
     tokens = [
-        (token.start(), _resolve_year(token.group(1), None)) for token in _YEAR_TOKEN.finditer(text)
+        (token.start(), year)
+        for token in _YEAR_TOKEN.finditer(text)
+        if (year := _resolve_year(token.group(1), None)) is not None
     ]
-    tokens = [(position, year) for position, year in tokens if year is not None]
     if not tokens:
         return None
     year = tokens[0][1]
-    return None if year is None else year - (1 if month >= 7 and match_start < tokens[0][0] else 0)
+    if month >= 7 and match_start < tokens[0][0]:
+        year -= 1
+    return year
 
 
 def _serial_datetime(value: float) -> datetime | None:

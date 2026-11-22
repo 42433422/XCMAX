@@ -173,7 +173,7 @@ def native_model(state, monkeypatch, *, stream=False, meter="reported"):
     return response
 
 
-def end_native_work(state, monkeypatch):
+def end_native_work(state, monkeypatch, *, reconciled=True):
     if state.remote_kind == "workspace":
         state.github.phase("completed")
         workspace_tests.original_terminal(state)
@@ -182,8 +182,13 @@ def end_native_work(state, monkeypatch):
         state.github.phase("completed")
         state.github.publish(receipt)
         report_tests.download_transport(state, monkeypatch)
-    assert remote_receipts.reconcile_request(state.request_id)
+    original = remote.read_request(state.request_id)
+    submissions = list(state.github.writes)
+    assert remote_receipts.reconcile_request(state.request_id) is reconciled
     assert not remote_receipts.reconcile_request(state.request_id)
+    assert state.github.writes == submissions
+    if not reconciled:
+        assert remote.read_request(state.request_id) == original
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -274,13 +279,16 @@ def test_unknown_usage_survives_expiry_native_terminal_and_life_reconciliation(
     state = life_remote
     claim_remote(state)
     native_model(state, monkeypatch, meter="absent")
-    call = next(iter(saved_task(state)["calls"].values()))
+    before = saved_task(state)
+    call = next(iter(before["calls"].values()))
     assert call["status"] == "unknown" and "actual_tokens" not in call
     later = portfolio._date(state.life_claim["deadline"]) + timedelta(seconds=1)
     monkeypatch.setattr(life, "utcnow", lambda: later)
-    end_native_work(state, monkeypatch)
+    end_native_work(state, monkeypatch, reconciled=False)
     saved = saved_task(state)
-    assert saved["status"] == "unknown"
+    # Keep the same execution recoverable while its original usage is unknown.
+    assert saved["status"] == before["status"]
+    assert saved["status"] in {"waiting", "running"}
     assert next(iter(saved["calls"].values())) == call
     assert company_tests.totals(state.company_id)["slots"] == 1
     assert company_tests.totals(state.company_id)["held"]["tokens"] > 0
@@ -389,6 +397,6 @@ async def test_stream_expiry_closes_real_sdk_without_clearing_unknown_usage(
     call = next(iter(saved_task(state)["calls"].values()))
     assert call["status"] == "unknown" and "actual_tokens" not in call
     assert len(seen["requests"]) == 1
-    end_native_work(state, monkeypatch)
+    end_native_work(state, monkeypatch, reconciled=False)
     assert reconciliation.reconcile_usage()["resolved"] == 0
     assert life.read_state()["budget"]["reserved_tokens"] == 200000

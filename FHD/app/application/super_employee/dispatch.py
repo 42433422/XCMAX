@@ -214,6 +214,86 @@ class EmployeeDispatcher:
             return {}
         return self._resume_dispatch(request, receipt, continue_plan=False)
 
+    def read_original_receipt(self, receipt: dict[str, Any]) -> dict[str, Any] | None:
+        """Read one bound acknowledgement without writing or dispatching work."""
+        api_url = self._remote.api_url()
+        pending_key = receipt.get("pending_request_id")
+        if (
+            receipt.get("dispatcher") != "para_api"
+            or not api_url
+            or api_url != receipt.get("api_url")
+            or not pending_key
+            or receipt.get("status") == "dispatching"
+        ):
+            return None
+        try:
+            with self._remote.client() as client:
+                token = self._remote.token(client, api_url)
+                result = self._remote.request(
+                    client,
+                    api_url,
+                    token,
+                    "GET",
+                    f"/api/tasks/by-request/{quote(str(pending_key), safe='')}",
+                )
+            return self._original_receipt(receipt, result)
+        except RECOVERABLE_ERRORS:
+            return None
+
+    def _original_receipt(
+        self, receipt: dict[str, Any], result: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        task, subtask, original = (result.get(key) for key in ("task", "subtask", "request"))
+        task_id = receipt.get("task_id")
+        pending_key = receipt.get("pending_request_id")
+        plan = receipt.get("plan")
+        dispatched = list(receipt.get("devices") or [])
+        if (
+            not isinstance(task, dict)
+            or not isinstance(subtask, dict)
+            or not isinstance(original, dict)
+            or original.get("client_request_id") != pending_key
+            or original.get("payload_sha256") != receipt.get("pending_payload_sha256")
+            or not task.get("id")
+            or not subtask.get("id")
+            or subtask.get("task_id") != task["id"]
+            or subtask.get("device_id") != receipt.get("pending_device_id")
+            or (task_id and task_id != task["id"])
+            or not isinstance(plan, list)
+            or _digest(plan) != receipt.get("plan_sha256")
+            or len(dispatched) >= len(plan)
+            or plan[len(dispatched)]["client_request_id"] != pending_key
+        ):
+            return None
+        item = plan[len(dispatched)]
+        dispatched.append(
+            {
+                "device_id": subtask["device_id"],
+                "device_name": item["device_name"],
+                "subtask_id": subtask["id"],
+                "tool": self._p.tool_name,
+            }
+        )
+        receipt = dict(receipt)
+        receipt.update(
+            task_id=task["id"],
+            task_status=str(task.get("status") or ""),
+            devices=dispatched,
+            response={"task": task, "dispatched": dispatched},
+            reconciliation_required=False,
+        )
+        for key in (
+            "pending_request_id",
+            "pending_payload_sha256",
+            "pending_device_id",
+        ):
+            receipt.pop(key, None)
+        receipt.update(
+            status=("accepted" if len(dispatched) == len(plan) else "dispatch_pending"),
+            accepted=len(dispatched) == len(plan),
+        )
+        return receipt
+
     def _resume_dispatch(
         self,
         request: dict[str, Any],
@@ -267,56 +347,12 @@ class EmployeeDispatcher:
                         "GET",
                         f"/api/tasks/by-request/{quote(str(pending_key), safe='')}",
                     )
-                    task, subtask, original = (
-                        result.get(key) for key in ("task", "subtask", "request")
-                    )
-                    plan = receipt.get("plan")
-                    dispatched = list(receipt.get("devices") or [])
-                    if (
-                        not isinstance(task, dict)
-                        or not isinstance(subtask, dict)
-                        or not isinstance(original, dict)
-                        or original.get("client_request_id") != pending_key
-                        or original.get("payload_sha256") != receipt.get("pending_payload_sha256")
-                        or not task.get("id")
-                        or not subtask.get("id")
-                        or subtask.get("task_id") != task["id"]
-                        or subtask.get("device_id") != receipt.get("pending_device_id")
-                        or (task_id and task_id != task["id"])
-                        or not isinstance(plan, list)
-                        or _digest(plan) != receipt.get("plan_sha256")
-                        or len(dispatched) >= len(plan)
-                        or plan[len(dispatched)]["client_request_id"] != pending_key
-                    ):
+                    recovered = self._original_receipt(receipt, result)
+                    if recovered is None:
                         return self._unknown_dispatch(
                             request, "para original request receipt mismatch"
                         )
-                    item = plan[len(dispatched)]
-                    dispatched.append(
-                        {
-                            "device_id": subtask["device_id"],
-                            "device_name": item["device_name"],
-                            "subtask_id": subtask["id"],
-                            "tool": self._p.tool_name,
-                        }
-                    )
-                    receipt.update(
-                        task_id=task["id"],
-                        task_status=str(task.get("status") or ""),
-                        devices=dispatched,
-                        response={"task": task, "dispatched": dispatched},
-                        reconciliation_required=False,
-                    )
-                    for key in (
-                        "pending_request_id",
-                        "pending_payload_sha256",
-                        "pending_device_id",
-                    ):
-                        receipt.pop(key, None)
-                    receipt.update(
-                        status=("accepted" if len(dispatched) == len(plan) else "dispatch_pending"),
-                        accepted=len(dispatched) == len(plan),
-                    )
+                    receipt = recovered
                     self._persist_receipt(request, receipt)
                     if not receipt["accepted"] and continue_plan:
                         return self.create_para_task(

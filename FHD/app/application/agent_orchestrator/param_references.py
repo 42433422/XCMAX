@@ -81,7 +81,8 @@ def host_reference_params(
     """
     if (tool_id, action) != ("employee", "execute"):
         return params, []
-    nested = params.get("input") if isinstance(params.get("input"), dict) else {}
+    input_params = params.get("input")
+    nested = input_params if isinstance(input_params, dict) else {}
     if nested.get("continuity_action", params.get("continuity_action")) != "chain":
         return params, []
     location = ("input", "steps") if "steps" in nested else ("steps",)
@@ -91,9 +92,9 @@ def host_reference_params(
     from copy import deepcopy
 
     host = deepcopy(params)
-    current = host
-    for key in location:
-        current = current[key]
+    host_steps = host["input"]["steps"] if len(location) == 2 else host["steps"]
+    if not isinstance(host_steps, list):
+        return params, []
     allowed: set[str] = set()
     deferred = []
     for index, step in enumerate(steps):
@@ -104,7 +105,7 @@ def host_reference_params(
             return params, []
         allowed.add(identity)
         deferred.append(((*location, index, "params"), deepcopy(step["params"])))
-        current[index]["params"] = {}
+        host_steps[index]["params"] = {}
     return host, deferred
 
 

@@ -46,12 +46,9 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "shipment_orders",
         "document_template",
         "purchase",
-        # 表格读取会在任务快照阶段查询上传记录并按租户校验归属，
-        # 后台/持久化运行必须从 runtime_context 恢复租户上下文。
+        # Upload reads and imports restore the original tenant in background runs.
         "excel_analysis",
-        # 导入会按当前租户写入客户/产品/订单，同样需要恢复租户。
         "import_excel_to_database",
-        # ELT 预演与执行同样按租户查询上传并写入目标库。
         "elt_import",
         "finance",
         "employee",
@@ -517,11 +514,8 @@ class AgentToolExecutor:
         result: Any = None
         idem_key = ""
         try:
-            # Durable/background Agent runs execute outside the originating HTTP
-            # request. Restore the authenticated integer tenant recorded in
-            # runtime_context so repository/raw-SQL boundaries keep their fail-closed
-            # isolation. Dataset/document tools deliberately keep their own opaque
-            # string tenant keys and must not be coerced here.
+            # Restore authenticated SQL tenant scope outside HTTP; dataset tools
+            # retain their opaque tenant keys without integer coercion.
             scope = (
                 owned_tenant_scope(runtime_tenant_id)
                 if ((validation.tool_id, action) in _OWNED_READ_ACTIONS or product_db_read)
@@ -532,6 +526,12 @@ class AgentToolExecutor:
                 agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")),
                 scope if runtime_tenant_id is not None else nullcontext(),
             ):
+                if validation.tool_id == "document_template":
+                    from app.application.template_mutation_receipt import template_execution_denial
+
+                    denied_template = template_execution_denial(step, params["_runtime_context"])
+                    if denied_template is not None:
+                        return denied_template
                 from app.application.agent_orchestrator.tool_permission import (
                     _fingerprint,
                     begin_idempotent_replay,
@@ -563,6 +563,16 @@ class AgentToolExecutor:
                     if idem_key and (validation.tool_id, action) == ("customers", "create")
                     else nullcontext()
                 )
+                if (
+                    idem_key
+                    and validation.tool_id == "document_template"
+                    and action in {"create", "update", "delete"}
+                ):
+                    from app.application.template_mutation_receipt import template_mutation_claim
+
+                    receipt_scope = template_mutation_claim(
+                        idem_key, _fingerprint(params), params["_runtime_context"], action
+                    )
                 try:
                     from app.application.tools.surface_authority import surface_invocation_scope
                     from app.infrastructure.llm.model_admission import model_rate_limit_scope
@@ -713,12 +723,8 @@ class AgentToolExecutor:
             }
             if requires_reconciliation:
                 result.update(outcome="unknown", retryable=False, reconciliation_required=True)
-        # Settle the durable receipt with the same trusted uncertainty as the
-        # outer deadline wrapper. A schema-valid employee "success" cannot erase
-        # a lost HTTP response and leave a successful cached receipt behind.
-        # After entering a mutating handler, failure alone is not proof of no
-        # effect (adapters may have caught an exception after commit). Genuine
-        # pre-dispatch validation/authorization refusals returned before claim.
+        # Retain lost-response uncertainty in the durable receipt. A mutating
+        # handler can fail after commit; pre-dispatch denials returned before claim.
         admitted_child = verified_plan_admission(step, result, dict(runtime_context or {}))
         if invocation_requires_reconciliation() or (
             not admitted_child
@@ -846,10 +852,8 @@ def execute_with_tool_deadline(
             and not invocation.uncertain
             and result.get("reconciliation_required") is True
         ):
-            # A returned receipt can require reconciliation without a timeout.
-            # Keep its durable artifacts and observed evidence visible to the run.
-            # Timely receipts keep their own artifacts/evidence in place.
-            # Nested reconciliation_evidence is reserved for late/unknown-I/O wrapping.
+            # Timely unresolved receipts retain evidence in place; only late or
+            # unknown-I/O receipts use nested reconciliation_evidence.
             return {**result, "success": False, "outcome": "unknown", "retryable": False}
         if (
             completed_in_time
@@ -869,11 +873,11 @@ def execute_with_tool_deadline(
             )
             and not result.get("reconciliation_required")
         ):
-            result = normalize_tool_execution_result(step, result, context)
+            normalized_result = normalize_tool_execution_result(step, result, context)
             if (
                 step.tool_id == "business_db"
                 and step.action == "write"
-                and result.get("success") is True
+                and normalized_result.get("success") is True
                 and isinstance(step.params.get("payload"), dict)
             ):
                 from app.domain.shared_services.tools_workflow_common import (
@@ -884,9 +888,9 @@ def execute_with_tool_deadline(
                     context,
                     str(step.params.get("entity") or ""),
                     str(step.params.get("operation") or "create"),
-                    result,
+                    normalized_result,
                 )
-            return result
+            return normalized_result
     worker_exited = isinstance(result, dict) and result.get("error_code") == "tool_worker_exited"
     return {
         "success": False,

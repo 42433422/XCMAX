@@ -1,6 +1,7 @@
 """Create derived enterprise projections and tenant-owned goal bindings only."""
 
 import sqlalchemy as sa
+from alembic.script import ScriptDirectory
 
 from alembic import op
 
@@ -84,4 +85,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Goal references and evidence are retained for existing task traceability.
-    pass
+    # Validate the existing delivery guards before moving this revision's stamp.
+    context = op.get_context()
+    parent = ScriptDirectory.from_config(context.config).get_revision(down_revision)
+    if parent is None:
+        raise RuntimeError("Enterprise cognition is missing its checkpoint-safety parent")
+    parent.module.downgrade()

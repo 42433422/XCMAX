@@ -8,31 +8,14 @@ from dataclasses import dataclass
 from fastapi import Request
 
 from app.application.workflow.workflow_types import PlanGraph, RiskLevel, WorkflowNode
+from app.domain.task_lifecycle.results import agent_node_output
 from app.middleware.request_id import ensure_request_id
 
 from .port_contracts import AgentRunView, Payload, ProductAgentRuntime
 
 
 def _agent_node_output(run: AgentRunView, node_id: str) -> Payload:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output: Payload = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    run_error = str(getattr(run, "error", False) or "")
-    if not output.get("success") and run_error and not output.get("message"):
-        output["message"] = run_error
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output
+    return agent_node_output(run, node_id)
 
 
 def _products_compat_agent_user_id(request: Request, payload: Payload) -> str:

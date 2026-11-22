@@ -236,8 +236,10 @@ class AIChatWorkflowResponseMixin:
         user_message: str = "",
     ) -> dict[str, Any]:
         from app.domain.task_lifecycle.results import (
+            agent_node_output,
             execution_result_envelopes,
             execution_result_error,
+            execution_result_outcome_unknown,
             execution_result_pending_state,
         )
 
@@ -305,8 +307,16 @@ class AIChatWorkflowResponseMixin:
         }
         pending = execution_result_pending_state(result)
         uncertain = (
-            isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
-        ) or pending == "unknown"
+            (
+                isinstance(recovery, dict)
+                and recovery.get("state") == "manual_reconciliation_required"
+            )
+            or pending == "unknown"
+            or any(
+                execution_result_outcome_unknown(agent_node_output(agent_run, step.node_id))
+                for step in getattr(agent_run, "steps", []) or []
+            )
+        )
         execution_state = "unknown" if uncertain else pending or str(agent_run.status or "unknown")
         if execution_state == "completed" and execution_result_error(result):
             execution_state = "failed"

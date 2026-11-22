@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 
+from app.application.template_mutation_receipt import record_template_mutation
 from app.domain.shared_services.document_templates.renderer import (
     _parse_json_dict,
     _parse_json_list,
@@ -200,6 +201,7 @@ def _create_template_with_payload_inner(payload: dict):
             if fingerprint and not preview_data.get("revision_parent"):
                 reused = _reused_reviewed_template(db, tenant_id, fingerprint)
                 if reused is not None:
+                    record_template_mutation(db, reused["db_id"], "create")
                     return _j(
                         {
                             "success": True,
@@ -241,6 +243,7 @@ def _create_template_with_payload_inner(payload: dict):
                 },
             )
             template_id = result.scalar_one() if is_pg else result.lastrowid
+            record_template_mutation(db, template_id, "create")
             db.commit()
             try:
                 db.execute(
@@ -465,6 +468,7 @@ def _update_template_with_payload_inner(payload: dict):
                 ).bindparams(bindparam("updated_at", type_=DateTime())),
                 {**params, **tenant_bind},
             )
+            record_template_mutation(db, db_id, "update")
             db.commit()
 
             try:

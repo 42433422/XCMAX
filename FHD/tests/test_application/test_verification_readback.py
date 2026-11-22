@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import copy
 import io
+import json
 import zipfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -94,6 +96,64 @@ def verify(case, output=None):
     )
 
 
+def test_customer_export_uses_original_owned_file_and_rejects_changed_receipts(
+    owner, tmp_path, monkeypatch
+):
+    from openpyxl import load_workbook
+
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.customer_app_service import CustomerApplicationService
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    case = invocation(owner, action="export", params={"keyword": "Receipt"})
+    context = {
+        **case.context,
+        "node_id": case.step.node_id,
+        "call_id": case.call.call_id,
+        "input_sha256": canonical_hash(case.step.params),
+    }
+    for tenant, name in (
+        (owner.tenant_id, "Receipt owned customer"),
+        (owner.tenant_id + 1, "Receipt foreign customer"),
+    ):
+        with tenant_scope(tenant), owner.factory.begin() as db:
+            db.add(PurchaseUnit(tenant_id=tenant, unit_name=name))
+    with tenant_scope(owner.tenant_id):
+        output = CustomerApplicationService().export_to_excel(
+            keyword="Receipt", runtime_context=context
+        )
+    assert output["success"] is True
+    path = Path(output["file_path"])
+    book = load_workbook(path, read_only=True)
+    try:
+        rows = list(book.active.iter_rows(values_only=True))
+        assert len(rows) == 2 and rows[1][1] == "Receipt owned customer"
+    finally:
+        book.close()
+
+    def no_export(*_args, **_kwargs):
+        raise AssertionError("readback must not invoke customer export")
+
+    monkeypatch.setattr(CustomerApplicationService, "export_to_excel", no_export)
+    for _ in range(2):
+        assert verify(case, output)["status"] == "verified"
+    for field in (
+        "run_id",
+        "tenant_id",
+        "owner_user_id",
+        "step_id",
+        "node_id",
+        "call_id",
+        "params_sha256",
+    ):
+        forged = copy.deepcopy(output)
+        forged["artifacts"][0]["metadata"].pop(field)
+        assert verify(case, forged)["code"] == "result_artifact_scope_mismatch"
+    content = path.read_bytes()
+    path.write_bytes(content[:-1] + bytes([content[-1] ^ 1]))
+    assert verify(case, output)["code"] == "result_evidence_mismatch"
+
+
 def create_customer(owner, case, *, receipt=True, tenant=None):
     tenant = owner.tenant_id if tenant is None else tenant
     key = idempotency_scope_key(case.context, "customers", "create", case.step.params)
@@ -102,7 +162,9 @@ def create_customer(owner, case, *, receipt=True, tenant=None):
         db.add(row)
         db.flush()
         if receipt:
-            with customer_creation_claim(key, _fingerprint(case.step.params), str(tenant)):
+            with customer_creation_claim(
+                key, _fingerprint(case.step.params, case.context), str(tenant)
+            ):
                 record_customer_creation(db, row)
         return row.id
 
@@ -244,6 +306,128 @@ def test_registered_generation_reads_real_run_owned_file_bytes(owner, kind, empl
     assert evidence["format"] == kind
     assert evidence["run_id"] == case.run.run_id
     assert evidence["verification_scope"] == "artifact_integrity"
+
+
+@pytest.fixture
+def office_output(owner, monkeypatch, tmp_path):
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.tools.workflow_tools.documents import generate_office_document
+    from app.domain.shared_services.kitten_ai_document import pickup
+
+    directory = tmp_path / "pickup"
+    directory.mkdir()
+    monkeypatch.setattr(pickup, "_CACHED_BASE", directory)
+
+    def create(kind="docx", *, native=False):
+        case = invocation(
+            owner,
+            "generate_office_document",
+            "execute",
+            {
+                "user_request": "Produce a sample document",
+                "output_format": kind,
+            },
+        )
+        case.context.update(
+            node_id=case.step.node_id,
+            call_id=case.call.call_id,
+            input_sha256=canonical_hash(case.step.params),
+        )
+        content = _content(kind)
+        generated = []
+
+        def generate(request, output_format):
+            generated.append((request, output_format))
+            return content, f"sample.{kind}"
+
+        if native:
+            from app.infrastructure.mods.mod_manager import import_mod_backend_py
+
+            monkeypatch.setattr(
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
+                generate,
+            )
+            mod_path = Path(__file__).resolve().parents[2] / "mods/tools/xcagi-planner-excel-tools"
+            mod = import_mod_backend_py(str(mod_path), "xcagi-planner-excel-tools", "tool_handlers")
+            output = json.loads(
+                mod.run_native_tool(
+                    "generate_office_document", case.step.params, runtime_context=case.context
+                )
+            )
+            assert output["source"] == "mod:xcagi-planner-excel-tools"
+        else:
+            output = generate_office_document(
+                case.step.params,
+                generate,
+                pickup.store_document_pickup,
+                runtime_context=case.context,
+            )
+        return case, output, content, generated
+
+    return create
+
+
+@pytest.mark.parametrize("kind", ["docx", "xlsx"])
+@pytest.mark.parametrize("native", [False, True], ids=["builtin", "native_mod"])
+def test_office_generation_retains_pickup_and_independent_original_file(
+    office_output, kind, native
+):
+    from app.domain.shared_services.kitten_ai_document.pickup import pop_document_pickup
+
+    case, output, content, generated = office_output(kind, native=native)
+    assert len(output["artifacts"]) == 1
+    artifact = output["artifacts"][0]
+    assert artifact["artifact_type"] == "office_document"
+    assert artifact["uri"].startswith(f"/api/agent/runs/{case.run.run_id}/artifacts/")
+    # Consuming the compatible one-time download does not destroy recovery proof.
+    assert pop_document_pickup(output["pickup_token"])[0] == content
+    assert pop_document_pickup(output["pickup_token"]) is None
+    for _ in range(2):
+        result = verify(case, output)
+        assert result["status"] == "verified", result
+        evidence = result["checks"][0]["evidence"]
+        assert evidence["verification_scope"] == "artifact_integrity"
+        assert evidence["format"] == kind
+        assert evidence["sha256"] == artifact["metadata"]["sha256"]
+    assert len(generated) == 1
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "run_id",
+        "owner_user_id",
+        "tenant_id",
+        "step_id",
+        "node_id",
+        "call_id",
+        "params_sha256",
+    ],
+)
+def test_office_result_requires_every_original_call_binding(office_output, field):
+    case, output, _, _ = office_output()
+    for omitted in (False, True):
+        changed = copy.deepcopy(output)
+        metadata = changed["artifacts"][0]["metadata"]
+        if omitted:
+            metadata.pop(field)
+        else:
+            metadata[field] = "another-execution"
+        assert verify(case, changed)["code"] == "result_artifact_scope_mismatch"
+
+
+@pytest.mark.parametrize("changed", ["bytes", "format", "pickup_only"])
+def test_office_claims_cannot_replace_verified_file_bytes(office_output, changed):
+    case, output, _, _ = office_output()
+    artifact = output["artifacts"][0]
+    if changed == "bytes":
+        artifact_path(case.run.run_id, artifact["artifact_id"]).write_bytes(b"not the document")
+    elif changed == "format":
+        artifact["name"] = "sample.xlsx"
+    else:
+        artifact.pop("artifact_id")
+        artifact["uri"] = output["download_url"]
+    assert verify(case, output)["status"] != "verified"
 
 
 @pytest.mark.parametrize(

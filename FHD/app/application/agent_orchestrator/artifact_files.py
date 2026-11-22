@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import io
 import json
@@ -114,7 +115,7 @@ def _read_artifact(path: Path) -> bytes:
                 parent_fd, filename, directory=False, create=False, for_input=True
             )
         else:
-            descriptor = os.open(  # codeql[py/path-injection]
+            descriptor = os.open(
                 filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd
             )
         with os.fdopen(descriptor, "rb") as stream:
@@ -169,6 +170,35 @@ def store_run_file(
     }
 
 
+def store_scoped_run_file(content: bytes, *, name: str, context: dict[str, Any]) -> dict[str, Any]:
+    """Publish one file with the original authenticated invocation, never tool-supplied scope."""
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+    actor = _bound_actor(context)
+    if any(
+        not isinstance(context.get(field), str) or not context[field]
+        for field in ("run_id", "step_id", "node_id", "call_id", "input_sha256")
+    ):
+        raise PermissionError("file artifact requires the original tool call identity")
+    receipt = store_run_file(
+        context["run_id"],
+        content,
+        name=name,
+        owner_user_id=int(actor.id),
+        tenant_id=str(context["tenant_id"]),
+    )
+    receipt["metadata"].update(
+        run_id=context["run_id"],
+        owner_user_id=str(actor.id),
+        tenant_id=str(context["tenant_id"]),
+        step_id=context["step_id"],
+        node_id=context["node_id"],
+        call_id=context["call_id"],
+        params_sha256=context["input_sha256"],
+    )
+    return receipt
+
+
 store_spreadsheet = store_run_file
 
 
@@ -197,3 +227,107 @@ read_verified_spreadsheet = read_verified_run_file
 def verified_spreadsheet_path(run_id: str, artifact: dict[str, Any]) -> Path:
     read_verified_run_file(run_id, artifact)
     return artifact_path(run_id, artifact["artifact_id"])
+
+
+def inspect_run_file_structure(content: bytes, suffix: str) -> dict[str, Any]:
+    if suffix in {".xlsx", ".xlsm", ".docx", ".pptx"}:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            members = archive.infolist()
+            if len(members) > 5000 or sum(item.file_size for item in members) > 64 * 1024 * 1024:
+                raise ValueError("office artifact exceeds verification budget")
+            try:
+                for item in members:
+                    if item.filename.endswith((".xml", ".rels")):
+                        fromstring(archive.read(item))
+            except DefusedXmlException as exc:
+                raise ValueError("unsafe office XML") from exc
+    if suffix in {".xlsx", ".xlsm"}:
+        from openpyxl import load_workbook
+        from openpyxl.utils.exceptions import InvalidFileException
+
+        try:
+            workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=False)
+        except InvalidFileException as exc:
+            raise ValueError("invalid spreadsheet artifact") from exc
+        try:
+            populated = any(
+                any(value is not None for value in row)
+                for sheet in workbook
+                for row in sheet.iter_rows(min_row=1, max_row=200, max_col=200, values_only=True)
+            )
+            if not workbook.sheetnames or not populated:
+                raise ValueError("spreadsheet has no inspectable content")
+            return {"format": suffix[1:], "sheets": len(workbook.sheetnames)}
+        finally:
+            workbook.close()
+    if suffix == ".csv":
+        text = content.decode("utf-8-sig")
+        if "\x00" in text:
+            raise ValueError("binary CSV content")
+        rows = sum(1 for row in csv.reader(io.StringIO(text), strict=True) if any(row))
+        if not rows:
+            raise ValueError("empty CSV artifact")
+        return {"format": "csv", "rows": rows}
+    if suffix == ".docx":
+        from docx import Document
+
+        document = Document(io.BytesIO(content))
+        if not any(p.text.strip() for p in document.paragraphs) and not document.tables:
+            raise ValueError("empty document artifact")
+        return {
+            "format": "docx",
+            "paragraphs": len(document.paragraphs),
+            "tables": len(document.tables),
+        }
+    if suffix == ".pptx":
+        from pptx import Presentation
+
+        slides = len(Presentation(io.BytesIO(content)).slides)
+        if not slides:
+            raise ValueError("empty presentation artifact")
+        return {"format": "pptx", "slides": slides}
+    if suffix == ".pdf":
+        from pypdf import PdfReader
+        from pypdf.errors import PdfReadError
+
+        try:
+            reader = PdfReader(io.BytesIO(content), strict=True)
+            if reader.is_encrypted or not len(reader.pages):
+                raise ValueError("unreadable PDF artifact")
+            return {"format": "pdf", "pages": len(reader.pages)}
+        except PdfReadError as exc:
+            raise ValueError("invalid PDF artifact") from exc
+    raise ValueError("unsupported artifact format")
+
+
+def compare_run_file_table(rows: Any, content: bytes, suffix: str) -> dict[str, Any]:
+    """Compare explicit approved tabular input with the independently parsed file."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+    if not isinstance(rows, list) or suffix not in {".xlsx", ".xlsm", ".csv"}:
+        return {}
+    if len(rows) > 50_000 or any(not isinstance(row, dict) or len(row) > 200 for row in rows):
+        raise RuntimeError("table comparison exceeds verification budget")
+    import pandas as pd
+
+    expected = pd.DataFrame(rows)
+    expected = expected.astype(object).where(pd.notna(expected), "")
+    if suffix == ".csv":
+        actual = pd.read_csv(io.BytesIO(content), dtype=object, keep_default_na=False)
+        expected = expected.astype(str)
+    else:
+        actual = pd.read_excel(
+            io.BytesIO(content),
+            dtype=object,
+            keep_default_na=False,
+            engine_kwargs={"data_only": False},
+        )
+    try:
+        pd.testing.assert_frame_equal(actual, expected, check_dtype=False, check_exact=True)
+    except AssertionError as exc:
+        raise ValueError("artifact differs from the approved table rows") from exc
+    return {
+        "input_rows_match": True,
+        "input_rows_sha256": canonical_hash(rows),
+        "row_count": len(rows),
+    }

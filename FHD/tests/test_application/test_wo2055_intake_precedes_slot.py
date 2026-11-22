@@ -216,10 +216,14 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
         assert run.status == "blocked"
         assert result["success"] is False
     else:
-        assert "WO-fixed-path" in text
+        assert output["data"]["work_order_id"] == "WO-fixed-path"
         assert output["data"]["owner_ticket_no"] == "CI-fixed-path"
-        assert run.status == "completed"
-        assert result["success"] is True
+        # The fake transport receipt cannot independently prove market-side persistence.
+        assert run.status == "blocked"
+        assert run.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
+        assert result["success"] is False
+        assert result["execution_state"] == "unknown"
+        assert result["requires_reconciliation"] is True
 
 
 @pytest.mark.parametrize(
@@ -268,3 +272,96 @@ def test_approval_freeze_is_idempotent_detached_and_elevates_all_required_nodes(
     original.nodes[1].depends_on.clear()
     assert frozen.nodes[0].params == {"nested": {"value": 1}}
     assert frozen.nodes[1].depends_on == ["first"]
+
+
+@pytest.mark.parametrize("verdict", ["verified", "failed", "inconclusive"])
+def test_chat_projection_preserves_host_verification_and_original_receipt(verdict):
+    import copy
+
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    accepted = verdict == "verified"
+    step = AgentStep(
+        node_id="write",
+        tool_id="products",
+        action="create",
+        status="completed" if accepted else "failed",
+        output={"success": True, "verified": True, "data": {"id": 7}},
+    )
+    call = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        tool_id=step.tool_id,
+        action=step.action,
+        status="completed",
+        output=copy.deepcopy(step.output),
+        metadata={
+            "verification_contract": {"kind": "business_state"},
+            "verification": {"accepted": accepted, "status": verdict},
+        },
+    )
+    run = AgentRun(
+        user_id="owner",
+        message="write once",
+        status="completed" if accepted else "blocked",
+        steps=[step],
+        tool_calls=[call],
+    )
+    plan = PlanGraph(
+        "verified-projection", "product_create", nodes=[WorkflowNode("write", "products", "create")]
+    )
+    before = copy.deepcopy(run.to_dict())
+    for _ in range(2):
+        result = AIChatWorkflowResponseMixin()._format_agent_run_response(plan, run)
+        assert result["success"] is accepted
+        if accepted:
+            assert result["execution_state"] == "completed"
+            assert not result.get("requires_reconciliation")
+        else:
+            assert result["execution_state"] == "unknown"
+            assert result["requires_reconciliation"] is True
+            assert result["retryable"] is False
+            assert result["execution"]["effect"] == "unknown"
+            assert result["execution"]["outcome"] == "unknown"
+        assert run.to_dict() == before
+
+
+@pytest.mark.parametrize("approval", [False, True])
+def test_chat_projection_keeps_preexecution_refusal_and_approval_without_effect(approval):
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    run = AgentRun(
+        user_id="owner",
+        message="write only after approval",
+        status="waiting_user" if approval else "blocked",
+        steps=[
+            AgentStep(
+                node_id="write",
+                tool_id="products",
+                action="create",
+                status="waiting_user" if approval else "failed",
+                output={
+                    "success": False,
+                    "execution_started": False,
+                    "pending_approval": approval,
+                    "message": "approval required" if approval else "permission denied",
+                },
+            )
+        ],
+    )
+    plan = PlanGraph(
+        "unexecuted-projection",
+        "product_create",
+        nodes=[WorkflowNode("write", "products", "create")],
+    )
+    result = AIChatWorkflowResponseMixin()._format_agent_run_response(plan, run)
+    assert result["success"] is False
+    assert result["execution_state"] == ("waiting_approval" if approval else "blocked")
+    assert result["execution"]["effect"] == "none"
+    assert result["execution"]["outcome"] == "not_executed"
+    assert not result.get("requires_reconciliation")
+    assert run.tool_calls == []

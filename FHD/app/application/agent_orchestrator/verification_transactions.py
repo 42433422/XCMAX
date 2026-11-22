@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
+from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
 from app.application.agent_orchestrator.verification_readback import _report
 from app.db.models import (
     InventoryTransaction,
@@ -653,7 +654,9 @@ def _purchase_inbound(db, tenant, step, data, before):
     }
 
 
-def verify_purchase_result(step, call, output, context):
+def verify_purchase_result(
+    step: AgentStep, call: ToolCall, output: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
     before = (call.metadata.get("verification_contract") or {}).get("authority_baseline") or {}
     if before.get("status") != "observed":
         return _report("inconclusive", "purchase_baseline_unavailable", "purchase_sql")

@@ -50,7 +50,12 @@ def _registered_router_customers(
     if action == "export":
         keyword = str(params.get("keyword") or unit_name or "").strip() or None
         return dict(
-            svc.export_to_excel(keyword=keyword, template_id=params.get("template_id")) or {}
+            svc.export_to_excel(
+                keyword=keyword,
+                template_id=params.get("template_id"),
+                **({"runtime_context": runtime_context} if runtime_context.get("run_id") else {}),
+            )
+            or {}
         )
     if action == "query":
         if "id" in params or "customer_id" in params:

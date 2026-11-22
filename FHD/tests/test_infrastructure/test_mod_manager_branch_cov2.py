@@ -416,7 +416,7 @@ class TestRefreshModsRootIfNeeded:
             "app.infrastructure.mods.mod_manager._default_mods_root", return_value=str(tmp_path)
         ):
             mm = ModManager()
-        with patch.dict("os.environ", {"XCAGI_MODS_ROOT": "/nonexistent/path"}):
+        with patch.dict("os.environ", {"XCAGI_MODS_ROOT": str(tmp_path / "missing-mods")}):
             mm._refresh_mods_root_if_needed()
             assert mm.mods_root == str(tmp_path)
 
@@ -525,12 +525,13 @@ class TestAllModsRoots:
             result = _all_mods_roots(str(tmp_path))
             assert str(tmp_path) in result
 
-    def test_primary_invalid_not_added(self) -> None:
+    def test_primary_invalid_not_added(self, tmp_path: Path) -> None:
         with patch(
             "app.infrastructure.mods.mod_manager._repo_layout_mods_candidates", return_value=[]
         ):
-            result = _all_mods_roots("/nonexistent")
-            assert "/nonexistent" not in result
+            missing = str(tmp_path / "missing-mods")
+            result = _all_mods_roots(missing)
+            assert missing not in result
 
     def test_env_root_added(self, tmp_path: Path) -> None:
         env_dir = tmp_path / "env-mods"

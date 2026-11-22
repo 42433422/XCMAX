@@ -231,6 +231,7 @@ def test_revoke_dispatch_preserves_original_ticket_and_fences_queued_work(client
         manually_owned_id = task_for(ticket_id, actor=f"admin:{admin.id}").id
         active = task_for(ticket_id)
         active.attempt_id, active.para_task_id, active.state = "attempt", "exact-para-id", "running"
+        active.device_id = "original-mac"
         active_id = active.id
         db.get(CustomerServiceTicket, ticket_id).evidence_json = json_dumps(
             {"resolution": {"team": [{"role": "fix", "employee_id": "previous-employee"}]}}
@@ -284,13 +285,51 @@ def test_revoke_dispatch_preserves_original_ticket_and_fences_queued_work(client
     assert prior_receipts[active_id]["state"] == "cancel_requested"
     assert len([a for a in detail["actions"] if a["action_type"] == "ticket.dispatch_revoke"]) == 1
     with get_session_factory()() as db:
+        remote = {
+            "id": "exact-para-id",
+            "title": f"[xcmax:{active_id}:attempt] Original ticket work",
+            "status": "running",
+            "subTasks": [
+                {
+                    "id": "original-subtask",
+                    "device_id": "original-mac",
+                    "tool_name": "codex",
+                    "attempt_count": 0,
+                    "status": "running",
+                }
+            ],
+        }
+        stop_requests = []
 
         class StoppedExecutor:
             def task(self, task_id):
                 assert task_id == "exact-para-id"
-                return {"id": task_id, "status": "cancelled"}
+                return remote
+
+            def cancel_task(self, task_id, target):
+                assert task_id == "exact-para-id"
+                assert target == {
+                    "request_key": f"[xcmax:{active_id}:attempt]",
+                    "subtask_id": "original-subtask",
+                    "device_id": "original-mac",
+                    "attempt": 1,
+                }
+                stop_requests.append(target)
+                remote["status"] = remote["subTasks"][0]["status"] = "cancelled"
+                return remote
 
         reconcile(db, db.get(MacControlTask, active_id), StoppedExecutor())
+        assert db.get(MacControlTask, active_id).state == "cancel_requested"
+        assert db.get(MacControlTask, active_id).reason == "executor_stop_confirmation_required"
+        remote["subTasks"][0]["cancellation"] = {
+            "status": "stopped",
+            "task_id": "exact-para-id",
+            "subtask_id": "original-subtask",
+            "device_id": "original-mac",
+            "attempt": 1,
+        }
+        reconcile(db, db.get(MacControlTask, active_id), StoppedExecutor())
+        assert len(stop_requests) == 1
     refreshed = client.get(path).json()
     assert refreshed["ticket"]["dispatch_revocation"] == receipt
     assert {

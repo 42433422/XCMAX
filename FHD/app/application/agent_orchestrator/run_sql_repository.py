@@ -12,7 +12,8 @@ from typing import cast
 
 from sqlalchemy import JSON, String, Table, and_, case, func, literal, or_
 from sqlalchemy import cast as sql_cast
-from sqlalchemy import text as sql_text
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -256,8 +257,6 @@ def preserve_run_evidence(
                     "planning generation replacement requires the original snapshot CAS"
                 )
             return
-    elif not same_run_generation(run, previous):
-        return
     old = previous.metadata
     if old.get("non_retryable"):
         run.metadata["non_retryable"] = True
@@ -310,6 +309,11 @@ def preserve_run_evidence(
         children[child_id] = receipt
     if children:
         run.metadata["child_results"] = children
+    from app.application.agent_orchestrator.result_verification import (
+        latest_step_call,
+        preview_continuation_params,
+    )
+
     for field, identity in (("steps", "step_id"), ("tool_calls", "call_id")):
         incoming = {getattr(item, identity): item for item in getattr(run, field)}
         combined = {}
@@ -321,6 +325,14 @@ def preserve_run_evidence(
                 and event.data.get("approval_request_id")
                 in (item.output.get("approval") or {}).get("approval_request_ids", [])
                 for event in run.events
+            )
+            preview_call = latest_step_call(previous, item) if field == "steps" else None
+            preview_pause = bool(
+                preview_call is not None
+                and replacement is not None
+                and replacement.status == "waiting_user"
+                and replacement.output == preview_call.output
+                and replacement.params == preview_continuation_params(previous, item, preview_call)
             )
             if replacement is None:
                 replacement = copy.deepcopy(item)
@@ -342,6 +354,7 @@ def preserve_run_evidence(
                     )
                     and replacement.status != item.status
                     and not resolved_approval
+                    and not preview_pause
                 )
             ) and getattr(replacement, "attempt_count", 0) <= getattr(item, "attempt_count", 0):
                 # Keep the executor's step/call object alive: repair and result
@@ -671,13 +684,17 @@ class SQLAlchemyAgentRunRepository:
             preserve_catalog_run_authority,
         )
 
-        preserve_catalog_run_authority(db, run, previous)
+        catalog_fenced = preserve_catalog_run_authority(db, run, previous)
         preserve_run_evidence(
             run,
             previous,
             allow_safe_retry=allow_safe_retry,
             allow_planning_replacement=allow_planning_replacement,
         )
+        if catalog_fenced:
+            # A signed permanent dispatch fence supersedes a previous failure;
+            # the generic terminal-state guard still retains its original receipt.
+            run.status = "cancelled"
         ensure_terminal_business_result(run)
         run_terminal_metrics.record_terminal_transition(run, previous, db)
         run.touch()
@@ -1233,13 +1250,19 @@ class SQLAlchemyAgentRunRepository:
 
     @classmethod
     def _insert_task_record(cls, db: Session, task: AgentTask) -> bool:
+        from app.db.models.agent import AgentTaskRecord
+
         values = cls._task_record_values(task)
-        statement = sql_text(
-            "INSERT INTO agent_tasks (" + ", ".join(values) + ") "
-            "VALUES (" + ", ".join(":" + key for key in values) + ") "
-            "ON CONFLICT(tenant_id, user_id, task_id) DO NOTHING"
+        dialect = db.get_bind().dialect.name
+        if dialect not in {"postgresql", "sqlite"}:
+            raise ValueError(f"Unsupported task repository dialect: {dialect}")
+        insert = postgresql_insert if dialect == "postgresql" else sqlite_insert
+        statement = (
+            insert(AgentTaskRecord)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=["tenant_id", "user_id", "task_id"])
         )
-        return cast(CursorResult, db.execute(statement, values)).rowcount == 1
+        return cast(CursorResult, db.execute(statement)).rowcount == 1
 
     @classmethod
     def _lock_task_record(cls, db: Session, task: AgentTask):

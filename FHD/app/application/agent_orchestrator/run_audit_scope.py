@@ -42,7 +42,12 @@ def attach_child_result(parent: Any, child: Any) -> bool:
     return True
 
 
-def project_child_results(parent: Any, read_run: Callable[[str], Any]) -> dict[str, Any]:
+def project_child_results(
+    parent: Any,
+    read_run: Callable[[str], Any],
+    *,
+    require_verified_completion: bool = False,
+) -> dict[str, Any]:
     """Refresh only already bound children; missing or out-of-scope receipts stay unknown."""
     from app.application.agent_orchestrator.trace_payloads import _payload_status
     from app.domain.task_lifecycle.results import execution_result_pending_state
@@ -73,6 +78,14 @@ def project_child_results(parent: Any, read_run: Callable[[str], Any]) -> dict[s
                 or child_scope is None
                 or parent_scope != child_scope
                 or context.get("parent_run_id") != parent.run_id
+                or (
+                    require_verified_completion
+                    and (
+                        context.get("parent_task_id")
+                        != (parent.metadata.get("task_context") or {}).get("task_id")
+                        or context.get("employee_id") != parent.metadata.get("admin_employee_id")
+                    )
+                )
             ):
                 continue
             outputs = {
@@ -97,6 +110,35 @@ def project_child_results(parent: Any, read_run: Callable[[str], Any]) -> dict[s
                     if waiting is None or waiting.tool_id == "clarify"
                     else "waiting_approval"
                 )
+            if state == "completed" and require_verified_completion:
+                from app.application.agent_orchestrator.result_verification import (
+                    latest_step_call,
+                    summarize_verification,
+                    verify_step_result,
+                )
+                from app.application.agent_orchestrator.task_background import (
+                    task_execution_context,
+                )
+
+                if not summarize_verification(child)["accepted"]:
+                    continue
+                accepted = bool(child.steps)
+                for step in child.steps:
+                    call = latest_step_call(child, step)
+                    observed = {
+                        **(child.metadata.get("runtime_context") or {}),
+                        **task_execution_context(child, step),
+                        "run_id": child.run_id,
+                        "step_id": step.step_id,
+                        "node_id": step.node_id,
+                    }
+                    if call is None or not verify_step_result(
+                        run=child, step=step, call=call, context=observed
+                    ).get("accepted"):
+                        accepted = False
+                        break
+                if not accepted:
+                    continue
             projected[run_id] = {
                 "status": state,
                 "execution_state": state,

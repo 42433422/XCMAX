@@ -74,6 +74,22 @@ def gateway_life(database, monkeypatch, tmp_path):
                 200,
                 json={"object": "list", "data": [{"id": MODEL, "type": "chat"}]},
             )
+        if request.url.path == "/model/info":
+            assert request.method == "GET"
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "model_name": MODEL,
+                            "model_info": {
+                                "max_input_tokens": 128000,
+                                "max_output_tokens": 4096,
+                            },
+                        }
+                    ]
+                },
+            )
         if request.url.path == "/global/spend":
             assert request.method == "GET"
             return httpx.Response(
@@ -101,8 +117,11 @@ def gateway_life(database, monkeypatch, tmp_path):
         body = json.loads(request.content)
         assert body["model"] == MODEL
         observations = json.loads(body["messages"][1]["content"])["observations"]
-        ref = observations[0]["ref"]
-        assert ref.startswith("company:assets:")
+        asset_refs = [
+            item["ref"] for item in observations if item["ref"].startswith("company:assets:")
+        ]
+        assert len(asset_refs) == 1
+        ref = asset_refs[0]
         # Both durable reservations must already exist before outbound HTTP.
         with database() as session:
             pending = session.scalars(

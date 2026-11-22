@@ -83,7 +83,7 @@ def freeze_verification_contract(
         "action": step.action,
         "input_sha256": canonical_hash(call.params),
         "tool_version": str(spec.version) if spec else "",
-        "read_only": bool(spec and spec.read_only),
+        "read_only": bool(spec and spec.is_read_only_call(call.params)),
         "output_schema": copy.deepcopy(spec.output_schema) if spec else {},
     }
     if step.tool_id == "sales":
@@ -120,6 +120,39 @@ def freeze_verification_contract(
         contract["workspace_sha256"] = task_admission_origin({}, workspace_root())[
             "workspace_sha256"
         ]
+    if step.tool_id == "dataset_rag" and step.action in {
+        "ingest_document",
+        "rollback_version",
+        "rebuild_index",
+        "cancel_rebuild",
+    }:
+        from app.application.dataset_rag.document_lifecycle import (
+            agent_ingest_read_repository,
+            capture_agent_rollback,
+        )
+
+        contract["dataset_store_sha256"] = canonical_hash(
+            str(agent_ingest_read_repository().storage_path)
+        )
+        if step.action == "rollback_version":
+            contract["rollback_target"] = capture_agent_rollback(step, context)
+        elif step.action in {"rebuild_index", "cancel_rebuild"}:
+            from app.application.dataset_rag.rebuild_coordinator import capture_agent_rebuild
+
+            contract["rebuild_baseline"] = capture_agent_rebuild(step, context)
+    if step.tool_id == "memory_v2" and step.action in {
+        "propose_candidate",
+        "confirm",
+        "correct",
+        "delete",
+    }:
+        from app.application.memory_v2_facade import capture_memory_baseline
+
+        contract["memory_baseline"] = capture_memory_baseline(step, context)
+    if (step.tool_id, step.action) == ("elt_import", "execute") and step.params.get("run_id"):
+        from app.application.elt.preview_confirmation import capture_agent_execution
+
+        contract["elt_execution_baseline"] = capture_agent_execution(step, context)
     contract["contract_sha256"] = canonical_hash(contract)
     call.metadata["verification_contract"] = contract
     call.metadata["verification"] = {
@@ -305,22 +338,10 @@ def latest_step_call(run: AgentRun, step: AgentStep) -> ToolCall | None:
     return next((call for call in reversed(run.tool_calls) if call.step_id == step.step_id), None)
 
 
-def step_verification_blocked(run: AgentRun, step: AgentStep) -> bool:
-    call = latest_step_call(run, step)
-    if call is None or not call.metadata.get("verification_contract"):
-        from app.application.agent_orchestrator.clarification import control_verification_report
-
-        if control_verification_report(run, step) is not None:
-            return False
-        return bool(
-            step.status == "completed"
-            and any(item.metadata.get("verification_contract") for item in run.tool_calls)
-        )
-    if call.output.get("success") is not True:
-        return False
+def _accepted_report_valid(run: AgentRun, step: AgentStep, call: ToolCall) -> bool:
     report = call.metadata.get("verification") or {}
     try:
-        return not (
+        return bool(
             report.get("status") in ACCEPTED_STATUSES
             and report.get("accepted") is True
             and _binding_valid(
@@ -340,8 +361,63 @@ def step_verification_blocked(run: AgentRun, step: AgentStep) -> bool:
                 {key: value for key, value in report.items() if key != "report_sha256"}
             )
         )
-    except (TypeError, ValueError, OverflowError):
-        return True
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+
+
+def preview_continuation_params(run: AgentRun, step: AgentStep, call: ToolCall) -> dict | None:
+    """A verified, effect-free ELT pause may propose a separately approved preview."""
+    if (call.tool_id, call.action) != ("elt_import", "preview") or call.output.get(
+        "requires_user_decision"
+    ) is not True:
+        return None
+    original = copy.deepcopy(step)
+    original.params, original.output = copy.deepcopy(call.params), copy.deepcopy(call.output)
+    if not _accepted_report_valid(run, original, call):
+        return None
+    report = call.metadata["verification"]
+    changes = call.output.get("resume_params")
+    if (
+        report.get("code") != "result_preview_verified"
+        or report.get("status") != "verified"
+        or not isinstance(changes, dict)
+        or not changes
+        or set(changes) - {"valid_rows_only", "accept_suggested"}
+        or any(value is not True for value in changes.values())
+        or not any(
+            check.get("source") == "elt_preview"
+            and check.get("status") == "passed"
+            and check.get("evidence", {}).get("scope") == "preview_only"
+            and check["evidence"].get("business_effect_verified") is False
+            and check["evidence"].get("resume_params") == changes
+            for check in report.get("checks", [])
+        )
+    ):
+        return None
+    proposed = {**call.params, **changes}
+    return proposed if proposed != call.params else None
+
+
+def step_verification_blocked(run: AgentRun, step: AgentStep) -> bool:
+    call = latest_step_call(run, step)
+    if call is None or not call.metadata.get("verification_contract"):
+        from app.application.agent_orchestrator.clarification import control_verification_report
+
+        if control_verification_report(run, step) is not None:
+            return False
+        return bool(
+            step.status == "completed"
+            and any(item.metadata.get("verification_contract") for item in run.tool_calls)
+        )
+    if call.output.get("success") is not True:
+        return False
+    if _accepted_report_valid(run, step, call):
+        return False
+    return not (
+        step.status in {"waiting_user", "pending"}
+        and step.output == call.output
+        and step.params == preview_continuation_params(run, step, call)
+    )
 
 
 def summarize_verification(run: AgentRun) -> dict[str, Any]:

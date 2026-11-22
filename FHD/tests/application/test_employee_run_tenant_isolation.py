@@ -1,6 +1,8 @@
 """Real SQLite and HTTP ownership checks for employee run history."""
 
+import json
 from contextlib import contextmanager
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -96,9 +98,9 @@ def test_http_run_history_is_scoped_even_for_admin(ledger, monkeypatch):
         ({"success": False, "pending_approval": True}, "awaiting_approval"),
         ({"success": True, "result": {"status": "paused"}}, "paused"),
         ({"success": True, "result": {"needs_user_input": True}}, "waiting_input"),
-        ({"success": True, "result": {"status": "queued"}}, "running"),
-        ({"success": True, "execution_accepted": True}, "running"),
-        ({"success": True, "result": {"status": "blocked"}}, "blocked"),
+        ({"success": True, "result": {"status": "queued"}}, "unknown"),
+        ({"success": True, "execution_accepted": True}, "unknown"),
+        ({"success": True, "result": {"status": "blocked"}}, "unknown"),
         (None, "unknown"),
         ({"success": True, "summary": "done", "outcome": "unknown"}, "unknown"),
         ({"success": True, "summary": "done", "requires_reconciliation": True}, "unknown"),
@@ -132,6 +134,7 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
     monkeypatch.setattr(auth_permission_resolver, "require_allowed", lambda **kwargs: None)
     monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    original_outcome = deepcopy(outcome)
 
     def invoke(*args, **kwargs):
         budget = tool_execution_deadline._DEADLINE.get()
@@ -163,7 +166,10 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
             },
         )
     assert response.status_code == 200
-    assert response.json()["attempts"] == 1
+    receipt = response.json()
+    assert receipt["attempts"] == 1 and receipt["success"] is False
+    assert receipt["verified"] is False and receipt["independent_verified"] is False
+    assert receipt["verification"]["accepted"] is False
     assert execute.call_count == 1
     assert execute.call_args.kwargs["workspace_root"] == str(tmp_path.resolve())
     assert execute.call_args.kwargs["user_id"] == 7
@@ -175,6 +181,22 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
 
     record = ledger.list_employee_run_logs("same", tenant_id=1)[0]
     assert record["status"] == expected and not record["verified"]
+    assert record["attempts"] == 1 and record["result_valid"] is False
+    assert record["validation_scope"] == "execution_envelope"
+    assert ledger.list_employee_run_logs("same", tenant_id=2) == []
+    with ledger.get_db() as db:
+        stored = db.get(EmployeeRunLog, receipt["run_id"])
+        assert (stored.tenant_id, stored.user_id, stored.session_id) == (1, 7, "trusted-session")
+        assert json.loads(stored.output_json) == receipt["data"]
+    assert outcome == original_outcome
+    if isinstance(original_outcome, dict):
+        evidence = receipt["data"].get("reconciliation_evidence", receipt["data"])
+        for key, value in original_outcome.items():
+            if key != "success":
+                assert evidence[key] == value
+    if expected == "unknown":
+        assert receipt["execution_state"] == "unknown"
+        assert receipt["retryable"] is False and receipt["reconciliation_required"] is True
     if expected != "failed":
         assert not record["finished_at"]
     payload = execute.call_args.args[2]

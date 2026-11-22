@@ -158,7 +158,7 @@ def enter_resume(state):
     state.github.jobs[0] = execute
 
 
-def finish_original(state):
+def finish_original(state, *, reconciled=True):
     previous = deepcopy(state.github.jobs)
     state.github.phase("completed")
     for index, job in enumerate(previous):
@@ -168,8 +168,13 @@ def finish_original(state):
             )
         state.github.jobs[index] = job
     original.original_terminal(state)
-    assert remote_receipts.reconcile_request(state.request_id)
+    before = remote.read_request(state.request_id)
+    submissions = list(state.github.writes)
+    assert remote_receipts.reconcile_request(state.request_id) is reconciled
     assert not remote_receipts.reconcile_request(state.request_id)
+    assert state.github.writes == submissions
+    if not reconciled:
+        assert remote.read_request(state.request_id) == before
 
 
 def resume_identity(state):
@@ -322,8 +327,9 @@ def test_long_lease_does_not_renew_unknown_usage_or_return_its_budget(long_remot
     assert short.saved_task(state) == before
     assert original.company_tests.totals(state.company_id)["slots"] == 1
     assert life.claim_cycle(domain="enterprise", reserve_tokens=200000) is None
-    finish_original(state)
-    assert short.saved_task(state)["status"] == "unknown"
+    finish_original(state, reconciled=False)
+    assert short.saved_task(state)["status"] == before["status"]
+    assert before["status"] in {"waiting", "running"}
     assert short.saved_task(state)["calls"] == before["calls"]
     assert reconciliation.reconcile_usage()["resolved"] == 0
     assert life.read_state()["budget"]["reserved_tokens"] == 200000
@@ -464,6 +470,6 @@ async def test_pending_old_call_blocks_resume_and_closure_keeps_unknown_cost(
     await response.close_source()
     assert all(client.is_closed() for client in seen["clients"])
     assert next(iter(short.saved_task(state)["calls"].values()))["status"] == "unknown"
-    finish_original(state)
+    finish_original(state, reconciled=False)
     assert reconciliation.reconcile_usage()["resolved"] == 0
     assert life.read_state()["budget"]["reserved_tokens"] == 200000

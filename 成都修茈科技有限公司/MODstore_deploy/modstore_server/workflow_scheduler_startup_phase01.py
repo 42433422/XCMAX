@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

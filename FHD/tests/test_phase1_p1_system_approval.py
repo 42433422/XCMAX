@@ -182,7 +182,13 @@ def test_tools_execute_empty(system_client: TestClient, path: str) -> None:
     with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
         r = system_client.post(path, json={})
     assert r.status_code == 400, r.text
-    assert r.json() == {"success": False, "message": "未知工具: None"}
+    assert r.json() == {
+        "success": False,
+        "error_code": "tool_contract_unavailable",
+        "message": "工具或动作未登记，未执行",
+        "retryable": False,
+        "execution_status": "not_started",
+    }
     orchestrator.assert_not_called()
 
 

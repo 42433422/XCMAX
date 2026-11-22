@@ -53,7 +53,10 @@ def unchanged_receipt_observation(previous, current) -> dict | None:
 
 
 def preserve_verification_receipts(run: AgentRun, previous: AgentRun) -> None:
-    from app.application.agent_orchestrator.result_verification import PROTOCOL
+    from app.application.agent_orchestrator.result_verification import (
+        PROTOCOL,
+        preview_continuation_params,
+    )
 
     protected = [
         call
@@ -82,7 +85,45 @@ def preserve_verification_receipts(run: AgentRun, previous: AgentRun) -> None:
         if successful and any(
             call.step_id == old.step_id and call.call_id not in prior_ids for call in run.tool_calls
         ):
-            raise ValueError("successful verification receipt cannot be replaced by another call")
+            from app.application.agent_orchestrator.approval_grant import approval_scope_matches
+
+            prior_step = next(
+                (step for step in previous.steps if step.step_id == old.step_id), None
+            )
+            current_step = next((step for step in run.steps if step.step_id == old.step_id), None)
+            proposed = (
+                preview_continuation_params(previous, prior_step, old) if prior_step else None
+            )
+            same_step_calls = [call for call in run.tool_calls if call.step_id == old.step_id]
+            position = next(
+                (i for i, call in enumerate(same_step_calls) if call.call_id == old.call_id), -1
+            )
+            successor = (
+                same_step_calls[position + 1] if 0 <= position < len(same_step_calls) - 1 else None
+            )
+            if not (
+                proposed is not None
+                and successor is not None
+                and (successor.node_id, successor.tool_id, successor.action)
+                == (old.node_id, old.tool_id, old.action)
+                and successor.params == proposed
+                and (
+                    successor.call_id in prior_ids
+                    or (
+                        current_step is not None
+                        and current_step.params == proposed
+                        and approval_scope_matches(run, current_step)
+                        and sum(call.call_id not in prior_ids for call in same_step_calls) == 1
+                        and preview_continuation_params(
+                            run, current_step, incoming.get(old.call_id, old)
+                        )
+                        == proposed
+                    )
+                )
+            ):
+                raise ValueError(
+                    "successful verification receipt cannot be replaced by another call"
+                )
         call = incoming.get(old.call_id)
         if call is None:
             missing.append(copy.deepcopy(old))

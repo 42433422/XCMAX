@@ -72,6 +72,7 @@ def _authenticated_tool_body(request: Request, body: dict[str, Any]) -> dict[str
 
 def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
     from app.domain.task_lifecycle.results import (
+        agent_node_output,
         execution_result_requires_reconciliation,
     )
 
@@ -150,6 +151,14 @@ def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
             output.update(outcome="unknown", retryable=False, reconciliation_required=True)
         if 400 <= raw_http_status <= 599:
             output["http_status_code"] = raw_http_status
+    else:
+        # Only the successful raw receipt reaches this branch. Preserve the
+        # existing rejection/error sanitization above while applying the host's
+        # verification verdict to this public projection.
+        output = agent_node_output(run, node_id)
+        if output.get("success") is False:
+            output.pop("error", None)
+            output.pop("traceback", None)
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -157,6 +166,7 @@ def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
     output["agent_status"] = str(getattr(run, "status", "") or "")
     output.setdefault("data", {})
     if isinstance(output.get("data"), dict):
+        output["data"] = dict(output["data"])
         output["data"].setdefault("agent_run_id", run_id)
         output["data"].setdefault("run_id", run_id)
     return output

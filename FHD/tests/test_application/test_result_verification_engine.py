@@ -298,6 +298,31 @@ def test_verifier_timeout_only_rechecks_original_committed_effect(tmp_path, monk
     assert len(recovered.tool_calls) == 1
 
 
+def test_business_write_cannot_replay_by_claiming_preview_control(tmp_path, monkeypatch):
+    repo, runner, run, step, context, _readback, dispatches, charges = _runtime(
+        tmp_path, monkeypatch
+    )
+    dispatch = runner.executor.execute
+    runner.executor.execute = lambda *args, **kwargs: {
+        **dispatch(*args, **kwargs),
+        "preview": True,
+        "requires_user_decision": True,
+        "resume_params": {"valid_rows_only": True},
+        "verification": {"scope": "preview_only", "business_effect_verified": False},
+    }
+    runner.execute_step(run, step, runtime_context=context, node_outputs={})
+    original = copy.deepcopy(run.tool_calls[0])
+    assert original.metadata["verification"]["accepted"] is True
+    step.params["valid_rows_only"] = True
+    step.status = "pending"
+    runner.execute_step(run, step, runtime_context=context, node_outputs={})
+    assert run.status == "blocked"
+    assert len(dispatches) == len(charges) == len(run.tool_calls) == 1
+    retained = repo.get(run.run_id).tool_calls[0]
+    assert retained.params == original.params and retained.output == original.output
+    assert retained.metadata["verification_contract"] == original.metadata["verification_contract"]
+
+
 def test_crash_between_receipt_and_verification_retains_recheckable_result(tmp_path, monkeypatch):
     repo, runner, run, step, context, readback, dispatches, charges = _runtime(
         tmp_path, monkeypatch

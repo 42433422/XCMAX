@@ -121,3 +121,44 @@ def test_registered_app_rejects_forged_identity_headers_without_session(scoped_a
             f"/api/agent/runs/{run.run_id}", headers={"X-User-ID": "7", "X-Tenant-ID": "11"}
         )
     assert response.status_code == 401, response.text
+
+
+@pytest.mark.parametrize("invalid", ["bytes", "uri", "type"])
+def test_registered_office_download_requires_owner_and_original_file(scoped_app, invalid):
+    from docx import Document
+
+    from app.application.agent_orchestrator.artifact_files import artifact_path, store_run_file
+
+    client, repo = scoped_app
+    run = AgentRun(user_id="7", message="private office task", status="completed")
+    run.metadata["runtime_context"] = {"tenant_id": "11"}
+    document = Document()
+    document.add_paragraph("Synthetic owner-bound office artifact")
+    output = BytesIO()
+    document.save(output)
+    content = output.getvalue()
+    saved = store_run_file(run.run_id, content, name="sample.docx", owner_user_id=7, tenant_id="11")
+    saved["artifact_type"] = "office_document"
+    run.artifacts.append(artifact_from_dict(saved))
+    repo.save(run)
+    uri = saved["uri"]
+    headers = {"X-Session-ID": "label-session-7"}
+    response = client.get(uri, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.content == content
+    assert response.headers["cache-control"] == "private, no-store"
+    for session_id in ("label-session-8", "label-session-9"):
+        assert client.get(uri, headers={"X-Session-ID": session_id}).status_code == 403
+    assert client.get(uri).status_code == 401
+    if invalid == "bytes":
+        artifact_path(run.run_id, saved["artifact_id"]).write_bytes(b"changed")
+    else:
+        artifact = run.artifacts[0]
+        if invalid == "uri":
+            artifact.uri = "/api/ai/kitten/document/pickup/unrelated"
+        else:
+            artifact.artifact_type = "unregistered_document"
+        repo.save(run)
+    denied = client.get(uri, headers=headers)
+    assert denied.status_code == (404 if invalid == "type" else 410), denied.text
+    assert "Synthetic owner-bound office artifact" not in denied.text

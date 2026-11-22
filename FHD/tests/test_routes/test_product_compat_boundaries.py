@@ -240,7 +240,11 @@ def test_public_executor_is_resolved_by_actual_agent_tool_chain(
     assert execute.call_args.args[0] == action
     assert response.json()["executed_action"] == action
     run = agent_repository.get(response.json()["run_id"])
-    assert run is not None and run.status == "completed"
+    assert run is not None and run.status == "blocked"
+    assert response.json()["success"] is False
+    assert response.json()["verification_code"] == "result_verifier_unavailable"
+    assert response.json()["retryable"] is False
+    assert run.tool_calls[0].output == {"success": True, "executed_action": action}
     observed = dict(run.metadata["runtime_context"])
     observed.pop("context_summary", None)
     observed.pop("untrusted_sources", None)
@@ -289,7 +293,9 @@ def test_historical_waiting_run_resumes_without_retired_module(
     resumed = AgentOrchestrator().continue_run(
         run.run_id, approved_by="compat-reviewer", approved_step_id="products_delete_compat"
     )
-    assert resumed is not None and resumed.status == "completed"
+    assert resumed is not None and resumed.status == "blocked"
+    assert resumed.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
+    assert resumed.tool_calls[0].output == {"success": True, "resumed": True}
     execute.assert_called_once_with("delete", {"id": 7})
     resumed_context = dict(resumed.metadata["runtime_context"])
     resumed_context.pop("context_summary", None)

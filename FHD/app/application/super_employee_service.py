@@ -290,7 +290,7 @@ class SuperEmployeeService:
         """Read the original dispatch intent without losing unresolved fleet sends.
 
         Never start message-list CLI backfills; this path only reads persisted
-        receipts and the original task status API.
+        receipts, the original request acknowledgement and task status APIs.
         """
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", request_id):
             return None
@@ -305,6 +305,10 @@ class SuperEmployeeService:
         original_id = str(receipt.get("task_id") or "")
         if task_id and task_id != original_id:
             return None
+        recovered = self._dispatching.read_original_receipt(receipt)
+        if recovered is not None:
+            receipt = recovered
+            original_id = str(receipt.get("task_id") or "")
         uncertain = bool(
             receipt.get("reconciliation_required")
             or receipt.get("pending_device_id")
@@ -319,6 +323,8 @@ class SuperEmployeeService:
                 "status",
                 "dispatcher",
                 "devices",
+                "accepted",
+                "reconciliation_required",
                 "pending_device_id",
                 "unexpected_task_id",
             )
@@ -357,13 +363,14 @@ class SuperEmployeeService:
         state = str(task.get("status") or "unknown")
         state = {"merged": "completed", "merge_conflict": "blocked"}.get(state, state)
         dispatch["task_status"] = state
-        if not uncertain:
+        pending = dispatch.get("status") == "dispatch_pending"
+        if not uncertain and not pending:
             dispatch["status"] = state
         return {
             "dispatch": dispatch,
             "assistant_message": {
                 "body": self._dispatch_reply(dispatch)
-                if uncertain
+                if uncertain or pending
                 else self._para_task_status_reply(task)
             },
         }

@@ -119,7 +119,8 @@ def retry_and_enqueue(
             recovery = run.metadata.get(VERIFICATION_RECOVERY_KEY) or {}
             now = time.time() if verification_time is None else verification_time
             if (
-                recovery.get("lease_token") != verification_lease_token
+                execution is None
+                or recovery.get("lease_token") != verification_lease_token
                 or float(recovery.get("lease_until") or 0) <= now
                 or principal_id != run.user_id
                 or (execution.task_id, execution.user_id, execution.tenant_id)

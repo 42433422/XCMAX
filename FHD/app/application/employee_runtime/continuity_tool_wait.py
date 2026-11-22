@@ -11,14 +11,16 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from types import ModuleType
 from typing import IO, Any
 
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 
+fcntl: ModuleType | None = None
 if os.name != "nt":
-    import fcntl
-else:
-    fcntl = None
+    import fcntl as _fcntl
+
+    fcntl = _fcntl
 
 
 class ToolNotStarted(TimeoutError):

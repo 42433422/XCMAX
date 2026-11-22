@@ -841,10 +841,13 @@ function connect() {
       const command = new AbortController()
       commands.set(id, command)
       const timeout = msg.timeout_ms === undefined ? COMMAND_MAX_MS : msg.timeout_ms
-      const ttl = typeof timeout === 'number' && Number.isFinite(timeout)
-        ? Math.min(COMMAND_MAX_MS, Math.max(0, timeout)) : 0
+      let ttl = 0
+      if (typeof timeout === 'number' && Number.isFinite(timeout) && timeout >= 0) {
+        if (timeout > COMMAND_MAX_MS) ttl = COMMAND_MAX_MS
+        else ttl = timeout
+      }
       const deadline = performance.now() + ttl
-      const deadlineTimer = window.setTimeout(() => command.abort(), ttl <= 0 ? 0 : COMMAND_MAX_MS)
+      const deadlineTimer = window.setTimeout(() => command.abort(), ttl)
       const commandCurrent = () => isCurrent() && !command.signal.aborted && performance.now() < deadline
       const action = String(msg.action || '')
       const params = (msg.params && typeof msg.params === 'object' ? msg.params : {}) as Record<string, unknown>

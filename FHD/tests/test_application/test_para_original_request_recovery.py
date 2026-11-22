@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import httpx
 import pytest
@@ -94,10 +95,16 @@ def test_second_ack_readback_keeps_both_original_subtasks(tmp_path, monkeypatch)
 def test_read_only_recovery_never_dispatches_remaining_devices(tmp_path, monkeypatch):
     create, requests, created, state = server(tmp_path, monkeypatch, devices=2)
     context = {"request_id": "partly-sent", "mode": "code", "para_tier": 2}
-    create().invoke(user_id=7, message="修复登录问题", context=context)
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    original = Path(first["dispatch"]["outbox_path"]).read_bytes()
     state["available"] = True
+    before = len(requests)
     result = create().read_dispatch_receipt(user_id=7, request_id=context["request_id"], task_id="")
     assert result["dispatch"]["status"] == "dispatch_pending"
+    assert result["dispatch"]["accepted"] is False
+    assert result["dispatch"]["reconciliation_required"] is False
+    assert all(method == "GET" for method, _, _ in requests[before:])
+    assert Path(first["dispatch"]["outbox_path"]).read_bytes() == original
     assert len(created) == 1
     # An authorized continuation sends only the previously unsent frozen plan.
     monkeypatch.setenv("MODSTORE_PARA_BASE_BRANCH", "different-after-restart")
@@ -121,6 +128,14 @@ def test_mismatched_original_receipt_stays_unknown(tmp_path, monkeypatch, field)
     result = create().invoke(user_id=7, message="修复登录问题", context=context)
     assert result["dispatch"]["status"] == "dispatch_unknown"
     assert not result["dispatch"]["accepted"]
+    assert len(created) == requests.count(("POST", "para.test", "/api/tasks")) == 1
+    original = Path(result["dispatch"]["outbox_path"]).read_bytes()
+    observed = create().read_dispatch_receipt(
+        user_id=7, request_id=context["request_id"], task_id=""
+    )
+    assert observed["dispatch"]["status"] == "dispatch_unknown"
+    assert observed["dispatch"]["reconciliation_required"] is True
+    assert Path(result["dispatch"]["outbox_path"]).read_bytes() == original
     assert len(created) == requests.count(("POST", "para.test", "/api/tasks")) == 1
 
 

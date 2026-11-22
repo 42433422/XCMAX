@@ -37,6 +37,59 @@ def _assert_shared_healthy_1(self, client, _shared_literal_0, _shared_literal_1)
         assert r.status_code == _shared_literal_1
 
 
+def _assert_mock_maintenance_unverified(client, payload, action):
+    """A service mock proves dispatch, not the resulting host/cache/database state."""
+    assert payload["success"] is False
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["verification_code"] == "result_verifier_unavailable"
+    assert payload["outcome"] == "unknown"
+    assert payload["retryable"] is False and payload["reconciliation_required"] is True
+    assert payload["run_id"] == payload["agent_run_id"]
+    run = client.app.state.agent_runs.get(payload["run_id"])
+    assert run is not None and run.status == "blocked"
+    assert len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert (call.tool_id, call.action) == ("system_maintenance", action)
+    assert call.output["success"] is True
+    report = call.metadata["verification"]
+    assert report["status"] == "inconclusive" and report["accepted"] is False
+    assert report["code"] == "result_verifier_unavailable"
+    assert all(check["status"] != "passed" for check in report["checks"])
+    assert run.steps[0].attempt_count == 1
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+    return run
+
+
+def _assert_registered_read_route(client, path, identifier_key):
+    """Exercise the actual registered read contract through either public entry."""
+    service = MagicMock()
+    service.get_all.return_value = {
+        "success": True,
+        "data": [{"id": 1, "customer_name": "ACME"}],
+        "total": 1,
+    }
+    with patch("app.application.get_customer_app_service", return_value=service):
+        response = client.post(
+            path,
+            json={
+                identifier_key: "customers",
+                "action": "query",
+                "params": {"keyword": "ACME"},
+            },
+        )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["success"] is True and payload["agent_status"] == "completed"
+    assert payload["data"] == [{"id": 1, "customer_name": "ACME"}]
+    service.get_all.assert_called_once_with(keyword="ACME", page=1, per_page=20)
+    run = client.app.state.agent_runs.get(payload["run_id"])
+    assert run is not None and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert (call.tool_id, call.action) == ("customers", "query")
+    assert call.metadata["verification"]["accepted"] is True
+    assert call.metadata["verification"]["code"] == "read_only_output_contract_checked"
+
+
 @pytest.fixture
 def client(trusted_actor, local_tools, monkeypatch, tmp_path) -> TestClient:
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
@@ -49,6 +102,7 @@ def client(trusted_actor, local_tools, monkeypatch, tmp_path) -> TestClient:
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
     )
     app = FastAPI()
+    app.state.agent_runs = repo
     app.include_router(routes.router)
     app.include_router(tools_execute_router)
     return TestClient(
@@ -414,7 +468,8 @@ class TestPerformanceCacheClear:
             return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/clear?pattern=test:*")
-            assert r.json()["success"] is True
+            assert r.status_code == 200
+            _assert_mock_maintenance_unverified(client, r.json(), "clear_performance_cache")
         mock_opt.redis_cache.clear_pattern.assert_called_once_with("test:*")
 
     def test_clear_local(self, client: TestClient, local_tools):
@@ -425,7 +480,8 @@ class TestPerformanceCacheClear:
             return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/clear")
-            assert r.json()["success"] is True
+            assert r.status_code == 200
+            _assert_mock_maintenance_unverified(client, r.json(), "clear_performance_cache")
         mock_opt.redis_cache.clear_local_cache.assert_called_once_with()
 
 
@@ -452,7 +508,9 @@ class TestPerformanceCacheInvalidate:
             return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/invalidate", json={"keys": ["k1"]})
-            assert r.json()["success"] is True
+            assert r.status_code == 200
+            _assert_mock_maintenance_unverified(client, r.json(), "invalidate_performance_cache")
+            assert r.json()["data"]["deleted_count"] == 1
         mock_opt.redis_cache.delete.assert_called_once_with("k1")
 
 
@@ -566,6 +624,28 @@ class TestPerformanceOptimizeReinitialize:
 # ---------------------------------------------------------------------------
 
 
+def _assert_template_receipt(response, client, action, legacy_status, *, raw_success=False):
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["success"] is False and body["agent_status"] == "blocked"
+    run = client.app.state.agent_runs.get(body["run_id"])
+    assert run is not None and run.status == "blocked" and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert call.tool_id == "document_template" and call.action == action
+    assert call.output["success"] is raw_success
+    assert call.output["http_status_code"] == legacy_status
+    report = call.metadata["verification"]
+    assert report["accepted"] is False
+    assert report["code"] == (
+        "result_template_receipt_unavailable" if raw_success else "execution_receipt_not_successful"
+    )
+    if raw_success:
+        assert body["error_code"] == "result_verification_inconclusive"
+        assert body["retryable"] is False and body["reconciliation_required"] is True
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+    return call
+
+
 class TestTemplatesProgress:
     def test_success(self, client: TestClient):
         with patch(
@@ -600,7 +680,8 @@ class TestTemplatesDelete:
             content=json.dumps({"id": "fs:"}),
             headers={"Content-Type": "application/json"},
         )
-        assert r.status_code == 400
+        call = _assert_template_receipt(r, client, "delete", 400)
+        assert call.output["message"] == "模板文件名无效"
 
     def test_fs_template_not_found(self, client: TestClient):
         with patch(
@@ -613,7 +694,8 @@ class TestTemplatesDelete:
                 content=json.dumps({"id": "fs:missing.docx"}),
                 headers={"Content-Type": "application/json"},
             )
-            assert r.status_code == 404
+            call = _assert_template_receipt(r, client, "delete", 404)
+            assert "模板文件不存在" in call.output["message"]
 
     def test_builtin_fs_template_is_refused_and_preserved(self, client: TestClient, tmp_path):
         test_file = tmp_path / "test.docx"
@@ -647,7 +729,10 @@ class TestTemplatesDelete:
                 content=json.dumps({"id": "db:9999"}),
                 headers={"Content-Type": "application/json"},
             )
-            assert r.status_code == 404
+            call = _assert_template_receipt(r, client, "delete", 404)
+            assert call.output["message"] == "模板不存在"
+            mock_db.execute.assert_called_once()
+            mock_db.commit.assert_not_called()
 
     def test_unsupported_type(self, client: TestClient):
         r = client.request(
@@ -656,7 +741,8 @@ class TestTemplatesDelete:
             content=json.dumps({"id": "other:123"}),
             headers={"Content-Type": "application/json"},
         )
-        assert r.status_code == 400
+        call = _assert_template_receipt(r, client, "delete", 400)
+        assert "暂不支持删除该模板类型" in call.output["message"]
 
     def test_error(self, client: TestClient):
         with patch(
@@ -677,9 +763,10 @@ class TestTemplatesCreate:
         with patch(
             "app.legacy.routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": True}, 200),
-        ):
+        ) as create:
             r = client.post("/api/templates/create", json={"name": "test"})
-            assert r.status_code == 200
+        _assert_template_receipt(r, client, "create", 200, raw_success=True)
+        create.assert_called_once_with({"name": "test"})
 
 
 class TestTemplatesUpdate:
@@ -687,16 +774,18 @@ class TestTemplatesUpdate:
         with patch(
             "app.legacy.routes.document_templates_compat.run_archive_template_update",
             return_value=({"success": True}, 200),
-        ):
+        ) as update:
             r = client.post("/api/templates/update", json={"id": 1, "name": "updated"})
-            assert r.status_code == 200
+        _assert_template_receipt(r, client, "update", 200, raw_success=True)
+        update.assert_called_once_with({"id": 1, "name": "updated"})
 
 
 class TestTemplatesDeletePost:
     def test_delegates_to_delete(self, client: TestClient):
         with patch("app.utils.path_io.path_utils.get_base_dir", return_value="/nonexistent"):
             r = client.post("/api/templates/delete", json={"id": "fs:missing.docx"})
-            assert r.status_code == 404
+        call = _assert_template_receipt(r, client, "delete", 404)
+        assert call.params == {"id": "fs:missing.docx"}
 
 
 # ---------------------------------------------------------------------------
@@ -742,23 +831,41 @@ class TestSkillsInfo:
 
 
 class TestSkillsExecute:
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, monkeypatch):
+        monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+        _assert_registered_read_route(client, "/api/skills/execute", "skill_id")
+
+    def test_unregistered_skill_is_rejected(self, client: TestClient):
         with patch(
             "app.application.facades.tools_facade.run_archive_tools_execute",
             return_value=({"success": True}, 200),
-        ):
+        ) as legacy_execute:
             r = client.post("/api/skills/execute", json={"skill_id": "s1"})
-            assert r.status_code == 200
+        assert r.status_code == 400
+        assert r.json()["error_code"] == "tool_contract_unavailable"
+        assert r.json()["execution_status"] == "not_started"
+        assert r.json()["retryable"] is False
+        legacy_execute.assert_not_called()
+        assert not client.app.state.agent_runs.list_recent()
 
 
 class TestToolsExecute:
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, monkeypatch):
+        monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+        _assert_registered_read_route(client, "/api/tools/execute", "tool_id")
+
+    def test_unregistered_tool_is_rejected(self, client: TestClient):
         with patch(
             "app.application.facades.tools_facade.run_archive_tools_execute",
             return_value=({"success": True}, 200),
-        ):
+        ) as legacy_execute:
             r = client.post("/api/tools/execute", json={"tool_id": "t1"})
-            assert r.status_code == 200
+        assert r.status_code == 400
+        assert r.json()["error_code"] == "tool_contract_unavailable"
+        assert r.json()["execution_status"] == "not_started"
+        assert r.json()["retryable"] is False
+        legacy_execute.assert_not_called()
+        assert not client.app.state.agent_runs.list_recent()
 
 
 # ---------------------------------------------------------------------------
@@ -786,35 +893,32 @@ def test_maintenance_denial_uses_signed_actor_and_never_calls_service(client, tr
     service.set_default_printer.assert_not_called()
 
 
-def test_maintenance_admin_can_execute_with_own_identity(trusted_actor, local_tools):
-    app = FastAPI()
-    app.include_router(routes.router)
-    app.include_router(tools_execute_router)
+def test_maintenance_admin_can_execute_with_own_identity(client, trusted_actor):
     admin = trusted_actor(role="admin")
-    client = TestClient(app, raise_server_exceptions=False, headers=admin.headers)
+    client.headers.update(admin.headers)
     service = MagicMock()
     service.set_default_printer.return_value = {"success": True}
     with patch("app.application.facades.session_facade.get_system_service", return_value=service):
         response = client.post("/api/system/printer", json={"printer_name": "HP"})
     assert response.status_code == 200, response.text
-    assert response.json()["success"] is True
+    run = _assert_mock_maintenance_unverified(client, response.json(), "set_default_printer")
+    assert run.user_id == str(admin.user_id)
     service.set_default_printer.assert_called_once_with("HP")
 
 
-def test_restore_waits_for_approval_even_for_applicant_admin(
-    trusted_actor, local_tools, monkeypatch
-):
-    app = FastAPI()
-    app.include_router(routes.router)
-    app.include_router(tools_execute_router)
+def test_restore_waits_for_approval_even_for_applicant_admin(client, trusted_actor, monkeypatch):
     admin = trusted_actor(role="admin")
-    client = TestClient(app, raise_server_exceptions=False, headers=admin.headers)
+    client.headers.update(admin.headers)
     from sqlalchemy import text
 
     from app.application.approval_workspace_app_service import approve_request
     from app.infrastructure.tenant_scope import tenant_scope
 
     monkeypatch.setattr("app.db.session.SessionLocal", admin.factory)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.get_agent_run_repository",
+        lambda: client.app.state.agent_runs,
+    )
     service = MagicMock()
     service.restore_database.return_value = {"success": True}
     with patch("app.application.facades.session_facade.get_database_service", return_value=service):
@@ -835,9 +939,19 @@ def test_restore_waits_for_approval_even_for_applicant_admin(
             receipt = approve_request(row.id, admin.request, body={}, x_user_id=None)
         if hasattr(receipt, "body"):
             receipt = json.loads(receipt.body)
-        assert receipt["success"] is True, (
-            AgentOrchestrator().get_run(response.json()["run_id"]).error
-        )
+        assert receipt["success"] is False
+        run = client.app.state.agent_runs.get(response.json()["run_id"])
+        assert run is not None and run.status == "blocked"
+        assert run.user_id == str(admin.user_id)
+        assert len(run.tool_calls) == 1
+        call = run.tool_calls[0]
+        assert (call.tool_id, call.action) == ("system_maintenance", "restore_database")
+        assert call.output["success"] is True
+        report = call.metadata["verification"]
+        assert report["status"] == "inconclusive" and report["accepted"] is False
+        assert report["code"] == "result_verifier_unavailable"
+        assert all(check["status"] != "passed" for check in report["checks"])
+        assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
         assert "durable_workflow_snapshot" not in receipt["data"]["business_data"]
         assert "_actor_authorization" not in json.dumps(receipt)
         with tenant_scope(admin.tenant_id):

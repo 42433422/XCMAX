@@ -8,9 +8,10 @@ from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import purchase as purchase_routes
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch, actor=None) -> TestClient:
     monkeypatch.setattr(purchase_routes, "_svc", lambda: fake_service)
     app = FastAPI()
 
@@ -20,15 +21,16 @@ def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestCli
         return await call_next(request)
 
     app.include_router(purchase_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=actor.headers if actor else {})
 
 
 def _assert_purchase_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
     run = repo.get(run_id)
     assert run is not None
     # A fake service reply exercises routing, but cannot prove an actual SQL effect.
-    assert (run.user_id, run.status) == ("tenant-a", "blocked")
-    assert run.metadata["runtime_context"]["tenant_id"] == 7
+    assert (run.user_id, run.status) == ("1", "blocked")
+    assert run.metadata["runtime_context"]["tenant_id"] == "7"
+    assert run.metadata["runtime_context"]["_actor_authorization"]
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.purchase.{action}"
     assert run.tool_calls[0].cost_units == 2
@@ -43,14 +45,14 @@ def _execution_number(repo, response, action):
 
 
 def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
     svc.create_supplier.return_value = {"success": True, "data": {"id": 7}}
     svc.update_supplier.return_value = {"success": True, "data": {"id": 7}}
     svc.delete_supplier.return_value = {"success": True}
-    client = _client(svc, monkeypatch)
+    client = _client(svc, monkeypatch, trusted_actor(user_id=1, role="admin"))
 
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -87,7 +89,7 @@ def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
 
 
 def test_purchase_order_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -96,7 +98,7 @@ def test_purchase_order_mutation_routes_execute_through_agent_orchestrator(
     svc.approve_purchase_order.return_value = {"success": True, "data": {"status": "approved"}}
     svc.cancel_purchase_order.return_value = {"success": True, "data": {"status": "cancelled"}}
     svc.create_purchase_inbound.return_value = {"success": True, "data": {"id": 5}}
-    client = _client(svc, monkeypatch)
+    client = _client(svc, monkeypatch, trusted_actor(user_id=1, role="admin"))
 
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -158,3 +160,15 @@ def test_purchase_order_mutation_routes_execute_through_agent_orchestrator(
     _assert_purchase_run(repo, approve_order.json()["run_id"], "approve_order")
     _assert_purchase_run(repo, cancel_order.json()["run_id"], "cancel_order")
     _assert_purchase_run(repo, create_inbound.json()["run_id"], "create_inbound")
+
+
+def test_purchase_mutation_rejects_identity_headers_without_session(monkeypatch):
+    service = MagicMock()
+    client = _client(service, monkeypatch)
+    response = client.post(
+        "/api/purchase/orders",
+        json={"supplier_id": 7, "user_id": "1", "tenant_id": 7},
+        headers={"X-User-Id": "1", "X-Tenant-Id": "7"},
+    )
+    assert response.status_code == 401
+    assert service.mock_calls == []

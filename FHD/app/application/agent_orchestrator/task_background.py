@@ -29,10 +29,15 @@ def task_execution_context(run: AgentRun, step: Any) -> dict[str, Any]:
     runtime = runtime if isinstance(runtime, dict) else {}
     tenant = str(runtime.get("tenant_id") or task_context.get("tenant_id") or "")
     tenant_part = f":{tenant}" if tenant else ""
+    preview_part = ""
+    if (step.tool_id, step.action) == ("elt_import", "preview"):
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+        preview_part = f":preview:{canonical_hash(step.params)}"
     return {
         "task_id": str(task_context.get("task_id") or ""),
         "task_attempt": int(task_context.get("attempt") or 1),
-        "idempotency_key": f"agent:{run.run_id}{tenant_part}:{step.step_id}",
+        "idempotency_key": f"agent:{run.run_id}{tenant_part}:{step.step_id}{preview_part}",
         **(
             {"business_action_id": f"agent:{run.run_id}:{step.step_id}"}
             if step.tool_id == "catalog_products_v1"

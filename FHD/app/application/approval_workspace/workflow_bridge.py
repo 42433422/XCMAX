@@ -406,7 +406,7 @@ class WorkflowApprovalBridge:
             if detail:
                 message = detail
         return {
-            "workflow_executed": True,
+            "workflow_executed": receipt["workflow_executed"],
             "execution_state": run.status,
             "approval_request_id": request_id,
             "agent_run_id": run.run_id,

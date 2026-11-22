@@ -430,7 +430,11 @@ def test_compat_customer_get_not_found(compat_customer_client: TestClient) -> No
     assert r.status_code == 404
 
 
-def test_compat_customer_update_via_service(compat_customer_client: TestClient) -> None:
+def test_compat_customer_update_via_service(
+    compat_customer_client: TestClient, trusted_actor, monkeypatch
+) -> None:
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(role="admin")
     with (
         patch(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
@@ -444,8 +448,9 @@ def test_compat_customer_update_via_service(compat_customer_client: TestClient) 
         r = compat_customer_client.put(
             "/customers/2",
             json={"unit_name": "乙公司"},
+            headers=actor.headers,
         )
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     upd.assert_called_once()
 
 
@@ -470,13 +475,20 @@ def test_legacy_tools_execute_route(tools_client: TestClient) -> None:
     with patch(
         "app.application.facades.tools_facade.run_archive_tools_execute",
         return_value=({"success": True, "tool": "excel_analysis"}, 200),
-    ):
+    ) as legacy_execute:
         r = tools_client.post(
             "/api/tools/execute",
             json={"tool_id": "excel_analysis", "params": {}},
         )
-    assert r.status_code == 200
-    assert r.json()["tool"] == "excel_analysis"
+    assert r.status_code == 400
+    assert r.json() == {
+        "success": False,
+        "error_code": "tool_contract_unavailable",
+        "message": "工具或动作未登记，未执行",
+        "retryable": False,
+        "execution_status": "not_started",
+    }
+    legacy_execute.assert_not_called()
 
 
 def test_compat_tools_list_role_filter(tools_client: TestClient) -> None:

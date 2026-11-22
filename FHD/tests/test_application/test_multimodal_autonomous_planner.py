@@ -13,9 +13,14 @@ from starlette.requests import Request
 
 @pytest.fixture
 def signed_actor(tmp_path):
-    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.fastapi_routes.domains.agent.route_support import (
+        authenticated_runtime_context,
+    )
     from app.infrastructure.auth.agent_principal import require_agent_principal
-    from evals.run_agent_eval import _authenticated_route_fixture, _isolated_task_execution_queue
+    from evals.run_agent_eval import (
+        _authenticated_route_fixture,
+        _isolated_task_execution_queue,
+    )
 
     client = SimpleNamespace(headers={})
     with (
@@ -63,15 +68,30 @@ def test_owned_multimodal_planning_preserves_effects_and_approval(tmp_path, task
     assert source["metadata"]["skip_dataset_ingest"] is True
     assert source["uri"] == ""
     if task["attachment_kind"] == "excel":
-        output = run["final_output"]["node_outputs"]["import_excel_records"]
+        # This owned-upload fixture tests dispatch, not a real product repository.
+        assert run["status"] == "blocked"
+        assert len(run["tool_calls"]) == 1
+        call = run["tool_calls"][0]
+        output = call["output"]
         assert output["success"] is True
         assert output["imported_count"] == 1
         assert output["data"]["result"]["created_products"] == 1
+        verification = call["metadata"]["verification"]
+        assert verification["accepted"] is False
+        assert verification["code"] == "result_verifier_unavailable"
+        assert verification["status"] == "inconclusive"
+        assert all(check["status"] != "passed" for check in verification["checks"])
     elif task.get("mock_office_document"):
         artifact = run["artifacts"][-1]
         assert artifact["artifact_type"] == "office_document"
         assert artifact["name"] == "risk-summary.docx"
-        assert artifact["uri"] == "/api/ai/kitten/document/pickup/eval-doc-token"
+        assert artifact["uri"] == (
+            f"/api/agent/runs/{run['run_id']}/artifacts/{artifact['artifact_id']}"
+        )
+        assert artifact["metadata"]["run_id"] == run["run_id"]
+        assert artifact["metadata"]["owner_user_id"] == run["user_id"]
+        assert len(artifact["metadata"]["sha256"]) == 64
+        assert run["tool_calls"][-1]["metadata"]["verification"]["accepted"] is True
     elif not task.get("explicit_knowledge_import"):
         assert not run["tool_calls"]
         assert run["metadata"].get("dataset_ingest_count", 0) == 0
@@ -91,12 +111,18 @@ def test_owned_multimodal_planning_preserves_effects_and_approval(tmp_path, task
 def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
     tmp_path, monkeypatch, local_tools, signed_actor, outcome
 ):
-    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.agent_orchestrator import (
+        AgentOrchestrator,
+        InMemoryAgentRunRepository,
+    )
     from app.application.dataset_rag_app_service import (
         get_dataset_rag_app_service,
         reset_dataset_rag_app_service_for_tests,
     )
+    from app.application.facades import tools_facade
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.db.models.product import Product
+    from app.infrastructure.tenant_scope import tenant_scope
 
     principal, context = signed_actor
     store = tmp_path / "dataset_store.json"
@@ -104,6 +130,7 @@ def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
     monkeypatch.setenv("DATASET_RAG_VECTOR_INDEX_PATH", str(tmp_path / "vectors.sqlite3"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-claims.sqlite"))
     reset_dataset_rag_app_service_for_tests()
     repo = InMemoryAgentRunRepository()
     orchestrator = AgentOrchestrator(repository=repo)
@@ -113,9 +140,13 @@ def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
         nodes=[
             WorkflowNode(
                 node_id=f"import_{number}",
-                tool_id="excel_import",
-                action="import_records",
-                params={"records": [{"product_name": f"样例-{number}"}]},
+                tool_id="business_db",
+                action="write",
+                params={
+                    "entity": "products",
+                    "operation": "create",
+                    "payload": {"name": f"样例-{number}"},
+                },
                 risk="medium",
                 idempotent=False,
             )
@@ -147,13 +178,33 @@ def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
             "artifact_type": "ocr_text",
             "preview": {"text": "失败工具返回的附件只供审核，不应作为正式知识"},
         }
+    real_execute = tools_facade.execute_registered_workflow_tool
+
+    def execute_business_import(*args, **kwargs):
+        # A real committed first write must reach the second approval boundary.
+        # Only the second failing/uncertain outcome is injected; successful writes
+        # use the repository and durable receipt required by the real verifier.
+        params = kwargs.get("params") or args[2]
+        if params["payload"]["name"] == "样例-1" or outcome in {
+            "completed",
+            "missing_approval",
+        }:
+            return real_execute(*args, **kwargs)
+        return second_result
+
+    def stored_products():
+        from app import db as host_db
+
+        with tenant_scope(principal.tenant_id), host_db.SessionLocal() as db:
+            return [row.name for row in db.query(Product).order_by(Product.id).all()]
+
     try:
         dataset = get_dataset_rag_app_service()
         with (
             patch.object(dataset, "ingest_document", wraps=dataset.ingest_document) as ingest,
             patch(
                 "app.application.facades.tools_facade.execute_registered_workflow_tool",
-                side_effect=[{"success": True}, second_result],
+                side_effect=execute_business_import,
             ) as execute,
         ):
             waiting = orchestrator.start_run_from_plan(
@@ -166,8 +217,10 @@ def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
             execute.assert_not_called()
             assert not store.exists()
             second_wait = orchestrator.continue_run(waiting.run_id, approved_by=principal.user_id)
-            assert second_wait.status == "waiting_user"
+            assert second_wait.status == "waiting_user", second_wait.to_dict()
             assert execute.call_count == 1, second_wait.to_dict()
+            assert stored_products() == ["样例-1"]
+            assert second_wait.tool_calls[0].metadata["verification"]["accepted"] is True
             assert not store.exists()
             with sqlite3.connect(tmp_path / "vectors.sqlite3") as vector_db:
                 assert (
@@ -191,11 +244,25 @@ def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
             assert execute.call_count == 2
 
             assert final.status == {
-                "failed": "failed",
+                # A failure returned after entering a write handler cannot prove
+                # that no write occurred; the existing claim remains unsettled.
+                "failed": "blocked",
                 "unknown": "blocked",
                 "outcome_unknown": "blocked",
                 "requires_reconciliation": "blocked",
-            }.get(outcome, "completed")
+            }.get(outcome, "completed"), {
+                "error": final.error,
+                "steps": [step.to_dict() for step in final.steps],
+                "calls": [call.to_dict() for call in final.tool_calls],
+            }
+            assert stored_products() == (
+                ["样例-1", "样例-2"] if outcome in {"completed", "missing_approval"} else ["样例-1"]
+            )
+            if outcome not in {"completed", "missing_approval"}:
+                report = final.tool_calls[-1].metadata["verification"]
+                assert report["accepted"] is False
+                assert report["code"] == "execution_receipt_not_successful"
+                assert final.tool_calls[-1].output["reconciliation_required"] is True
             # Approving business imports authorizes those imports, not knowledge
             # writes or destinations supplied by an untrusted model artifact.
             ingest.assert_not_called()

@@ -12,6 +12,7 @@ from app.application.agent_orchestrator.result_verification import (
     bind_execution_receipt,
     freeze_verification_contract,
     latest_step_call,
+    preview_continuation_params,
     project_verification,
     restore_verified_artifacts,
     step_verification_blocked,
@@ -78,10 +79,14 @@ def _confirm_customer_create(
     }
     if not name or type(claimed) is not int:
         return unverified
+    tenant = str((runtime_context or {}).get("tenant_id") or "")
+    if not tenant.isdecimal() or int(tenant) <= 0:
+        return unverified
     from sqlalchemy import select
     from sqlalchemy.exc import SQLAlchemyError
 
     from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import owned_tenant_id, tenant_scope
     from app.utils.operational_errors import RECOVERABLE_ERRORS
 
     try:
@@ -91,20 +96,24 @@ def _confirm_customer_create(
     except RECOVERABLE_ERRORS:
         return unverified
     try:
-        rows = (
-            session.execute(
-                select(PurchaseUnit)
-                .where(PurchaseUnit.unit_name == name)
-                .execution_options(skip_tenant_filter=True)
+        if owned_tenant_id() not in (None, int(tenant)):
+            return unverified
+        with tenant_scope(int(tenant)):
+            rows = (
+                session.execute(
+                    select(PurchaseUnit).where(
+                        PurchaseUnit.unit_name == name,
+                        PurchaseUnit.id == claimed,
+                        PurchaseUnit.tenant_id == int(tenant),
+                    )
+                )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
     except RECOVERABLE_ERRORS + (SQLAlchemyError,):
         return unverified
     finally:
         session.close()
-    tenant = str((runtime_context or {}).get("tenant_id") or "")
     matched = [
         row
         for row in rows
@@ -160,22 +169,34 @@ class StepExecution:
             and prior.metadata.get("verification_contract")
             and prior.metadata.get("verification_output_sha256")
         ):
-            # A receipt already exists. This path can only read evidence; neither
-            # verification failure nor a graph replay authorizes another effect.
+            # Business effects never replay. Only a verified ELT control pause
+            # can admit a new, separately approved, effect-free preview.
+            from app.application.agent_orchestrator.approval_grant import approval_scope_matches
+
+            preview_resume = (
+                step.params == preview_continuation_params(run, step, prior)
+                and step.output == prior.output
+                and approval_scope_matches(run, step)
+            )
+            observed_step = copy.deepcopy(step) if preview_resume else step
+            if preview_resume:
+                observed_step.params = copy.deepcopy(prior.params)
             context = {
                 **runtime_context,
                 "run_id": run.run_id,
                 "step_id": step.step_id,
                 "node_id": step.node_id,
-                **task_execution_context(run, step),
+                **task_execution_context(run, observed_step),
             }
-            verify_step_result(run=run, step=step, call=prior, context=context)
+            verify_step_result(run=run, step=observed_step, call=prior, context=context)
             restore_verified_artifacts(run, step, prior, self.attach_artifacts)
             self._record_verification(run, step, prior)
-            if not step_verification_blocked(run, step):
+            blocked = step_verification_blocked(run, step)
+            if not blocked and not preview_resume:
                 node_outputs[step.node_id] = dict(step.output)
             self.repository.save(run)
-            return
+            if blocked or not preview_resume:
+                return
         started = time.perf_counter()
         step.attempt_count += 1
         step.status = "running"
@@ -409,6 +430,10 @@ class StepExecution:
                 "run_id": run.run_id,
                 "step_id": step.step_id,
                 "node_id": step.node_id,
+                "call_id": tool_call.call_id,
+                "input_sha256": (tool_call.metadata.get("verification_contract") or {}).get(
+                    "input_sha256", ""
+                ),
                 "message": run.message,
                 "node_outputs": dict(node_outputs),
                 **task_execution_context(run, step),

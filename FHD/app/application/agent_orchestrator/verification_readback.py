@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import copy
 import csv
-import io
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -28,7 +27,15 @@ from app.application.employee_runtime.task_continuity import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EMPLOYEE_COMPLETION_ACTIONS = frozenset({"run_tools", "child_return", "chain"})
-_FILE_ACTIONS = frozenset({("reports", "export"), ("excel_analysis", "export")})
+_FILE_ACTIONS = frozenset(
+    {
+        ("reports", "export"),
+        ("excel_analysis", "export"),
+        ("generate_office_document", "execute"),
+        ("customers", "export"),
+        ("shipment_records", "export"),
+    }
+)
 _GENERATORS = {
     "excel-generate-employee": ".xlsx",
     "csv-generate-employee": ".csv",
@@ -80,74 +87,6 @@ def _scope_matches(run: Any, step: Any, call: Any, context: dict[str, Any]) -> b
     )
 
 
-def _customer(step: Any, output: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
-    from app.application.agent_orchestrator.tool_permission import (
-        _customer_create_effect,
-        _fingerprint,
-        idempotency_scope_key,
-    )
-
-    params = dict(step.params)
-    key = idempotency_scope_key(context, step.tool_id, step.action, params)
-    if key.endswith(":"):
-        return _report("inconclusive", "result_receipt_missing", "customer_transaction")
-    fingerprint = _fingerprint(params)
-    from app.infrastructure.auth.agent_mod_scope import agent_mod_execution_scope
-    from app.infrastructure.tenant_scope import tenant_scope
-    from app.request_active_mod_ctx import (
-        reset_request_active_mod_id,
-        set_request_active_mod_id,
-    )
-
-    # The producing child restored these ContextVars only in its own process.
-    # Clear an unrelated request's Mod even when the original run has no Mod.
-    token = set_request_active_mod_id("")
-    try:
-        with (
-            agent_mod_execution_scope(context.get("_mod_authorization")),
-            tenant_scope(int(context["tenant_id"])),
-        ):
-            effect, receipt = _customer_create_effect(
-                str(context["tenant_id"]),
-                params,
-                key=key,
-                fingerprint=fingerprint,
-                receipted=False,
-            )
-    finally:
-        reset_request_active_mod_id(token)
-    if effect != "matched" or not isinstance(receipt, dict):
-        return _report("inconclusive", "result_receipt_unavailable", "customer_transaction")
-    actual = receipt["data"]
-    returned = output.get("data")
-    returned = returned if isinstance(returned, dict) else {}
-    claimed_id = output.get("id", returned.get("id"))
-    mismatch = claimed_id is not None and (
-        type(claimed_id) is not int or claimed_id != actual["id"]
-    )
-    for field in (
-        "id",
-        "tenant_id",
-        "customer_name",
-        "contact_person",
-        "contact_phone",
-        "contact_address",
-    ):
-        if field in returned and str(returned[field]) != str(actual[field]):
-            mismatch = True
-    if mismatch:
-        return _report("failed", "result_customer_mismatch", "customer_transaction")
-    return _report(
-        "verified",
-        "result_verified",
-        "customer_transaction",
-        customer_id=actual["id"],
-        tenant_id=str(actual["tenant_id"]),
-        params_sha256=fingerprint,
-        version=actual["version"],
-    )
-
-
 def _catalog(step: Any, context: dict[str, Any]) -> dict[str, Any]:
     from app.mod_sdk.catalog_product_store import verify_catalog_action
 
@@ -167,118 +106,26 @@ def _catalog(step: Any, context: dict[str, Any]) -> dict[str, Any]:
         return _report("verified", "result_verified", "catalog_transaction", **evidence)
     if outcome == "rejected_no_effect":
         return _report("failed", "result_catalog_rejected", "catalog_transaction", **evidence)
+    if (
+        outcome == "saved"
+        and readback.get("outcome") == "historical_saved"
+        and evidence["historical_effect_verified"]
+        and readback.get("current_matches") is False
+        and readback.get("fresh_save") is False
+        and proof.get("source_binding_verified") is True
+        and proof.get("method") == "catalog_price_receipt_v1"
+    ):
+        # Verify the signed original effect, without claiming it is still current.
+        # The catalog projection retains historical_saved and business success=False.
+        return _report(
+            "verified", "result_catalog_historical_verified", "catalog_transaction", **evidence
+        )
     return _report(
         "inconclusive",
         "result_catalog_state_changed",
         "catalog_transaction",
         **evidence,
     )
-
-
-def _file_structure(content: bytes, suffix: str) -> dict[str, Any]:
-    if suffix in {".xlsx", ".xlsm", ".docx", ".pptx"}:
-        from defusedxml.common import DefusedXmlException
-        from defusedxml.ElementTree import fromstring
-
-        with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            members = archive.infolist()
-            if len(members) > 5000 or sum(item.file_size for item in members) > 64 * 1024 * 1024:
-                raise ValueError("office artifact exceeds verification budget")
-            try:
-                for item in members:
-                    if item.filename.endswith((".xml", ".rels")):
-                        fromstring(archive.read(item))
-            except DefusedXmlException as exc:
-                raise ValueError("unsafe office XML") from exc
-    if suffix in {".xlsx", ".xlsm"}:
-        from openpyxl import load_workbook
-        from openpyxl.utils.exceptions import InvalidFileException
-
-        try:
-            workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=False)
-        except InvalidFileException as exc:
-            raise ValueError("invalid spreadsheet artifact") from exc
-        try:
-            populated = any(
-                any(value is not None for value in row)
-                for sheet in workbook
-                for row in sheet.iter_rows(min_row=1, max_row=200, max_col=200, values_only=True)
-            )
-            if not workbook.sheetnames or not populated:
-                raise ValueError("spreadsheet has no inspectable content")
-            return {"format": suffix[1:], "sheets": len(workbook.sheetnames)}
-        finally:
-            workbook.close()
-    if suffix == ".csv":
-        text = content.decode("utf-8-sig")
-        if "\x00" in text:
-            raise ValueError("binary CSV content")
-        rows = sum(1 for row in csv.reader(io.StringIO(text), strict=True) if any(row))
-        if not rows:
-            raise ValueError("empty CSV artifact")
-        return {"format": "csv", "rows": rows}
-    if suffix == ".docx":
-        from docx import Document
-
-        document = Document(io.BytesIO(content))
-        if not any(p.text.strip() for p in document.paragraphs) and not document.tables:
-            raise ValueError("empty document artifact")
-        return {
-            "format": "docx",
-            "paragraphs": len(document.paragraphs),
-            "tables": len(document.tables),
-        }
-    if suffix == ".pptx":
-        from pptx import Presentation
-
-        slides = len(Presentation(io.BytesIO(content)).slides)
-        if not slides:
-            raise ValueError("empty presentation artifact")
-        return {"format": "pptx", "slides": slides}
-    if suffix == ".pdf":
-        from pypdf import PdfReader
-        from pypdf.errors import PdfReadError
-
-        try:
-            reader = PdfReader(io.BytesIO(content), strict=True)
-            if reader.is_encrypted or not len(reader.pages):
-                raise ValueError("unreadable PDF artifact")
-            return {"format": "pdf", "pages": len(reader.pages)}
-        except PdfReadError as exc:
-            raise ValueError("invalid PDF artifact") from exc
-    raise ValueError("unsupported artifact format")
-
-
-def _compare_table_input(step: Any, content: bytes, suffix: str) -> dict[str, Any]:
-    """Compare explicit approved tabular input with the independently parsed file."""
-    rows = step.params.get("rows" if step.tool_id == "excel_analysis" else "data")
-    if not isinstance(rows, list) or suffix not in {".xlsx", ".xlsm", ".csv"}:
-        return {}
-    if len(rows) > 50_000 or any(not isinstance(row, dict) or len(row) > 200 for row in rows):
-        raise RuntimeError("table comparison exceeds verification budget")
-    import pandas as pd
-
-    expected = pd.DataFrame(rows)
-    expected = expected.astype(object).where(pd.notna(expected), "")
-    if suffix == ".csv":
-        actual = pd.read_csv(io.BytesIO(content), dtype=object, keep_default_na=False)
-        expected = expected.astype(str)
-    else:
-        actual = pd.read_excel(
-            io.BytesIO(content),
-            dtype=object,
-            keep_default_na=False,
-            engine_kwargs={"data_only": False},
-        )
-    try:
-        pd.testing.assert_frame_equal(actual, expected, check_dtype=False, check_exact=True)
-    except AssertionError as exc:
-        raise ValueError("artifact differs from the approved table rows") from exc
-    return {
-        "input_rows_match": True,
-        "input_rows_sha256": canonical_hash(rows),
-        "row_count": len(rows),
-    }
 
 
 def _files(
@@ -292,15 +139,32 @@ def _files(
     from app.application.agent_orchestrator.artifact_files import (
         RUN_FILE_MIME_TYPES,
         artifact_path,
+        compare_run_file_table,
+        inspect_run_file_structure,
         read_verified_run_file,
     )
 
     artifacts = output.get("artifacts")
     if not isinstance(artifacts, list) or not artifacts or len(artifacts) > 32:
         return _report("inconclusive", "result_artifact_missing", "run_artifact")
+    office = (step.tool_id, step.action) == ("generate_office_document", "execute")
+    business_export = step.tool_id in {"customers", "shipment_records"} and step.action == "export"
+    if business_export:
+        suffix = ".xlsx"
+    if office:
+        templated = any(
+            step.params.get(key) for key in ("template_id", "template_name", "template")
+        )
+        suffix = (
+            ".xlsx"
+            if templated
+            or str(step.params.get("output_format") or "docx").strip().lower() == "xlsx"
+            else ".docx"
+        )
     checks = []
     for artifact in artifacts:
-        if not isinstance(artifact, dict) or artifact.get("artifact_type") != "file":
+        permitted_types = {"file", "office_document"} if office else {"file"}
+        if not isinstance(artifact, dict) or artifact.get("artifact_type") not in permitted_types:
             return _report("failed", "result_artifact_identity_mismatch", "run_artifact")
         artifact_id = artifact.get("artifact_id")
         metadata = artifact.get("metadata")
@@ -308,7 +172,8 @@ def _files(
             return _report("failed", "result_artifact_identity_mismatch", "run_artifact")
         expected_uri = f"/api/agent/runs/{run.run_id}/artifacts/{artifact_id}"
         if artifact.get("uri") != expected_uri or any(
-            field in metadata and str(metadata[field]) != expected
+            (office or business_export or field in metadata)
+            and str(metadata.get(field)) != expected
             for field, expected in (
                 ("run_id", run.run_id),
                 ("tenant_id", str(context["tenant_id"])),
@@ -338,8 +203,9 @@ def _files(
         ):
             return _report("inconclusive", "result_artifact_owner_missing", "run_artifact")
         content = read_verified_run_file(run.run_id, artifact)
-        structure = _file_structure(content, actual_suffix)
-        comparison = _compare_table_input(step, content, actual_suffix) if not suffix else {}
+        structure = inspect_run_file_structure(content, actual_suffix)
+        rows = step.params.get("rows" if step.tool_id == "excel_analysis" else "data")
+        comparison = compare_run_file_table(rows, content, actual_suffix) if not suffix else {}
         checks.append(
             _report(
                 "verified",
@@ -826,6 +692,7 @@ def verify_independent_result(
     )
 
     sales_action = step.tool_id == "sales" and step.action in SALES_ACTIONS
+    sales_closed_loop = action == ("sales", "execute_closed_loop")
     purchase_action = step.tool_id == "purchase" and step.action in PURCHASE_ACTIONS
     cognition_action = step.tool_id == "enterprise_cognition" and step.action in {
         "bind_goal",
@@ -844,17 +711,63 @@ def verify_independent_result(
         in _EMPLOYEE_COMPLETION_ACTIONS
     )
     employee_admission = action == ("employee", "execute") and employee == "clerk"
+    office_stage = action == ("excel_import", "office_stage")
+    template_mutation = step.tool_id == "document_template" and step.action in {
+        "create",
+        "update",
+        "delete",
+    }
+    business_write = action == ("business_db", "write")
+    shipment_mutation = step.tool_id == "shipment_records" and step.action in {
+        "create",
+        "update",
+        "delete",
+    }
+    stock_movement = step.tool_id == "inventory" and step.action in {"stock_in", "stock_out"}
+    dataset_ingest = action in {
+        ("dataset_rag", "ingest_document"),
+        ("dataset_rag", "rollback_version"),
+    }
+    dataset_rebuild = step.tool_id == "dataset_rag" and step.action in {
+        "rebuild_index",
+        "cancel_rebuild",
+    }
+    customer_write = step.tool_id == "customers" and step.action in {
+        "update",
+        "delete",
+        "batch_delete",
+    }
+    elt_preview = action == ("elt_import", "preview")
+    elt_execution = action == ("elt_import", "execute") and bool(step.params.get("run_id"))
+    memory_action = step.tool_id == "memory_v2" and step.action in {
+        "propose_candidate",
+        "confirm",
+        "correct",
+        "delete",
+    }
     if not (
         action == ("customers", "create")
         or catalog_action
         or file_action
         or sales_action
+        or sales_closed_loop
         or purchase_action
         or cognition_action
         or kellai_action
         or surface_action
         or employee_admission
         or employee_completion
+        or office_stage
+        or template_mutation
+        or business_write
+        or shipment_mutation
+        or stock_movement
+        or dataset_ingest
+        or dataset_rebuild
+        or customer_write
+        or elt_preview
+        or elt_execution
+        or memory_action
     ):
         return _report("inconclusive", "result_verifier_unavailable", "host_registry")
     if not _scope_matches(run, step, call, context):
@@ -884,6 +797,58 @@ def verify_independent_result(
             return _employee_completion(run, step, call, output, context, employee)
         if employee_admission:
             return _employee_admission(run, step, call, output, context)
+        if office_stage:
+            from app.application.elt.docking_approval import verify_office_stage_submission
+
+            return verify_office_stage_submission(run, output, context)
+        if template_mutation:
+            from app.application.template_mutation_receipt import verify_template_mutation
+
+            return verify_template_mutation(run, step, call, output, context)
+        if memory_action:
+            from app.application.memory_v2_facade import verify_memory_mutation
+
+            return verify_memory_mutation(step, call, output, context)
+        if business_write:
+            from app.application.business_db_write_verification import (
+                verify_independent_business_write,
+            )
+
+            return verify_independent_business_write(step, output, context)
+        if shipment_mutation:
+            from app.application.shipment_app_service import verify_agent_shipment_mutation
+
+            return verify_agent_shipment_mutation(step, output, context)
+        if stock_movement:
+            from app.application.inventory_app_service import verify_agent_stock_movement
+
+            return verify_agent_stock_movement(step, output, context)
+        if sales_closed_loop:
+            from app.application.sales.verification import verify_agent_closed_loop
+
+            return verify_agent_closed_loop(step, output, context)
+        if dataset_rebuild:
+            from app.application.dataset_rag.rebuild_coordinator import verify_agent_rebuild
+
+            return verify_agent_rebuild(step, call, output, context)
+        if dataset_ingest:
+            from app.application.dataset_rag.document_lifecycle import verify_agent_document
+
+            return verify_agent_document(step, call, output, context)
+        if customer_write:
+            from app.application.business_db_write_verification import (
+                verify_independent_customer_write,
+            )
+
+            return verify_independent_customer_write(step, output, context)
+        if elt_preview:
+            from app.application.elt.preview_confirmation import verify_agent_preview
+
+            return verify_agent_preview(step, output, context)
+        if elt_execution:
+            from app.application.elt.preview_confirmation import verify_agent_execution
+
+            return verify_agent_execution(step, call, output, context)
         if sales_action:
             return verify_sales_result(step, call, output, context)
         if purchase_action:
@@ -900,7 +865,7 @@ def verify_independent_result(
             )
 
             return verify_kellai_delivery(run, step, call, context)
-        if action == ("customers", "create"):
+        if action in {("customers", "create"), ("customers", "export")}:
             from app.infrastructure.auth.business_scope_gate import (
                 check_owned_business_permission,
             )
@@ -911,7 +876,10 @@ def verify_independent_result(
                 return _report("inconclusive", "result_read_permission_unavailable", "task_scope")
             if str(tenant) != str(context["tenant_id"]):
                 return _report("failed", "result_scope_mismatch", "task_scope")
-            return _customer(step, output, context)
+            if action == ("customers", "create"):
+                from app.application.business_db_write_verification import verify_customer_creation
+
+                return verify_customer_creation(step, output, context)
         if catalog_action:
             if (
                 not {"product.view", "dataset.read"}
@@ -919,6 +887,11 @@ def verify_independent_result(
             ):
                 return _report("inconclusive", "result_read_permission_unavailable", "task_scope")
             return _catalog(step, context)
+        if action == ("shipment_records", "export"):
+            from app.domain.shared_services.auth_service import get_auth_service
+
+            if "shipment.view" not in get_auth_service().get_user_permissions(actor):
+                return _report("inconclusive", "result_read_permission_unavailable", "task_scope")
         return _files(run, step, call, output, context, _GENERATORS.get(employee, ""))
     except (PermissionError, OSError, RuntimeError, ImportError):
         return _report("inconclusive", "result_source_unavailable", "independent_readback")

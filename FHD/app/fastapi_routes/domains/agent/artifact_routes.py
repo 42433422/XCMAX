@@ -29,9 +29,14 @@ def download_agent_artifact(
         if run
         else None
     )
-    if artifact is None or artifact.artifact_type != "file":
+    if artifact is None or artifact.artifact_type not in {"file", "office_document"}:
         return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
     try:
+        if (
+            artifact.artifact_type == "office_document"
+            and artifact.uri != f"/api/agent/runs/{run_id}/artifacts/{artifact_id}"
+        ):
+            raise ValueError("office artifact is not bound to this run")
         content = read_verified_run_file(run_id, artifact.to_dict())
     except (OSError, ValueError, KeyError):
         return JSONResponse(

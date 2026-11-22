@@ -32,13 +32,14 @@ _WORKERS: dict[tuple[str, str], _BrowserWorker] = {}
 _PAYLOAD_LIMIT = 8 * 1024 * 1024
 
 
-def _failure(code: str, *, unknown: bool = True) -> dict[str, Any]:
+def _failure(code: str, *, unknown: bool = True, session_id: str = "") -> dict[str, Any]:
     return {
         "success": False,
         "error_code": code,
         "retryable": False,
         "outcome": "unknown" if unknown else "not_started",
         "reconciliation_required": unknown,
+        **({"session_id": session_id} if session_id else {}),
     }
 
 
@@ -333,18 +334,24 @@ def execute_browser_isolated(
         fingerprint, business_url = _connection_identity(config, context)
     except BOUNDARY_ERRORS:
         return _failure("tool_scope_unavailable", unknown=False)
+    outputs = context.get("node_outputs")
+    generations = {
+        value["session_id"]
+        for value in (outputs.values() if isinstance(outputs, dict) else [])
+        if isinstance(value, dict)
+        and value.get("server") == config.name
+        and isinstance(value.get("session_id"), str)
+        and value["session_id"]
+    }
+    if len(generations) > 1:
+        return _failure("mcp_session_lost")
+    original_session = next(iter(generations), "")
     key = (config.name, scope)
     with _LOCK:
         worker = _WORKERS.get(key)
         if worker is None:
-            outputs = context.get("node_outputs")
-            if any(
-                isinstance(value, dict)
-                and value.get("server") == config.name
-                and value.get("session_id")
-                for value in (outputs.values() if isinstance(outputs, dict) else [])
-            ):
-                return _failure("mcp_session_lost")
+            if original_session:
+                return _failure("mcp_session_lost", session_id=original_session)
             if step.action not in config.session_start_tools:
                 return _failure("mcp_session_not_started", unknown=False)
             if (
@@ -364,8 +371,11 @@ def execute_browser_isolated(
             _WORKERS[key] = worker
         elif worker.fingerprint != fingerprint:
             worker.close()
-            return _failure("mcp_session_lost")
-    return worker.call(step, context, deadline, business_url)
+            return _failure("mcp_session_lost", session_id=original_session)
+    result = worker.call(step, context, deadline, business_url)
+    if result.get("error_code") == "mcp_session_lost" and original_session:
+        result.setdefault("session_id", original_session)
+    return result
 
 
 def _connection_identity(config, context):

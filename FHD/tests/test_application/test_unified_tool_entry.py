@@ -286,7 +286,7 @@ def test_model_aliases_cannot_bypass_the_runtime_with_forged_arguments(
 
 @pytest.mark.parametrize(
     "state,expected",
-    [("unknown", "unknown"), ("waiting_approval", "waiting_approval"), ("queued", "blocked")],
+    [("unknown", "unknown"), ("waiting_approval", "waiting_approval"), ("queued", "unknown")],
 )
 def test_capability_wrapper_keeps_pending_receipt_so_employee_cannot_replay(
     monkeypatch,
@@ -332,12 +332,16 @@ def test_capability_wrapper_keeps_pending_receipt_so_employee_cannot_replay(
         ]
         assert results[0]["agent_run_id"] == results[1]["agent_run_id"]
         for result in results:
-            # A queued child blocks its parent; the original child receipt survives.
+            # A mocked queue acknowledgement has no durable admission evidence.
+            # Keep its original state and require reconciliation without replay.
             assert result["execution_state"] == expected
             assert result["retryable"] is False and result["success"] is False
-            if state == "unknown":
+            if expected == "unknown":
                 assert result["outcome"] == "unknown"
                 assert result["reconciliation_required"] is True
+                if state == "queued":
+                    assert result["result"]["execution_state"] == "queued"
+                    assert result["result"]["agent_status"] == "blocked"
             else:
                 assert result["result"]["execution_state"] == state
                 assert result.get("outcome") != "unknown"

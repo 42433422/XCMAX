@@ -17,11 +17,32 @@ def _client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+def _assert_mock_template_needs_readback(run, payload):
+    # Fake archive results prove dispatch only; no template row was persisted.
+    assert payload["agent_status"] == run.status == "blocked"
+    assert payload["success"] is False
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["retryable"] is False and payload["reconciliation_required"] is True
+    assert payload["verification_code"] == "result_template_receipt_unavailable"
+    receipt = run.tool_calls[0].metadata["verification"]
+    assert receipt["status"] == "inconclusive" and receipt["accepted"] is False
+    assert receipt["code"] == "result_template_receipt_unavailable"
+    assert receipt["checks"] and all(
+        check["status"] == "unavailable" and not check["evidence"] for check in receipt["checks"]
+    )
+    assert run.tool_calls[0].output["success"] is True
+    assert run.final_output.get("business_result", {}).get("success") is not True
+    events = {event.event_type for event in run.events}
+    assert {"tool.started", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
+
+
 def test_templates_create_route_executes_document_template_tool_through_agent(
     tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     actor = trusted_actor()
     repo = InMemoryAgentRunRepository()
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-claims.sqlite"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -41,7 +62,7 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
                 },
                 200,
             ),
-        ),
+        ) as create,
     ):
         response = _client().post(
             "/api/templates/create",
@@ -49,17 +70,18 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
             headers={**actor.headers, "X-User-Id": "untrusted-client-actor"},
         )
 
-    assert response.status_code == 200
+    create.assert_called_once()
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["agent_status"] == "completed"
+    assert payload["agent_status"] == "blocked"
     assert payload["template"]["id"] == "db:1"
 
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == str(actor.user_id)
-    assert run.status == "completed"
+    _assert_mock_template_needs_readback(run, payload)
     assert run.intent == "document_template_create"
     assert run.steps[0].risk == "medium"
     assert run.steps[0].status == "completed"
@@ -68,7 +90,7 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
     assert run.tool_calls[0].permission == "tool.document_template.create"
     assert run.tool_calls[0].metadata["authorization_permission"] == "elt.template.manage"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed"} <= {
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= {
         event.event_type for event in run.events
     }
 
@@ -78,6 +100,7 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
 ) -> None:
     actor = trusted_actor()
     repo = InMemoryAgentRunRepository()
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-claims.sqlite"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -97,7 +120,7 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
                 },
                 200,
             ),
-        ),
+        ) as update,
     ):
         response = _client().post(
             "/api/templates/update",
@@ -105,17 +128,18 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
             headers={**actor.headers, "X-User-Id": "untrusted-client-actor"},
         )
 
-    assert response.status_code == 200
+    update.assert_called_once()
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["agent_status"] == "completed"
+    assert payload["agent_status"] == "blocked"
     assert payload["template"]["name"] == "发货模板 v2"
 
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == str(actor.user_id)
-    assert run.status == "completed"
+    _assert_mock_template_needs_readback(run, payload)
     assert run.intent == "document_template_update"
     assert run.steps[0].risk == "medium"
     assert run.tool_calls[0].tool_id == "document_template"
@@ -130,6 +154,7 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
 ) -> None:
     actor = trusted_actor()
     repo = InMemoryAgentRunRepository()
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-claims.sqlite"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -149,7 +174,7 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
                 },
                 200,
             ),
-        ),
+        ) as delete,
     ):
         response = _client().request(
             "DELETE",
@@ -158,17 +183,18 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
             headers={**actor.headers, "X-User-Id": "untrusted-client-actor"},
         )
 
-    assert response.status_code == 200
+    delete.assert_called_once()
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["agent_status"] == "completed"
+    assert payload["agent_status"] == "blocked"
     assert payload["deleted"]["id"] == "db:1"
 
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == str(actor.user_id)
-    assert run.status == "completed"
+    _assert_mock_template_needs_readback(run, payload)
     assert run.intent == "document_template_delete"
     assert run.steps[0].risk == "high"
     assert run.steps[0].status == "completed"
@@ -177,6 +203,6 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
     assert run.tool_calls[0].permission == "tool.document_template.delete"
     assert run.tool_calls[0].metadata["authorization_permission"] == "elt.template.manage"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed"} <= {
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= {
         event.event_type for event in run.events
     }

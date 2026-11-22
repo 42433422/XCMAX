@@ -844,8 +844,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
     def test_llm_empty_content_returns_none(self) -> None:
         return _assert_shared_llm_empty_content_returns_none_0(self, "")
 
-    def test_llm_invalid_json_returns_none(self) -> None:
-        return _assert_shared_llm_empty_content_returns_none_0(self, "not json{")
+    def test_llm_truncated_plan_json_returns_none(self) -> None:
+        return _assert_shared_llm_empty_content_returns_none_0(self, '{"nodes":[')
 
     def test_llm_valid_plan(self) -> None:
         mock_response = Mock()

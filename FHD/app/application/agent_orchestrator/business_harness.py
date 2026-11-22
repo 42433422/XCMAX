@@ -449,6 +449,8 @@ def _verified_task_admissions(run: Any) -> list[dict[str, Any]]:
     sources = {
         ("employee", "execute"): ("employee_task_ledger", "business_effect_verified"),
         ("enterprise_cognition", "plan"): ("enterprise_authority", "business_execution_verified"),
+        ("excel_import", "office_stage"): ("docking_approval", "business_execution_verified"),
+        ("dataset_rag", "rebuild_index"): ("dataset_rebuild_store", "business_effect_verified"),
     }
     for step in getattr(run, "steps", []) or []:
         source = sources.get((step.tool_id, step.action))
@@ -481,6 +483,11 @@ def _verified_task_admissions(run: Any) -> list[dict[str, Any]]:
                         "task_id": evidence.get("task_id"),
                         "current_child_status": evidence.get("current_child_status"),
                         "business_effect_verified": False,
+                        **(
+                            {"approval_request_id": evidence.get("approval_request_id")}
+                            if source[0] == "docking_approval"
+                            else {}
+                        ),
                     }
                 )
     return admissions
@@ -511,6 +518,13 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     identity = harness_event_context(run)
     artifacts = getattr(run, "artifacts", []) or []
     pending = _pending_approval_signal(payloads)
+    approval_ids = [
+        item["approval_request_id"]
+        for item in admissions
+        if item.get("source") == "docking_approval" and item.get("approval_request_id")
+    ]
+    if not pending and approval_ids:
+        pending = {"approval_request_ids": approval_ids}
     # 审批门后的业务动作**未执行**：此处报 success=true 正是界面谎称
     # 「智能任务执行完成」的来源。终态以审批事实为准，而非外层对话是否正常结束。
     unexecuted = (

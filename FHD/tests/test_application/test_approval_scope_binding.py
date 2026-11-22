@@ -279,7 +279,8 @@ def test_queued_approval_and_retry_do_not_execute_after_scope_drift(monkeypatch,
         )
         assert finished.steps[0].output["success"] is True
         assert (
-            finished.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
+            finished.tool_calls[0].metadata["verification"]["code"]
+            == "result_read_permission_unavailable"
         )
     else:
         assert finished.status == "waiting_user", (
