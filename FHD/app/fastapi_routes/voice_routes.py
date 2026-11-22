@@ -627,6 +627,8 @@ async def voice_command(
                 if isinstance(payload, dict)
                 else {"response": str(payload)}
             )
+            if not isinstance(result, dict):
+                raise ValueError("Invalid public chat response shape")
             details = result.get("data") or {}
             if not isinstance(details, dict):
                 details = {}
