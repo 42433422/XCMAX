@@ -62,3 +62,6 @@ socksio==1.0.0
 defusedxml==0.7.1
 semantic-router==1.1.2
 fastembed==0.9.1
+
+# Local account-tool pairing credentials: native OS keychain (MIT).
+keyring==25.7.0

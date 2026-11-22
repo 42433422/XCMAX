@@ -256,7 +256,7 @@
   },
   "tools": {
     "kellai": {
-      "description": "客来来统一渠道、客户与会话。先读取真实联系人和渠道；send 必须精确给出 customer_id、channel_type、contact_id、content，经现有审批流程批准后执行。发送受理不是送达，结果未知时使用 receipt 查询，不得新建请求重发。",
+      "description": "客来来是本机账号与消息通道工具。先读取账号连接和联系人映射；send 必须精确给出 connection_id、customer_id、channel_type、contact_id、content，经 XCMAX 审批后执行。受理不等于送达，未知结果只用 receipt 查询原请求。",
       "availability": "shared",
       "actions": {
         "channels": {
@@ -269,7 +269,7 @@
             "max_attempts": 0
           }
         },
-        "customers": {
+        "contacts": {
           "risk": "low",
           "read_only": true,
           "idempotent": true,
@@ -279,12 +279,13 @@
             "max_attempts": 0
           }
         },
-        "conversations": {
+        "messages": {
           "risk": "low",
           "read_only": true,
           "idempotent": true,
           "required_params": [
-            "customer_id"
+            "customer_id",
+            "connection_id"
           ],
           "availability": "shared",
           "retry": {
@@ -297,6 +298,7 @@
           "idempotent": false,
           "required_params": [
             "customer_id",
+            "connection_id",
             "channel_type",
             "contact_id",
             "content"

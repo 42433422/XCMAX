@@ -6,7 +6,7 @@ import KellaiView from '../../../mods/tools/kellai/frontend/views/KellaiView.vue
 import KellaiMessageComposer from '@/components/im/kellaiInbox/KellaiMessageComposer.vue'
 import { deliveryTargetKey, useKellaiStore } from '@/stores/kellai'
 
-const api = vi.hoisted(() => ({ status: vi.fn(), start: vi.fn(), dataStatus: vi.fn(), customers: vi.fn(), channels: vi.fn(), conversations: vi.fn(), latestDraft: vi.fn(), followUpOverview: vi.fn(), sendReceipt: vi.fn(), sendMessage: vi.fn() }))
+const api = vi.hoisted(() => ({ status: vi.fn(), start: vi.fn(), contacts: vi.fn(), channels: vi.fn(), messages: vi.fn(), sendReceipt: vi.fn(), sendMessage: vi.fn() }))
 vi.mock('@/api/kellaiBinding', () => ({ default: api }))
 vi.mock('@/components/LocalFileAccessCard.vue', () => ({ default: { template: '<div>本机文件授权</div>' } }))
 
@@ -20,44 +20,45 @@ describe('Kellai product module', () => {
   })
   afterEach(() => { delete (window as Window & { xcagiDesktop?: unknown }).xcagiDesktop })
 
-  it('shows the five workspaces and requests send permission only after explicit selection', async () => {
+  it('shows the three tool workspaces and requests send permission only after explicit selection', async () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/kellai', component: KellaiView }] })
     await router.push('/kellai')
     await router.isReady()
     const wrapper = mount(KellaiView, { global: { plugins: [router] } })
     await flushPromises()
     expect(wrapper.findAll('h1').map(item => item.text())).toEqual(['智能生态 / 客来来'])
-    expect(wrapper.findAll('[role="tab"]').map(item => item.text())).toEqual(['连接与账号', '消息中心', '联系人', '数据接入', '自动化'])
+    expect(wrapper.findAll('[role="tab"]').map(item => item.text())).toEqual(['连接与账号', '统一聊天', '联系人'])
     const authorize = () => wrapper.findAll('button').find(item => item.text() === '连接客来来')!
     await authorize().trigger('click')
     await flushPromises()
-    expect(api.start).toHaveBeenLastCalledWith(['customer_profiles.read', 'customer_conversations.read', 'channels.read'])
+    expect(api.start).toHaveBeenLastCalledWith(['channels.read', 'messages.read'])
     await wrapper.get('.el-switch').trigger('click')
     await authorize().trigger('click')
     await flushPromises()
-    expect(api.start).toHaveBeenLastCalledWith(['customer_profiles.read', 'customer_conversations.read', 'channels.read', 'messages.send'])
+    expect(api.start).toHaveBeenLastCalledWith(['channels.read', 'messages.read', 'messages.send'])
     wrapper.unmount()
   })
 
-  it('maps old WeChat source links to the authorized inbox while honoring an explicit workspace', async () => {
+  it('maps old WeChat source links to the authorized inbox without restoring removed business workspaces', async () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/kellai', component: KellaiView }] })
     await router.push('/kellai?source=wechat_local_db')
     const wrapper = mount(KellaiView, { global: { plugins: [router] } })
     await flushPromises()
-    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('消息中心')
-    expect(api.customers).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('统一聊天')
+    expect(api.contacts).not.toHaveBeenCalled()
     expect(api.sendMessage).not.toHaveBeenCalled()
     await router.push('/kellai?source=wechat_local_db&workspace=data')
     await flushPromises()
-    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('数据接入')
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('统一聊天')
     wrapper.unmount()
   })
 
   it('keeps receipt recovery available when the original channel is offline', async () => {
     const store = useKellaiStore()
     store.binding = { state: 'connected', connection: { connection_id: 'paired', authorized_scopes: ['messages.send'] } }
-    store.activeCustomerId = 7
-    const key = deliveryTargetKey({ customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9' })
+    store.activeContactId = 7
+    store.activeConnectionId = 'account-a'
+    const key = deliveryTargetKey({ customer_id: 7, connection_id: 'account-a', channel_type: 'chatwoot', contact_id: 'conversation-9' })
     store.deliveries['existing-request-id'] = { request_id: 'existing-request-id', target_key: key, receipt: { request_id: 'existing-request-id', status: 'unknown' }, checking: false, error: '' }
     api.sendReceipt.mockResolvedValue({ request_id: 'existing-request-id', status: 'accepted', persisted: false })
     const wrapper = mount(KellaiMessageComposer)

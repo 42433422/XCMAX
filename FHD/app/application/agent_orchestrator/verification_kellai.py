@@ -45,9 +45,9 @@ def can_observe_kellai_delivery(run, step, call) -> bool:
 
 def verify_kellai_delivery(run, step, call, context: dict) -> dict:
     from app.application import kellai_binding_app_service as binding
+    from app.application.kellai_binding_app_service import request_kellai
     from app.application.tools.kellai import delivery_request_id
     from app.infrastructure.auth.agent_mod_scope import _bound_actor
-    from app.infrastructure.kellai_client import request_kellai
 
     source = "kellai_original_delivery"
     output = call.output
@@ -98,17 +98,21 @@ def verify_kellai_delivery(run, step, call, context: dict) -> dict:
     # A matching provider ID alone does not prove the approved customer,
     # recipient and content. Read the original scoped message projection too.
     connection = binding.scoped_connection(
-        actor=actor_id, tenant_id=tenant_id, scope="customer_conversations.read"
+        actor=actor_id, tenant_id=tenant_id, scope="messages.read"
     )
     if binding.connection_identity_sha256(connection) != approved_connection:
         return _report("failed", "result_delivery_connection_changed", source)
     params = step.params
     data = request_kellai(
-        f"customers/{params['customer_id']}/conversations?message_id="
+        f"contacts/{params['customer_id']}/messages?connection_id={quote(params['connection_id'], safe='')}&message_id="
         f"{quote(str(receipt['message_id']), safe='')}&limit=1",
         connection,
     ).get("data")
-    if not isinstance(data, dict) or data.get("customer_id") != params["customer_id"]:
+    if (
+        not isinstance(data, dict)
+        or data.get("customer_id") != params["customer_id"]
+        or data.get("connection_id") != params["connection_id"]
+    ):
         return _report("inconclusive", "result_delivery_message_unavailable", source)
     rows = data.get("messages")
     messages = (
@@ -128,7 +132,7 @@ def verify_kellai_delivery(run, step, call, context: dict) -> dict:
         or type(message.get("customer_id")) is not int
         or any(
             message.get(key) != params[key]
-            for key in ("customer_id", "channel_type", "contact_id", "content")
+            for key in ("customer_id", "connection_id", "channel_type", "contact_id", "content")
         )
     ):
         return _report("failed", "result_delivery_message_mismatch", source)

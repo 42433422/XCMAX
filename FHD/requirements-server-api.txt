@@ -81,3 +81,6 @@ email-validator>=2.0.0
 passlib[bcrypt]>=1.7.4
 PyJWT>=2.15.0
 PyYAML>=6.0.2
+
+# Local account-tool pairing credentials: native OS keychain (MIT).
+keyring==25.7.0

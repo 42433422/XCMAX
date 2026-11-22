@@ -17,3 +17,6 @@
 -e ../packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres
 -e ../packages/xcagi_langgraph_prebuilt
 -e ../packages/xcagi_langgraph_sdk
+
+# Local account-tool pairing credentials: native OS keychain (MIT).
+keyring==25.7.0

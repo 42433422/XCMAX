@@ -16,23 +16,19 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 | 迁移与历史入口 | [MIGRATION_REGISTRY](docs/MIGRATION_REGISTRY.md) |
 | 更新内容 | [CHANGELOG](CHANGELOG.md) |
 
-## 客来来模块
+## 客来来账号工具
 
-企业客户端的“数据来源”入口现统一为“客来来”，主路径 `/kellai`，标题为“智能生态 / 客来来”。普通模块 `mods/tools/kellai` 随企业包交付，五个工作区为连接与账号、消息中心、联系人、数据接入、自动化。原 `/data-sources` 和 ERP Mod 旧链接保留查询参数与定位片段并转到新入口；内部导航键保持兼容已有角色和移动菜单。
+企业客户端的“客来来”入口由 `mods/tools/kellai` 随企业包交付，保留连接与账号、统一聊天、联系人三个工作区。客来来管理本机外部账号和收发通道；联系人仅是账号与外部地址的映射。客户档案、经营数据、AI 任务和审批由 XCMAX 业务模块统一处理。原 `/data-sources` 跳转继续保留查询参数，未再提供数据接入、自动化或专用 Copilot。
 
-模块复用已有 `KellaiCustomerInbox`、本机文件授权、ELT、AI 模型和跟进任务，Pinia 中共享绑定、客户、会话及回执。渠道目录、实际收发能力与连接状态直接读取客来来；没有渠道能力就不显示可用发送，未实现的静态 planned 来源不再充当产品能力。每类渠道当前只有客来来配置的主实例，渠道凭据、回调和自动回复规则在客来来管理。
+配对协议为 v2，权限收敛到 `channels.read`、`messages.read`、`messages.send`。默认只申请前两项；发送需主动选择并在客来来确认。一次交接限定回环来源、Host、Origin 和自定义请求头；原待授权请求只能消费一次。旧授权不自动扩展权限，升级后需重新确认。元数据绑定当前 XCMAX 登录账号与企业范围，秘密只存系统凭据库引用。宿主以配对令牌查询受保护的 `grant-status`；仅明确的撤销或令牌失效响应会退役凭据并提示重配，离线不当作撤销，历史回执编号保留。固定代理访问 `127.0.0.1:8793`，不接收任意服务地址或浏览器渠道密钥。
 
-默认旧配对仍只申请 `customer_profiles.read`、`customer_conversations.read`。模块入口另申请 `channels.read`；`messages.send` 需用户主动选择并在客来来确认，保存当前 XCMAX 登录账号与企业范围，原只读绑定不自动升级。新代理固定访问本机 `127.0.0.1:8793`，复用客来来 `integrations/xcmax/channels`、`messages/send`、`messages/requests/{client_request_id}`。令牌不交给前端，不接受浏览器提供的渠道密钥或任意发送地址。
+统一聊天由用户选择明确的 `connection_id` 和联系人后读取消息；即使只有一个账号也不会默选发送目标。发送同时绑定账号、渠道、联系人与正文，正文上限与工具一致为 8000 字符，并以原 `client_request_id` 查询独立回执。每条请求号按登录账号保存在本机，重新授权保留历史；旧记录中未能确认账号的未决发送先核对回执。新请求在发送前被权限或参数校验明确拒绝时不留下未决阻塞；超时、冲突或历史回执读取被拒绝不能证明原请求未发送，也不自动重发。渠道受理、平台发出、送达和已读按真实回执分别展示，解除绑定不能撤回已受理消息。恢复存储损坏时拒绝新发送；清除应用数据不在恢复保证内，多窗口人工发送仍不提供跨窗口原子互斥。
 
-手动发送只使用已授权客户会话中的渠道联系人编号。每条发送按请求号保留独立回执，同一联系人的后一次发送不会覆盖前一次查询入口；任何未决请求仍阻止对该目标重复发送。超时和未知结果只查询原回执；同一账号与连接在关闭窗口或重启后仍恢复所有已保存请求编号，内容与令牌不进入该恢复存储。恢复或持久保存失败时拒绝发送；用户清除应用数据不在恢复保证内，多窗口存储也不提供原子互斥。账本 `accepted` 表示渠道受理，界面和小 C 按真实 `provider_state` 显示已发送、送达、已读或失败；未知请求不会因附带状态被升级为成功。桌面执行型渠道明确返回 `requires_desktop_execution`，不冒充服务端已发送。解除绑定不能撤回已受理的消息。
-
-小 C 通过既有 `execute_erp_capability` 注册表调用 `kellai.channels/customers/conversations/send/receipt`，没有第二套 Agent 运行时。发送属于 high 风险、必须写审批、不自动重试；执行前复核封存的登录身份、客来来 scope、已持久化审批的精确收件人和正文，再以运行与步骤生成稳定请求编号。自动化页复用客来来配置入口；本模块人工发送授权不会自动开启自动发送规则。
-
-摘要与草稿沿现有 `chat_completion_openai_format(profile="customer_copilot", request=request)` 使用宿主账户模型。独立客来来可配置现有 OpenAI 兼容账户网关 `/v1/models` 与 `/v1/chat/completions`（`xcauto-account`、`stream=false`）；需已有账户 JWT，或明确配置了钱包签名和 `llm:use` 的 PAT。渠道配对令牌不等于模型授权，LiteLLM 服务端主密钥不下发给模块，不建立另一套供应商密钥池。
-
-验证边界：单元与本机契约测试只证明代码边界；真实外部渠道仍需要有效账号、凭据、可达回调和原始供应商回执，候选代码不能作为已发布或真实送达证据。
+通用小 C 经既有 `execute_erp_capability` 调用 `kellai.channels/contacts/messages/send/receipt`。发送沿宿主 high 风险审批，执行前复核登录身份、scope 和已持久化审批的精确参数；原运行与步骤生成稳定请求编号。独立验证同时读取原回执和原账号消息，核对内容与收件人后才确认送达。Chatwoot 消息由本机工具经认证 GET 拉取，签名回调是可选入口；真实渠道仍需有效账号、凭据、可达供应商服务及可验证回执。跨仓隔离 HTTP 测试覆盖请求、审批消耗、发送、回执持久化和 Agent 重载核验，不代表安装包或真实账号验收通过。
 
 ## 开源组件选型
+
+宿主账号工具的秘密存储复用 [keyring 25.7.0](https://github.com/jaraco/keyring/tree/v25.7.0)（MIT；`pyproject.toml`、部署锁和 `uv.lock` 固定版本）。只启用 macOS Keychain、Windows Credential Manager、Secret Service 或 KWallet 原生后端；无安全后端则停止授权，不写明文备用文件。一次交接复用已固定的 [filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT）做跨进程互斥；产品代码只处理账号归属、权限与协议校验。
 
 CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。
 
@@ -56,7 +52,6 @@ Computer Use 在现有 `desktop_automation` 工具内复用 [Playwright Python 1
 浏览器执行复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0，`browser` extra 与 `uv.lock` 固定版本，与现有前端版本一致）的 BrowserContext、严格 locator、自动等待、断言、上传与下载。内部页面沿用 AIOPEN 光标；任务、模型路由、审批、租约、幂等和文件存储均复用现有 Agent。[Playwright MCP](https://github.com/microsoft/playwright-mcp) 复用原 LangGraph 和按任务保留的浏览器会话；[Browser Use](https://github.com/browser-use/browser-use) 与 [Stagehand](https://github.com/browserbase/stagehand)（均 MIT）提供更高层模型编排，本次选择更薄的 Playwright 原语适配。配置、代码边界与剩余缺口见 [浏览器执行接入](docs/aiopen.md#agent-浏览器执行闭环)。
 
 浏览器进程预算复用既有 [psutil 7.2.2](https://github.com/giampaolo/psutil)（BSD-3-Clause，`uv.lock` 与部署锁均已固定）和 Agent 子进程握手、截止及回收器。真实 Chromium 对照确认 2 GiB 虚拟地址上限会阻止启动，浏览器任务因而使用整棵已观测进程树的 RSS 预算，默认仍为 2 GiB；CPU、句柄和 Chromium sandbox 保留。RSS 轮询是运行预算监督，严格内核内存隔离需部署侧 cgroup 等机制，不能把前者当成后者。
-客来来工作区复用前端 lockfile 已固定的 [Vue 3.5.45](https://github.com/vuejs/core/tree/v3.5.45)、[Pinia 4.1.0](https://github.com/vuejs/pinia/tree/v4.1.0)、[Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（均为 MIT）。采用现有 tabs、table、switch、状态 store 和请求工具，不搬入 React/Tauri 页面或新增渠道 SDK；渠道协议仍由客来来统一负责。
 
 小 C 桌面浮窗复用已锁定的 [Electron 45.3.2](https://github.com/electron/electron/tree/v45.3.2)（MIT）`BrowserWindow` 和 `Tray`，沿用现有小 C 对话组件和同一登录会话。
 

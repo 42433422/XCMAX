@@ -33,7 +33,6 @@
 [domain->infrastructure] app/domain/shared_services/fhd_payment_reconciliation.py:36
 [domain->infrastructure] app/domain/shared_services/intent_confirmation_service.py:392
 [domain->infrastructure] app/domain/shared_services/intent_recognition_pipeline.py:262
-[domain->infrastructure] app/domain/shared_services/kellai_customer_copilot.py:144
 [domain->infrastructure] app/domain/shared_services/kitten_ai_document/generate.py:12
 [domain->infrastructure] app/domain/shared_services/materials_service.py:19
 [domain->infrastructure] app/domain/shared_services/mobile_relay_desktop_client.py:123

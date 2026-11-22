@@ -1360,7 +1360,6 @@
     "tests/test_services/test_intent_trainer_extended.py": 0.253057,
     "tests/test_services/test_inventory_service.py": 5.046058,
     "tests/test_services/test_invoicing_service.py": 2.081289,
-    "tests/test_services/test_kellai_customer_copilot.py": 0.03,
     "tests/test_services/test_kitten_ai_document_generate.py": 0.460537,
     "tests/test_services/test_kitten_ai_document_pickup.py": 0.087134,
     "tests/test_services/test_kitten_business_snapshot.py": 0.106981,

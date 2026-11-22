@@ -320,7 +320,6 @@ desktop_excludes = [
     "grpc",
     "h5py",
     "jedi",
-    "keyring",
     "langchain",
     "librosa",
     "lightgbm",

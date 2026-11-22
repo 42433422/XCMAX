@@ -10,6 +10,7 @@ from app.application.tools import kellai
 
 PARAMS = {
     "customer_id": 7,
+    "connection_id": "account-chatwoot-a",
     "channel_type": "chatwoot",
     "contact_id": "conversation-28",
     "content": "请查收已确认的回复",
@@ -21,12 +22,19 @@ def authorized(monkeypatch, tmp_path):
     from app.domain.shared_services import kellai_binding_store as store
 
     monkeypatch.setattr(store, "_store_path", lambda: tmp_path / "binding.json")
+    secrets = {}
+    native = SimpleNamespace(
+        set_password=lambda _s, k, v: secrets.__setitem__(k, v),
+        get_password=lambda _s, k: secrets.get(k),
+        delete_password=lambda _s, k: secrets.pop(k, None),
+    )
+    monkeypatch.setattr(store, "_credential_backend", lambda: native)
     store.start_pairing(
         actor=9,
         tenant_id="tenant-a",
         requested_scopes=[scope["id"] for scope in store.ALLOWED_SCOPES],
     )
-    pending = store.pending_for_kellai()
+    pending = store.claim_handoff()
     store.approve_pairing(
         request_id=pending["request_id"],
         authorization_secret=pending["authorization_secret"],
@@ -72,7 +80,7 @@ def test_missing_actor_and_other_tenant_cannot_read_customer_data(monkeypatch, a
         kellai.execute_kellai("channels", {}, authorized)["error_code"] == "tool_identity_required"
     )
     monkeypatch.setattr(kellai, "_bound_actor", lambda _: SimpleNamespace(id=9))
-    result = kellai.execute_kellai("customers", {}, {**authorized, "tenant_id": "tenant-b"})
+    result = kellai.execute_kellai("contacts", {}, {**authorized, "tenant_id": "tenant-b"})
     assert result["error_code"] == "kellai_scope_required"
 
 
@@ -143,7 +151,11 @@ def test_persisted_approval_binds_exact_recipient_content_and_consumption(monkey
     request_id = kellai._approved_request_id(PARAMS, authorized)
     assert request_id == kellai._approved_request_id(PARAMS, authorized)
     assert request_id.startswith("agent_")
-    for field, value in [("contact_id", "other-recipient"), ("content", "unapproved-content")]:
+    for field, value in [
+        ("contact_id", "other-recipient"),
+        ("content", "unapproved-content"),
+        ("connection_id", "account-chatwoot-b"),
+    ]:
         with pytest.raises(PermissionError):
             kellai._approved_request_id({**PARAMS, field: value}, authorized)
     run.metadata["approval_receipt"]["grant_id"] = "not-consumed"
@@ -155,7 +167,7 @@ def test_persisted_approval_binds_exact_recipient_content_and_consumption(monkey
     store.start_pairing(
         actor=9, tenant_id="tenant-a", requested_scopes=[row["id"] for row in store.ALLOWED_SCOPES]
     )
-    pending = store.pending_for_kellai()
+    pending = store.claim_handoff()
     store.approve_pairing(
         request_id=pending["request_id"],
         authorization_secret=pending["authorization_secret"],

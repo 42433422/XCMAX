@@ -12,9 +12,18 @@ _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 class KellaiRequestError(RuntimeError):
-    def __init__(self, message: str, status_code: int = 503):
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 503,
+        code: str = "",
+        *,
+        request_not_dispatched: bool = False,
+    ):
         super().__init__(message)
         self.status_code = status_code
+        self.code = code
+        self.request_not_dispatched = request_not_dispatched
 
 
 def request_kellai(
@@ -43,11 +52,26 @@ def request_kellai(
         with (opener or _OPENER.open)(request, timeout=30 if body is not None else 5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
+        code = ""
+        rejection = False
         try:
             error = json.loads(exc.read().decode("utf-8"))
-            detail = error.get("detail") or error.get("error")
+            detail = (
+                (error.get("detail") or error.get("error")) if isinstance(error, dict) else None
+            )
+            rejection = isinstance(detail, str) and bool(detail.strip())
             if isinstance(detail, dict):
+                code = str(detail.get("code") or "")
                 detail = detail.get("message") or detail.get("error")
+                rejection = bool(code or isinstance(detail, str) and detail.strip())
+            elif isinstance(detail, list) and detail:
+                rejection = exc.code == 422 and all(
+                    isinstance(item, dict)
+                    and isinstance(item.get("loc"), list)
+                    and item["loc"][:1] == ["body"]
+                    and isinstance(item.get("type"), str)
+                    for item in detail
+                )
         except (ValueError, OSError):
             detail = None
         if (
@@ -82,6 +106,13 @@ def request_kellai(
         raise KellaiRequestError(
             detail if isinstance(detail, str) else "客来来拒绝了请求，请检查授权和连接状态",
             exc.code if 400 <= exc.code < 600 else 502,
+            code=code,
+            # The fixed tool gateway performs auth/schema checks before its
+            # delivery handler. Conflict, missing ledger and transport errors
+            # cannot establish that an original request was never dispatched.
+            request_not_dispatched=path == "messages/send"
+            and exc.code in {401, 403, 422}
+            and rejection,
         ) from exc
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
         raise KellaiRequestError(

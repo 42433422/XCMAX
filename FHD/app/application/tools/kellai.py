@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 from typing import Any
+from urllib.parse import urlencode
 
 from app.application import kellai_binding_app_service as binding
+from app.application.kellai_binding_app_service import request_kellai
 from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
-from app.infrastructure.kellai_client import KellaiRequestError, request_kellai
+from app.infrastructure.kellai_client import KellaiRequestError
 
 
 def delivery_request_id(run_id: str, step_id: str) -> str:
@@ -102,8 +104,8 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
         actor = _bound_actor(context)
         scope = {
             "channels": "channels.read",
-            "customers": "customer_profiles.read",
-            "conversations": "customer_conversations.read",
+            "contacts": "messages.read",
+            "messages": "messages.read",
             "send": "messages.send",
             "receipt": "messages.send",
         }[action]
@@ -117,12 +119,13 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
             path = "messages/send"
         elif action == "receipt":
             path = f"messages/requests/{params['client_request_id']}"
-        elif action == "conversations":
-            path = (
-                f"customers/{params['customer_id']}/conversations?limit={params.get('limit', 30)}"
+        elif action == "messages":
+            query = urlencode(
+                {"connection_id": params["connection_id"], "limit": params.get("limit", 30)}
             )
-        elif action == "customers":
-            path = f"customers?limit={params.get('limit', 50)}"
+            path = f"contacts/{params['customer_id']}/messages?{query}"
+        elif action == "contacts":
+            path = f"contacts?limit={params.get('limit', 50)}"
         else:
             path = "channels"
         result = request_kellai(path, connection, body)

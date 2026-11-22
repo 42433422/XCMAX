@@ -10,7 +10,8 @@
         <div class="kellai-module__grid" data-tutorial-id="kellai-connections">
           <ElCard shadow="never">
             <template #header>本机连接授权</template>
-            <p>使用当前 XCMAX 账号连接客来来。客户资料、会话与渠道配置以客来来为准。</p>
+            <p>客来来只管理外部账号连接与消息通道。业务数据、AI 任务和审批统一由 XCMAX 处理。</p>
+            <ElAlert v-if="binding.requires_reauthorization" title="账号工具已升级，请重新确认授权；原发送记录保留用于核对。" type="warning" :closable="false" />
             <p v-if="binding.connection?.authorized_by?.display_name">客来来授权人：{{ binding.connection.authorized_by.display_name }}</p>
             <div class="kellai-module__tags"><ElTag v-for="scope in scopes" :key="scope">{{ scopeLabel(scope) }}</ElTag></div>
             <label class="kellai-module__grant"><ElSwitch v-model="requestSend" :disabled="busy" />申请人工发送权限</label>
@@ -27,53 +28,29 @@
             <ElAlert v-if="channelError" :title="channelError" type="warning" :closable="false" />
             <ElEmpty v-if="!scopes.includes('channels.read')" description="申请渠道读取权限后显示真实连接与能力" :image-size="70" />
             <ElEmpty v-else-if="!channels.length" description="客来来尚未返回渠道，请检查本机服务与配置" :image-size="70" />
-            <div v-for="channel in channels" :key="channel.connection_id || channel.type" class="kellai-module__channel">
+            <div v-for="channel in channels" :key="channel.connection_id" class="kellai-module__channel">
               <div class="kellai-module__channel-heading"><strong>{{ channel.name }}</strong><ElTag :type="channel.connected ? 'success' : 'info'">{{ !channel.enabled ? '未启用' : channel.connected ? '已连接' : '未连接' }}</ElTag></div>
               <div class="kellai-module__tags"><ElTag v-for="capability in capabilityLabels(channel)" :key="capability">{{ capability }}</ElTag></div>
               <p class="kellai-module__muted">{{ channel.capabilities.reason || receiveLabel(channel.capabilities.receive_mode) }}</p>
               <small>{{ channel.connection_id }}</small>
             </div>
-            <p class="kellai-module__muted">各渠道当前使用客来来配置的主账号；在客来来完成密钥、回调与桥接配置。能力以服务端返回为准。</p>
+            <p class="kellai-module__muted">每行对应一个明确的账号连接；收发按连接编号执行。在客来来管理凭据、回调和退出登录。</p>
           </ElCard>
         </div>
       </ElTabPane>
-      <ElTabPane label="消息中心" name="messages" lazy>
+      <ElTabPane label="统一聊天" name="messages" lazy>
         <KellaiCustomerInbox embedded />
       </ElTabPane>
       <ElTabPane label="联系人" name="contacts" lazy>
-        <ElInput v-model="contactSearch" placeholder="搜索已授权客户名称或渠道" clearable aria-label="搜索联系人" />
-        <ElTable :data="filteredCustomers" empty-text="暂无已授权客户，请先连接客来来并接入真实渠道">
-          <ElTableColumn prop="display_name" label="客户" min-width="150" />
-          <ElTableColumn label="阶段" min-width="100"><template #default="{ row }">{{ row.stage_label || row.stage || '未分阶段' }}</template></ElTableColumn>
-          <ElTableColumn label="来源渠道" min-width="160"><template #default="{ row }">{{ row.channel_sources?.join('、') || '未标记' }}</template></ElTableColumn>
-          <ElTableColumn prop="last_message_preview" label="最近消息" min-width="220" show-overflow-tooltip />
-          <ElTableColumn label="操作" width="100"><template #default="{ row }"><ElButton link type="primary" @click="openConversation(row.customer_id)">查看会话</ElButton></template></ElTableColumn>
+        <ElInput v-model="contactSearch" placeholder="搜索联系人、账号或渠道" clearable aria-label="搜索联系人" />
+        <ElTable :data="filteredContacts" empty-text="暂无联系人映射，请先连接客来来并接入真实渠道">
+          <ElTableColumn prop="contact_name" label="联系人" min-width="150" />
+          <ElTableColumn prop="channel_type" label="渠道" min-width="100" />
+          <ElTableColumn prop="connection_id" label="账号连接" min-width="180" show-overflow-tooltip />
+          <ElTableColumn prop="contact_id" label="外部联系人编号" min-width="180" show-overflow-tooltip />
+          <ElTableColumn label="操作" width="100"><template #default="{ row }"><ElButton link type="primary" @click="openConversation(row)">查看会话</ElButton></template></ElTableColumn>
         </ElTable>
-        <p class="kellai-module__muted">展示本次已授权的最近 {{ customers.length }} 位客户；发送时使用会话中的渠道联系人编号。</p>
-      </ElTabPane>
-      <ElTabPane label="数据接入" name="data" lazy>
-        <LocalFileAccessCard />
-        <ElCard shadow="never" class="kellai-module__section">
-          <template #header>企业数据接入</template>
-          <p>数据库、表格与业务系统继续使用现有数据对接中心。文件授权、同步作业和知识检索保留原来的权限与执行记录。</p>
-          <ElButton type="primary" @click="router.push({ name: 'business-docking' })">打开数据对接中心</ElButton>
-        </ElCard>
-      </ElTabPane>
-      <ElTabPane label="自动化" name="automation" lazy>
-        <div class="kellai-module__grid">
-          <ElCard shadow="never">
-            <template #header>客户沟通与内部跟进</template>
-            <p>消息中心复用当前配置的 AI 模型生成摘要、意图与回复草稿，审批后可以建立跟进任务或填入发送编辑器。</p>
-            <p>当前客户：{{ activeCustomer?.display_name || '尚未选择' }} · 待跟进 {{ followUpMetrics?.open || 0 }} 项</p>
-            <ElButton @click="setWorkspace('messages')">处理客户消息与跟进</ElButton>
-          </ElCard>
-          <ElCard shadow="never">
-            <template #header>外部消息自动化</template>
-            <p>自动回复与定时任务由客来来统一执行。在客来来设置执行条件、渠道和发送策略，并查看运行记录。</p>
-            <p class="kellai-module__muted">本模块的人工发送授权不会自动开启任何自动发送规则。</p>
-            <ElButton @click="store.handleOpenKellai">打开客来来管理自动化</ElButton>
-          </ElCard>
-        </div>
+        <p class="kellai-module__muted">展示 {{ contacts.length }} 条账号与联系人映射。客户档案、销售阶段和跟进任务由 XCMAX 业务模块管理。</p>
       </ElTabPane>
     </ElTabs>
   </section>
@@ -84,16 +61,15 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElSwitch, ElTable, ElTableColumn, ElTabPane, ElTabs, ElTag } from 'element-plus'
-import type { KellaiChannel } from '@/api/kellaiBinding'
+import type { KellaiChannel, KellaiContact } from '@/api/kellaiBinding'
 import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue'
-import LocalFileAccessCard from '@/components/LocalFileAccessCard.vue'
 import { KELLAI_READ_SCOPES, useKellaiStore } from '@/stores/kellai'
 
 const store = useKellaiStore()
-const { binding, channels, customers, scopes, busy, error, channelError, statusLabel, activeCustomer, followUpMetrics } = storeToRefs(store)
+const { binding, channels, contacts, scopes, busy, error, channelError, statusLabel } = storeToRefs(store)
 const router = useRouter()
 const route = useRoute()
-const areas = ['connections', 'messages', 'contacts', 'data', 'automation']
+const areas = ['connections', 'messages', 'contacts']
 function routeWorkspace(): string {
   const { workspace, source } = route.query
   if (typeof workspace === 'string' && areas.includes(workspace)) return workspace
@@ -103,15 +79,15 @@ function routeWorkspace(): string {
 const workspace = ref(routeWorkspace())
 const requestSend = ref(false)
 const contactSearch = ref('')
-const filteredCustomers = computed(() => customers.value.filter(customer => `${customer.display_name} ${customer.channel_sources?.join(' ') || ''}`.toLowerCase().includes(contactSearch.value.trim().toLowerCase())))
+const filteredContacts = computed(() => contacts.value.filter(contact => `${contact.contact_name} ${contact.channel_type} ${contact.connection_id}`.toLowerCase().includes(contactSearch.value.trim().toLowerCase())))
 watch(routeWorkspace, value => { workspace.value = value })
 function persistWorkspace(): void { void router.replace({ query: { ...route.query, workspace: workspace.value }, hash: route.hash }) }
 function setWorkspace(value: string): void { workspace.value = value; persistWorkspace() }
-async function openConversation(customerId: number): Promise<void> {
-  const customer = customers.value.find(item => item.customer_id === customerId)
-  if (customer) { setWorkspace('messages'); await store.selectCustomer(customer) }
+async function openConversation(contact: KellaiContact): Promise<void> {
+  setWorkspace('messages')
+  await store.selectContact(contact)
 }
-function authorize(): void { void store.startBinding([...KELLAI_READ_SCOPES, 'channels.read', ...(requestSend.value ? ['messages.send'] : [])]) }
+function authorize(): void { void store.startBinding([...KELLAI_READ_SCOPES, ...(requestSend.value ? ['messages.send'] : [])]) }
 function scopeLabel(id: string): string { return binding.value.available_scopes?.find(scope => scope.id === id)?.label || id }
 function capabilityLabels(channel: KellaiChannel): string[] {
   const cap = channel.capabilities

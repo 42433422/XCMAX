@@ -279,7 +279,7 @@ def test_windows_builders_pass_four_part_product_version_metadata() -> None:
     assert "Record '6.exe版本' 'FAIL'" in acceptance
 
 
-def test_desktop_package_includes_chat_voice_runtime() -> None:
+def test_desktop_package_includes_chat_and_account_runtimes() -> None:
     spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
     build = (REPO_ROOT / "scripts" / "package" / "build-backend.sh").read_text(encoding="utf-8")
     normalizer = (
@@ -290,6 +290,7 @@ def test_desktop_package_includes_chat_voice_runtime() -> None:
     excludes = spec.split("desktop_excludes = [", 1)[1].split("]", 1)[0]
     assert '"faster_whisper"' not in excludes
     assert '"av"' not in excludes
+    assert '"keyring"' not in excludes
     assert "collect_submodules(module)" in spec
     assert "collect_dynamic_libs(module)" in spec
     assert "binaries=binaries" in spec

@@ -2,22 +2,25 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.domain.shared_services import kellai_binding_store
 from app.fastapi_routes import kellai_binding
-from app.services import kellai_binding_store
 
 PAIRING_HEADERS = {"X-Kellai-Local-Pairing": "1"}
 XCMAX_HEADERS = {**PAIRING_HEADERS, "X-XCMAX-Client-Shell": "enterprise"}
 CLIENT_HEADERS = {"X-XCMAX-Client-Shell": "enterprise"}
 
+NATIVE_BACKEND_SELECTOR = kellai_binding_store._credential_backend
+
 MODULE_SCOPES = [
-    "customer_profiles.read",
-    "customer_conversations.read",
     "channels.read",
+    "messages.read",
     "messages.send",
 ]
 
@@ -29,11 +32,12 @@ def approve_module(client: TestClient, scopes: list[str] | None = None) -> dict:
         json={"requested_scopes": scopes or MODULE_SCOPES},
     )
     assert started.status_code == 200
-    pending = client.get("/api/kellai/binding/pending", headers=PAIRING_HEADERS).json()["data"]
+    pending = client.post("/api/kellai/binding/handoff", headers=PAIRING_HEADERS).json()["data"]
     response = client.post(
         "/api/kellai/binding/approve",
         headers=PAIRING_HEADERS,
         json={
+            "protocol_version": 2,
             "request_id": pending["request_id"],
             "authorization_secret": pending["authorization_secret"],
             "accepted_scopes": [scope["id"] for scope in pending["requested_scopes"]],
@@ -54,20 +58,35 @@ def app() -> FastAPI:
 
 @pytest.fixture(autouse=True)
 def isolated_store(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    from app.services import kellai_customer_copilot
-
     store_path = tmp_path / "kellai-binding.json"
     monkeypatch.setattr(kellai_binding_store, "_store_path", lambda: store_path)
-    monkeypatch.setattr(
-        kellai_customer_copilot,
-        "_store_path",
-        lambda: tmp_path / "kellai-copilot-drafts.json",
+    secrets = {}
+    native = SimpleNamespace(
+        set_password=lambda _s, k, v: secrets.__setitem__(k, v),
+        get_password=lambda _s, k: secrets.get(k),
+        delete_password=lambda _s, k: secrets.pop(k, None),
     )
+    monkeypatch.setattr(kellai_binding_store, "_credential_backend", lambda: native)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _r: 7)
+    monkeypatch.setattr(kellai_binding, "_client_tenant", lambda _r: "team-a")
+    from app.infrastructure import kellai_client
+
+    @contextmanager
+    def ready_probe(request, *, timeout):
+        assert request.full_url.endswith("/grant-status")
+        connection = kellai_binding_store.connection_metadata()
+        payload = {
+            "success": True,
+            "data": {"connection_id": connection["connection_id"], "protocol_version": 2},
+        }
+        yield SimpleNamespace(read=lambda: json.dumps(payload).encode())
+
+    monkeypatch.setattr(kellai_client._OPENER, "open", ready_probe)
     return store_path
 
 
 def local_client(app: FastAPI) -> TestClient:
-    return TestClient(app, client=("127.0.0.1", 50000))
+    return TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1:5001")
 
 
 def test_kellai_loopback_requests_bypass_environment_proxies(
@@ -93,22 +112,13 @@ def test_kellai_loopback_requests_bypass_environment_proxies(
     assert calls == [(request, 3)]
 
 
-def test_optional_scopes_require_real_actor_and_never_upgrade_legacy(app, monkeypatch):
+def test_scopes_require_real_actor_and_do_not_silently_expand(app, monkeypatch):
     client = local_client(app)
     monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: None)
-    default = client.post("/api/kellai/binding/start", headers=XCMAX_HEADERS).json()["data"]
-    assert [scope["id"] for scope in default["requested_scopes"]] == MODULE_SCOPES[:2]
-    assert (
-        client.post(
-            "/api/kellai/binding/start",
-            headers=XCMAX_HEADERS,
-            json={"requested_scopes": MODULE_SCOPES},
-        ).status_code
-        == 400
-    )
-    approve_module(client, MODULE_SCOPES[:2])
+    assert client.post("/api/kellai/binding/start", headers=XCMAX_HEADERS).status_code == 400
     monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
-    assert client.get("/api/kellai/binding/channels", headers=CLIENT_HEADERS).status_code == 403
+    approve_module(client, ["channels.read"])
+    assert client.get("/api/kellai/binding/contacts", headers=CLIENT_HEADERS).status_code == 403
     assert (
         client.post(
             "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input()
@@ -121,10 +131,120 @@ def send_input() -> dict:
     return {
         "client_request_id": "message-request-12345",
         "customer_id": 8,
+        "connection_id": "account-chatwoot-a",
         "channel_type": "chatwoot",
         "contact_id": "conversation-28",
         "content": "人工确认的回复",
     }
+
+
+def test_manual_send_rejects_invalid_body_before_dispatch(app, monkeypatch):
+    client = local_client(app)
+    approve_module(client)
+    calls = []
+
+    @contextmanager
+    def accepted(request, *, timeout):
+        calls.append(request)
+        yield SimpleNamespace(
+            read=lambda: json.dumps(
+                {
+                    "success": True,
+                    "data": {
+                        "request_id": send_input()["client_request_id"],
+                        "status": "accepted",
+                    },
+                }
+            ).encode()
+        )
+
+    monkeypatch.setattr(kellai_binding, "_open_kellai_request", accepted)
+    assert (
+        client.post(
+            "/api/kellai/binding/messages/send",
+            headers=XCMAX_HEADERS,
+            json={**send_input(), "content": "字" * 8000},
+        ).status_code
+        == 200
+    )
+    response = client.post(
+        "/api/kellai/binding/messages/send",
+        headers=XCMAX_HEADERS,
+        json={**send_input(), "content": "字" * 8001},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "content"]
+    assert len(calls) == 1
+
+
+def test_manual_send_denied_scope_is_explicitly_not_dispatched(app, monkeypatch):
+    client = local_client(app)
+    approve_module(client, ["channels.read"])
+    monkeypatch.setattr(
+        kellai_binding,
+        "_open_kellai_request",
+        lambda *_args, **_kwargs: pytest.fail("denied scope reached tool"),
+    )
+    response = client.post(
+        "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input()
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"]["request_not_dispatched"] is True
+
+
+@pytest.mark.parametrize(
+    ("status", "payload", "not_dispatched"),
+    [
+        (
+            status,
+            b'{"detail":{"code":"fixture_denial","message":"denied"}}',
+            status in {401, 403, 422},
+        )
+        for status in [401, 403, 422, 404, 409, 503]
+    ]
+    + [
+        (401, b"invalid-response", False),
+        (422, b'{"detail":[null]}', False),
+        (422, b'{"detail":[{"loc":["body","content"],"type":"string_too_long"}]}', True),
+    ],
+)
+def test_tool_http_rejection_does_not_claim_history_or_transport_outcome(
+    app, monkeypatch, status, payload, not_dispatched
+):
+    import io
+    from urllib.error import HTTPError
+
+    client = local_client(app)
+    approve_module(client)
+    calls = []
+
+    def denied(request, *, timeout):
+        calls.append(request)
+        raise HTTPError(
+            request.full_url,
+            status,
+            "Refused",
+            {},
+            io.BytesIO(payload),
+        )
+
+    monkeypatch.setattr(kellai_binding, "_open_kellai_request", denied)
+    response = client.post(
+        "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input()
+    )
+    assert response.status_code == status
+    detail = response.json()["detail"]
+    assert (
+        isinstance(detail, dict) and detail.get("request_not_dispatched", False)
+    ) is not_dispatched
+    assert len(calls) == 1
+    # Rejecting a read of an existing request cannot prove the original send absent.
+    queried = client.get(
+        "/api/kellai/binding/messages/requests/message-request-12345", headers=CLIENT_HEADERS
+    )
+    assert queried.status_code == status
+    detail = queried.json()["detail"]
+    assert not (isinstance(detail, dict) and detail.get("request_not_dispatched"))
 
 
 def test_owned_scope_checks_account_tenant_and_revocation(app, monkeypatch):
@@ -134,7 +254,7 @@ def test_owned_scope_checks_account_tenant_and_revocation(app, monkeypatch):
     connection = approve_module(client)
     assert connection["authorized_scopes"] == MODULE_SCOPES
     monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 8)
-    assert client.get("/api/kellai/binding/customers", headers=CLIENT_HEADERS).status_code == 403
+    assert client.get("/api/kellai/binding/contacts", headers=CLIENT_HEADERS).status_code == 403
     assert (
         client.post(
             "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input()
@@ -377,7 +497,7 @@ def test_admin_account_is_denied_even_if_it_spoofs_the_enterprise_shell(
     )
 
     response = local_client(app).get(
-        "/api/kellai/binding/customers",
+        "/api/kellai/binding/contacts",
         headers=CLIENT_HEADERS,
     )
 
@@ -392,11 +512,12 @@ def test_pairing_secrets_never_appear_in_public_status(app: FastAPI) -> None:
     started_payload = started.json()["data"]
     assert "authorization_secret" not in started_payload
 
-    pending = client.get("/api/kellai/binding/pending", headers=PAIRING_HEADERS).json()["data"]
+    pending = client.post("/api/kellai/binding/handoff", headers=PAIRING_HEADERS).json()["data"]
     approved = client.post(
         "/api/kellai/binding/approve",
         headers=PAIRING_HEADERS,
         json={
+            "protocol_version": 2,
             "request_id": pending["request_id"],
             "authorization_secret": pending["authorization_secret"],
             "accepted_scopes": [scope["id"] for scope in pending["requested_scopes"]],
@@ -428,266 +549,201 @@ def test_pairing_secrets_never_appear_in_public_status(app: FastAPI) -> None:
     )
 
 
-def test_pairing_requires_all_read_only_scopes(app: FastAPI) -> None:
+def test_pairing_accepts_a_smaller_grant_without_expanding_requested_scopes(app: FastAPI) -> None:
     client = local_client(app)
     client.post("/api/kellai/binding/start", headers=XCMAX_HEADERS)
-    pending = client.get("/api/kellai/binding/pending", headers=PAIRING_HEADERS).json()["data"]
+    pending = client.post("/api/kellai/binding/handoff", headers=PAIRING_HEADERS).json()["data"]
 
     response = client.post(
         "/api/kellai/binding/approve",
         headers=PAIRING_HEADERS,
         json={
+            "protocol_version": 2,
             "request_id": pending["request_id"],
             "authorization_secret": pending["authorization_secret"],
-            "accepted_scopes": ["customer_profiles.read"],
+            "accepted_scopes": ["channels.read"],
             "access_token": "x" * 40,
             "authorized_by": {},
         },
     )
 
-    assert response.status_code == 400
-    assert "全部只读权限" in response.json()["detail"]
-
-
-def test_customer_data_proxy_clamps_limits_and_validates_customer_id(
-    app: FastAPI,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    requested_paths: list[str] = []
-
-    def fake_kellai_get(path: str):
-        requested_paths.append(path)
-        if "conversations" in path:
-            return {"success": True, "data": {"messages": [{"id": "m-1"}]}}
-        return {"success": True, "data": {"customers": [{"customer_id": 7}]}}
-
-    monkeypatch.setattr(kellai_binding, "_kellai_get", fake_kellai_get)
-    client = local_client(app)
-
-    customers = client.get("/api/kellai/binding/customers?limit=999", headers=CLIENT_HEADERS)
-    conversations = client.get(
-        "/api/kellai/binding/customers/7/conversations?limit=-4",
-        headers=CLIENT_HEADERS,
-    )
-    invalid_customer = client.get(
-        "/api/kellai/binding/customers/0/conversations",
-        headers=CLIENT_HEADERS,
-    )
-
-    assert customers.json()["data"]["customers"][0]["customer_id"] == 7
-    assert conversations.json()["data"]["messages"][0]["id"] == "m-1"
-    assert requested_paths == [
-        "/api/kellai/integrations/xcmax/customers?limit=50",
-        "/api/kellai/integrations/xcmax/customers/7/conversations?limit=1",
-    ]
-    assert invalid_customer.status_code == 422
-
-
-def test_copilot_draft_uses_only_authorized_customer_conversation(
-    app: FastAPI,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.services import kellai_customer_copilot
-
-    requested_paths: list[str] = []
-
-    def fake_kellai_get(path: str):
-        requested_paths.append(path)
-        if path.endswith("/conversations?limit=100"):
-            return {
-                "success": True,
-                "data": {
-                    "messages": [
-                        {
-                            "id": "m-1",
-                            "customer_id": 7,
-                            "direction": "inbound",
-                            "content": "请问什么时候可以交付？",
-                        }
-                    ]
-                },
-            }
-        return {
-            "success": True,
-            "data": {
-                "customers": [
-                    {
-                        "customer_id": 7,
-                        "display_name": "已授权客户",
-                        "stage_label": "意向客户",
-                    }
-                ]
-            },
-        }
-
-    captured: dict[str, object] = {}
-
-    async def fake_generate_draft(**kwargs):
-        captured.update(kwargs)
-        return {
-            "draft_id": "draft-1",
-            "customer_id": 7,
-            "summary": "客户询问交期",
-            "reply_draft": "我先为您核实。",
-            "risk_level": "medium",
-            "status": "pending_approval",
-        }
-
-    monkeypatch.setattr(kellai_binding, "_kellai_get", fake_kellai_get)
-    monkeypatch.setattr(kellai_customer_copilot, "generate_draft", fake_generate_draft)
-
-    response = local_client(app).post(
-        "/api/kellai/binding/customers/7/copilot-drafts",
-        headers=XCMAX_HEADERS,
-    )
-
     assert response.status_code == 200
-    assert response.json()["data"]["status"] == "pending_approval"
-    assert captured["customer_id"] == 7
-    assert captured["customer"]["display_name"] == "已授权客户"
-    assert captured["messages"][0]["id"] == "m-1"
-    assert requested_paths == [
-        "/api/kellai/integrations/xcmax/customers?limit=50",
-        "/api/kellai/integrations/xcmax/customers/7/conversations?limit=100",
-    ]
+    assert response.json()["data"]["authorized_scopes"] == ["channels.read"]
+    assert client.get("/api/kellai/binding/contacts", headers=CLIENT_HEADERS).status_code == 403
 
 
-def test_copilot_draft_rejects_unpaired_or_unknown_customer(
-    app: FastAPI,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.parametrize("scopes", [[], ["messages.send"], ["channels.read", "messages.send"]])
+def test_pairing_rejects_empty_or_expanded_grants(app, scopes):
+    client = local_client(app)
+    client.post("/api/kellai/binding/start", headers=XCMAX_HEADERS)
+    pending = client.post("/api/kellai/binding/handoff", headers=PAIRING_HEADERS).json()["data"]
+    response = client.post(
+        "/api/kellai/binding/approve",
+        headers=PAIRING_HEADERS,
+        json={
+            "protocol_version": 2,
+            "request_id": pending["request_id"],
+            "authorization_secret": pending["authorization_secret"],
+            "accepted_scopes": scopes,
+            "access_token": "x" * 40,
+        },
+    )
+    assert response.status_code == 400
+    assert kellai_binding_store.connection_metadata() is None
+
+
+def test_handoff_is_single_use_and_rejects_cross_site_origin_and_host(app):
+    client = local_client(app)
+    assert client.post("/api/kellai/binding/start", headers=XCMAX_HEADERS).status_code == 200
+    assert client.get("/api/kellai/binding/pending", headers=PAIRING_HEADERS).status_code == 404
+    for headers in (
+        {**PAIRING_HEADERS, "Origin": "https://evil.example"},
+        {**PAIRING_HEADERS, "Origin": "null"},
+        {**PAIRING_HEADERS, "Host": "evil.example"},
+    ):
+        assert client.post("/api/kellai/binding/handoff", headers=headers).status_code == 403
+    pending = client.post("/api/kellai/binding/handoff", headers=PAIRING_HEADERS)
+    assert pending.status_code == 200
+    assert pending.json()["data"]["protocol_version"] == 2
+    assert client.post("/api/kellai/binding/handoff", headers=PAIRING_HEADERS).status_code == 409
+
+
+def test_plaintext_legacy_grant_is_retired_without_scope_expansion(app, isolated_store):
+    isolated_store.write_text(
+        json.dumps({"version": 1, "connection": {"access_token": "old-secret"}})
+    )
+    response = local_client(app).get("/api/kellai/binding/status", headers=CLIENT_HEADERS)
+    assert response.json()["data"]["requires_reauthorization"] is True
+    assert response.json()["data"]["state"] == "not_connected"
+    assert "old-secret" not in isolated_store.read_text()
+
+
+def test_pending_and_access_secrets_live_only_in_keychain(app, isolated_store):
+    client = local_client(app)
+    approve_module(client)
+    state = json.loads(isolated_store.read_text())
+    assert "access_token" not in state["connection"]
+    assert state["connection"]["access_token_ref"]
+    assert "private-local-token" not in isolated_store.read_text()
+    assert state["pending"] is None
+
+
+def test_contact_messages_require_explicit_connection_and_read_scope(app, monkeypatch):
+    client = local_client(app)
+    approve_module(client)
+    calls = []
     monkeypatch.setattr(
         kellai_binding,
-        "_kellai_get",
-        lambda _path: {"success": True, "data": {"customers": []}},
+        "_kellai_scoped_request",
+        lambda path, _c: calls.append(path) or {"success": True, "data": {"messages": []}},
     )
+    assert (
+        client.get("/api/kellai/binding/contacts/7/messages", headers=CLIENT_HEADERS).status_code
+        == 422
+    )
+    response = client.get(
+        "/api/kellai/binding/contacts/7/messages?connection_id=account-a", headers=CLIENT_HEADERS
+    )
+    assert response.status_code == 200
+    assert calls == ["contacts/7/messages?connection_id=account-a&limit=100"]
+    assert (
+        client.get("/api/kellai/binding/contacts?limit=101", headers=CLIENT_HEADERS).status_code
+        == 422
+    )
+    missing_account = send_input()
+    del missing_account["connection_id"]
+    assert (
+        client.post(
+            "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=missing_account
+        ).status_code
+        == 422
+    )
+
+
+def test_plaintext_or_missing_keyring_never_creates_a_pending_grant(
+    app, monkeypatch, isolated_store
+):
+    class PlaintextBackend:
+        priority = 1
+
+    monkeypatch.setattr(kellai_binding_store.keyring, "get_keyring", lambda: PlaintextBackend())
+    monkeypatch.setattr(kellai_binding_store, "_credential_backend", NATIVE_BACKEND_SELECTOR)
+    response = local_client(app).post("/api/kellai/binding/start", headers=XCMAX_HEADERS)
+    assert response.status_code == 400
+    assert "安全凭据库" in response.json()["detail"]
+    assert not isolated_store.exists()
+
+
+def test_locked_vault_blocks_io_but_does_not_block_revoking_the_grant(
+    app, monkeypatch, isolated_store
+):
     client = local_client(app)
+    approve_module(client)
 
-    unpaired = client.post(
-        "/api/kellai/binding/customers/7/copilot-drafts",
-        headers=CLIENT_HEADERS,
-    )
-    unknown = client.post(
-        "/api/kellai/binding/customers/7/copilot-drafts",
-        headers=XCMAX_HEADERS,
-    )
+    def locked():
+        raise ValueError("系统凭据库已锁定")
 
-    assert unpaired.status_code == 403
-    assert unknown.status_code == 404
-    assert "真实客户" in unknown.json()["detail"]
+    monkeypatch.setattr(kellai_binding_store, "_credential_backend", locked)
+    assert client.get("/api/kellai/binding/status", headers=CLIENT_HEADERS).status_code == 200
+    assert client.get("/api/kellai/binding/channels", headers=CLIENT_HEADERS).status_code == 503
+    assert client.post("/api/kellai/binding/disconnect", headers=XCMAX_HEADERS).status_code == 200
+    assert json.loads(isolated_store.read_text())["connection"] is None
 
 
-def test_copilot_approval_is_explicit_and_client_only(
-    app: FastAPI,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.services import kellai_customer_copilot
+def test_expired_handoff_secret_is_deleted_from_vault(app, monkeypatch, isolated_store):
+    from datetime import timedelta
 
-    decisions: list[dict[str, object]] = []
-
-    def fake_decide_draft(**kwargs):
-        decisions.append(kwargs)
-        return {
-            "draft_id": kwargs["draft_id"],
-            "customer_id": 7,
-            "status": "approved_for_manual_send",
-            "reply_draft": "人工确认后复制",
-        }
-
-    monkeypatch.setattr(kellai_customer_copilot, "decide_draft", fake_decide_draft)
     client = local_client(app)
-
-    admin = client.post(
-        "/api/kellai/binding/copilot-drafts/draft-1/approve",
-        headers={"X-XCMAX-Client-Shell": "admin", "X-Kellai-Local-Pairing": "1"},
-        json={"note": "管理端不应批准"},
-    )
-    approved = client.post(
-        "/api/kellai/binding/copilot-drafts/draft-1/approve",
-        headers=XCMAX_HEADERS,
-        json={"note": "已由客户负责人核对"},
-    )
-
-    assert admin.status_code == 403
-    assert approved.status_code == 200
-    assert approved.json()["data"]["status"] == "approved_for_manual_send"
-    assert decisions == [
-        {
-            "draft_id": "draft-1",
-            "decision": "approve",
-            "actor": None,
-            "note": "已由客户负责人核对",
-        }
-    ]
+    assert client.post("/api/kellai/binding/start", headers=XCMAX_HEADERS).status_code == 200
+    pending = json.loads(isolated_store.read_text())["pending"]
+    backend = kellai_binding_store._credential_backend()
+    assert backend.get_password("com.xcagi.kellai", pending["authorization_secret_ref"])
+    future = kellai_binding_store._now() + timedelta(minutes=16)
+    monkeypatch.setattr(kellai_binding_store, "_now", lambda: future)
+    assert client.post("/api/kellai/binding/handoff", headers=PAIRING_HEADERS).status_code == 409
+    assert backend.get_password("com.xcagi.kellai", pending["authorization_secret_ref"]) is None
 
 
-def test_follow_up_task_routes_stay_in_client_plane(
-    app: FastAPI,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.services import kellai_customer_copilot
+@pytest.mark.parametrize(
+    "code", ["xcmax_grant_revoked", "xcmax_grant_invalid", "xcmax_reauthorization_required"]
+)
+def test_explicit_tool_revocation_retires_only_the_matching_secret(app, monkeypatch, code):
+    from io import BytesIO
+    from urllib.error import HTTPError
 
-    task = {
-        "task_id": "task-1",
-        "customer_id": 7,
-        "source_draft_id": "draft-1",
-        "title": "客户跟进 · 交期咨询",
-        "description": "核实交期并回访",
-        "priority": "normal",
-        "status": "open",
-    }
-    decisions: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        kellai_customer_copilot,
-        "list_follow_up_tasks",
-        lambda customer_id: [task] if customer_id == 7 else [],
-    )
-    monkeypatch.setattr(
-        kellai_customer_copilot,
-        "create_follow_up_task",
-        lambda **_kwargs: task,
-    )
+    from app.infrastructure import kellai_client
 
-    def fake_decision(**kwargs):
-        decisions.append(kwargs)
-        return {**task, "status": "completed"}
-
-    monkeypatch.setattr(kellai_customer_copilot, "decide_follow_up_task", fake_decision)
     client = local_client(app)
+    connection = approve_module(client)
+    metadata = kellai_binding_store.connection_metadata()
+    vault = kellai_binding_store._credential_backend()
 
-    listed = client.get(
-        "/api/kellai/binding/customers/7/follow-up-tasks",
-        headers=CLIENT_HEADERS,
-    )
-    unpaired = client.post(
-        "/api/kellai/binding/copilot-drafts/draft-1/follow-up-task",
-        headers=CLIENT_HEADERS,
-    )
-    created = client.post(
-        "/api/kellai/binding/copilot-drafts/draft-1/follow-up-task",
-        headers=XCMAX_HEADERS,
-    )
-    completed = client.post(
-        "/api/kellai/binding/follow-up-tasks/task-1/complete",
-        headers=XCMAX_HEADERS,
-        json={"outcome_result": "success"},
-    )
-    admin = client.get(
-        "/api/kellai/binding/customers/7/follow-up-tasks",
-        headers={"X-XCMAX-Client-Shell": "admin"},
-    )
+    def revoked(request, *, timeout):
+        payload = {"detail": {"code": code, "message": "授权已失效"}}
+        raise HTTPError(request.full_url, 401, "revoked", {}, BytesIO(json.dumps(payload).encode()))
 
-    assert listed.status_code == 200
-    assert listed.json()["data"]["tasks"][0]["task_id"] == "task-1"
-    assert unpaired.status_code == 403
-    assert created.status_code == 200
-    assert completed.json()["data"]["status"] == "completed"
-    assert admin.status_code == 403
-    assert decisions == [
-        {
-            "task_id": "task-1",
-            "decision": "complete",
-            "actor": None,
-            "outcome_result": "success",
-        }
-    ]
+    monkeypatch.setattr(kellai_client._OPENER, "open", revoked)
+    status = client.get("/api/kellai/binding/status", headers=CLIENT_HEADERS).json()["data"]
+    assert status["state"] == "revoked"
+    assert status["requires_reauthorization"] is True
+    assert status["connection"]["connection_id"] == connection["connection_id"]
+    assert vault.get_password("com.xcagi.kellai", metadata["access_token_ref"]) is None
+    assert kellai_binding_store.connection_credentials() is None
+
+
+@pytest.mark.parametrize("code", ["", "xcmax_scope_required"])
+def test_offline_or_scope_denial_does_not_revoke_the_grant(app, monkeypatch, code):
+    from app.infrastructure import kellai_client
+
+    client = local_client(app)
+    approve_module(client)
+    original = kellai_binding_store.connection_metadata()
+
+    def unavailable(*_args, **_kwargs):
+        raise kellai_client.KellaiRequestError("暂不可达或该权限未授予", 403 if code else 503, code)
+
+    monkeypatch.setattr(kellai_client, "request_kellai", unavailable)
+    status = client.get("/api/kellai/binding/status", headers=CLIENT_HEADERS).json()["data"]
+    assert status["state"] == "offline"
+    assert kellai_binding_store.connection_metadata() == original
+    assert kellai_binding_store.connection_credentials()["access_token"]

@@ -1,9 +1,9 @@
 {
   "id": "kellai",
   "name": "客来来",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "成都修茈科技有限公司",
-  "description": "统一渠道连接、客户消息、联系人、数据接入与自动化；复用客来来渠道服务和 XCMAX 模型与审批。",
+  "description": "本机账号授权钱包与统一消息通道；凭据保留在客来来，业务、任务与审批复用 XCMAX。",
   "primary": false,
   "dependencies": { "xcagi": ">=1.0.0.0" },
   "backend": {},

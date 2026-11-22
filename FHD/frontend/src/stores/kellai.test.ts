@@ -6,19 +6,19 @@ import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRun
 import { deliveryTargetKey, useKellaiStore } from './kellai'
 
 const api = vi.hoisted(() => ({
-  status: vi.fn(), dataStatus: vi.fn(), customers: vi.fn(), channels: vi.fn(), conversations: vi.fn(),
-  latestDraft: vi.fn(), followUpOverview: vi.fn(), generateDraft: vi.fn(), sendMessage: vi.fn(), sendReceipt: vi.fn(),
+  status: vi.fn(), contacts: vi.fn(), channels: vi.fn(), messages: vi.fn(),
+  sendMessage: vi.fn(), sendReceipt: vi.fn(),
   start: vi.fn(), disconnect: vi.fn(),
 }))
 vi.mock('@/api/kellaiBinding', () => ({ default: api }))
-const customer = { customer_id: 7, display_name: '客户甲' }
-const recipient = { customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9', content: '已人工确认' }
+const customer = { customer_id: 7, contact_name: '客户甲', connection_id: 'account-a', channel_type: 'chatwoot', contact_id: 'conversation-9' }
+const recipient = { customer_id: 7, connection_id: 'account-a', channel_type: 'chatwoot', contact_id: 'conversation-9', content: '已人工确认' }
 const key = deliveryTargetKey(recipient)
-const allScopes = ['customer_profiles.read', 'customer_conversations.read', 'channels.read', 'messages.send']
+const allScopes = ['messages.read', 'channels.read', 'messages.send']
 const connection = { state: 'connected', connection: { connection_id: 'conn-a', authorized_scopes: allScopes } }
 const owner = { tenantId: 3, localUserId: 1, accountKind: 'enterprise' }
-const storageKey = 'kellai-requests:[3,null,1,"enterprise","conn-a"]'
-const channel = { id: 1, type: 'chatwoot', name: 'Chatwoot', connected: true, enabled: true, connection_id: 'team:chatwoot:primary', capabilities: { send: true, receive: true, contacts: true, sync: true } }
+const storageKey = 'kellai-requests:v2:[3,null,1,"enterprise"]'
+const channel = { channel_type: 'chatwoot', name: 'Chatwoot', connected: true, enabled: true, connection_id: 'account-a', capabilities: { send: true, receive: true, contacts: true, sync: true } }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(next => { resolve = next }); return { promise, resolve } }
 
 describe('Kellai shared account and delivery state', () => {
@@ -29,23 +29,20 @@ describe('Kellai shared account and delivery state', () => {
     sessionStorage.clear()
     setRuntimeTenantStorageScopeInput(owner)
     api.status.mockResolvedValue(connection)
-    api.dataStatus.mockResolvedValue({ customer_count: 1, unread_message_count: 0 })
-    api.customers.mockResolvedValue([customer])
-    api.channels.mockResolvedValue([channel])
-    api.conversations.mockResolvedValue([])
-    api.latestDraft.mockResolvedValue(null)
-    api.followUpOverview.mockResolvedValue({ tasks: [], metrics: null })
+    api.contacts.mockResolvedValue([customer])
+    api.channels.mockResolvedValue([{ ...channel }])
+    api.messages.mockResolvedValue([])
     api.sendMessage.mockImplementation(async (input: { client_request_id: string }) => ({ request_id: input.client_request_id, status: 'accepted', persisted: true }))
     api.sendReceipt.mockImplementation(async (request_id: string) => ({ request_id, status: 'unknown' }))
   })
   afterEach(() => vi.restoreAllMocks())
 
   it('shares one binding and never reads channel capability under the old read-only grant', async () => {
-    api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, authorized_scopes: allScopes.slice(0, 2) } })
+    api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, authorized_scopes: ['messages.read'] } })
     const store = useKellaiStore()
     expect(useKellaiStore()).toBe(store)
     await store.refreshAll()
-    expect(store.customers).toEqual([customer])
+    expect(store.contacts).toEqual([customer])
     expect(store.canSend).toBe(false)
     expect(api.channels).not.toHaveBeenCalled()
     await store.submitMessage(recipient)
@@ -59,32 +56,26 @@ describe('Kellai shared account and delivery state', () => {
     const loading = store.refreshAll()
     productReadAccountEpoch.value++
     productReadAccountEpoch.value++
-    api.customers.mockResolvedValue([{ customer_id: 9, display_name: '新账号客户' }])
+    api.contacts.mockResolvedValue([{ ...customer, customer_id: 9, contact_name: '新账号客户' }])
     await store.refreshAll()
     old.resolve(connection)
     await loading
-    expect(store.customers.map(item => item.customer_id)).toEqual([9])
+    expect(store.contacts.map(item => item.customer_id)).toEqual([9])
     expect(store.busy).toBe(false)
   })
 
-  it('ignores late conversation and AI draft responses for the previous customer', async () => {
+  it('ignores late messages for the previous contact or account', async () => {
     const store = useKellaiStore()
     await store.refreshAll()
-    const late = deferred<Array<{ id: string; customer_id: number; direction: string; content: string }>>()
-    api.conversations.mockReturnValueOnce(late.promise)
-    const previous = store.loadMessages(7)
-    api.conversations.mockResolvedValue([{ id: 'next', customer_id: 8, direction: 'inbound', content: '客户乙消息' }])
-    await store.selectCustomer({ customer_id: 8, display_name: '客户乙' })
-    late.resolve([{ id: 'old', customer_id: 7, direction: 'inbound', content: '客户甲私密消息' }])
+    const late = deferred<Array<{ id: string; customer_id: number; direction: string; content: string; connection_id: string }>>()
+    api.messages.mockReturnValueOnce(late.promise)
+    const previous = store.selectContact(customer)
+    api.messages.mockResolvedValue([{ id: 'next', customer_id: 8, direction: 'inbound', content: '客户乙消息', connection_id: 'account-b' }])
+    await store.selectContact({ ...customer, customer_id: 8, contact_name: '客户乙', connection_id: 'account-b' })
+    late.resolve([{ id: 'old', customer_id: 7, direction: 'inbound', content: '客户甲私密消息', connection_id: 'account-a' }])
     await previous
     expect(store.messages.map(item => item.id)).toEqual(['next'])
-    const draft = deferred<unknown>()
-    api.generateDraft.mockReturnValueOnce(draft.promise)
-    const generating = store.generateCopilotDraft()
-    await store.selectCustomer(customer)
-    draft.resolve({ draft_id: 'old-draft', customer_id: 8, reply_draft: '旧客户回复' })
-    await generating
-    expect(store.copilotDraft).toBeNull()
+    expect(api.messages).toHaveBeenLastCalledWith(8, 'account-b', 100)
   })
 
   it.each(['connected', 'offline'])('recovers the original unknown request after closing a window, initially %s', async initialState => {
@@ -120,7 +111,7 @@ describe('Kellai shared account and delivery state', () => {
     expect(recovered.deliveries[id].receipt.persisted).toBe(false)
   })
 
-  it('opens customers while historical receipts are slow, preserves dedupe and never runs a second recovery for the same scope', async () => {
+  it('opens contacts while historical receipts are slow, preserves dedupe and never runs a second recovery for the same scope', async () => {
     const ids = Array.from({ length: 6 }, (_, i) => `historical_request_${i}`)
     localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(ids.map(id => [id, key]))))
     const firstBatch = deferred<{ request_id: string; status: string }>()
@@ -130,7 +121,7 @@ describe('Kellai shared account and delivery state', () => {
     const store = useKellaiStore()
     const opening = store.refreshAll()
     await flushPromises()
-    expect(store.customers).toEqual([customer])
+    expect(store.contacts).toEqual([customer])
     expect(store.busy).toBe(false)
     expect(api.sendReceipt.mock.calls.map(([id]) => id)).toEqual(ids.slice(0, 4))
     await store.refreshAll()
@@ -144,25 +135,28 @@ describe('Kellai shared account and delivery state', () => {
     expect(store.deliveries[ids[5]].receipt.status).toBe('delivered')
   })
 
-  it('does not continue querying the old connection after its first recovery batch finishes late', async () => {
+  it('discards late old-pairing receipt responses while retaining the original request ids', async () => {
     const ids = Array.from({ length: 5 }, (_, i) => `historical_request_${i}`)
     localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(ids.map(id => [id, key]))))
-    const late = deferred<{ request_id: string; status: string }>()
-    api.sendReceipt.mockReturnValue(late.promise)
+    const old = deferred<{ request_id: string; status: string }>()
+    api.sendReceipt.mockReturnValue(old.promise)
     const store = useKellaiStore()
     await store.refreshAll()
     expect(api.sendReceipt).toHaveBeenCalledTimes(4)
+    const current = deferred<{ request_id: string; status: string }>()
+    api.sendReceipt.mockReturnValue(current.promise)
     api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, connection_id: 'conn-b' } })
     await store.refreshAll()
-    late.resolve({ request_id: '', status: 'requires_desktop_execution' })
+    expect(api.sendReceipt).toHaveBeenCalledTimes(8)
+    old.resolve({ request_id: '', status: 'requires_desktop_execution' })
     await flushPromises()
-    expect(api.sendReceipt).toHaveBeenCalledTimes(4)
-    expect(store.deliveries).toEqual({})
+    expect(api.sendReceipt).toHaveBeenCalledTimes(8)
+    expect(Object.keys(store.deliveries)).toEqual(ids)
+    expect(store.deliveries[ids[0]].receipt.status).toBe('unknown')
     expect(JSON.parse(localStorage.getItem(storageKey)!)).toHaveProperty(ids[0], key)
-    expect(localStorage.getItem(storageKey.replace('conn-a', 'conn-b'))).toBeNull()
   })
 
-  it('isolates persistent request IDs by owner and connection and respects revoked send access', async () => {
+  it('isolates request IDs by owner, preserves reauthorization history and respects revoked send access', async () => {
     api.sendMessage.mockRejectedValueOnce(new Error('连接中断'))
     const store = useKellaiStore()
     await store.refreshAll()
@@ -180,7 +174,7 @@ describe('Kellai shared account and delivery state', () => {
     expect(api.sendReceipt).toHaveBeenCalledExactlyOnceWith(id)
     api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, connection_id: 'conn-b' } })
     await store.refreshAll()
-    expect(store.deliveries).toEqual({})
+    expect(store.deliveries[id].target_key).toBe(key)
     api.sendReceipt.mockClear()
     api.status.mockResolvedValue({ ...connection, connection: { ...connection.connection, authorized_scopes: allScopes.slice(0, 2) } })
     await store.refreshAll()
@@ -191,7 +185,7 @@ describe('Kellai shared account and delivery state', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     api.disconnect.mockResolvedValue(undefined)
     await store.disconnect()
-    expect(localStorage.getItem(storageKey)).toBeNull()
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toHaveProperty(id, key)
     expect(store.deliveries).toEqual({})
   })
 
@@ -273,8 +267,9 @@ describe('Kellai shared account and delivery state', () => {
   })
 
   it('does not restore a confirmed unexecuted desktop request as an unknown ledger entry', async () => {
-    const native = { ...recipient, channel_type: 'wechat', contact_id: 'native-contact' }
-    api.channels.mockResolvedValue([channel, { ...channel, type: 'wechat' }])
+    const native = { ...recipient, customer_id: 8, connection_id: 'account-wechat', channel_type: 'wechat', contact_id: 'native-contact' }
+    api.channels.mockResolvedValue([channel, { ...channel, connection_id: 'account-wechat', channel_type: 'wechat' }])
+    api.contacts.mockResolvedValue([customer, { ...native, contact_name: '原生联系人' }])
     const store = useKellaiStore()
     await store.refreshAll()
     const real = (await store.submitMessage(recipient))!
@@ -320,6 +315,66 @@ describe('Kellai shared account and delivery state', () => {
     expect(api.sendMessage).toHaveBeenCalledTimes(2)
   })
 
+  it('requires an exact account/contact mapping before dispatch', async () => {
+    const store = useKellaiStore()
+    await store.refreshAll()
+    await store.submitMessage({ ...recipient, connection_id: 'account-b' })
+    await store.submitMessage({ ...recipient, contact_id: 'unknown-contact' })
+    expect(api.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects oversize text before saving a request and still sends a valid replacement', async () => {
+    const store = useKellaiStore()
+    await store.refreshAll()
+    await store.submitMessage({ ...recipient, content: '字'.repeat(8001) })
+    expect(api.sendMessage).not.toHaveBeenCalled()
+    expect(store.deliveries).toEqual({})
+    expect(localStorage.getItem(storageKey)).toBeNull()
+    expect(store.error).toContain('8000')
+    await store.submitMessage({ ...recipient, content: '字'.repeat(8000) })
+    expect(api.sendMessage).toHaveBeenCalledOnce()
+  })
+
+  it('does not retain a new request as unknown after a definite pre-dispatch rejection', async () => {
+    api.sendMessage.mockRejectedValueOnce(Object.assign(new Error('本次输入被拒绝'), { requestNotDispatched: true }))
+    const store = useKellaiStore()
+    await store.refreshAll()
+    const id = (await store.submitMessage(recipient))!
+    expect(store.deliveries[id].receipt).toMatchObject({ status: 'rejected', persisted: false })
+    expect(store.blockedTargets.has(key)).toBe(false)
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({})
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps an original unknown send blocked when a later receipt read is rejected', async () => {
+    api.sendMessage.mockRejectedValueOnce(new Error('network result unknown'))
+    const store = useKellaiStore()
+    await store.refreshAll()
+    const id = (await store.submitMessage(recipient))!
+    api.sendReceipt.mockRejectedValueOnce(Object.assign(new Error('read denied'), { requestNotDispatched: true }))
+    await store.queryReceipt(id)
+    expect(store.deliveries[id].receipt.status).toBe('unknown')
+    expect(store.blockedTargets.has(key)).toBe(true)
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [id]: key })
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).toHaveBeenCalledOnce()
+  })
+
+  it('migrates unresolved old account records and blocks sends until their receipt is checked', async () => {
+    const id = 'legacy-unresolved-123'
+    localStorage.setItem('kellai-requests:[3,null,1,"enterprise","old-pair"]', JSON.stringify({ [id]: JSON.stringify([7, 'chatwoot', 'conversation-9']) }))
+    const store = useKellaiStore()
+    await store.refreshAll()
+    await store.submitMessage(recipient)
+    expect(store.unresolvedLegacy).toBe(true)
+    expect(api.sendMessage).not.toHaveBeenCalled()
+    api.sendReceipt.mockResolvedValue({ request_id: id, status: 'accepted', connection_id: 'account-a', customer_id: 7, channel_type: 'chatwoot', contact_id: 'conversation-9' })
+    await store.queryReceipt(id)
+    expect(store.deliveries[id].target_key).toBe(key)
+    expect(store.unresolvedLegacy).toBe(false)
+  })
+
   it('clears channel capabilities on failure and blocks sends to disabled channels', async () => {
     const store = useKellaiStore()
     await store.refreshAll()
@@ -345,6 +400,33 @@ describe('Kellai shared account and delivery state', () => {
     pending.resolve({ request_id: 'private-receipt', status: 'accepted' })
     await sending
     expect(store.deliveries).toEqual({})
-    expect(store.customers).toEqual([])
+    expect(store.contacts).toEqual([])
   })
+  it('keeps unresolved original requests when revocation is observed during readback', async () => {
+    const id = 'previous-unknown-123'
+    localStorage.setItem(storageKey, JSON.stringify({ [id]: key }))
+    api.sendReceipt.mockRejectedValueOnce(Object.assign(new Error('授权已撤销'), { code: 'xcmax_grant_revoked' }))
+    const store = useKellaiStore()
+    await store.refreshAll()
+    await flushPromises()
+    expect(store.binding.state).toBe('revoked')
+    expect(store.canSend).toBe(false)
+    expect(store.deliveries[id].receipt.status).toBe('unknown')
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({ [id]: key })
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not turn a definitely undispatched revoked send into a permanent unknown request', async () => {
+    const store = useKellaiStore()
+    await store.refreshAll()
+    api.sendMessage.mockRejectedValueOnce(Object.assign(new Error('授权已撤销'), { code: 'xcmax_grant_revoked' }))
+    const requestId = (await store.submitMessage(recipient))!
+    expect(store.binding.state).toBe('revoked')
+    expect(store.deliveries[requestId].receipt.status).toBe('rejected')
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({})
+    await store.submitMessage(recipient)
+    expect(api.sendMessage).toHaveBeenCalledTimes(1)
+  })
+
 })

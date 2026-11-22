@@ -20,10 +20,7 @@ from sqlalchemy.orm import Session
 from app.db import HostSessionLocal, get_host_engine
 from app.db.models.im import ImCustomerServiceAutomationState, ImMessage
 from app.db.models.user import User
-from app.domain.shared_services.kellai_copilot_llm import (
-    content_from_completion,
-    parse_json_content,
-)
+from app.infrastructure.llm.response_completion import model_payload
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
@@ -640,8 +637,8 @@ class EnterpriseCsAutomationService:
                     profile="customer_copilot",
                     reasoning_enabled=False,
                 )
-                parsed = parse_json_content(content_from_completion(completion))
-                if not parsed:
+                parsed, _ = model_payload(completion if isinstance(completion, dict) else {})
+                if not isinstance(parsed, dict) or not parsed:
                     raise ValueError("empty customer service completion")
         except RECOVERABLE_ERRORS as error:
             failure: dict[str, Any] = {"reason": "completion_failed"}

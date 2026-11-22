@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,17 +28,25 @@ def delivery(trusted_actor, monkeypatch, tmp_path):
     actor = trusted_actor(role="admin")
     params = {
         "customer_id": 17,
+        "connection_id": "account-chatwoot-a",
         "contact_id": "conversation-28",
         "channel_type": "chatwoot",
         "content": "已确认的私有客户回复",
     }
     case = invocation(actor, tool="kellai", action="send", params=params)
     monkeypatch.setattr(binding, "_store_path", lambda: tmp_path / "binding.json")
-    scopes = ["messages.send", "customer_profiles.read", "customer_conversations.read"]
+    secrets = {}
+    native = SimpleNamespace(
+        set_password=lambda _s, k, v: secrets.__setitem__(k, v),
+        get_password=lambda _s, k: secrets.get(k),
+        delete_password=lambda _s, k: secrets.pop(k, None),
+    )
+    monkeypatch.setattr(binding, "_credential_backend", lambda: native)
+    scopes = ["messages.send", "channels.read", "messages.read"]
     binding.start_pairing(
         actor=actor.user_id, tenant_id=str(actor.tenant_id), requested_scopes=scopes
     )
-    pending = binding.pending_for_kellai()
+    pending = binding.claim_handoff()
     binding.approve_pairing(
         request_id=pending["request_id"],
         authorization_secret=pending["authorization_secret"],
@@ -71,8 +80,18 @@ def delivery(trusted_actor, monkeypatch, tmp_path):
         calls.append(path)
         if path == f"messages/requests/{request_id}":
             return {"success": True, "data": copy.deepcopy(receipt)}
-        assert path == "customers/17/conversations?message_id=delivery-original&limit=1"
-        return {"success": True, "data": {"customer_id": 17, "messages": [copy.deepcopy(message)]}}
+        assert (
+            path
+            == "contacts/17/messages?connection_id=account-chatwoot-a&message_id=delivery-original&limit=1"
+        )
+        return {
+            "success": True,
+            "data": {
+                "customer_id": 17,
+                "connection_id": "account-chatwoot-a",
+                "messages": [copy.deepcopy(message)],
+            },
+        }
 
     monkeypatch.setattr("app.infrastructure.kellai_client.request_kellai", read)
     case.step.status = case.call.status = "completed"
@@ -114,7 +133,7 @@ def test_accepted_waits_for_original_delivery_then_recovers_without_resending(de
     assert calls == [
         f"messages/requests/{receipt['request_id']}",
         f"messages/requests/{receipt['request_id']}",
-        "customers/17/conversations?message_id=delivery-original&limit=1",
+        "contacts/17/messages?connection_id=account-chatwoot-a&message_id=delivery-original&limit=1",
     ]
 
 
@@ -126,7 +145,9 @@ def test_unconfirmed_or_failed_delivery_never_passes(delivery, state):
     assert len(delivery[3]) == 1
 
 
-@pytest.mark.parametrize("field", ["content", "contact_id", "channel_type", "customer_id"])
+@pytest.mark.parametrize(
+    "field", ["content", "contact_id", "connection_id", "channel_type", "customer_id"]
+)
 def test_provider_receipt_cannot_verify_another_message(delivery, field):
     delivery[1]["provider_state"] = "read"
     delivery[2][field] = 99 if field == "customer_id" else "different-original-message"
@@ -170,7 +191,7 @@ def test_repairing_to_another_team_cannot_rebind_original_evidence(delivery, mon
             tenant_id=old["xcmax_tenant_id"],
             requested_scopes=old["authorized_scopes"],
         )
-        pending = binding.pending_for_kellai()
+        pending = binding.claim_handoff()
         binding.approve_pairing(
             request_id=pending["request_id"],
             authorization_secret=pending["authorization_secret"],
