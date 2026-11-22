@@ -280,12 +280,19 @@ describe('useChatOrchestration batch/json', () => {
     expect(addMessage.mock.calls.some(call => String(call[0]).startsWith('处理失败'))).toBe(false)
   })
 
-  it('keeps a preserved parent on a blocked JSON admission without showing the round as waiting', async () => {
-    enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(['only-one']))
-    requestChatByModeWithTimeout.mockResolvedValueOnce({
+  it.each([false, true])('keeps a preserved parent on a blocked JSON admission without showing the round as waiting (batch=%s)', async (batch) => {
+    enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(batch ? ['first', 'second'] : ['only-one']))
+    const blocked = {
       success: false, message: 'runtime_not_qualified', runtime: 'codex', run_id: 'parent', execution_state: 'blocked',
       runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's', status: 'waiting_user' },
-    })
+    }
+    if (batch) {
+      requestChatByModeBatchWithTimeout.mockResolvedValueOnce({
+        success: false, batch: true, results: [{ success: true, response: 'read-only ready' }, blocked],
+      })
+    } else {
+      requestChatByModeWithTimeout.mockResolvedValueOnce(blocked)
+    }
     await useChatOrchestration({ sessionId: ref('s') }).sendMessage('continue')
     await vi.waitFor(() => expect(addMessage).toHaveBeenCalledWith('处理失败: runtime_not_qualified', 'ai', expect.objectContaining({
       runtimeContinuation: { runId: 'parent', status: 'waiting_user', sessionId: 's' }, workflowAction: 'blocked',

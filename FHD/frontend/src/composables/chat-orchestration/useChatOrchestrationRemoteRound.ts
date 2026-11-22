@@ -892,7 +892,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const receipt = data.batch && Array.isArray(data.results) ? data.results[data.results.length - 1] : data
     recordChatModelRoute(requestScope.sessionId, receipt?.route_metadata, identity)
     const showUnfinished = async (part: ChatPlannerPayload) => {
-      await addRoundMessage(String(part.response || part.message || '原任务尚未完成，请在任务工作区核对进度。'), responseExtras(part))
+      const failed = part.success === false && runtimeExecutionState(part) === 'blocked'
+      const text = String(part.response || part.message || '原任务尚未完成，请在任务工作区核对进度。')
+      await addRoundMessage(failed ? `处理失败: ${text}` : text, responseExtras(part, failed))
       if (!round.isActive()) return
       syncTaskFromChatResponse(part, primaryText)
       await syncAgentRunFromPayload(part, primaryText, isOwnerCurrent)
