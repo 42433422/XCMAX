@@ -24,6 +24,14 @@ from tests.platform_model_support import (
 from tests.platform_model_support import upstream as upstream
 
 
+@pytest.fixture(autouse=True)
+def loaded_model_registry(isolated):
+    from modstore_server.llm_litellm_router import _load_litellm
+
+    # Load SDK client subclasses before upstream replaces httpx.AsyncClient.
+    _load_litellm()
+
+
 @pytest.fixture
 def chat_client(database):
     from modstore_server import llm_api
@@ -140,6 +148,55 @@ def test_platform_only_rejects_explicit_selection(chat_client, selection):
     )
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "PLATFORM_ROUTE_CONFLICT"
+
+
+@pytest.mark.parametrize(
+    "mode,model,code",
+    [
+        ("explicit", "mimo-v2.5-asr", "INVALID_CHAT_PREFERENCE"),
+        ("explicit", "gpt-image-1", "INVALID_CHAT_PREFERENCE"),
+        ("byok", "mimo-v2.6-flash", "NO_BYOK_CHAT_MODEL"),
+    ],
+)
+@pytest.mark.parametrize("endpoint", ["resolve-chat-default", "chat", "chat/stream"])
+def test_saved_invalid_route_blocks_http_billing_until_explicit_recovery(
+    database, chat_client, monkeypatch, mode, model, code, endpoint
+):
+    from modstore_server import llm_api
+    from modstore_server.models import User
+
+    save("xiaomi", base_url=BASE, model="mimo-v2.6-flash")
+    user = database.get(User, 1)
+    before = json.dumps({"mode": mode, "provider": "xiaomi", "model": model})
+    user.default_llm_json = before
+    database.commit()
+    billed = [
+        AsyncMock(side_effect=AssertionError("invalid route reached billing")) for _ in range(2)
+    ]
+    monkeypatch.setattr(llm_api, "run_billed_llm_chat", billed[0])
+    monkeypatch.setattr(llm_api, "stream_billed_llm_chat", billed[1])
+    response = (
+        chat_client.get(f"/api/llm/{endpoint}")
+        if endpoint == "resolve-chat-default"
+        else chat_client.post(
+            f"/api/llm/{endpoint}",
+            json={"model": "auto", "messages": [{"role": "user", "content": "synthetic"}]},
+        )
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == code
+    assert "route_token" not in response.text
+    database.refresh(user)
+    assert user.default_llm_json == before
+    recovery = chat_client.put("/api/llm/preferences", json={"mode": "platform"})
+    assert recovery.status_code == 200
+    restored = chat_client.get("/api/llm/resolve-chat-default")
+    assert restored.status_code == 200
+    route = restored.json()
+    assert route["model"] == "mimo-v2.6-flash" and route["key_source"] == "platform"
+    assert route["route_token"]
+    for entry in billed:
+        entry.assert_not_called()
 
 
 def test_chat_default_openapi_exposes_optional_platform_only(chat_client):
