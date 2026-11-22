@@ -91,6 +91,9 @@ async def resolve_default_llm_route(
     )
     pref_m = model.strip() if explicit_query else str(prefs.get("model") or "").strip()
     explicit = bool(provider or model)
+    # A saved BYOK choice never permits silently charging the platform account.
+    if mode == "byok" and credentials.get(pref_p, (None, None, "none"))[2] != "user_override":
+        invalid("所选 BYOK 不可用，未切换到收费平台", "NO_BYOK_CHAT_MODEL")
 
     async def select(p: str, m: str, source: str, *, platform_only: bool = False):
         block = None
@@ -160,8 +163,6 @@ async def resolve_default_llm_route(
     if explicit:
         if pref_p not in _facade().KNOWN_PROVIDERS:
             invalid("账户默认供应商无效，请重新选择聊天模型或跟随平台")
-        if mode == "byok" and credentials[pref_p][2] != "user_override":
-            invalid("所选 BYOK 不可用，未切换到收费平台", "NO_BYOK_CHAT_MODEL")
         selected = await select(pref_p, pref_m, "explicit" if provider else "preference")
         if not selected and operation == "vision" and not explicit_query and pref_m:
             selected = await select(pref_p, "", "operation_preference")
