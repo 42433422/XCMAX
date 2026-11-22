@@ -204,7 +204,8 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
     async def resumed_runtime(**kwargs):
         return await run_codex_agent(**kwargs, transport_factory=Transport)
 
-    def review(binding, _config, *, rows, output):
+    def review(binding, _config, *, rows, output, consume_format_retry):
+        assert callable(consume_format_retry)
         contract = binding.run.metadata["runtime_goal_contract"]
         snapshot = goal_evidence_snapshot(contract, rows, output, goal_answers(binding.run))
         raw = {
@@ -274,6 +275,7 @@ def test_approved_child_continues_original_parent_and_requires_independent_revie
     assert parent.status == "completed", parent.to_dict()
     result = parent.final_output["codex_result"]
     assert result["business_completed"] and result["verified_operations"]
+    assert not parent.metadata["codex_runtime"].get("goal_format_retry_used")
     assert result["goal_coverage"]["completed"] is True
     assert "等待" not in result["output"]
     assert len(parent.tool_calls) == 1
@@ -298,8 +300,10 @@ def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same
     state.complete_child()
     review = goal_verifier.verify_runtime_goal
 
-    def missing_goal(*args, **kwargs):
-        report = review(*args, **kwargs)
+    def missing_goal(binding, config, *, rows, output, consume_format_retry):
+        report = review(
+            binding, config, rows=rows, output=output, consume_format_retry=consume_format_retry
+        )
         report.pop("report_digest")
         report.update(status="needs_work", accepted=False, feedback="原目标仍有一项条件待核对")
         report["review"]["goals"][0]["status"] = "unmet"
@@ -311,6 +315,7 @@ def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same
     before = blocked.final_output["codex_result"]
     assert blocked.status == "blocked" and before["retryable"] is True
     assert before["rounds"] == 3 and before["failure_stage"] == "goal_verification"
+    assert not blocked.metadata["codex_runtime"].get("goal_format_retry_used")
     assert "条件待核对" in before["failure_reason"]
     assert state.client.get(f"/api/agent/runs/{state.parent_id}").status_code == 200
     refreshed = state.repository.get(state.parent_id)

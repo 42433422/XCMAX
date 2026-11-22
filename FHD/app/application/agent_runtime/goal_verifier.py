@@ -10,6 +10,7 @@ import copy
 import json
 import math
 import time
+from collections.abc import Callable
 from typing import Any, cast
 
 from pydantic import ValidationError
@@ -46,14 +47,22 @@ def _finish_report(report: dict[str, Any]) -> dict[str, Any]:
     return {**report, "report_digest": canonical_digest(report)}
 
 
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result = dict(pairs)
+    if len(result) != len(pairs):
+        raise ValueError("Duplicate key in goal review JSON")
+    return result
+
+
 def verify_runtime_goal(
     binding: Any,
     config: Any,
     *,
     rows: list[dict[str, Any]],
     output: str,
+    consume_format_retry: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
-    """Synchronous: at most two metered, tool-free requests within one deadline."""
+    """Tool-free review; one extra format request requires the original task's budget."""
     from openai import APIError, DefaultHttpxClient, OpenAI
     from openai.types.responses import ResponseInputParam
 
@@ -174,6 +183,8 @@ def verify_runtime_goal(
                     feedback="目标核验已达时限，原任务未确认完成。",
                 )
                 break
+            if attempt and (consume_format_retry is None or not consume_format_retry()):
+                break
             messages = [
                 {"role": "system", "content": "独立核对原始目标及宿主证据；只读，不执行、不授权。"},
                 {
@@ -225,20 +236,42 @@ def verify_runtime_goal(
                 break
             items = raw.get("output")
             if not isinstance(items, list) or any(
-                not isinstance(item, dict) or item.get("type") not in {"message", "reasoning"}
+                not isinstance(item, dict)
+                or item.get("type") not in {"message", "reasoning"}
+                or item.get("status") not in (None, "completed")
+                or (
+                    item.get("type") == "message"
+                    and (
+                        not isinstance(item.get("content"), list)
+                        or any(
+                            not isinstance(part, dict) or part.get("type") != "output_text"
+                            for part in item["content"]
+                        )
+                    )
+                )
                 for item in items
             ):
                 diagnostic["state"] = "invalid_output"
-                error = "核验只能返回无工具的JSON正文"
-                format_failure = True
-                continue
+                format_failure = False
+                report.update(
+                    error_code="goal_verification_format_invalid",
+                    feedback="核验返回拒绝、工具请求或非法内容，原任务未确认完成。",
+                )
+                break
             if raw.get("status") != "completed":
                 diagnostic["state"] = "incomplete"
-                error = "核验输出未完整结束，请完整输出所需字段"
-                format_failure = True
-                continue
+                format_failure = False
+                report.update(
+                    error_code=(
+                        "goal_verification_budget_exhausted"
+                        if raw.get("status") == "incomplete" and output_budget == capacity
+                        else "goal_verification_format_invalid"
+                    ),
+                    feedback="核验输出未完整结束，原任务及全部待核对目标已保留。",
+                )
+                break
             try:
-                decoded = json.loads(response.output_text)
+                decoded = json.loads(response.output_text, object_pairs_hook=_unique_json_object)
                 json.dumps(decoded, allow_nan=False)
                 if isinstance(decoded, dict) and isinstance(decoded.get("goals"), list):
                     if len(decoded["goals"]) > 64:
@@ -280,20 +313,8 @@ def verify_runtime_goal(
             )
             return _finish_report(report)
     if format_failure:
-        exhausted = (
-            report["attempts"][-1].get("state") == "incomplete"
-            and report["attempts"][-1].get("max_output_tokens") == capacity
-        )
         report.update(
-            error_code=(
-                "goal_verification_budget_exhausted"
-                if exhausted
-                else "goal_verification_format_invalid"
-            ),
-            feedback=(
-                "核验报告在路由允许的输出容量内仍未完整结束，原任务及全部待核对目标已保留。"
-                if exhausted
-                else "目标核验格式经有限修复仍未通过，原任务未确认完成。"
-            ),
+            error_code="goal_verification_format_invalid",
+            feedback="目标核验格式无效，原任务未确认完成。",
         )
     return _finish_report(report)

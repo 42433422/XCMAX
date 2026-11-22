@@ -405,21 +405,6 @@ textarea:focus,
 
 /* ========== 响应式适配 ========== */
 
-/* 屏幕宽度小于 1024px */
-@media screen and (max-width: 1023px) {
-  .right-panel {
-    display: none;
-  }
-
-  .chat-container {
-    width: 100%;
-  }
-
-  .chat-view {
-    width: 100%;
-  }
-}
-
 /* 屏幕宽度小于 768px */
 @media screen and (max-width: 767px) {
   .sidebar {
@@ -436,31 +421,6 @@ textarea:focus,
 
   .top-bar {
     padding: 0 10px;
-  }
-
-  .chat-messages {
-    padding: 10px;
-  }
-
-  .message {
-    max-width: 90%;
-  }
-
-  .input-area {
-    padding: 10px;
-  }
-
-  .input-wrapper {
-    flex-direction: column;
-  }
-
-  .input-wrapper textarea {
-    min-height: 60px;
-  }
-
-  .quick-actions {
-    padding: 8px 10px;
-    overflow-x: auto;
   }
 }
 

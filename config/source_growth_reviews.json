@@ -43,10 +43,10 @@
       "head_blob": "e7fb7ffb5e968cfc27eeda4621d3e731c829c843",
       "before_lines": 1359,
       "after_lines": 1362,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。幂等重放准入使用既有 worker_claim_owns_run，允许持有原父队列租约的受控调用识别已登记 child，避免仅比较 run_id 误拒合法委托。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。幂等重放准入使用既有 worker_claim_owns_run，允许持有原父队列租约的受控调用识别已登记 child，避免仅比较 run_id 误拒合法委托。",
       "boundary": "仅替换 begin_idempotent_replay 的租约归属判断；安全只读、ELT、handoff、实时身份权限及未知结果约束仍走原门禁。",
       "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，含 queued_runtime 19 项与 workflow_goal 12 项，覆盖伪造/外来 child 拒绝、原 SQL 批量审批绑定及未知不重放；strict 结构零错零警。",
-      "follow_up": "后续父子租约规则继续集中在 business_write_guard，权限层只消费受信归属结果；最终提交复核跨任务拒绝案例并保持 hold-merge。",
+      "follow_up": "后续父子租约规则继续集中在 business_write_guard，权限层只消费受信归属结果；最终提交复核跨任务拒绝案例并按最新合入授权完成审查。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec.py": {
@@ -55,7 +55,7 @@
       "head_blob": "cc057c6dfcfeb9a9a1e272797ca084e36f170e37",
       "before_lines": 898,
       "after_lines": 940,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。在原 ToolSpec 上增加发现到调用的确定性契约摘要，接入 Excel 单一输入源和读权限映射，并声明 AIOPEN 单动作后置核验及 owned 文件引用。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。在原 ToolSpec 上增加发现到调用的确定性契约摘要，接入 Excel 单一输入源和读权限映射，并声明 AIOPEN 单动作后置核验及 owned 文件引用。",
       "boundary": "摘要覆盖实际执行契约，排除说明与样例；只扩展原能力目录声明，写操作继续使用原审批，页面核验只证明可见状态，公式写入只证明文本保存。",
       "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，含 workflow_goal 12 项、screen_actions 7 项、workbook_write 6 项和 employee_workbook_tools 4 项，覆盖摘要、同会话核验与实际工作簿；新架构违例为零。",
       "follow_up": "后续能力继续从现有目录和专用输入合同生成；最终提交复核 schema 摘要与下发一致性。真实浏览器 CI 与原客户题库资格仍待独立证据。",
@@ -415,10 +415,10 @@
       "head_blob": "d21dad7cb9f3ff62ce2d2657d402205b4dcc3e3d",
       "before_lines": 1025,
       "after_lines": 1034,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。把 runtimeContinuation、等待状态和审批卡接入现有远端响应消费，保留未完成任务，并在续接时跳过会分叉原任务的产品与 Mod 本地快路径。 本轮blocked与保留的waiting父引用分开渲染，正确显示失败提示而保留原续接。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。把 runtimeContinuation、等待状态和审批卡接入现有远端响应消费，保留未完成任务，并在续接时跳过会分叉原任务的产品与 Mod 本地快路径。 本轮blocked与保留的waiting父引用分开渲染，正确显示失败提示而保留原续接。",
       "boundary": "仅负责现有消息附加信息、等待展示和请求路由；不在前端授予审批或判断业务完成，等待结果不记作模型成功。",
       "validation": "本轮最终前端源码的原12文件续接回归443/443通过（43.06秒），覆盖消息恢复、审批、批量、流式与原父任务引用；blocked原父保留场景在单JSON与真实batch均精确断言失败提示。串行原npm run type-check:build通过（23.16秒），未改编译配置或门禁；最终head完整CI另行核验。",
-      "follow_up": "本记录仅是评审请求，不是批准；最终head仍需前端质量、完整CI及架构审查。后续续接状态继续由现有helper和服务端原任务共同校验，保持Draft/hold-merge。",
+      "follow_up": "本记录仅是评审请求，不是批准；最终head仍需前端质量、完整CI及架构审查。后续续接状态继续由现有helper和服务端原任务共同校验，按最新授权在完整检查后合入。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useAiOpenCursor.ts": {
@@ -439,10 +439,10 @@
       "head_blob": "17a45947801017562cbbad7a6046dbfc8d83edc8",
       "before_lines": 817,
       "after_lines": 824,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。从服务端非用户消息恢复 runtimeContinuation，并在本地消息缓存中持久保存，避免刷新后丢失原父任务的补充和审批续接引用。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。从服务端非用户消息恢复 runtimeContinuation，并在本地消息缓存中持久保存，避免刷新后丢失原父任务的补充和审批续接引用。",
       "boundary": "仅恢复和保存消息元数据；拒绝把用户消息作为任务续接凭据，不新增权限判断或后台执行入口。",
       "validation": "本轮最终前端源码的原12文件续接回归443/443通过（43.06秒），覆盖消息恢复、审批、批量、流式与原父任务引用；blocked原父保留场景在单JSON与真实batch均精确断言失败提示。串行原npm run type-check:build通过（23.16秒），未改编译配置或门禁；最终head完整CI另行核验。",
-      "follow_up": "本记录仅是评审请求，不是批准；最终head仍需前端质量、完整CI及架构审查。后续续接状态继续由现有helper和服务端原任务共同校验，保持Draft/hold-merge。",
+      "follow_up": "本记录仅是评审请求，不是批准；最终head仍需前端质量、完整CI及架构审查。后续续接状态继续由现有helper和服务端原任务共同校验，按最新授权在完整检查后合入。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useChatOrchestration.ts": {
@@ -451,10 +451,10 @@
       "head_blob": "614abf23157e7e6a82c4526af45d5d5e6ed0cc53",
       "before_lines": 1039,
       "after_lines": 1048,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。让运行观察、消息更新和审批卡保留原 Codex 父任务引用，续接时跳过新手首单等本地分支，并禁止把父 run 当业务子任务批准。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。让运行观察、消息更新和审批卡保留原 Codex 父任务引用，续接时跳过新手首单等本地分支，并禁止把父 run 当业务子任务批准。",
       "boundary": "仅连接现有编排与卡片控制；runtime 审批卡不走前端自动确认，仍向原 child API 领取并消费批准，续接引用只在同会话传播。",
       "validation": "本轮最终前端源码的原12文件续接回归443/443通过（43.06秒），覆盖消息恢复、审批、批量、流式与原父任务引用；blocked原父保留场景在单JSON与真实batch均精确断言失败提示。串行原npm run type-check:build通过（23.16秒），未改编译配置或门禁；最终head完整CI另行核验。",
-      "follow_up": "本记录仅是评审请求，不是批准；最终head仍需前端质量、完整CI及架构审查。后续续接状态继续由现有helper和服务端原任务共同校验，保持Draft/hold-merge。",
+      "follow_up": "本记录仅是评审请求，不是批准；最终head仍需前端质量、完整CI及架构审查。后续续接状态继续由现有helper和服务端原任务共同校验，按最新授权在完整检查后合入。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useVoiceCall.ts": {
@@ -483,14 +483,14 @@
     },
     "FHD/frontend/src/views/ChatView.vue": {
       "base_file": "FHD/frontend/src/views/ChatView.vue",
-      "base_blob": "bb02182431e151888eb1344758a0218703ecd21c",
-      "head_blob": "49270b7be29399e04f9c060e3e933ba98b0f170f",
-      "before_lines": 1010,
-      "after_lines": 1086,
-      "reason": "接入通用附件选择、打开原任务和撤回确认，让用户能从开放式执行链回到审批与后台处理回执。 Add image generation to the existing chat composer and persist unresolved request keys across restarts.",
-      "boundary": "继续按当前会话和任务编号路由。撤回等待期间禁止重复提交，业务撤回和权限仍由服务端完成。 Keys are bound to the authenticated owner, Mod, conversation and prompt digest; only confirmed outcomes remove them.",
-      "validation": "验证范围包括拖放附件、原任务导航、会话恢复、撤回后提示和发送进入等待。待远端 CI 与桌面交互验收。 本地 925 项前端测试与构建类型检查通过。 Chat and storage tests cover scope changes and reopening; frontend type checking passed. Exact-head CI and production wallet readback remain required. 本次整合保留本地工作区与多模态生图入口，95 项多模态及交互前端回归通过。",
-      "follow_up": "模板验收后继续使用统一附件选择和会话状态模块，不在页面重新实现上传权限与步骤呈现。 Architecture review and installed desktop restart and billing verification remain outstanding.",
+      "base_blob": "a40988dab3daffb819bdf2c9c3bdf7799d7dd90b",
+      "head_blob": "6f4c6461ec3b24f9df424949ca2f29015d009ec0",
+      "before_lines": 1021,
+      "after_lines": 1036,
+      "reason": "管理端手机聊天接通原任务与历史抽屉的窄屏入口，在停用时关闭；页面增量为模板与显示状态。",
+      "boundary": "复用 ChatSidePanel、原会话和任务事件。抽屉内部留在现有组件，样式留在 chat.css；不增加数据访问或权限。",
+      "validation": "锁定 npm 依赖；Vitest 三文件 70 项通过。两项 Chromium E2E 因容器拒绝 Unix socket 未进入断言，需精确远端 CI 和真机软键盘确认。",
+      "follow_up": "由仓库维护者核对页面职责和实测手机回归。本条仅申请架构审查，不代表获批。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/views/PersyKnowledgeView.vue": {
@@ -739,10 +739,10 @@
       "head_blob": "a59f01c03dceb8f6ee48a5233125f39d3c72ad60",
       "before_lines": 737,
       "after_lines": 864,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。增加受限回执对账，在原子事务内将已独立核验的原子任务结果投影到父 Run、Task 与无租约等待队列，解决父状态滞留。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。增加受限回执对账，在原子事务内将已独立核验的原子任务结果投影到父 Run、Task 与无租约等待队列，解决父状态滞留。",
       "boundary": "只处理原目标、原子任务快照与父状态 CAS；调用者不能指定目标状态，活租约或待核对副作用拒绝收口，仍复用原队列与 SessionBook。",
       "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，含 receipt_projection 15 项、queued_runtime 19 项，覆盖跨账号、活租约、未知结果及等待队列扫描；全 app mypy 2272 源文件通过。",
-      "follow_up": "语义投影继续归 receipt_projection，仓储仅承担同库事务与 CAS；最终提交需重测 blob，并由责任人复核受限对账边界，保持 hold-merge。",
+      "follow_up": "语义投影继续归 receipt_projection，仓储仅承担同库事务与 CAS；最终提交需重测 blob，并由责任人复核受限对账边界，本请求不替代实际审查。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_executor.py": {
@@ -751,7 +751,7 @@
       "head_blob": "20f920b4bf002f9eaaa0fd8c36f897b1bebe75d2",
       "before_lines": 908,
       "after_lines": 1016,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。补回后台 child 的原员工授权恢复、已发现契约摘要复核和 Excel 比较租户域；工具执行与 ELT 续时按可信调用剩余预算收紧。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。补回后台 child 的原员工授权恢复、已发现契约摘要复核和 Excel 比较租户域；工具执行与 ELT 续时按可信调用剩余预算收紧。",
       "boundary": "仍由原执行器、原审批和现有隔离进程执行；新增检查位于实际副作用之前。父活跃预算只随当轮调用传播，审批后独立 worker 使用原工具 watchdog。",
       "validation": "源码 8544418d 的完整 Codex 集合 802 项及 71 文件迁移集 1546 项分别通过；另有本轮预算联合 67 项与工具/Excel/员工/浏览器 182 项回归。全 app mypy 2272 源文件及 Ruff app/tests/scripts 通过，各集合不相加。",
       "follow_up": "员工授权细则继续维护在原员工模块，执行器保留薄调用；最终提交复核预算边界及真实浏览器 CI，本地 AF_UNIX 受限的真 Chromium 用例尚未通过。",
@@ -763,7 +763,7 @@
       "head_blob": "be8951a54ebe2d5e9fbf26a6fc64c1dfcfd99734",
       "before_lines": 937,
       "after_lines": 945,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。将可信 ContextVar 调用总上限传入原隔离 worker，并在父监管与 ELT 每文件阶段续时两侧同时钳制，防止阶段预算越过父剩余时限。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。将可信 ContextVar 调用总上限传入原隔离 worker，并在父监管与 ELT 每文件阶段续时两侧同时钳制，防止阶段预算越过父剩余时限。",
       "boundary": "只新增内部浮点上限并取最小 deadline，不接受请求中的预算字段；原进程监督、终止清理及无父预算时的 ELT 分阶段机制保留。",
       "validation": "本轮真实进程 file_deadline/stage_cannot_extend 定点 5 项通过，涵盖到期终止和无迟到写；源码 8544418d 的 71 文件迁移集 1546 项通过，含原 tool_process 回归。全 app mypy 2272 源文件通过，集合不相加。",
       "follow_up": "最终复核总预算与阶段 watchdog 的层级；审批后的独立 child 不继承旧父 epoch，文档须保持这一范围，原隔离进程机制继续作为唯一执行边界。",
@@ -919,10 +919,10 @@
       "head_blob": "121953fbbf3b8a711c4a456aebd036c5bef4cb11",
       "before_lines": 727,
       "after_lines": 826,
-      "reason": "仅为架构评审请求，非批准；#3468 保持 Draft 与 hold-merge。自然语言 Agent Run 创建和控制接入固定 Codex 父任务，校验请求身份与会话版本，并保留原 SQL 队列受理和 HTTP 202 语义。",
+      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。自然语言 Agent Run 创建和控制接入固定 Codex 父任务，校验请求身份与会话版本，并保留原 SQL 队列受理和 HTTP 202 语义。",
       "boundary": "路由仅认证、校验、封存输入并调用 gateway/route_support；明确工具任务仍走原确定性图，子任务 resume/retry 受父控制约束，未知效果不重放。",
       "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，含 runs_entry 13 项、control 10 项、queued_runtime 19 项，覆盖即时受理、原父续接、会话删除、撤权和幂等；71 文件迁移集 1546 项另行通过，不合并计数。",
-      "follow_up": "新增运行控制继续收敛到已有 route_support 与 gateway；最终提交验证原 API 状态及错误码，严格保持 Draft/hold-merge，不据本请求执行合入或部署。",
+      "follow_up": "新增运行控制继续收敛到已有 route_support 与 gateway；最终提交验证原 API 状态及错误码，按最新用户授权与实际 CI、审查结果合入；本请求不代表部署验收。",
       "review_owner": "@42433422"
     }
   }

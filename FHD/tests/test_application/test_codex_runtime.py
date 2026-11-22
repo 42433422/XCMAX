@@ -26,6 +26,8 @@ from app.infrastructure.codex.binding import (
     CodexGrant,
 )
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_codex_goal_verifier import goal, response, review
+from tests.test_application.test_codex_goal_verifier import verifier as verifier
 
 
 class Store:
@@ -192,7 +194,7 @@ def setup_runtime(tmp_path, monkeypatch):
         turn_timeout_seconds=30,
     )
 
-    def review(binding, _config, *, rows, output):
+    def review(binding, _config, *, rows, output, consume_format_retry):
         store = stores[binding.run_id]
         contract = binding.run.metadata["runtime_goal_contract"]
         snapshot = goal_evidence_snapshot(contract, rows, output, goal_answers(binding.run))
@@ -403,6 +405,92 @@ def test_verifier_feedback_completes_missing_work_in_same_thread(setup_runtime):
         for item in store.run.events
         if item.event_type == "runtime.goal.verified"
     ] == ["needs_work", "verified"]
+
+
+def test_format_retry_is_shared_across_three_turns_and_sql_restart(
+    verifier, trusted_actor, tmp_path
+):
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.infrastructure.codex.binding import CodexBindingStore
+
+    actor = trusted_actor(user_id=71)
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    parent = AgentRun(str(actor.user_id), "请写一段总结", status="running")
+    parent.metadata["runtime_context"] = actor.context
+    contract = build_goal_contract(parent)
+    parent.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
+    repository.save(parent)
+    config = CodexTransportConfig(
+        runtime_root=tmp_path.resolve(),
+        scope_id="fixture",
+        model=verifier.config.model,
+        provider_url=verifier.config.provider_url,
+        provider_token="synthetic-placeholder",
+        mcp_url="http://127.0.0.1:41111/mcp",
+        mcp_token="synthetic-placeholder",
+        context_window=32000,
+        auto_compact_token_limit=24000,
+        turn_timeout_seconds=30,
+    )
+
+    class CandidateTransport(Transport):
+        async def stream_turn(self, text):
+            self.events = completed(f"候选回复{len(self.inputs) + 1}：尚未完成")
+            async for item in super().stream_turn(text):
+                yield item
+
+    def invoke(store, transport):
+        return runtime.run_codex_agent(
+            run_id=parent.run_id,
+            task=parent.message,
+            system_prompt="Synthetic test authority",
+            config=config,
+            binding_store=store,
+            transport_factory=transport.factory,
+            completion_mode="reply",
+            runtime_config={"provider_id": "synthetic", "route_identity": "synthetic-route"},
+        )
+
+    unmet = review(goal(parent.message, kind="reply", status="unmet", evidence_ids=["response"]))
+    positive = response(review(goal(parent.message, kind="reply", evidence_ids=["response"])))
+    verifier.replies = [
+        response({}, text="{"),
+        response(unmet),
+        response(unmet),
+        response({}, text="{"),
+        positive,
+    ]
+    reserved = []
+
+    def observe(_request):
+        saved = repository.get(parent.run_id)
+        reserved.append(saved.metadata["codex_runtime"].get("goal_format_retry_used", False))
+
+    verifier.observe_request = observe
+    trace = SimpleNamespace(log=[], run=parent)
+    first = CandidateTransport(trace)
+    result = asyncio.run(invoke(CodexBindingStore(repository), first))
+    assert result["ok"] is False and len(first.inputs) == 3
+    assert len(verifier.requests) == 4 and len(verifier.replies) == 1
+    assert reserved == [False, True, True, True], "reservation must precede the second HTTP request"
+    saved = repository.get(parent.run_id)
+    assert saved.metadata["codex_runtime"]["goal_format_retry_used"] is True
+    assert saved.metadata["runtime_goal_contract"] == contract
+    # An explicit continuation reopens the same original task after a worker
+    # restart. A new repository, binding and generation cannot reset its budget.
+    saved.status = "waiting_user"
+    repository.save(saved)
+    reopened = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    resumed = CandidateTransport(trace)
+    verifier.replies = [response({}, text="{"), positive]
+    again = asyncio.run(invoke(CodexBindingStore(reopened), resumed))
+    assert again["ok"] is False and resumed.resumed == ["thread-one"]
+    assert len(resumed.inputs) == 1 and len(verifier.requests) == 5
+    assert len(verifier.replies) == 1 and reserved[-1] is True
+    latest = reopened.get(parent.run_id)
+    assert latest.metadata["codex_runtime"]["generation"] == 2
+    assert latest.metadata["runtime_goal_contract"] == contract
+    assert latest.metadata["codex_runtime"]["goal_format_retry_used"] is True
 
 
 def test_only_persisted_host_skills_become_developer_guidance(setup_runtime):

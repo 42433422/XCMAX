@@ -147,6 +147,8 @@ def verifier(monkeypatch):
 
     def handle(request):
         state.requests.append(request)
+        if observer := getattr(state, "observe_request", None):
+            observer(request)
         assert state.replies, "verifier exceeded its expected budget"
         result = state.replies.pop(0)
         if isinstance(result, Exception):
@@ -168,8 +170,20 @@ def verifier(monkeypatch):
 
     monkeypatch.setattr(openai, "OpenAI", client)
     monkeypatch.setattr(AgentToolExecutor, "execute", no_execution)
+
+    def consume_format_retry():
+        metadata = state.run.metadata["codex_runtime"]
+        if metadata.get("goal_format_retry_used", False) is not False:
+            return False
+        metadata["goal_format_retry_used"] = True
+        return True
+
     state.verify = lambda: verify_runtime_goal(
-        CodexBinding(run), state.config, rows=state.rows, output=state.output
+        CodexBinding(state.run),
+        state.config,
+        rows=state.rows,
+        output=state.output,
+        consume_format_retry=consume_format_retry,
     )
 
     def classify(report, *, runtime_status="completed", mode="auto"):
@@ -325,15 +339,10 @@ def test_pure_reply_needs_no_tool_but_does_need_complete_review(verifier):
     assert not verifier.classify(report, runtime_status="failed")[1]["ok"]
 
 
-@pytest.mark.parametrize("first", ["invalid_json", "incomplete"])
-def test_known_format_or_truncation_repaired_once_within_original_budget(verifier, first):
+def test_known_format_repaired_once_within_original_budget(verifier):
     complete = review(goal(), goal("再查询second", goal_id="second"))
     verifier.replies = [
-        response(
-            {},
-            text="{" if first == "invalid_json" else "",
-            status="incomplete" if first == "incomplete" else "completed",
-        ),
+        response({}, text="{"),
         response(complete),
     ]
     verifier.run.metadata["codex_runtime"]["deadline_at"] = time.time() + 3
@@ -343,6 +352,75 @@ def test_known_format_or_truncation_repaired_once_within_original_budget(verifie
     first_body, second_body = (json.loads(request.content) for request in verifier.requests)
     assert first_body["max_output_tokens"] < second_body["max_output_tokens"] <= 8000
     assert "紧凑JSON" in second_body["input"][-1]["content"]
+    assert verifier.run.metadata["codex_runtime"]["goal_format_retry_used"] is True
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "refusal",
+        "tool_call",
+        "incomplete",
+        "content_filter",
+        "message_incomplete",
+        "message_in_progress",
+    ],
+)
+def test_refusal_tool_call_and_truncation_cannot_be_retried_into_acceptance(verifier, kind):
+    complete = review(goal(), goal("再查询second", goal_id="second"))
+    first = response(complete)
+    if kind == "refusal":
+        first["output"][0]["content"] = [{"type": "refusal", "refusal": "deny"}]
+    elif kind == "tool_call":
+        first["output"] = [
+            {
+                "type": "function_call",
+                "id": "call",
+                "call_id": "call",
+                "name": "forbidden",
+                "arguments": "{}",
+            }
+        ]
+    elif kind.startswith("message_"):
+        first["output"][0]["status"] = kind.removeprefix("message_")
+    else:
+        first.update(
+            status="incomplete",
+            incomplete_details={
+                "reason": "content_filter" if kind == "content_filter" else "max_output_tokens"
+            },
+        )
+    verifier.replies = [first, response(complete)]
+    report = verifier.verify()
+    assert report["status"] == "unavailable" and report["accepted"] is False
+    assert len(verifier.requests) == 1 and len(verifier.replies) == 1
+    assert not verifier.run.metadata["codex_runtime"].get("goal_format_retry_used")
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_duplicate_json_keys_cannot_overwrite_a_negative_review(verifier, nested):
+    raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
+    raw = raw.replace(
+        '"status": "satisfied"' if nested else '"violations": []',
+        '"status": "unmet", "status": "satisfied"'
+        if nested
+        else '"violations": ["must reject"], "violations": []',
+        1,
+    )
+    verifier.replies = [response({}, text=raw), response({}, text=raw)]
+    report = verifier.verify()
+    assert report["accepted"] is False and report["status"] == "unavailable"
+    assert len(verifier.requests) == 2
+    assert {item["state"] for item in report["attempts"]} == {"invalid_format"}
+
+
+def test_format_retry_requires_an_original_task_reservation(verifier):
+    verifier.replies = [response({}, text="{"), response(review(goal()))]
+    report = verify_runtime_goal(
+        CodexBinding(verifier.run), verifier.config, rows=verifier.rows, output=verifier.output
+    )
+    assert not report["accepted"] and len(verifier.requests) == 1
+    assert len(verifier.replies) == 1
 
 
 def test_invalid_format_stops_after_two_calls_without_declaring_success(verifier):
@@ -376,7 +454,8 @@ def test_exhausted_route_capacity_preserves_task_instead_of_truncating_goals(ver
     report = verifier.verify()
     assert report["error_code"] == "goal_verification_budget_exhausted"
     assert not report["accepted"] and verifier.classify(report)[0] == "blocked"
-    assert [json.loads(req.content)["max_output_tokens"] for req in verifier.requests] == [1000] * 2
+    assert [json.loads(req.content)["max_output_tokens"] for req in verifier.requests] == [1000]
+    assert len(verifier.replies) == 1
 
 
 def test_more_than_64_goals_cannot_be_silently_reduced_to_success(verifier):

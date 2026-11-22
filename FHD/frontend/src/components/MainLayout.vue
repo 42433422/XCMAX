@@ -1,6 +1,6 @@
 <template>
-  <div class="main-container">
-    <div class="sidebar-shell" :class="{ collapsed: sidebarCollapsed }" :style="sidebarShellStyle" @mouseenter="onSidebarMouseEnter">
+  <div class="main-container" :class="{ 'main-container--admin': adminConsoleSpa, 'has-mobile-bottom-nav': mobileBottomNavVisible }" :style="mobileViewportStyle">
+    <div v-if="!adminConsoleSpa || isSidebarFeatureEnabled" class="sidebar-shell" :class="{ collapsed: sidebarCollapsed }" :style="sidebarShellStyle" @mouseenter="onSidebarMouseEnter">
       <Sidebar :active-view="displayedActiveView" @change-view="handleViewChange" />
       <PaneResizeHandle
         v-if="isSidebarFeatureEnabled && !sidebarCollapsed"
@@ -18,6 +18,17 @@
     >
       <button class="sidebar-peek-button" type="button" aria-label="展开侧边栏" title="展开侧边栏" @click="onHoverTriggerClick">▶</button>
     </div>
+    <ElDrawer
+      v-if="adminConsoleSpa && !isSidebarFeatureEnabled"
+      v-model="mobileSidebarOpen"
+      class="mobile-sidebar-drawer"
+      title="管理端导航"
+      direction="ltr"
+      size="min(320px, calc(100vw - 32px))"
+      append-to-body
+    >
+      <Sidebar :active-view="displayedActiveView" @change-view="handleViewChange" />
+    </ElDrawer>
     <div class="main-content">
       <div v-if="isImpersonating" class="impersonate-bar" role="status">
         <span class="impersonate-bar__text">
@@ -28,6 +39,15 @@
         </button>
       </div>
       <div class="top-bar">
+        <button
+          v-if="adminConsoleSpa && !isSidebarFeatureEnabled"
+          type="button"
+          class="mobile-sidebar-toggle"
+          aria-label="打开管理端导航"
+          aria-haspopup="dialog"
+          :aria-expanded="mobileSidebarOpen"
+          @click="mobileSidebarOpen = true"
+        ><i class="fa fa-bars" aria-hidden="true"></i></button>
         <div class="page-title-wrap">
           <div class="page-kicker">{{ topKickerText }}</div>
           <div class="page-title" :key="currentViewTitle">{{ currentViewTitle }}</div>
@@ -75,6 +95,10 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElDrawer } from 'element-plus'
+import 'element-plus/theme-chalk/base.css'
+import 'element-plus/theme-chalk/el-overlay.css'
+import 'element-plus/theme-chalk/el-drawer.css'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
@@ -131,12 +155,14 @@ const endingImpersonation = ref(false)
 const { modMenuItems } = useModRoutes()
 const SIDEBAR_INACTIVITY_MS = 15000
 const SIDEBAR_HOVER_OPEN_MS = 1000
-const SIDEBAR_DISABLE_MQ = '(max-width: 767px)'
+const SIDEBAR_DISABLE_MQ = '(max-width: 768px)'
 const MOBILE_BOTTOM_NAV_MQ = '(max-width: 768px)'
 const SIDEBAR_PANE_KEY = 'main-layout.sidebar'
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart']
 const sidebarCollapsed = ref(false)
-const isSidebarFeatureEnabled = ref(true)
+const isSidebarFeatureEnabled = ref(typeof window === 'undefined' || !window.matchMedia?.(SIDEBAR_DISABLE_MQ)?.matches)
+const mobileSidebarOpen = ref(false)
+const mobileViewportStyle = ref({})
 let sidebarCollapseTimer = null
 let sidebarHoverTimer = null
 let sidebarViewportMedia = null
@@ -271,6 +297,7 @@ watch(currentRouteName, () => {
   syncPendingSidebarWithRoute()
   syncAppNavIntentWithRoute()
 })
+watch(() => route.fullPath, () => { mobileSidebarOpen.value = false })
 
 /** 对话与信息页收起悬浮入口，避免遮挡客服和员工的输入工具条；通话中必须保留，否则静音/挂断会丢失。 */
 const shouldShowFloatingChatAssistant = computed(() => voiceCallActive.value || (!isChatSidebarActive(currentRouteName.value, route) && currentRouteName.value !== 'im' && !documentPreviewPip.visible))
@@ -363,6 +390,7 @@ async function navigateToView(viewKey, source = 'shell') {
 }
 
 const handleViewChange = (viewKey) => {
+  mobileSidebarOpen.value = false
   // Fire-and-forget: do not serialize UI behind a prior slow navigate promise.
   void navigateToView(viewKey, 'sidebar-or-quicknav')
 }
@@ -446,6 +474,8 @@ const onHoverTriggerClick = () => {
 const onViewportChange = (event) => {
   const matches = Boolean(event?.matches)
   isSidebarFeatureEnabled.value = !matches
+  mobileSidebarOpen.value = false
+  syncMobileViewport()
   clearSidebarHoverTimer()
   clearSidebarCollapseTimer()
   if (!isSidebarFeatureEnabled.value) {
@@ -462,22 +492,16 @@ const onMobileNavViewportChange = (event) => {
 
 const mobileBottomNavVisible = computed(() => showMobileBottomNav.value && !adminConsoleSpa && route.meta?.hideChrome !== true)
 
-onMounted(async () => {
-  if (!accountProfileStore.loaded) {
-    try {
-      await accountProfileStore.refreshFromServer()
-    } catch {
-      /* ignore */
-    }
-  }
-  if (!industryStore.isLoaded) {
-    try {
-      await industryStore.initialize()
-    } catch (_e) {
-      // 行业信息加载失败时，顶部标题保持默认文案
-    }
-  }
-  if (!layoutActive || typeof window === 'undefined') return
+function syncMobileViewport() {
+  const viewport = window.visualViewport
+  // iOS keyboards resize the visual viewport, while the layout viewport stays tall.
+  // Preserve browser zoom: a pinch must not resize the app to its magnified viewport.
+  mobileViewportStyle.value = adminConsoleSpa && viewport && viewport.scale === 1
+    ? { '--mobile-viewport-height': `${viewport.height}px`, '--mobile-viewport-top': `${viewport.offsetTop}px` }
+    : {}
+}
+
+onMounted(() => {
   sidebarViewportMedia = window.matchMedia?.(SIDEBAR_DISABLE_MQ) ?? null
   if (sidebarViewportMedia) {
     onViewportChange(sidebarViewportMedia)
@@ -499,10 +523,31 @@ onMounted(async () => {
   ACTIVITY_EVENTS.forEach((eventName) => {
     window.addEventListener(eventName, handleGlobalActivity, { passive: true })
   })
+  window.visualViewport?.addEventListener('resize', syncMobileViewport)
+  window.visualViewport?.addEventListener('scroll', syncMobileViewport)
+})
+
+onMounted(async () => {
+  if (!accountProfileStore.loaded) {
+    try {
+      await accountProfileStore.refreshFromServer()
+    } catch {
+      /* ignore */
+    }
+  }
+  if (layoutActive && !industryStore.isLoaded) {
+    try {
+      await industryStore.initialize()
+    } catch {
+      // 行业信息加载失败时，顶部标题保持默认文案
+    }
+  }
 })
 
 onBeforeUnmount(() => {
   layoutActive = false
+  window.visualViewport?.removeEventListener('resize', syncMobileViewport)
+  window.visualViewport?.removeEventListener('scroll', syncMobileViewport)
   stopSidebarResize()
   clearSidebarHoverTimer()
   clearSidebarCollapseTimer()

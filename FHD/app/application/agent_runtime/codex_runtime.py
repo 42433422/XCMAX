@@ -263,6 +263,21 @@ async def run_codex_agent(
 
         return store.update(run_id, guarded)
 
+    def consume_format_retry() -> bool:
+        consumed = False
+
+        def reserve(run: AgentRun, metadata: dict[str, Any]) -> None:
+            nonlocal consumed
+            store._validate_current(run, metadata, generation)
+            consumed = metadata.get("goal_format_retry_used", False) is False
+            if consumed:
+                metadata["goal_format_retry_used"] = True
+
+        # Persist before another metered request. CAS retries only this metadata
+        # reservation; later turns and restarted coordinators retain its use.
+        mutate(reserve)
+        return consumed
+
     async def stop(reason: str) -> None:
         # Revoke callback authority before asking the runtime to stop. A stopped
         # process does not prove that a previously submitted child was rolled back.
@@ -573,7 +588,12 @@ async def run_codex_agent(
                             break
                         output = "\n\n".join(value for value in texts.values() if value.strip())
                         review = await asyncio.to_thread(
-                            verify_runtime_goal, binding, actual_config, rows=rows, output=output
+                            verify_runtime_goal,
+                            binding,
+                            actual_config,
+                            rows=rows,
+                            output=output,
+                            consume_format_retry=consume_format_retry,
                         )
 
                         def record_review(run: AgentRun, metadata: dict[str, Any]) -> None:

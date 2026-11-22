@@ -12,6 +12,7 @@ from contextvars import copy_context
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import psutil
 import pytest
@@ -288,7 +289,7 @@ def test_real_worker_keeps_captured_model_credentials_off_disk(browser, monkeypa
 
     first = call(browser, "browser_snapshot")
     state(first)
-    worker = next(iter(workers._WORKERS.values()))
+    worker = workers._WORKERS[(first["server"], registry.mcp_session_scope(browser[1]))]
     process = psutil.Process(worker.process.pid)
     sent = threading.Event()
     frames = []
@@ -327,7 +328,7 @@ def test_real_worker_keeps_captured_model_credentials_off_disk(browser, monkeypa
 def test_backpressured_request_deadline_reaps_worker_and_sender_thread(browser, monkeypatch):
     first = call(browser, "browser_snapshot")
     browser_pid = state(first)["pid"]
-    worker = next(iter(workers._WORKERS.values()))
+    worker = workers._WORKERS[(first["server"], registry.mcp_session_scope(browser[1]))]
     worker_pid = worker.process.pid
     sender_threads = []
     send = worker.commands.send_bytes
@@ -352,10 +353,22 @@ def test_backpressured_request_deadline_reaps_worker_and_sender_thread(browser, 
     assert call(browser, "browser_snapshot")["error_code"] == "mcp_session_lost"
 
 
-def test_large_request_and_oversize_rejection_keep_worker_usable(browser, monkeypatch):
+@pytest.mark.parametrize("retained_foreign_worker", [False, True])
+def test_large_request_and_oversize_rejection_keep_worker_usable(
+    browser, monkeypatch, retained_foreign_worker
+):
+    foreign_key = ("foreign-browser-fixture", "foreign-scope")
+    foreign = SimpleNamespace(
+        lost=True,
+        clean=False,
+        close=lambda: False,
+        commands=SimpleNamespace(send_bytes=Mock(side_effect=AssertionError("wrong worker"))),
+    )
+    if retained_foreign_worker:
+        monkeypatch.setitem(workers._WORKERS, foreign_key, foreign)
     first = call(browser, "browser_snapshot")
     state(first)
-    worker = next(iter(workers._WORKERS.values()))
+    worker = workers._WORKERS[(first["server"], registry.mcp_session_scope(browser[1]))]
     sends = []
     send = worker.commands.send_bytes
 
@@ -376,6 +389,10 @@ def test_large_request_and_oversize_rejection_keep_worker_usable(browser, monkey
     assert rejected["outcome"] == "not_started" and len(sends) == 1
     current = call(browser, "browser_snapshot")
     assert current["session_id"] == first["session_id"] and state(current)["clicks"] == 0
+    if retained_foreign_worker:
+        assert workers._WORKERS[foreign_key] is foreign
+        assert foreign.lost and foreign.clean is False
+        foreign.commands.send_bytes.assert_not_called()
 
 
 def test_actor_binding_change_cannot_reuse_previous_browser_process(browser):
@@ -391,7 +408,7 @@ def test_actor_binding_change_cannot_reuse_previous_browser_process(browser):
 def test_parked_browser_rss_watchdog_reaps_before_next_action(browser):
     first = call(browser, "browser_snapshot")
     pid = state(first)["pid"]
-    worker = next(iter(workers._WORKERS.values()))
+    worker = workers._WORKERS[(first["server"], registry.mcp_session_scope(browser[1]))]
     # Lower the physical watchdog budget after the real worker is parked.
     worker.memory_limit = 1
     deadline = time.monotonic() + 4
