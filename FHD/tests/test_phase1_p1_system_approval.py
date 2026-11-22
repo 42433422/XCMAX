@@ -100,13 +100,16 @@ def test_performance_cache_invalidate(
     optimizer.redis_cache.delete.return_value = 1
     r = system_client.post("/api/performance/cache/invalidate", json=body)
     assert r.status_code == status, r.text
-    assert r.json()["success"] is (status == 200)
+    payload = r.json()
     if status == 200:
-        assert r.json()["data"]["deleted_count"] == 1
-        assert r.json()["data"]["requested_keys"] == 1
+        assert payload["success"] is False
+        assert payload["error_code"] == "result_verification_inconclusive"
+        assert payload["data"]["deleted_count"] == 1
+        assert payload["data"]["requested_keys"] == 1
         optimizer.redis_cache.delete.assert_called_once_with("k")
     else:
-        assert r.json()["error_code"] == "schema_validation_failed"
+        assert payload["success"] is False
+        assert payload["error_code"] == "schema_validation_failed"
         optimizer.redis_cache.delete.assert_not_called()
 
 

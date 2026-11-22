@@ -355,9 +355,10 @@ class TestPrintRoutesSaveSelection:
                 "/api/print/printer-selection",
                 json={"document_printer": "P1", "label_printer": "P1"},
             )
-        assert r.status_code == 200
+        assert r.status_code == 400
         data = r.json()
-        assert data["success"] is True
+        assert data["success"] is False
+        assert data["error_code"] == "result_verification_inconclusive"
         assert data["doc"] == "P1"
 
     def test_save_selection_exception(self, print_client: TestClient, local_tools):
@@ -390,8 +391,9 @@ class TestPrintRoutesDocument:
                 "/api/print/document",
                 json={"file_path": str(document), "printer_name": "P1"},
             )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
+        assert r.status_code == 400
+        assert r.json()["success"] is False
+        assert r.json()["error_code"] == "result_verification_inconclusive"
 
     def test_print_document_failed_result_returns_400(
         self, print_client: TestClient, tmp_path: Path
@@ -497,8 +499,10 @@ class TestPrintRoutesLabel:
                 "/api/print/label",
                 json={"file_path": "/tmp/x.pdf", "require_confirm": True, "confirm_token": token},
             )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
+        assert r.status_code == 400
+        payload = r.json()
+        assert payload["success"] is False
+        assert payload["error_code"] == "result_verification_inconclusive"
 
     def test_print_label_no_confirm_failed(self, print_client: TestClient):
         with (
@@ -530,8 +534,9 @@ class TestPrintRoutesLabel:
                 "/api/print/label", json=body, headers={"X-Request-ID": "print-request-2"}
             )
             anonymous = print_client.post("/api/print/label", json=body)
-        assert first.status_code == retry.status_code == 200
+        assert first.status_code == retry.status_code == 400
         assert first.json()["run_id"] == retry.json()["run_id"]
+        assert first.json()["error_code"] == "result_verification_inconclusive"
         assert separate.status_code == anonymous.status_code == 500
         assert separate.json()["success"] is anonymous.json()["success"] is False
         assert separate.json().get("status") != "printed"
@@ -560,7 +565,9 @@ class TestPrintRoutesOtherEndpoints:
         with patch("app.fastapi_routes.print_routes._svc") as svc:
             svc.return_value.test_printer.return_value = {"success": True}
             r = print_client.post("/api/print/test", json={"printer_name": "P1"})
-        assert r.status_code == 200
+        assert r.status_code == 400
+        assert r.json()["success"] is False
+        assert r.json()["error_code"] == "result_verification_inconclusive"
 
     def test_validate_printer_separation(self, print_client: TestClient):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
@@ -624,7 +631,8 @@ class TestPrintRoutesWorkflowLabel:
                 "/api/print/workflow/label-print/dispatch",
                 json={"idempotency_key": "key2", "model_number": "M1"},
             )
-        assert r.status_code == 200
+        assert r.status_code == 400
+        assert r.json()["error_code"] == "result_verification_inconclusive"
 
     def test_dispatch_print_failed(self, print_client: TestClient):
         with (
