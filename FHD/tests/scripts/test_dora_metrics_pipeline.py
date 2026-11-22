@@ -266,15 +266,21 @@ def test_product_view_separates_recorded_gate_from_current_verification(monkeypa
     assert "原记录门禁：passed" in rendered and "本版验证：UNVERIFIED" in rendered
     assert "c" * 40 in rendered and "2026-07-25T11:34:00Z" in rendered
 
-def test_benchmark_marker_refresh_requires_regenerated_claimed_vs_actual(tmp_path, monkeypatch):
+
+def test_benchmark_marker_refresh_requires_regenerated_claimed_vs_actual(
+    tmp_path, monkeypatch
+):
     """Marker refresh must invalidate and then regenerate the derived SSOT."""
     marker_path = tmp_path / "benchmark_run_mode.json"
     output = tmp_path / "CLAIMED_VS_ACTUAL.md"
     monkeypatch.setattr(gen_claimed_vs_actual, "METRICS_DIR", tmp_path)
     monkeypatch.setattr(gen_claimed_vs_actual, "OUTPUT_DOC", output)
     marker = {
-        "mode": "monitoring", "status": "UNVERIFIED", "llm_verified": False,
-        "sha": "a" * 40, "observed_at": "2026-11-22T12:00:00+08:00",
+        "mode": "monitoring",
+        "status": "UNVERIFIED",
+        "llm_verified": False,
+        "sha": "a" * 40,
+        "observed_at": "2026-11-22T12:00:00+08:00",
     }
     marker_path.write_text(json.dumps(marker), encoding="utf-8")
     monkeypatch.setattr("sys.argv", ["gen_claimed_vs_actual.py"])
@@ -282,8 +288,11 @@ def test_benchmark_marker_refresh_requires_regenerated_claimed_vs_actual(tmp_pat
     monkeypatch.setattr("sys.argv", ["gen_claimed_vs_actual.py", "--check"])
     assert gen_claimed_vs_actual.main() == 0
     marker.update(
-        mode="acceptance", status="VERIFIED", llm_verified=True,
-        sha="b" * 40, observed_at="2026-11-23T12:00:00+08:00",
+        mode="acceptance",
+        status="VERIFIED",
+        llm_verified=True,
+        sha="b" * 40,
+        observed_at="2026-11-23T12:00:00+08:00",
     )
     marker_path.write_text(json.dumps(marker), encoding="utf-8")
     assert gen_claimed_vs_actual.main() == 1  # stale doc must fail
