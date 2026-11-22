@@ -1235,8 +1235,8 @@ class SQLAlchemyAgentRunRepository:
     def _insert_task_record(cls, db: Session, task: AgentTask) -> bool:
         values = cls._task_record_values(task)
         statement = sql_text(
-            f"INSERT INTO agent_tasks ({', '.join(values)}) "
-            f"VALUES ({', '.join(':' + key for key in values)}) "
+            "INSERT INTO agent_tasks (" + ", ".join(values) + ") "
+            "VALUES (" + ", ".join(":" + key for key in values) + ") "
             "ON CONFLICT(tenant_id, user_id, task_id) DO NOTHING"
         )
         return cast(CursorResult, db.execute(statement, values)).rowcount == 1

@@ -16,7 +16,7 @@
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
       "base_blob": "9301b7ae2900583d16d97608221a0bdf671c1bc6",
-      "head_blob": "fd74d1e508ee8de71f3afb581610ea2be75da350",
+      "head_blob": "38484afe78997f3f825be497e208124c42030524",
       "before_lines": 1124,
       "after_lines": 1282,
       "reason": "本记录是评审请求，不是审批证据。集成树纳入已登记 SQL 仓储增量后按与当前 main 的 merge-base 重算 identity。",
@@ -208,7 +208,7 @@
     "FHD/frontend/src/composables/useAiOpenCursor.ts": {
       "base_file": "FHD/frontend/src/composables/useAiOpenCursor.ts",
       "base_blob": "0db8c3a087eef4b09f6396d1007c2a85fe03f336",
-      "head_blob": "88d3ac8f370c7ae42051b25e0ee8c8bff87dff48",
+      "head_blob": "e79ffd9e8826acb9da1a477e22016337fce8684c",
       "before_lines": 937,
       "after_lines": 985,
       "reason": "本记录是评审请求，不是审批证据。集成树纳入已登记 AIOPEN 光标/浏览器前端增量后按 unique head 重算 identity。",

@@ -844,7 +844,7 @@ function connect() {
       const ttl = typeof timeout === 'number' && Number.isFinite(timeout)
         ? Math.min(COMMAND_MAX_MS, Math.max(0, timeout)) : 0
       const deadline = performance.now() + ttl
-      const deadlineTimer = window.setTimeout(() => command.abort(), ttl)
+      const deadlineTimer = window.setTimeout(() => command.abort(), ttl <= 0 ? 0 : COMMAND_MAX_MS)
       const commandCurrent = () => isCurrent() && !command.signal.aborted && performance.now() < deadline
       const action = String(msg.action || '')
       const params = (msg.params && typeof msg.params === 'object' ? msg.params : {}) as Record<string, unknown>

@@ -10,7 +10,7 @@ from __future__ import annotations
 import numbers
 import re
 from datetime import date, datetime
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -48,15 +48,13 @@ def _year_from_text(text: str, *, month: int, match_start: int) -> int | None:
     if not tokens:
         return None
     year = tokens[0][1]
-    if month >= 7 and match_start < tokens[0][0]:
-        year -= 1
-    return year
+    return None if year is None else year - (1 if month >= 7 and match_start < tokens[0][0] else 0)
 
 
 def _serial_datetime(value: float) -> datetime | None:
     if not (_SERIAL_MIN <= value <= _SERIAL_MAX):
         return None
-    return (_EXCEL_EPOCH + pd.Timedelta(days=float(value))).to_pydatetime()
+    return cast(datetime, (_EXCEL_EPOCH + pd.Timedelta(days=float(value))).to_pydatetime())
 
 
 def first_date(
@@ -66,7 +64,7 @@ def first_date(
     if value is None:
         return None
     if isinstance(value, (datetime, date, pd.Timestamp)):
-        return pd.Timestamp(value).to_pydatetime()
+        return cast(datetime, pd.Timestamp(value).to_pydatetime())
     if isinstance(value, numbers.Real) and not isinstance(value, bool):
         return _serial_datetime(float(value)) if allow_serial else None
     text = str(value).strip()
@@ -104,7 +102,7 @@ def first_date(
         return None
     if pd.isna(parsed):
         return None
-    return pd.Timestamp(parsed).to_pydatetime()
+    return cast(datetime, pd.Timestamp(parsed).to_pydatetime())
 
 
 def cn_date(series: pd.Series, default_year: int | None = None) -> pd.Series:

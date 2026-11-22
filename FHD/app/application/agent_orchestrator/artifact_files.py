@@ -114,7 +114,7 @@ def _read_artifact(path: Path) -> bytes:
                 parent_fd, filename, directory=False, create=False, for_input=True
             )
         else:
-            descriptor = os.open(
+            descriptor = os.open(  # codeql[py/path-injection]
                 filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd
             )
         with os.fdopen(descriptor, "rb") as stream:

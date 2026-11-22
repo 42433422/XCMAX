@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import Any, Mapping
 
 from app.application.ai_chat.dialogue_memory import _lock, _memory_dir
@@ -40,6 +41,7 @@ def remember_active_conversation(
                 expected_revision=(context or {}).get("_conversation_revision"),
             )
             temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            os.chmod(temporary, 0o600)
             temporary.replace(path)
             db.commit()
     except RECOVERABLE_ERRORS:
@@ -80,9 +82,7 @@ def _scope(
     context: Mapping[str, Any] | None, conversation_id: str
 ) -> tuple[str, dict[str, str]] | None:
     context = context or {}
-    raw = str(
-        conversation_id or context.get("conversation_id") or context.get("session_id") or ""
-    ).strip()
+    raw = str(conversation_id or context.get("conversation_id") or "").strip()
     owner = durable_user_id(context.get("local_user_id") or context.get("actor_id"))
     if owner is None or not raw:
         return None
