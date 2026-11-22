@@ -1,12 +1,11 @@
 import logging
 import os
 import threading
-import time
 from importlib import import_module
 from pathlib import Path
 from typing import cast
 
-from sqlalchemy import create_engine, event, inspection, pool, text
+from sqlalchemy import create_engine, event, inspection, pool
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import ArgumentError as SQLAlchemyArgumentError
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -84,36 +83,6 @@ def _mod_isolated_databases_enabled() -> bool:
     )
 
 
-_MOD_DB_EXISTS_CACHE: dict[str, tuple[float, bool]] = {}
-_MOD_DB_EXISTS_TTL_SECONDS = 60.0
-
-
-def _postgres_database_exists(db_url: str) -> bool:
-    """检查 Mod 分库是否已存在；结果短时缓存，避免每请求探测。"""
-    now = time.monotonic()
-    cached = _MOD_DB_EXISTS_CACHE.get(db_url)
-    if cached and now - cached[0] < _MOD_DB_EXISTS_TTL_SECONDS:
-        return cached[1]
-    exists = False
-    try:
-        u = make_url(db_url)
-        admin_url = u.set(database="postgres").render_as_string(hide_password=False)
-        engine = create_engine(admin_url, isolation_level="AUTOCOMMIT", future=True, poolclass=NullPool)
-        try:
-            with engine.connect() as conn:
-                row = conn.execute(
-                    text("SELECT 1 FROM pg_database WHERE datname = :name"),
-                    {"name": u.database},
-                ).first()
-                exists = row is not None
-        finally:
-            engine.dispose()
-    except RECOVERABLE_ERRORS:
-        exists = False
-    _MOD_DB_EXISTS_CACHE[db_url] = (now, exists)
-    return exists
-
-
 def _postgres_url_with_mod_db(base_url: str, active_mod_id: str) -> str:
     """PostgreSQL：库名改为 {原库名}__{mod_suffix}（须事先建库并迁移）。"""
     if not active_mod_id or not (base_url or "").strip():
@@ -164,16 +133,9 @@ def _database_url_for_active_mod(base_url: str) -> str:
     if u is not None and u.get_dialect().name == "sqlite" and _mod_isolated_databases_enabled():
         return _sqlite_url_with_mod_suffix(base_url, active_mod_id)
     if u is not None and u.get_dialect().name == "postgresql" and _mod_isolated_databases_enabled():
-        mod_url = _postgres_url_with_mod_db(base_url, active_mod_id)
-        if mod_url == base_url or _postgres_database_exists(mod_url):
-            return mod_url
-        cached = _MOD_DB_EXISTS_CACHE.get(mod_url)
-        if not cached or (time.monotonic() - cached[0]) >= _MOD_DB_EXISTS_TTL_SECONDS:
-            logger.warning(
-                "Mod 分库 %s 不存在（可能缺少 CREATEDB 权限），本次回退基库",
-                make_url(mod_url).database,
-            )
-        return base_url
+        # Never route an active Mod back to the host database when its isolated
+        # PostgreSQL database is missing. Connection failure must remain closed.
+        return _postgres_url_with_mod_db(base_url, active_mod_id)
     return base_url
 
 
