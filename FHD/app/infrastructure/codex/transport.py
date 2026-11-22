@@ -518,14 +518,16 @@ def verify_packaged_runtime() -> None:
     business qualification; it cannot write a qualification receipt.
     """
     with tempfile.TemporaryDirectory(prefix="xcagi-codex-probe-") as temporary:
+        # Probe credentials are ephemeral. No fixed token is shipped in source.
+        probe_nonce = os.urandom(24).hex()
         config = CodexTransportConfig(
             runtime_root=Path(temporary).resolve(),
             scope_id="packaged-protocol-probe",
             model="packaging-probe-no-model-call",
             provider_url="http://127.0.0.1:1/v1",
-            provider_token="packaging-probe",
+            provider_token=probe_nonce,
             mcp_url="http://127.0.0.1:1/mcp",
-            mcp_token="packaging-probe",
+            mcp_token=probe_nonce,
             context_window=32768,
             timeout_seconds=15,
         )
