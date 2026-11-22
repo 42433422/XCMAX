@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Validate real server and desktop OTA/rollback acceptance evidence."""
+"""Validate submitted rollback claims without certifying unmeasured acceptance.
+
+The legacy input has no authenticated machine observations: its booleans,
+timestamps and hashes are supplied by the caller.  Schema validation must never
+be promoted into proof that the production/physical-device exercises occurred.
+"""
 
 from __future__ import annotations
 
@@ -124,9 +129,13 @@ def verify(payload: dict[str, Any], *, release_sha: str) -> dict[str, Any]:
         ]
         if any(value is None for value in event_times) or event_times != sorted(event_times):
             blockers.append(f"{target}_event_sequence_invalid")
+    structural_passed = not blockers
+    blockers.append("independent_native_measurements_missing")
     return {
         "schema": "xcagi.upgrade_rollback_verification/v1",
-        "passed": not blockers,
+        "passed": False,
+        "structural_passed": structural_passed,
+        "verification_scope": "submitted_claims",
         "release_sha": release_sha,
         "server_rto_minutes": rto if rto != float("inf") else None,
         "server_rpo_minutes": rpo if rpo != float("inf") else None,
@@ -139,6 +148,10 @@ def main() -> int:
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--release-sha", required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--register-claims", action="store_true",
+        help="Validate and archive claims only; the result remains passed=false.",
+    )
     args = parser.parse_args()
     payload = json.loads(args.evidence.read_text(encoding="utf-8"))
     result = verify(payload, release_sha=args.release_sha.lower())
@@ -147,7 +160,7 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
-    return 0 if result["passed"] else 1
+    return 0 if args.register_claims and result["structural_passed"] else 1
 
 
 if __name__ == "__main__":

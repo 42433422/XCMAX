@@ -24,6 +24,6 @@ describe('enterpriseWorkflowEstablishment', () => {
       workflow_employees: [{ id: 'label_print', label: '标签打印' }],
     })
     expect(layer?.id).toBe('execution')
-    expect(layer?.label).toBe('执行层')
+    expect(layer?.label).toBe('业务运营部')
   })
 })

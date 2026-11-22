@@ -1,5 +1,6 @@
 """Admission/settlement failures must stop provider I/O and future tool work."""
 
+import time
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -19,7 +20,10 @@ class Store:
     def __init__(self, route):
         self.run = AgentRun(user_id="71", message="test")
         self.run.metadata["runtime_context"] = {"actor_id": "71", "tenant_id": "1"}
-        self.run.metadata["codex_runtime"] = {"runtime_config": route.runtime_identity()}
+        self.run.metadata["codex_runtime"] = {
+            "runtime_config": route.runtime_identity(),
+            "deadline_at": time.time() + 60,
+        }
         self.binding = SimpleNamespace(
             run=self.run,
             run_id=self.run.run_id,
@@ -225,12 +229,10 @@ def test_revocation_after_reservation_before_io_releases_unused_hold(gateway):
     from app.infrastructure.codex.binding import CodexBindingError
 
     client, store, calls, _, _ = gateway
-    authenticate, count = store.authenticate, 0
+    authenticate = store.authenticate
 
     def revoked(token, audience="mcp"):
-        nonlocal count
-        count += 1
-        if count == 3:
+        if ledger.get_model_wallet("71")["balance_units"] < 100:
             raise CodexBindingError("cancelled", "cancelled before sending")
         return authenticate(token, audience)
 
@@ -392,3 +394,109 @@ def test_real_responses_namespace_and_flat_mcp_call_formats_are_allowed(gateway,
         }
     ]
     assert post(client).status_code == 200
+
+
+def test_connect_failure_retries_on_same_route_and_charges_each_attempt_once(gateway):
+    client, store, calls, response, app = gateway
+
+    def flaky(request):
+        calls.append(request)
+        if len(calls) < 3:
+            raise httpx.ConnectError("no connection", request=request)
+        return httpx.Response(200, json=response)
+
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(flaky),
+        **kwargs,
+    )
+    assert post(client).status_code == 200
+    assert len(calls) == 3 and len({str(call.url) for call in calls}) == 1
+    attempts = list(store.binding.metadata["model_requests"].values())
+    assert [item["state"] for item in attempts] == ["failed", "failed", "completed"]
+    assert [item["attempt"] for item in attempts] == [1, 2, 3]
+    assert len({item["request_group"] for item in attempts}) == 1
+    assert all(item["diagnostic"]["outcome"] == "not_started" for item in attempts[:2])
+    assert len(store.run.llm_calls) == 3 and ledger.get_model_wallet("71")["balance_units"] == 98
+    assert "runtime_failure_kind" not in store.run.metadata
+    assert "runtime_failure_stage" not in store.run.metadata
+
+
+def test_429_rejection_retries_with_original_task_deadline(gateway):
+    client, store, calls, response, app = gateway
+    deadline = store.binding.metadata["deadline_at"]
+
+    def limited(request):
+        calls.append(request)
+        return (
+            httpx.Response(429, headers={"retry-after": "0"})
+            if len(calls) == 1
+            else httpx.Response(200, json=response)
+        )
+
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(limited),
+        **kwargs,
+    )
+    assert post(client).status_code == 200 and len(calls) == 2
+    assert store.binding.metadata["deadline_at"] == deadline
+    first = next(iter(store.binding.metadata["model_requests"].values()))
+    assert first["diagnostic"]["failure_kind"] == "rate_limited"
+    assert first["diagnostic"]["outcome"] == "not_started"
+    assert "runtime_failure_kind" not in store.run.metadata
+    assert "runtime_failure_reason" not in store.run.metadata
+
+
+@pytest.mark.parametrize("failure", ["read_timeout", "http_503"])
+def test_uncertain_provider_failure_never_replays_request(gateway, failure):
+    client, store, calls, _, app = gateway
+
+    def uncertain(request):
+        calls.append(request)
+        if failure == "read_timeout":
+            raise httpx.ReadTimeout("receipt lost", request=request)
+        return httpx.Response(503)
+
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(uncertain),
+        **kwargs,
+    )
+    assert post(client).status_code == 502 and len(calls) == 1
+    assert store.binding.metadata["model_reconciliation_required"] is True
+    assert post(client).status_code == 409 and len(calls) == 1
+    assert store.run.metadata["runtime_failure_kind"] in {
+        "transport_unknown",
+        "provider_unavailable",
+    }
+
+
+def test_expired_parent_deadline_blocks_network_and_reservation(gateway):
+    client, store, calls, _, _ = gateway
+    store.binding.metadata["deadline_at"] = time.time() - 1
+    assert post(client).status_code == 408
+    assert not calls and not store.binding.metadata.get("model_requests")
+    assert ledger.get_model_wallet("71")["balance_units"] == 100
+
+
+def test_cancellation_between_retries_stops_before_second_provider_attempt(gateway):
+    from app.infrastructure.codex.binding import CodexBindingError
+
+    client, store, calls, _, app = gateway
+    original = store.authenticate
+
+    def authenticate(token, audience="mcp"):
+        if calls:
+            raise CodexBindingError("cancelled", "task stopped")
+        return original(token, audience)
+
+    def limited(request):
+        calls.append(request)
+        return httpx.Response(429, headers={"retry-after": "0"})
+
+    store.authenticate = authenticate
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(limited),
+        **kwargs,
+    )
+    assert post(client).status_code == 409 and len(calls) == 1
+    assert ledger.get_model_wallet("71")["balance_units"] == 100
+    assert not store.binding.metadata.get("model_reconciliation_required")

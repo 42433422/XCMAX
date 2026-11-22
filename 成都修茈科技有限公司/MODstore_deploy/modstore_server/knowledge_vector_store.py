@@ -129,12 +129,13 @@ def status() -> Dict[str, Any]:
     if _backend() == "redis":
         try:
             return _redis_module().status()
-        except BOUNDARY_ERRORS as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.exception("Redis vector status unavailable")
             return {
                 "configured": False,
                 "ready": False,
                 "chunks": 0,
-                "error": str(e),
+                "error": "向量服务状态暂时无法读取",
                 "backend": "redis",
             }
 

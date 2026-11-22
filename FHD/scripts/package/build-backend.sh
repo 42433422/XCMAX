@@ -60,7 +60,11 @@ if ! "${PYTHON}" -m pip --version >/dev/null 2>&1; then
   "${PYTHON}" -m ensurepip --upgrade
 fi
 "${PYTHON}" -m pip install --upgrade pip
-"${PYTHON}" -m pip install -r requirements-server-api.txt -e ".[server-api]"
+BACKEND_EXTRAS="server-api"
+if [[ "${XCAGI_BUNDLE_COMPUTER_USE:-0}" == "1" ]]; then
+  BACKEND_EXTRAS="server-api,computer-use"
+fi
+"${PYTHON}" -m pip install -r requirements-server-api.txt -e ".[${BACKEND_EXTRAS}]"
 "${PYTHON}" -m pip install "pyinstaller>=6.0" appdirs
 
 if [[ "$(uname -s)" == "Darwin" ]]; then

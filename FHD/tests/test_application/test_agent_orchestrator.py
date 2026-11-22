@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-
-from tests.fixtures.planner_model import goal_review_response
 
 
 @pytest.fixture(autouse=True)
 def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 
-    # These planner/event tests mock dispatch in this interpreter; the real spawned
+    # These formal graph/event tests mock dispatch in this interpreter; the real spawned
     # executor and tenant persistence are exercised by test_tool_process/tenant.
     monkeypatch.setattr(
         "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
@@ -31,66 +28,35 @@ def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
 
 
-def _planner_fallback_patches():
+def _business_plan(*, write=False):
+    """Explicit business graph fixtures; natural-language execution belongs to Codex."""
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
-    def synthetic_model_plan(plan_id, _user_id, message, _registry, _context):
-        if "写入数据库" in message and "客户" in message:
-            name = message.split("客户", 1)[1].split("写入数据库", 1)[0].strip()
-            node = WorkflowNode(
-                node_id="write_customer",
-                tool_id="business_db",
-                action="write",
-                params={
-                    "entity": "customers",
-                    "operation": "upsert",
-                    "payload": {"unit_name": name},
-                },
-                risk="medium",
-                idempotent=False,
-            )
-            intent = "business_db_write"
-        else:
-            keyword = message.rsplit(" ", 1)[-1]
-            node = WorkflowNode(
-                node_id="read_products",
-                tool_id="business_db",
-                action="read",
-                params={"entity": "products", "keyword": keyword},
-                risk="low",
-                idempotent=True,
-            )
-            intent = "business_db_read"
-        return PlanGraph(
-            plan_id=plan_id,
-            intent=intent,
-            todo_steps=[node.description or node.action],
-            risk_level=node.risk,
-            nodes=[node],
+    node = (
+        WorkflowNode(
+            "write_customer",
+            "business_db",
+            "write",
+            {"entity": "customers", "operation": "upsert", "payload": {"unit_name": "星光贸易"}},
+            risk="medium",
+            idempotent=False,
         )
-
-    def scripted_goal_review(**kwargs):
-        payload = json.loads(kwargs["messages"][1]["content"])
-        source = payload["user_message"]
-        assert source in {"请把客户 星光贸易 写入数据库", "查数据库产品 XG-5003"}
-        node_id = "write_customer" if source.startswith("请把客户") else "read_products"
-        return goal_review_response(payload, source=source, node_ids=[node_id], outcome="execute")
-
-    return (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch(
-            "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm",
-            side_effect=synthetic_model_plan,
-        ),
-        patch(
-            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        patch(
-            "app.application.workflow.planner.request_planner_completion",
-            side_effect=scripted_goal_review,
-        ),
+        if write
+        else WorkflowNode(
+            "read_products",
+            "business_db",
+            "read",
+            {"entity": "products", "keyword": "XG-5003"},
+            risk="low",
+            idempotent=True,
+        )
+    )
+    return PlanGraph(
+        plan_id="fixture-write" if write else "fixture-read",
+        intent="business_db_write" if write else "business_db_read",
+        todo_steps=[node.action],
+        risk_level=node.risk,
+        nodes=[node],
     )
 
 
@@ -100,10 +66,6 @@ def test_agent_orchestrator_persists_stable_error_codes_not_exception_details():
     from app.application.workflow.workflow_types import PlanGraph
 
     secret = "Traceback: database password=do-not-expose"
-    direct = AgentOrchestrator(repository=InMemoryAgentRunRepository())
-    with patch.object(direct, "_plan", side_effect=RuntimeError(secret)):
-        direct_run = direct.start_run(user_id="u1", message="执行任务")
-
     provided = AgentOrchestrator(repository=InMemoryAgentRunRepository())
     with patch.object(provided, "_apply_plan", side_effect=RuntimeError(secret)):
         provided_run = provided.start_run_from_plan(
@@ -112,7 +74,7 @@ def test_agent_orchestrator_persists_stable_error_codes_not_exception_details():
             plan=PlanGraph(plan_id="p1", intent="test"),
         )
 
-    for run in (direct_run, provided_run):
+    for run in (provided_run,):
         assert run.status == "failed"
         assert run.error == "agent_run_internal_error"
         assert secret not in str(run.to_dict())
@@ -125,19 +87,14 @@ def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
     repo = InMemoryAgentRunRepository()
-    patches = _planner_fallback_patches()
     with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
         ) as mock_execute,
     ):
-        run = AgentOrchestrator(repository=repo).start_run(
+        run = AgentOrchestrator(repository=repo).start_run_from_plan(
+            plan=_business_plan(write=False),
             user_id="u1",
             message="查数据库产品 XG-5003",
             runtime_context={"source": "test"},
@@ -318,18 +275,13 @@ def test_agent_orchestrator_waits_for_user_on_medium_risk_step():
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
     repo = InMemoryAgentRunRepository()
-    patches = _planner_fallback_patches()
     with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool"
         ) as mock_execute,
     ):
-        run = AgentOrchestrator(repository=repo).start_run(
+        run = AgentOrchestrator(repository=repo).start_run_from_plan(
+            plan=_business_plan(write=True),
             user_id="u1",
             message="请把客户 星光贸易 写入数据库",
         )
@@ -343,24 +295,19 @@ def test_agent_orchestrator_waits_for_user_on_medium_risk_step():
     assert "step.waiting_user" in [event.event_type for event in run.events]
 
 
-def test_agent_orchestrator_continues_waiting_run_after_approval():
+def test_approved_write_without_source_evidence_stays_blocked():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
     repo = InMemoryAgentRunRepository()
-    patches = _planner_fallback_patches()
     with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool"
         ) as mock_execute,
     ):
         orchestrator = AgentOrchestrator(repository=repo)
-        waiting = orchestrator.start_run(
+        waiting = orchestrator.start_run_from_plan(
+            plan=_business_plan(write=True),
             user_id="u1",
             message="请把客户 星光贸易 写入数据库",
             runtime_context={"source": "approval-test"},
@@ -370,7 +317,7 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
         completed = orchestrator.continue_run(waiting.run_id, approved_by="tester")
 
     assert completed is not None
-    assert completed.status == "completed", (
+    assert completed.status == "blocked", (
         completed.error,
         [(event.event_type, event.data) for event in completed.events[-5:]],
         [(step.status, step.error, step.output) for step in completed.steps],
@@ -379,9 +326,10 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
     assert completed.tool_calls[0].status == "completed"
     assert completed.tool_calls[0].cost_units == 2
     assert completed.metadata["cost_units_total"] == 2
-    assert completed.final_output["node_outputs"][completed.steps[0].node_id]["success"] is True
+    assert completed.tool_calls[0].output["success"] is True
+    assert completed.metadata["verification"]["accepted"] is False
     assert "step.approved" in [event.event_type for event in completed.events]
-    assert "tool.completed" in [event.event_type for event in completed.events]
+    assert "tool.completed" not in [event.event_type for event in completed.events]
     mock_execute.assert_called_once()
     tool_id, action, params = mock_execute.call_args.args
     assert tool_id == "business_db"
@@ -390,7 +338,7 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
     assert params["_runtime_context"]["source"] == "approval-test"
 
 
-def test_approved_sales_step_continues_the_dependent_export():
+def test_approved_sales_without_independent_receipt_stops_dependent_export():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -446,12 +394,10 @@ def test_approved_sales_step_continues_the_dependent_export():
         )
 
     assert completed is not None
-    assert completed.status == "completed"
-    assert [step.status for step in completed.steps] == ["completed", "completed", "completed"]
+    assert completed.status == "blocked"
+    assert [step.status for step in completed.steps] == ["completed", "pending", "pending"]
     assert [call.args[0:2] for call in mock_execute.call_args_list] == [
         ("sales", "execute_closed_loop"),
-        ("sales", "verify_closed_loop"),
-        ("reports", "export"),
     ]
 
 
@@ -498,20 +444,16 @@ def test_agent_orchestrator_ignores_continue_for_non_waiting_step():
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
     repo = InMemoryAgentRunRepository()
-    patches = _planner_fallback_patches()
     with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "message": "客户已写入"},
         ) as mock_execute,
     ):
         orchestrator = AgentOrchestrator(repository=repo)
-        waiting = orchestrator.start_run(user_id="u1", message="请把客户 星光贸易 写入数据库")
+        waiting = orchestrator.start_run_from_plan(
+            plan=_business_plan(write=True), user_id="u1", message="请把客户 星光贸易 写入数据库"
+        )
         waiting.status = "running"
         waiting.steps[0].status = "pending"
         repo.save(waiting)
@@ -1091,19 +1033,19 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
         run = orchestrator.continue_run(waiting.run_id, approved_by="u1")
 
     assert run is not None
-    assert run.status == "completed", (run.error, [step.to_dict() for step in run.steps])
+    assert run.status == "blocked", (run.error, [step.to_dict() for step in run.steps])
     assert [call.node_id for call in run.tool_calls] == [
         "find_customer",
         "find_product",
         "create_first_order",
     ]
     assert run.metadata["tool_call_count"] == 3
-    assert run.final_output["node_outputs"]["create_first_order"]["data"]["shipment_id"] == 30
+    assert run.tool_calls[-1].output["data"]["shipment_id"] == 30
+    assert run.metadata["verification"]["accepted"] is False
 
 
 def test_agent_orchestrator_skips_llm_repair_for_invalid_plan(tmp_path, monkeypatch):
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.agent_orchestrator.run_models import LLMCall
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
@@ -1128,29 +1070,7 @@ def test_agent_orchestrator_skips_llm_repair_for_invalid_plan(tmp_path, monkeypa
         ],
     )
 
-    repair_call = LLMCall(
-        provider_id="openai_compatible",
-        provider="xcauto",
-        model="xcauto-account",
-        prompt_tokens=20,
-        completion_tokens=10,
-        total_tokens=30,
-        cost_units=1,
-        billing_status="metered",
-        billing_source="estimated_token_units",
-        metadata={"source": "agent_orchestrator.llm_repair"},
-    )
     with (
-        patch(
-            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-            return_value={
-                "success": True,
-                "params_patch": {"entity": "products"},
-                "reason": "business_db.read requires entity",
-                "confidence": 0.91,
-                "llm_call": repair_call,
-            },
-        ) as mock_repair,
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": [{"model_number": "5003"}]},
@@ -1166,11 +1086,11 @@ def test_agent_orchestrator_skips_llm_repair_for_invalid_plan(tmp_path, monkeypa
     assert run.status == "blocked"
     assert run.error.startswith("执行前计划审核未通过")
     assert run.tool_calls == []
-    mock_repair.assert_not_called()
+    assert run.llm_calls == []
     mock_execute.assert_not_called()
 
 
-def test_agent_orchestrator_generates_office_document_as_artifact_after_approval():
+def test_unverified_pickup_token_is_not_a_verified_download_after_approval():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -1225,25 +1145,19 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
 
     assert waiting.status == "waiting_user"
     assert run is not None
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.steps[0].risk == "medium"
     assert run.steps[0].idempotent is False
-    assert run.artifacts[0].artifact_type == "office_document"
-    assert run.artifacts[0].name == "contract.docx"
-    assert run.artifacts[0].uri == "/api/ai/kitten/document/pickup/doc-token"
-    assert run.metadata["artifact_count"] == 1
-    assert run.final_output["artifacts"][0]["mime_type"].endswith("wordprocessingml.document")
-    assert "artifact.attached" in [event.event_type for event in run.events]
+    assert not run.artifacts
+    assert run.metadata["verification"]["accepted"] is False
+    assert "artifact.attached" not in [event.event_type for event in run.events]
 
 
 def test_approval_resume_without_durable_snapshot_fails_closed():
-    from unittest.mock import Mock
-
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import (
         InMemoryAgentRunRepository,
     )
-    from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
@@ -1285,20 +1199,6 @@ def test_approval_resume_without_durable_snapshot_fails_closed():
             ),
         ],
     )
-    service = object.__new__(AIChatApplicationService)
-    service._pending_workflows = {
-        "u1": {
-            "plan": plan,
-            "runtime_context": {"message": "出库并导出"},
-            "approval_required": True,
-            "approval_nodes": [{"node_id": "shipment"}],
-        }
-    }
-    service.approval_service = Mock()
-    service.approval_service.create_approval_request.return_value = SimpleNamespace(
-        request_id="approval-1"
-    )
-    service.approval_service.get_request_metadata.return_value = {"request_no": "approval-1"}
     observed = []
 
     def execute(_tool, _action, params):
@@ -1319,16 +1219,14 @@ def test_approval_resume_without_durable_snapshot_fails_closed():
             side_effect=execute,
         ),
     ):
-        handled, response = service._resume_pending_dynamic_workflow("u1", "确认", "确认")
-        assert handled and response["success"], (
-            response,
-            [
-                (r.status, r.error, [(s.node_id, s.status, s.error) for s in r.steps])
-                for r in repo.list_recent(user_id="u1")
-            ],
+        waiting = orchestrator.start_run_from_plan(
+            user_id="u1",
+            message="出库并导出",
+            plan=plan,
+            runtime_context={"message": "出库并导出"},
         )
-        assert observed == []
-        run_id = service.approval_service.attach_pending_agent_run.call_args.kwargs["agent_run_id"]
+        assert waiting.status == "waiting_user" and observed == []
+        run_id = waiting.run_id
         completed = orchestrator.continue_run(
             run_id, approved_by="reviewer", approved_step_id="shipment"
         )
@@ -1342,11 +1240,9 @@ def test_approval_resume_without_durable_snapshot_fails_closed():
 
 def test_in_memory_approval_snapshot_cannot_resume_protected_plan():
     import logging
-    from unittest.mock import Mock
 
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.approval_workspace.protocols import WorkflowBackends
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -1418,16 +1314,6 @@ def test_in_memory_approval_snapshot_cannot_resume_protected_plan():
             return request_id in self.items
 
     approvals = Approvals()
-    service = object.__new__(AIChatApplicationService)
-    service._pending_workflows = {
-        "u1": {
-            "plan": plan,
-            "runtime_context": {"message": "顺序执行"},
-            "approval_required": True,
-            "approval_nodes": [{"node_id": "first"}, {"node_id": "second"}],
-        }
-    }
-    service.approval_service = approvals
 
     def execution_snapshot(request_id):
         return approvals.items.get(request_id)
@@ -1459,10 +1345,18 @@ def test_in_memory_approval_snapshot_cannot_resume_protected_plan():
             side_effect=execute,
         ),
     ):
-        handled, response = service._resume_pending_dynamic_workflow("u1", "确认", "确认")
-        assert handled and response["success"] and calls == []
-        first = next(iter(approvals.items))
-        run_id = approvals.items[first]["agent_run_id"]
+        plan.metadata["approval_required_node_ids"] = ["first", "second"]
+        waiting = agent.start_run_from_plan(user_id="u1", message="顺序执行", plan=plan)
+        assert waiting.status == "waiting_user" and calls == []
+        first = approvals.create_approval_request(
+            plan_id=plan.plan_id,
+            node=plan.nodes[0],
+            runtime_context={},
+            plan=plan,
+            require_persistence=False,
+        ).request_id
+        run_id = waiting.run_id
+        approvals.attach_pending_agent_run(first, agent_run_id=run_id, approved_step_id="first")
         first_result = bridge.resume(request_no=first, opinion="同意", approved_by="7")
         assert first_result["success"] is False
         assert first_result.get("waiting_approval") is not True
@@ -1471,3 +1365,54 @@ def test_in_memory_approval_snapshot_cannot_resume_protected_plan():
         assert run.status == "waiting_user"
         assert run.tool_calls == []
         assert "审批" in first_result.get("message", "") or first_result.get("success") is False
+
+
+def test_unknown_nested_tool_receipt_blocks_repair_followups_and_refund(monkeypatch):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.infrastructure.billing.model_usage import get_model_wallet, set_model_wallet_balance
+
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
+    set_model_wallet_balance("u1", 3, reason="uncertain-tool-test")
+    repo = InMemoryAgentRunRepository()
+    plan = PlanGraph(
+        plan_id="p-uncertain-tool",
+        intent="business_db_read",
+        metadata={"repair_overrides": {"read": {"retry": True, "max_attempts": 2}}},
+        nodes=[
+            WorkflowNode(
+                node_id=node,
+                tool_id="business_db",
+                action="read",
+                params={"entity": "products", "keyword": "5003"},
+                risk="low",
+                idempotent=True,
+                depends_on=[] if node == "read" else ["read"],
+            )
+            for node in ("read", "followup")
+        ],
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={
+            "success": True,
+            "data": [{"model_number": "5003"}],
+            "request_id": "original-request",
+            "result": {"outputs": [{"outcome_unknown": True, "action_id": "original-action"}]},
+        },
+    ) as dispatch:
+        run = AgentOrchestrator(repository=repo).start_run_from_plan(
+            user_id="u1", message="查产品后继续核对", plan=plan
+        )
+        assert run.status == "blocked" and run.metadata["non_retryable"] is True
+        assert run.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        assert len(run.tool_calls) == 1 and run.steps[0].status == "failed"
+        assert run.steps[0].repair_history == [] and run.steps[1].status == "pending"
+        assert run.tool_calls[0].output["outcome"] == "unknown"
+        assert not run.tool_calls[0].metadata.get("wallet_refund")
+        assert get_model_wallet("u1")["balance_units"] == 2
+        reopened = AgentOrchestrator(repository=repo).continue_run(run.run_id, approved_by="u1")
+        assert reopened is not None and reopened.status == "blocked"
+        assert reopened.tool_calls[0].output["outcome"] == "unknown"
+        dispatch.assert_called_once()

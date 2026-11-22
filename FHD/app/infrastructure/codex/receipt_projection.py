@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import copy
+import logging
+from collections.abc import Callable
 from typing import Any
 
 from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
 from app.application.agent_orchestrator.run_models import AgentRun
-from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+from app.application.agent_orchestrator.run_repository import (
+    AgentRunRepository,
+    get_agent_run_repository,
+)
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
@@ -17,11 +22,15 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 )
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
 from app.domain.task_lifecycle.agent_runtime_results import (
+    ACTIVE_STATES,
+    WAITING_STATES,
     base_runtime_result,
     model_unsettled,
     receipt_state,
 )
-from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore
+from app.infrastructure.codex.binding import CodexBinding, CodexBindingError, CodexBindingStore
+
+logger = logging.getLogger(__name__)
 
 
 def projection_allowed(run: AgentRun) -> bool:
@@ -30,7 +39,7 @@ def projection_allowed(run: AgentRun) -> bool:
     return bool(
         run.metadata.get("runtime_type") == "codex"
         and run.status in {"waiting_user", "running", "blocked"}
-        and run.metadata.get("runtime_expected_operations")
+        and run.metadata.get("runtime_goal_contract")
         and metadata.get("calls")
         and not metadata.get("coordinator_active")
         and metadata.get("revoked") is True
@@ -39,10 +48,43 @@ def projection_allowed(run: AgentRun) -> bool:
     )
 
 
+def _continuation_ready(run: AgentRun, rows: list[dict[str, Any]]) -> bool:
+    """Resume new approved evidence; settled failed exploration is not a new effect."""
+    completed = []
+    for row in rows:
+        receipt = row.get("receipt") or {}
+        state = receipt_state(row)
+        if (
+            state == "completed"
+            and receipt.get("verified") is True
+            and receipt.get("success") is True
+        ):
+            completed.append(row)
+        elif not (
+            state in {"failed", "not_started", "not_executed"}
+            and row.get("read_only") is True
+            and receipt.get("success") is False
+        ):
+            return False
+    if not completed:
+        return False
+    previous = run.final_output.get("codex_result") or {}
+    if previous.get("exit_status") == "continuation_pending":
+        return True
+    prior = {str(row.get("call_id")): row for row in previous.get("business_receipts") or []}
+    return any(
+        receipt_state(prior[str(row["call_id"])]) in WAITING_STATES | ACTIVE_STATES
+        for row in completed
+        if str(row.get("call_id")) in prior
+    )
+
+
 def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun | None:
     """Build a projection; the SQL queue boundary independently verifies its inputs."""
     from app.application.agent_runtime.codex_runtime import (
+        _classification_metadata,
         _classify,
+        _failure_diagnostics,
         _project_child_calls,
     )
 
@@ -56,20 +98,40 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
     CodexBindingStore._validate_goal(run, metadata)
     result = base_runtime_result(run.run_id)
     previous = run.final_output.get("codex_result") or {}
-    for key in ("thread_id", "turn_id", "rounds", "trajectory", "session_messages", "run_events"):
+    for key in (
+        "thread_id",
+        "turn_id",
+        "rounds",
+        "trajectory",
+        "session_messages",
+        "run_events",
+        "output",
+        "goal_response",
+        "active_seconds",
+        "model_request_attempts",
+    ):
         if key in previous:
             result[key] = copy.deepcopy(previous[key])
     status = _classify(
         result,
         rows,
-        {**metadata, "expected_operations": run.metadata["runtime_expected_operations"]},
-        "business",
+        _classification_metadata(CodexBinding(run)),
+        str(run.metadata.get("runtime_completion_mode") or "auto"),
         str(metadata.get("runtime_status") or "interrupted"),
     )
-    if result.get("business_completed"):
-        required = result["goal_coverage"]["required"]
-        result["output"] = f"已根据业务回执核验全部 {required} 项冻结目标，任务已完成。"
+    if result.get("exit_status") == "goal_verification_required" and _continuation_ready(run, rows):
+        # A completed child is new evidence for the same runtime, never proof
+        # that every original goal is complete. The dispatcher owns continuation.
+        status = "running"
+        result.update(
+            execution_state="running",
+            exit_status="continuation_pending",
+            resume_required=True,
+            output="已核对原业务回执，正在继续完成和核验原任务。",
+            error="",
+        )
     result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts]
+    result.update(_failure_diagnostics(run, result))
     fingerprint = canonical_digest(
         {
             "goal": run.metadata.get("runtime_goal_digest"),
@@ -131,3 +193,110 @@ def refresh_codex_receipts(
         # Invalid/foreign evidence cannot promote the task. Keep the original
         # durable state available for inspection, without model or tool retries.
         return repository.get(run.run_id) or current
+
+
+def resume_ready_codex_runs(
+    *,
+    repository: AgentRunRepository,
+    stopped: Callable[[], bool] = lambda: False,
+    limit: int = 50,
+    cursor: dict[str, str] | None = None,
+) -> int:
+    """Queue original threads after approval/readback, independently of HTTP GETs.
+
+    The existing queue transaction fences owner, control, prior request, lease
+    and unresolved effects. Its worker rechecks the fresh child evidence before
+    starting Codex; neither this scan nor a result read executes business tools.
+    """
+    from app.application.agent_orchestrator.run_models import utc_now_iso
+    from app.application.agent_runtime.codex_runtime import _resume_error
+    from app.db.models.agent import AgentRunRecord
+    from app.infrastructure.codex.queued_runtime import enqueue_resume, stage_queued_request
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    if not isinstance(repository, SQLAlchemyAgentRunRepository):
+        return 0
+    from sqlalchemy import and_, or_
+
+    with repository.transaction(read_only=True) as db:
+        query = db.query(AgentRunRecord).filter(
+            AgentRunRecord.intent == "codex.runtime",
+            AgentRunRecord.status.in_(("waiting_user", "running")),
+        )
+        if cursor:
+            query = query.filter(
+                or_(
+                    AgentRunRecord.updated_at > cursor["updated_at"],
+                    and_(
+                        AgentRunRecord.updated_at == cursor["updated_at"],
+                        AgentRunRecord.run_id > cursor["run_id"],
+                    ),
+                )
+            )
+        records = (
+            query.order_by(AgentRunRecord.updated_at, AgentRunRecord.run_id)
+            .limit(max(0, min(limit, 200)))
+            .all()
+        )
+        candidates = [
+            (repository._record_to_run(record), record.updated_at, record.run_id)
+            for record in records
+        ]
+    if not candidates and cursor is not None:
+        cursor.clear()
+    count = 0
+    store = CodexBindingStore(repository)
+    for candidate, updated_at, candidate_id in candidates:
+        if stopped():
+            break
+        # A scheduling hint only: restart may safely scan from the beginning.
+        # Old waiting-input/approval rows must not starve later ready parents.
+        if cursor is not None:
+            cursor.update(updated_at=updated_at, run_id=candidate_id)
+        if candidate is None or not projection_allowed(candidate):
+            continue
+        try:
+            current = refresh_codex_receipts(candidate, repository=repository)
+            binding = store.get(current.run_id)
+            metadata = binding.metadata
+            if not projection_allowed(current) or metadata.get("waiting_input"):
+                continue
+            rows = store.receipt_snapshot(current.run_id)
+            binding = store.get(current.run_id)
+            if not _continuation_ready(binding.run, rows) or _resume_error(store, binding, rows):
+                continue
+            key = "receipt_" + canonical_digest(
+                {"goal": binding.run.metadata.get("runtime_goal_digest"), "receipts": rows}
+            )
+            if key in (binding.run.metadata.get("runtime_requests") or {}):
+                continue
+
+            def enqueue(parent: AgentRun, current_metadata: dict[str, Any]) -> None:
+                if len(parent.metadata.get("runtime_requests") or {}) >= 256:
+                    raise CodexBindingError("request_limit", "原任务续跑次数已达到上限")
+                if current_metadata.get("waiting_input"):
+                    raise CodexBindingError("binding_conflict", "原任务仍等待用户补充")
+                parent.metadata.setdefault("runtime_requests", {})[key] = {
+                    "digest": canonical_digest(rows),
+                    "state": "admitted",
+                    "created_at": utc_now_iso(),
+                    "source": "verified_child_receipts",
+                }
+                stage_queued_request(
+                    parent,
+                    key,
+                    {
+                        "task": parent.message,
+                        "input_data": copy.deepcopy(parent.metadata.get("_codex_input_data")),
+                        "history": copy.deepcopy(parent.metadata.get("_codex_history")),
+                        "answer_to_waiting_input": False,
+                    },
+                )
+
+            enqueue_resume(store, binding.run, enqueue)
+            count += 1
+        except CodexBindingError:
+            continue  # A concurrent control, changed owner or unknown effect wins.
+        except RECOVERABLE_ERRORS:
+            logger.warning("原 Codex 任务续跑尚待核对", exc_info=True)
+    return count

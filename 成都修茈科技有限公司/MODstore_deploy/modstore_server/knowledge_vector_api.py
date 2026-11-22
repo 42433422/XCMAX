@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -32,6 +33,7 @@ from modstore_server.knowledge_vector_store import (
 from modstore_server.models import User, get_session_factory
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeSearchBody(BaseModel):
@@ -42,7 +44,8 @@ class KnowledgeSearchBody(BaseModel):
 
 
 def _service_unavailable(e: Exception) -> HTTPException:
-    return HTTPException(503, str(e))
+    logger.warning("knowledge service unavailable: %s", e)
+    return HTTPException(503, "知识服务暂时不可用，请检查模型与向量服务配置")
 
 
 @router.get("/status")
@@ -65,10 +68,11 @@ def api_list_documents(user: User = Depends(_get_current_user)):
     try:
         return {"documents": list_documents(user.id)}
     except KnowledgeVectorError as e:
+        logger.warning("knowledge document listing unavailable: %s", e)
         return {
             "documents": [],
             "degraded": True,
-            "reason": str(e),
+            "reason": "知识服务暂时不可用，请检查模型与向量服务配置",
         }
 
 

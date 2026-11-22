@@ -11,6 +11,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from .budget import refresh_ai_budget_metadata
 from .run_models import AgentArtifact, AgentRun, LLMCall
 from .run_repository import AgentRunRepository, get_agent_run_repository
+from .task_context import ensure_run_trace
 from .trace_artifacts import (
     _append_artifacts_to_final_output as _append_artifacts_to_final_output,
 )
@@ -248,6 +249,10 @@ def attach_chat_trace_run(
         # The trace service rejected and replaced this response. Do not return
         # the original model payload after persisting a failed run.
         payload = copy.deepcopy(run.final_output["chat_payload"])
+    context = ensure_run_trace(run, live=False)
+    for key in ("trace_id", "span_id", "request_id"):
+        if context.get(key):
+            payload[key] = context[key]
     return _attach_run_id(guard_unexecuted_payload(run, payload), run.run_id)
 
 

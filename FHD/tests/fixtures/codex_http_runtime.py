@@ -119,9 +119,7 @@ def runtime_entry(trusted_actor, tmp_path, monkeypatch):
     monkeypatch.setattr(gateway, "runtime_settings", lambda: state.settings)
     monkeypatch.setattr(gateway, "LocalRuntimeServer", Server)
     monkeypatch.setattr(gateway, "run_codex_agent", runtime)
-    monkeypatch.setattr(
-        AgentOrchestrator, "start_run", lambda *a, **kw: pytest.fail("retired native entry")
-    )
+    assert not hasattr(AgentOrchestrator, "start_run"), "retired natural-language entry remains"
 
     def drain(run_id):
         owner = "http-fixture-worker"
@@ -144,38 +142,87 @@ def runtime_entry(trusted_actor, tmp_path, monkeypatch):
     set_agent_task_dispatcher_for_tests(None)
 
 
-@pytest.fixture
-def compiled_chat_runtime(runtime_entry, monkeypatch):
-    """Real host compilation/SQL/MCP, with explicit Responses and SDK fixtures.
+def fixture_goal_review(
+    prompt, *, kind, source=None, evidence_ids=None, status="satisfied", feedback=""
+):
+    """Explicit fixture judgement; the production host still checks every proof."""
+    if evidence_ids is None:
+        evidence_ids = (
+            ["response"]
+            if kind == "reply"
+            else [
+                row["evidence_id"]
+                for row in prompt["evidence"]
+                if row["receipt"].get("verified") is True
+            ]
+        )
+    return {
+        "goals": [
+            {
+                "goal_id": "fixture-goal",
+                "source_id": "request",
+                "source": source or prompt["original_request"]["text"],
+                "kind": kind,
+                "status": status,
+                "evidence_ids": evidence_ids,
+                "reason": "Explicit synthetic model review of this test's declared original goal",
+            }
+        ],
+        "violations": [],
+        "uncovered_sources": [],
+        "feedback": feedback,
+    }
 
-    Callers supply each planner and independent review response. This exercises
-    the fixed entry without representing scripted model I/O as qualification.
-    """
+
+@pytest.fixture
+def dynamic_chat_runtime(runtime_entry, monkeypatch):
+    """Real prepare/SQL/MCP/verifier/gateway; only Codex SDK and upstream are fixtures."""
     import copy
 
     import httpx
     import openai
 
     from app.application.agent_runtime import codex_runtime, goal_admission
+    from app.infrastructure.codex.model_gateway import MODEL_PATH
 
     state = runtime_entry
     state.model_requests, state.admissions, state.transports, state.receipts = [], [], [], []
     state.on_turn = lambda binding: None
-    state.completion = lambda **kwargs: pytest.fail("fixture must specify its model response")
-    actual_openai, actual_compile = openai.OpenAI, goal_admission.compile_runtime_goal
+    state.actions = None
+    state.reply = "本轮模型已结束。"
+    state.script = None
+    state.review = lambda prompt: pytest.fail(
+        "fixture must explicitly declare its independent review"
+    )
+    drain_claim = state.drain
 
-    def response(request):
+    def drain(run_id):
+        # Exercise the production coordinator's periodic receipt scan before
+        # claiming a ready task, as its worker loop does after child approvals.
+        dispatcher = AgentTaskDispatcher(
+            execution_repository=state.queue, run_repository=state.repository
+        )
+        dispatcher._recover_outcomes()
+        worker = dispatcher._outcome_worker
+        assert worker is not None
+        worker.join(timeout=10)
+        assert not worker.is_alive(), "receipt recovery exceeded the fixture deadline"
+        return drain_claim(run_id)
+
+    state.drain = drain
+    actual_openai, actual_prepare = openai.OpenAI, goal_admission.prepare_runtime_goal
+
+    def upstream(request):
         body = json.loads(request.content)
         assert body["tools"] == [] and body["store"] is False
-        assert str(request.url) == state.model_config.provider_url + "/responses"
-        assert request.headers["authorization"] == "Bearer " + state.model_config.provider_token
-        prompt = json.loads(body["input"][-1]["content"])
+        prompt = json.loads(body["input"][1]["content"])
+        assert prompt["task"] == "verify_runtime_goal"
         state.model_requests.append(prompt)
-        result = state.completion(messages=body["input"], context=prompt.get("context", {}))
+        reviewed = state.review(prompt)
         return httpx.Response(
             200,
             json={
-                "id": "resp_compiled_fixture",
+                "id": "resp_dynamic_fixture",
                 "object": "response",
                 "created_at": 1,
                 "model": body["model"],
@@ -183,13 +230,13 @@ def compiled_chat_runtime(runtime_entry, monkeypatch):
                 "output": [
                     {
                         "type": "message",
-                        "id": "msg_compiled_fixture",
+                        "id": "msg_dynamic_fixture",
                         "role": "assistant",
                         "status": "completed",
                         "content": [
                             {
                                 "type": "output_text",
-                                "text": result["choices"][0]["message"]["content"],
+                                "text": json.dumps(reviewed, ensure_ascii=False),
                                 "annotations": [],
                             }
                         ],
@@ -199,16 +246,43 @@ def compiled_chat_runtime(runtime_entry, monkeypatch):
             },
         )
 
+    class Server:
+        url = "http://127.0.0.1:19113"
+
+        def __init__(self, app):
+            state.servers.append(app)
+            app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+                transport=httpx.MockTransport(upstream), **kwargs
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return None
+
+    def loopback(request):
+        # Route through the actual model gateway: grant authentication, debit,
+        # original deadline and usage settlement are not replaced by this fixture.
+        assert request.url.path == MODEL_PATH
+        with TestClient(state.servers[-1]) as client:
+            response = client.post(
+                MODEL_PATH, content=request.content, headers=dict(request.headers)
+            )
+        return httpx.Response(
+            response.status_code, headers=dict(response.headers), content=response.content
+        )
+
     def client(**kwargs):
         kwargs.pop("http_client").close()
         return actual_openai(
-            **kwargs, http_client=httpx.Client(transport=httpx.MockTransport(response))
+            **kwargs, http_client=httpx.Client(transport=httpx.MockTransport(loopback))
         )
 
-    def compile_goal(binding, config):
-        state.model_config = config
-        state.admissions.append(copy.deepcopy(binding.run))
-        return actual_compile(binding, config)
+    def prepare_goal(binding, *, history=None):
+        if not binding.run.metadata.get("runtime_goal_contract"):
+            state.admissions.append(copy.deepcopy(binding.run))
+        return actual_prepare(binding, history=history)
 
     class Transport:
         def __init__(self, config):
@@ -222,7 +296,7 @@ def compiled_chat_runtime(runtime_entry, monkeypatch):
             return None
 
         async def start_thread(self, *, developer_instructions):
-            return "compiled-chat-fixture"
+            return "dynamic-chat-fixture"
 
         async def resume_thread(self, thread_id, *, developer_instructions):
             return thread_id
@@ -230,20 +304,50 @@ def compiled_chat_runtime(runtime_entry, monkeypatch):
         async def interrupt(self):
             return None
 
-        async def stream_turn(self, _text):
+        async def stream_turn(self, text):
             bridge = state.servers[-1].state.codex_tool_bridge
             binding = bridge.store.authenticate(self.config.mcp_token)
-            state.on_turn(binding)
-            if binding.run.metadata["runtime_goal_mode"] == "business":
-                operation = binding.run.metadata["runtime_expected_operations"][0]
-                state.receipts.append(
-                    bridge.invoke(
-                        self.config.mcp_token,
-                        "execute_plan",
-                        {"call_id": "compiled-fixture-plan", **operation["params"]},
-                    )
+            state.bridge, state.token = bridge, self.config.mcp_token
+
+            def execute(tool_id, action, params, call_id):
+                described = bridge.invoke(
+                    self.config.mcp_token,
+                    "capability_describe",
+                    {"tool_id": tool_id, "action": action},
                 )
-            reply = binding.run.metadata.get("_codex_goal_reply") or "本轮模型已结束。"
+                receipt = bridge.invoke(
+                    self.config.mcp_token,
+                    "execute_action",
+                    {
+                        "tool_id": tool_id,
+                        "action": action,
+                        "params": params,
+                        "call_id": call_id,
+                        "schema_digest": described["capability"]["schema_digest"],
+                    },
+                )
+                state.receipts.append(receipt)
+                return receipt
+
+            state.execute = execute
+            state.on_turn(binding)
+            if state.script is not None:
+                reply = state.script(binding, text)
+            else:
+                assert state.actions is not None, (
+                    "fixture must explicitly specify its Codex actions"
+                )
+                for operation in state.actions:
+                    observed = execute(**operation)
+                    if observed.get("status") in {
+                        "waiting_user",
+                        "blocked",
+                        "unknown",
+                        "running",
+                        "queued",
+                    }:
+                        break
+                reply = state.reply
             for method, payload in (
                 ("turn/started", {"turn": {"status": "inProgress"}}),
                 ("item/completed", {"item": {"type": "agentMessage", "text": reply}}),
@@ -252,13 +356,22 @@ def compiled_chat_runtime(runtime_entry, monkeypatch):
                 yield {
                     "method": method,
                     "payload": payload,
-                    "thread_id": "compiled-chat-fixture",
-                    "turn_id": "compiled-fixture-turn",
+                    "thread_id": "dynamic-chat-fixture",
+                    "turn_id": "dynamic-fixture-turn",
                 }
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv(
+        "MODEL_USAGE_LEDGER_PATH", str(state.settings.runtime_root.parent / "model-usage.json")
+    )
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.setenv(
+        "XCAGI_TOOL_IDEMPOTENCY_PATH",
+        str(state.settings.runtime_root.parent / "tool-idempotency.sqlite"),
+    )
     monkeypatch.setattr(openai, "OpenAI", client)
-    monkeypatch.setattr(goal_admission, "compile_runtime_goal", compile_goal)
+    monkeypatch.setattr(goal_admission, "prepare_runtime_goal", prepare_goal)
+    monkeypatch.setattr(gateway, "LocalRuntimeServer", Server)
     monkeypatch.setattr(gateway, "run_codex_agent", codex_runtime.run_codex_agent)
     monkeypatch.setattr("app.infrastructure.codex.CodexTransport", Transport)
     monkeypatch.setattr(

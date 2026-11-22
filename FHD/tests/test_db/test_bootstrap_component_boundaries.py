@@ -80,6 +80,7 @@ _COMMON = (
     "ensure_ai_conversation_bootstrap",
     "ensure_mobile_push_bootstrap",
     "ensure_local_file_bootstrap",
+    "ensure_enterprise_cognition_bootstrap",
 )
 
 
@@ -231,7 +232,10 @@ class _PortableConnection:
     def execute(self, statement, parameters=None):
         sql = str(statement).replace("BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
         sql = sql.replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN").replace("JSONB", "TEXT")
-        return self.connection.execute(text(sql), parameters or {})
+        # Keep typed bind parameters on portable DML; only the DDL needs translation.
+        return self.connection.execute(
+            statement if sql == str(statement) else text(sql), parameters or {}
+        )
 
 
 @pytest.mark.parametrize("existing_empty", [False, True])

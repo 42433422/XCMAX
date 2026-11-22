@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import os
 import shutil
 import threading
@@ -126,7 +127,7 @@ class PatchApplier:
             try:
                 staged = self._stage(patch)
             except PatchConflict as exc:
-                result.error = str(exc)
+                result.error = f"{exc.file}: {exc.reason} (hunk_index={exc.hunk_index})"
                 result.completed_at = time.time()
                 return result
 
@@ -144,9 +145,10 @@ class PatchApplier:
                     patch_id=patch.patch_id,
                     summary=patch.summary,
                 )
-            except BOUNDARY_ERRORS as exc:
+            except BOUNDARY_ERRORS:
+                logging.getLogger(__name__).exception("Patch commit failed; restoring backup")
                 self._rollback(backup_path)
-                result.error = f"commit_failed:{type(exc).__name__}:{exc}"
+                result.error = "commit_failed"
                 result.completed_at = time.time()
                 return result
             result.backup_dir = str(backup_path)

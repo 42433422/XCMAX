@@ -3,7 +3,7 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -25,6 +25,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "vue": ["./node_modules/vue"],
+      "pinia": ["./node_modules/pinia"],
+      "vue-router": ["./node_modules/vue-router"],
+      "element-plus": ["./node_modules/element-plus"],
       "@admin-console-inject/adminHostRoutes": ["./src/router/adminHostRoutes.stub.ts"],
       "@/data/workflow-employee-docs.json": ["./src/data/workflow-employee-docs.json"],
       "@/data/workflow-employees.json": ["./src/data/workflow-employees.json"],

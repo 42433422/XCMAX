@@ -1,8 +1,9 @@
-"""The fixed executor dispatches one frozen graph and verifies durable graph receipts."""
+"""Dynamic discovery and concrete actions retain the original SQL receipts and approvals."""
 
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -11,363 +12,340 @@ from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode, plan_to_dict
-from app.domain.task_lifecycle.agent_runtime_contract import frozen_workflow_operation
-from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore, canonical_digest
+from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore
 from app.infrastructure.codex.tools import CodexToolBridge
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def graph_runtime(trusted_actor, monkeypatch, tmp_path):
+def dynamic_runtime(trusted_actor, monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    actor = trusted_actor(permissions=["product.view", "customer.view", "tool.customers.create"])
+    actor = trusted_actor(
+        permissions=[
+            "product.view",
+            "customer.view",
+            "tool.customers.create",
+            "tool.products.batch_delete",
+            "tool.excel_analyzer.analyze",
+        ]
+    )
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    parent = AgentRun(
+        user_id=str(actor.user_id), message="查看产品后按结果处理客户", status="running"
+    )
+    parent.metadata.update(runtime_type="codex", runtime_context=actor.context)
+    contract = build_goal_contract(parent)
+    parent.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
+    repository.save(parent)
+    store = CodexBindingStore(repository)
+    grant = store.create(parent.run_id)
+    executor = AgentToolExecutor()
+    orchestrator = AgentOrchestrator(
+        repository=repository, tool_executor=SimpleNamespace(execute=executor.execute)
+    )
+    bridge = CodexToolBridge(store, orchestrator)
+
+    def describe(tool="products", action="query"):
+        return bridge.invoke(
+            grant.mcp_token, "capability_describe", {"tool_id": tool, "action": action}
+        )["capability"]
+
+    def execute(call, params, tool="products", action="query", **extra):
+        capability = describe(tool, action)
+        return bridge.invoke(
+            grant.mcp_token,
+            "execute_action",
+            {
+                "tool_id": tool,
+                "action": action,
+                "call_id": call,
+                "params": params,
+                "schema_digest": capability["schema_digest"],
+                **extra,
+            },
+        )
+
+    return SimpleNamespace(
+        actor=actor,
+        repository=repository,
+        store=store,
+        parent=parent,
+        grant=grant,
+        bridge=bridge,
+        describe=describe,
+        execute=execute,
+        executor=executor,
+    )
+
+
+def test_discovery_is_authorized_paginated_and_returns_the_exact_contract(dynamic_runtime):
+    state = dynamic_runtime
+    first = state.bridge.invoke(state.grant.mcp_token, "capability_search", {"limit": 1})
+    second = state.bridge.invoke(
+        state.grant.mcp_token, "capability_search", {"limit": 1, "offset": first["next_offset"]}
+    )
+    assert first["capabilities"] != second["capabilities"]
+    assert first["total"] == second["total"] >= 2
+    assert all(
+        row["tool_id"] != "materials" for row in first["capabilities"] + second["capabilities"]
+    )
+    capability = state.describe()
+    spec = get_tool_action_spec("products", "query")
+    assert capability["input_schema"] == spec.input_schema
+    assert capability["output_schema"] == spec.output_schema
+    assert capability["schema_digest"] == spec.schema_digest
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
+def test_mcp_thread_reads_current_sql_parent_budget_before_running_action(
+    dynamic_runtime, monkeypatch
+):
+    import time
+
+    from app.application.tool_execution_deadline import remaining_invocation_seconds
+
+    state = dynamic_runtime
+    now = time.time()
+    state.store.update(
+        state.parent.run_id,
+        lambda run, metadata: metadata.update(active_started_at=now, deadline_at=now + 2.0),
+    )
+    observed = []
+
+    def dispatch(tool, action, params):
+        observed.append(remaining_invocation_seconds(60))
+        return {"success": True, "data": []}
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
+    )
+    result = state.execute("read-with-budget", {})
+    assert result["verified"] is True
+    assert len(observed) == 1 and 0 < observed[0] <= 2
+    assert remaining_invocation_seconds(60) == 60
+
+
+@pytest.mark.parametrize("digest", [None, "", "0" * 64])
+def test_missing_or_stale_schema_never_publishes_an_action(dynamic_runtime, digest):
+    state = dynamic_runtime
+    with pytest.raises(CodexBindingError) as error:
+        state.bridge.invoke(
+            state.grant.mcp_token,
+            "execute_action",
+            {
+                "tool_id": "products",
+                "action": "query",
+                "call_id": "stale",
+                "params": {},
+                "schema_digest": digest,
+            },
+        )
+    assert error.value.code == "schema_changed"
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+
+
+def test_known_invalid_parameters_can_be_corrected_after_schema_feedback(
+    dynamic_runtime, monkeypatch
+):
+    state = dynamic_runtime
+    calls = []
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        lambda tool, action, params: (
+            calls.append(copy.deepcopy(params)) or {"success": True, "file_path": "owned.xlsx"}
+        ),
+    )
+    invalid = state.execute("read", {"file_path": 123}, "excel_analyzer", "analyze")
+    assert (
+        invalid["status"] == "not_started" and invalid["error_code"] == "schema_validation_failed"
+    )
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}
+    fixed = state.execute("read", {"file_path": "owned.xlsx"}, "excel_analyzer", "analyze")
+    child = state.repository.get(fixed["run_id"])
+    assert fixed["verified"] is True and len(calls) == 1, (
+        fixed,
+        child.error,
+        [(step.status, step.error, step.output) for step in child.steps],
+    )
+
+
+def test_next_action_uses_observed_result_without_a_precompiled_graph(dynamic_runtime, monkeypatch):
+    state = dynamic_runtime
     calls = []
 
     def dispatch(tool, action, params):
-        calls.append((tool, action, params.get("keyword")))
-        return {
-            "success": True,
-            "selected": True,
-            "data": [{"id": 7, "model_number": "fixture", "price": 12}],
-        }
+        calls.append((tool, action, copy.deepcopy(params)))
+        context = params["_runtime_context"]
+        assert context["parent_run_id"] == state.parent.run_id
+        assert context["_actor_authorization"] == state.actor.context["_actor_authorization"]
+        assert str(context["tenant_id"]) == str(state.actor.tenant_id)
+        return {"success": True, "data": [{"model_number": "observed-name"}]}
 
     monkeypatch.setattr(
         "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
     )
-
-    def prepare(nodes):
-        repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
-        parent = AgentRun(user_id=str(actor.user_id), message="执行完整业务图", status="running")
-        plan = plan_to_dict(PlanGraph(plan_id=f"plan_{parent.run_id}", intent="test", nodes=nodes))
-        parent.metadata.update(
-            runtime_context=actor.context,
-            runtime_frozen_plan=plan,
-            runtime_expected_operations=[frozen_workflow_operation(plan)],
-        )
-        repository.save(parent)
-        store = CodexBindingStore(repository)
-        grant = store.create(parent.run_id)
-        orchestrator = AgentOrchestrator(
-            repository=repository,
-            tool_executor=SimpleNamespace(execute=AgentToolExecutor().execute),
-        )
-        bridge = CodexToolBridge(store, orchestrator)
-        return SimpleNamespace(
-            actor=actor,
-            parent=parent,
-            plan=plan,
-            store=store,
-            grant=grant,
-            bridge=bridge,
-            args={"call_id": "whole-plan", "plan_digest": canonical_digest(plan)},
-            calls=calls,
-        )
-
-    return prepare
+    observed = state.execute("observe", {"keyword": "first"})
+    name = observed["tool_calls"][0]["output"]["data"][0]["model_number"]
+    next_result = state.execute("follow-up", {"keyword": name})
+    assert observed["verified"] is next_result["verified"] is True
+    assert [row[2]["keyword"] for row in calls] == ["first", "observed-name"]
+    assert "runtime_frozen_plan" not in state.repository.get(state.parent.run_id).metadata
 
 
-def read_node(name, **kwargs):
-    return WorkflowNode(
-        node_id=name, tool_id="products", action="query", params={"keyword": name}, **kwargs
+def test_parameter_dependent_read_keeps_original_read_semantics(dynamic_runtime, monkeypatch):
+    state = dynamic_runtime
+    spec = get_tool_action_spec("excel_analyzer", "analyze")
+    assert spec.read_only is False and spec.is_read_only_call({"file_path": "owned.xlsx"})
+    # The registered file adapter is independently covered with owned uploads;
+    # this test verifies the conditional effect contract reaches the durable bridge.
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        lambda *_: {"success": True, "file_path": "owned.xlsx"},
     )
+    result = state.execute("inspect", {"file_path": "owned.xlsx"}, "excel_analyzer", "analyze")
+    call = state.store.get(state.parent.run_id).metadata["calls"]["inspect"]
+    assert call["read_only"] is True
+    assert result["pending_approval"] is False
 
 
-def test_multiple_goals_share_one_frozen_workflow_and_reopen_without_reexecution(graph_runtime):
-    setup = graph_runtime([read_node("first"), read_node("second", depends_on=["first"])])
-    receipt = setup.bridge.invoke(setup.grant.mcp_token, "execute_plan", setup.args)
-    assert receipt["verified"] is True, receipt
-    assert setup.calls == [("products", "query", "first"), ("products", "query", "second")]
-    reopened = CodexToolBridge(
-        CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+def test_schema_changed_during_approval_blocks_the_original_effect(dynamic_runtime, monkeypatch):
+    state = dynamic_runtime
+    result = state.execute("write", {"unit_name": "approved-name"}, "customers", "create")
+    assert result["pending_approval"] is True
+    child = state.repository.get(result["run_id"])
+    original = get_tool_action_spec("customers", "create")
+    changed = replace(original, version=original.version + ".changed")
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.tool_executor.get_tool_action_spec", lambda *_: changed
     )
-    repeated = reopened.invoke(
-        setup.grant.mcp_token, "execute_plan", {**setup.args, "call_id": "new-model-id"}
-    )
-    assert repeated["run_id"] == receipt["run_id"]
-    assert repeated["verified"] is True
-    assert len(setup.calls) == 2
-
-
-def test_conditional_skips_are_checked_against_original_graph(graph_runtime):
-    setup = graph_runtime(
-        [
-            read_node(
-                "choose",
-                branches=[Branch(condition={"key": "selected", "equals": True}, target="yes")],
-                next="no",
-            ),
-            read_node("yes", depends_on=["choose"]),
-            read_node("no", depends_on=["choose"]),
-        ]
-    )
-    receipt = setup.bridge.invoke(setup.grant.mcp_token, "execute_plan", setup.args)
-    assert receipt["verified"] is True, receipt
-    assert [row[2] for row in setup.calls] == ["choose", "yes"]
-    child = setup.store.repository.get(receipt["run_id"])
-    selected = next(step for step in child.steps if step.node_id == "yes")
-    selected.status = "skipped"
-    from app.infrastructure.codex.workflow import validate_workflow_receipt
-
-    binding = setup.store.get(setup.parent.run_id)
-    call = binding.metadata["calls"][setup.args["call_id"]]
-    assert validate_workflow_receipt(binding, call, child) is False
-    assert len(setup.calls) == 2
-
-
-def test_model_cannot_replace_or_split_frozen_graph(graph_runtime):
-    setup = graph_runtime([read_node("read")])
-    with pytest.raises(CodexBindingError, match="冻结目标"):
-        setup.bridge.invoke(
-            setup.grant.mcp_token, "execute_plan", {**setup.args, "plan_digest": "changed"}
-        )
-    with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(
-            setup.grant.mcp_token,
-            "execute_action",
-            {
-                "call_id": "split",
-                "tool_id": "products",
-                "action": "query",
-                "params": {"keyword": "read"},
-            },
-        )
-    assert error.value.code == "goal_mismatch"
-    assert setup.calls == []
-
-
-def test_frozen_write_waits_on_original_child_approval(graph_runtime):
-    setup = graph_runtime(
-        [
-            WorkflowNode(
-                node_id="create",
-                tool_id="customers",
-                action="create",
-                params={"unit_name": "fixture"},
-                risk="high",
-            )
-        ]
-    )
-    receipt = setup.bridge.invoke(setup.grant.mcp_token, "execute_plan", setup.args)
-    assert receipt["pending_approval"] is True
-    assert receipt["verified"] is False
-    assert receipt["approval_card"]["run_id"] == receipt["run_id"]
-    assert setup.calls == []
-    assert (
-        setup.bridge.invoke(
-            setup.grant.mcp_token, "execute_plan", {**setup.args, "call_id": "another"}
-        )["run_id"]
-        == receipt["run_id"]
-    )
-
-
-def test_mutated_child_params_fail_independent_receipt_validation(graph_runtime):
-    setup = graph_runtime([read_node("read")])
-    receipt = setup.bridge.invoke(setup.grant.mcp_token, "execute_plan", setup.args)
-    assert receipt["verified"] is True
-    child = setup.store.repository.get(receipt["run_id"])
-    child.steps[0].params["keyword"] = "another target"
-    child.metadata["plan"]["nodes"][0]["params"] = dict(child.steps[0].params)
-    child.tool_calls[-1].params = dict(child.steps[0].params)
-    setup.store.repository.save(child)
-    with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(
-            setup.grant.mcp_token, "task_evidence", {"call_id": setup.args["call_id"]}
-        )
-    assert error.value.code == "evidence_mismatch"
-    assert len(setup.calls) == 1
-
-
-def ambiguous_reference(graph_runtime, monkeypatch):
-    from app.application.customer_app_service import CustomerApplicationService
-
-    setup = graph_runtime(
-        [
-            read_node("lookup"),
-            WorkflowNode(
-                node_id="create",
-                tool_id="customers",
-                action="create",
-                params={"unit_name": "{{lookup.data[0].model_number}}"},
-                depends_on=["lookup"],
-                risk="high",
-            ),
-        ]
-    )
-
-    def dispatch(tool, action, params):
-        setup.calls.append((tool, action, copy.deepcopy(params)))
-        if action == "query":
-            return {
-                "success": True,
-                "data": [
-                    {"id": 7, "model_number": "first"},
-                    {"id": 8, "model_number": "second"},
-                ],
-            }
-        return CustomerApplicationService().create({"customer_name": params["unit_name"]})
+    from app.application.agent_orchestrator.tool_spec import ToolValidationResult
 
     monkeypatch.setattr(
-        "app.application.customer_app_service.get_customers_session", setup.actor.factory
+        "app.application.agent_orchestrator.tool_executor.validate_tool_call",
+        lambda *_: ToolValidationResult(True, "customers", "create", changed),
     )
+    dispatched = []
     monkeypatch.setattr(
-        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        lambda *args: dispatched.append(args) or {"success": True},
     )
-    setup.receipt = setup.bridge.invoke(setup.grant.mcp_token, "execute_plan", setup.args)
-    setup.child = setup.store.repository.get(setup.receipt["run_id"])
-    setup.question = next(step for step in setup.child.steps if step.tool_id == "clarify")
-    return setup
-
-
-def answer_reference(setup):
-    staged = setup.bridge.orchestrator.stage_clarification_answer(
-        setup.child.run_id,
-        step_id=setup.question.step_id,
-        parameters={"id": 8},
-        requested_by=str(setup.actor.user_id),
+    outcome = state.executor.execute(
+        child.steps[0], runtime_context=child.metadata["runtime_context"]
     )
-    assert staged is not None and staged.run_id == setup.child.run_id
-    return setup.bridge.orchestrator.execute_dispatched_run(staged.run_id)
+    assert outcome["error_code"] == "schema_changed"
+    assert outcome["execution_status"] == "not_started"
+    assert dispatched == []
 
 
-def test_reference_selection_resumes_original_graph_then_waits_for_original_approval(
-    graph_runtime, monkeypatch
+def test_unknown_receipt_fences_followup_without_replaying_original_action(
+    dynamic_runtime, monkeypatch
 ):
-    from app.application.agent_runtime.chat import runtime_chat_payload
-    from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
-
-    setup = ambiguous_reference(graph_runtime, monkeypatch)
-    receipt = setup.receipt
-    assert receipt["status"] == "waiting_user"
-    assert receipt["needs_user_input"] is True
-    assert receipt["pending_approval"] is False and receipt["approval_card"] is None
-    assert receipt["clarification"]["step_id"] == setup.question.step_id
-    assert receipt["clarification"]["run_id"] == setup.child.run_id
-    rows = list(setup.store.get(setup.parent.run_id).metadata["calls"].values())
-    result = {"run_id": setup.parent.run_id, "output": "model says done"}
-    assert classify_runtime_result(result, rows, {}, "business", "completed") == "waiting_user"
-    payload = runtime_chat_payload(result)
-    assert payload["data"]["needs_user_input"] is True
-    assert payload["data"]["clarification"]["step_id"] == setup.question.step_id
-    assert payload["data"]["clarification"]["run_id"] == setup.child.run_id
-    assert "approval_card" not in payload["data"].get("data", {})
-
-    child = answer_reference(setup)
-    write = next(step for step in child.steps if step.node_id == "create")
-    assert child.status == write.status == "waiting_user"
-    assert write.params == {"unit_name": "second"}
-    assert len(setup.calls) == 1
-    waiting = setup.bridge.invoke(
-        setup.grant.mcp_token, "task_evidence", {"call_id": setup.args["call_id"]}
+    state = dynamic_runtime
+    calls = []
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        lambda *args: (
+            calls.append(args) or {"success": False, "outcome": "unknown", "retryable": False}
+        ),
     )
-    assert waiting["pending_approval"] is True and waiting["needs_user_input"] is False
-    assert waiting["approval_card"]["run_id"] == child.run_id
-    completed = setup.bridge.orchestrator.continue_run(
-        child.run_id,
-        approved_by=str(setup.actor.user_id),
-        approved_step_id=write.step_id,
-        runtime_context=setup.actor.context,
+    first = state.execute("uncertain", {"keyword": "first"})
+    assert first["outcome"] == "unknown"
+    for call_id, keyword in (("uncertain", "first"), ("another", "second")):
+        with pytest.raises(CodexBindingError) as error:
+            state.execute(call_id, {"keyword": keyword})
+        assert error.value.code in {"call_in_progress", "reconciliation_required"}
+    original = state.store.receipt_snapshot(state.parent.run_id)
+    assert len(original) == 1 and original[0]["receipt"]["run_id"] == first["run_id"]
+    assert len(calls) == 1
+
+
+def test_batch_write_binds_call_identity_and_objects_to_original_sql_approval(
+    dynamic_runtime, monkeypatch
+):
+    from app.application.agent_orchestrator.approval_grant import (
+        ApprovalGrantError,
+        issue_approval_grant,
+        validate_approval_grant,
     )
-    assert completed.status == "completed", (completed.error, completed.final_output)
-    reopened = CodexToolBridge(
-        CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
     )
-    final = reopened.invoke(setup.grant.mcp_token, "execute_plan", setup.args)
-    assert final["verified"] is True, final
-    assert final["run_id"] == setup.child.run_id
-    assert [call[:2] for call in setup.calls] == [("products", "query"), ("customers", "create")]
-    assert setup.calls[1][2]["unit_name"] == "second"
-    assert setup.store.get(setup.parent.run_id).run.metadata["runtime_frozen_plan"] == setup.plan
+    from app.db.models.agent_approval import AgentApprovalConsumption
 
-
-def test_reference_selection_rejects_foreign_or_out_of_scope_answers(graph_runtime, monkeypatch):
-    from app.application.agent_orchestrator.clarification import ClarificationAnswerError
-
-    setup = ambiguous_reference(graph_runtime, monkeypatch)
-    before = setup.child.to_dict()
-    assert (
-        setup.bridge.orchestrator.stage_clarification_answer(
-            setup.child.run_id,
-            step_id=setup.question.step_id,
-            parameters={"id": 8},
-            requested_by="another-owner",
+    state = dynamic_runtime
+    dispatched = []
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        lambda *args: dispatched.append(args) or {"success": True},
+    )
+    params = {"ids": [11, 22]}
+    first = state.execute("batch-original", params, "products", "batch_delete")
+    repeated = state.execute("batch-repeat", params, "products", "batch_delete")
+    assert first["pending_approval"] is repeated["pending_approval"] is True
+    assert first["run_id"] == repeated["run_id"] and first["task_id"] == repeated["task_id"]
+    child = state.repository.get(first["run_id"])
+    assert child is not None and child.status == "waiting_user"
+    assert child.steps[0].params == params and child.tool_calls == []
+    assert first["approval_card"]["approval_nodes"][0]["params"] == params
+    original = issue_approval_grant(child, principal_id=str(state.actor.user_id))
+    assert original is not None
+    validate_approval_grant(original["grant"], run=child, principal_id=str(state.actor.user_id))
+    mutated = copy.deepcopy(child)
+    mutated.steps[0].params = {"ids": [11, 22, 33]}
+    with pytest.raises(ApprovalGrantError):
+        validate_approval_grant(
+            original["grant"], run=mutated, principal_id=str(state.actor.user_id)
         )
-        is None
-    )
-    for parameters in ({"id": 999}, {"id": 8, "unit_name": "another target"}):
-        with pytest.raises(ClarificationAnswerError):
-            setup.bridge.orchestrator.stage_clarification_answer(
-                setup.child.run_id,
-                step_id=setup.question.step_id,
-                parameters=parameters,
-                requested_by=str(setup.actor.user_id),
-            )
-    assert setup.store.repository.get(setup.child.run_id).to_dict() == before
-    assert len(setup.calls) == 1
-
-
-@pytest.mark.parametrize(
-    "tamper", ["missing_proof", "candidate", "selection", "author", "parameters", "new_node"]
-)
-def test_reference_amendment_cannot_replace_original_goal(graph_runtime, monkeypatch, tamper):
-    from app.application.agent_orchestrator.run_models import AgentStep
-
-    setup = ambiguous_reference(graph_runtime, monkeypatch)
-    child = answer_reference(setup)
-    proof = child.metadata["reference_clarifications"][setup.question.step_id]
-    if tamper == "missing_proof":
-        child.metadata["reference_clarifications"] = {}
-    elif tamper == "candidate":
-        proof["question_params"]["clarification"]["candidates"][1]["source_value"] = "new target"
-    elif tamper == "selection":
-        proof["answer"]["parameters"]["id"] = 7
-    elif tamper == "author":
-        proof["answer"]["answered_by"] = "another-owner"
-    elif tamper == "parameters":
-        write = next(step for step in child.steps if step.node_id == "create")
-        write.params["contact_person"] = "unfrozen parameter"
-        proof["answer"]["result_params"] = copy.deepcopy(write.params)
-        for node in child.metadata["plan"]["nodes"]:
-            if node["node_id"] == write.node_id:
-                node["params"] = copy.deepcopy(write.params)
-    else:
-        child.steps.append(
-            AgentStep(node_id="extra", tool_id="products", action="query", params={})
-        )
-        child.metadata["plan"]["nodes"].append(
-            {"node_id": "extra", "tool_id": "products", "action": "query", "params": {}}
-        )
-    setup.store.repository.save(child)
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(
-            setup.grant.mcp_token, "task_evidence", {"call_id": setup.args["call_id"]}
-        )
-    assert error.value.code == "evidence_mismatch"
-    assert len(setup.calls) == 1
-
-
-def test_unknown_call_receipt_precedes_graph_amendment_checks_and_never_replays(
-    graph_runtime, monkeypatch
-):
-    setup = ambiguous_reference(graph_runtime, monkeypatch)
-    child = setup.child
-    child.metadata["reference_clarifications"] = {}
-    child.tool_calls[0].output = {
-        "success": False,
-        "outcome": "unknown",
-        "reconciliation_required": True,
-        "retryable": False,
+        state.execute("batch-original", {"ids": [33]}, "products", "batch_delete")
+    assert error.value.code == "call_conflict"
+    with pytest.raises(CodexBindingError) as pending:
+        state.execute("different-batch", {"ids": [33]}, "products", "batch_delete")
+    assert pending.value.code == "waiting_user"
+    # Model-supplied approval and identity never reach the frozen batch.
+    with pytest.raises(CodexBindingError) as forged:
+        state.execute("forged", {**params, "human_approved": True}, "products", "batch_delete")
+    assert forged.value.code == "identity_override"
+    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=state.actor.factory))
+    calls = reopened.get(state.parent.run_id).metadata["calls"]
+    assert calls["batch-original"]["child_task_id"] == calls["batch-repeat"]["child_task_id"]
+    assert all(row["params"] == params for row in calls.values())
+    assert (
+        child.metadata["runtime_context"]["_actor_authorization"]
+        == state.actor.context["_actor_authorization"]
+    )
+    assert str(child.metadata["runtime_context"]["tenant_id"]) == str(state.actor.tenant_id)
+    assert len(state.repository.list_recent()) == 2 and dispatched == []
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=state.actor.factory)
+    options = {
+        "run_id": child.run_id,
+        "token": original["grant"],
+        "principal_id": str(state.actor.user_id),
+        "runtime_context": state.actor.context,
+        "authenticated_actor_binding": state.actor.context["_actor_authorization"],
     }
-    setup.store.repository.save(child)
-    receipt = setup.bridge.invoke(setup.grant.mcp_token, "execute_plan", setup.args)
-    assert receipt["status"] == "unknown" and receipt["verified"] is False
-    assert receipt["reconciliation_required"] is True and receipt["retryable"] is False
-    assert receipt["run_id"] == child.run_id
+    approved = approve_and_enqueue(state.repository, queue, **options)
+    assert approved.status == "queued" and approved.steps[0].params == params
+    with pytest.raises(ApprovalGrantError):
+        approve_and_enqueue(state.repository, queue, **options)
+    with state.actor.factory() as db:
+        consumed = db.query(AgentApprovalConsumption).all()
+        assert len(consumed) == 1
+        assert (consumed[0].run_id, consumed[0].step_id) == (child.run_id, child.steps[0].step_id)
+        assert consumed[0].jti == approved.metadata["approval_receipt"]["grant_id"]
+    assert dispatched == []
+
+
+def test_retired_plan_tool_cannot_dispatch_or_create_another_execution_loop(dynamic_runtime):
+    state = dynamic_runtime
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(
-            setup.grant.mcp_token, "execute_plan", {**setup.args, "call_id": "another-model-id"}
+        state.bridge.invoke(
+            state.grant.mcp_token, "execute_plan", {"call_id": "old", "plan_digest": "0" * 64}
         )
-    assert error.value.code == "reconciliation_required"
-    assert len(setup.calls) == 1
+    assert error.value.code == "unknown_tool"
+    assert state.store.get(state.parent.run_id).metadata["calls"] == {}

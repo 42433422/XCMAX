@@ -485,13 +485,19 @@ def execute_employee_task_local(
     from app.application.employee_runtime.loader import candidate_pack_ids
     from app.application.employee_runtime.tool_scope import host_employee_denial
     from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
-    from app.application.tools.workflow_spreadsheet_scope import office_reader_input
+    from app.application.tools.workflow_spreadsheet_scope import (
+        office_reader_input,
+        publish_written_workbook,
+        workbook_writer_input,
+    )
+    from app.domain.workbook_write_contract import WORKBOOK_WRITER
 
     context = runtime_context or {}
     candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
     if denial := host_employee_denial(candidates, input_data or {}, context):
         return denial
     reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
+    writer = WORKBOOK_WRITER in candidates
     if (
         reader
         and context_only
@@ -518,18 +524,25 @@ def execute_employee_task_local(
     scope = (
         office_reader_input(reader, input_data or {}, context)
         if reader
+        else workbook_writer_input(input_data or {}, context)
+        if writer
         else nullcontext(input_data)
     )
     try:
         with scope as payload:
-            return EmployeeAgent(employee_id).run(
+            result = EmployeeAgent(employee_id).run(
                 task,
                 payload,
                 user_id=user_id,
-                workspace_root=payload["workspace_root"] if reader and payload else workspace_root,
+                workspace_root=payload["workspace_root"]
+                if (reader or writer) and payload
+                else workspace_root,
                 session_id=session_id,
                 runtime_context=runtime_context,
             )
+            if writer and payload and result.get("success") is True:
+                return publish_written_workbook(result, context, payload["workspace_root"])
+            return result
     except PermissionError as exc:
         return {"success": False, "error_code": "employee_file_access_denied", "error": str(exc)}
 

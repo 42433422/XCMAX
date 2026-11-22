@@ -57,7 +57,10 @@ class Synchronization:
                     )
                     yield f"data: {heartbeat}\n\n"
             except self._errors.recoverable() as exc:
-                err = _json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False)
+                self._errors.logger.warning("sync stream read failed: %s", exc)
+                err = _json.dumps(
+                    {"type": "error", "message": "同步数据暂时不可用"}, ensure_ascii=False
+                )
                 yield f"data: {err}\n\n"
             await asyncio.sleep(self._poll_interval())
 
@@ -91,7 +94,7 @@ class Synchronization:
             return {"success": True, "data": result}
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("sync_push failed: %s", exc)
-            return JSONResponse({"success": False, "message": f"推送失败: {exc}"}, status_code=500)
+            return JSONResponse({"success": False, "message": "同步推送失败"}, status_code=500)
 
     async def sync_changes(
         self, since_cursor: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000)
@@ -103,7 +106,7 @@ class Synchronization:
             return {"success": True, "data": rows, "count": len(rows)}
         except self._errors.recoverable() as exc:
             self._errors.logger.debug("sync_changes read failed: %s", exc)
-            return {"success": True, "data": [], "count": 0, "note": str(exc)}
+            return {"success": True, "data": [], "count": 0, "note": "同步变更暂时无法读取"}
 
     async def sync_receive(self, body: dict | list = Body(default=None)):
         """接收远端推来的变更，写入 inbox，立即尝试应用，并记录审计日志。
@@ -120,7 +123,8 @@ class Synchronization:
 
                 result = apply_inbox(limit=len(items) + 50)
             except self._errors.recoverable() as ae:
-                result = {"applied": 0, "error": str(ae)}
+                self._errors.logger.warning("sync inbox apply failed: %s", ae)
+                result = {"applied": 0, "error": "同步变更应用失败，请核对收件箱状态"}
             try:
                 from app.mod_sdk.audit import write_audit_event
 
@@ -134,7 +138,7 @@ class Synchronization:
             return {"success": True, "received": written, "apply_result": result}
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("sync_receive failed: %s", exc)
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+            return JSONResponse({"success": False, "message": "同步接收失败"}, status_code=500)
 
     async def sync_pull(self):
         """主动从远端拉取增量变更并应用到本地。"""
@@ -148,7 +152,7 @@ class Synchronization:
             return {"success": True, "data": {"pull": pull_result, "apply": apply_result}}
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("sync_pull failed: %s", exc)
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+            return JSONResponse({"success": False, "message": "同步拉取失败"}, status_code=500)
 
     async def list_conflicts(self, limit: int = Query(50, ge=1, le=500)):
         """列出 inbox 中待处理的冲突条目。"""
@@ -158,7 +162,8 @@ class Synchronization:
             data = list_admin_sync_conflicts(limit=limit)
             return {"success": True, "data": data, "count": len(data)}
         except self._errors.recoverable() as exc:
-            return {"success": True, "data": [], "count": 0, "note": str(exc)}
+            self._errors.logger.warning("sync conflicts read failed: %s", exc)
+            return {"success": True, "data": [], "count": 0, "note": "同步冲突暂时无法读取"}
 
     async def resolve_conflict(self, inbox_id: int, body: dict):
         """手动解决指定冲突（action: 'apply' | 'skip'）。"""
@@ -181,7 +186,10 @@ class Synchronization:
                 mark_admin_inbox_skipped(inbox_id)
             return {"success": True, "inbox_id": inbox_id, "action": action}
         except self._errors.recoverable() as exc:
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+            self._errors.logger.warning("sync conflict resolution failed: %s", exc)
+            return JSONResponse(
+                {"success": False, "message": "同步冲突处理失败，请核对原记录状态"}, status_code=500
+            )
 
     async def sync_stream(self, request: Request, since_cursor: int = Query(0, ge=0)):
         """专用 SSE 同步流：服务端实时推送本地变更（与 AI chat streaming 完全分离）。

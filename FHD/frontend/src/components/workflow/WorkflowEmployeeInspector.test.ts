@@ -26,7 +26,8 @@ interface DeskRow {
   shortName: string
   panelTitle: string
   enabled: boolean
-  snapshot?: { progressPct?: number; busy?: boolean }
+  snapshot?: { progressPct?: number; busy?: boolean; authority?: string }
+  taskId?: string
 }
 
 function makeRow(overrides: Partial<DeskRow> = {}): DeskRow {
@@ -47,7 +48,7 @@ function mountInspector(props: Record<string, unknown> = {}) {
       ...props,
     },
     global: {
-      stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      stubs: { RouterLink: { name: 'RouterLink', props: ['to'], template: '<a><slot /></a>' } },
     },
   })
 }
@@ -71,6 +72,18 @@ describe('WorkflowEmployeeInspector', () => {
   it('renders the lead text', () => {
     const wrapper = mountInspector()
     expect(wrapper.find('.wfe-inspector-lead').text()).toContain('一键托管')
+  })
+
+  it('links the selected employee to the same durable task and compose form', () => {
+    const wrapper = mountInspector({ desks: [makeRow({ empId: 'auditor', taskId: 'task-7' })], selectedEmpId: 'auditor' })
+    const targets = wrapper.findAllComponents({ name: 'RouterLink' }).map(link => link.props('to'))
+    expect(targets).toContainEqual({ name: 'employee-workbench', query: { employee: 'auditor', task: 'task-7' } })
+    expect(targets).toContainEqual({ name: 'employee-workbench', query: { employee: 'auditor', compose: '1' } })
+  })
+
+  it('keeps real running progress visible after automatic duty is turned off', () => {
+    const wrapper = mountInspector({ desks: [makeRow({ enabled: false, snapshot: { authority: 'task-center', progressPct: 70 } })] })
+    expect(wrapper.find('.wfe-inspector-progress-bar').attributes('style')).toContain('width: 70%')
   })
 
   it('renders no rows when desks is empty', () => {

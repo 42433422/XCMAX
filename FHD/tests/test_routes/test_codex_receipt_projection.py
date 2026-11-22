@@ -1,4 +1,4 @@
-"""Approval completion closes its original parent from SQL receipts, without replay."""
+"""Approval completion resumes its original thread; GET never executes or certifies goals."""
 
 from __future__ import annotations
 
@@ -14,7 +14,14 @@ from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgen
 from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_runtime import gateway
 from app.db.models.purchase_unit import PurchaseUnit
-from app.domain.task_lifecycle.agent_runtime_contract import frozen_goal_digest
+from app.domain.task_lifecycle.agent_runtime_contract import (
+    GOAL_PROTOCOL,
+    build_goal_contract,
+    canonical_digest,
+    goal_answers,
+    goal_evidence_snapshot,
+    validate_goal_review,
+)
 from app.domain.task_lifecycle.agent_runtime_results import (
     base_runtime_result,
     classify_runtime_result,
@@ -44,15 +51,13 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
     )
     state.outcome = "completed"
 
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
+
     def dispatch(tool, action, params):
         assert (tool, action) == ("customers", "create")
         if state.outcome == "failed":
             return {"success": False, "error": "fixture business rejection"}
-        with state.actor.factory.begin() as db:
-            row = PurchaseUnit(unit_name=params["unit_name"], tenant_id=state.actor.tenant_id)
-            db.add(row)
-            db.flush()
-            customer_id = row.id
+        result = execute_registered_workflow_tool(tool, action, params)
         if state.outcome == "unknown":
             return {
                 "success": False,
@@ -60,7 +65,7 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
                 "retryable": False,
                 "reconciliation_required": True,
             }
-        return {"success": True, "data": {"id": customer_id, "unit_name": params["unit_name"]}}
+        return result
 
     monkeypatch.setattr(
         "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
@@ -80,27 +85,57 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
     parent.metadata.update(
         runtime_type="codex",
         runtime_context=context,
-        runtime_expected_operations=[operation],
-        runtime_goal_digest=frozen_goal_digest([operation], None),
+        runtime_route_identity=state.settings.route.identity,
+        runtime_instruction_digest=canonical_digest("original instructions"),
+        _codex_system_prompt="original instructions",
+        _codex_input_data=None,
+        _codex_history=None,
+        runtime_allowed_actions=None,
+        runtime_requests={},
         runtime_completion_mode="business",
     )
+    contract = build_goal_contract(parent)
+    parent.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
     apply_task_context(parent, context)
     state.repository.save(parent)
     state.queue.enqueue(parent)
     claim = state.queue.claim("original-parent-worker", run_id=parent.run_id, lease_seconds=120)
     assert claim is not None
     store = CodexBindingStore(state.repository)
-    grant = store.create(parent.run_id)
+    grant = store.create(
+        parent.run_id,
+        runtime_config={
+            **state.settings.route.runtime_identity(),
+            "gate_required": False,
+            "runtime": "codex",
+            "model": state.settings.route.model,
+            "runtime_version": "0.171.0",
+            "sdk_version": "0.171.0",
+            "completion_mode": "business",
+            "max_active_seconds": float(state.settings.turn_timeout_seconds),
+        },
+    )
+    store.record_thread(
+        parent.run_id, "original-thread", generation=grant.binding.metadata["generation"]
+    )
     bridge = CodexToolBridge(store, AgentOrchestrator(repository=state.repository))
     receipt = bridge.invoke(
-        grant.mcp_token, "execute_action", {"call_id": "only-write", **operation}
+        grant.mcp_token,
+        "execute_action",
+        {
+            "call_id": "only-write",
+            **operation,
+            "schema_digest": bridge.invoke(
+                grant.mcp_token,
+                "capability_describe",
+                {key: operation[key] for key in ("tool_id", "action")},
+            )["capability"]["schema_digest"],
+        },
     )
     assert receipt["pending_approval"] is True
     rows = store.receipt_snapshot(parent.run_id)
     result = base_runtime_result(parent.run_id)
-    classify_runtime_result(
-        result, rows, {"expected_operations": [operation]}, "business", "completed"
-    )
+    classify_runtime_result(result, rows, {"goal_contract": contract}, "business", "completed")
 
     def wait(parent, metadata):
         parent.status = "waiting_user"
@@ -124,9 +159,6 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
         set_agent_run_repository_for_tests(state.repository)
         state.store = CodexBindingStore(state.repository)
         monkeypatch.setattr(
-            gateway, "run_runtime_task", lambda **kw: pytest.fail("receipt read started model")
-        )
-        monkeypatch.setattr(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             lambda *a, **kw: pytest.fail("receipt read repeated effect"),
         )
@@ -139,12 +171,82 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
                 .execution_options(skip_tenant_filter=True)
             )
 
+    state.resume_count = 0
+    from app.application.agent_runtime.codex_runtime import run_codex_agent
+    from tests.test_application.test_codex_runtime import completed
+
+    class Transport:
+        def __init__(self, config):
+            self.config = config
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+        async def start_thread(self, **_options):
+            pytest.fail("A completed child must resume the original thread")
+
+        async def resume_thread(self, thread_id, **_options):
+            assert thread_id == "original-thread"
+            state.resume_count += 1
+            return thread_id
+
+        async def stream_turn(self, text):
+            assert "创建客户" in text or "原目标仍有一项条件待核对" in text
+            for event in completed("原客户已创建并核验"):
+                yield {**event, "thread_id": "original-thread"}
+
+        async def interrupt(self):
+            return None
+
+    async def resumed_runtime(**kwargs):
+        return await run_codex_agent(**kwargs, transport_factory=Transport)
+
+    def review(binding, _config, *, rows, output):
+        contract = binding.run.metadata["runtime_goal_contract"]
+        snapshot = goal_evidence_snapshot(contract, rows, output, goal_answers(binding.run))
+        raw = {
+            "goals": [
+                {
+                    "goal_id": "customer",
+                    "source_id": "request",
+                    "source": "创建客户",
+                    "kind": "write",
+                    "status": "satisfied",
+                    "evidence_ids": [state.child_id],
+                    "reason": "SQL business readback matches the original approved customer",
+                }
+            ],
+            "violations": [],
+            "uncovered_sources": [],
+            "feedback": "",
+        }
+        reviewed, errors = validate_goal_review(raw, contract, snapshot, output)
+        assert not errors, errors
+        report = {
+            "protocol": GOAL_PROTOCOL,
+            "goal_digest": contract["digest"],
+            "evidence_digest": snapshot["digest"],
+            "response_digest": canonical_digest(output),
+            "review": reviewed,
+            "status": "verified",
+            "accepted": True,
+            "feedback": "",
+        }
+        return {**report, "report_digest": canonical_digest(report)}
+
+    monkeypatch.setattr(gateway, "run_codex_agent", resumed_runtime)
+    monkeypatch.setattr("app.application.agent_runtime.goal_verifier.verify_runtime_goal", review)
     state.complete_child, state.effect_count = complete_child, effect_count
     return state
 
 
 @pytest.mark.parametrize("read_child", [False, True])
-def test_approved_child_read_closes_original_parent_and_queue(receipt_task, read_child):
+def test_approved_child_continues_original_parent_and_requires_independent_review(
+    receipt_task, read_child
+):
     state = receipt_task
     state.complete_child()
     assert state.effect_count() == 1
@@ -153,6 +255,22 @@ def test_approved_child_read_closes_original_parent_and_queue(receipt_task, read
     response = state.client.get(f"/api/agent/runs/{target}")
     assert response.status_code == 200, response.text
     parent = state.repository.get(state.parent_id)
+    assert parent.status == "running", json.dumps(
+        {
+            "error": parent.error,
+            "result": parent.final_output.get("codex_result"),
+            "child_status": state.repository.get(state.child_id).status,
+        },
+        ensure_ascii=False,
+    )
+    assert state.resume_count == 0  # GET only projects receipts.
+    assert not parent.final_output["codex_result"]["business_completed"]
+    from app.infrastructure.codex.receipt_projection import resume_ready_codex_runs
+
+    assert resume_ready_codex_runs(repository=state.repository) == 1
+    assert resume_ready_codex_runs(repository=state.repository) == 0
+    parent = state.drain(state.parent_id)
+    assert state.resume_count == 1, parent.final_output.get("codex_result")
     assert parent.status == "completed", parent.to_dict()
     result = parent.final_output["codex_result"]
     assert result["business_completed"] and result["verified_operations"]
@@ -168,6 +286,66 @@ def test_approved_child_read_closes_original_parent_and_queue(receipt_task, read
     assert state.client.get(f"/api/agent/runs/{state.parent_id}").status_code == 200
     assert state.repository.get(state.parent_id).to_dict() == before
     assert state.effect_count() == 1
+
+
+def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same_task(
+    receipt_task, monkeypatch
+):
+    from app.application.agent_runtime import goal_verifier
+    from app.infrastructure.codex.receipt_projection import resume_ready_codex_runs
+
+    state = receipt_task
+    state.complete_child()
+    review = goal_verifier.verify_runtime_goal
+
+    def missing_goal(*args, **kwargs):
+        report = review(*args, **kwargs)
+        report.pop("report_digest")
+        report.update(status="needs_work", accepted=False, feedback="原目标仍有一项条件待核对")
+        report["review"]["goals"][0]["status"] = "unmet"
+        return {**report, "report_digest": canonical_digest(report)}
+
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", missing_goal)
+    assert resume_ready_codex_runs(repository=state.repository) == 1
+    blocked = state.drain(state.parent_id)
+    before = blocked.final_output["codex_result"]
+    assert blocked.status == "blocked" and before["retryable"] is True
+    assert before["rounds"] == 3 and before["failure_stage"] == "goal_verification"
+    assert "条件待核对" in before["failure_reason"]
+    assert state.client.get(f"/api/agent/runs/{state.parent_id}").status_code == 200
+    refreshed = state.repository.get(state.parent_id)
+    assert refreshed.status == "blocked"
+    for field in (
+        "failure_stage",
+        "failure_kind",
+        "failure_reason",
+        "active_seconds",
+        "model_request_attempts",
+    ):
+        assert refreshed.final_output["codex_result"][field] == before[field]
+    assert resume_ready_codex_runs(repository=state.repository) == 0
+    assert state.resume_count == 1 and state.effect_count() == 1
+    goal_digest = refreshed.metadata["runtime_goal_digest"]
+    generation = refreshed.metadata["codex_runtime"]["generation"]
+    monkeypatch.setattr(goal_verifier, "verify_runtime_goal", review)
+    options = {
+        "run_id": state.parent_id,
+        "task": "继续原任务",
+        "system_prompt": "original instructions",
+        "runtime_context": {**state.store.get(state.parent_id).context, "turn_id": "user-retry"},
+        "settings": state.settings,
+        "completion_mode": "business",
+    }
+    queued = gateway.run_runtime_task(**options)
+    assert queued["execution_state"] == "queued", queued
+    assert gateway.run_runtime_task(**options)["deduplicated"] is True
+    completed = state.drain(state.parent_id)
+    assert completed.status == "completed", completed.final_output
+    assert completed.metadata["runtime_goal_digest"] == goal_digest
+    assert completed.metadata["codex_runtime"]["generation"] == generation + 1
+    assert completed.metadata["codex_runtime"]["active_seconds"] >= before["active_seconds"]
+    assert state.resume_count == 2 and state.effect_count() == 1
+    assert completed.final_output["codex_result"]["failure_kind"] == ""
 
 
 @pytest.mark.parametrize(
@@ -226,7 +404,7 @@ def test_child_failure_and_unknown_are_never_promoted(receipt_task, outcome):
     response = state.client.get(f"/api/agent/runs/{state.parent_id}")
     assert response.status_code == 200, response.text
     parent = state.repository.get(state.parent_id)
-    assert parent.status == ("blocked" if outcome == "unknown" else "failed"), parent.to_dict()
+    assert parent.status == "blocked", parent.to_dict()
     assert parent.final_output["codex_result"]["business_completed"] is False
     assert state.queue.get(parent.run_id).state == "failed"
     if outcome == "unknown":
@@ -264,22 +442,12 @@ def test_queue_reconciliation_cannot_shrink_goal_or_bypass_active_lease(receipt_
     state = receipt_task
     state.complete_child()
 
-    def require_two(parent, metadata):
-        goals = parent.metadata["runtime_expected_operations"]
-        goals.append(
-            {"tool_id": "products", "action": "query", "params": {"keyword": "unexecuted"}}
-        )
-        digest = frozen_goal_digest(goals, None)
-        parent.metadata["runtime_goal_digest"] = metadata["goal_digest"] = digest
-
-    state.store.update(state.parent_id, require_two)
     state.store.receipt_snapshot(state.parent_id)
     original = state.repository.get(state.parent_id)
     forged = copy.deepcopy(original)
-    forged.metadata["runtime_expected_operations"] = forged.metadata["runtime_expected_operations"][
-        :1
-    ]
-    digest = frozen_goal_digest(forged.metadata["runtime_expected_operations"], None)
+    forged.message = "伪造更小的目标"
+    forged.metadata["runtime_goal_contract"] = build_goal_contract(forged)
+    digest = forged.metadata["runtime_goal_contract"]["digest"]
     forged.metadata["runtime_goal_digest"] = forged.metadata["codex_runtime"]["goal_digest"] = (
         digest
     )
@@ -289,3 +457,28 @@ def test_queue_reconciliation_cannot_shrink_goal_or_bypass_active_lease(receipt_
     assert state.queue.claim("active", run_id=state.parent_id, lease_seconds=120)
     assert state.queue.reconcile_codex_receipts(state.repository, original) is None
     assert state.repository.get(state.parent_id).to_dict() == original.to_dict()
+
+
+def test_waiting_input_rows_do_not_starve_later_approval_continuations(receipt_task):
+    from app.db.models.agent import AgentRunRecord
+    from app.infrastructure.codex.receipt_projection import resume_ready_codex_runs
+
+    state = receipt_task
+    state.complete_child()
+    older = AgentRun(
+        user_id=str(state.actor.user_id),
+        message="等待用户补充",
+        status="waiting_user",
+        intent="codex.runtime",
+    )
+    older.metadata.update(runtime_type="codex", runtime_context=state.actor.context)
+    state.repository.save(older)
+    with state.actor.factory() as db:
+        db.get(AgentRunRecord, older.run_id).updated_at = "2000-01-01T00:00:00+00:00"
+        db.commit()
+    cursor = {}
+    assert resume_ready_codex_runs(repository=state.repository, limit=1, cursor=cursor) == 0
+    assert cursor["run_id"] == older.run_id
+    assert resume_ready_codex_runs(repository=state.repository, limit=1, cursor=cursor) == 1
+    assert state.queue.get(state.parent_id).state == "queued"
+    assert state.effect_count() == 1

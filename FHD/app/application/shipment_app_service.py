@@ -24,6 +24,169 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def verify_agent_shipment_mutation(
+    step: Any, output: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    """Read the original claim and current tenant records; never repeat a mutation."""
+    from app.application.agent_orchestrator.verification_readback import _report
+    from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
+    from app.application.business_db_write_verification import (
+        _model_config,
+        _verify_independent_write,
+    )
+
+    if step.action == "create":
+        return verify_agent_created_shipment(step, output, context)
+    source = "shipment_storage"
+    params = dict(step.params)
+    record_id = params.get("id")
+    if type(record_id) is not int or record_id <= 0:
+        return _report("failed", "result_shipment_identity_missing", source)
+    if step.action == "update":
+        _, fields, _ = _model_config("shipment_records")
+        allowed = {*fields, "id", "date"}
+        if any(key not in allowed and value is not None for key, value in params.items()):
+            return _report("inconclusive", "result_shipment_fields_unavailable", source)
+        if not params.get("unit_name"):
+            params.pop("unit_name", None)
+        if params.get("date"):
+            params["created_at"] = datetime.strptime(params.pop("date"), "%Y-%m-%d")
+    elif step.action != "delete":
+        return _report("inconclusive", "result_verifier_unavailable", source)
+    proof = _verify_independent_write(
+        step,
+        output,
+        context,
+        "shipment_records",
+        step.action,
+        params,
+        verify_empty_fields=True,
+    )
+    if proof["status"] != "verified" or step.action != "delete":
+        return proof
+    from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
+
+    with _transaction_read_scope(context, {"shipment.view"}, "shipment") as (db, tenant):
+        remaining = (
+            db.query(ShipmentEltImportFingerprint)
+            .filter(
+                ShipmentEltImportFingerprint.tenant_key == f"tenant:{tenant}",
+                ShipmentEltImportFingerprint.shipment_id == record_id,
+            )
+            .first()
+        )
+        if remaining is not None:
+            return _report("failed", "result_shipment_fingerprint_retained", source)
+    return proof
+
+
+def verify_agent_created_shipment(
+    step: Any, output: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    """Read the original aggregate and every persisted item, without creating a shipment."""
+    import json
+
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.verification_readback import _report
+    from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
+    from app.application.business_db_write_verification import (
+        _same_value,
+        _verify_independent_write,
+    )
+    from app.db.models.shipment import ShipmentRecord
+
+    source = "shipment_storage"
+    params = step.params
+    shipment = output.get("shipment")
+    products = params.get("products") or params.get("items")
+    if (
+        not isinstance(shipment, dict)
+        or type(shipment.get("id")) is not int
+        or shipment["id"] <= 0
+        or not isinstance(products, list)
+        or not products
+        or any(not isinstance(product, dict) for product in products)
+    ):
+        return _report("inconclusive", "result_shipment_identity_missing", source)
+    unit = str(params.get("unit_name") or params.get("purchase_unit") or "").strip()
+    proof = _verify_independent_write(
+        step,
+        output,
+        context,
+        "shipment_records",
+        "create",
+        {"id": shipment["id"], "unit_name": unit},
+    )
+    if proof["status"] != "verified":
+        return proof
+    items = [ShipmentItem.from_dict(product) for product in products]
+    expected = {
+        "purchase_unit": unit,
+        "contact_person": params.get("contact_person"),
+        "contact_phone": params.get("contact_phone"),
+        "contact_address": None,
+        "items": [item.to_dict() for item in items],
+        "status": "pending",
+        "total_amount": sum(item.amount.amount for item in items),
+        "total_quantity_tins": sum(item.quantity.tins for item in items),
+        "total_quantity_kg": sum(item.quantity.kg for item in items),
+    }
+    if any(
+        canonical_hash(shipment.get(key)) != canonical_hash(value)
+        for key, value in expected.items()
+    ):
+        return _report("failed", "result_shipment_receipt_mismatch", source)
+    with _transaction_read_scope(context, {"shipment.view"}, "shipment") as (db, tenant):
+        row = (
+            db.query(ShipmentRecord)
+            .filter(ShipmentRecord.id == shipment["id"], ShipmentRecord.tenant_id == tenant)
+            .one_or_none()
+        )
+        if row is None:
+            return _report("failed", "result_shipment_missing", source)
+        parsed = json.loads(row.parsed_data or "null")
+        # The existing mapper serializes the aggregate before the database assigns
+        # its id. Every other field must still equal that original stored receipt.
+        if (
+            not isinstance(parsed, dict)
+            or parsed.get("id") is not None
+            or canonical_hash({**parsed, "id": row.id}) != canonical_hash(shipment)
+        ):
+            return _report("failed", "result_shipment_items_changed", source)
+        columns = {
+            "purchase_unit": unit,
+            "product_name": items[0].product_name,
+            "model_number": items[0].model_number,
+            "quantity_kg": expected["total_quantity_kg"],
+            "quantity_tins": expected["total_quantity_tins"],
+            "tin_spec": items[0].quantity.spec_per_tin,
+            "unit_price": items[0].unit_price.amount,
+            "amount": expected["total_amount"],
+            "status": "pending",
+            "printed_at": None,
+            "printer_name": None,
+        }
+        if any(not _same_value(getattr(row, key), value) for key, value in columns.items()) or any(
+            getattr(row, key) is None or getattr(row, key).isoformat() != shipment.get(key)
+            for key in ("created_at", "updated_at")
+        ):
+            return _report("failed", "result_shipment_columns_changed", source)
+        receipt_evidence = proof["checks"][0]["evidence"]
+        return _report(
+            "verified",
+            "result_verified",
+            source,
+            tenant_id=str(tenant),
+            record_id=row.id,
+            item_count=len(items),
+            params_sha256=receipt_evidence["params_sha256"],
+            receipt_sha256=receipt_evidence["receipt_sha256"],
+            stored_items_sha256=canonical_hash(parsed["items"]),
+            scope="current_shipment_storage",
+            attribution="not_inferred",
+        )
+
+
 class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
     """发货单应用服务 - 用例编排"""
 

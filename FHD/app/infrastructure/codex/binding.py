@@ -21,10 +21,6 @@ from typing import Any
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest as canonical_digest
-from app.domain.task_lifecycle.agent_runtime_contract import (
-    frozen_goal_digest,
-    frozen_workflow_operation,
-)
 
 _KEY = "codex_runtime"
 _AUDIENCES = frozenset({"mcp", "model"})
@@ -130,18 +126,18 @@ class CodexBindingStore:
 
     @staticmethod
     def _validate_goal(run: AgentRun, metadata: dict[str, Any]) -> str:
+        from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
+
+        if not run.metadata.get("runtime_goal_contract"):
+            if metadata.get("calls") or run.metadata.get("runtime_goal_digest"):
+                raise CodexBindingError("goal_changed", "原任务目标合同已丢失")
+            return ""  # Initial host binding only; claim_call requires the contract.
         try:
-            digest = frozen_goal_digest(
-                run.metadata.get("runtime_expected_operations"),
-                run.metadata.get("runtime_frozen_plan"),
-            )
-        except (TypeError, ValueError) as exc:
-            raise CodexBindingError("goal_changed", "原任务冻结的业务目标已失效") from exc
-        if (
-            run.metadata.get("runtime_goal_digest", digest) != digest
-            or metadata.get("goal_digest", digest) != digest
-        ):
-            raise CodexBindingError("goal_changed", "原任务冻结的业务目标不能改变")
+            digest = validate_runtime_goal(run)
+        except (TypeError, ValueError, KeyError) as exc:
+            raise CodexBindingError("goal_changed", "原任务目标或授权范围已变化") from exc
+        if metadata.get("goal_digest", digest) not in {"", digest}:
+            raise CodexBindingError("goal_changed", "原任务目标合同不能改变")
         return digest
 
     @staticmethod
@@ -270,6 +266,10 @@ class CodexBindingStore:
             raise CodexBindingError(code, "运行授权已结束")
         if float(metadata.get("expires_at", 0)) <= time.time():
             raise CodexBindingError("token_expired", "运行授权已过期")
+        if metadata.get("active_started_at") is not None and (
+            float(metadata.get("deadline_at", 0)) <= time.time()
+        ):
+            raise CodexBindingError("runtime_budget_exhausted", "原任务运行时长预算已耗尽")
         if generation is not None and metadata.get("generation") != generation:
             raise CodexBindingError("token_invalid", "运行授权已被更新")
         self._validate_authority(run, metadata)
@@ -372,29 +372,16 @@ class CodexBindingStore:
             created = False
             if metadata.get("waiting_input"):
                 raise CodexBindingError("waiting_user", "请先补充原任务所需信息")
-            expected = run.metadata.get("runtime_expected_operations")
-            if run.metadata.get("runtime_goal_admission") is True:
-                if (
-                    run.metadata.get("runtime_goal_admitted") is not True
-                    or run.metadata.get("runtime_goal_mode") != "business"
-                    or not expected
-                ):
-                    raise CodexBindingError("goal_required", "当前任务没有获准执行的业务目标")
-                plan = run.metadata.get("runtime_frozen_plan")
-                permitted = [frozen_workflow_operation(plan)] if plan is not None else expected
-                if fingerprint not in {canonical_digest(row) for row in permitted}:
-                    raise CodexBindingError("goal_mismatch", "只能执行宿主冻结的完整业务义务")
+            if not run.metadata.get("runtime_goal_contract"):
+                raise CodexBindingError("goal_required", "原任务缺少持久目标合同")
+            if not read_only and run.metadata.get("runtime_completion_mode") == "reply":
+                raise CodexBindingError("goal_mismatch", "回复任务不能申请业务写入")
             calls = metadata.setdefault("calls", {})
             existing = calls.get(call_id)
             if existing is not None:
                 if existing["fingerprint"] != fingerprint:
                     raise CodexBindingError("call_conflict", "同一调用标识不能改变操作内容")
                 return
-            if not read_only:
-                if expected is None:
-                    raise CodexBindingError("goal_required", "请先由宿主冻结完整业务目标")
-                if fingerprint not in {canonical_digest(row) for row in expected}:
-                    raise CodexBindingError("goal_mismatch", "操作不属于原任务冻结的业务目标")
             if len(calls) >= 256:
                 raise CodexBindingError("call_limit", "任务工具调用已达到上限")
             prior = next((c for c in calls.values() if c["child_task_id"] == child_task_id), None)
@@ -504,7 +491,7 @@ class CodexBindingStore:
         return self.update(run_id, record)
 
     def receipt_snapshot(self, run_id: str) -> list[dict[str, Any]]:
-        from app.infrastructure.codex.tools import read_call_receipt
+        from app.infrastructure.codex.receipts import read_call_receipt
 
         binding = self.get(run_id)
         self._validate_goal(binding.run, binding.metadata)

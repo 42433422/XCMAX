@@ -338,8 +338,8 @@ class TestRunNaturalLanguagePandas:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
-        # app.legacy.excel_text_to_pandas may not exist; function falls back gracefully
-        result = run_natural_language_pandas(df, "show all")
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
+            result = run_natural_language_pandas(df, "show all")
         assert result["result_kind"] == "dataframe"
         assert result["row_count"] == 2
 
@@ -349,7 +349,8 @@ class TestRunNaturalLanguagePandas:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": []})
-        result = run_natural_language_pandas(df, "show all")
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
+            result = run_natural_language_pandas(df, "show all")
         assert result["row_count"] == 0
 
     def test_translation_error_graceful(self):
@@ -358,6 +359,10 @@ class TestRunNaturalLanguagePandas:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"a": [1]})
-        # If the legacy module doesn't exist, the function still returns a valid result
-        result = run_natural_language_pandas(df, "show all")
+        with patch(
+            "app.application.tools.workflow.adapters.translate_pandas",
+            side_effect=OSError("llm down"),
+        ):
+            result = run_natural_language_pandas(df, "show all")
+        assert result["error"] == "excel_query_failed"
         assert "result_kind" in result

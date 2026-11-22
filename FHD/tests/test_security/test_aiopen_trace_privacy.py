@@ -73,6 +73,44 @@ def test_control_trace_does_not_mutate_or_redact_the_authorized_response(audit):
     assert PRIVATE not in json.dumps(saved)
 
 
+@pytest.mark.parametrize("nested", [False, True])
+def test_redacted_trace_retains_unknown_without_replaying_or_leaking_payload(audit, nested):
+    saved, trace, _ = audit
+    receipt = {"outcome": "unknown", "retryable": True, "message": PRIVATE}
+    result = {"success": True, "result": receipt} if nested else {"success": True, **receipt}
+    before = copy.deepcopy(result)
+    assert trace(result=result) == "audit-fixture"
+    payload, _context = saved[0]
+    output = payload["data"]["legacy_tool_records"][0]["output"]
+    assert payload["success"] is False and output["success"] is False
+    assert output["outcome"] == "unknown" and output["retryable"] is False
+    assert output["reconciliation_required"] is True
+    assert PRIVATE not in json.dumps(saved) and result == before
+
+
+def test_operational_receipt_fields_reject_untyped_or_private_values():
+    result = support.safe_control_payload(
+        {"outcome": PRIVATE, "retryable": PRIVATE, "reconciliation_required": PRIVATE}
+    )
+    # A truthy malformed uncertainty flag remains fail-closed, while its raw
+    # value is still excluded from the typed audit receipt.
+    assert result == {
+        "payload_redacted": True,
+        "success": False,
+        "outcome": "unknown",
+        "retryable": False,
+        "reconciliation_required": True,
+    }
+    assert support.safe_control_payload({"outcome": PRIVATE, "retryable": PRIVATE}) == {
+        "payload_redacted": True
+    }
+    assert support.safe_control_payload({"outcome": "not_started", "retryable": False}) == {
+        "payload_redacted": True,
+        "outcome": "not_started",
+        "retryable": False,
+    }
+
+
 @pytest.mark.parametrize("kind", ["tool", "control"])
 def test_trace_failure_does_not_log_exception_payload(kind, caplog, audit):
     def failing_recorder(*args, **kwargs):

@@ -19,7 +19,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-READ_TOOLS = ("excel_analysis", "excel_schema_understand", "excel_join_compare")
+READ_TOOLS = ("excel_analysis", "excel_join_compare")
 CHART_TOOLS = ("excel_chart_recommend",)
 DOC_TOOLS = ("generate_office_document",)
 
@@ -146,7 +146,7 @@ def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
     actions = _as_dict(config.get("actions"))
     agent = _as_dict(actions.get("agent"))
     ws = _as_dict(agent.get("workspace"))
-    if bool(ws.get("read_only")):
+    if bool(ws.get("read_only")) or bool(_as_dict(config.get("workspace_policy")).get("read_only")):
         return True
     v2 = _as_dict(manifest.get("employee_config_v2"))
     wp = _as_dict(v2.get("workspace_policy"))
@@ -165,7 +165,7 @@ def _merge_lifecycle_tools(
 
         extra = discovery_for_runtime(employee_id)
     except RECOVERABLE_ERRORS:
-        return specs
+        extra = []
     allow = _explicit_allowlist(config, manifest)
     merged = list(specs)
     seen = {str((item.get("function") or {}).get("name") or "") for item in merged}
@@ -179,6 +179,15 @@ def _merge_lifecycle_tools(
             continue
         merged.append(spec)
         seen.add(name)
+    if is_read_only(manifest, config):
+        from resources.config.risk_actions_loader import list_write_tools
+
+        blocked = list_write_tools()
+        merged = [
+            spec
+            for spec in merged
+            if str((spec.get("function") or {}).get("name") or "") not in blocked
+        ]
     return merged
 
 
@@ -217,16 +226,9 @@ def resolve_employee_tools(
     if not selected:
         for n in (
             "excel_analysis",
-            "excel_schema_understand",
             "generate_office_document",
         ):
             add(n)
-
-    if read_only:
-        from resources.config.risk_actions_loader import list_write_tools
-
-        blocked = set(list_write_tools())
-        selected = [n for n in selected if n not in blocked]
 
     return _merge_lifecycle_tools(employee_id, manifest, config, [base[n] for n in selected])
 

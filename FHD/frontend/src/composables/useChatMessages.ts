@@ -158,7 +158,7 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
   const todoSteps = stringArray(ui.todoSteps)
   if (todoSteps.length) extras.todoSteps = todoSteps
   const nodeResults = objectArray(ui.nodeResults)
-  if (nodeResults.length) extras.nodeResults = nodeResults as NonNullable<ChatMessageExtras['nodeResults']>
+  if (nodeResults.length) extras.nodeResults = nodeResults as unknown as NonNullable<ChatMessageExtras['nodeResults']>
   const executionProgress = objectArray(ui.executionProgress)
   if (executionProgress.length)
     extras.executionProgress = executionProgress as unknown as NonNullable<ChatMessageExtras['executionProgress']>

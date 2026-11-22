@@ -26,19 +26,12 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from app.infrastructure.codex.launcher import WindowsRuntimeJob, launch_arguments
+from app.infrastructure.codex.tool_names import CODEX_TOOL_NAMES
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 CODEX_SDK_VERSION = "0.171.0"
 CODEX_RUNTIME_VERSION = "0.171.0"
 _PROVIDER = "xcmax_gateway"
-_MCP_TOOLS = (
-    "capability_search",
-    "capability_describe",
-    "execute_action",
-    "execute_plan",
-    "task_evidence",
-    "request_input",
-)
 
 
 class CodexTransportError(RuntimeError):
@@ -82,10 +75,10 @@ class CodexTransportConfig:
     mcp_token: str = field(repr=False)
     context_window: int
     auto_compact_token_limit: int | None = None
-    mcp_tools: tuple[str, ...] = _MCP_TOOLS
+    mcp_tools: tuple[str, ...] = CODEX_TOOL_NAMES
     codex_bin: str | None = None
-    timeout_seconds: float = 120.0
-    turn_timeout_seconds: float = 900.0
+    timeout_seconds: float = 60.0
+    turn_timeout_seconds: float = 180.0
 
     def __post_init__(self) -> None:
         if not Path(self.runtime_root).is_absolute():
@@ -102,7 +95,7 @@ class CodexTransportConfig:
         limit = self.auto_compact_token_limit
         if limit is not None and (type(limit) is not int or not 0 < limit < self.context_window):
             raise ValueError("Codex compaction threshold must fit the model context")
-        if not self.mcp_tools or set(self.mcp_tools) - set(_MCP_TOOLS):
+        if not self.mcp_tools or set(self.mcp_tools) - set(CODEX_TOOL_NAMES):
             raise ValueError("Codex may only expose the controlled business bridge tools")
         for value in (self.timeout_seconds, self.turn_timeout_seconds):
             if not math.isfinite(value) or value <= 0:

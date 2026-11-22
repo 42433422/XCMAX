@@ -13,7 +13,7 @@ type ModsStore = ReturnType<typeof useModsStore>
 export interface ModStoreActionsDeps {
   modsStore: ModsStore
   catalog: Pick<ModStoreCatalog, 'loadMods'>
-  meta: Pick<ModStoreMeta, 'isEmployeePackItem' | 'installSuccessMessage'>
+  meta: Pick<ModStoreMeta, 'isEmployeePackItem' | 'installSuccessMessage' | 'marketItemKindLabel'>
 }
 
 export interface ModStoreActions {
@@ -122,7 +122,7 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
   }
 
   const uninstallMod = async (mod: StoreModRow): Promise<void> => {
-    if (!(await appConfirm(`确定要卸载 MOD "${mod.name}" 吗？`, { danger: true }))) {
+    if (!(await appConfirm(`确定要卸载${meta.marketItemKindLabel(mod)}「${mod.name}」吗？`, { danger: true }))) {
       return
     }
 
@@ -141,7 +141,7 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
 
       if (data.success) {
         mod.is_installed = false
-        await appAlert(`MOD ${mod.name} 卸载成功！`)
+        await appAlert(`${meta.marketItemKindLabel(mod)} ${mod.name} 卸载成功！`)
         await catalog.loadMods()
         refreshHostMods()
       } else {
@@ -176,7 +176,7 @@ export function useModStoreActions(state: ModStoreState, deps: ModStoreActionsDe
 
       if (data.success) {
         mod.version = data.data.version
-        await appAlert(`MOD ${mod.name} 更新成功！`)
+        await appAlert(`${meta.marketItemKindLabel(mod)} ${mod.name} 更新成功！`)
         await catalog.loadMods()
         refreshHostMods()
       } else {

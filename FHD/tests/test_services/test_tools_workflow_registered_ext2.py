@@ -777,8 +777,10 @@ class TestMaterialsRouterBranches:
         svc.batch_delete_materials.side_effect = RuntimeError("db error")
         with patch("app.application.get_material_application_service", return_value=svc):
             result = _registered_router_materials("batch_delete", {"ids": [1]}, {}, "admin", "")
-        assert result["success"] is True
-        assert "db error" in result["warning"]
+        assert result["success"] is False
+        assert result["outcome"] == "unknown"
+        assert result["reconciliation_required"] and result["retryable"] is False
+        assert "deleted_count" not in result and "warning" not in result
 
     def test_batch_delete_non_dict_result(self):
         svc = MagicMock()

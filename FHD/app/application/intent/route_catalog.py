@@ -1,7 +1,7 @@
 """意图路由表：用客户真实说法定义意图，由 semantic-router 做向量匹配。
 
 只放示例句（utterances），不放正则：新增意图只需补句子，不需要改判定逻辑。
-路由名与 ``planner_prompt_profile`` 的场景名保持一致，便于直接参与工具预筛。
+路由标签供能力目录检索参考，不能取代已授权工具的完整契约。
 """
 
 from __future__ import annotations

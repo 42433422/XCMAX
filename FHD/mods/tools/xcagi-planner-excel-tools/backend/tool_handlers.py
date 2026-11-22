@@ -231,51 +231,22 @@ def _document_result(
     fmt: str,
     summary: str,
     extra: dict[str, Any] | None = None,
+    *,
+    runtime_context: dict[str, Any] | None = None,
 ) -> str:
-    from app.mod_sdk.host_services import store_document_pickup
+    from app.mod_sdk.host_services import store_document_pickup, store_office_document_result
 
-    mime = (
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        if fmt == "xlsx"
-        else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-    token = store_document_pickup(content, fname, mime)
-    download_url = f"/api/ai/kitten/document/pickup/{token}"
-    metadata: dict[str, Any] = {"pickup_token": token, "generator": "generate_office_document"}
-    if extra:
-        metadata.update(extra)
     return json.dumps(
         _tag_source(
-            {
-                "success": True,
-                "message": (
-                    f"已生成《{fname}》。请让用户在浏览器打开以下路径下载"
-                    "（一次性有效，勿泄露 token）："
-                ),
-                "pickup_token": token,
-                "file_name": fname,
-                "download_url": download_url,
-                "artifacts": [
-                    {
-                        "artifact_type": "office_document",
-                        "name": fname,
-                        "source": "generate_office_document",
-                        "uri": download_url,
-                        "mime_type": mime,
-                        "summary": summary[:500],
-                        "preview": {
-                            "file_name": fname,
-                            "download_url": download_url,
-                            "output_format": fmt,
-                        },
-                        "metadata": metadata,
-                    }
-                ],
-                "assistant_hint": (
-                    "将 download_url 原样写入回复（可做成 Markdown 链接）；"
-                    "不要再次调用 generate_office_document，除非用户明确要求重新生成。"
-                ),
-            }
+            store_office_document_result(
+                content,
+                fname,
+                fmt,
+                summary,
+                store_document_pickup,
+                extra,
+                runtime_context=runtime_context,
+            )
         ),
         ensure_ascii=False,
     )
@@ -303,8 +274,11 @@ def _handle_generate_office_document(
         if fmt != "xlsx":
             return json.dumps(
                 _tag_source(
-                    {"success": False, "error": "template_requires_xlsx",
-                     "message": "模板填充只支持 Excel（.xlsx）模板"}
+                    {
+                        "success": False,
+                        "error": "template_requires_xlsx",
+                        "message": "模板填充只支持 Excel（.xlsx）模板",
+                    }
                 ),
                 ensure_ascii=False,
             )
@@ -344,6 +318,7 @@ def _handle_generate_office_document(
                 "unmapped_labels": filled.get("unmapped_labels"),
                 "generator": "generate_office_document:template_fill",
             },
+            runtime_context=runtime_context,
         )
 
     if not req:
@@ -355,7 +330,7 @@ def _handle_generate_office_document(
         from app.mod_sdk.host_services import generate_office_file
 
         content, fname = generate_office_file(req, fmt)  # type: ignore[arg-type]
-        return _document_result(content, fname, fmt, req)
+        return _document_result(content, fname, fmt, req, runtime_context=runtime_context)
     except BOUNDARY_ERRORS as e:
         return json.dumps(_tag_source({"success": False, "error": str(e)}), ensure_ascii=False)
 

@@ -2,7 +2,7 @@
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: CI/CD Pipeline
 run-name: >-
-  CI/CD ${{ github.event_name == 'workflow_dispatch' && inputs.release_sha || github.sha }}
+  CI/CD ${{ github.event_name == 'workflow_dispatch' && inputs.release_sha || github.sha }}${{ inputs.delivery_request_id && format(' [delivery:{0}]', inputs.delivery_request_id) || '' }}
 
 on:
   push:
@@ -36,11 +36,6 @@ on:
         required: false
         default: false
         type: boolean
-      dispatch_evolution:
-        description: "Run the independent Evolution workflow after CVM upload"
-        required: false
-        default: true
-        type: boolean
       push_image_tar:
         description: "Also push the optional 600MB+ offline image archive"
         required: false
@@ -48,6 +43,11 @@ on:
         type: boolean
       release_sha:
         description: "Exact 40-character SHA to build/deploy; required when push_to_cvm=true"
+        required: false
+        default: ""
+        type: string
+      delivery_request_id:
+        description: "Original post-merge CI request identity; retained across observation retries"
         required: false
         default: ""
         type: string
@@ -85,6 +85,49 @@ defaults:
     working-directory: FHD
 
 jobs:
+  browser-agent-integration:
+    name: Browser Agent real MCP integration
+    # Use the existing sandbox-capable browser acceptance host; never disable Chromium's sandbox.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      XCAGI_BROWSER_MCP_LIVE: "1"
+      XCAGI_SKIP_INTENT_LLM: "1"
+      PYTHONPATH: ${{ github.workspace }}/FHD
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+      - name: Install original backend and pinned browser runtime
+        run: |
+          uv sync --frozen --extra server-api --extra dev
+          npm --prefix scripts/autonomy/runtime_tools/browser_mcp_deps ci --ignore-scripts
+          cd scripts/autonomy/runtime_tools/browser_mcp_deps
+          npx --no-install playwright install --with-deps chromium
+      - name: Verify real browser continuity, isolation and failed readback
+        run: |
+          uv run --no-sync pytest \
+            tests/test_application/test_browser_mcp_live.py \
+            tests/test_application/test_browser_tool_process.py \
+            tests/test_application/test_browser_agent_loop.py \
+            tests/test_application/test_browser_goal_contract.py \
+            tests/test_application/test_mcp_browser_contract.py \
+            tests/test_infrastructure/test_mcp_persistent_sessions.py \
+            -q -o addopts= --junitxml=browser-agent-results.xml
+      - name: Retain browser acceptance results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: browser-agent-integration
+          path: FHD/browser-agent-results.xml
+          if-no-files-found: warn
   agent-postgres-transactions:
     name: Agent PostgreSQL transactions
     runs-on: ubuntu-latest
@@ -115,17 +158,46 @@ jobs:
       - name: Install test dependencies
         working-directory: FHD
         run: uv sync --frozen --extra server-api --extra dev
-      - name: Verify PostgreSQL approval, resume, and cross-module execution transactions
+      - name: Verify joint admission, authorization, recovery, and PostgreSQL transactions
         working-directory: FHD
         run: |
           test -n "$XCAGI_TEST_AGENT_POSTGRES_URL"
-          uv run --no-sync pytest tests/test_application/test_native_task_recovery.py tests/test_application/test_approval_session_renewal.py tests/test_application/test_cross_module_execution_transactions.py tests/test_application/test_approval_persistence.py::test_guarded_delete_serializes_concurrent_writes tests/test_application/test_approval_persistence.py::test_only_one_concurrent_reviewer_can_claim_approval -q -o addopts= --junitxml=agent-postgres-results.xml
+          uv run --no-sync pytest \
+            tests/test_application/test_agent_task_admission.py \
+            tests/test_application/test_task_execution_repository.py \
+            tests/test_application/test_task_dispatcher.py \
+            tests/test_application/test_agent_loop.py \
+            tests/application/test_employee_runtime_write_approval.py \
+            tests/test_application/test_native_task_recovery.py \
+            tests/test_application/test_approval_session_renewal.py \
+            tests/test_application/test_cross_module_execution_transactions.py \
+            tests/test_application/test_approval_persistence.py::test_guarded_delete_serializes_concurrent_writes \
+            tests/test_application/test_approval_persistence.py::test_only_one_concurrent_reviewer_can_claim_approval \
+            tests/test_application/test_super_employee_dispatch_recovery.py \
+            tests/test_routes/test_admin_employee_admission.py \
+            tests/test_routes/test_mobile_super_employee_receipts.py \
+            tests/test_services/test_mobile_relay_request_identity.py \
+            -q -o addopts= --junitxml=agent-postgres-results.xml
+      - name: Verify backup snapshot counts on the disposable PostgreSQL service
+        working-directory: FHD
+        env:
+          FHD_TEST_PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          test -n "$FHD_TEST_PG_CONTAINER"
+          uv run --no-sync pytest tests/release_gate/test_postgres_backup_snapshot.py -q -o addopts= --junitxml=postgres-backup-snapshot-results.xml
+          uv run --no-sync python - <<'PY'
+          import xml.etree.ElementTree as ET
+          report = ET.parse("postgres-backup-snapshot-results.xml")
+          assert len(report.findall(".//testcase")) >= 5 and not report.findall(".//skipped"), "native backup scenarios must execute"
+          PY
       - name: Retain transaction test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: agent-postgres-transactions
-          path: FHD/agent-postgres-results.xml
+          path: |
+            FHD/agent-postgres-results.xml
+            FHD/postgres-backup-snapshot-results.xml
           if-no-files-found: warn
   # Share one runner checkout for the cheap guard, change classification, and shard plan.
   guard-temp-scripts:
@@ -458,7 +530,7 @@ jobs:
           retention-days: 7
 
   backend-test:
-    needs: [guard-temp-scripts, ssot-drift-gate, backend-quality, backend-test-shard]
+    needs: [guard-temp-scripts, ssot-drift-gate, backend-quality, backend-test-shard, agent-postgres-transactions]
     if: always()
     runs-on: ubuntu-latest
     outputs:
@@ -478,6 +550,7 @@ jobs:
           EXPECTED_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
           QUALITY: ${{ needs.backend-quality.result }}
           SHARDS: ${{ needs.backend-test-shard.result }}
+          AGENT_TRANSACTIONS: ${{ needs.agent-postgres-transactions.result }}
           SHOULD_RUN: ${{ needs.guard-temp-scripts.outputs.backend }}
           SKIP: ${{ needs.guard-temp-scripts.outputs.backend_skip }}
         run: |
@@ -488,6 +561,7 @@ jobs:
           test -n "$SOURCE_SHA"
           test "$SOURCE_SHA" = "$EXPECTED_SOURCE_SHA"
           test "$QUALITY" = success
+          test "$AGENT_TRANSACTIONS" = success
           case "$SHOULD_RUN:$SKIP" in
             false:true) test "$SHARDS" = skipped ;;
             true:false) test "$SHARDS" = success ;;
@@ -740,7 +814,7 @@ jobs:
   vitest:
     name: Vitest (173 文件 · jsdom)
     needs: frontend-test
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require the verified frontend result
@@ -751,7 +825,7 @@ jobs:
 
   frontend-smoke:
     needs: frontend-test
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require the verified frontend result
@@ -1071,7 +1145,7 @@ jobs:
 
   docker-build-fhd-api-pr:
     name: Build candidate FHD API image
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, security-scan, container-scan, pack-verify, arch-fitness]
     if: >-
       github.event_name != 'schedule' &&
       !(github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v')) &&
@@ -1110,7 +1184,7 @@ jobs:
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
     name: Publish FHD API image
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, security-scan, container-scan, pack-verify, arch-fitness]
     if: >-
       github.event_name != 'schedule' && github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v')) &&
@@ -1277,7 +1351,7 @@ jobs:
     # Keep the existing branch-protection context tied to actual work on PRs.
     name: docker-build-fhd-api
     needs: [backend-test, docker-build-fhd-api-pr, docker-build-fhd-api]
-    if: always() && github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true'
+    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -1413,41 +1487,13 @@ jobs:
             echo "::warning::CVM push failed with status ${status}; keeping main CI green. Use workflow_dispatch with push_to_cvm=true for a strict retry."
           fi
 
-  # Bot-token workflow_dispatch does not reliably emit a downstream workflow_run
-  # event. Dispatch Evolution with the repository PAT only after the exact CVM
-  # release and DR receipt have succeeded.
-  dispatch-evolution-after-cvm:
-    needs: [cvm-push-release]
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main' &&
-      inputs.push_to_cvm == true &&
-      inputs.dispatch_evolution == true &&
-      needs.cvm-push-release.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: Dispatch Evolution Orchestrator after exact production receipt
-        working-directory: .
-        env:
-          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
-        run: |
-          set -euo pipefail
-          test -n "${GH_TOKEN:-}"
-          gh workflow run fhd-evolution-orchestrator.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref main \
-            -f force_run=false
-
   # Docker Build & Push（全仓镜像）已于 2026-07-20 退役：推 <repo>:sha-xxx 无人引用，
   # 实际制品由 docker-build-fhd-api（GHCR fhd-api 镜像）与 pack-verify（tarball）承担。
   # 2026-08-01 移除残留 job 定义（无下游 needs，branch protection 未引用）。
 
   release-verify:
     name: release-verify
-    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, pack-verify, arch-fitness]
     if: needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45

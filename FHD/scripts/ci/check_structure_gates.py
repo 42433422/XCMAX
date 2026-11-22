@@ -22,7 +22,9 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 # --- baselines (do not invent; keep in sync with 06-structure-gates.md) ---
@@ -104,12 +106,10 @@ def count_legacy_prod_refs(repo: Path) -> list[Path]:
     roots = [repo / "FHD" / "app", repo / "FHD" / "scripts"]
     pat = re.compile(r"app\.legacy")
     hits: list[Path] = []
-    skip_parts = {"legacy", "tests", "evals", "test_legacy", ".venv", "node_modules"}
     for root in roots:
         if not root.is_dir():
             continue
         for p in root.rglob("*.py"):
-            parts = set(p.parts)
             # exclude app/legacy tree and tests/evals
             if "legacy" in p.parts and "app" in p.parts:
                 # allow only if path contains app/legacy
@@ -175,11 +175,37 @@ def count_modstore_parts(repo: Path) -> list[Path]:
     return sorted(set(hits))
 
 
-def count_py_gt_40kb(repo: Path) -> tuple[list[Path], list[Path]]:
+def first_party_python_files(repo: Path) -> list[Path]:
+    """Respect Git ownership even when independently governed submodules are initialized.
+
+    The index, not .gitmodules names or checkout state, identifies gitlinks.
+    Submodule CI remains responsible for the source within those boundaries.
+    """
+    index = subprocess.check_output(
+        ["git", "-C", str(repo), "ls-files", "--stage", "-z"], stderr=subprocess.PIPE
+    )
+    submodules = set()
+    for entry in index.split(b"\0"):
+        metadata, separator, path = entry.partition(b"\t")
+        if separator and metadata.split()[0] == b"160000":
+            submodules.add(repo / os.fsdecode(path))
+    files = []
+    for current, directories, names in os.walk(repo):
+        directory = Path(current)
+        directories[:] = [
+            name
+            for name in directories
+            if name not in {".git", "node_modules"} and directory / name not in submodules
+        ]
+        files.extend(directory / name for name in names if name.endswith(".py"))
+    return sorted(files)
+
+
+def count_py_gt_40kb(python_files: Iterable[Path]) -> tuple[list[Path], list[Path]]:
     big: list[Path] = []
     testish: list[Path] = []
     skip = {".venv", "node_modules", "__pycache__", ".git"}
-    for p in repo.rglob("*.py"):
+    for p in python_files:
         if any(x in p.parts for x in skip):
             continue
         try:
@@ -241,6 +267,11 @@ def main() -> int:
     repo = Path(args.repo).resolve()
     if not (repo / "FHD" / "app").is_dir():
         print(f"ERROR: not an XCMAX root (missing FHD/app): {repo}", file=sys.stderr)
+        return 3
+    try:
+        python_files = first_party_python_files(repo)
+    except (OSError, subprocess.CalledProcessError):
+        print(f"ERROR: cannot read Git index ownership: {repo}", file=sys.stderr)
         return 3
 
     app = repo / "FHD" / "app"
@@ -428,7 +459,7 @@ def main() -> int:
         )
 
     # --- G11 py > 40KB ratchet ---
-    big_py, big_test = count_py_gt_40kb(repo)
+    big_py, big_test = count_py_gt_40kb(python_files)
     infos.append(
         f"py>40KB={len(big_py)} testish={len(big_test)} "
         f"(baselines {BASELINE['py_gt_40kb']}/{BASELINE['py_gt_40kb_testish']})"
@@ -451,8 +482,9 @@ def main() -> int:
 
     ports_all = [
         p
-        for p in repo.rglob("ports.py")
-        if ".git" not in p.parts
+        for p in python_files
+        if p.name == "ports.py"
+        and ".git" not in p.parts
         and "node_modules" not in p.parts
         and ".venv" not in p.parts
         and not _is_ports_compat_shim(p)
@@ -490,8 +522,10 @@ def main() -> int:
         errors.append("G12: domain/services directory must not exist")
     bps = [
         port_path
-        for port_path in repo.rglob("blueprints.py")
-        if ".git" not in port_path.parts and "node_modules" not in port_path.parts
+        for port_path in python_files
+        if port_path.name == "blueprints.py"
+        and ".git" not in port_path.parts
+        and "node_modules" not in port_path.parts
     ]
     infos.append(f"blueprints.py={len(bps)} (baseline {BASELINE.get('blueprints_py', 40)})")
     if len(bps) > BASELINE.get("blueprints_py", 40):
@@ -499,7 +533,7 @@ def main() -> int:
             f"G12: blueprints.py {len(bps)} > baseline {BASELINE.get('blueprints_py', 40)}"
         )
     big100 = []
-    for py_path in repo.rglob("*.py"):
+    for py_path in python_files:
         if any(x in py_path.parts for x in (".git", "node_modules", "__pycache__", ".venv")):
             continue
         # first-party ratchet: skip vendored LangGraph + eval harness

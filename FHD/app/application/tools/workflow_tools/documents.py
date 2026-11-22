@@ -69,6 +69,7 @@ def generate_office_document(
             str(args.get("user_request") or "").strip(),
             store,
             {"generator": "generate_office_document:template_fill", **template_result["template"]},
+            runtime_context=runtime_context,
         )
 
     request = str(
@@ -83,7 +84,9 @@ def generate_office_document(
     if not request:
         return {"success": False, "error": "missing_user_request"}
     content, name = generate(request, output_format)
-    return _store_result(content, name, output_format, request, store)
+    return _store_result(
+        content, name, output_format, request, store, runtime_context=runtime_context
+    )
 
 
 def _store_result(
@@ -93,7 +96,15 @@ def _store_result(
     summary: str,
     store: Callable[[bytes, str, str], str],
     metadata_extra: Payload | None = None,
+    *,
+    runtime_context: Payload | None = None,
 ) -> Payload:
+    context = runtime_context or {}
+    published = None
+    if context.get("run_id"):
+        from app.application.agent_orchestrator.artifact_files import store_scoped_run_file
+
+        published = store_scoped_run_file(content, name=name, context=context)
     mime = (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         if output_format == "xlsx"
@@ -104,27 +115,29 @@ def _store_result(
     metadata = {"pickup_token": token, "generator": "generate_office_document"}
     if metadata_extra:
         metadata.update(metadata_extra)
+    artifact = {
+        "artifact_type": "office_document",
+        "name": name,
+        "source": "generate_office_document",
+        "uri": url,
+        "mime_type": mime,
+        "summary": summary[:500],
+        "preview": {
+            "file_name": name,
+            "download_url": url,
+            "output_format": output_format,
+        },
+        "metadata": metadata,
+    }
+    if published is not None:
+        artifact.update(published, artifact_type="office_document")
+        artifact["metadata"] = {**metadata, **published["metadata"]}
     return {
         "success": True,
         "message": f"已生成《{name}》。请让用户在浏览器打开以下路径下载（一次性有效，勿泄露 token）：",
         "pickup_token": token,
         "file_name": name,
         "download_url": url,
-        "artifacts": [
-            {
-                "artifact_type": "office_document",
-                "name": name,
-                "source": "generate_office_document",
-                "uri": url,
-                "mime_type": mime,
-                "summary": summary[:500],
-                "preview": {
-                    "file_name": name,
-                    "download_url": url,
-                    "output_format": output_format,
-                },
-                "metadata": metadata,
-            }
-        ],
+        "artifacts": [artifact],
         "assistant_hint": "将 download_url 原样写入回复（可做成 Markdown 链接）；不要再次调用 generate_office_document，除非用户明确要求重新生成。",
     }

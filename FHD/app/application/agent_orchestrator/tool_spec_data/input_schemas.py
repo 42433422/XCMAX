@@ -3,7 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.application.tools.workflow_tools.catalog_excel import excel_tool_specs
+from app.domain.browser_contract import BROWSER_INPUT_SCHEMAS
+from app.domain.enterprise_cognition.contracts import ENTERPRISE_INPUT_SCHEMAS
+from app.domain.shared_services.kellai_tool_contract import KELLAI_INPUT_SCHEMAS
 
 from .report_input_schemas import REPORT_INPUT_SCHEMAS
 
@@ -145,7 +147,9 @@ _OCR_EXTRACT_INPUT = _object_schema(["text"], {"text": {"type": "string"}})
 
 
 _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+    **BROWSER_INPUT_SCHEMAS,
     **REPORT_INPUT_SCHEMAS,
+    **KELLAI_INPUT_SCHEMAS,
     ("conversation_history", "read"): {
         "type": "object",
         "additionalProperties": False,
@@ -1142,10 +1146,53 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("sales", "create_order"): _SALES_QUOTE_INPUT,
+    **ENTERPRISE_INPUT_SCHEMAS,
+}
+
+# Computer Use stays in the existing desktop tool catalog; adapters validate the
+# discriminated action contracts before issuing any input.
+_COMPUTER_REQUEST = {"type": "string", "minLength": 1, "maxLength": 128}
+for _action in ("computer_status", "computer_observe"):
+    _SPECIAL_INPUT_SCHEMAS[("desktop_automation", _action)] = {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+for _action in ("computer_result", "computer_stop"):
+    _SPECIAL_INPUT_SCHEMAS[("desktop_automation", _action)] = {
+        **_object_schema(["request_id"], {"request_id": _COMPUTER_REQUEST}),
+        "additionalProperties": False,
+    }
+_SPECIAL_INPUT_SCHEMAS[("desktop_automation", "computer_execute")] = {
+    **_object_schema(
+        ["request_id", "target", "steps"],
+        {
+            "request_id": _COMPUTER_REQUEST,
+            "target": {"type": "string", "enum": ["browser", "desktop"]},
+            "snapshot_id": {
+                "type": "string",
+                "description": "desktop 必须使用 computer_observe 最新返回的 snapshot_id，120秒内且仅用一次",
+            },
+            "steps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "object", "required": ["action"]},
+                "description": 'browser: navigate(url), click(target), fill(target,text), press(target,key), select(target,value), check(target,checked); target 如 {"role":"button","name":"保存"}、{"label":"姓名"}、{"test_id":"save"} 或 {"selector":"#save"}。desktop: click(x,y), move(x,y), drag(x,y,to_x,to_y), type(text), press(keys), scroll(x,y,clicks)；坐标使用截图返回的 input_width/input_height。',
+            },
+            "verification": {
+                "type": "object",
+                "description": 'browser 后置回读 {"kind":"text|value|url|visible|checked","target":{...},"expected":...}，url 不带 target，visible/checked 的 expected 为布尔值。desktop 为 {"pixels":[{"x":0,"y":0,"rgb":[0,0,0],"tolerance":0}]}，像素为截图物理坐标，仅证明视觉条件。未提供时任务保持未核验。',
+            },
+        },
+    ),
+    "additionalProperties": False,
 }
 
 
 def _workbook_input_schema(name: str, required: list[str]) -> dict[str, Any]:
+    from app.application.tools.workflow_tools.catalog_excel import excel_tool_specs
+
     function = next(
         tool["function"] for tool in excel_tool_specs() if tool["function"]["name"] == name
     )
@@ -1155,11 +1202,12 @@ def _workbook_input_schema(name: str, required: list[str]) -> dict[str, Any]:
     return schema
 
 
-_SPECIAL_INPUT_SCHEMAS.update(
-    {
-        ("excel_analysis", "structure"): _workbook_input_schema(
-            "excel_schema_understand", ["file_path"]
-        ),
+def workbook_input_schemas() -> dict[tuple[str, str], dict[str, Any]]:
+    """Reuse the public catalog after ToolSpec initialization, without eager tool imports."""
+    from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT, WORKBOOK_WRITER
+
+    schemas = {
+        ("excel_analysis", "structure"): _workbook_input_schema("excel_analysis", ["file_path"]),
         ("excel_analysis", "aggregate"): _workbook_input_schema(
             "excel_analysis", ["file_path", "metrics"]
         ),
@@ -1170,9 +1218,22 @@ _SPECIAL_INPUT_SCHEMAS.update(
             "excel_join_compare", ["file_path_a", "file_path_b", "key_columns"]
         ),
     }
-)
-_SPECIAL_INPUT_SCHEMAS[("excel_join_compare", "join")]["properties"]["file_paths"].update(
-    minItems=2, maxItems=2
-)
-for _action, _key in (("join", "join_keys"), ("diff", "key_columns")):
-    _SPECIAL_INPUT_SCHEMAS[("excel_join_compare", _action)]["properties"][_key]["minItems"] = 1
+    schemas[("excel_join_compare", "join")]["properties"]["file_paths"].update(
+        minItems=2, maxItems=2
+    )
+    for action, key in (("join", "join_keys"), ("diff", "key_columns")):
+        schemas[("excel_join_compare", action)]["properties"][key]["minItems"] = 1
+    employee = deepcopy(_SPECIAL_INPUT_SCHEMAS[("employee", "execute")])
+    employee["allOf"] = [
+        {
+            "if": {
+                "anyOf": [
+                    {"required": [key], "properties": {key: {"const": WORKBOOK_WRITER}}}
+                    for key in ("employee_id", "pack_id", "tool_name", "id")
+                ]
+            },
+            "then": {"required": ["input"], "properties": {"input": WORKBOOK_WRITE_INPUT}},
+        }
+    ]
+    schemas[("employee", "execute")] = employee
+    return schemas

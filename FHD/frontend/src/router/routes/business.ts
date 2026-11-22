@@ -82,9 +82,13 @@ const routes: RouteRecordRaw[] = [
     },
     {
       path: '/data-sources',
+      redirect: to => ({ path: '/kellai', query: to.query, hash: to.hash }),
+    },
+    {
+      path: '/kellai',
       name: 'data-sources',
       component: () => import('../../views/DataSourcesView.vue'),
-      meta: { title: '数据来源' },
+      meta: { title: '客来来' },
     },
     {
       path: '/print',

@@ -42,9 +42,13 @@ _SERVER_FIELDS = frozenset(
         "user_id",
         "employee_id",
         "employee_tool_allowlist",
+        "mutation_policy",
+        "_bulk_preview_scope",
+        "_bulk_preview_scopes",
         "node_outputs",
         "_actor_authorization",
         "_mod_authorization",
+        "_tool_approval_scope",
         "task_id",
         "run_id",
         "agent_run_id",
@@ -52,6 +56,7 @@ _SERVER_FIELDS = frozenset(
         "parent_run_id",
         "idempotency_key",
         "system_instruction",
+        "enterprise_cognition",
     }
 )
 _UNTRUSTED_CONTROL = frozenset(
@@ -67,10 +72,12 @@ _UNTRUSTED_CONTROL = frozenset(
         "node_outputs",
         "_actor_authorization",
         "_mod_authorization",
+        "_tool_approval_scope",
         "_approval_agent_run_required",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
         "mutation_policy",
+        "enterprise_cognition",
     }
 )
 _FINGERPRINT_SKIP = frozenset(
@@ -211,6 +218,27 @@ def actor_tool_denial(
 ) -> dict[str, Any] | None:
     """Deny when a sealed actor, tenant owner, or employee allowlist does not grant this tool."""
     ctx = dict(context or {})
+    receipt = ctx.get("_tool_approval_scope")
+    if isinstance(receipt, dict) and (
+        receipt.get("tool_id"),
+        receipt.get("action"),
+    ) == (tool_id, action):
+        from app.application.agent_orchestrator.approval_grant import (
+            execution_scope_claims,
+        )
+
+        if any(
+            receipt.get(key) != value
+            for key, value in execution_scope_claims(ctx, tool_id, action).items()
+        ):
+            return _denial(
+                "approval_scope_changed",
+                "审批后的身份范围或工具契约已变化，请重新审批",
+                context=ctx,
+                tool_id=tool_id,
+                action=action,
+                reason="approval_scope_changed",
+            )
     tenant_denial = _tenant_tool_denial(tool_id, action, ctx)
     if tenant_denial is not None:
         return tenant_denial
@@ -407,11 +435,32 @@ def approval_execution_denial(
     )
 
 
-def _fingerprint(params: dict[str, Any]) -> str:
+def _fingerprint(params: dict[str, Any], context: dict[str, Any] | None = None) -> str:
     from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 
+    ctx = context if context is not None else params.get("_runtime_context")
+    ctx = ctx if isinstance(ctx, dict) else {}
+    actor = ctx.get("_actor_authorization")
+    actor = actor if isinstance(actor, dict) else {}
+    mod = ctx.get("_mod_authorization")
+    mod = mod if isinstance(mod, dict) else {}
     visible = {key: value for key, value in params.items() if key not in _FINGERPRINT_SKIP}
-    return canonical_hash(visible)
+    # Keep existing durable keys and transaction receipts addressable. Identity
+    # is immutable within a key; session renewal does not create a new effect.
+    return "scope-v2:" + canonical_hash(
+        [
+            str(ctx.get("tenant_id") or ""),
+            str(actor.get("user_id") or ctx.get("actor_id") or ctx.get("user_id") or ""),
+            str(
+                mod.get("mod_id")
+                or actor.get("mod_id")
+                or ctx.get("mod_id")
+                or ctx.get("active_mod_id")
+                or ""
+            ),
+            visible,
+        ]
+    )
 
 
 def idempotency_scope_key(
@@ -433,7 +482,7 @@ def idempotency_scope_key(
     return f"{tenant}:{task}:{tool_id}:{action}:{raw}"
 
 
-def _idempotency_path() -> Path | None:
+def _idempotency_path(*, create_parent: bool = True) -> Path | None:
     raw = os.environ.get("XCAGI_TOOL_IDEMPOTENCY_PATH", "").strip()
     if raw.lower() in {"0", "off", "memory", "none"}:
         return None
@@ -445,7 +494,8 @@ def _idempotency_path() -> Path | None:
 
         raw = str(Path(get_app_data_dir()) / "tool-idempotency.sqlite")
     path = Path(raw)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if create_parent:
+        path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -684,9 +734,11 @@ def _customer_create_effect(
         from app.application.customer_creation_receipt import CUSTOMER_CREATE_RECEIPTS
         from app.db.models.purchase_unit import PurchaseUnit
         from app.domain.task_lifecycle.control import SessionBook
+        from app.infrastructure.tenant_scope import owned_tenant_id, tenant_scope
 
-        session = get_customers_session()
-        try:
+        if owned_tenant_id() not in (None, tenant_id):
+            return "unknown", None
+        with tenant_scope(tenant_id), get_customers_session() as session:
             receipt = SessionBook(session).get(CUSTOMER_CREATE_RECEIPTS, tenant, key)
             customer_id = receipt.get("customer_id")
             if type(customer_id) is not int or customer_id <= 0:
@@ -696,15 +748,14 @@ def _customer_create_effect(
                     select(PurchaseUnit.id)
                     .where(PurchaseUnit.unit_name == name, PurchaseUnit.tenant_id == tenant_id)
                     .limit(1)
-                    .execution_options(skip_tenant_filter=True)
                 ).first()
                 return ("absent" if existing is None else "unknown"), None
             if receipt.get("fingerprint") != fingerprint:
                 return "unknown", None
             row = session.execute(
-                select(PurchaseUnit)
-                .where(PurchaseUnit.id == customer_id, PurchaseUnit.tenant_id == tenant_id)
-                .execution_options(skip_tenant_filter=True)
+                select(PurchaseUnit).where(
+                    PurchaseUnit.id == customer_id, PurchaseUnit.tenant_id == tenant_id
+                )
             ).scalar_one_or_none()
             if row is None:
                 return "unknown", None
@@ -726,8 +777,6 @@ def _customer_create_effect(
                 "tenant_id": int(row.tenant_id),
                 "version": int(row.version),
             }
-        finally:
-            session.close()
     except lookup_errors:
         return "unknown", None
     return "matched", {
@@ -801,10 +850,20 @@ def _replace_dead_claim(key: str, owner: str, fingerprint: str, new_owner: str) 
         conn.close()
 
 
-def _reread_claim(key: str) -> dict[str, Any] | None:
-    conn = _idempotency_conn()
-    if conn is None:
-        return _IDEMPOTENCY.get(key)
+def _reread_claim(key: str, *, durable_read_only: bool = False) -> dict[str, Any] | None:
+    conn: sqlite3.Connection | None
+    if durable_read_only:
+        path = _idempotency_path(create_parent=False)
+        if path is None:
+            return None
+        try:
+            conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)
+        except (OSError, sqlite3.Error):
+            return None
+    else:
+        conn = _idempotency_conn()
+        if conn is None:
+            return _IDEMPOTENCY.get(key)
     try:
         row = conn.execute(
             "select fingerprint, owner, inflight, output_json from tool_idempotency where scope_key = ?",
@@ -853,6 +912,7 @@ def begin_idempotent_replay(
 ) -> tuple[str, dict[str, Any] | None]:
     from app.application.agent_orchestrator.business_write_guard import (
         owns_elt_step,
+        owns_handoff_read,
         worker_claim_guard,
         worker_claim_owns_run,
     )
@@ -864,8 +924,12 @@ def begin_idempotent_replay(
     claim_kind = "elt" if elt else "read"
     with _IDEMPOTENCY_LOCK:
         with worker_claim_guard() if safe_read or elt else nullcontext() as claim:
-            if claim is not None and not worker_claim_owns_run(
-                str(context.get("run_id") or context.get("agent_run_id") or "")
+            if (
+                claim is not None
+                and not worker_claim_owns_run(
+                    str(context.get("run_id") or context.get("agent_run_id") or "")
+                )
+                and not (safe_read and owns_handoff_read(context, tool_id, action, params))
             ):
                 raise WorkerLeaseLost("tool claim does not belong to the current task")
             return _begin_idempotent_replay(
@@ -909,7 +973,7 @@ def _begin_idempotent_replay(
     if key.endswith(":"):
         return "", None
     try:
-        fingerprint = _fingerprint(params)
+        fingerprint = _fingerprint(params, context)
     except RECOVERABLE_ERRORS:
         return key, _denial(
             "idempotency_conflict",
@@ -933,10 +997,25 @@ def _begin_idempotent_replay(
         _IDEMPOTENCY[key] = record
         _LIVE_OWNERS.add(owner)
         return key, None
+    if not str(current.get("fingerprint") or "").startswith("scope-v2:"):
+        # Old records cannot establish which actor/Mod owned the effect. Neither
+        # disclose their result nor create a fresh claim that could repeat it.
+        return key, {
+            **_denial(
+                "idempotency_scope_unverified",
+                "原调用缺少身份范围回执，必须核验原结果，不可重复执行",
+                context=context,
+                tool_id=tool_id,
+                action=action,
+                reason="idempotency_scope_unverified",
+            ),
+            "outcome": "unknown",
+            "reconciliation_required": True,
+        }
     if current.get("fingerprint") != fingerprint:
         return key, _denial(
             "idempotency_conflict",
-            "相同幂等键不能改用新的执行参数",
+            "相同幂等键不能改用新的执行身份或参数",
             context=context,
             tool_id=tool_id,
             action=action,

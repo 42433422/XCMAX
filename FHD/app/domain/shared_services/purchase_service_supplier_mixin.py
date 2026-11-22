@@ -59,8 +59,13 @@ class PurchaseSupplierMixin:
         if model is None:
             return {}
         return {
-            column.name: PurchaseSupplierMixin._decimal_to_float(getattr(model, column.name))
+            column.name: (
+                value.isoformat()
+                if isinstance(value, date)
+                else PurchaseSupplierMixin._decimal_to_float(value)
+            )
             for column in model.__table__.columns
+            for value in [getattr(model, column.name)]
         }
 
     def get_suppliers(

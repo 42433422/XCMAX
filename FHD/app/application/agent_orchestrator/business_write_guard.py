@@ -50,6 +50,91 @@ def recheck_worker_claim():
         pass
 
 
+def owns_handoff_read(context, tool_id, action, params):
+    """Bind a registered child read to the original worker's durable ancestors.
+
+    Called while worker_claim_guard holds the existing queue fence. Neither a
+    caller's parent_run_id nor a copied employee marker establishes ownership.
+    """
+    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.application.agent_orchestrator.task_context import task_context_of
+    from app.application.employee_runtime.handoff_commit import _same_task_scope
+
+    claim = _claim.get()
+    if claim is None:
+        return False
+    repository, execution, _ = claim
+    root = repository.get(execution.run_id)
+    child = repository.get(str(context.get("run_id") or context.get("agent_run_id") or ""))
+    if root is None or child is None or child.run_id == root.run_id:
+        return False
+    saved = child.metadata.get("runtime_context") or {}
+    step = child.steps[0] if len(child.steps) == 1 else None
+    if (
+        step is None
+        or step.status != "running"
+        or context.get("agent_run_id", child.run_id) != child.run_id
+        or (step.step_id, step.node_id, step.tool_id, step.action)
+        != (context.get("step_id"), context.get("node_id"), tool_id, action)
+        or step.params != {key: value for key, value in params.items() if key != "_runtime_context"}
+        or context.get("idempotency_key") != task_execution_context(child, step)["idempotency_key"]
+        or any(
+            context.get(key) != saved.get(key)
+            for key in (
+                "tenant_id",
+                "user_id",
+                "task_id",
+                "parent_task_id",
+                "parent_run_id",
+                "workspace_path",
+                "workspace_id",
+                "employee_id",
+                "employee_tool_allowlist",
+                "_actor_authorization",
+                "_mod_authorization",
+            )
+        )
+        or f"{tool_id}.{action}" not in (saved.get("employee_tool_allowlist") or [])
+    ):
+        return False
+    original = root.metadata.get("runtime_context") or {}
+    identity = {
+        "task_id": task_context_of(root).get("task_id"),
+        "tenant_id": str(original.get("tenant_id") or ""),
+        "user_id": root.user_id,
+    }
+    bindings = {
+        "workspace_path": task_context_of(root).get("workspace_path"),
+        **{
+            key: original.get(key)
+            for key in ("_actor_authorization", "_mod_authorization", "workspace_id")
+        },
+    }
+    if not all(identity.values()) or not bindings["workspace_path"]:
+        return False
+    visited = set()
+    while child.run_id != root.run_id:
+        runtime = child.metadata.get("runtime_context") or {}
+        plan = child.metadata.get("plan") or {}
+        fingerprint = (plan.get("metadata") or {}).get("handoff_request")
+        if (
+            child.run_id in visited
+            or len(visited) >= 64
+            or not _same_task_scope(child, identity, bindings)
+            or runtime.get("parent_task_id") != identity["task_id"]
+            or plan.get("plan_id") != f"handoff-{identity['task_id']}"
+            or not isinstance(fingerprint, str)
+            or len(fingerprint) != 64
+            or any(char not in "0123456789abcdef" for char in fingerprint)
+        ):
+            return False
+        visited.add(child.run_id)
+        child = repository.get(str(runtime.get("parent_run_id") or ""))
+        if child is None:
+            return False
+    return _same_task_scope(root, identity, bindings)
+
+
 def capture_worker_claim():
     """Pass only the server-held fence across spawn, never caller runtime fields."""
     claim = _claim.get()

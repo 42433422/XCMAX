@@ -44,6 +44,17 @@ class CredentialRoutes:
 
         self.auth_login = auth_login
 
+        @router.post("/api/auth/offline-login", response_model=None)
+        async def auth_offline_login(
+            request: Request,
+            body: JsonObject = Body(default_factory=dict),
+            background_tasks: BackgroundTasks = cast(BackgroundTasks, None),
+        ) -> object:
+            """桌面离线登录：仅校验本机账号密码，不访问市场。"""
+            return await credentials().offline(request, body, background_tasks)
+
+        self.auth_offline_login = auth_offline_login
+
         @router.post(
             "/api/auth/login-with-phone-code",
             response_model=None,

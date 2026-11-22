@@ -21,6 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.customer_issue_delivery_contract import (
+    execution_requires_reconciliation,
+    execution_succeeded,
+)
+from modstore_server.employee_executor_policies import execution_blocks_redispatch
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.sandbox_host import (
     SandboxHostContext,
@@ -66,6 +71,55 @@ class SandboxResult:
     errors: List[str]
     timed_out: bool
     sdk_calls: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def sandbox_replay_block_reason(result: SandboxResult | dict[str, Any] | None) -> str:
+    """A new sandbox also repeats RPC effects; a stopped process is not a rollback."""
+    row = vars(result) if isinstance(result, SandboxResult) else result
+    if not isinstance(row, dict) or row.get("timed_out") is not False:
+        return "sandbox execution outcome is unknown; reconcile before another run"
+    calls = row.get("sdk_calls")
+    if not isinstance(calls, list) or any(not isinstance(call, dict) for call in calls):
+        return "sandbox SDK receipts are incomplete; reconcile before another run"
+    if execution_blocks_redispatch(row) or any(
+        call.get("method") == "employee_run" or execution_blocks_redispatch(call) for call in calls
+    ):
+        return "sandbox execution requires reconciliation before another run"
+    return ""
+
+
+def sandbox_verification_error(result: SandboxResult | dict[str, Any] | None) -> str:
+    """Admit real runtime and business receipts, never a transport ACK or summary."""
+    row = vars(result) if isinstance(result, SandboxResult) else result
+    if not isinstance(row, dict) or not (
+        row.get("ok") is True
+        and type(row.get("returncode")) is int
+        and row["returncode"] == 0
+        and row.get("timed_out") is False
+        and isinstance(row.get("outputs"), list)
+        and row["outputs"]
+    ):
+        return "sandbox has no successful execution and output receipt"
+    calls = row.get("sdk_calls")
+    if not isinstance(calls, list) or any(not isinstance(call, dict) for call in calls):
+        return "sandbox SDK receipts are incomplete"
+    if execution_requires_reconciliation(row) or any(
+        execution_requires_reconciliation(call)
+        or (execution_blocks_redispatch(call) and not execution_succeeded(call))
+        for call in calls
+    ):
+        return "sandbox SDK execution requires reconciliation"
+    if any(
+        call.get("method") == "employee_run"
+        and (
+            call.get("ok") is not True
+            or not execution_succeeded(call.get("result"))
+            or not execution_succeeded(call)
+        )
+        for call in calls
+    ):
+        return "employee execution has no confirmed business receipt"
+    return ""
 
 
 def _runtime_sdk_source() -> Path:

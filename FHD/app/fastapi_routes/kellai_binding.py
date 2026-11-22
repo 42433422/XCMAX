@@ -31,6 +31,18 @@ class CancelBindingBody(BaseModel):
     authorization_secret: str = Field(min_length=24, max_length=256)
 
 
+class StartBindingBody(BaseModel):
+    requested_scopes: list[str] | None = Field(default=None, max_length=10)
+
+
+class SendMessageBody(BaseModel):
+    client_request_id: str = Field(min_length=12, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    customer_id: int = Field(ge=1)
+    channel_type: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_-]+$")
+    contact_id: str = Field(min_length=1, max_length=256)
+    content: str = Field(min_length=1, max_length=10000)
+
+
 class CopilotDecisionBody(BaseModel):
     note: str = Field(default="", max_length=500)
 
@@ -65,6 +77,16 @@ def _require_xcmax_client(request: Request) -> None:
         or bool(meta.get("market_is_admin"))
     ):
         raise HTTPException(status_code=403, detail="平台管理账号无权读取客户原始会话")
+    owners = kellai_binding_app.binding_owners()
+    if owners and _client_actor(request) not in owners:
+        raise HTTPException(status_code=403, detail="此客来来连接属于另一个 XCMAX 账号")
+    connection = kellai_binding_app.connection_credentials()
+    if (
+        connection
+        and connection.get("xcmax_user_id") is not None
+        and str(connection.get("xcmax_tenant_id") or "") != _client_tenant(request)
+    ):
+        raise HTTPException(status_code=403, detail="此客来来连接属于另一个企业范围")
 
 
 def _require_pairing_request(request: Request) -> None:
@@ -82,6 +104,16 @@ def _client_actor(request: Request) -> int | None:
         return int(user_id) if user_id is not None else None
     except (ImportError, RuntimeError, TypeError, ValueError):
         return None
+
+
+def _client_tenant(request: Request) -> str:
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        user = resolve_session_user(request)
+        return str(getattr(user, "tenant_id", "") or "")
+    except (ImportError, RuntimeError, TypeError, ValueError):
+        return ""
 
 
 def _open_kellai_request(request: urllib.request.Request, *, timeout: float):
@@ -114,6 +146,27 @@ def _kellai_get(path: str) -> dict[str, Any]:
     return payload
 
 
+def _scoped_connection(request: Request, scope: str) -> dict[str, Any]:
+    _require_xcmax_client(request)
+    try:
+        return kellai_binding_app.scoped_connection(
+            actor=_client_actor(request), tenant_id=_client_tenant(request), scope=scope
+        )
+    except kellai_binding_app.KellaiAuthorizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+def _kellai_scoped_request(
+    path: str, connection: dict[str, Any], body: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    from app.infrastructure.kellai_client import KellaiRequestError, request_kellai
+
+    try:
+        return request_kellai(path, connection, body, opener=_open_kellai_request)
+    except KellaiRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 @router.get("/status")
 def get_binding_status(request: Request):
     _require_xcmax_client(request)
@@ -121,10 +174,18 @@ def get_binding_status(request: Request):
 
 
 @router.post("/start")
-def start_binding(request: Request):
+def start_binding(request: Request, body: StartBindingBody | None = None):
     _require_xcmax_client(request)
     _require_pairing_request(request)
-    return {"success": True, "data": kellai_binding_app.start_pairing()}
+    try:
+        data = kellai_binding_app.start_pairing(
+            requested_scopes=body.requested_scopes if body else None,
+            actor=_client_actor(request),
+            tenant_id=_client_tenant(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"success": True, "data": data}
 
 
 @router.get("/pending")
@@ -180,6 +241,30 @@ def get_data_status(request: Request):
     _require_xcmax_client(request)
     payload = _kellai_get("/api/kellai/integrations/xcmax/data-status")
     return {"success": True, "data": payload.get("data") or {}}
+
+
+@router.get("/channels")
+def get_channels(request: Request):
+    connection = _scoped_connection(request, "channels.read")
+    return _kellai_scoped_request("channels", connection)
+
+
+@router.post("/messages/send")
+def send_message(request: Request, body: SendMessageBody):
+    _require_pairing_request(request)
+    connection = _scoped_connection(request, "messages.send")
+    if not body.content.strip() or not body.contact_id.strip():
+        raise HTTPException(status_code=422, detail="接收人和消息内容不能为空")
+    return _kellai_scoped_request("messages/send", connection, body.model_dump())
+
+
+@router.get("/messages/requests/{client_request_id}")
+def get_send_receipt(
+    request: Request,
+    client_request_id: str = Path(min_length=12, max_length=128, pattern=r"^[A-Za-z0-9_-]+$"),
+):
+    connection = _scoped_connection(request, "messages.send")
+    return _kellai_scoped_request(f"messages/requests/{client_request_id}", connection)
 
 
 @router.get("/customers")

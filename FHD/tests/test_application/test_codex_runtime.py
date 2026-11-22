@@ -10,6 +10,15 @@ import pytest
 
 from app.application.agent_orchestrator.run_models import AgentRun, ToolCall
 from app.application.agent_runtime import codex_runtime as runtime
+from app.domain.task_lifecycle.agent_runtime_contract import (
+    GOAL_PROTOCOL,
+    build_goal_contract,
+    canonical_digest,
+    goal_answers,
+    goal_evidence_snapshot,
+    validate_goal_review,
+    validate_runtime_goal,
+)
 from app.infrastructure.codex import CodexTransportConfig, CodexTransportError
 from app.infrastructure.codex.binding import (
     CodexBinding,
@@ -28,6 +37,13 @@ class Store:
         self.log = []
         self.auth_error = None
         self.child = None
+        self.review_kind = "read"
+        self.review_missing = False
+        self.reviews = []
+        contract = build_goal_contract(self.run)
+        self.run.metadata.update(
+            runtime_goal_contract=contract, runtime_goal_digest=contract["digest"]
+        )
         self.repository = SimpleNamespace(get=self.get_run)
         if metadata is not None:
             self.run.metadata["codex_runtime"] = copy.deepcopy(metadata)
@@ -69,6 +85,12 @@ class Store:
         assert generation == self.run.metadata["codex_runtime"]["generation"]
         self.run.metadata["codex_runtime"]["thread_id"] = thread_id
         return self.get(run_id)
+
+    def _validate_current(self, run, metadata, generation):
+        assert metadata["generation"] == generation
+        validate_runtime_goal(run)
+        if self.auth_error:
+            raise CodexBindingError(self.auth_error, "authority revoked")
 
     def update(self, run_id, fn):
         current = copy.deepcopy(self.run)
@@ -170,7 +192,58 @@ def setup_runtime(tmp_path, monkeypatch):
         turn_timeout_seconds=30,
     )
 
+    def review(binding, _config, *, rows, output):
+        store = stores[binding.run_id]
+        contract = binding.run.metadata["runtime_goal_contract"]
+        snapshot = goal_evidence_snapshot(contract, rows, output, goal_answers(binding.run))
+        ids = [
+            row["evidence_id"]
+            for row in snapshot["evidence"]
+            if row["state"] == "completed"
+            and row["receipt"].get("verified")
+            and row["receipt"].get("success")
+        ]
+        raw = (
+            store.reviews.pop(0)
+            if store.reviews
+            else {
+                "goals": [
+                    {
+                        "goal_id": "original",
+                        "source_id": "request",
+                        "source": binding.run.message,
+                        "kind": store.review_kind,
+                        "status": "unmet" if store.review_missing else "satisfied",
+                        "evidence_ids": ["response"] if store.review_kind == "reply" else ids,
+                        "reason": "Controlled semantic fixture; host validates original receipts",
+                    }
+                ],
+                "violations": [],
+                "uncovered_sources": [],
+                "feedback": "继续核对原始目标",
+            }
+        )
+        reviewed, errors = validate_goal_review(raw, contract, snapshot, output)
+        accepted = not errors and not any(goal["status"] == "unmet" for goal in reviewed["goals"])
+        report = {
+            "protocol": GOAL_PROTOCOL,
+            "goal_digest": contract["digest"],
+            "evidence_digest": snapshot["digest"],
+            "response_digest": canonical_digest(output),
+            "review": reviewed,
+            "status": "verified" if accepted else "needs_work",
+            "accepted": accepted,
+            "feedback": raw["feedback"],
+        }
+        return {**report, "report_digest": canonical_digest(report)}
+
+    stores = {}
+    monkeypatch.setattr("app.application.agent_runtime.goal_verifier.verify_runtime_goal", review)
+
     def invoke(store, transport, **kwargs):
+        stores[store.run.run_id] = store
+        if kwargs.get("completion_mode") == "reply":
+            store.review_kind = "reply"
         return runtime.run_codex_agent(
             run_id=store.run.run_id,
             task="整理销售数据",
@@ -201,6 +274,7 @@ def receipt(*, status="completed", verified=True, success=True):
         "action": "query",
         "params": {},
         "state": status,
+        "read_only": True,
         "child_task_id": "task-child",
         "child_run_id": "run-child",
         "receipt": {
@@ -232,8 +306,12 @@ def test_model_completion_without_receipt_cannot_complete_business(setup_runtime
     store = Store()
     result = asyncio.run(invoke(store, Transport(store, completed("已出库并记账成功"))))
     assert result["ok"] is False and result["business_completed"] is False
-    assert result["exit_status"] == "no_business_receipt"
+    assert result["exit_status"] == "goal_verification_required"
     assert store.run.status == "blocked"
+    assert result["failure_stage"] == "goal_verification"
+    assert result["failure_kind"] == "goal_verification_required"
+    assert result["failure_reason"] == "继续核对原始目标"
+    assert store.run.metadata["runtime_failure_kind"] == result["failure_kind"]
 
 
 @pytest.mark.parametrize("text", ["", "   \n"])
@@ -242,8 +320,8 @@ def test_empty_model_turn_is_not_a_completed_reply(setup_runtime, text):
     store = Store()
     result = asyncio.run(invoke(store, Transport(store, completed(text)), completion_mode="reply"))
     assert result["ok"] is False and result["reply_completed"] is False
-    assert result["exit_status"] == "empty_reply" and result["runtime_completed"] is True
-    assert store.run.status == "failed"
+    assert result["exit_status"] == "goal_verification_required"
+    assert store.run.status == "blocked"
 
 
 @pytest.mark.parametrize("state", ["waiting_user", "waiting_approval", "pending_approval"])
@@ -258,10 +336,8 @@ def test_approval_wait_survives_turn_completion(setup_runtime, state):
 
 def test_verified_child_receipts_are_projected_not_fabricated(setup_runtime):
     invoke, _ = setup_runtime
-    store = Store(rows=[receipt(), {**receipt(), "call_id": "duplicate-model-call"}])
-    store.run.metadata["runtime_expected_operations"] = [
-        {"tool_id": "sales", "action": "query", "params": {}}
-    ]
+    row = receipt()
+    store = Store(rows=[row, {**copy.deepcopy(row), "call_id": "duplicate-model-call"}])
     result = asyncio.run(invoke(store, Transport(store)))
     assert result["ok"] is True and result["business_completed"] is True
     assert len(store.run.tool_calls) == 1
@@ -272,15 +348,92 @@ def test_verified_child_receipts_are_projected_not_fabricated(setup_runtime):
     assert result["run_events"][-1]["event_type"] == "runtime.codex.finished"
 
 
-def test_verified_operations_do_not_prove_an_unfrozen_multi_goal_task(setup_runtime):
+def test_verified_operations_do_not_satisfy_a_missing_original_goal(setup_runtime):
     invoke, _ = setup_runtime
     store = Store(rows=[receipt()])
+    store.review_missing = True
+    store.run.metadata.update(
+        runtime_failure_kind="rate_limit", runtime_failure_reason="已恢复的先前限流"
+    )
     result = asyncio.run(invoke(store, Transport(store, completed("已全部完成"))))
     assert result["verified_operations"] is True and result["business_completed"] is False
     assert result["exit_status"] == "goal_verification_required"
-    assert result["output"] == "已核验 1 项操作，整体目标尚待核对。"
+    assert "整体目标尚未完成" in result["output"]
     assert result["session_messages"][-1]["content"] == result["output"]
     assert store.run.status == "blocked"
+
+
+def test_verifier_feedback_completes_missing_work_in_same_thread(setup_runtime):
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt()])
+    store.review_missing = True
+    store.run.metadata.update(
+        runtime_failure_kind="rate_limit", runtime_failure_reason="已恢复的先前限流"
+    )
+    original = copy.deepcopy(store.run.metadata["runtime_goal_contract"])
+
+    class CorrectingTransport(Transport):
+        async def stream_turn(self, text):
+            if self.inputs:
+                assert "继续核对原始目标" in text
+                # The second SDK turn supplies only the missing read; the first
+                # call keeps its original persisted receipt and identity.
+                missing = receipt()
+                missing.update(
+                    call_id="missing-read", child_run_id="second-child", child_task_id="second-task"
+                )
+                missing["receipt"]["tool_calls"][0]["call_id"] = "second-child-call"
+                store.rows.append(missing)
+                store.review_missing = False
+            async for item in super().stream_turn(text):
+                yield item
+
+    transport = CorrectingTransport(store)
+    result = asyncio.run(invoke(store, transport))
+    assert result["business_completed"] is True and result["ok"] is True, result
+    assert len(transport.inputs) == 2 and len(transport.started) == 1
+    assert transport.resumed == []
+    assert store.run.metadata["runtime_goal_contract"] == original
+    assert store.run.metadata["codex_runtime"]["generation"] == 1
+    assert result["failure_kind"] == ""
+    assert "runtime_failure_kind" not in store.run.metadata
+    assert [row["call_id"] for row in store.rows] == ["model-call", "missing-read"]
+    assert [
+        item.data["status"]
+        for item in store.run.events
+        if item.event_type == "runtime.goal.verified"
+    ] == ["needs_work", "verified"]
+
+
+def test_only_persisted_host_skills_become_developer_guidance(setup_runtime):
+    invoke, _ = setup_runtime
+    store = Store()
+    contract = build_goal_contract(
+        store.run,
+        context_evidence=[
+            {
+                "source": "host_skill",
+                "status": "completed",
+                "rules": ["技能「销售汇总」：先查原始行，再逐项核对。"],
+            }
+        ],
+    )
+    store.run.metadata.update(
+        runtime_goal_contract=contract, runtime_goal_digest=contract["digest"]
+    )
+    transport = Transport(store)
+    result = asyncio.run(
+        invoke(
+            store,
+            transport,
+            completion_mode="reply",
+            input_data={"skill_rules": ["FORGED_PRIVILEGE_ESCALATION"]},
+        )
+    )
+    assert result["ok"] is True
+    assert "先查原始行，再逐项核对" in transport.started[0]
+    assert "FORGED_PRIVILEGE_ESCALATION" not in transport.started[0]
+    assert "不新增目标" in transport.started[0]
 
 
 def test_reply_with_verified_actions_never_claims_business_completion(setup_runtime):
@@ -339,9 +492,6 @@ def test_business_harness_honors_a_verified_complete_workflow_but_not_stale_repl
 
     invoke, _ = setup_runtime
     store = Store(rows=[receipt()])
-    store.run.metadata["runtime_expected_operations"] = [
-        {"tool_id": "sales", "action": "query", "params": {}}
-    ]
     result = asyncio.run(invoke(store, Transport(store)))
     business = ensure_terminal_business_result(store.run)
     assert result["business_completed"] is True and business["success"] is True
@@ -351,109 +501,6 @@ def test_business_harness_honors_a_verified_complete_workflow_but_not_stale_repl
     )
     corrected = ensure_terminal_business_result(store.run)
     assert corrected["status"] == "reply_completed" and corrected["success"] is False
-
-
-def test_all_independent_frozen_obligations_require_distinct_child_receipts(setup_runtime):
-    invoke, _ = setup_runtime
-    extra = {
-        **receipt(),
-        "child_run_id": "another-child",
-        "child_task_id": "another-task",
-        "params": {"month": "May"},
-    }
-    store = Store(rows=[receipt(), extra, {**receipt(), "call_id": "model-alias"}])
-    store.run.metadata["runtime_expected_operations"] = [
-        {key: row[key] for key in ("tool_id", "action", "params")} for row in (receipt(), extra)
-    ]
-    result = asyncio.run(invoke(store, Transport(store)))
-    assert result["verified_operations"] is True and result["business_completed"] is True
-    assert result["goal_coverage"] == {
-        "frozen": True,
-        "required": 2,
-        "verified": 2,
-        "operations": 2,
-        "missing": [],
-        "unexpected": [],
-        "conflicting_receipts": [],
-        "completed": True,
-    }
-
-
-@pytest.mark.parametrize("failure", ["missing", "changed", "alias", "extra_effect", "replayed"])
-def test_frozen_goal_cannot_be_completed_with_incomplete_or_substituted_evidence(
-    setup_runtime, failure
-):
-    invoke, _ = setup_runtime
-    first = receipt()
-    second = {
-        **receipt(),
-        "child_run_id": "run-second",
-        "child_task_id": "task-second",
-        "params": {"month": "May"},
-    }
-    expected = [
-        {key: row[key] for key in ("tool_id", "action", "params")} for row in (first, second)
-    ]
-    rows = [first, second]
-    if failure == "missing":
-        rows = [first, {**first, "call_id": "alias-for-missing-obligation"}]
-    elif failure == "changed":
-        rows[1] = {**second, "params": {"month": "June"}}
-    elif failure == "alias":
-        rows[1] = {**second, "child_run_id": first["child_run_id"]}
-    else:
-        rows.append(
-            {
-                **first,
-                "child_run_id": "run-third",
-                "child_task_id": "task-third",
-                "params": {"month": "July"} if failure == "extra_effect" else {},
-            }
-        )
-    store = Store(rows=rows)
-    store.run.metadata["runtime_expected_operations"] = expected
-    result = asyncio.run(invoke(store, Transport(store, completed("所有目标已完成"))))
-    assert result["ok"] is False and result["business_completed"] is False
-    assert result["exit_status"] == "goal_verification_required"
-    assert result["goal_coverage"]["completed"] is False
-    assert "所有目标已完成" not in result["output"]
-
-
-def test_exploratory_reads_do_not_add_or_replace_frozen_obligations(setup_runtime):
-    invoke, _ = setup_runtime
-    probe = {
-        **receipt(),
-        "child_run_id": "run-probe",
-        "child_task_id": "task-probe",
-        "params": {"month": "June"},
-        "read_only": True,
-    }
-    store = Store(rows=[receipt(), probe])
-    store.run.metadata["runtime_expected_operations"] = [
-        {"tool_id": "sales", "action": "query", "params": {}}
-    ]
-    result = asyncio.run(invoke(store, Transport(store)))
-    assert result["business_completed"] is True
-    assert result["goal_coverage"]["verified"] == result["goal_coverage"]["required"] == 1
-
-
-@pytest.mark.parametrize("state", ["unknown", "waiting_user"])
-def test_one_unresolved_obligation_prevents_multi_goal_completion(setup_runtime, state):
-    invoke, _ = setup_runtime
-    second = {
-        **receipt(status=state, success=False, verified=False),
-        "child_run_id": "run-unresolved",
-        "child_task_id": "task-unresolved",
-        "params": {"month": "May"},
-    }
-    store = Store(rows=[receipt(), second])
-    store.run.metadata["runtime_expected_operations"] = [
-        {key: row[key] for key in ("tool_id", "action", "params")} for row in store.rows
-    ]
-    result = asyncio.run(invoke(store, Transport(store, completed("所有目标已完成"))))
-    assert result["business_completed"] is False and result["ok"] is False
-    assert result["exit_status"] == state
-    assert "所有目标已完成" not in result["output"]
 
 
 @pytest.mark.parametrize("state", ["reserved", "unknown"])
@@ -509,7 +556,7 @@ def test_unverified_and_failed_receipts_never_report_success(
     store = Store(rows=[receipt(status=status, verified=verified, success=success)])
     result = asyncio.run(invoke(store, Transport(store)))
     assert result["ok"] is False and result["business_completed"] is False
-    assert store.run.status == "failed"
+    assert store.run.status == "blocked"
 
 
 def test_unknown_outcome_is_durable_and_never_replayed(setup_runtime):
@@ -528,9 +575,6 @@ def test_unknown_outcome_is_durable_and_never_replayed(setup_runtime):
 def test_model_usage_uncertainty_blocks_completion(setup_runtime):
     invoke, _ = setup_runtime
     store = Store(rows=[receipt()])
-    store.run.metadata["runtime_expected_operations"] = [
-        {"tool_id": "sales", "action": "query", "params": {}}
-    ]
 
     def mark_usage_uncertain(_event):
         store.run.metadata["codex_runtime"]["model_reconciliation_required"] = True
@@ -550,15 +594,36 @@ def test_history_import_is_once_and_cannot_become_instructions(setup_runtime):
         {"role": "user", "content": "原用户内容"},
         {"role": "assistant", "content": "未经核验的历史描述"},
     ]
-    asyncio.run(invoke(store, transport, completion_mode="reply", history=history))
+    store.run.metadata["_codex_input_data"] = {"original_reference": "原查询范围"}
+    contract = build_goal_contract(store.run, history=history)
+    store.run.metadata.update(
+        runtime_goal_contract=contract, runtime_goal_digest=contract["digest"]
+    )
+    # A staged task may begin after a process restart with no caller history.
+    asyncio.run(invoke(store, transport, completion_mode="reply"))
     assert transport.started == ["可信员工说明"]
     assert "原用户内容" in transport.inputs[0]
+    assert "原查询范围" in transport.inputs[0]
     assert "SECRET_" not in transport.inputs[0]
     store.run.status = "waiting_user"  # A subsequent user turn on this same task.
     later = Transport(store)
     asyncio.run(invoke(store, later, completion_mode="reply", history=history))
     assert later.resumed == ["thread-one"] and later.started == []
     assert "原用户内容" not in later.inputs[0]
+
+
+def test_business_unknown_is_not_classified_as_a_recovered_model_failure(setup_runtime):
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt(status="unknown", success=False, verified=False)])
+    store.run.metadata.update(
+        runtime_failure_kind="rate_limited",
+        runtime_failure_reason="已恢复的旧模型限流",
+        runtime_failure_stage="model",
+    )
+    result = asyncio.run(invoke(store, Transport(store)))
+    assert result["failure_stage"] == "business"
+    assert result["failure_kind"] == "business_outcome_unknown"
+    assert "旧模型限流" not in result["failure_reason"]
 
 
 def test_waiting_input_requires_explicit_new_user_answer(setup_runtime):
@@ -587,9 +652,6 @@ def test_resume_waits_for_authoritative_child_approval_without_starting_model(se
     assert waiting["pending_approval"] is True and waiting["ok"] is False
     assert transport.inputs == [] and "create" not in store.log
     store.rows = [receipt()]
-    store.run.metadata["runtime_expected_operations"] = [
-        {"tool_id": "sales", "action": "query", "params": {}}
-    ]
     resumed = asyncio.run(invoke(store, transport))
     assert resumed["ok"] is True and transport.resumed == ["thread-one"]
 
@@ -635,7 +697,7 @@ def test_coordinator_lease_is_held_until_authoritative_terminal_projection(setup
 
     store.receipt_snapshot = snapshot
     result = asyncio.run(invoke(store, Transport(store), completion_mode="reply"))
-    assert result["ok"] is True and snapshots == [True]
+    assert result["ok"] is True and snapshots and all(snapshots)
     assert store.run.metadata["codex_runtime"]["coordinator_active"] is False
 
 
@@ -653,34 +715,24 @@ def test_transport_loss_does_not_restart_or_fallback(setup_runtime):
     assert store.log.index("revoke") < store.log.index("interrupt") < store.log.index("exit")
 
 
-def test_complete_frozen_goal_closes_from_receipts_after_final_model_response_is_lost(
-    setup_runtime,
-):
+def test_verified_child_cannot_complete_task_without_independent_goal_review(setup_runtime):
     invoke, _ = setup_runtime
     store = Store(rows=[receipt()])
-    store.run.metadata["runtime_expected_operations"] = [
-        {"tool_id": "sales", "action": "query", "params": {}}
-    ]
     transport = Transport(
         store,
         events=completed()[:1],
         error=CodexTransportError("codex_connection_lost", "lost", outcome_unknown=True),
     )
     result = asyncio.run(invoke(store, transport))
-    assert result["ok"] is True and result["business_completed"] is True
-    assert result["runtime_completed"] is False and result["runtime_status"] == "failed"
-    assert result["runtime_error_code"] == "codex_connection_lost"
-    assert result["goal_coverage"]["completed"] is True
-    assert "按业务回执核验" in result["output"]
-    assert store.run.status == "completed" and len(transport.started) == 1
+    assert result["ok"] is False and result["business_completed"] is False
+    assert result["runtime_completed"] is False
+    assert result["goal_coverage"]["completed"] is False
+    assert store.run.status == "failed" and len(transport.started) == 1
 
 
 def test_cancellation_is_not_overridden_by_already_verified_business_receipts(setup_runtime):
     invoke, _ = setup_runtime
     store = Store(rows=[receipt()])
-    store.run.metadata["runtime_expected_operations"] = [
-        {"tool_id": "sales", "action": "query", "params": {}}
-    ]
 
     def cancel(_event):
         store.auth_error = "cancelled"

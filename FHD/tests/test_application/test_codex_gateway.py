@@ -63,7 +63,6 @@ def setup_gateway(trusted_actor, tmp_path, monkeypatch):
         entered=None,
         release=None,
         waiting_question=None,
-        compiled_plan=None,
         context={**actor.context, "turn_id": "request-one"},
     )
 
@@ -87,23 +86,19 @@ def setup_gateway(trusted_actor, tmp_path, monkeypatch):
             allowed_actions=kwargs["allowed_actions"],
             runtime_config=kwargs["runtime_config"],
         )
-        if state.compiled_plan:
-            from app.domain.task_lifecycle.agent_runtime_contract import (
-                frozen_goal_digest,
-                frozen_workflow_operation,
-            )
+        from app.application.agent_runtime.goal_admission import prepare_runtime_goal
 
-            def compile_goal(parent, metadata):
-                expected = [frozen_workflow_operation(state.compiled_plan)]
-                digest = frozen_goal_digest(expected, state.compiled_plan)
+        if not grant.binding.run.metadata.get("runtime_goal_contract"):
+            goal = prepare_runtime_goal(grant.binding, history=kwargs.get("history"))
+            assert not goal.question
+
+            def bind_goal(parent, metadata):
                 parent.metadata.update(
-                    runtime_expected_operations=expected,
-                    runtime_frozen_plan=copy.deepcopy(state.compiled_plan),
-                    runtime_goal_digest=digest,
+                    runtime_goal_contract=goal.contract, runtime_goal_digest=goal.contract["digest"]
                 )
-                metadata["goal_digest"] = digest
+                metadata["goal_digest"] = goal.contract["digest"]
 
-            store.update(run_id, compile_goal)
+            store.update(run_id, bind_goal)
         store.record_thread(
             run_id, "thread-fixture", generation=grant.binding.metadata["generation"]
         )
@@ -174,7 +169,7 @@ def test_creates_independent_parent_with_private_resume_contract(setup_gateway):
     result = asyncio.run(state.invoke(input_data={"file": "input.csv"}, on_event=events.append))
     parent = state.repository.get(result["run_id"])
     assert parent.intent == "codex.runtime" and parent.steps == []
-    assert parent.metadata["runtime_expected_operations"] is None
+    assert "runtime_expected_operations" not in parent.metadata
     assert parent.metadata["_codex_system_prompt"] == "可信服务器员工说明"
     assert parent.metadata["_codex_input_data"] == {"file": "input.csv"}
     assert parent.metadata["ai_cost_budget_units"] == 120
@@ -201,7 +196,7 @@ def test_staging_persists_paused_parent_without_grant_server_or_execution(setup_
     from app.infrastructure.codex.binding import CodexBindingStore
 
     state = setup_gateway
-    options = {"start_paused": True, "completion_mode": "auto", "admit_goal": True}
+    options = {"start_paused": True, "completion_mode": "auto"}
     staged = asyncio.run(state.invoke(**options))
     duplicate = asyncio.run(state.invoke(**options))
     assert staged["execution_state"] == "paused" and staged["resume_required"] is True
@@ -212,7 +207,7 @@ def test_staging_persists_paused_parent_without_grant_server_or_execution(setup_
     assert binding.run.status == "paused" and binding.run.intent == "codex.runtime"
     assert binding.metadata["generation"] == 0 and binding.metadata["revoked"] is True
     assert binding.metadata["token_hashes"] == binding.metadata["calls"] == {}
-    assert binding.run.metadata["runtime_goal_admission"] is True
+    assert "runtime_goal_contract" not in binding.run.metadata
     assert binding.run.final_output["codex_result"]["resume_required"] is True
 
     # The authenticated control route performs this state transition before
@@ -227,7 +222,6 @@ def test_staging_persists_paused_parent_without_grant_server_or_execution(setup_
             run_id=binding.run_id,
             runtime_context={**state.context, "turn_id": "staged-resume"},
             completion_mode="auto",
-            admit_goal=True,
         )
     )
     assert result["run_id"] == staged["run_id"] and len(state.calls) == 1
@@ -280,225 +274,53 @@ def test_resume_retains_parent_and_deduplicates_new_answer(setup_gateway):
     assert state.repository.get(first["run_id"]).metadata["_codex_input_data"] is None
 
 
-def frozen_plan(keyword="fixture"):
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
-
-    return plan_to_dict(
-        PlanGraph(
-            plan_id="host-frozen-plan",
-            intent="products.query",
-            nodes=[
-                WorkflowNode(
-                    node_id="query",
-                    tool_id="products",
-                    action="query",
-                    params={"keyword": keyword},
-                )
-            ],
-        )
-    )
-
-
-def test_frozen_host_plan_is_bound_to_request_and_isolated_from_context_injection(setup_gateway):
-    from app.domain.task_lifecycle.agent_runtime_contract import (
-        frozen_goal_digest,
-        frozen_workflow_operation,
-    )
-
+def test_goal_contract_ignores_context_injection_and_preserves_original_request(setup_gateway):
     state = setup_gateway
-    plan = frozen_plan()
-    state.context.update(frozen_plan=frozen_plan("forged"), runtime_goal_digest="forged")
-    result = asyncio.run(state.invoke(frozen_plan=plan, completion_mode="business"))
-    parent = state.repository.get(result["run_id"])
-    expected = [frozen_workflow_operation(plan)]
-    assert parent.metadata["runtime_expected_operations"] == expected
-    assert parent.metadata["runtime_frozen_plan"] == plan
-    assert parent.metadata["runtime_goal_digest"] == frozen_goal_digest(expected, plan)
-    assert parent.metadata["codex_runtime"]["goal_digest"] == parent.metadata["runtime_goal_digest"]
-    assert "frozen_plan" not in parent.metadata["runtime_context"]
-    assert "runtime_goal_digest" not in parent.metadata["runtime_context"]
-    assert "execute_plan" in state.calls[0]["system_prompt"]
-    assert expected[0]["params"]["plan_digest"] in state.calls[0]["system_prompt"]
-    changed = asyncio.run(
-        state.invoke(
-            run_id=parent.run_id,
-            runtime_context={**state.context, "turn_id": "another-answer"},
-            frozen_plan=frozen_plan("changed"),
-            completion_mode="business",
-        )
+    state.context.update(
+        runtime_goal_contract={"forged": True},
+        runtime_goal_digest="forged",
+        runtime_goal_verification={"accepted": True},
     )
-    assert changed["error_code"] == "request_conflict" and len(state.calls) == 1
-
-
-def test_host_goal_admission_is_explicit_and_pinned_across_resume(setup_gateway):
-    state = setup_gateway
-    state.context["admit_goal"] = True
-    rejected = asyncio.run(state.invoke(completion_mode="auto"))
-    assert rejected["error_code"] == "invalid_request" and state.calls == []
-    result = asyncio.run(state.invoke(completion_mode="auto", admit_goal=True))
+    result = asyncio.run(state.invoke(completion_mode="auto"))
     parent = state.repository.get(result["run_id"])
-    assert parent.metadata["runtime_goal_admission"] is True
-    assert "admit_goal" not in parent.metadata["runtime_context"]
-    assert state.calls[0]["admit_goal"] is True
-    assert state.calls[0]["system_prompt"] == "可信服务器员工说明"
-    changed = asyncio.run(
-        state.invoke(
-            run_id=result["run_id"],
-            runtime_context={**state.context, "turn_id": "attempt-disable-admission"},
-            completion_mode="auto",
-            admit_goal=False,
-        )
-    )
-    assert changed["error_code"] == "invalid_request" and len(state.calls) == 1
+    contract = parent.metadata["runtime_goal_contract"]
+    assert contract["request"]["text"] == parent.message
+    assert parent.metadata["runtime_goal_digest"] == contract["digest"]
+    assert "runtime_goal_contract" not in parent.metadata["runtime_context"]
+    assert "runtime_goal_verification" not in parent.metadata["runtime_context"]
+    assert "capability_describe" in state.calls[0]["system_prompt"]
+    assert "execute_plan" not in state.calls[0]["system_prompt"]
 
 
-def test_duplicate_auto_answer_reuses_request_after_internal_host_goal_freezing(setup_gateway):
+def test_duplicate_answer_preserves_goal_and_deduplicates_same_parent(setup_gateway):
     state = setup_gateway
     state.waiting_question = "查询哪种产品？"
-    first = asyncio.run(state.invoke(completion_mode="auto", admit_goal=True))
-    state.compiled_plan = frozen_plan()
+    first = asyncio.run(state.invoke(completion_mode="auto"))
+    contract = state.repository.get(first["run_id"]).metadata["runtime_goal_contract"]
     options = {
         "run_id": first["run_id"],
-        "runtime_context": {**state.context, "turn_id": "compiler-answer"},
+        "runtime_context": {**state.context, "turn_id": "new-user-answer"},
         "task": "fixture 产品",
         "completion_mode": "auto",
-        "admit_goal": True,
         "answer_to_waiting_input": True,
     }
     resumed = asyncio.run(state.invoke(**options))
     duplicate = asyncio.run(state.invoke(**options))
-    assert resumed["run_id"] == first["run_id"] == duplicate["run_id"]
-    assert duplicate["deduplicated"] is True and len(state.calls) == 2
-    assert state.repository.get(first["run_id"]).metadata["runtime_frozen_plan"] == frozen_plan()
-
-
-@pytest.mark.parametrize(
-    "value",
-    [
-        [],
-        [{"tool_id": "products", "action": "query", "params": {}}] * 2,
-        [{"tool_id": "products", "action": "query", "params": {"value": float("nan")}}],
-    ],
-)
-def test_malformed_or_duplicate_frozen_obligations_are_rejected_before_parent_creation(
-    setup_gateway, value
-):
-    state = setup_gateway
-    result = asyncio.run(state.invoke(expected_operations=value))
-    assert result["error_code"] == "invalid_expected_operations"
-    assert state.repository.list_recent() == [] and state.calls == []
-
-
-def test_clarification_can_freeze_host_goal_once_on_the_original_parent(setup_gateway):
-    state = setup_gateway
-    state.waiting_question = "查询哪种产品？"
-    first = asyncio.run(state.invoke(completion_mode="business"))
-    before = state.repository.get(first["run_id"])
-    assert before.metadata["runtime_expected_operations"] is None
-    original_digest = before.metadata["runtime_goal_digest"]
-    options = {
-        "run_id": first["run_id"],
-        "runtime_context": {**state.context, "turn_id": "clarification-answer"},
-        "task": "fixture 产品",
-        "completion_mode": "business",
-        "answer_to_waiting_input": True,
-        "frozen_plan": frozen_plan(),
-    }
-    resumed = asyncio.run(state.invoke(**options))
-    duplicate = asyncio.run(state.invoke(**options))
-    parent = state.repository.get(first["run_id"])
     assert resumed["run_id"] == duplicate["run_id"] == first["run_id"]
     assert duplicate["deduplicated"] is True and len(state.calls) == 2
-    assert parent.metadata["runtime_frozen_plan"] == options["frozen_plan"]
-    assert parent.metadata["runtime_goal_digest"] != original_digest
-    assert parent.metadata["codex_runtime"]["goal_digest"] == parent.metadata["runtime_goal_digest"]
-    assert len([e for e in parent.events if e.event_type == "runtime.goal_frozen"]) == 1
-    changed = asyncio.run(
-        state.invoke(
-            **{
-                **options,
-                "runtime_context": {**state.context, "turn_id": "attempt-to-refreeze"},
-                "frozen_plan": frozen_plan("other-product"),
-            }
-        )
-    )
-    assert changed["error_code"] == "request_conflict" and len(state.calls) == 2
+    assert state.repository.get(first["run_id"]).metadata["runtime_goal_contract"] == contract
 
 
-@pytest.mark.parametrize(
-    "pending",
-    ["child", "model", "coordinator", "no_question", "reservation", "request", "live_grant"],
-)
-def test_clarification_does_not_freeze_over_active_or_uncertain_work(setup_gateway, pending):
+def test_host_tampering_with_original_goal_invalidates_resume(setup_gateway):
     state = setup_gateway
-    state.waiting_question = "查询哪种产品？"
-    first = asyncio.run(state.invoke(completion_mode="business"))
+    first = asyncio.run(state.invoke())
     parent = state.repository.get(first["run_id"])
-    metadata = parent.metadata["codex_runtime"]
-    if pending == "child":
-        metadata["calls"] = {"existing": {"state": "unknown"}}
-    elif pending == "model":
-        metadata["model_requests"] = {"existing": {"state": "unknown"}}
-    elif pending == "coordinator":
-        metadata["coordinator_active"] = True
-    elif pending == "no_question":
-        metadata.pop("waiting_input")
-    elif pending == "reservation":
-        parent.metadata["reserved_cost_units"] = 1
-    elif pending == "request":
-        parent.metadata["runtime_requests"]["other"] = {"state": "admitted"}
-    else:
-        metadata["revoked"] = False
+    parent.message = "伪造新目标"
     state.repository.save(parent)
     result = asyncio.run(
-        state.invoke(
-            run_id=first["run_id"],
-            runtime_context={**state.context, "turn_id": "clarification-answer"},
-            answer_to_waiting_input=True,
-            completion_mode="business",
-            frozen_plan=frozen_plan(),
-        )
+        state.invoke(run_id=parent.run_id, runtime_context={**state.context, "turn_id": "tampered"})
     )
-    assert result["error_code"] == "goal_freeze_blocked" and len(state.calls) == 1
-    saved = state.repository.get(first["run_id"])
-    assert saved.metadata["runtime_expected_operations"] is None
-    assert saved.metadata["runtime_goal_digest"] == parent.metadata["runtime_goal_digest"]
-
-
-def test_competing_clarification_goals_cannot_replace_the_first_admitted_goal(setup_gateway):
-    state = setup_gateway
-    state.waiting_question = "查询哪种产品？"
-    first = asyncio.run(state.invoke(completion_mode="business"))
-
-    async def scenario():
-        state.entered, state.release = asyncio.Event(), asyncio.Event()
-        options = {
-            "run_id": first["run_id"],
-            "completion_mode": "business",
-            "answer_to_waiting_input": True,
-        }
-        accepted = asyncio.create_task(
-            state.invoke(
-                **options,
-                runtime_context={**state.context, "turn_id": "first-answer"},
-                frozen_plan=frozen_plan("first"),
-            )
-        )
-        await state.entered.wait()
-        conflict = await state.invoke(
-            **options,
-            runtime_context={**state.context, "turn_id": "competing-answer"},
-            frozen_plan=frozen_plan("second"),
-        )
-        state.release.set()
-        return await accepted, conflict
-
-    resumed, conflict = asyncio.run(scenario())
-    assert resumed["run_id"] == first["run_id"] and conflict["error_code"] == "request_conflict"
-    assert len(state.calls) == 2
-    assert state.repository.get(first["run_id"]).metadata["runtime_frozen_plan"] == frozen_plan(
-        "first"
-    )
+    assert result["error_code"] == "goal_changed" and len(state.calls) == 1
 
 
 @pytest.mark.parametrize(
@@ -507,10 +329,6 @@ def test_competing_clarification_goals_cannot_replace_the_first_admitted_goal(se
         ({"system_prompt": "不同的服务器指令"}, "runtime_changed"),
         ({"completion_mode": "business"}, "runtime_changed"),
         ({"allowed_actions": ["stock.write"]}, "owner_changed"),
-        (
-            {"expected_operations": [{"tool_id": "stock", "action": "query", "params": {}}]},
-            "request_conflict",
-        ),
     ],
 )
 def test_resume_cannot_change_pinned_runtime_contract(setup_gateway, change, code):

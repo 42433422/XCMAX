@@ -7,9 +7,30 @@ import pytest
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun, ToolCall
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
 from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore
 from app.infrastructure.codex.tools import CodexToolBridge
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+def _invoke(bridge, token, name, arguments):
+    if name == "execute_action":
+        description = bridge.invoke(
+            token,
+            "capability_describe",
+            {
+                "tool_id": arguments["tool_id"],
+                "action": arguments["action"],
+            },
+        )
+        arguments = {"schema_digest": description["capability"]["schema_digest"], **arguments}
+    return bridge.invoke(token, name, arguments)
+
+
+def _bind_goal(run):
+    run.metadata["runtime_type"] = "codex"
+    contract = build_goal_contract(run)
+    run.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
 
 
 @pytest.fixture
@@ -21,9 +42,7 @@ def bridge_setup(trusted_actor, monkeypatch, tmp_path):
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     run = AgentRun(user_id=str(actor.user_id), message="执行企业任务", status="running")
     run.metadata["runtime_context"] = actor.context
-    run.metadata["runtime_expected_operations"] = [
-        {"tool_id": "customers", "action": "create", "params": {"unit_name": "fixture"}}
-    ]
+    _bind_goal(run)
     repository.save(run)
     store = CodexBindingStore(repository)
     grant = store.create(run.run_id)
@@ -46,7 +65,8 @@ def test_authority_arguments_and_unbound_tools_never_publish_tasks(bridge_setup)
         {"idempotency_key": "replace"},
     ):
         with pytest.raises(CodexBindingError) as error:
-            setup.bridge.invoke(
+            _invoke(
+                setup.bridge,
                 setup.grant.mcp_token,
                 "execute_action",
                 {
@@ -58,7 +78,8 @@ def test_authority_arguments_and_unbound_tools_never_publish_tasks(bridge_setup)
             )
         assert error.value.code == "identity_override"
     with pytest.raises(CodexBindingError):
-        setup.bridge.invoke(
+        _invoke(
+            setup.bridge,
             setup.grant.mcp_token,
             "execute_action",
             {
@@ -80,13 +101,13 @@ def test_write_uses_original_approval_and_stable_task_for_repeated_model_calls(b
         "action": "create",
         "params": {"unit_name": "fixture"},
     }
-    first = setup.bridge.invoke(setup.grant.mcp_token, "execute_action", args)
+    first = _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     assert first["status"] == "waiting_user"
     assert first["pending_approval"] is True
     assert first["verified"] is False
     assert first["tool_calls"] == []
-    again = setup.bridge.invoke(
-        setup.grant.mcp_token, "execute_action", {**args, "call_id": "fresh-model-id"}
+    again = _invoke(
+        setup.bridge, setup.grant.mcp_token, "execute_action", {**args, "call_id": "fresh-model-id"}
     )
     assert again["task_id"] == first["task_id"]
     assert again["run_id"] == first["run_id"]
@@ -103,38 +124,33 @@ def test_write_uses_original_approval_and_stable_task_for_repeated_model_calls(b
     assert "approval_grant" not in card
 
 
-def test_changed_write_is_rejected_before_task_creation_or_approval(bridge_setup):
+def test_changed_write_cannot_reuse_an_approved_request_identity(bridge_setup):
     setup = bridge_setup
+    args = {
+        "call_id": "original",
+        "tool_id": "customers",
+        "action": "create",
+        "params": {"unit_name": "fixture"},
+    }
+    first = _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(
+        _invoke(
+            setup.bridge,
             setup.grant.mcp_token,
             "execute_action",
-            {
-                "call_id": "changed",
-                "tool_id": "customers",
-                "action": "create",
-                "params": {"unit_name": "different-from-frozen-goal"},
-            },
+            {**args, "params": {"unit_name": "different-object"}},
         )
-    assert error.value.code == "goal_mismatch"
-    assert setup.store.get(setup.run.run_id).metadata["calls"] == {}
-    assert len(setup.store.repository.list_recent()) == 1
+    assert error.value.code == "call_conflict"
+    assert len(setup.store.repository.list_recent()) == 2
+    child = setup.store.repository.get(first["run_id"])
+    assert child.steps[0].params == args["params"]
 
 
-def test_two_frozen_obligations_use_reopened_sql_child_evidence(bridge_setup, monkeypatch):
-    """Protocol/business-ledger test; the dispatcher output is explicitly a fixture."""
-    from app.domain.task_lifecycle.agent_runtime_results import (
-        base_runtime_result,
-        classify_runtime_result,
-    )
-
+def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monkeypatch):
     setup = bridge_setup
-    expected = [
-        {"tool_id": "products", "action": "query", "params": {"keyword": key}}
-        for key in ("first", "second")
-    ]
-    run = AgentRun(user_id=setup.run.user_id, message="查询两个产品", status="running")
-    run.metadata.update(runtime_context=setup.actor.context, runtime_expected_operations=expected)
+    run = AgentRun(user_id=setup.run.user_id, message="查询产品并按结果继续查询", status="running")
+    run.metadata["runtime_context"] = setup.actor.context
+    _bind_goal(run)
     setup.store.repository.save(run)
     grant = setup.store.create(run.run_id)
     dispatched = []
@@ -146,43 +162,36 @@ def test_two_frozen_obligations_use_reopened_sql_child_evidence(bridge_setup, mo
     monkeypatch.setattr(
         "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
     )
-    first = setup.bridge.invoke(
-        grant.mcp_token, "execute_action", {**expected[0], "call_id": "first"}
+    first = _invoke(
+        setup.bridge,
+        grant.mcp_token,
+        "execute_action",
+        {
+            "tool_id": "products",
+            "action": "query",
+            "params": {"keyword": "first"},
+            "call_id": "first",
+        },
     )
     assert first["verified"] is True
-    partial = base_runtime_result(run.run_id)
-    assert (
-        classify_runtime_result(
-            partial,
-            setup.store.receipt_snapshot(run.run_id),
-            {"expected_operations": expected},
-            "business",
-            "completed",
-        )
-        == "blocked"
-    )
-    assert partial["goal_coverage"]["verified"] == 1
     setup.store.close(run.run_id, "waiting_user")
     reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
     renewed = reopened.create(run.run_id)
     bridge = CodexToolBridge(reopened, setup.bridge.orchestrator)
-    second = bridge.invoke(
-        renewed.mcp_token, "execute_action", {**expected[1], "call_id": "second"}
+    second = _invoke(
+        bridge,
+        renewed.mcp_token,
+        "execute_action",
+        {
+            "tool_id": "products",
+            "action": "query",
+            "params": {"keyword": "second"},
+            "call_id": "second",
+        },
     )
     assert second["verified"] is True and second["run_id"] != first["run_id"]
-    result = base_runtime_result(run.run_id)
-    assert (
-        classify_runtime_result(
-            result,
-            reopened.receipt_snapshot(run.run_id),
-            {"expected_operations": expected},
-            "business",
-            "completed",
-        )
-        == "completed"
-    )
-    assert result["business_completed"] is True
-    assert result["goal_coverage"]["verified"] == 2
+    snapshot = reopened.receipt_snapshot(run.run_id)
+    assert len(snapshot) == 2 and all(row["receipt"]["verified"] for row in snapshot)
     assert dispatched == [("products", "query", "first"), ("products", "query", "second")]
 
 
@@ -207,7 +216,7 @@ def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_set
         "action": "query",
         "params": {"keyword": "fixture"},
     }
-    receipt = setup.bridge.invoke(setup.grant.mcp_token, "execute_action", args)
+    receipt = _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     child = setup.store.repository.get(receipt["run_id"])
     assert receipt["verified"] is True, (
         receipt,
@@ -218,7 +227,7 @@ def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_set
     reopened = CodexToolBridge(
         CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
     )
-    replay = reopened.invoke(setup.grant.mcp_token, "execute_action", args)
+    replay = _invoke(reopened, setup.grant.mcp_token, "execute_action", args)
     assert replay["run_id"] == receipt["run_id"]
     assert replay["verified"] is True
     assert calls == [("products", "query")]
@@ -235,7 +244,7 @@ def test_lost_claim_without_child_cannot_be_replayed(bridge_setup):
         read_only=False,
         generation=setup.grant.binding.metadata["generation"],
     )
-    active = setup.bridge.invoke(setup.grant.mcp_token, "task_evidence", {"call_id": "lost"})
+    active = _invoke(setup.bridge, setup.grant.mcp_token, "task_evidence", {"call_id": "lost"})
     assert active["status"] == "claimed"
     assert active["in_progress"] is True
     setup.store.close(setup.run.run_id, "interrupted")
@@ -247,9 +256,13 @@ def test_lost_claim_without_child_cannot_be_replayed(bridge_setup):
     assert len(setup.store.repository.list_recent()) == 1
 
 
-def test_http_403_inside_transport_success_does_not_verify_business_success(bridge_setup):
+@pytest.mark.parametrize("claimed_success", [False, True])
+def test_http_403_inside_transport_success_does_not_verify_business_success(
+    bridge_setup, claimed_success
+):
     setup = bridge_setup
-    result = setup.bridge.invoke(
+    result = _invoke(
+        setup.bridge,
         setup.grant.mcp_token,
         "execute_action",
         {
@@ -263,7 +276,7 @@ def test_http_403_inside_transport_success_does_not_verify_business_success(brid
     child.status = "completed"
     step = child.steps[0]
     step.status = "completed"
-    step.output = {"success": True, "status_code": 403, "data": {"message": "denied"}}
+    step.output = {"success": claimed_success, "status_code": 403, "data": {"message": "denied"}}
     child.tool_calls.append(
         ToolCall(
             step_id=step.step_id,
@@ -276,22 +289,26 @@ def test_http_403_inside_transport_success_does_not_verify_business_success(brid
         )
     )
     setup.store.repository.save(child)
-    result = setup.bridge.invoke(setup.grant.mcp_token, "task_evidence", {"call_id": "write"})
+    result = _invoke(setup.bridge, setup.grant.mcp_token, "task_evidence", {"call_id": "write"})
     assert result["verified"] is False
-    assert result["status"] == "failed"
+    # A definite denied receipt remains a recoverable failure. A contradictory
+    # completed-write claim lacks proof of no effect and must never replay.
+    assert result["status"] == ("unknown" if claimed_success else "failed")
+    assert result["reconciliation_required"] is claimed_success
 
 
 def test_request_input_is_durable_and_blocks_additional_actions(bridge_setup):
     setup = bridge_setup
-    result = setup.bridge.invoke(
-        setup.grant.mcp_token, "request_input", {"question": "请提供客户名称"}
+    result = _invoke(
+        setup.bridge, setup.grant.mcp_token, "request_input", {"question": "请提供客户名称"}
     )
     assert result["needs_user_input"] is True
     assert (
         setup.store.get(setup.run.run_id).metadata["waiting_input"]["question"] == "请提供客户名称"
     )
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(
+        _invoke(
+            setup.bridge,
             setup.grant.mcp_token,
             "execute_action",
             {
@@ -312,15 +329,16 @@ def test_employee_gate_cannot_be_lost_or_override_actor_permissions(bridge_setup
     )
     args = {"call_id": "gated", "tool_id": "products", "action": "query", "params": {}}
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(setup.grant.mcp_token, "execute_action", args)
+        _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     assert error.value.code == "gate_required"
     setup.bridge.gate = lambda tool, action, params: {"ok": False, "reason": "workspace blocked"}
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(setup.grant.mcp_token, "execute_action", args)
+        _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     assert error.value.code == "gate_denied"
     setup.bridge.gate = lambda tool, action, params: {"ok": True}
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(
+        _invoke(
+            setup.bridge,
             setup.grant.mcp_token,
             "execute_action",
             {
@@ -337,6 +355,7 @@ def test_private_bridge_rejects_a_valid_token_for_another_run(bridge_setup):
     setup = bridge_setup
     other = AgentRun(user_id=setup.run.user_id, message="another task", status="running")
     other.metadata["runtime_context"] = setup.actor.context
+    _bind_goal(other)
     setup.store.repository.save(other)
     other_grant = setup.store.create(other.run_id)
     bridge = CodexToolBridge(
@@ -346,14 +365,15 @@ def test_private_bridge_rejects_a_valid_token_for_another_run(bridge_setup):
         run_id=setup.run.run_id,
     )
     with pytest.raises(CodexBindingError) as error:
-        bridge.invoke(other_grant.mcp_token, "request_input", {"question": "new question"})
+        _invoke(bridge, other_grant.mcp_token, "request_input", {"question": "new question"})
     assert error.value.code == "scope_conflict"
     assert "waiting_input" not in setup.store.get(other.run_id).metadata
 
 
 def test_waiting_approval_blocks_new_business_actions(bridge_setup):
     setup = bridge_setup
-    setup.bridge.invoke(
+    _invoke(
+        setup.bridge,
         setup.grant.mcp_token,
         "execute_action",
         {
@@ -364,7 +384,8 @@ def test_waiting_approval_blocks_new_business_actions(bridge_setup):
         },
     )
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(
+        _invoke(
+            setup.bridge,
             setup.grant.mcp_token,
             "execute_action",
             {
@@ -380,7 +401,8 @@ def test_waiting_approval_blocks_new_business_actions(bridge_setup):
 
 def test_receipt_cannot_substitute_different_parameters(bridge_setup):
     setup = bridge_setup
-    receipt = setup.bridge.invoke(
+    receipt = _invoke(
+        setup.bridge,
         setup.grant.mcp_token,
         "execute_action",
         {
@@ -395,7 +417,7 @@ def test_receipt_cannot_substitute_different_parameters(bridge_setup):
     child.metadata["plan"]["nodes"][0]["params"] = child.steps[0].params
     setup.store.repository.save(child)
     with pytest.raises(CodexBindingError) as error:
-        setup.bridge.invoke(setup.grant.mcp_token, "task_evidence", {"call_id": "write"})
+        _invoke(setup.bridge, setup.grant.mcp_token, "task_evidence", {"call_id": "write"})
     assert error.value.code == "evidence_mismatch"
 
 
@@ -413,7 +435,8 @@ def test_revoke_after_child_is_saved_prevents_dispatch(bridge_setup, monkeypatch
     monkeypatch.setattr(setup.store, "record_call", record)
     monkeypatch.setattr(setup.bridge.orchestrator, "execute_dispatched_run", dispatched.append)
     with pytest.raises(CodexBindingError):
-        setup.bridge.invoke(
+        _invoke(
+            setup.bridge,
             setup.grant.mcp_token,
             "execute_action",
             {
@@ -433,7 +456,7 @@ def test_official_sdk_mcp_endpoint_rejects_wrong_audience_and_lists_tools(bridge
     from fastapi.testclient import TestClient
 
     from app.infrastructure.codex.mcp_server import MCP_PATH, router
-    from app.infrastructure.codex.tools import CODEX_TOOL_NAMES
+    from app.infrastructure.codex.tool_names import CODEX_TOOL_NAMES
 
     setup = bridge_setup
     app = FastAPI()
@@ -509,6 +532,7 @@ def test_private_mcp_initialize_and_list_cannot_borrow_another_run_token(bridge_
     setup = bridge_setup
     other = AgentRun(user_id=setup.run.user_id, message="another task", status="running")
     other.metadata["runtime_context"] = setup.actor.context
+    _bind_goal(other)
     setup.store.repository.save(other)
     token = setup.store.create(other.run_id).mcp_token
     app = FastAPI()

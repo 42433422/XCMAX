@@ -77,6 +77,29 @@ def test_attach_chat_trace_run_accepts_explicit_intent() -> None:
     assert run.metadata["runtime_context"]["workflow_trace_mode"] == "deterministic_shortcut"
 
 
+def test_chat_payload_uses_same_readonly_legacy_trace_as_run_view(monkeypatch) -> None:
+    from app.application.agent_orchestrator.run_models import AgentRun
+
+    run = AgentRun(
+        user_id="u1",
+        message="legacy",
+        status="completed",
+        metadata={
+            "trace_id": "old-trace",
+            "span_id": "old-span",
+        },
+    )
+    original = dict(run.metadata)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.chat_trace.create_chat_trace_run",
+        lambda *args, **kwargs: run,
+    )
+    result = attach_chat_trace_run({"success": True, "response": "done"}, message="legacy")
+    assert result["trace_id"] == run.to_dict()["trace_id"]
+    assert result["span_id"] == run.to_dict()["span_id"]
+    assert run.metadata == original
+
+
 def test_attach_chat_trace_run_records_llm_calls(tmp_path, monkeypatch) -> None:
     repo = InMemoryAgentRunRepository()
     ledger_path = tmp_path / "model_usage_ledger.json"

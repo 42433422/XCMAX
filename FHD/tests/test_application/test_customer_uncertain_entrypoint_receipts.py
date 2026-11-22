@@ -1,4 +1,4 @@
-"""Real entrypoints, host compilation, approval, MCP/SQL receipts and DB faults."""
+"""Real entrypoints, dynamic execution, approval, MCP/SQL receipts and DB faults."""
 
 import asyncio
 import json
@@ -15,22 +15,21 @@ from starlette.requests import Request
 
 from app.db.models import PurchaseUnit
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import compiled_chat_runtime as compiled_chat_runtime
+from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
 from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
-from tests.fixtures.planner_model import goal_review_response
 
 
 @pytest.mark.parametrize("entrypoint", ["chat", "voice"])
 @pytest.mark.parametrize("failure", [OperationalError, RuntimeError])
 def test_committed_customer_uncertainty_survives_real_entrypoint(
-    trusted_actor, compiled_chat_runtime, local_tools, monkeypatch, entrypoint, failure
+    trusted_actor, dynamic_chat_runtime, local_tools, monkeypatch, entrypoint, failure
 ):
     from app.application import get_ai_chat_app_service
     from app.fastapi_routes import ai_intent, voice_routes
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(permissions=["customer.edit"])
-    runtime = compiled_chat_runtime
+    runtime = dynamic_chat_runtime
     runtime.client.headers.update(actor.headers)
     engine = actor.factory.kw["bind"]
     request = Request(
@@ -42,7 +41,7 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
     )
     name = f"uncertain-{entrypoint}-{failure.__name__}"
     message = f"新增单位 {name}"
-    # Only external model/ASR I/O is scripted. Compiler/review, authenticated
+    # Only external SDK/ASR I/O is scripted. Raw goal admission, authenticated
     # child approval, worker, customer store and receipt formatting remain real.
     get_ai_chat_app_service()
 
@@ -55,48 +54,17 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
         voice_routes, "_platform_transcribe", AsyncMock(return_value={"text": message})
     )
 
-    def respond(**kwargs):
-        prompt = json.loads(kwargs["messages"][-1]["content"])
-        if prompt.get("task") == "audit_goal_coverage":
-            return goal_review_response(
-                prompt, source=message, node_ids=["customer"], outcome="execute"
-            )
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(
-                            {
-                                "mode": "workflow",
-                                "intent": "customer_write",
-                                "nodes": [
-                                    {
-                                        "node_id": "customer",
-                                        "tool_id": "customers",
-                                        "action": "ensure_exists",
-                                        "params": {"unit_name": name},
-                                        "risk": "medium",
-                                        "idempotent": True,
-                                    }
-                                ],
-                            }
-                        )
-                    }
-                }
-            ]
-        }
-
-    runtime.completion = respond
+    runtime.actions = []
+    runtime.review = lambda prompt: pytest.fail(
+        "unknown committed effects must preempt final model review"
+    )
     state = {"inserts": 0, "committed": False, "postcommit_reads": 0, "faults": 0}
 
     def approve_while_turn_waits(binding):
         # The external runtime waits while the real owner approves the frozen
         # child through HTTP. Its next MCP poll reuses the same call identity.
-        bridge = runtime.servers[-1].state.codex_tool_bridge
-        token = runtime.transports[-1].config.mcp_token
-        operation = binding.run.metadata["runtime_expected_operations"][0]
-        waiting = bridge.invoke(
-            token, "execute_plan", {"call_id": "compiled-fixture-plan", **operation["params"]}
+        waiting = runtime.execute(
+            "customers", "ensure_exists", {"unit_name": name}, "customer-fixture"
         )
         assert waiting["pending_approval"] is True, waiting
         assert state["inserts"] == 0
@@ -175,7 +143,7 @@ def test_committed_customer_uncertainty_survives_real_entrypoint(
         assert state["postcommit_reads"] == 1
         assert state["inserts"] == 1  # No automatic duplicate within this request.
         assert len(runtime.admissions) == len(runtime.transports) == 1
-        assert len(runtime.model_requests) == 2
+        assert runtime.model_requests == []
     finally:
         event.remove(Engine, "after_cursor_execute", after_sql)
         event.remove(Engine, "before_cursor_execute", before_sql)

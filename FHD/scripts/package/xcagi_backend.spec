@@ -5,6 +5,7 @@ import json
 import os
 import runpy
 from importlib.metadata import version
+import sys
 from pathlib import Path
 
 import setuptools
@@ -17,6 +18,7 @@ from PyInstaller.utils.hooks import (
 )
 
 ROOT = Path.cwd().resolve()
+BUNDLE_COMPUTER_USE = os.environ.get("XCAGI_BUNDLE_COMPUTER_USE") == "1"
 
 
 def add_data(relative_path: str):
@@ -296,6 +298,26 @@ if importlib.util.find_spec("apprise") is not None:
     hiddenimports.extend(collect_submodules("apprise", on_error="raise"))
     datas.extend(collect_data_files("apprise", include_py_files=False))
 
+# Optional Computer Use build: collect upstream drivers without opening a GUI
+# while analyzing. Browser executables are provisioned by the operator separately.
+if BUNDLE_COMPUTER_USE:
+    computer_modules = [
+        "playwright", "pyautogui", "pyperclip", "pyscreeze", "pytweening",
+        "pygetwindow", "pymsgbox", "mouseinfo", "pyrect", "PIL.ImageGrab",
+    ]
+    for module in computer_modules:
+        if importlib.util.find_spec(module) is None:
+            raise ModuleNotFoundError(f"Computer Use build dependency missing: {module}")
+    hiddenimports.extend(computer_modules)
+    hiddenimports.extend(collect_submodules("playwright", on_error="raise"))
+    # Same collection used by Playwright's official PyInstaller hook: includes
+    # the Node driver and JS protocol package, not a downloaded Chromium profile.
+    datas.extend(collect_data_files("playwright", include_py_files=False))
+    hiddenimports.extend({
+        "win32": ["pyautogui._pyautogui_win", "pygetwindow._pygetwindow_win", "pymsgbox._native_win"],
+        "darwin": ["pyautogui._pyautogui_osx", "pygetwindow._pygetwindow_macos", "Quartz", "AppKit", "rubicon.objc"],
+    }.get(sys.platform, ["pyautogui._pyautogui_x11", "Xlib"]))
+
 # de-dupe while preserving order
 _seen = set()
 _deduped = []
@@ -354,6 +376,8 @@ desktop_excludes = [
     "transformers",
     "yapf",
 ]
+if BUNDLE_COMPUTER_USE:
+    desktop_excludes.remove("playwright")
 
 a = Analysis(
     [str(ROOT / "XCAGI" / "run_fastapi.py")],

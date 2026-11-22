@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { webcrypto } from 'node:crypto'
 import { nextTick, ref } from 'vue'
 import { useSuperEmployeeDispatch, type UseSuperEmployeeDispatchParams } from '../useSuperEmployeeDispatch'
 import * as entries from '../useMessengerEntries'
@@ -6,6 +7,7 @@ import * as entries from '../useMessengerEntries'
 const m = vi.hoisted(() => ({ admin: false, get: vi.fn(), post: vi.fn(), ssot: vi.fn(), directory: vi.fn(), toast: vi.fn(),
   codexFetch: vi.fn(), codexSend: vi.fn(), claudeFetch: vi.fn(), claudeSend: vi.fn(), cursorFetch: vi.fn(), cursorSend: vi.fn() }))
 vi.mock('@/api', () => ({ default: { get: m.get, post: m.post } }))
+vi.mock('@/utils/tenantStorageScopeRuntime', () => ({ getRuntimeTenantStorageScopeInput: () => ({ tenantId: 7, localUserId: 17 }) }))
 vi.mock('@/utils/adminConsoleUrl', () => ({ isAdminConsoleSpa: () => m.admin }))
 vi.mock('@/utils/platformShellApi', () => ({ fetchEmployeeSsot: m.ssot }))
 vi.mock('@/api/employeeDirectory', () => ({ fetchEmployeeDirectory: m.directory }))
@@ -25,10 +27,11 @@ function setup(admin = true) {
   return { p, s: useSuperEmployeeDispatch(p) }
 }
 beforeEach(() => {
+  localStorage.clear(); vi.stubGlobal('crypto', webcrypto)
   vi.useFakeTimers(); vi.setSystemTime(1000)
   for (const fn of [m.get, m.post, m.ssot, m.directory, m.toast, m.codexFetch, m.codexSend, m.claudeFetch, m.claudeSend, m.cursorFetch, m.cursorSend]) fn.mockReset()
   for (const fetch of [m.codexFetch, m.claudeFetch, m.cursorFetch]) fetch.mockResolvedValue([])
-  m.ssot.mockResolvedValue({}); m.get.mockResolvedValue({}); m.post.mockResolvedValue({ data: { message: 'done' } })
+  m.ssot.mockResolvedValue({}); m.get.mockResolvedValue({}); m.post.mockImplementation(async (_path, payload) => ({ success: true, execution_state: 'completed', idempotency_key: payload.idempotency_key, run_id: 'original-run', data: { message: 'done' } }))
   m.directory.mockResolvedValue([])
 })
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks() })
@@ -90,7 +93,8 @@ describe('super employee dispatch and conversation transitions', () => {
     expect(s.systemEntryLastStatus(duty)).toBe('等待任务')
     await s.onDutyEmployeeSend()
     expect(m.post).toHaveBeenCalledWith('/api/xcmax/local/employees/agent%2Ftest/execute', expect.objectContaining({ task: 'work', user_id: admin ? 7 : 0,
-      input_data: expect.objectContaining({ source: admin ? 'admin_im' : 'enterprise_im', client_surface: admin ? 'admin_console' : 'enterprise_client' }) }))
+      idempotency_key: expect.any(String), turn_id: expect.any(String),
+      input_data: expect.objectContaining({ source: admin ? 'admin_im' : 'enterprise_im', client_surface: admin ? 'admin_console' : 'enterprise_client' }) }), { retry: false })
     expect(s.activeDutyEmployeeMessages.value.map((row) => [row.role, row.body])).toEqual([['user', 'work'], ['assistant', 'done']])
     expect(s.systemEntryLastStatus(duty)).toBe('已回复')
     expect(s.dutyEmployeeDraft.value).toBe(''); expect(s.dutyEmployeeBusy.value).toBe(false)
@@ -106,8 +110,52 @@ describe('super employee dispatch and conversation transitions', () => {
     expect(m.toast).toHaveBeenCalledWith(error instanceof Error ? 'offline' : '加载 Codex 对话失败', 'error')
     p.activeSystemEntry.value = duty; s.dutyEmployeeDraft.value = 'task'; m.post.mockRejectedValue(error)
     await s.onDutyEmployeeSend()
-    expect(s.activeDutyEmployeeMessages.value.at(-1)).toMatchObject({ status: '失败', body: error instanceof Error ? '调用失败：offline' : '调用失败：未知错误' })
+    expect(s.activeDutyEmployeeMessages.value.at(-1)).toMatchObject({ status: '待核对', body: expect.stringContaining('结果待核对') })
     expect(s.dutyEmployeeBusy.value).toBe(false)
+  })
+  it('updates the original pending bubble through read-only polling without another send', async () => {
+    const { p, s } = setup()
+    p.activeSystemEntry.value = duty; s.dutyEmployeeDraft.value = 'work'
+    m.post.mockImplementation(async (_path, payload) => ({ success: false, execution_state: 'queued', idempotency_key: payload.idempotency_key, run_id: 'original-run' }))
+    await s.onDutyEmployeeSend()
+    const original = s.activeDutyEmployeeMessages.value.at(-1)!
+    m.get.mockResolvedValue({ success: true, execution_state: 'completed', idempotency_key: original.request_key, run_id: original.run_id, data: { message: 'original result confirmed' } })
+    // Fake time starts polling but cannot settle the native WebCrypto work.
+    const nativeDigest = webcrypto.subtle.digest.bind(webcrypto.subtle)
+    let releaseDigest!: () => void
+    const digestReady = new Promise<void>(resolve => { releaseDigest = resolve })
+    const pollDigest = vi.spyOn(webcrypto.subtle, 'digest').mockImplementationOnce(async (...args) => {
+      await digestReady
+      return nativeDigest(...args)
+    })
+    try {
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(pollDigest).toHaveBeenCalledOnce()
+      expect(m.get).not.toHaveBeenCalled()
+      expect(s.activeDutyEmployeeMessages.value.at(-1)).toMatchObject({ id: original.id, status: '待核对', run_id: 'original-run' })
+    } finally { releaseDigest() }
+    await vi.waitFor(() => {
+      expect(s.activeDutyEmployeeMessages.value).toHaveLength(2)
+      expect(s.activeDutyEmployeeMessages.value.at(-1)).toMatchObject({ id: original.id, body: 'original result confirmed', status: '已回复', run_id: 'original-run' })
+    })
+    expect(m.post).toHaveBeenCalledTimes(1)
+    expect(m.get).toHaveBeenCalledTimes(1)
+    expect(m.get).toHaveBeenCalledWith(`/api/xcmax/local/employees/${encodeURIComponent(duty.id)}/runs?idempotency_key=${encodeURIComponent(original.request_key!)}`, {}, { retry: false, quiet: true })
+    expect(localStorage.length).toBe(0)
+    s.stopDutyReceiptPolling()
+  })
+  it('recovers a persisted original key when reopening the employee conversation', async () => {
+    const first = setup()
+    first.p.activeSystemEntry.value = duty; first.s.dutyEmployeeDraft.value = 'work'
+    m.post.mockImplementation(async (_path, payload) => ({ success: false, execution_state: 'queued', idempotency_key: payload.idempotency_key, run_id: 'original-run' }))
+    await first.s.onDutyEmployeeSend()
+    const original = first.s.activeDutyEmployeeMessages.value.at(-1)!
+    first.s.stopDutyReceiptPolling()
+    m.get.mockResolvedValue({ success: true, execution_state: 'completed', idempotency_key: original.request_key, run_id: original.run_id, data: { message: 'restored result' } })
+    const reopened = setup()
+    await reopened.s.activatePinnedEntry(duty)
+    expect(reopened.s.activeDutyEmployeeMessages.value).toEqual([expect.objectContaining({ body: 'restored result', request_key: original.request_key, run_id: 'original-run' })])
+    expect(m.post).toHaveBeenCalledTimes(1)
   })
   it('rejects uninstalled employees and renders busy and last-message states', async () => {
     const { p, s } = setup()

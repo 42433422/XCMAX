@@ -131,7 +131,7 @@ class RuntimeSettings:
     route: ModelRoute | None = None
     runtime_root: Path | None = None
     codex_bin: str | None = None
-    turn_timeout_seconds: int = 300
+    turn_timeout_seconds: int = 180
     qualification_file: Path | None = None
 
     def require_qualified(self) -> ModelRoute:
@@ -185,7 +185,7 @@ def runtime_settings() -> RuntimeSettings:
             route=route,
             runtime_root=root,
             codex_bin=data.get("codex_bin"),
-            turn_timeout_seconds=_positive(data.get("turn_timeout_seconds", 300), "timeout", 3570),
+            turn_timeout_seconds=_positive(data.get("turn_timeout_seconds", 180), "timeout", 3570),
             qualification_file=Path(data["qualification_file"])
             if data.get("qualification_file")
             else None,

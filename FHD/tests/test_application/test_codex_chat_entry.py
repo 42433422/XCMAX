@@ -21,12 +21,11 @@ def entry(monkeypatch):
     def invoke(context=None, engine="codex"):
         nonlocal selected
         selected = RuntimeSettings(engine=engine)
-        return chat.try_runtime_chat(
+        return chat.run_runtime_chat(
             user_id="owner",
             message="补充原任务",
             context=context or {},
             file_context={},
-            service=service,
         )
 
     return invoke, execute, service
@@ -37,16 +36,15 @@ def test_new_chat_uses_fixed_executor_and_host_goal_admission(entry):
     assert invoke({"session_id": "original"})["runtime"] == "codex"
     execute.assert_called_once()
     assert execute.call_args.kwargs["completion_mode"] == "auto"
-    assert execute.call_args.kwargs["admit_goal"] is True
+    assert "admit_goal" not in execute.call_args.kwargs
 
 
-def test_rollout_keeps_native_pending_plan_in_its_original_conversation(entry):
+def test_retired_pending_plan_cannot_select_another_executor(entry):
     invoke, execute, service = entry
     service._pending_workflows["owner"] = {"runtime_context": {"session_id": "original"}}
-    assert invoke({"session_id": "original"}, "codex") is None
-    execute.assert_not_called()
-    assert invoke({"session_id": "another"}, "codex")["runtime"] == "codex"
+    assert invoke({"session_id": "original"})["runtime"] == "codex"
     execute.assert_called_once()
+    service._hydrate_pending_workflow.assert_not_called()
 
 
 def test_explicit_continuation_is_not_silently_replanned_after_switch_off(entry):
@@ -135,16 +133,26 @@ def test_unknown_work_retains_original_task_pointer():
     assert result["success"] is False
 
 
-def test_stale_legacy_pending_never_mints_a_new_plan():
-    from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
+def test_incomplete_retryable_goal_keeps_chat_on_original_task():
+    result = chat.runtime_chat_payload(
+        {
+            "run_id": "original",
+            "execution_state": "blocked",
+            "exit_status": "goal_verification_required",
+            "retryable": True,
+        },
+        conversation_id="session",
+    )
+    assert result["runtime_context_update"]["agent_runtime_run_id"] == "original"
+    assert result["runtime_context_update"]["status"] == "waiting_user"
 
-    callbacks = SimpleNamespace(_resume_pending_dynamic_workflow=Mock(return_value=(False, None)))
-    planner = Mock()
-    dispatch = PlannedWorkflowDispatch({}, callbacks, planner, Mock(), Mock())
-    result = dispatch.handle("owner", "继续", "chat", {}, "继续", resume_only=True)
-    assert result["success"] is False
-    assert result["data"]["error_code"] == "legacy_workflow_missing"
-    planner.plan.assert_not_called()
+
+def test_no_retired_planner_compatibility_entry_is_exposed():
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    assert not hasattr(AIChatApplicationService, "_try_handle_dynamic_workflow")
+    assert not hasattr(AgentOrchestrator, "start_run")
 
 
 @pytest.mark.parametrize("state,run_id", [("waiting_user", "parent"), ("completed", None)])

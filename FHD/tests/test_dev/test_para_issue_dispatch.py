@@ -148,7 +148,9 @@ def test_completed_task_opens_pr(issue, monkeypatch):
     "scenario",
     ["fresh", "intent_unapplied", "held", "applied", "applied_ci_pending", "unrelated"],
 )
-def test_original_pr_repair_only_observes_already_applied_intents(issue, monkeypatch, scenario):
+def test_original_pr_repair_observes_applied_intents_and_registers_unapproved_requests(
+    issue, monkeypatch, scenario
+):
     repo, branch, old, new = "o/r", "fix/ci", "a" * 40, "d" * 40
     workflow_path = ".github/workflows/fhd-ci-cd.yml"
     bot = {"login": "github-actions[bot]", "type": "Bot"}
@@ -234,6 +236,23 @@ def test_original_pr_repair_only_observes_already_applied_intents(issue, monkeyp
     def forbidden(*args, **kwargs):
         pytest.fail("suspended repairs cannot dispatch or promote a candidate")
 
+    class PendingApproval:
+        def __init__(self, *_args):
+            assert scenario == "fresh"
+
+        def create(self, body):
+            assert body["source_run_attempt"] == 1
+            assert body["request_key"] == f"gh-issue-5-ci-70-attempt-1-{old}"
+            return {"id": "ctl1", "state": "awaiting_approval"}
+
+        def get(self, _task_id):
+            return {
+                "id": "ctl1",
+                "state": "awaiting_approval",
+                "executor": mod.GITHUB_REPAIR,
+                "reason": "original_pr_company_budget_required",
+            }
+
     for key, value in {
         "MODSTORE_PARA_DISPATCH_TOKEN": "dispatch",
         "PR_CREATE_TOKEN": "independent-token",
@@ -247,13 +266,13 @@ def test_original_pr_repair_only_observes_already_applied_intents(issue, monkeyp
     monkeypatch.setattr(mod.impl, "_gh_post", post)
     monkeypatch.setattr(mod.repair, "load_trusted_authors", lambda: ["maintainer"])
     monkeypatch.setattr(mod.repair, "advance", forbidden)
-    monkeypatch.setattr(mod, "DispatchClient", forbidden)
+    monkeypatch.setattr(mod, "DispatchClient", PendingApproval)
     monkeypatch.setattr(mod.time, "sleep", lambda _: None)
 
     for _ in range(2):
         with pytest.raises(SystemExit) as exc:
             mod.run(_args(base_branch=branch))
-        assert exc.value.code == (0 if scenario == "applied" else 6)
+        assert exc.value.code == (0 if scenario == "applied" else 2 if scenario == "fresh" else 6)
         saved = json.loads((mod.REPORT_DIR / "para_issue_dispatch_5.json").read_text())
         if applied or scenario == "unrelated":
             assert not writes
@@ -269,6 +288,9 @@ def test_original_pr_repair_only_observes_already_applied_intents(issue, monkeyp
                 "unrelated": "pr_update_unconfirmed",
             }
             assert saved["status"] == expected[scenario]
+        elif scenario == "fresh":
+            assert saved["status"] == "awaiting_approval"
+            assert saved["source_run_attempt"] == 1
         else:
             assert saved["status"] == "pr_repair_blocked"
     assert pr["head"]["sha"] == head
@@ -286,6 +308,197 @@ def test_repair_advance_rejects_previously_published_candidates_without_writes(m
     ):
         mod.repair.advance(
             "https://github.com/o/r.git", target, "d" * 40, "fixture", before_write=forbidden
+        )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "revoked_after_intent",
+        "intent_ack_unknown",
+        "intent_not_durable",
+        "push_ack_unknown",
+        "ci_pending",
+    ],
+)
+def test_original_producer_persists_exact_intent_then_rechecks_gate_before_write(
+    issue, monkeypatch, fault
+):
+    target = mod.repair.Target(42, "fix/ci", "a" * 40, 70, 99, ".github/workflows/fhd-ci-cd.yml", 2)
+    result = mod.DispatchResult(
+        issue_number=5,
+        repo="o/r",
+        started_at="now",
+        control_task_id="11111111222243338444555555555555",
+        para_task_id="p1",
+        github_run_id=502,
+        branch="devfleet/opencode/fix",
+        head_sha="d" * 40,
+        original_sha=target.old_sha,
+        source_run_id=70,
+        source_run_attempt=2,
+        base_branch=target.branch,
+    )
+    pr = {
+        "number": 42,
+        "state": "open",
+        "draft": False,
+        "labels": [],
+        "user": {"login": "maintainer"},
+        "head": {"ref": target.branch, "sha": target.old_sha, "repo": {"full_name": "o/r"}},
+        "base": {"ref": "main", "repo": {"full_name": "o/r"}},
+    }
+    comments, events = [], []
+
+    def get(path, params):
+        if path.endswith("/issues/5/comments"):
+            return 200, comments
+        if path.endswith("/pulls/42"):
+            events.append("head_read")
+            return 200, pr
+        if path.endswith("/actions/workflows/99/runs"):
+            events.append("ci_read")
+            return 200, {
+                "workflow_runs": []
+                if fault == "ci_pending"
+                else [
+                    {
+                        "id": 71,
+                        "head_sha": result.head_sha,
+                        "head_branch": target.branch,
+                        "workflow_id": target.workflow_id,
+                        "path": target.workflow_path,
+                        "event": "pull_request",
+                        "head_repository": {"full_name": "o/r"},
+                        "pull_requests": [{"number": 42}],
+                    }
+                ]
+            }
+        pytest.fail(path)
+
+    def post(url, token, payload):
+        assert url.endswith("/issues/5/comments") and token == "gh"
+        if payload["body"].startswith(mod.repair.INTENT_MARKER):
+            events.append("intent_write")
+            if fault == "intent_ack_unknown":
+                raise OSError("connection lost")
+            if fault != "intent_not_durable":
+                comments.append(
+                    {"user": {"login": "github-actions[bot]", "type": "Bot"}, **payload}
+                )
+            return {"id": 10}
+        return {"id": 11}
+
+    class Client:
+        def publication(self, task_id):
+            assert task_id == result.control_task_id
+            events.append("gate_read")
+            return {
+                "kind": "original_pr_repair",
+                "authorized": not (fault == "revoked_after_intent" and "intent_write" in events),
+            }
+
+    def verify(state, selected, candidate, **kwargs):
+        events.append("artifact_read")
+        assert selected == target and candidate == result.head_sha
+        assert (
+            kwargs["github_run_id"] == 502 and kwargs["control_task_id"] == result.control_task_id
+        )
+        if not state["authorized"]:
+            raise ValueError("revoked")
+        return SimpleNamespace(authorization={"issue_number": 5})
+
+    def advance(remote, selected, candidate, token, *, before_write, authorization):
+        assert remote == "https://github.com/o/r.git" and token == "write-pat"
+        before_write()
+        assert mod.repair.prior_intent("o/r", 5, target.branch, comments) == (
+            target,
+            candidate,
+            result.control_task_id,
+            "p1",
+            502,
+        )
+        events.append("push")
+        pr["head"]["sha"] = candidate
+        if fault == "push_ack_unknown":
+            raise subprocess.TimeoutExpired("git push", 1)
+        return 1
+
+    monkeypatch.setenv("PR_CREATE_TOKEN", "write-pat")
+    monkeypatch.setattr(mod, "_read_github", lambda _token: get)
+    monkeypatch.setattr(mod.impl, "_gh_post", post)
+    monkeypatch.setattr(mod.repair, "load_trusted_authors", lambda: ["maintainer"])
+    monkeypatch.setattr(mod.repair, "verify_publication", verify)
+    monkeypatch.setattr(mod.repair.publication, "authorized_original_pr", lambda *_a: target)
+    monkeypatch.setattr(mod.repair, "advance", advance)
+    monkeypatch.setattr(mod.time, "sleep", lambda _seconds: None)
+    execution = {"execution": {"subtasks": [{"branch_name": result.branch}]}}
+    with pytest.raises(SystemExit) as exc:
+        mod._advance_original(
+            result, target, execution, Client(), _args(base_branch=target.branch), None
+        )
+    succeeded = fault in {None, "push_ack_unknown"}
+    assert exc.value.code == (0 if succeeded else 6)
+    if fault in {None, "push_ack_unknown", "ci_pending"}:
+        assert events[:6] == [
+            "gate_read",
+            "artifact_read",
+            "intent_write",
+            "gate_read",
+            "artifact_read",
+            "push",
+        ]
+        assert events.count("push") == 1
+        assert result.status == ("pr_updated_ci_observed" if succeeded else "pr_updated_ci_pending")
+        assert "ci_read" in events
+    else:
+        assert "push" not in events
+        assert result.status == (
+            "pr_update_unconfirmed" if fault == "revoked_after_intent" else "pr_repair_blocked"
+        )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        (None, None),
+        ("source_sha", "e" * 40),
+        ("source_run_id", 71),
+        ("source_run_attempt", 1),
+        ("source_run_attempt", None),
+    ],
+)
+def test_original_resume_is_bound_to_exact_source_run_and_attempt(field, value):
+    identity = {
+        "repo": "o/r",
+        "issue_number": 5,
+        "base_branch": "fix/ci",
+        "control_task_id": "original",
+        "source_sha": "a" * 40,
+        "source_run_id": 70,
+        "source_run_attempt": 2,
+    }
+    if field:
+        identity[field] = value
+    comments = [
+        {
+            "user": {"login": "github-actions[bot]", "type": "Bot"},
+            "body": mod.RECEIPT_MARKER + json.dumps(identity) + " -->",
+        }
+    ]
+    args = _args(base_branch="fix/ci", control_task_id="original")
+    if field:
+        with pytest.raises(ValueError):
+            mod._validated_resume(
+                args, comments, source_sha="a" * 40, source_run_id=70, source_run_attempt=2
+            )
+    else:
+        assert (
+            mod._validated_resume(
+                args, comments, source_sha="a" * 40, source_run_id=70, source_run_attempt=2
+            )
+            == "original"
         )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -15,23 +16,24 @@ def make_binding(
     actor,
     *,
     runtime_config=None,
-    expected_operations=None,
-    goal_admission=False,
-    goal_mode=None,
+    goal_bound=True,
+    completion_mode="auto",
     **context,
 ):
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     run = AgentRun(user_id=str(actor.user_id), message="查询并生成报告", status="running")
     run.metadata["runtime_context"] = {**actor.context, **context}
-    run.metadata["runtime_expected_operations"] = expected_operations
-    run.metadata.update(
-        runtime_goal_admission=goal_admission,
-        runtime_goal_admitted=goal_mode is not None,
-        runtime_goal_mode=goal_mode,
-    )
+    from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+
+    run.metadata["runtime_completion_mode"] = completion_mode
+    if goal_bound:
+        contract = build_goal_contract(run)
+        run.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
     repository.save(run)
     store = CodexBindingStore(repository)
-    return store, run, store.create(run.run_id, runtime_config=runtime_config)
+    grant = store.create(run.run_id, runtime_config=runtime_config)
+    store.update(run.run_id, lambda _run, metadata: metadata.update(deadline_at=time.time() + 60))
+    return store, run, grant
 
 
 def test_grants_survive_repository_reopen_and_separate_audiences(trusted_actor):
@@ -140,9 +142,6 @@ def test_disabled_actor_and_cleared_conversation_invalidate_grants(trusted_actor
 def test_effect_identity_is_server_owned_across_changed_model_call_ids(trusted_actor):
     store, run, grant = make_binding(
         trusted_actor(),
-        expected_operations=[
-            {"tool_id": "customers", "action": "create", "params": {"unit_name": "fixture"}}
-        ],
     )
     kwargs = {
         "tool_id": "customers",
@@ -171,12 +170,12 @@ def test_goal_cannot_change_after_grant_even_after_repository_reopen(trusted_act
     actor = trusted_actor()
     store, run, grant = make_binding(
         actor,
-        expected_operations=[
-            {"tool_id": "customers", "action": "create", "params": {"unit_name": "fixture"}}
-        ],
     )
     parent = store.repository.get(run.run_id)
-    parent.metadata["runtime_expected_operations"] = changed
+    if changed is None:
+        parent.metadata.pop("runtime_goal_contract")
+    else:
+        parent.message = "已被替换的原始目标"
     store.repository.save(parent)
     reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=actor.factory))
     for check in (
@@ -189,8 +188,8 @@ def test_goal_cannot_change_after_grant_even_after_repository_reopen(trusted_act
         assert error.value.code == "goal_changed"
 
 
-def test_unfrozen_goal_never_claims_an_effect(trusted_actor):
-    store, run, grant = make_binding(trusted_actor())
+def test_missing_goal_never_claims_an_effect(trusted_actor):
+    store, run, grant = make_binding(trusted_actor(), goal_bound=False)
     options = {
         "tool_id": "customers",
         "action": "create",
@@ -205,21 +204,21 @@ def test_unfrozen_goal_never_claims_an_effect(trusted_actor):
 
 
 @pytest.mark.parametrize("goal_mode", [None, "reply"])
-def test_auto_admission_does_not_permit_business_reads_before_goal_or_during_reply(
-    trusted_actor, goal_mode
-):
-    store, run, grant = make_binding(trusted_actor(), goal_admission=True, goal_mode=goal_mode)
+def test_missing_goal_or_reply_mode_cannot_authorize_writes(trusted_actor, goal_mode):
+    store, run, grant = make_binding(
+        trusted_actor(), goal_bound=goal_mode is not None, completion_mode=goal_mode or "auto"
+    )
     with pytest.raises(CodexBindingError) as error:
         store.claim_call(
             run.run_id,
-            "unexpected-query",
-            tool_id="products",
-            action="query",
-            params={},
-            read_only=True,
+            "unexpected-write",
+            tool_id="customers",
+            action="create",
+            params={"unit_name": "fixture"},
+            read_only=False,
             generation=grant.binding.metadata["generation"],
         )
-    assert error.value.code == "goal_required"
+    assert error.value.code == ("goal_required" if goal_mode is None else "goal_mismatch")
     assert store.get(run.run_id).metadata["calls"] == {}
 
 
@@ -234,10 +233,6 @@ def test_pending_cancel_blocks_new_actions_even_before_run_status_changes(truste
 def test_child_budget_shares_model_reservations_and_settles_only_once(trusted_actor):
     store, run, grant = make_binding(
         trusted_actor(),
-        expected_operations=[
-            {"tool_id": "customers", "action": "create", "params": {"unit_name": name}}
-            for name in ("fixture", "another")
-        ],
     )
 
     def budget(parent, metadata):
@@ -279,7 +274,6 @@ def test_child_budget_shares_model_reservations_and_settles_only_once(trusted_ac
 def test_unknown_child_cost_stays_reserved_and_forbids_replay(trusted_actor):
     store, run, grant = make_binding(
         trusted_actor(),
-        expected_operations=[{"tool_id": "customers", "action": "create", "params": {}}],
     )
     store.update(
         run.run_id, lambda parent, metadata: parent.metadata.update(ai_cost_budget_units=10)
@@ -325,7 +319,6 @@ def test_real_model_admission_and_child_claim_share_one_budget(
     store, run, grant = make_binding(
         trusted_actor(),
         runtime_config=route.runtime_identity(),
-        expected_operations=[{"tool_id": "customers", "action": "create", "params": {}}],
     )
     store.update(
         run.run_id, lambda parent, metadata: parent.metadata.update(ai_cost_budget_units=10)

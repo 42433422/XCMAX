@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from app.infrastructure.codex.policy import RuntimePolicyError, runtime_settings
-
-if TYPE_CHECKING:
-    from app.infrastructure.codex.binding import CodexBindingStore
 
 _INSTRUCTIONS = (
     "你是 XCMAX 企业助手小C。根据当前用户请求工作。先发现当前账号可用能力，再按工具契约调用。"
@@ -37,6 +34,8 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         and (
             result.get("reconciliation_required") is True
             or state in {"running", "unknown", "paused"}
+            or state == "blocked"
+            and result.get("retryable") is True
         )
     )
     text = str(result.get("output") or result.get("error") or "本轮执行未完成")
@@ -90,126 +89,27 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
                 else {}
             ),
             "error_code": result.get("error_code") or result.get("exit_status", ""),
+            "failure_stage": result.get("failure_stage", ""),
+            "failure_kind": result.get("failure_kind", ""),
+            "failure_reason": result.get("failure_reason", ""),
+            "model_request_attempts": result.get("model_request_attempts", 0),
+            "active_seconds": result.get("active_seconds"),
             **({"data": {"approval_card": card}} if card else {}),
         },
     }
 
 
-def answer_reference_input(
-    store: CodexBindingStore, *, run_id: str, text: str
-) -> dict[str, Any] | None:
-    """Called only after gateway owner/context checks and durable request dedup.
-
-    Selection is deterministic and limited to independently verified candidates.
-    It queues the same child with no approval grant and starts no model turn.
-    """
-    import copy
-
-    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
-    from app.application.agent_orchestrator.task_dispatcher import notify_agent_task_dispatcher
-    from app.application.agent_orchestrator.task_execution_repository import (
-        get_task_execution_repository,
-    )
-    from app.application.agent_orchestrator.task_execution_sql_repository import (
-        SQLAlchemyTaskExecutionRepository,
-    )
-    from app.application.workflow.clarification_lifecycle import resolve_confirmed_target
-    from app.domain.task_lifecycle.agent_runtime_results import model_unsettled
-    from app.infrastructure.codex.binding import CodexBindingError
-
-    binding = store.get(run_id)
-    if not binding.run.metadata.get("runtime_frozen_plan"):
-        return None
-    rows = store.receipt_snapshot(run_id)
-    questions = {
-        (question["run_id"], question["step_id"]): question
-        for row in rows
-        if (receipt := row.get("receipt") or {}).get("needs_user_input") is True
-        and isinstance(question := receipt.get("clarification"), dict)
-        and question.get("run_id")
-        and question.get("step_id")
-    }
-    if len(questions) != 1:
-        return None
-    # Refresh after receipt_snapshot has settled cost/reservation metadata.
-    binding = store.get(run_id)
-    store._validate_authority(binding.run, binding.metadata)
-    store._validate_control(binding.run)
-    if binding.metadata.get("coordinator_active") or model_unsettled(binding.metadata):
-        raise CodexBindingError("binding_conflict", "原执行者或模型计量尚未结束，不能补答")
-    question = next(iter(questions.values()))
-    if not any(
-        call.get("child_run_id") == question["run_id"] and call.get("reservation_state") == "held"
-        for call in binding.metadata.get("calls", {}).values()
-    ):
-        raise CodexBindingError("binding_conflict", "原子任务预算已变化，请先核对原任务")
-    child = store.repository.get(question["run_id"])
-    if child is None:
-        return None
-    proof = (child.metadata.get("reference_clarifications") or {}).get(question["step_id"])
-    if not isinstance(proof, dict) or proof.get("answer") is not None:
-        return None
-    selection = resolve_confirmed_target(text, question.get("candidates") or [])
-    if selection is not None:
-        queue = get_task_execution_repository()
-        if not isinstance(queue, SQLAlchemyTaskExecutionRepository):
-            raise CodexBindingError("binding_conflict", "原任务的持久化调度当前不可用")
-        staged = AgentOrchestrator(repository=store.repository).stage_clarification_answer(
-            child.run_id,
-            step_id=question["step_id"],
-            parameters=selection,
-            requested_by=binding.run.user_id,
-            queue=queue,
-            parent_snapshot=binding.run,
-        )
-        if staged is None:
-            raise CodexBindingError("request_conflict", "原任务状态已变化，请刷新后重新选择")
-        notify_agent_task_dispatcher()
-    from app.infrastructure.codex.receipt_projection import refresh_codex_receipts
-
-    refreshed = refresh_codex_receipts(store.get(run_id).run, repository=store.repository)
-    result = copy.deepcopy(refreshed.final_output["codex_result"])
-    if selection is None:
-        result["output"] = str(question.get("question") or "请补充原任务信息") + (
-            "\n请回复候选编号、完整名称或明确序号，例如「第二个」。"
-        )
-    return dict(result)
-
-
-def try_runtime_chat(
+def run_runtime_chat(
     *,
     user_id: str,
     message: str,
     context: dict[str, Any],
     file_context: dict[str, Any],
-    service: Any,
-) -> dict[str, Any] | None:
-    """None is reserved for an existing session-bound historical workflow."""
+) -> dict[str, Any]:
+    """Run every general chat through the authenticated Codex task gateway."""
     run_id = str(context.get("agent_runtime_run_id") or "")
     session = str(context.get("session_id") or context.get("conversation_id") or "")
     try:
-        # Native plans created before rollout retain their original continuation.
-        if not run_id:
-            pending = service._pending_workflows.get(user_id)
-            pending_context = (pending or {}).get("runtime_context") or {}
-            pending_session = str(
-                pending_context.get("session_id") or pending_context.get("conversation_id") or ""
-            )
-            if pending and pending_session != session:
-                pending = None
-            if not pending and session:
-                service._hydrate_pending_workflow(user_id, session)
-                pending = service._pending_workflows.get(user_id)
-                pending_context = (pending or {}).get("runtime_context") or {}
-                pending_session = str(
-                    pending_context.get("session_id")
-                    or pending_context.get("conversation_id")
-                    or ""
-                )
-                if pending_session != session:
-                    pending = None
-            if pending:
-                return None
         settings = runtime_settings()
         from app.application.agent_runtime.gateway import run_runtime_task
 
@@ -229,7 +129,6 @@ def try_runtime_chat(
             or None,
             run_id=run_id or None,
             completion_mode="auto",
-            admit_goal=True,
             settings=settings,
             on_event=stream_runtime_event,
             # Chat turn admission supplies a new stable turn_id for a genuine user answer.
@@ -242,7 +141,7 @@ def try_runtime_chat(
             "runtime_policy_blocked",
         }:
             # An unavailable deployment must not erase a prior task's pointer
-            # and let the following chat turn replay its work in Native.
+            # and let the following chat turn create a duplicate business task.
             result.update(run_id=run_id, resume_required=True, execution_state="blocked")
         return runtime_chat_payload(result, conversation_id=session)
     except RuntimePolicyError:

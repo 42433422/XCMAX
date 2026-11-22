@@ -15,9 +15,6 @@ class RuntimeDependencies:
     action_spec: Callable[[str, str], ToolActionSpecV2 | None]
     validate: Callable[[str, str, dict[str, Any]], ToolValidationResult]
     refresh_budget: Callable[[AgentRun], None]
-    repair_enabled: Callable[[AgentRun, dict[str, Any]], bool]
-    repair_limit: Callable[[AgentRun, AgentStep, dict[str, Any]], int]
-    request_repair: Callable[[AgentRun, AgentStep, dict[str, Any]], dict[str, Any]]
 
 
 class ArtifactSink(Protocol):

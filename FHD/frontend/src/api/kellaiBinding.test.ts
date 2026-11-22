@@ -64,6 +64,44 @@ describe('kellaiBindingApi', () => {
     expect(apiBaseMocks.apiFetch).toHaveBeenNthCalledWith(2, '/api/kellai/binding/customers/7/conversations?limit=100', expect.any(Object))
   })
 
+  it('keeps the default grant read-only and passes explicit scopes and original send ids', async () => {
+    apiBaseMocks.apiFetch.mockImplementation(async () => jsonResponse({ success: true, data: {} }))
+    await kellaiBindingApi.start()
+    expect(apiBaseMocks.apiFetch).toHaveBeenLastCalledWith('/api/kellai/binding/start', expect.objectContaining({ body: '{}' }))
+    const scopes = ['customer_profiles.read', 'customer_conversations.read', 'channels.read', 'messages.send']
+    await kellaiBindingApi.start(scopes)
+    expect(apiBaseMocks.apiFetch).toHaveBeenLastCalledWith('/api/kellai/binding/start', expect.objectContaining({ body: JSON.stringify({ requested_scopes: scopes }) }))
+    const input = { client_request_id: 'request-original-123', customer_id: 7, channel_type: 'chatwoot', contact_id: '9', content: '确认后的回复' }
+    apiBaseMocks.apiFetch.mockImplementation(async () => jsonResponse({ success: true, data: { request_id: input.client_request_id, status: 'accepted' } }))
+    await kellaiBindingApi.sendMessage(input)
+    expect(apiBaseMocks.apiFetch).toHaveBeenLastCalledWith('/api/kellai/binding/messages/send', expect.objectContaining({ method: 'POST', body: JSON.stringify(input) }))
+    await kellaiBindingApi.sendReceipt(input.client_request_id)
+    expect(apiBaseMocks.apiFetch).toHaveBeenLastCalledWith('/api/kellai/binding/messages/requests/request-original-123', expect.any(Object))
+  })
+
+  it.each(['failed', 'unknown', 'requires_desktop_execution'])('preserves a real %s send receipt with success=false', async (status) => {
+    const input = { client_request_id: 'request-outcome-123', customer_id: 7, channel_type: 'chatwoot', contact_id: '9', content: '确认后的回复' }
+    const receipt = { request_id: input.client_request_id, status, persisted: false }
+    apiBaseMocks.apiFetch.mockResolvedValueOnce(jsonResponse({ success: false, data: receipt }))
+    await expect(kellaiBindingApi.sendMessage(input)).resolves.toEqual(receipt)
+    expect(apiBaseMocks.apiFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    [{ request_id: 'wrong-request-123', status: 'accepted' }, 200],
+    [{ request_id: 'request-outcome-123', status: 'invented-success' }, 200],
+    [{ request_id: 'request-outcome-123', status: 'accepted' }, 403],
+  ])('rejects mismatched, malformed or unauthorized receipts', async (receipt, httpStatus) => {
+    apiBaseMocks.apiFetch.mockResolvedValueOnce(jsonResponse({ success: true, data: receipt }, httpStatus as number))
+    await expect(kellaiBindingApi.sendReceipt('request-outcome-123')).rejects.toThrow()
+    expect(apiBaseMocks.apiFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not accept an unsuccessful ordinary read as a receipt', async () => {
+    apiBaseMocks.apiFetch.mockResolvedValueOnce(jsonResponse({ success: false, data: { request_id: 'request-outcome-123', status: 'failed' } }))
+    await expect(kellaiBindingApi.customers()).rejects.toThrow()
+  })
+
   it('rejects invalid customer ids before making a request', async () => {
     await expect(kellaiBindingApi.conversations(0)).rejects.toThrow('客户编号无效')
     expect(apiBaseMocks.apiFetch).not.toHaveBeenCalled()

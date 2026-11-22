@@ -101,20 +101,23 @@ describe('native AI SDK tool stream', () => {
     expect(settled).toBe(false)
     expect(round.text.value).toBe('')
     emit({ type: 'tool_call', phase: 'finished', node_id: 'lookup', success: true, output_preview: '2 个客户' })
-    emit({ type: 'tool_call', phase: 'finished', node_id: 'import', success: false, error: '缺少数量字段', recovery_hint: '补充数量后继续', duration_ms: 400 })
+    emit({ type: 'tool_call', phase: 'finished', node_id: 'import', success: false, error: '缺少数量字段', recovery_hint: '补充数量后继续', duration_ms: 400,
+      trace_id: 'trace-a', span_id: 'span-import', run_id: 'run-a', error_code: 'validation_failed', error_type: 'ValueError' })
     emit({ type: 'token', text: '请补充数量字段。' })
     emit({ type: 'done', result: { success: false } })
     writer.close()
     expect(await result).toMatchObject({ text: '请补充数量字段。', error: null, aborted: false })
     expect(steps).toHaveLength(2)
-    expect(steps[0]).toMatchObject({ state: 'failed', error: '缺少数量字段', hint: '补充数量后继续', durationMs: 400 })
+    expect(steps[0]).toMatchObject({ state: 'failed', error: '缺少数量字段', hint: '补充数量后继续', durationMs: 400,
+      trace_id: 'trace-a', span_id: 'span-import', run_id: 'run-a', error_code: 'validation_failed', error_type: 'ValueError' })
     expect(steps[1]).toMatchObject({ state: 'success', output: '2 个客户' })
   })
 
   it('lets the SDK replace a retried tool and supports receipt-only replay', async () => {
     const events: PlannerSseEvent[] = [
       { type: 'tool_call', phase: 'finished', node_id: 'n1', tool_id: 'excel', action: 'read', success: false, error: '暂时失败' },
-      { type: 'tool_call', phase: 'started', node_id: 'n1', tool_id: 'excel', action: 'read', retries: 1 },
+      { type: 'tool_call', phase: 'started', node_id: 'n1', tool_id: 'excel', action: 'read', retries: 1,
+        trace_id: 'trace-a', span_id: 'span-retry', run_id: 'run-a', attempt: 2 },
       { type: 'tool_call', phase: 'finished', node_id: 'n1', success: true, output_preview: '20 行', retries: 1 },
       { type: 'done' },
     ]
@@ -123,7 +126,8 @@ describe('native AI SDK tool stream', () => {
     const result = await useAiSdkChatRound({ onMessage: message => { steps = stepsFromAiParts(message.parts) } }).send({})
     expect(result.error).toBeNull()
     expect(steps).toHaveLength(1)
-    expect(steps[0]).toMatchObject({ state: 'success', error: undefined, retries: 1, output: '20 行' })
+    expect(steps[0]).toMatchObject({ state: 'success', error: undefined, retries: 1, output: '20 行',
+      trace_id: 'trace-a', span_id: 'span-retry', run_id: 'run-a', attempt: 2 })
   })
 
   it('distinguishes deferred ELT receipts, confirmed writes and unknown side effects', async () => {

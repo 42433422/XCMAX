@@ -43,6 +43,7 @@ export function mergeModManifestEntries(
         const cur = baseMap.get(id)!
         if (!cur.carrierModId && declaringModId) cur.carrierModId = declaringModId
         if (!cur.hostModId && resolvedHost) cur.hostModId = resolvedHost
+        if (!cur.enterprise_layer && e.enterprise_layer) cur.enterprise_layer = e.enterprise_layer
         continue
       }
       const meta = modMeta[id]
@@ -55,6 +56,7 @@ export function mergeModManifestEntries(
         source: 'mod_manifest',
         carrierModId: declaringModId || undefined,
         hostModId: resolvedHost || undefined,
+        enterprise_layer: e.enterprise_layer,
         prompt_only: e.prompt_only === true,
       })
     }

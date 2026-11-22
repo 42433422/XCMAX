@@ -9,7 +9,7 @@
         --tasks tests/benchmarks/task_golden_set.json \
         --trial 0 --out /tmp/trial_0.jsonl
 
-评测链路：instruction → LLMWorkflowPlanner.plan() → AgentOrchestrator
+评测链路：instruction → qualified Codex runtime → durable host child tasks
 （包含审批、依赖和工具结果校验）→ DB 终态断言（复用
 business_db_write_verification._model_config 的实体映射 SSOT）。
 """
@@ -32,7 +32,7 @@ _TRIAL_BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
 
 def _bootstrap_isolated_db() -> None:
-    """在导入 app 之前设置隔离环境：独立 SQLite 文件 + 关闭 LLM。"""
+    """在导入 app 之前设置隔离环境：独立 SQLite 文件；模型仅使用显式配置且已认证的 Codex 路由。"""
     global _BOOTED
     if _BOOTED:
         return
@@ -47,18 +47,22 @@ def _bootstrap_isolated_db() -> None:
     os.environ["MODEL_USAGE_LEDGER_PATH"] = f"{tmpdir}/usage.json"
     os.environ["MODEL_USAGE_WALLET_BACKEND"] = "audit"
     os.environ.pop("MODEL_USAGE_WALLET_REQUIRED", None)
-    os.environ.setdefault("FHD_ALLOW_X_USER_ID_HEADER", "1")
+    os.environ["XCAGI_DATA_DIR"] = f"{tmpdir}/data"
+    os.environ["XCAGI_DIALOGUE_MEMORY_DIR"] = f"{tmpdir}/dialogue"
+    os.environ["XCAGI_TOOL_IDEMPOTENCY_PATH"] = f"{tmpdir}/idempotency.sqlite"
     # 计划追溯日志重定向到临时目录，避免污染仓库 resources/routing_policies/
     os.environ["XCAGI_PLAN_GRAPH_LOG"] = f"{tmpdir}/plan_graphs.jsonl"
     _BOOTED = True
 
 
-def _model_response_received(response: Any) -> bool:
-    choices = response.get("choices") if isinstance(response, dict) else None
-    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        return False
-    message = choices[0].get("message")
-    return isinstance(message, dict) and bool(message.get("content") or message.get("tool_calls"))
+def _completed_model_requests(metadata: dict[str, Any]) -> int:
+    """Count only original-run requests that actually returned and settled usage."""
+    calls = metadata.get("codex_runtime", {}).get("model_requests", {})
+    return sum(
+        row.get("state") == "completed" and isinstance(row.get("usage"), dict)
+        for row in calls.values()
+        if isinstance(row, dict)
+    )
 
 
 def _action_sig(node: Any) -> dict[str, str]:
@@ -245,14 +249,226 @@ def _execute_plan(plan: Any, task: dict[str, Any]) -> tuple[bool, str, dict[str,
     )
 
 
+def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list[Any]]:
+    """Use the same authenticated Codex/SQL queue as product requests.
+
+    The caller's explicit scenario answers/approvals are the only continuation
+    authority. No expected success can approve an action or select another model.
+    A missing qualified route fails this live benchmark visibly.
+    """
+    from datetime import timedelta
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from sqlalchemy.orm import sessionmaker
+    from starlette.requests import Request
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+    from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+    from app.application.agent_orchestrator.run_repository import set_agent_run_repository_for_tests
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+    from app.application.agent_orchestrator.task_execution_repository import (
+        set_task_execution_repository_for_tests,
+    )
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.application.agent_runtime.gateway import run_runtime_task
+    from app.db import engine
+    from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+    from app.infrastructure.codex.binding import CodexBindingStore
+    from app.infrastructure.codex.receipt_projection import (
+        refresh_codex_receipts,
+        resume_ready_codex_runs,
+    )
+    from app.utils.security.password_hash import generate_password_hash
+    from app.utils.time import utc_now_naive
+
+    factory = sessionmaker(bind=engine)
+    sid = uuid4().hex
+    with factory.begin() as db:
+        role = Role(name="admin")
+        role.permissions = [
+            Permission(code=item["code"], name=item["name"]) for item in DEFAULT_PERMISSIONS
+        ]
+        db.add(role)
+        actor = User(
+            username="task-benchmark-" + sid,
+            password=generate_password_hash(uuid4().hex),
+            tenant_id=1,
+            role="admin",
+            tier="enterprise",
+        )
+        db.add(actor)
+        db.flush()
+        db.add(
+            UserSession(
+                session_id=sid, user_id=actor.id, expires_at=utc_now_naive() + timedelta(hours=1)
+            )
+        )
+    principal = require_agent_principal(
+        Request({"type": "http", "headers": [(b"x-session-id", sid.encode())]}), x_user_id=None
+    )
+    context = authenticated_runtime_context(
+        {"source": "task_benchmark", "turn_id": uuid4().hex}, principal
+    )
+    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    set_agent_run_repository_for_tests(repository)
+    set_task_execution_repository_for_tests(queue)
+    dispatcher = AgentTaskDispatcher(execution_repository=queue, run_repository=repository)
+
+    def drain(run_id):
+        owner = "task-benchmark-worker"
+        execution = queue.claim(owner, lease_seconds=600)
+        if execution is None or execution.run_id != run_id:
+            raise RuntimeError("original benchmark task was not claimed")
+        dispatcher._execute_claim(execution, owner)
+        return repository.get(run_id)
+
+    admitted = run_runtime_task(
+        task=task["instruction"],
+        system_prompt="",
+        runtime_context=context,
+        completion_mode="auto",
+        start_queued=True,
+        _repository=repository,
+    )
+    if admitted.get("execution_state") != "queued":
+        return (
+            False,
+            str(admitted.get("error_code") or "runtime admission failed"),
+            {"status": "blocked", "final_output": admitted, "model_responses": 0},
+            [],
+        )
+    parent = drain(admitted["run_id"])
+    store = CodexBindingStore(repository)
+    approvals, answers = list(task.get("approvals") or []), list(task.get("answers") or [])
+    error = ""
+    for _ in range(32):
+        rows = store.receipt_snapshot(parent.run_id)
+        children = [repository.get(row["child_run_id"]) for row in rows]
+        waiting = [
+            (child, step)
+            for child in children
+            for step in child.steps
+            if step.status == "waiting_user"
+        ]
+        if not waiting:
+            binding = store.get(parent.run_id)
+            if (
+                binding.metadata.get("waiting_input")
+                and answers
+                and isinstance(answers[0].get("reply"), str)
+            ):
+                answer = answers.pop(0)
+                staged = run_runtime_task(
+                    task=answer["reply"],
+                    system_prompt="",
+                    runtime_context={**context, "turn_id": uuid4().hex},
+                    run_id=parent.run_id,
+                    completion_mode="auto",
+                    answer_to_waiting_input=True,
+                    start_queued=True,
+                    _repository=repository,
+                )
+                if staged.get("execution_state") != "queued":
+                    error = "original input wait could not be resumed"
+                    break
+                parent = drain(parent.run_id)
+                continue
+            if resume_ready_codex_runs(repository=repository):
+                parent = drain(parent.run_id)
+                continue
+            break
+        child, step = waiting[0]
+        if step.tool_id == "clarify":
+            target = next(
+                (node for node in child.steps if node.node_id == step.params.get("target_node_id")),
+                None,
+            )
+            if not answers:
+                break
+            answer = answers.pop(0)
+            if target is None or _action_sig(target) != {
+                key: answer[key] for key in ("tool_id", "action")
+            }:
+                error = "scripted answer does not match the original clarification target"
+                break
+            AgentOrchestrator(repository=repository).stage_clarification_answer(
+                child.run_id,
+                step_id=step.step_id,
+                parameters=answer["parameters"],
+                requested_by=principal.user_id,
+                queue=queue,
+                parent_snapshot=parent,
+            )
+        else:
+            if not approvals:
+                break
+            approval = approvals.pop(0)
+            if (
+                _action_sig(step) != {key: approval[key] for key in ("tool_id", "action")}
+                or step.params != approval["params"]
+            ):
+                error = "scripted approval does not match the pending action and parameters"
+                break
+            grant = issue_approval_grant(child, principal_id=principal.user_id)
+            if grant is None:
+                error = "pending child has no host approval grant"
+                break
+            approve_and_enqueue(
+                repository,
+                queue,
+                run_id=child.run_id,
+                token=grant["grant"],
+                principal_id=principal.user_id,
+                runtime_context={},
+                authenticated_binding=principal.mod_authorization,
+                authenticated_actor_binding=principal.actor_authorization,
+            )
+        drain(child.run_id)
+        parent = refresh_codex_receipts(repository.get(parent.run_id), repository=repository)
+    parent = refresh_codex_receipts(repository.get(parent.run_id), repository=repository)
+    rows = store.receipt_snapshot(parent.run_id)
+    children = [repository.get(row["child_run_id"]) for row in rows]
+    nodes = [SimpleNamespace(tool_id=row["tool_id"], action=row["action"]) for row in rows]
+    expected_status = (task.get("expect") or {}).get("run_status", "completed")
+    passed = not error and parent.status == expected_status
+    reason = error or (
+        ""
+        if passed
+        else f"run status: expected {expected_status}, got {parent.status}; {parent.error}"
+    )
+    execution = {
+        **parent.to_dict(),
+        "steps": [step.to_dict() for child in children for step in child.steps],
+        "tool_calls": [call.to_dict() for child in children for call in child.tool_calls],
+        "final_output": {
+            **parent.final_output,
+            "node_outputs": {
+                key: value
+                for child in children
+                for key, value in child.final_output.get("node_outputs", {}).items()
+            },
+        },
+        "model_responses": _completed_model_requests(parent.metadata),
+    }
+    return passed, reason, execution, nodes
+
+
 def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     _bootstrap_isolated_db()
     import app.db.models
-    from app.application.workflow.planner import LLMWorkflowPlanner
     from app.db import engine
     from app.db.db_base import Base
     from app.infrastructure.tenant_scope import tenant_scope
-    from app.services.tools_execution.registry import get_workflow_tool_registry
     from scripts.dev.task_benchmark_assertions import (
         check_returned_records,
         check_spreadsheets,
@@ -276,21 +492,8 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
         Base.metadata.create_all(engine, checkfirst=True)
 
     with out_path.open("w", encoding="utf-8") as out, tenant_scope(1):
-        from app.application.workflow.planner_llm_gateway import request_planner_completion
-
-        responses = []
-
-        def measured_completion(**kwargs):
-            response = request_planner_completion(**kwargs)
-            if _model_response_received(response):
-                responses.append(True)
-            return response
-
-        planner = LLMWorkflowPlanner(completion=measured_completion)
-        registry = get_workflow_tool_registry()
         for task in tasks:
             _reset_db()
-            responses.clear()
             expect = task.get("expect") or {}
             result: dict[str, Any] = {
                 "task_id": task["task_id"],
@@ -308,8 +511,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 seed_inventory_quantities(task.get("inventory_quantities") or [])
                 seed_sales_period_orders(task.get("sales_period_orders") or [])
                 seed_ledger_period_entries(task.get("ledger_period_entries") or [])
-                plan = planner.plan("bench-user", task["instruction"], registry)
-                nodes = list(plan.nodes) if plan else []
+                exec_ok, exec_why, executed, nodes = _execute_goal(task)
                 ok, why = _check_no_actions(nodes, expect)
                 if ok:
                     ok, why = _check_routing(nodes, expect)
@@ -317,12 +519,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                     ok, why = _check_forbid(nodes, expect)
                 result["routing_pass"] = ok
                 result["plan"] = [_action_sig(n) for n in nodes]
-                executed = {}
-                if plan is None:
-                    exec_ok, exec_why = False, "planner returned no plan"
-                else:
-                    exec_ok, exec_why, executed = _execute_plan(plan, task)
-                    result["execution"] = executed
+                result["execution"] = executed
                 if expect.get("no_tool_calls") and executed.get("tool_calls"):
                     exec_ok = False
                     exec_why = "unexpected tool execution while user input was required"
@@ -348,7 +545,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 result["pass"] = ok and exec_ok and db_ok and output_ok and artifact_ok
             except _TRIAL_BOUNDARY_ERRORS as exc:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
-            result["model_responses"] = len(responses)
+            result["model_responses"] = (result.get("execution") or {}).get("model_responses", 0)
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
 
 

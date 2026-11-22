@@ -48,28 +48,6 @@ def test_personal_memory_scope_survives_sessions_but_respects_owner_boundaries()
         assert scoped_personal_memory_id({**base, field: value}) != key
 
 
-def test_follow_up_cannot_replace_a_pending_write_plan():
-    from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.workflow_types import PlanGraph
-
-    service = AIChatApplicationService.__new__(AIChatApplicationService)
-    pending = {
-        "plan": PlanGraph(plan_id="original-write", intent="business_db_write"),
-        "runtime_context": {"session_id": "conversation-a"},
-        "agent_run_id": "run-original",
-    }
-    service._pending_workflows = {"owner-a": pending}
-    handled, reply = service._resume_pending_dynamic_workflow(
-        "owner-a",
-        "刚才的客户呢",
-        "刚才的客户呢",
-        {"session_id": "conversation-a"},
-    )
-    assert handled and service._pending_workflows["owner-a"] is pending
-    assert reply["data"]["data"]["plan_id"] == "original-write"
-    assert reply["data"]["data"]["run_id"] == "run-original"
-
-
 def test_provider_registry_does_not_retain_previous_users_adapter(monkeypatch):
     from app.infrastructure.llm.providers import registry
 
@@ -79,9 +57,7 @@ def test_provider_registry_does_not_retain_previous_users_adapter(monkeypatch):
     assert providers.resolve(conversation_service=SimpleNamespace(modstore_adapter=None)) is None
 
 
-def test_planner_and_cognition_share_each_threads_model_without_environment_key(monkeypatch):
-    from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
-    from app.application.workflow.planner_llm_gateway import request_planner_completion
+def test_nested_non_agent_calls_keep_each_threads_model_without_environment_key(monkeypatch):
     from app.infrastructure.llm import client as routing
 
     monkeypatch.setattr(routing, "_first_api_key", lambda: ("", None))
@@ -98,14 +74,10 @@ def test_planner_and_cognition_share_each_threads_model_without_environment_key(
         client = MagicMock()
         client.chat.completions.create.return_value = reply
         with routing.llm_client_scope(client, model):
-            plan = request_planner_completion(
-                ai_service=SimpleNamespace(),
-                context={},
-                messages=[{"role": "user", "content": "test"}],
+            result = routing.get_llm_client().chat.completions.create(
+                model=routing.resolve_chat_model(), messages=[{"role": "user", "content": "test"}]
             )
-            cognition = _run_async(_chat_completion([{"role": "user", "content": "test"}]))
-        assert plan["model"] == model
-        assert cognition["model"] == model
+        assert result.model_dump()["model"] == model
         assert {call.kwargs["model"] for call in client.chat.completions.create.call_args_list} == {
             model
         }

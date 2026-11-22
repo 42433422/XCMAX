@@ -13,22 +13,8 @@ from app.application.session_account_meta import (
 )
 
 
-def _chat_svc() -> tuple[AIChatApplicationService, MagicMock]:
-    mock_ai = MagicMock()
-    mock_ai.chat = AsyncMock(
-        return_value={"success": True, "text": "回复", "action": "followup", "data": {}}
-    )
-    with (
-        patch(
-            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
-        ),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        svc = AIChatApplicationService()
-        svc.ai_service = mock_ai
-        return svc, mock_ai
+def _chat_svc() -> AIChatApplicationService:
+    return AIChatApplicationService()
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +38,7 @@ def test_is_session_market_admin(mock_load: MagicMock) -> None:
 
 
 @patch.object(AIChatApplicationService, "_persist_chat_turn")
-@patch("app.application.agent_runtime.chat.try_runtime_chat")
+@patch("app.application.agent_runtime.chat.run_runtime_chat")
 def test_process_chat_returns_workflow_without_llm(
     mock_runtime: MagicMock, _mock_persist: MagicMock
 ) -> None:
@@ -62,17 +48,17 @@ def test_process_chat_returns_workflow_without_llm(
         "response": "工作流结果",
         "data": {"text": "工作流结果", "action": "workflow_done", "data": {}},
     }
-    svc, mock_ai = _chat_svc()
+    svc = _chat_svc()
     out = svc.process_chat("u1", "导入数据库", source="pro", context={})
     assert out["success"] is True
     assert "工作流" in out["response"]
     mock_runtime.assert_called_once()
-    mock_ai.chat.assert_not_called()
+    assert not hasattr(svc, "workflow_planner")
 
 
 @patch.object(AIChatApplicationService, "_persist_chat_turn")
 def test_process_chat_empty_message(_mock_persist: MagicMock) -> None:
-    svc, _mock_ai = _chat_svc()
+    svc = _chat_svc()
     out = svc.process_chat("u1", "")
     assert out["success"] is False
     assert "不能为空" in out["message"]

@@ -1,56 +1,31 @@
-"""Real HTTP chat answers keep the frozen child and its independent write approval."""
+"""Candidate answers preserve the original goal and require independent write approval."""
 
 from __future__ import annotations
 
+import copy
 import uuid
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_runtime import codex_runtime, gateway, goal_admission
-from app.application.agent_runtime.goal_admission import RuntimeGoal
-from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.codex_http_runtime import (
+    dynamic_chat_runtime as dynamic_chat_runtime,
+)
+from tests.fixtures.codex_http_runtime import (
+    runtime_entry as runtime_entry,
+)
 
 
 @pytest.fixture
-def reference_chat(runtime_entry, monkeypatch):
+def reference_chat(dynamic_chat_runtime, monkeypatch):
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.legacy.routes.conversation.compat_routes import router
 
-    state = runtime_entry
-    state.compiler_calls, state.transports, state.business_calls = [], [], []
-
-    def compile_goal(binding, _config):
-        state.compiler_calls.append(binding.run_id)
-        return RuntimeGoal(
-            mode="business",
-            plan=plan_to_dict(
-                PlanGraph(
-                    plan_id=f"plan_{binding.run_id}",
-                    intent="reference-answer-fixture",
-                    nodes=[
-                        WorkflowNode(
-                            node_id="lookup",
-                            tool_id="products",
-                            action="query",
-                            params={"keyword": "fixture"},
-                            idempotent=True,
-                        ),
-                        WorkflowNode(
-                            node_id="create",
-                            tool_id="customers",
-                            action="create",
-                            params={"unit_name": "{{lookup.data[0].model_number}}"},
-                            depends_on=["lookup"],
-                            risk="high",
-                        ),
-                    ],
-                )
-            ),
-        )
+    state = dynamic_chat_runtime
+    state.business_calls = []
 
     def dispatch(tool, action, _params):
         state.business_calls.append((tool, action))
@@ -60,46 +35,22 @@ def reference_chat(runtime_entry, monkeypatch):
             "data": [{"id": 7, "model_number": "first"}, {"id": 8, "model_number": "second"}],
         }
 
-    class Transport:
-        def __init__(self, config):
-            self.config = config
-            state.transports.append(self)
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_exc):
-            return None
-
-        async def start_thread(self, *, developer_instructions):
-            return "reference-chat-fixture"
-
-        async def interrupt(self):
-            return None
-
-        async def stream_turn(self, _text):
-            bridge = state.servers[-1].state.codex_tool_bridge
-            binding = bridge.store.authenticate(self.config.mcp_token)
-            operation = binding.run.metadata["runtime_expected_operations"][0]
-            bridge.invoke(
-                self.config.mcp_token,
-                "execute_plan",
-                {"call_id": "reference-graph", **operation["params"]},
+    def script(binding, text):
+        answers = goal_answers(binding.run)
+        if not answers:
+            receipt = state.execute("products", "query", {"keyword": "fixture"}, "candidates")
+            assert receipt["status"] == "completed", receipt
+        if not answers or answers[-1]["answer"] != "第二个":
+            state.bridge.invoke(
+                state.token, "request_input", {"question": "请选择客户名称：1. first；2. second。"}
             )
-            yield {
-                "method": "turn/completed",
-                "payload": {"turn": {"status": "completed"}},
-                "thread_id": "reference-chat-fixture",
-                "turn_id": "initial-turn",
-            }
+            return "请明确选择候选；选择不授予写入审批。"
+        assert "查询候选并以选中名称新增客户" in text
+        receipt = state.execute("customers", "create", {"unit_name": "second"}, "create-selected")
+        assert receipt["pending_approval"] is True, receipt
+        return "已选择 second，新增客户须审批。"
 
-    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    monkeypatch.setattr(goal_admission, "compile_runtime_goal", compile_goal)
-    monkeypatch.setattr(gateway, "run_codex_agent", codex_runtime.run_codex_agent)
-    monkeypatch.setattr("app.infrastructure.codex.CodexTransport", Transport)
-    monkeypatch.setattr(
-        "app.application.agent_runtime.chat.runtime_settings", lambda: state.settings
-    )
+    state.script = script
     monkeypatch.setattr(
         "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
     )
@@ -113,7 +64,7 @@ def reference_chat(runtime_entry, monkeypatch):
         yield state
 
 
-def test_real_chat_candidate_answer_queues_same_child_without_model_or_write_approval(
+def test_real_chat_candidate_answer_continues_same_goal_without_write_approval(
     reference_chat, local_tools
 ):
     state = reference_chat
@@ -125,10 +76,9 @@ def test_real_chat_candidate_answer_queues_same_child_without_model_or_write_app
     first = response.json()
     assert first["needs_user_input"] is True, first
     parent_id = first["run_id"]
-    question = first["data"]["clarification"]
-    child_id, step_id = question["run_id"], question["step_id"]
-    assert child_id != parent_id
-    frozen = state.repository.get(parent_id).metadata["runtime_frozen_plan"]
+    original = state.repository.get(parent_id)
+    contract = copy.deepcopy(original.metadata["runtime_goal_contract"])
+    thread_id = original.metadata["codex_runtime"]["thread_id"]
     context["agent_runtime_run_id"] = parent_id
     context["turn_id"] = "unclear-reference-answer"
     uncertain = state.chat_client.post(
@@ -136,38 +86,37 @@ def test_real_chat_candidate_answer_queues_same_child_without_model_or_write_app
     ).json()
     assert uncertain["needs_user_input"] is True, uncertain
     assert uncertain["requires_confirmation"] is False
-    assert state.repository.get(child_id).status == "waiting_user"
-    assert state.queue.get(child_id) is None
+    assert state.business_calls == [("products", "query")]
 
     context["turn_id"] = "selected-reference-answer"
     answer_payload = {"message": "第二个", "context": context}
     answered = state.chat_client.post("/api/ai/chat", json=answer_payload).json()
     assert answered["run_id"] == parent_id, answered
-    assert answered["execution_state"] == "running", answered
-    queued = state.repository.get(child_id)
-    assert queued.status == "queued"
-    proof = queued.metadata["reference_clarifications"][step_id]
-    assert proof["answer"]["parameters"] == {"id": "8"}
-    assert proof["answer"]["answered_by"] == str(state.actor.user_id)
-    assert queued.metadata["dispatch"]["approved_step_id"] == ""
-    assert state.queue.get(child_id).state == "queued"
-    # HTTP request replay cannot re-answer a later question or enqueue a new child.
+    assert answered["requires_confirmation"] is True, answered
+    child_id = answered["data"]["data"]["approval_card"]["run_id"]
+    assert child_id != parent_id
+    child = state.repository.get(child_id)
+    assert child.status == "waiting_user"
+    assert len(child.steps) == 1
+    write = child.steps[0]
+    assert write.status == "waiting_user" and write.params == {"unit_name": "second"}
+    assert state.queue.get(child_id) is None
+
     repeated = state.chat_client.post("/api/ai/chat", json=answer_payload)
     assert repeated.status_code == 200, repeated.text
-    assert (
-        state.repository.get(child_id).metadata["reference_clarifications"]
-        == queued.metadata["reference_clarifications"]
-    )
-    continued = state.drain(child_id)
-    assert continued.status == "waiting_user", continued.to_dict()
-    write = next(step for step in continued.steps if step.node_id == "create")
-    assert write.status == "waiting_user" and write.params == {"unit_name": "second"}
+    assert repeated.json()["run_id"] == parent_id
     context["turn_id"] = "not-a-write-approval"
     pending = state.chat_client.post(
         "/api/ai/chat", json={"message": "确认", "context": context}
     ).json()
     assert pending["run_id"] == parent_id and pending["requires_confirmation"] is True, pending
     assert pending["data"]["data"]["approval_card"]["run_id"] == child_id
+    assert state.repository.get(child_id).status == "waiting_user"
     assert state.business_calls == [("products", "query")]
-    assert len(state.compiler_calls) == len(state.transports) == 1
-    assert state.repository.get(parent_id).metadata["runtime_frozen_plan"] == frozen
+    final = state.repository.get(parent_id)
+    assert final.metadata["runtime_goal_contract"] == contract
+    assert final.metadata["codex_runtime"]["thread_id"] == thread_id
+    assert len(final.metadata["codex_runtime"]["calls"]) == 2
+    assert [item["answer"] for item in goal_answers(final)] == ["确认", "第二个"]
+    assert len(state.admissions) == 1 and len(state.transports) == 3
+    assert state.model_requests == [], "pending approvals must not be audited as completion"

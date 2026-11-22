@@ -13,6 +13,8 @@ const { fetchMarketCatalog } = vi.hoisted(() => ({
 
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
+  getActiveExtensionModHeaders: () => ({}),
+  getClientModsUiOffHeader: () => ({}),
   DEFAULT_MOD_API_TIMEOUT_MS: 30000,
 }))
 vi.mock('@/api/modStore', () => ({
@@ -59,7 +61,7 @@ describe('ModStore deep', () => {
     const wrapper = await mountModStore('/mod-store?tab=ai_employee')
     await vi.waitFor(() => expect(fetchMarketCatalog).toHaveBeenCalled(), { timeout: 3000 })
     expect(wrapper.find('.mod-store').exists()).toBe(true)
-    expect(wrapper.text()).toContain('AI 员工市场')
+    expect(wrapper.text()).toContain('AI 市场')
   })
 
   it('shows market title and shell', async () => {

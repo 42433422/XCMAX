@@ -143,6 +143,7 @@ def run_telemetry_scan(
     signals.extend(_scan_workflow_drift())
 
     results = []
+    failures = []
     for signal in signals:
         try:
             r = ingest_telemetry_signal(
@@ -153,6 +154,7 @@ def run_telemetry_scan(
             results.append(r)
         except RECOVERABLE_ERRORS as exc:
             logger.warning("telemetry signal ingest failed: %s", exc)
+            failures.append({"type": signal.get("type"), "error": "telemetry_signal_ingest_failed"})
             results.append({"ok": False, "error": str(exc)})
 
     market_payloads = [s["payload"] for s in signals if s.get("type") == "market_signal"]
@@ -162,11 +164,18 @@ def run_telemetry_scan(
             release_plan = plan_release_candidate_from_market(market_payloads)
         except RECOVERABLE_ERRORS as exc:
             logger.warning("release_planning from market failed: %s", exc)
+            failures.append(
+                {"type": "release_planning", "error": "telemetry_release_planning_failed"}
+            )
 
+    # 部分信号入库失败时必须如实返回 ok=False，否则调度器会记为成功，
+    # 探针坏掉也不会被任何人发现。
     return {
-        "ok": True,
+        "ok": not failures,
         "signals_found": len(signals),
         "signals_ingested": len([r for r in results if r.get("ok")]),
+        "signals_failed": len(failures),
+        "errors": failures,
         "release_planning": release_plan,
     }
 

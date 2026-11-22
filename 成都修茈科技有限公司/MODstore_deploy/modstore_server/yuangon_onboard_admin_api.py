@@ -97,7 +97,8 @@ def _discover_yuangon_ids(repo: Path) -> tuple[List[str], List[str]]:
                 if pid:
                     ids.add(pid)
         except RECOVERABLE_ERRORS as exc:
-            errs.append(f"{f.relative_to(ydir)}: {exc}")
+            logger.warning("employee manifest could not be read: %s", exc)
+            errs.append(f"{f.relative_to(ydir)}: manifest 无法读取或格式无效")
     return sorted(ids), errs
 
 
@@ -168,9 +169,9 @@ def yuangon_onboard_run(
         )
     except subprocess.TimeoutExpired:
         raise HTTPException(504, "onboard script timeout (900s)")
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("onboard subprocess failed")
-        raise HTTPException(500, str(exc)) from exc
+        raise HTTPException(500, "元工登记任务暂时无法启动") from None
 
     out = (proc.stdout or "")[-24_000:]
     err = (proc.stderr or "")[-8000:]

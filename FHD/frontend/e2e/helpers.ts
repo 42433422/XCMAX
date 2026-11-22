@@ -95,7 +95,29 @@ export async function installE2eShellMocks(page: Page): Promise<void> {
     }))
   }
 
-  await page.route(/\/api\/conversations\/(?!sessions(?:\?|$))[^/?]+(?:\?|$)/, route => route.fulfill({
+  // The synthetic account must also own its background startup reads. Letting
+  // these reach an unauthenticated API redirects the shell to the login page.
+  const accountReads: Record<string, unknown> = {
+    '/api/conversations/active': { success: true, conversation_id: '' },
+    '/api/conversations/sessions': { success: true, sessions: [], has_more: false },
+    '/api/agent/tasks': { success: true, data: [], count: 0 },
+    '/api/agent/runs': { success: true, data: [], count: 0 },
+    '/api/agent/task-runtime': { success: true, data: { running: false, max_workers: 0, active_count: 0 } },
+    '/api/tutorial/v2/courses': { success: true, data: [] },
+    '/api/tutorial/v2/runs/current': { success: true, data: null },
+    '/api/im/unread-total': { success: true, unread_total: 0 },
+  }
+  for (const [path, body] of Object.entries(accountReads)) {
+    await page.route(url => url.pathname === path, route => {
+      if (route.request().method() !== 'GET') return route.fallback()
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    })
+  }
+  await page.route('**/api/agent/tasks/events/stream', route => route.fulfill({
+    status: 200, contentType: 'text/event-stream', body: ': synthetic idle\n\n',
+  }))
+
+  await page.route(/\/api\/conversations\/(?!(?:sessions|active)(?:\?|$))[^/?]+(?:\?|$)/, route => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify({
       success: true, id: new URL(route.request().url()).pathname.split('/').pop(), messages: [], metadata: {},
     }),

@@ -27,7 +27,7 @@ from app.application.agent_orchestrator.task_execution_models import (
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
-from app.domain.task_lifecycle.adapters import LEASED_STATES, WAITING_STATES
+from app.domain.task_lifecycle.adapters import APPROVAL_STATES, LEASED_STATES
 
 
 class InMemoryTaskExecutionRepository:
@@ -174,7 +174,7 @@ class InMemoryTaskExecutionRepository:
                 recovered = row.state in LEASED_STATES
                 body = self._book.get("agent", row.tenant_id, row.run_id)
                 if recovered and body.get("effects"):
-                    self._stop_locked(row, current, "failed", "needs_verification")
+                    self._stop_locked(row, current, "unknown", "needs_verification")
                     continue
                 if recovered and row.execution_count + 1 > DEFAULT_MAX_ATTEMPTS:
                     row.state = "failed"
@@ -261,7 +261,6 @@ class InMemoryTaskExecutionRepository:
         error_code: str,
     ) -> AgentTaskExecution | None:
         from app.domain.task_lifecycle.adapters import (
-            WAITING_STATES,
             canonical_execution_state,
             execution_transition_allowed,
         )
@@ -315,7 +314,7 @@ class InMemoryTaskExecutionRepository:
             row.finished_at = now
         if error_code != "needs_verification":
             body["effects"] = []
-        if visible in WAITING_STATES or visible == "waiting_approval":
+        if visible in APPROVAL_STATES:
             body["approver"] = body.get("approver") or row.user_id
             body["approval_requested_at"] = now
         remember(
@@ -330,33 +329,41 @@ class InMemoryTaskExecutionRepository:
         self._rows[row.run_id] = copy.deepcopy(row)
         return copy.deepcopy(row)
 
-    def mark_open_effect(self, run_id: str, effect_id: str = "dispatch") -> None:
+    def mark_open_effect(
+        self, run_id: str, effect_id: str = "dispatch", *, owner_id: str = ""
+    ) -> bool:
         with self._lock:
             row = self._rows.get(str(run_id or ""))
             if row is None or row.state not in LEASED_STATES:
-                return
+                return False
+            if owner_id and (row.lease_owner != owner_id or row.lease_expires_at <= utc_now_iso()):
+                return False
             body = self._book.get("agent", row.tenant_id, row.run_id)
             effects = set(body.get("effects") or [])
             effects.add(str(effect_id or "dispatch"))
             body["effects"] = sorted(effects)
             self._book.put("agent", row.tenant_id, row.run_id, body)
+            row.updated_at = utc_now_iso()
+            return True
 
     def request_approval(self, run_id: str, approver: str) -> AgentTaskExecution | None:
+        from app.domain.task_lifecycle.adapters import execution_transition_allowed
+
         with self._lock:
             row = self._rows.get(str(run_id or ""))
-            if row is None:
+            if row is None or not execution_transition_allowed(row.state, "waiting_approval"):
                 return None
             body = self._book.get("agent", row.tenant_id, row.run_id)
             body["approver"] = str(approver or "")
             self._book.put("agent", row.tenant_id, row.run_id, body)
-            return self._transition_locked(row, "paused", error_code="approval_requested")
+            return self._transition_locked(row, "waiting_approval", error_code="approval_requested")
 
     def resolve_approval(self, run_id: str, decision: str, actor: str) -> AgentTaskExecution | None:
         from app.domain.task_lifecycle.control import TaskLifecycleError, approval_actor_allowed
 
         with self._lock:
             row = self._rows.get(str(run_id or ""))
-            if row is None:
+            if row is None or row.state not in APPROVAL_STATES:
                 return None
             body = self._book.get("agent", row.tenant_id, row.run_id)
             if not approval_actor_allowed(body, actor):
@@ -402,7 +409,7 @@ class InMemoryTaskExecutionRepository:
         row.lease_owner = ""
         row.lease_expires_at = ""
         row.last_error_code = code
-        row.finished_at = current
+        row.finished_at = "" if state == "unknown" else current
         row.updated_at = current
         body = self._book.get("agent", row.tenant_id, row.run_id)
         remember(body, at=current, source=previous, target=state, code=code, actor="")
@@ -414,7 +421,7 @@ class InMemoryTaskExecutionRepository:
 
         moment = datetime.fromisoformat(current.replace("Z", "+00:00"))
         for row in list(self._rows.values()):
-            if row.state not in WAITING_STATES:
+            if row.state not in APPROVAL_STATES:
                 continue
             body = self._book.get("agent", row.tenant_id, row.run_id)
             started = str(body.get("approval_requested_at") or row.updated_at or "")

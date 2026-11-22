@@ -160,6 +160,37 @@ def test_real_pinned_cli_private_gateway_clarification_resume_and_billing(
         body = await request.json()
         requests.append(body)
         index = len(requests)
+        if not body.get("stream"):
+            from tests.test_application.test_codex_goal_verifier import response
+
+            payload = json.loads(body["input"][1]["content"])
+            assert payload["task"] == "verify_runtime_goal" and body["tools"] == []
+            goals = [
+                {
+                    "goal_id": "reply",
+                    "source_id": "request",
+                    "source": payload["original_request"]["text"],
+                    "kind": "reply",
+                    "status": "satisfied",
+                    "evidence_ids": ["response"],
+                    "reason": "Controlled protocol fixture verifies the recorded reply",
+                }
+            ]
+            goals.extend(
+                {
+                    "goal_id": "answer-" + str(number),
+                    "source_id": answer["source_id"],
+                    "source": answer["answer"],
+                    "kind": "reply",
+                    "status": "satisfied",
+                    "evidence_ids": ["response"],
+                    "reason": "Original answer retained",
+                }
+                for number, answer in enumerate(payload["answers"])
+            )
+            return response(
+                {"goals": goals, "violations": [], "uncovered_sources": [], "feedback": ""}
+            )
         if index == 1:
             item = {
                 "type": "function_call",
@@ -227,7 +258,7 @@ def test_real_pinned_cli_private_gateway_clarification_resume_and_billing(
             "on_event": events.append,
         }
         first = gateway.run_runtime_task(
-            task="请查询指定月份的库存", runtime_context=context, **options
+            task="请记录我选择的月份并回复收到", runtime_context=context, **options
         )
         assert first.get("needs_user_input") is True, json.dumps(
             {
@@ -265,13 +296,13 @@ def test_real_pinned_cli_private_gateway_clarification_resume_and_billing(
     assert "waiting_input" not in saved.metadata["codex_runtime"]
     assert saved.metadata["codex_runtime"]["revoked"] is True
     assert saved.metadata["codex_runtime"]["coordinator_active"] is False
-    assert len(requests) == len(saved.llm_calls) == 3
+    assert len(requests) == len(saved.llm_calls) == 4
     assert {
         entry["state"] for entry in saved.metadata["codex_runtime"]["model_requests"].values()
     } == {"completed"}
     assert saved.metadata["reserved_cost_units"] == 0
-    assert saved.metadata["ai_cost_units_total"] == 3
-    assert ledger.get_model_wallet(str(actor.user_id))["balance_units"] == 97
+    assert saved.metadata["ai_cost_units_total"] == 4
+    assert ledger.get_model_wallet(str(actor.user_id))["balance_units"] == 96
     assert all(body["model"] == route.model and body["store"] is False for body in requests)
     assert saved.final_output["business_result"]["status"] == "reply_completed"
     assert saved.final_output["business_result"]["success"] is False

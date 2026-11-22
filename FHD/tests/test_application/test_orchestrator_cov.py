@@ -72,22 +72,6 @@ def _make_orchestrator(repo: MagicMock | None = None, executor: MagicMock | None
 # ---------------------------------------------------------------------------
 
 
-@patch("app.application.agent_orchestrator.orchestrator.apply_ai_budget_metadata")
-@patch("app.application.agent_orchestrator.orchestrator.AgentToolExecutor")
-def test_start_run_auto_execute_false_skips_execution(mock_exec_cls, mock_budget):
-    """auto_execute=False must not call _execute_ready_steps (line 65 branch)."""
-    orch, repo, executor = _make_orchestrator()
-
-    plan = _make_plan()
-    with (
-        patch.object(orch, "_plan", return_value=plan),
-        patch.object(orch, "_apply_plan"),
-        patch.object(orch, "_execute_ready_steps") as mock_exec_steps,
-    ):
-        orch.start_run(user_id="u1", message="msg", auto_execute=False)
-        mock_exec_steps.assert_not_called()
-
-
 # ---------------------------------------------------------------------------
 # Line 100: start_run_from_plan with auto_execute=False
 # ---------------------------------------------------------------------------
@@ -508,22 +492,8 @@ def test_prepare_repair_or_retry_limit_exceeded_returns_false():
 
 
 # ---------------------------------------------------------------------------
-# Line 939-940: _prepare_llm_repair_or_retry when LLM repair disabled
+# Deterministic retry policy after retirement of model repair
 # ---------------------------------------------------------------------------
-
-
-def test_prepare_llm_repair_or_retry_llm_disabled_returns_false():
-    """is_llm_repair_enabled=False → returns False immediately (lines 939-940)."""
-    orch, _, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step(risk="low", idempotent=True)
-
-    with patch(
-        "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-        return_value=False,
-    ):
-        result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
-    assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -532,66 +502,9 @@ def test_prepare_llm_repair_or_retry_llm_disabled_returns_false():
 # ---------------------------------------------------------------------------
 
 
-def test_prepare_llm_repair_or_retry_request_fails_returns_false():
-    """When request_llm_repair raises, event is emitted and False returned (lines 968-969)."""
-    orch, _, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step(risk="low", idempotent=True)
-    step.max_repair_attempts = 2
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-            return_value=True,
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
-            return_value=2,
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-            side_effect=RuntimeError("LLM timeout"),
-        ),
-    ):
-        result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
-
-    assert result is False
-    event_types = [e.event_type for e in run.events]
-    assert "step.llm_repair_failed" in event_types
-
-
 # ---------------------------------------------------------------------------
 # Line 983-984: params_patch empty after LLM success → returns False
 # ---------------------------------------------------------------------------
-
-
-def test_prepare_llm_repair_params_patch_empty_returns_false():
-    """Empty params_patch after advice.success returns False (lines 983-984)."""
-    orch, _, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step(risk="low", idempotent=True)
-    step.max_repair_attempts = 2
-
-    advice = {"success": True, "params_patch": {}, "llm_call": None}
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-            return_value=True,
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
-            return_value=2,
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-            return_value=advice,
-        ),
-        patch.object(orch, "_record_repair_llm_call", return_value=True),
-    ):
-        result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
-
-    assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -599,82 +512,9 @@ def test_prepare_llm_repair_params_patch_empty_returns_false():
 # ---------------------------------------------------------------------------
 
 
-def test_prepare_llm_repair_validation_fails_returns_false():
-    """Validation failure after params_patch returns False (lines 989-990)."""
-    orch, _, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step(node_id="n1", tool_id="tool_a", action="run", risk="low", idempotent=True)
-    step.params = {"a": 1}
-    step.max_repair_attempts = 2
-
-    advice = {"success": True, "params_patch": {"b": 2}, "llm_call": None}
-    bad_validation = MagicMock(ok=False, error_code="invalid_param", message="bad param")
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-            return_value=True,
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
-            return_value=2,
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-            return_value=advice,
-        ),
-        patch.object(orch, "_record_repair_llm_call", return_value=True),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.validate_tool_call",
-            return_value=bad_validation,
-        ),
-    ):
-        result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
-
-    assert result is False
-    event_types = [e.event_type for e in run.events]
-    assert "step.repair_rejected" in event_types
-
-
 # ---------------------------------------------------------------------------
 # Line 1004-1005: params unchanged after patch → returns False
 # ---------------------------------------------------------------------------
-
-
-def test_prepare_llm_repair_params_unchanged_returns_false():
-    """When next_params == previous_params, returns False (lines 1004-1005)."""
-    orch, _, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step(node_id="n1", tool_id="tool_a", action="run", risk="low", idempotent=True)
-    step.params = {"a": 1}
-    step.max_repair_attempts = 2
-
-    # params_patch that doesn't change anything
-    advice = {"success": True, "params_patch": {"a": 1}, "llm_call": None}
-    good_validation = MagicMock(ok=True)
-
-    with (
-        patch(
-            "app.application.agent_orchestrator.orchestrator.is_llm_repair_enabled",
-            return_value=True,
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.llm_repair_attempt_limit",
-            return_value=2,
-        ),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.request_llm_repair",
-            return_value=advice,
-        ),
-        patch.object(orch, "_record_repair_llm_call", return_value=True),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.validate_tool_call",
-            return_value=good_validation,
-        ),
-    ):
-        result = orch._prepare_llm_repair_or_retry(run, step, runtime_context={})
-
-    assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -682,60 +522,9 @@ def test_prepare_llm_repair_params_unchanged_returns_false():
 # ---------------------------------------------------------------------------
 
 
-def test_record_repair_llm_call_no_llm_call_returns_true():
-    """advice without LLMCall instance returns True (lines 1060-1061)."""
-    orch, _, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step()
-
-    advice = {"llm_call": None, "success": True}
-    result = orch._record_repair_llm_call(run, step, advice)
-    assert result is True
-
-
-def test_record_repair_llm_call_non_llmcall_object_returns_true():
-    """Non-LLMCall object in advice returns True (lines 1060-1061)."""
-    orch, _, _ = _make_orchestrator()
-    run = _make_run()
-    step = _make_step()
-
-    advice = {"llm_call": {"not": "a real llm call"}, "success": True}
-    result = orch._record_repair_llm_call(run, step, advice)
-    assert result is True
-
-
 # ---------------------------------------------------------------------------
 # Line 1085-1086: _record_repair_llm_call when call.status == "failed" → False
 # ---------------------------------------------------------------------------
-
-
-def test_record_repair_llm_call_failed_status_returns_false():
-    """LLMCall with status='failed' causes _record_repair_llm_call to return False (lines 1085-1086)."""
-    orch, _, _ = _make_orchestrator()
-    run = _make_run()
-    run.metadata["cost_units_total"] = 0
-    run.metadata["ai_cost_units_total"] = 0
-    step = _make_step()
-
-    llm_call = LLMCall(
-        provider_id="test_provider",
-        provider="openai",
-        model="gpt-4",
-        status="failed",
-        cost_units=0,
-    )
-    advice = {"llm_call": llm_call}
-
-    with (
-        patch("app.application.agent_orchestrator.orchestrator.refresh_ai_budget_metadata"),
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_tool_action_spec",
-            return_value=None,
-        ),
-    ):
-        result = orch._record_repair_llm_call(run, step, advice)
-
-    assert result is False
 
 
 # ---------------------------------------------------------------------------

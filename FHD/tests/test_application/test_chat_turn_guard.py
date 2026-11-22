@@ -40,26 +40,23 @@ def test_keeps_displayable_text_and_rejects_whitespace_or_reasoning():
 
 
 def test_unknown_agent_effect_survives_public_chat_sanitization():
-    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
-    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-    from app.application.workflow.workflow_types import PlanGraph
+    from app.application.agent_runtime.chat import runtime_chat_payload
     from app.fastapi_routes.ai_intent import _public_unified_chat_payload
 
-    step = AgentStep(
-        node_id="write",
-        tool_id="customers",
-        action="create",
-        status="failed",
-        error="private database detail",
-        output={"success": False, "outcome": "unknown", "reconciliation_required": True},
+    payload = runtime_chat_payload(
+        {
+            "run_id": "original-run",
+            "ok": False,
+            "execution_state": "unknown",
+            "reconciliation_required": True,
+            "retryable": False,
+            "error": "private database detail",
+        }
     )
-    run = AgentRun(user_id="1", message="新增客户", status="blocked", steps=[step])
-    plan = PlanGraph(plan_id="test", intent="customer_write", nodes=[])
-    payload = AIChatWorkflowResponseMixin()._format_agent_run_response(plan, run)
     public = _public_unified_chat_payload(payload)
     assert payload["requires_reconciliation"] is True and payload["retryable"] is False
     assert public["execution_state"] == "unknown" and public["retryable"] is False
-    assert public["run_id"] == run.run_id
+    assert public["run_id"] == "original-run"
     assert "勿重复提交" in public["message"] and "private database detail" not in str(public)
     for status in ("pending_approval", "running", "queued"):
         pending = {"success": True, "data": {"status": status}}
@@ -139,47 +136,6 @@ def test_cleanup_and_followups_reach_planner_with_conversation_history(monkeypat
     assert "_bulk_preview_scopes" not in args[2]
     assert result == {"response": "模型回复"}
     snapshot.assert_not_called()
-
-
-def test_model_reply_is_visible_after_langgraph():
-    import json
-    from unittest.mock import Mock
-
-    from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
-    from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
-
-    response = {
-        "choices": [
-            {
-                "message": {
-                    "content": json.dumps(
-                        {"mode": "reply", "reply": "可见的模型正文"}, ensure_ascii=False
-                    )
-                }
-            }
-        ]
-    }
-    service = Mock()
-    service.get_context.return_value = None
-    completion = Mock(return_value=response)
-    plan = LLMWorkflowPlanner(ai_service=service, completion=completion).plan(
-        "user", "你好", get_workflow_tool_registry(), {}
-    )
-    result = PlannedWorkflowDispatch._execute_reply_plan(plan, {})
-    assert result["success"] is True and result["response"] == "可见的模型正文"
-    completion.assert_called_once()
-
-
-def test_whitespace_model_reply_is_not_a_success():
-    import json
-
-    from app.application.workflow.llm_plan_generation import _decode_completion
-
-    response = {
-        "choices": [{"message": {"content": json.dumps({"mode": "reply", "reply": "  \n"})}}]
-    }
-    assert _decode_completion(response) is None
 
 
 def test_retry_and_second_confirm_do_not_write(monkeypatch):

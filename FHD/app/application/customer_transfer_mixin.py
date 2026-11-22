@@ -209,7 +209,11 @@ class CustomerTransferMixin:
             }
 
     def export_to_excel(
-        self, keyword: str | None = None, template_id: str | None = None
+        self,
+        keyword: str | None = None,
+        template_id: str | None = None,
+        *,
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """导出购买单位到 Excel"""
         try:
@@ -307,14 +311,36 @@ class CustomerTransferMixin:
                             ]
                         )
 
-                wb.save(file_path)
+                artifacts = []
+                context = runtime_context or {}
+                run_id = str(context.get("run_id") or "")
+                if run_id:
+                    from io import BytesIO
 
-                return {
+                    from app.application.agent_orchestrator.artifact_files import (
+                        artifact_path,
+                        store_scoped_run_file,
+                    )
+
+                    content = BytesIO()
+                    wb.save(content)
+                    receipt = store_scoped_run_file(
+                        content.getvalue(), name=filename, context=context
+                    )
+                    artifacts.append(receipt)
+                    file_path = str(artifact_path(run_id, receipt["artifact_id"]))
+                else:
+                    wb.save(file_path)
+                wb.close()
+                result: dict[str, Any] = {
                     "success": True,
                     "message": f"成功导出 {len(units)} 条记录",
                     "file_path": str(file_path),
                     "filename": filename,
                 }
+                if artifacts:
+                    result["artifacts"] = artifacts
+                return result
             finally:
                 session.close()
 

@@ -123,7 +123,7 @@ def _fetch_fhd_host_snapshot(
             return {
                 "included": False,
                 "reason": f"fhd_http_{resp.status_code}",
-                "detail": resp.text[:300],
+                "detail": "宿主对账服务拒绝请求",
             }
         data = resp.json()
         if not isinstance(data, dict):
@@ -137,7 +137,7 @@ def _fetch_fhd_host_snapshot(
         return {
             "included": False,
             "reason": "fhd_fetch_error",
-            "detail": str(exc)[:300],
+            "detail": "宿主对账数据暂时不可用",
         }
 
 

@@ -14,7 +14,7 @@ Covers missing branches in:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
@@ -698,10 +698,10 @@ class TestGetMonthlyTrend:
             result = svc.get_monthly_trend()
 
         assert result["success"] is True
-        assert result["year"] == datetime.utcnow().year
+        assert result["year"] == datetime.now(UTC).year
         assert len(result["data"]) == 12
         for i, month_data in enumerate(result["data"]):
-            assert month_data["month"] == f"{datetime.utcnow().year}-{i + 1:02d}"
+            assert month_data["month"] == f"{datetime.now(UTC).year}-{i + 1:02d}"
             assert month_data["revenue"] == 0.0
             assert month_data["cost"] == 0.0
             assert month_data["profit"] == 0.0

@@ -17,9 +17,9 @@ from app.application.workflow.workflow_types import PlanGraph, plan_to_dict
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 from app.infrastructure.codex.policy import RuntimeSettings
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import compiled_chat_runtime as compiled_chat_runtime
+from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.codex_http_runtime import fixture_goal_review
 from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
-from tests.fixtures.planner_model import goal_review_response
 
 ISSUE_MESSAGE = "客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5"
 
@@ -84,7 +84,7 @@ def _no_llm(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_stream_entry_stages_order_with_explicit_quantity_and_price(
-    monkeypatch, compiled_chat_runtime, local_tools
+    monkeypatch, dynamic_chat_runtime, local_tools
 ):
     from app.application.workflow.workflow_types import WorkflowNode
 
@@ -115,30 +115,16 @@ def test_stream_entry_stages_order_with_explicit_quantity_and_price(
     )
     body = _body(message=ISSUE_MESSAGE.replace("数量24", "数量24kg"), user_id="u-2067")
 
-    def completion(**kwargs):
-        prompt = json.loads(kwargs["messages"][-1]["content"])
-        if prompt.get("task") == "audit_goal_coverage":
-            return goal_review_response(
-                prompt, source=body.message, node_ids=["generate"], outcome="execute"
-            )
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(
-                            {
-                                "mode": "workflow",
-                                "intent": plan.intent,
-                                "nodes": plan_to_dict(plan)["nodes"],
-                            }
-                        )
-                    }
-                }
-            ]
+    state = dynamic_chat_runtime
+    state.actions = [
+        {
+            "tool_id": "shipment_orders",
+            "action": "generate",
+            "params": plan.nodes[0].params,
+            "call_id": "generate",
         }
-
-    state = compiled_chat_runtime
-    state.completion = completion
+    ]
+    state.review = lambda prompt: pytest.fail("pending write must stop before final review")
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment_svc):
         events = _events(
             b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
@@ -147,13 +133,13 @@ def test_stream_entry_stages_order_with_explicit_quantity_and_price(
     result = events[-1]["result"]
     assert result["runtime"] == "codex" and result["requires_confirmation"] is True, result
     parent = state.repository.get(result["run_id"])
-    frozen = parent.metadata["runtime_frozen_plan"]
-    assert frozen["nodes"][-1]["params"] == plan.nodes[-1].params
-    assert frozen["nodes"][-1]["risk"] == "high"
+    assert parent.metadata["runtime_goal_contract"]["request"]["text"] == body.message
     child_id = result["data"]["data"]["approval_card"]["run_id"]
     child = state.repository.get(child_id)
     assert child.status == "waiting_user" and not child.tool_calls
-    assert len(state.transports) == 1 and not service._pending_workflows
+    assert child.steps[0].params == plan.nodes[-1].params
+    assert child.steps[0].risk in {"medium", "high"}
+    assert len(state.transports) == 1 and not hasattr(service, "_pending_workflows")
     shipment_svc.generate_shipment_document.assert_not_called()
 
 
@@ -185,136 +171,57 @@ def test_stream_entry_hands_shipment_to_the_same_chat_service(
 @pytest.mark.parametrize(
     "case", ["absent", "missing", "corrupt", "empty", "expired", "cross_session"]
 )
-def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, case):
+def test_legacy_in_memory_controls_cannot_start_retired_kernel(monkeypatch, message, case):
     _no_llm(monkeypatch)
     monkeypatch.setattr("app.application.agent_runtime.chat.runtime_settings", RuntimeSettings)
     service = AIChatApplicationService()
-    monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
-    from app.application.agent_task_context import scoped_conversation_user_id
-    from app.application.workflow.workflow_types import WorkflowNode
-
-    runtime = chat_helpers._runtime_context_with_authenticated_actor(
-        _request(), {"session_id": "s"}
-    )
-    owner_key = scoped_conversation_user_id("u-cancel", runtime)
-    valid = PlanGraph(
-        "pending-control",
-        "fixture",
-        nodes=[
-            WorkflowNode(
-                node_id="generate",
-                tool_id="shipment_orders",
-                action="generate",
-                params={
-                    "unit_name": "客户",
-                    "products": [{"name": "商品", "quantity": 1, "unit": "kg", "unit_price": 1}],
-                },
-            )
-        ],
-    )
-    if case != "absent":
-        service._pending_workflows[owner_key] = {
-            "plan": {}
-            if case == "corrupt"
-            else PlanGraph("empty", "fixture")
-            if case == "empty"
-            else None
-            if case == "missing"
-            else valid,
-            "runtime_context": {
-                **runtime,
-                "session_id": "other" if case == "cross_session" else "s",
-            },
-            "kind": "clarification" if case == "expired" else "workflow",
-            "created_at": 1.0 if case == "expired" else time.time(),
-            "ttl_seconds": 30,
-        }
+    assert not hasattr(service, "_pending_workflows")
+    assert not hasattr(service, "_hydrate_pending_workflow")
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     execute = MagicMock(side_effect=AssertionError("Invalid control must not execute"))
-    monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator", execute)
     monkeypatch.setattr(
-        "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", execute
+        "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan", execute
     )
-    body = _body(message=message, user_id="u-cancel", context={"session_id": "s"})
+    body = _body(
+        message=message,
+        user_id="u-cancel",
+        context={
+            "session_id": "s",
+            "_pending_workflows": {"case": case, "approved": True},
+            "approved": True,
+            "approved_step_id": "generate",
+        },
+    )
     result = _events(
         b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     )[-1]["result"]
-    if case in {"absent", "cross_session"}:
-        # No original task exists in this conversation. A deployment without a
-        # qualified fixed executor must refuse, never revive the retired planner
-        # or treat a different conversation's plan as this user's approval.
-        assert result["success"] is False
-        assert result["data"]["error_code"] == "runtime_policy_blocked"
-        assert "qualification is missing" in result["response"]
-        assert result["business_completed"] is False
-        assert result["requires_confirmation"] is False
-    else:
-        assert result["data"]["action"] == "clarification_required"
+    # Legacy in-memory slots are not execution authority. The fixed runtime
+    # must refuse this unqualified route, with no planner or business fallback.
+    assert result["success"] is False
+    assert result["data"]["error_code"] == "runtime_policy_blocked"
+    assert "qualification is missing" in result["response"]
+    assert result["business_completed"] is False
+    assert result["requires_confirmation"] is False
     execute.assert_not_called()
-    assert (
-        not service._pending_workflows
-        if case in {"absent", "expired"}
-        else owner_key in service._pending_workflows
-    )
 
 
 def test_stream_missing_spec_requests_clarification_without_document(
-    monkeypatch, compiled_chat_runtime
+    monkeypatch, dynamic_chat_runtime
 ):
     from app.application.shipment_app_service import ShipmentApplicationService
-    from app.application.workflow.clarification_lifecycle import build_clarify_node
-    from app.application.workflow.workflow_types import WorkflowNode
 
-    plan = PlanGraph(
-        plan_id="missing-unit",
-        intent="shipment_generate",
-        nodes=[
-            WorkflowNode(
-                node_id="generate",
-                tool_id="shipment_records",
-                action="create",
-                params={
-                    "unit_name": "客户闭环验收客户",
-                    "products": [{"name": "客户闭环测试商品A", "quantity": 24, "unit_price": 3.5}],
-                },
-            )
-        ],
-    )
     service = AIChatApplicationService()
+    state = dynamic_chat_runtime
 
-    def completion(**kwargs):
-        prompt = json.loads(kwargs["messages"][-1]["content"])
-        if prompt.get("task") == "audit_goal_coverage":
-            return goal_review_response(
-                prompt,
-                source=ISSUE_MESSAGE,
-                node_ids=["clarify_shipment_unit", "generate"],
-                outcome="clarify",
-            )
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(
-                            {
-                                "mode": "workflow",
-                                "intent": plan.intent,
-                                "nodes": plan_to_dict(plan)["nodes"],
-                            }
-                        )
-                    }
-                }
-            ]
-        }
+    def ask_units(binding, text):
+        observed = state.bridge.invoke(
+            state.token, "request_input", {"question": "请补充数量24对应的计量单位。"}
+        )
+        assert observed["needs_user_input"] is True
+        return observed["question"]
 
-    state = compiled_chat_runtime
-    state.completion = completion
-    monkeypatch.setattr(
-        "app.application.workflow.planning_graph_policy.build_clarify_node",
-        lambda question, ambient: build_clarify_node(
-            question, {**ambient, "node_id": "clarify_shipment_unit"}
-        ),
-    )
+    state.script = ask_units
+    state.review = lambda prompt: pytest.fail("missing units are not a completed goal")
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     generator = MagicMock()
     shipment = ShipmentApplicationService(MagicMock(), generator, MagicMock())
@@ -326,9 +233,10 @@ def test_stream_missing_spec_requests_clarification_without_document(
     assert "计量单位" in result["response"]
     assert "已生成" not in result["response"]
     parent = state.repository.get(result["run_id"])
-    assert parent.metadata.get("runtime_frozen_plan") is None
+    assert parent.metadata["runtime_goal_contract"]["request"]["text"] == ISSUE_MESSAGE
     assert parent.status == "waiting_user" and not parent.tool_calls
-    assert state.transports == [] and not service._pending_workflows
+    assert len(state.transports) == 1 and not hasattr(service, "_pending_workflows")
+    assert state.model_requests == []
     generator.generate.assert_not_called()
 
 
@@ -352,7 +260,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
     tmp_path,
     authenticated_stream,
     endpoint,
-    compiled_chat_runtime,
+    dynamic_chat_runtime,
 ):
     from app.application.elt.service_uploads import UploadServiceMixin
     from app.db.models.elt import EltUpload
@@ -365,25 +273,25 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
     seen = []
     reviewed = []
 
-    def completion(**kwargs):
-        payload = json.loads(kwargs["messages"][1]["content"])
-        if payload.get("task") == "audit_goal_coverage":
-            reviewed.append(payload)
-            source = payload["user_message"]
-            assert source in {"Summarize attached prices.", "Explain the attached document."}
-            assert payload["plan"]["nodes"][0]["params"] == {"response": "已查看附件"}
-            return goal_review_response(
-                payload, source=source, node_ids=["model_reply"], outcome="reply"
-            )
-        seen.append(kwargs["context"])
-        return {
-            "choices": [
-                {"message": {"content": json.dumps({"mode": "reply", "reply": "已查看附件"})}}
-            ]
-        }
+    state = dynamic_chat_runtime
+    state.actions = []
+    state.reply = "已查看附件"
 
+    def inspect_turn(binding):
+        seen.append(binding.run.metadata["runtime_goal_contract"]["request"])
+
+    def review(prompt):
+        reviewed.append(prompt)
+        assert prompt["original_request"]["text"] in {
+            "Summarize attached prices.",
+            "Explain the attached document.",
+        }
+        assert prompt["response"] == "已查看附件"
+        return fixture_goal_review(prompt, kind="reply")
+
+    state.on_turn = inspect_turn
+    state.review = review
     service = AIChatApplicationService()
-    compiled_chat_runtime.completion = completion
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(
@@ -411,7 +319,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
         assert response.status_code == 200, response.text
         assert len(seen) == 1
         assert len(reviewed) == 1
-        assert "paint" in seen[0]["file_context"]["verified_uploads"][0]["text"]
+        assert "paint" in seen[0]["attachments"][0]["preview"]["text"]
         assert "已查看附件" in response.text
         with tenant_scope(7), actor.factory.begin() as db:
             db.query(EltUpload).filter(EltUpload.id == upload["upload_id"]).one().owner_user_id = 99
@@ -446,5 +354,5 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
         assert len(seen) == 2
         assert len(reviewed) == 2
         assert "PRIVATE_LOCAL_CONTENT_MUST_NOT_BE_READ" not in str(seen[-1])
-        assert "verified_uploads" not in str(seen[-1].get("file_context", {}))
+        assert seen[-1]["attachments"] == []
         assert "owned_upload" not in raw_path.text

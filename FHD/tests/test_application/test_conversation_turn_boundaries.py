@@ -17,18 +17,18 @@ from app.db.models import AIConversation, AIConversationSession
 from app.domain.shared_services.conversation_service import ConversationRevisionError
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import compiled_chat_runtime as compiled_chat_runtime
+from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.codex_http_runtime import fixture_goal_review
 from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
-from tests.fixtures.planner_model import goal_review_response
 
 
 @pytest.fixture
-def runtime(compiled_chat_runtime, monkeypatch, tmp_path):
+def runtime(dynamic_chat_runtime, monkeypatch, tmp_path):
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.domain.shared_services.conversation_service import ConversationService
     from app.fastapi_routes import xcagi_compat_chat_helpers as facade
 
-    actor = compiled_chat_runtime.actor
+    actor = dynamic_chat_runtime.actor
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "memory"))
     monkeypatch.setattr(
         "app.application.attachment_artifacts.store._default_root", lambda: tmp_path / "artifacts"
@@ -47,11 +47,10 @@ def runtime(compiled_chat_runtime, monkeypatch, tmp_path):
     conversation = ConversationService()
     monkeypatch.setattr("app.services.get_conversation_service", lambda: conversation)
     service = AIChatApplicationService.__new__(AIChatApplicationService)
-    service._pending_workflows = {}
     service._inject_excel_vector_context = lambda **kw: kw["context"]
     service._inject_wechat_contact_context = lambda **kw: kw["context"]
     service._persist_recallable_chat_turn = lambda **kw: None
-    service._try_handle_dynamic_workflow = Mock(side_effect=AssertionError("retired new-task path"))
+    assert not hasattr(AIChatApplicationService, "_try_handle_dynamic_workflow")
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setattr("app.application.chat_turn_guard.admit_chat_turn", lambda *args: None)
     monkeypatch.setattr(
@@ -72,12 +71,11 @@ def runtime(compiled_chat_runtime, monkeypatch, tmp_path):
             module, "_ensure_chat_db_read_authorized", lambda *a, **kw: (True, None)
         )
         monkeypatch.setattr(module, "_message_requires_db_read_token", lambda message: False)
-        monkeypatch.setattr(module, "_ensure_vector_index_if_needed", lambda *args: None)
         monkeypatch.setattr(module, "planner_workflow_interrupt_reply", lambda message: None)
     monkeypatch.setattr(compat, "assert_p2_elevated_claim_or_raise", lambda request: None)
     monkeypatch.setattr(compat, "resolve_ai_tier", lambda request: "standard")
     yield SimpleNamespace(
-        actor=actor, service=service, conversation=conversation, compiled=compiled_chat_runtime
+        actor=actor, service=service, conversation=conversation, compiled=dynamic_chat_runtime
     )
     for lease in tuple(memory._INFLIGHT.values()):
         lease.release()
@@ -85,18 +83,11 @@ def runtime(compiled_chat_runtime, monkeypatch, tmp_path):
 
 
 def _script_reply(runtime, message, reply):
-    def completion(**kwargs):
-        prompt = json.loads(kwargs["messages"][-1]["content"])
-        assert prompt["user_message"] == message
-        if prompt.get("task") == "audit_goal_coverage":
-            return goal_review_response(
-                prompt, source=message, node_ids=["model_reply"], outcome="reply"
-            )
-        return {
-            "choices": [{"message": {"content": json.dumps({"mode": "reply", "reply": reply})}}]
-        }
-
-    runtime.compiled.completion = completion
+    runtime.compiled.actions = []
+    runtime.compiled.reply = reply
+    runtime.compiled.review = lambda prompt: fixture_goal_review(
+        prompt, kind="reply", source=message
+    )
 
 
 def _body(**overrides):
@@ -235,7 +226,7 @@ async def test_real_dispatch_captures_epoch_for_json_and_sse(
         payload = await compat.execute_compat_chat(runtime.actor.request, body)
     assert len(contexts) == 1 and persist.call_count == 1
     assert len(runtime.compiled.transports) == (1 if mode == "online" else 0)
-    runtime.service._try_handle_dynamic_workflow.assert_not_called()
+    assert not hasattr(runtime.service, "_try_handle_dynamic_workflow")
     assert payload["history_persistence"]["status"] == ("invalidated" if withdraw else "saved")
     assert _rows(runtime) == ([] if withdraw else [("user", body.message), ("assistant", "reply")])
     with runtime.actor.factory() as db:
@@ -287,14 +278,13 @@ async def test_credential_identity_survives_sql_restore_and_rejects_changed_secr
     )
     assert memory._read(key, body.context) == before
     assert _rows(runtime)[0][1] == message.replace("fixture-alpha", "[已隐藏]")
-    runtime.service._try_handle_dynamic_workflow = Mock(
-        side_effect=AssertionError("duplicate execution")
-    )
+    before_transports = len(runtime.compiled.transports)
     rejected = await compat.execute_compat_chat(
         runtime.actor.request, _body(message=message.replace("fixture-alpha", "fixture-beta"))
     )
     assert rejected["success"] is False and len(_rows(runtime)) == 2
-    runtime.service._try_handle_dynamic_workflow.assert_not_called()
+    assert len(runtime.compiled.transports) == before_transports
+    assert not hasattr(runtime.service, "_try_handle_dynamic_workflow")
 
 
 @pytest.mark.asyncio
@@ -339,11 +329,11 @@ async def test_attachment_context_keeps_full_evidence_and_original_turn_identity
         payload = await compat.execute_compat_chat(runtime.actor.request, original)
     assert payload["history_persistence"]["status"] == "saved"
     assert len(observed) == 1 and collect.await_args.kwargs["user_id"] == "1"
-    assert len(runtime.compiled.model_requests) == 2
+    assert len(runtime.compiled.model_requests) == 1
     assert all(
         "FINAL-EVIDENCE-MARKER" in json.dumps(prompt) for prompt in runtime.compiled.model_requests
     )
-    runtime.service._try_handle_dynamic_workflow.assert_not_called()
+    assert not hasattr(runtime.service, "_try_handle_dynamic_workflow")
     assert _rows(runtime) == [("user", original.message), ("assistant", "attachment reply")]
     replay = memory.prepare_chat_turn(original.message, observed[0])
     assert replay["data"]["replay"] and replay["response"] == "attachment reply"

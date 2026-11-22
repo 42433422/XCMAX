@@ -30,6 +30,8 @@ const STATUS_CLASS: Record<TracePhase['status'], string> = {
   failed: 'st-failed',
   waiting: 'st-waiting',
   blocked: 'st-blocked',
+  paused: 'st-waiting',
+  cancelled: 'st-blocked',
 }
 
 function escapeMermaidLabel(text: string): string {

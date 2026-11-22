@@ -162,17 +162,18 @@ def apply_employee_change_request(
                 with os.fdopen(os.dup(fd), "w", encoding="utf-8") as stream:
                     os.ftruncate(fd, 0)
                     stream.write(content)
-        except OSError as exc:
+        except OSError:
+            logger.exception("employee change request write failed")
             row.status = "failed"
-            row.error = str(exc)[:2000]
+            row.error = "文件写入失败，请核对原变更请求"
             session.commit()
             _publish_cr_result(
                 int(change_request_id),
                 str(row.source_employee_id or ""),
                 False,
-                str(exc)[:500],
+                "文件写入失败，请核对原变更请求",
             )
-            return {"ok": False, "error": str(exc)[:500]}
+            return {"ok": False, "error": "文件写入失败，请核对原变更请求"}
 
         row.status = "applied"
         row.approved_by_user_id = int(approved_by_user_id)
@@ -338,12 +339,15 @@ def apply_employee_change_request(
                 fingerprint=None,
             )
             deploy_event_out = {"ok": True}
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
             logger.exception(
                 "publish ops.change_request.approved failed for CR %d",
                 change_request_id,
             )
-            deploy_event_out = {"ok": False, "error": str(exc)[:300]}
+            deploy_event_out = {
+                "ok": False,
+                "error": "部署事件发布失败，请核对原变更请求",
+            }
     return {
         "ok": True,
         "path": resolved,

@@ -18,6 +18,42 @@ def _success(**fields: Any) -> dict[str, Any]:
 
 
 _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
+    ("desktop_automation", "computer_execute"): [
+        _sample(
+            "verify_browser_page",
+            {
+                "request_id": "computer-example-1",
+                "target": "browser",
+                "steps": [{"action": "navigate", "url": "https://example.com/"}],
+                "verification": {"kind": "url", "expected": "https://example.com/"},
+            },
+            _success(executed=True, verified=True, request_id="computer-example-1"),
+        )
+    ],
+    ("browser", "observe"): [
+        _sample(
+            "read_approved_site",
+            {"url": "https://example.com"},
+            _success(outcome="observed", verified=False, snapshot="- heading: Example"),
+        )
+    ],
+    ("browser", "execute"): [
+        _sample(
+            "submit_and_read_receipt",
+            {
+                "url": "https://example.com/orders",
+                "steps": [{"action": "click", "locator": {"role": "button", "name": "提交"}}],
+                "verify": [
+                    {"kind": "text", "locator": {"selector": "#receipt"}, "expected": "提交成功"}
+                ],
+            },
+            _success(
+                outcome="succeeded",
+                verified=True,
+                verification=[{"kind": "text", "status": "passed"}],
+            ),
+        )
+    ],
     ("sales", "create_order"): [
         _sample(
             "confirmed_named_order",
@@ -291,7 +327,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             _success(
                 message="employee run accepted",
                 employee_id="quote-agent",
-                data={"status": "accepted"},
+                data={"status": "accepted", "execution_status": "accepted"},
             ),
         )
     ],

@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from typing import Any, Literal
 
-from app.domain.task_lifecycle.agent_runtime_contract import frozen_goal_coverage
+from app.domain.task_lifecycle.agent_runtime_contract import goal_report_coverage
 from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 
 ClassifiedRunStatus = Literal["blocked", "waiting_user", "running", "failed", "completed"]
@@ -127,22 +127,32 @@ def classify_runtime_result(
             output=question,
         )
         return "waiting_user"
-    receipts_verified = bool(rows) and all(
-        receipt_state(row) == "completed"
+    verified_rows = [
+        row
+        for row in rows
+        if receipt_state(row) == "completed"
         and (row.get("receipt") or {}).get("success") is True
         and (row.get("receipt") or {}).get("verified") is True
+    ]
+    report = metadata.get("goal_verification")
+    if not isinstance(report, dict):
+        report = {}
+    reviewed_output = str(result.get("goal_response", result.get("output")) or "")
+    coverage = goal_report_coverage(
+        metadata.get("goal_contract"),
+        rows,
+        reviewed_output,
+        metadata.get("goal_answers"),
+        report,
+    )
+    result["goal_coverage"] = coverage
+    result["verified_operations"] = bool(verified_rows) and all(
+        (row.get("receipt") or {}).get("success") is not True or row in verified_rows
         for row in rows
     )
-    coverage = (
-        frozen_goal_coverage(metadata.get("expected_operations"), rows)
-        if completion_mode == "business" and receipts_verified
-        else None
-    )
-    result["verified_operations"] = receipts_verified
-    if coverage is not None:
-        result["goal_coverage"] = coverage
+    mode = str(coverage["mode"])
     if runtime_status != "completed" and (
-        not coverage or not coverage["completed"] or runtime_status in {"cancelled", "paused"}
+        not coverage["completed"] or mode == "reply" or runtime_status in {"cancelled", "paused"}
     ):
         result.update(
             exit_status=runtime_status or "failed",
@@ -153,38 +163,20 @@ def classify_runtime_result(
             output="本轮运行尚未完成，未确认任务完成。",
         )
         return "failed"
-    if rows and not receipts_verified:
+    if not coverage["completed"]:
+        feedback = str((report or {}).get("feedback") or "原始目标仍需逐项核对。")
         result.update(
-            exit_status="unverified_result",
-            execution_state="failed",
-            error="业务回执未通过核验，不能报告执行成功",
-            output="业务回执未通过核验，不能报告执行成功。",
-        )
-        return "failed"
-    if not rows and completion_mode == "business":
-        result.update(
-            exit_status="no_business_receipt",
+            exit_status="goal_verification_required",
             execution_state="blocked",
-            output="没有可核验的业务回执，尚未确认任务完成。",
-            error="本轮没有可核验的业务执行回执",
+            error="已执行动作不等于整体目标完成，原任务目标仍需核对",
+            output=f"已核验 {len(verified_rows)} 项操作，整体目标尚未完成。\n{feedback}",
+            goal_response=reviewed_output,
+            verification_feedback=feedback,
+            retryable=isinstance(report, dict)
+            and report.get("status") in {"needs_work", "unavailable"},
         )
         return "blocked"
-    if completion_mode == "business":
-        if coverage is None or not coverage["completed"]:
-            result.update(
-                exit_status="goal_verification_required",
-                execution_state="blocked",
-                error="已执行动作不等于整体目标完成，原任务目标仍需核对",
-                output=f"已核验 {coverage['operations'] if coverage else 0} 项操作，整体目标尚待核对。",
-            )
-            return "blocked"
-        if runtime_status != "completed":
-            result.update(
-                output=f"已按业务回执核验全部 {coverage['required']} 项冻结义务，业务任务已完成。",
-                runtime_error=result.pop("error", ""),
-                runtime_error_code=result.pop("error_code", ""),
-            )
-    elif not str(result.get("output") or "").strip():
+    if mode == "reply" and not reviewed_output.strip():
         result.update(
             exit_status="empty_reply",
             execution_state="failed",
@@ -194,12 +186,19 @@ def classify_runtime_result(
             runtime_completed=True,
         )
         return "failed"
+    result["goal_response"] = reviewed_output
+    if mode == "business" and (runtime_status != "completed" or not reviewed_output.strip()):
+        result.update(
+            output=f"已按原任务回执逐项核验全部 {coverage['required']} 项目标，业务任务已完成。",
+            runtime_error=result.pop("error", ""),
+            runtime_error_code=result.pop("error_code", ""),
+        )
     result.update(
         ok=True,
-        exit_status="completed" if completion_mode == "business" else "reply_completed",
+        exit_status="completed" if mode == "business" else "reply_completed",
         execution_state="completed",
-        business_completed=completion_mode == "business",
-        reply_completed=completion_mode == "reply",
+        business_completed=mode == "business",
+        reply_completed=mode == "reply",
         runtime_status=runtime_status,
         runtime_completed=runtime_status == "completed",
     )

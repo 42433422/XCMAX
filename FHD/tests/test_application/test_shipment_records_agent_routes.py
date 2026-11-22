@@ -29,13 +29,18 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
     tmp_path, monkeypatch, trusted_actor
 ):
-    actor7 = trusted_actor(user_id=11, tenant_id=7)
+    from app import db as host_db
+
+    actor7 = trusted_actor(user_id=11, tenant_id=7, permissions=["shipment.view", "shipment.edit"])
     actor8 = trusted_actor(user_id=22, tenant_id=8)
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'shipments.db'}")
-    engine = create_engine(f"sqlite:///{tmp_path / 'shipments.db'}")
-    Base.metadata.create_all(engine)
-    monkeypatch.setattr("app.db.session.SessionLocal", sessionmaker(bind=engine))
+    engine = actor7.factory.kw["bind"]
+    # The real worker must reopen the same session rows and tenant records;
+    # parent-only SQLAlchemy patches cannot authenticate a spawned process.
+    monkeypatch.setenv("DATABASE_URL", str(engine.url))
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-claims.sqlite"))
+    monkeypatch.setattr(host_db, "SessionLocal", actor7.factory)
+    monkeypatch.setattr("app.db.session.SessionLocal", actor7.factory)
     repo = InMemoryAgentRunRepository()
     service = ShipmentApplicationService(
         SQLAlchemyShipmentRepository(),
@@ -45,6 +50,7 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
     user = [SimpleNamespace(id=11, is_active=True, role="user", tier="enterprise", tenant_id=7)]
     monkeypatch.setattr(shipment_orders, "_svc", lambda: service)
     monkeypatch.setattr(gate, "resolve_product_sku", lambda: "enterprise")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     allowed = [True]
     monkeypatch.setattr(
         "app.application.facades.session_facade.get_auth_service",
@@ -101,18 +107,23 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
         allowed[0] = False
         assert client.patch(path, json={"id": record_id, "status": "printed"}).status_code == 403
         allowed[0] = True
-        assert (
-            client.patch(
-                path,
-                json={
-                    "id": record_id,
-                    "tenant_id": 8,
-                    "status": "printed",
-                    "product_name": "更新产品",
-                },
-            ).status_code
-            == 200
+        updated = client.patch(
+            path,
+            json={
+                "id": record_id,
+                "tenant_id": 8,
+                "tenantId": 8,
+                "user_id": "22",
+                "userId": "22",
+                "status": "printed",
+                "product_name": "更新产品",
+            },
         )
+        assert updated.status_code == 200, updated.text
+        update_run = repo.get(updated.json()["run_id"])
+        assert update_run is not None and update_run.status == "completed"
+        assert update_run.metadata["runtime_context"]["tenant_id"] == "7"
+        assert not {"tenant_id", "tenantId", "user_id", "userId"} & set(update_run.steps[0].params)
         with tenant_scope(7):
             rows = service.get_shipment_records()
             assert len(rows) == 1 and rows[0]["tenant_id"] == 7 and rows[0]["status"] == "printed"
@@ -151,6 +162,7 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
                 AgentToolExecutor().execute,
                 step,
                 runtime_context={
+                    **actor8.context,
                     "tenant_id": "8",
                     "service_source": "fastapi_shipment_records_route",
                 },
@@ -160,7 +172,11 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
             denied = pool.submit(
                 AgentToolExecutor().execute,
                 step,
-                runtime_context={"service_source": "fastapi_shipment_records_route"},
+                runtime_context={
+                    **actor8.context,
+                    "tenant_id": None,
+                    "service_source": "fastapi_shipment_records_route",
+                },
             ).result(timeout=20)
             assert denied["success"] is False
         with tenant_scope(8):
@@ -209,7 +225,7 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
 ):
     import logging
     from pathlib import Path
-    from unittest.mock import Mock, patch
+    from unittest.mock import Mock
 
     from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
 
@@ -217,21 +233,29 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
 
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
-    from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.approval_workspace.protocols import WorkflowBackends
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
     from app.application.inventory_app_service import InventoryAppService
     from app.application.workflow.approval_persistence import load_workflow_snapshot_for_execution
     from app.application.workflow.approval_service import ApprovalService
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_from_dict
     from app.db.models import InventoryLedger, Product, User, Warehouse
+    from app.db.models.permission import DEFAULT_ROLES
 
-    actor = trusted_actor(user_id=11, tenant_id=7, role="admin")
+    permissions = next(role["permissions"] for role in DEFAULT_ROLES if role["name"] == "admin")
+    actor = trusted_actor(
+        user_id=11,
+        tenant_id=7,
+        role="admin",
+        permissions=[*permissions, "tool.inventory.query_transactions"],
+    )
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "shipment-claims.sqlite"))
     engine = create_engine(f"sqlite:///{tmp_path / 'approved-shipment.db'}")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    monkeypatch.setattr("app.db.SessionLocal", factory)
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.setattr("app.infrastructure.mods.hooks.trigger", lambda *a, **kw: None)
@@ -302,11 +326,11 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
                 depends_on=["shipment"],
             ),
         ],
+        metadata={"approval_required_node_ids": ["stock", "shipment"]},
     )
     repo = SQLAlchemyAgentRunRepository(session_factory=factory)
     agent = AgentOrchestrator(repository=repo)
     approvals = ApprovalService()
-    service = object.__new__(AIChatApplicationService)
     context = {
         **actor.context,
         "local_user_id": 11,
@@ -314,15 +338,6 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         "message": "生成出货记录并导出",
         "service_source": "fastapi_shipment_records_route",
     }
-    service._pending_workflows = {
-        "11": {
-            "plan": plan,
-            "runtime_context": context,
-            "approval_required": True,
-            "approval_nodes": [{"node_id": "stock"}, {"node_id": "shipment"}],
-        }
-    }
-    service.approval_service = approvals
     unexpected = Mock(side_effect=AssertionError("alternate path"))
     bridge = WorkflowApprovalBridge(
         WorkflowBackends(
@@ -337,14 +352,25 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         (RuntimeError,),
         logging.getLogger(__name__),
     )
-    with (
-        tenant_scope(7),
-        patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=agent),
-    ):
-        handled, reply = service._resume_pending_dynamic_workflow("11", "确认", "确认")
-        assert handled and reply["success"], reply
+    with tenant_scope(7):
+        waiting = agent.start_run_from_plan(
+            user_id="11", message="生成出货记录并导出", plan=plan, runtime_context=context
+        )
+        assert waiting.status == "waiting_user", waiting.to_dict()
+        stored_plan = plan_from_dict(waiting.metadata["plan"])
+        assert stored_plan is not None
+        request = approvals.create_approval_request(
+            plan_id=stored_plan.plan_id,
+            node=stored_plan.nodes[0],
+            runtime_context={**context, "_approval_agent_run_required": True},
+            plan=stored_plan,
+            require_persistence=True,
+        )
+        request_no = request.request_id
+        assert approvals.attach_pending_agent_run(
+            request_no, agent_run_id=waiting.run_id, approved_step_id="stock"
+        )
         assert shipment.get_shipment_records() == []
-        request_no = reply["data"]["data"]["approval_request_ids"][0]
         outcome = bridge.resume(request_no=request_no, opinion="同意", approved_by="11")
         assert outcome.get("waiting_approval") is True, outcome
         with factory() as db:
@@ -373,6 +399,41 @@ def test_approved_shipment_then_export_uses_full_persisted_plan(
         assert 500 in cells or "500" in text
         summary = next(row for row in rows if row and row[0] == "合计")
         assert summary[8] in (500, 500.0)
+        # The existing exporter owns the bytes and exact call binding. Reading
+        # them again cannot accept a borrowed owner, changed file, or revoked grant.
+        import copy
+
+        from app.application.agent_orchestrator.task_background import task_execution_context
+        from app.application.agent_orchestrator.verification_readback import (
+            verify_independent_result,
+        )
+        from app.db.models.permission import Role
+
+        step, call = stored.steps[2], stored.tool_calls[2]
+        verification_context = {
+            **stored.metadata["runtime_context"],
+            **task_execution_context(stored, step),
+            "run_id": stored.run_id,
+            "step_id": step.step_id,
+        }
+
+        def readback(result):
+            return verify_independent_result(
+                run=stored, step=step, call=call, context=verification_context, output=result
+            )
+
+        assert readback(call.output)["status"] == "verified"
+        borrowed = copy.deepcopy(call.output)
+        borrowed["artifacts"][0]["metadata"]["owner_user_id"] = "another-owner"
+        assert readback(borrowed)["code"] == "result_artifact_scope_mismatch"
+        original_bytes = Path(path).read_bytes()
+        Path(path).write_bytes(b"changed original export")
+        assert readback(call.output)["status"] != "verified"
+        Path(path).write_bytes(original_bytes)
+        with actor.factory.begin() as db:
+            role = db.query(Role).filter_by(name="admin").one()
+            role.permissions = [p for p in role.permissions if p.code != "shipment.view"]
+        assert readback(call.output)["code"] == "result_read_permission_unavailable"
     engine.dispose()
 
 
@@ -394,12 +455,21 @@ def test_r05_export_without_a_file_fails_the_business_assertion(
         test_approved_shipment_then_export_uses_full_persisted_plan(
             tmp_path, monkeypatch, trusted_actor
         )
-    except AssertionError as exc:
-        assert "is_file" in str(exc) or "file_path" in str(exc)
+    except AssertionError:
+        import json
+        import sqlite3
+
+        with sqlite3.connect(tmp_path / "approved-shipment.db") as db:
+            runs = [json.loads(row[0]) for row in db.execute("SELECT payload_json FROM agent_runs")]
+        assert len(runs) == 1 and runs[0]["status"] == "blocked"
+        calls = runs[0]["tool_calls"]
+        assert len(calls) == 3
+        assert all(call["metadata"]["verification"]["accepted"] for call in calls[:2])
+        assert calls[2]["output"] == {"success": True, "file_path": ""}
+        assert calls[2]["metadata"]["verification"]["code"] == "result_artifact_missing"
     else:
         raise AssertionError("an export without a file was accepted")
     env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
     restored = subprocess.run(
         [
             sys.executable,
@@ -410,6 +480,8 @@ def test_r05_export_without_a_file_fails_the_business_assertion(
             "-o",
             "addopts=",
             "--tb=line",
+            "--basetemp",
+            str(tmp_path / "fresh-positive"),
         ],
         cwd=str(Path(__file__).resolve().parents[2]),
         env=env,

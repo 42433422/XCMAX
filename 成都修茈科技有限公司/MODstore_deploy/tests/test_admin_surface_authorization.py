@@ -185,6 +185,34 @@ def test_cached_surface_audit_is_not_public(surface_case):
     audit.assert_not_awaited()
 
 
+def test_admin_memory_eviction_returns_conflict_for_active_execution(
+    surface_case, monkeypatch, tmp_path
+):
+    from modstore_server.maintenance_loop import store
+
+    client, _, _, _ = surface_case
+    memory_path = tmp_path / "memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEASE_FILE", str(tmp_path / "loop.lock"))
+    memory_path.write_text('{"pending_execution":{"task_id":"original-task"}}', encoding="utf-8")
+    before = memory_path.read_bytes()
+    with store._exclusive_loop_lease() as acquired:
+        assert acquired
+        response = client.post(
+            "/api/xcmax/admin/loop/memory/evict",
+            json={"note": "review"},
+            headers={
+                "Authorization": "Bearer "
+                + auth_service.create_access_token(7, "synthetic-admin", is_admin=True)
+            },
+        )
+    assert response.status_code == 409
+    assert response.json()["success"] is False
+    assert response.json()["data"]["status"] == "skipped_active_lease"
+    assert response.json()["data"]["changed"] is False
+    assert memory_path.read_bytes() == before
+
+
 @pytest.mark.parametrize("path", PATHS)
 def test_admin_pat_cannot_authorize_private_surfaces(surface_case, path):
     client, reads, identity, audit = surface_case

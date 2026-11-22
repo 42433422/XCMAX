@@ -69,12 +69,21 @@ def enqueue_resume(
     """Publish a continuation and its queue row in the same host transaction."""
     from app.db.models.agent import AgentTaskExecutionRecord
     from app.domain.task_lifecycle.adapters import execution_requeue_allowed
+    from app.domain.task_lifecycle.control import SessionBook
 
     repository = store.repository
     queue = durable_queue(repository)
     with repository.transaction() as db:
         execution = db.get(AgentTaskExecutionRecord, parent.run_id)
         if execution is not None:
+            control = SessionBook(db).get("agent", str(execution.tenant_id or ""), parent.run_id)
+            if (
+                execution.lease_owner
+                or execution.lease_expires_at
+                or execution.last_error_code == "needs_verification"
+                or control.get("effects")
+            ):
+                raise CodexBindingError("reconciliation_required", "原执行权或业务效果尚未核对")
             if not execution_requeue_allowed(str(execution.state), retryable=True):
                 raise CodexBindingError("binding_conflict", "原任务仍有执行权或已经结束")
             matched = (
@@ -94,6 +103,16 @@ def enqueue_resume(
         current = copy.deepcopy(parent)
         metadata = current.metadata.setdefault("codex_runtime", {})
         store._validate_authority(current, metadata)
+        if current.status == "blocked":
+            if (current.final_output.get("codex_result") or {}).get("retryable") is not True:
+                raise CodexBindingError("run_inactive", "原任务尚不满足安全续跑条件")
+            # Explicit new request admission and the durable queue claim share
+            # this CAS. Preserve all original goals, receipts and budget use;
+            # existing pause/cancel, parent controls and unknown-effect guards
+            # still apply below before the transaction can commit.
+            current.status = "running"
+            current.error = ""
+            current.add_event("run.resumed", "按用户新请求继续原 Codex 任务")
         store._validate_control(current)
         pending = current.metadata.get("_codex_queued_request") or {}
         if metadata.get("coordinator_active"):
@@ -215,8 +234,6 @@ def _execute_queued_runtime(
             completion_mode=run.metadata["runtime_completion_mode"],
             allowed_actions=actions,
             gate=gate,
-            expected_operations=copy.deepcopy(run.metadata.get("runtime_expected_operations")),
-            admit_goal=run.metadata.get("runtime_goal_admission", False),
             answer_to_waiting_input=pending.get("answer_to_waiting_input", False),
             _repository=claimed,
         )

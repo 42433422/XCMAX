@@ -34,16 +34,13 @@ def control_setup(trusted_actor, monkeypatch):
         runtime_context=actor.context,
         _codex_system_prompt="server instructions",
         _codex_input_data={"source": "original"},
-        runtime_completion_mode="reply",
+        runtime_completion_mode="auto",
         runtime_allowed_actions=None,
-        runtime_expected_operations=[
-            {
-                "tool_id": "customers",
-                "action": "create",
-                "params": {"unit_name": "fixture"},
-            }
-        ],
     )
+    from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+
+    contract = build_goal_contract(run)
+    run.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
     repository.save(run)
     store = CodexBindingStore(repository)
     grant = store.create(run.run_id)
@@ -91,6 +88,11 @@ def test_cancel_revokes_root_and_cancels_pending_child(control_setup):
         setup.grant.mcp_token,
         "execute_action",
         {
+            "schema_digest": bridge.invoke(
+                setup.grant.mcp_token,
+                "capability_describe",
+                {"tool_id": "customers", "action": "create"},
+            )["capability"]["schema_digest"],
             "call_id": "write",
             "tool_id": "customers",
             "action": "create",
@@ -219,10 +221,16 @@ def test_runtime_context_override_and_foreign_principal_are_rejected(control_set
 
 def test_child_cannot_retry_or_resume_after_releasing_parent_budget(control_setup, monkeypatch):
     setup = control_setup
-    receipt = CodexToolBridge(setup.store, setup.orchestrator).invoke(
+    bridge = CodexToolBridge(setup.store, setup.orchestrator)
+    receipt = bridge.invoke(
         setup.grant.mcp_token,
         "execute_action",
         {
+            "schema_digest": bridge.invoke(
+                setup.grant.mcp_token,
+                "capability_describe",
+                {"tool_id": "customers", "action": "create"},
+            )["capability"]["schema_digest"],
             "call_id": "write",
             "tool_id": "customers",
             "action": "create",
@@ -256,10 +264,16 @@ def test_parent_resume_preserves_original_child_approval_and_reservation(
     set_task_execution_repository_for_tests(
         SQLAlchemyTaskExecutionRepository(session_factory=setup.actor.factory)
     )
-    receipt = CodexToolBridge(setup.store, setup.orchestrator).invoke(
+    bridge = CodexToolBridge(setup.store, setup.orchestrator)
+    receipt = bridge.invoke(
         setup.grant.mcp_token,
         "execute_action",
         {
+            "schema_digest": bridge.invoke(
+                setup.grant.mcp_token,
+                "capability_describe",
+                {"tool_id": "customers", "action": "create"},
+            )["capability"]["schema_digest"],
             "call_id": "write",
             "tool_id": "customers",
             "action": "create",

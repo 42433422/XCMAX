@@ -1,4 +1,5 @@
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
+import { employeeDirectoryScope } from '@/api/employeeDirectory'
 import { resolveEnterpriseOrgLayerForCatalogItem } from '@/constants/enterpriseWorkflowEstablishment'
 import {
   catalogStoreCollection,
@@ -10,6 +11,7 @@ import {
 } from '@/constants/genericModPack'
 import type { EnterpriseOrgLayer } from '@/constants/enterpriseWorkflowEstablishment'
 import type { ModStoreState, StoreModRow } from './useModStoreState'
+import { marketItemType } from './useModStoreState'
 
 export interface ModStoreMeta {
   modIconClass: (mod: StoreModRow) => string
@@ -55,9 +57,7 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
   }
 
   const isEmployeePackItem = (mod?: StoreModRow | null): boolean =>
-    String(mod?.artifact || '')
-      .trim()
-      .toLowerCase() === 'employee_pack'
+    marketItemType(mod) === 'employee'
 
   const enterpriseModLabel = (mod: StoreModRow): string => {
     const art = String(mod?.artifact || '')
@@ -68,7 +68,7 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
     return label ? `企业 Mod：${label}` : ''
   }
 
-  const marketItemKindLabel = (mod: StoreModRow): string => (isEmployeePackItem(mod) ? '员工' : '扩展 Mod')
+  const marketItemKindLabel = (mod: StoreModRow): string => (isEmployeePackItem(mod) ? '员工' : '模块')
 
   const installSuccessMessage = (mod: StoreModRow, onboardNote = ''): string => {
     const kind = marketItemKindLabel(mod)
@@ -91,8 +91,13 @@ export function useModStoreMeta(state: ModStoreState, { marketBaseUrl }: { marke
   }
 
   const resolveEnterpriseStack = async (): Promise<void> => {
-    const stack = await resolveEnterpriseModStack()
-    state.enterpriseStackLabel.value = stack.stackLabel
+    const scope = employeeDirectoryScope()
+    try {
+      const stack = await resolveEnterpriseModStack()
+      if (scope === employeeDirectoryScope()) state.enterpriseStackLabel.value = stack.stackLabel
+    } catch (reason) {
+      if (scope === employeeDirectoryScope()) state.loadError.value = reason instanceof Error ? reason.message : '企业分区读取失败，请重试'
+    }
   }
 
   return {

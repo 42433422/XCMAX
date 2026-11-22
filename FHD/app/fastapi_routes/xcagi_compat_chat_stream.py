@@ -147,7 +147,7 @@ def _classify_and_submit_client_issue(
 
 
 def _is_workflow_control(message: str) -> bool:
-    from app.application.ai_chat.workflow_session import CANCEL_WORDS, CONFIRM_WORDS
+    from app.application.workflow.clarification_selection import CANCEL_WORDS, CONFIRM_WORDS
 
     text = str(message or "").strip().lower().rstrip("。.!！")
     return text in CONFIRM_WORDS or text in CANCEL_WORDS
@@ -384,9 +384,6 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         yield sse_event_line({"type": "done", "result": payload})
         return
 
-    if error := facade._ensure_vector_index_if_needed(body.message, runtime_context):
-        yield sse_event_line({"type": "error", "message": error})
-        return
     service = get_ai_chat_app_service()
     tenant_id = runtime_context.get("tenant_id")
     tenant_id = int(tenant_id) if tenant_id is not None else None

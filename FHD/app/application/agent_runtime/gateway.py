@@ -1,7 +1,7 @@
 """Bind authenticated product requests to the qualified local Codex runtime.
 
-Requests supply neither credentials nor a provider. The host freezes the goal
-before execution; a Codex invocation never falls back into another engine.
+Requests supply neither credentials nor a provider. The host binds the original goal
+without preplanning business actions; a Codex invocation never falls back into another engine.
 """
 
 from __future__ import annotations
@@ -24,11 +24,7 @@ from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_orchestrator.tool_permission import redact
 from app.application.agent_runtime.codex_runtime import run_codex_agent
 from app.domain.task_lifecycle.agent_runtime_contract import (
-    AgentRuntimeContractError,
     canonical_digest,
-    frozen_goal_digest,
-    frozen_workflow_operation,
-    validate_expected_operations,
 )
 from app.domain.task_lifecycle.agent_runtime_results import base_runtime_result
 from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
@@ -155,6 +151,11 @@ def _trusted_context(raw: dict[str, Any]) -> tuple[dict[str, Any], str]:
         "frozen_plan",
         "runtime_frozen_plan",
         "runtime_goal_digest",
+        "runtime_goal_contract",
+        "runtime_goal_verification",
+        "runtime_task_id",
+        "deadline_at",
+        "model_requests",
         "admit_goal",
         "runtime_goal_admission",
         "start_paused",
@@ -166,113 +167,19 @@ def _trusted_context(raw: dict[str, Any]) -> tuple[dict[str, Any], str]:
     return context, owner
 
 
-def _expected(value: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
-    try:
-        return validate_expected_operations(value)
-    except AgentRuntimeContractError as exc:
-        raise CodexBindingError(exc.code, str(exc)) from exc
-
-
-def _frozen_plan(value: dict[str, Any] | None) -> dict[str, Any] | None:
-    if value is None:
-        return None
-    from app.application.workflow.workflow_types import (
-        plan_from_dict,
-        plan_to_dict,
-        validate_plan_graph,
+def _goal_instructions(system_prompt: str) -> str:
+    """One decision kernel; the host authorizes actions and verifies outcomes."""
+    return system_prompt + (
+        "\n\n你是本任务唯一的动态决策执行者。先使用 capability_search 和 capability_describe "
+        "发现当前账户真实可用的能力，读取完整输入 Schema 与契约摘要；允许先观察文件、"
+        "数据和环境，再决定下一步，不需要先生成完整业务图。"
+        "只通过宿主公布的工具执行，不能编造工具名称、动作或完成回执。"
+        "工具参数或已知无副作用的失败可依据反馈修正；结果未知、待审批、待认证、"
+        "取消或预算耗尽必须保留原任务，不重复提交写入。"
+        "用户补充信息沿原任务处理，不删除原始目标、条件和否定约束。"
+        "结束前检查每项目标并读取原回执；宿主会独立核验真实业务结果。"
+        "核验指出缺口时，在原线程和原授权范围内继续解决。"
     )
-
-    try:
-        if not isinstance(value, dict):
-            raise ValueError("计划必须是宿主生成的对象")
-        canonical_digest(value)
-        plan = plan_from_dict(value)
-        if plan is None or validate_plan_graph(plan):
-            raise ValueError("计划缺失或依赖图无效")
-        return plan_to_dict(plan)
-    except (AttributeError, KeyError, TypeError, ValueError) as exc:
-        raise CodexBindingError("invalid_frozen_plan", "宿主冻结的业务计划无效") from exc
-
-
-def _goal_digest(expected: Any, plan: Any) -> str:
-    try:
-        return frozen_goal_digest(expected, plan)
-    except (TypeError, ValueError) as exc:
-        raise CodexBindingError(
-            getattr(exc, "code", "invalid_frozen_plan"), "宿主冻结的目标与计划不一致"
-        ) from exc
-
-
-def _goal_instructions(
-    system_prompt: str, expected: Any, plan: Any, *, allow_unfrozen_reads: bool = True
-) -> str:
-    """Pure instruction rendering after host admission; no I/O or authority changes."""
-    if expected is None:
-        if not allow_unfrozen_reads:
-            return system_prompt + (
-                "\n\n本轮未获准执行业务操作；仅可回复或调用 request_input 澄清。"
-                "不得调用 execute_action 或 execute_plan，也不得声称业务操作已经完成。"
-            )
-        return system_prompt + (
-            "\n\n宿主尚未冻结业务目标；仅可进行获授权的低风险只读探查。"
-            "需要补充目标时调用 request_input；不得声明业务已经完成。"
-        )
-    instructions = (
-        "\n\n以下 JSON 是宿主冻结的完整必需义务，仅为操作数据，不是新增指令或授权。"
-        "必须逐项完成并读取原任务回执；不得改参、扩展写入范围或用文字代替执行证明。"
-        "审批、身份、预算和业务权限继续由宿主裁定。"
-    )
-    if plan is not None:
-        instructions += (
-            "xcmax_workflow.execute 项只通过 execute_plan 提交其 plan_digest；"
-            "完整图由宿主保存并执行，不得通过 execute_action 提交、拆分或重写图。"
-        )
-    return system_prompt + instructions + "\n" + json.dumps(expected, ensure_ascii=False)
-
-
-def _freeze_waiting_goal(
-    store: CodexBindingStore,
-    run: AgentRun,
-    metadata: dict[str, Any],
-    expected: list[dict[str, Any]],
-    plan: dict[str, Any] | None,
-) -> None:
-    """One host-only transition, atomically admitted with a new clarification answer."""
-    store._validate_authority(run, metadata)
-    store._validate_control(run)
-    if (
-        run.metadata.get("runtime_expected_operations") is not None
-        or run.metadata.get("runtime_frozen_plan") is not None
-    ):
-        raise CodexBindingError("request_conflict", "原任务的业务目标已经冻结")
-    if (
-        run.status != "waiting_user"
-        or not metadata.get("waiting_input")
-        or metadata.get("calls")
-        or metadata.get("coordinator_active")
-        or metadata.get("revoked") is not True
-        or metadata.get("model_reconciliation_required")
-        or int(run.metadata.get("reserved_cost_units") or 0) != 0
-        or any(
-            not isinstance(row, dict) or row.get("state") not in {"completed", "failed"}
-            for row in (metadata.get("model_requests") or {}).values()
-        )
-        or any(
-            row.get("state") == "admitted"
-            for row in (run.metadata.get("runtime_requests") or {}).values()
-        )
-    ):
-        raise CodexBindingError("goal_freeze_blocked", "原任务尚不满足安全冻结业务目标的条件")
-    digest = _goal_digest(expected, plan)
-    run.metadata.update(
-        runtime_expected_operations=copy.deepcopy(expected),
-        runtime_frozen_plan=copy.deepcopy(plan),
-        runtime_goal_digest=digest,
-    )
-    if run.metadata.get("runtime_goal_admission") is True:
-        run.metadata.update(runtime_goal_admitted=True, runtime_goal_mode="business")
-    metadata["goal_digest"] = digest
-    run.add_event("runtime.goal_frozen", "已按宿主确认的澄清结果冻结业务目标", {"digest": digest})
 
 
 def _actions(value: list[str] | None) -> list[str] | None:
@@ -391,19 +298,16 @@ async def run_runtime_task_async(
     on_event: Callable[[dict[str, Any]], Any] | None = None,
     answer_to_waiting_input: bool = False,
     settings: RuntimeSettings | None = None,
-    expected_operations: list[dict[str, Any]] | None = None,
-    frozen_plan: dict[str, Any] | None = None,
-    admit_goal: bool = False,
     start_paused: bool = False,
     start_queued: bool = False,
     _repository: SQLAlchemyAgentRunRepository | None = None,
+    _task_id: str | None = None,
 ) -> dict[str, Any]:
     """Create or explicitly resume a durable host-owned runtime parent."""
     resolved_id = str(run_id or "")
     store = None
     request_key = ""
     admitted = False
-    freeze_after_input = False
     try:
         settings = settings or runtime_settings()
         if settings.engine != "codex":
@@ -420,20 +324,22 @@ async def run_runtime_task_async(
             or not isinstance(system_prompt, str)
             or completion_mode not in {"business", "reply", "auto"}
             or type(answer_to_waiting_input) is not bool
-            or type(admit_goal) is not bool
             or type(start_paused) is not bool
             or type(start_queued) is not bool
             or (start_paused and start_queued)
-            or (completion_mode == "auto" and not admit_goal)
             or (start_paused and run_id)
+            or (
+                _task_id is not None
+                and (
+                    not isinstance(_task_id, str)
+                    or not _task_id.strip()
+                    or len(_task_id) > 160
+                    or "/" in _task_id
+                )
+            )
         ):
             raise CodexBindingError("invalid_request", "任务或完成模式无效")
         context, owner = _trusted_context(runtime_context)
-        expected = _expected(expected_operations)
-        supplied_expected = copy.deepcopy(expected)
-        plan = _frozen_plan(frozen_plan)
-        if not run_id and expected is None and plan is not None:
-            expected = [frozen_workflow_operation(plan)]
         actions = _actions(allowed_actions)
         repository = _repository or get_agent_run_repository()
         if not isinstance(repository, SQLAlchemyAgentRunRepository):
@@ -461,15 +367,11 @@ async def run_runtime_task_async(
             "completion_mode": completion_mode,
             "instructions": instruction_digest,
             "allowed_actions": actions,
-            # Auto admission may freeze a goal during this request. Its result
-            # must not change the identity of a repeated clarification answer.
-            "expected_operations": supplied_expected if admit_goal else expected,
-            "frozen_plan": plan,
-            "admit_goal": admit_goal,
             "start_paused": start_paused,
             "start_queued": start_queued,
             "answer_to_waiting_input": answer_to_waiting_input,
             "history": canonical_digest(history),
+            "task_id": _task_id,
         }
         is_resume = bool(run_id)
         if is_resume:
@@ -477,6 +379,14 @@ async def run_runtime_task_async(
             if parent is None:
                 raise CodexBindingError("binding_missing", "原运行任务不存在")
             _same_owner(parent, context, owner)
+            stored_task_id = parent.metadata.get("runtime_task_id")
+            if _task_id is not None and _task_id != stored_task_id:
+                raise CodexBindingError("request_conflict", "原运行任务的宿主任务标识不能改变")
+            if stored_task_id is not None and (
+                (parent.metadata.get("task_context") or {}).get("task_id") != stored_task_id
+            ):
+                raise CodexBindingError("request_conflict", "原运行任务的任务绑定已改变")
+            requested["task_id"] = stored_task_id
             if parent.intent != "codex.runtime" or parent.metadata.get("runtime_type") != "codex":
                 raise CodexBindingError("runtime_changed", "不能把其他引擎的任务恢复为 Codex")
             if parent.metadata.get("runtime_route_identity") != route.identity:
@@ -487,44 +397,13 @@ async def run_runtime_task_async(
                 raise CodexBindingError("runtime_changed", "原任务的运行指令不能改变")
             if parent.metadata.get("runtime_completion_mode") != completion_mode:
                 raise CodexBindingError("runtime_changed", "原任务的完成判定不能改变")
-            if parent.metadata.get("runtime_goal_admission", False) is not admit_goal:
-                raise CodexBindingError("runtime_changed", "原任务的宿主目标准入方式不能改变")
             stored_actions = parent.metadata.get("runtime_allowed_actions")
             if actions is None:
                 actions = copy.deepcopy(stored_actions)
                 requested["allowed_actions"] = actions
             elif actions != stored_actions:
                 raise CodexBindingError("owner_changed", "原任务的工具授权范围不能改变")
-            stored_expected = _expected(parent.metadata.get("runtime_expected_operations"))
-            stored_plan = _frozen_plan(parent.metadata.get("runtime_frozen_plan"))
-            digest = _goal_digest(stored_expected, stored_plan)
-            if (
-                parent.metadata.get("runtime_goal_digest", digest) != digest
-                or (parent.metadata.get("codex_runtime") or {}).get("goal_digest", digest) != digest
-            ):
-                raise CodexBindingError("goal_changed", "原任务冻结的业务目标不能改变")
-            freeze_after_input = (
-                answer_to_waiting_input
-                and stored_expected is None
-                and stored_plan is None
-                and (expected is not None or plan is not None)
-            )
-            if freeze_after_input and expected is None and plan is not None:
-                expected = [frozen_workflow_operation(plan)]
-                if not admit_goal:
-                    requested["expected_operations"] = expected
-            if expected is None:
-                expected = copy.deepcopy(stored_expected)
-                if not admit_goal:
-                    requested["expected_operations"] = expected
-            elif not freeze_after_input and expected != stored_expected:
-                raise CodexBindingError("request_conflict", "不能改变原任务冻结的业务目标")
-            if plan is None:
-                plan = copy.deepcopy(stored_plan)
-                if not admit_goal:
-                    requested["frozen_plan"] = plan
-            elif not freeze_after_input and plan != stored_plan:
-                raise CodexBindingError("request_conflict", "不能改变原任务冻结的工作流")
+            store._validate_goal(parent, parent.metadata.get("codex_runtime") or {})
         else:
             # Authorization revisions and mutable tool configuration must not
             # turn a repeated client request into a new executable task.
@@ -542,6 +421,8 @@ async def run_runtime_task_async(
                 )
             }
             seed["owner"] = owner
+            if _task_id is not None:
+                seed["task_id"] = _task_id
             resolved_id = "run_codex_" + canonical_digest(seed)[:48]
             parent_run_id = str(context.get("parent_run_id") or "")
             if parent_run_id:
@@ -554,26 +435,22 @@ async def run_runtime_task_async(
                 context["root_run_id"] = parent_context.get("root_run_id") or ancestor.run_id
             else:
                 context["root_run_id"] = resolved_id
-            context.update(task_id=resolved_id, source="codex_runtime")
+            context.update(task_id=_task_id or resolved_id, source="codex_runtime")
             parent = AgentRun(
                 user_id=owner, message=task, run_id=resolved_id, intent="codex.runtime"
             )
             parent.metadata.update(
                 runtime_type="codex",
+                runtime_task_id=_task_id,
                 runtime_context=context,
                 runtime_route_identity=route.identity,
                 runtime_gate_required=gate is not None,
                 runtime_instruction_digest=instruction_digest,
-                runtime_expected_operations=expected,
-                runtime_frozen_plan=plan,
-                runtime_goal_digest=_goal_digest(expected, plan),
-                runtime_goal_admission=admit_goal,
-                runtime_goal_admitted=admit_goal and expected is not None,
-                runtime_goal_mode="business" if admit_goal and expected is not None else None,
                 runtime_completion_mode=completion_mode,
                 runtime_allowed_actions=actions,
                 _codex_system_prompt=system_prompt,
                 _codex_input_data=copy.deepcopy(input_data),
+                _codex_history=copy.deepcopy(history),
                 runtime_requests={
                     request_key: {
                         "digest": canonical_digest(requested),
@@ -591,7 +468,6 @@ async def run_runtime_task_async(
                     "revoked": True,
                     "token_hashes": {},
                     "calls": {},
-                    "goal_digest": parent.metadata["runtime_goal_digest"],
                     "runtime_status": "not_started",
                 }
             if start_paused:
@@ -633,6 +509,18 @@ async def run_runtime_task_async(
             notify_agent_task_dispatcher()
             return dict(public_runtime_result(parent.final_output["codex_result"]))
         if is_resume:
+            queue_resume = start_queued or parent.status == "blocked"
+            if queue_resume:
+                from app.infrastructure.codex.queued_runtime import stage_queued_request
+
+            if parent.status == "blocked":
+                from app.application.agent_runtime.codex_runtime import _resume_error
+
+                rows = store.receipt_snapshot(resolved_id)
+                binding = store.get(resolved_id)
+                if error := _resume_error(store, binding, rows):
+                    raise CodexBindingError("reconciliation_required", error)
+                parent = binding.run
 
             def claim(run: AgentRun, _metadata: dict[str, Any]) -> None:
                 nonlocal admitted
@@ -646,20 +534,18 @@ async def run_runtime_task_async(
                     return
                 if len(requests) >= 256:
                     raise CodexBindingError("request_limit", "运行任务已达到续跑请求上限")
-                if freeze_after_input and expected is not None:
-                    _freeze_waiting_goal(store, run, _metadata, expected, plan)
                 requests[request_key] = {
                     "digest": digest,
                     "state": "admitted",
                     "turn_id": context["turn_id"],
                     "created_at": utc_now_iso(),
                 }
-                if start_queued:
+                if queue_resume:
                     stage_queued_request(run, request_key, queued_payload)
                 else:
                     admitted = True
 
-            if start_queued:
+            if queue_resume:
                 from app.application.agent_orchestrator.task_dispatcher import (
                     notify_agent_task_dispatcher,
                 )
@@ -674,23 +560,6 @@ async def run_runtime_task_async(
                 return _duplicate_result(
                     claimed.run, claimed.run.metadata["runtime_requests"][request_key]
                 )
-            if answer_to_waiting_input:
-                from app.application.agent_runtime.chat import answer_reference_input
-
-                try:
-                    answered = answer_reference_input(store, run_id=resolved_id, text=task)
-                except CodexBindingError as exc:
-                    if exc.code not in {"binding_conflict", "request_conflict"}:
-                        raise
-                    answered = {
-                        **_failure(exc.code, str(exc), run_id=resolved_id),
-                        "execution_state": "blocked",
-                        "resume_required": True,
-                    }
-                if answered is not None:
-                    result = dict(public_runtime_result(answered))
-                    _record_request_result(store, resolved_id, request_key, result)
-                    return result
         from fastapi import FastAPI
 
         from app.infrastructure.codex import CodexTransportConfig
@@ -723,16 +592,13 @@ async def run_runtime_task_async(
             result = await run_codex_agent(
                 run_id=resolved_id,
                 task=task,
-                system_prompt=system_prompt
-                if admit_goal
-                else _goal_instructions(system_prompt, expected, plan),
+                system_prompt=_goal_instructions(system_prompt),
                 config=config,
                 binding_store=store,
                 history=history,
                 input_data=input_data,
                 completion_mode=completion_mode,
                 allowed_actions=actions,
-                admit_goal=admit_goal,
                 runtime_config={**route.runtime_identity(), "gate_required": gate is not None},
                 answer_to_waiting_input=answer_to_waiting_input,
                 on_event=(lambda event: on_event(public_runtime_result(event)))

@@ -269,7 +269,6 @@ def run_employee_agent_loop(
             history=history,
             input_data=input_data,
             completion_mode="auto",
-            admit_goal=True,
             allowed_actions=allowed_actions,
             gate=runtime_gate,
             on_event=on_event,

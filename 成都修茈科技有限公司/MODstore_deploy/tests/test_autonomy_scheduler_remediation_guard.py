@@ -64,6 +64,19 @@ def attempt(e):
         e.m.run_pending_automated_remediation()
 
 
+def test_exhausted_handoff_keeps_memory_when_execution_lease_is_busy(env, monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEASE_FILE", str(tmp_path / "loop.lock"))
+    pending = {"task_id": "original-task", "request_id": "original-request"}
+    env.memory["pending_execution"] = pending
+    keys = {("repair", "task-a")}
+    with env.store._exclusive_loop_lease() as acquired:
+        assert acquired
+        assert env.m._handoff_exhausted_remediations(keys, attempts=3) is False
+    assert env.memory["open_items"] == [env.item]
+    assert env.memory["pending_execution"] == pending
+    env.dispatch.assert_not_called()
+
+
 @pytest.mark.parametrize("kind", ["automated_remediation", "failed_steps"])
 def test_limit_stops_real_dispatch_for_both_kinds(env, kind):
     env.item.update(kind=kind, steps=["code"])

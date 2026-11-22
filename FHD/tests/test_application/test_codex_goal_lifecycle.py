@@ -1,246 +1,39 @@
-"""Real SQL/goal/bridge lifecycle with an explicit fixture compiler and transport.
+"""Real SQL, dynamic MCP and independent review; only upstream I/O is a fixture.
 
-Business dispatch returns fixture data using the existing local_tools opt-in.
-The real executor's permissions and receipts run in process for that fixture;
-this is neither subprocess acceptance nor real-model deployment qualification.
+No compiler/plan fixture makes the user's goal true. These scenarios exercise the
+original request, host-persisted answers, independent children and final evidence.
 """
 
 from __future__ import annotations
 
 import asyncio
 import copy
-import json
 import threading
-import uuid
-from types import SimpleNamespace
 
 import pytest
 
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_runtime import gateway, goal_admission
-from app.application.agent_runtime.goal_admission import RuntimeGoal
-from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
 from app.infrastructure.codex import CodexTransportError
 from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore
-from app.infrastructure.codex.policy import (
-    CODEX_VERSION,
-    QUALIFICATION_CHECKS,
-    ModelRoute,
-    RuntimeSettings,
-)
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.codex_http_runtime import fixture_goal_review
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
 
 
 @pytest.fixture
-def goal_runtime(trusted_actor, tmp_path, monkeypatch):
-    actor = trusted_actor(permissions=["product.view"])
-    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
-    route = ModelRoute(
-        base_url="http://127.0.0.1:19180/v1",
-        model="explicit-fixture-model",
-        provider_id="goal-lifecycle-fixture",
-        upstream_vendor="test-fixture",
-        context_window=32000,
-        max_output_tokens=4000,
-    )
-    qualification = tmp_path / "test-only-qualification.json"
-    qualification.write_text(
-        json.dumps(
-            {
-                "schema": "xcmax.runtime-qualification.v1",
-                "route_identity": route.identity,
-                "codex_version": CODEX_VERSION,
-                "model_kind": "real",
-                "evidence_refs": ["synthetic-lifecycle-fixture-only"],
-                "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
-            }
-        )
-    )
-    state = SimpleNamespace(
-        actor=actor,
-        repository=repository,
-        settings=RuntimeSettings(
-            engine="codex",
-            route=route,
-            runtime_root=tmp_path / "runtime",
-            qualification_file=qualification,
-        ),
-        compiler_calls=[],
-        transports=[],
-        dispatch_log=tmp_path / "fixture-dispatch.jsonl",
-        receipts=[],
-        rejections=[],
-        compiler_mode="business",
-        token="",
-        bridge=None,
-        lost_final=False,
-        initial_turn="goal-fixture-" + uuid.uuid4().hex,
-        compiler_entered=None,
-        compiler_release=None,
-    )
-
-    class Server:
-        url = "http://127.0.0.1:19181"
-
-        def __init__(self, app):
-            state.bridge = app.state.codex_tool_bridge
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            return None
-
-    def compile_goal(binding, config):
-        assert binding.metadata["runtime_config"]["route_identity"] == route.identity
-        assert config.provider_token != config.mcp_token
-        state.compiler_calls.append(copy.deepcopy(binding.run))
-        if state.compiler_entered is not None:
-            state.compiler_entered.set()
-            assert state.compiler_release.wait(timeout=5), "Fixture compiler was not released"
-        if state.compiler_mode == "reply":
-            return RuntimeGoal(mode="reply", reply="库存表示可用产品的数量。")
-        answers = [
-            event for event in binding.run.events if event.event_type == "runtime.input_answered"
-        ]
-        if not answers:
-            return RuntimeGoal(mode="business", question="请确认要查询的两个产品名称。")
-        assert answers[-1].data["answer"] == "first 和 second"
-        return RuntimeGoal(
-            mode="business",
-            plan=plan_to_dict(
-                PlanGraph(
-                    plan_id=f"plan_{binding.run_id}",
-                    intent="products.query",
-                    nodes=[
-                        WorkflowNode(
-                            node_id="first",
-                            tool_id="products",
-                            action="query",
-                            params={"keyword": "first"},
-                            risk="low",
-                            idempotent=True,
-                        ),
-                        WorkflowNode(
-                            node_id="second",
-                            tool_id="products",
-                            action="query",
-                            params={"keyword": "second"},
-                            depends_on=["first"],
-                            risk="low",
-                            idempotent=True,
-                        ),
-                    ],
-                )
-            ),
-        )
-
-    def dispatch(tool, action, params):
-        # Observe dispatch separately from the execution ledger, so receipt
-        # verification cannot silently execute the fixture business actions again.
-        with state.dispatch_log.open("a", encoding="utf-8") as journal:
-            journal.write(json.dumps([tool, action, params["keyword"]]) + "\n")
-        return {"success": True, "data": [{"model_number": params["keyword"]}]}
-
-    class Transport:
-        def __init__(self, config):
-            self.config = config
-            state.transports.append(self)
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_exc):
-            return None
-
-        async def start_thread(self, *, developer_instructions):
-            self.instructions = developer_instructions
-            return "thread-lifecycle-fixture"
-
-        async def resume_thread(self, thread_id, *, developer_instructions):
-            self.instructions = developer_instructions
-            return thread_id
-
-        async def interrupt(self):
-            return None
-
-        async def stream_turn(self, _text):
-            def event(method, payload):
-                return {
-                    "method": method,
-                    "payload": payload,
-                    "thread_id": "thread-lifecycle-fixture",
-                    "turn_id": "turn-fixture",
-                }
-
-            yield event("turn/started", {"turn": {"status": "inProgress"}})
-            state.token = self.config.mcp_token
-            binding = state.bridge.store.authenticate(state.token)
-            if state.compiler_mode == "reply":
-                try:
-                    state.bridge.invoke(
-                        state.token,
-                        "execute_action",
-                        {
-                            "call_id": "unrequested-business-read",
-                            "tool_id": "products",
-                            "action": "query",
-                            "params": {"keyword": "unexpected"},
-                        },
-                    )
-                except CodexBindingError as exc:
-                    state.rejections.append(exc.code)
-                message = "库存表示可用产品的数量。"
-            else:
-                operation = binding.run.metadata["runtime_expected_operations"][0]
-                state.receipts.append(
-                    state.bridge.invoke(
-                        state.token,
-                        "execute_plan",
-                        {
-                            "call_id": "whole-workflow",
-                            **operation["params"],
-                        },
-                    )
-                )
-                if state.lost_final:
-                    raise CodexTransportError(
-                        "fixture_connection_lost",
-                        "fixture final response lost",
-                        outcome_unknown=True,
-                    )
-                message = "已查询两个产品。"
-            yield event(
-                "item/completed",
-                {
-                    "item": {
-                        "id": "message-fixture",
-                        "type": "agentMessage",
-                        "text": message,
-                    }
-                },
-            )
-            yield event("turn/completed", {"turn": {"status": "completed"}})
-
-    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.setattr(gateway, "get_agent_run_repository", lambda: repository)
-    monkeypatch.setattr(gateway, "LocalRuntimeServer", Server)
-    monkeypatch.setattr(goal_admission, "compile_runtime_goal", compile_goal)
-    monkeypatch.setattr("app.infrastructure.codex.CodexTransport", Transport)
-    monkeypatch.setattr(
-        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
-    )
+def goal_runtime(dynamic_chat_runtime):
+    state = dynamic_chat_runtime
 
     async def invoke(**kwargs):
         return await gateway.run_runtime_task_async(
             **{
                 "task": "依次查询两个产品",
-                "system_prompt": "使用宿主冻结的任务和业务回执。",
-                "runtime_context": {**actor.context, "turn_id": state.initial_turn},
+                "system_prompt": "根据原目标先观察，再逐项核对真实业务结果。",
+                "runtime_context": {**state.actor.context, "turn_id": "original-goal-turn"},
                 "completion_mode": "auto",
-                "admit_goal": True,
                 "settings": state.settings,
                 **kwargs,
             }
@@ -250,77 +43,103 @@ def goal_runtime(trusted_actor, tmp_path, monkeypatch):
     return state
 
 
-def dispatches(state):
-    if not state.dispatch_log.exists():
-        return []
-    return [tuple(json.loads(row)) for row in state.dispatch_log.read_text().splitlines()]
-
-
 @pytest.mark.parametrize("lost_final", [False, True])
-def test_auto_clarification_freezes_and_executes_one_graph_on_original_sql_parent(
-    goal_runtime, lost_final, local_tools
+def test_dynamic_clarification_and_actions_keep_original_goal_and_sql_parent(
+    goal_runtime, lost_final
 ):
     state = goal_runtime
-    state.lost_final = lost_final
+
+    def script(binding, text):
+        if not goal_answers(binding.run):
+            question = state.bridge.invoke(
+                state.token, "request_input", {"question": "请确认要查询的两个产品名称。"}
+            )
+            return question["question"]
+        for name in ("first", "second"):
+            receipt = state.execute("products", "query", {"keyword": name}, name)
+            assert receipt["verified"] is True, receipt
+        if lost_final:
+            raise CodexTransportError("fixture_final_lost", "final turn event unavailable")
+        return "已分别读取first和second的原查询回执。"
+
+    state.script = script
+    state.review = lambda prompt: fixture_goal_review(prompt, kind="read")
     waiting = asyncio.run(state.invoke())
-    assert waiting["needs_user_input"] is True and waiting["business_completed"] is False
-    assert dispatches(state) == [] and state.transports == []
+    assert waiting["needs_user_input"] and not waiting["business_completed"]
+    assert state.receipts == [] and state.model_requests == []
     parent = state.repository.get(waiting["run_id"])
-    assert (
-        parent.status == "waiting_user" and parent.metadata["runtime_expected_operations"] is None
-    )
-    assert len(state.compiler_calls) == 1
+    contract = copy.deepcopy(parent.metadata["runtime_goal_contract"])
+    assert contract["request"]["text"] == "依次查询两个产品"
+    assert not parent.metadata.get("runtime_frozen_plan")
     options = {
-        "run_id": waiting["run_id"],
+        "run_id": parent.run_id,
         "task": "first 和 second",
         "answer_to_waiting_input": True,
-        "runtime_context": {**state.actor.context, "turn_id": "clarification-answer"},
+        "runtime_context": {**state.actor.context, "turn_id": "original-answer-turn"},
     }
-    completed = asyncio.run(state.invoke(**options))
-    assert completed["business_completed"] is True, completed
-    assert completed["runtime_completed"] is (not lost_final)
-    assert completed["run_id"] == waiting["run_id"] and len(state.compiler_calls) == 2
-    assert len(state.transports) == 1 and len(state.receipts) == 1
-    assert state.receipts[0]["verified"] is True
-    assert dispatches(state) == [("products", "query", "first"), ("products", "query", "second")]
+    result = asyncio.run(state.invoke(**options))
+    parent = state.repository.get(parent.run_id)
+    assert parent.metadata["runtime_goal_contract"] == contract
+    assert goal_answers(parent)[0]["answer"] == "first 和 second"
+    assert result["run_id"] == parent.run_id and len(state.transports) == 2
+    assert len(parent.metadata["codex_runtime"]["calls"]) == 2
+    assert all(receipt["verified"] for receipt in state.receipts)
+    assert result["business_completed"] is (not lost_final), result
+    if lost_final:
+        assert not state.model_requests, "lost SDK completion is not an independent goal review"
+    else:
+        assert len(state.model_requests) == 1
+        assert parent.status == "completed" and result["runtime_completed"] is True
     reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=state.actor.factory))
-    binding = reopened.get(waiting["run_id"])
-    assert binding.run.status == "completed"
-    assert binding.run.metadata["runtime_goal_digest"] == binding.metadata["goal_digest"]
-    assert len(binding.metadata["calls"]) == 1
-    snapshot = reopened.receipt_snapshot(waiting["run_id"])
-    assert snapshot[0]["receipt"]["verified"] is True
-    assert len(dispatches(state)) == 2  # Verification replays only receipts, never business I/O.
+    snapshot = reopened.receipt_snapshot(parent.run_id)
+    assert len(snapshot) == 2 and all(row["receipt"]["verified"] for row in snapshot)
+    assert len(state.receipts) == 2, "receipt verification never replays tools"
     duplicate = asyncio.run(state.invoke(**options))
-    assert duplicate["deduplicated"] is True and duplicate["business_completed"] is True
-    assert len(state.compiler_calls) == 2 and len(state.transports) == 1
+    assert duplicate["deduplicated"] is True
+    assert duplicate["business_completed"] is (not lost_final)
+    assert len(state.transports) == 2 and len(state.receipts) == 2
     with pytest.raises(CodexBindingError):
         reopened.authenticate(state.token)
 
 
-def test_host_reply_admission_rejects_unrequested_business_tool_even_if_read_only(goal_runtime):
+def test_pure_reply_needs_no_business_tool_or_upfront_plan(goal_runtime):
     state = goal_runtime
-    state.compiler_mode = "reply"
-    result = asyncio.run(state.invoke(task="库存是什么意思？"))
+    state.actions = []
+    state.reply = "库存表示当前持有的货物数量。"
+    state.review = lambda prompt: fixture_goal_review(prompt, kind="reply")
+    result = asyncio.run(state.invoke(task="库存是什么意思？", completion_mode="business"))
     assert result["reply_completed"] is True and result["business_completed"] is False
-    assert state.rejections == ["goal_required"] and dispatches(state) == []
     parent = state.repository.get(result["run_id"])
-    assert parent.metadata["runtime_goal_mode"] == "reply"
-    assert parent.metadata["codex_runtime"]["calls"] == {}
+    assert parent.metadata["codex_runtime"]["calls"] == {} and state.receipts == []
+    assert parent.metadata["runtime_goal_verification"]["mode"] == "reply"
+    assert len(state.transports) == len(state.model_requests) == 1
 
 
 @pytest.mark.parametrize("control", ["cancel", "pause", "revoke_actor", "expire_grant"])
-def test_compiler_cannot_freeze_after_authority_changes_with_same_generation(goal_runtime, control):
+def test_context_admission_cannot_freeze_after_same_generation_authority_change(
+    goal_runtime, monkeypatch, control
+):
     from app.db.models.user import User
 
     state = goal_runtime
-    state.compiler_entered, state.compiler_release = threading.Event(), threading.Event()
+    entered, release = threading.Event(), threading.Event()
+    actual_prepare = goal_admission.prepare_runtime_goal
+    parents = []
+
+    def prepare(binding, **kwargs):
+        value = actual_prepare(binding, **kwargs)
+        parents.append(binding.run_id)
+        entered.set()
+        assert release.wait(timeout=5), "fixture admission must be released"
+        return value
+
+    monkeypatch.setattr(goal_admission, "prepare_runtime_goal", prepare)
 
     async def scenario():
         pending = asyncio.create_task(state.invoke())
-        assert await asyncio.to_thread(state.compiler_entered.wait, 5)
-        parent_id = state.compiler_calls[0].run_id
+        assert await asyncio.to_thread(entered.wait, 5)
         store = CodexBindingStore(state.repository)
+        parent_id = parents[0]
         generation = store.get(parent_id).metadata["generation"]
         try:
             if control in {"cancel", "pause"}:
@@ -333,15 +152,118 @@ def test_compiler_cannot_freeze_after_authority_changes_with_same_generation(goa
             else:
                 store.update(parent_id, lambda _run, metadata: metadata.update(expires_at=0))
         finally:
-            state.compiler_release.set()
+            release.set()
         return await asyncio.wait_for(pending, 5), parent_id, generation
 
     result, parent_id, generation = asyncio.run(scenario())
-    assert result["ok"] is False and result["business_completed"] is False
-    assert state.transports == [] and dispatches(state) == []
     parent = state.repository.get(parent_id)
+    assert not result["ok"] and not result["business_completed"]
+    assert state.transports == state.receipts == state.model_requests == []
     assert parent.metadata["codex_runtime"]["generation"] == generation
-    assert parent.metadata["runtime_expected_operations"] is None
-    assert parent.metadata["runtime_frozen_plan"] is None
-    assert parent.metadata["runtime_goal_admitted"] is False
-    assert "waiting_input" not in parent.metadata["codex_runtime"]
+    assert not parent.metadata.get("runtime_goal_contract")
+    assert not parent.memory_references and not parent.retrieval_calls
+
+
+@pytest.mark.parametrize("read_state", ["failed", "unknown"])
+def test_approval_readback_allows_settled_failed_exploration_but_never_unknown(read_state):
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+    from app.infrastructure.codex.receipt_projection import project_receipt_state
+
+    parent = AgentRun(
+        run_id="readback-goal-parent",
+        user_id="42",
+        message="先核对库存，再创建发货单",
+        intent="codex.runtime",
+        status="waiting_user",
+    )
+    contract = build_goal_contract(parent)
+    parent.metadata.update(
+        runtime_type="codex",
+        runtime_goal_contract=contract,
+        runtime_goal_digest=contract["digest"],
+        codex_runtime={
+            "calls": {"read": {}, "write": {}},
+            "goal_digest": contract["digest"],
+            "coordinator_active": False,
+            "revoked": True,
+            "runtime_status": "completed",
+        },
+    )
+    read = {
+        "call_id": "read-call",
+        "child_run_id": "read",
+        "child_task_id": "read-task",
+        "tool_id": "products",
+        "action": "query",
+        "params": {},
+        "read_only": True,
+        "state": read_state,
+        "receipt": {
+            "run_id": "read",
+            "task_id": "read-task",
+            "status": read_state,
+            "success": False,
+            "verified": False,
+            "outcome": "not_started" if read_state == "failed" else "unknown",
+        },
+    }
+    write = {
+        "call_id": "write-call",
+        "child_run_id": "write",
+        "child_task_id": "write-task",
+        "tool_id": "shipment",
+        "action": "create",
+        "params": {},
+        "read_only": False,
+        "state": "completed",
+        "receipt": {
+            "run_id": "write",
+            "task_id": "write-task",
+            "status": "completed",
+            "success": True,
+            "verified": True,
+        },
+    }
+    waiting = copy.deepcopy(write)
+    waiting.update(state="waiting_approval")
+    waiting["receipt"].update(status="waiting_approval", success=False, verified=False)
+    parent.final_output["codex_result"] = {
+        "exit_status": "waiting_user",
+        "business_receipts": [read, waiting],
+    }
+    projected = project_receipt_state(parent, [read, write])
+    assert projected is not None
+    result = projected.final_output["codex_result"]
+    assert result["business_completed"] is False, "child completion never proves the original goal"
+    if read_state == "unknown":
+        assert projected.status == "blocked" and result["reconciliation_required"] is True
+    else:
+        assert projected.status == "running" and result["exit_status"] == "continuation_pending"
+
+        # A result read cannot invent a new review budget after the SDK already
+        # exhausted its bounded corrections with unchanged completed receipts.
+        parent.status = "blocked"
+        parent.metadata["codex_runtime"]["active_seconds"] = 12.0
+        parent.metadata["runtime_goal_verification"] = {
+            "status": "needs_work",
+            "error_code": "goal_verification_required",
+            "feedback": "仍有原始目标未完成",
+        }
+        parent.final_output["codex_result"] = {
+            "exit_status": "goal_verification_required",
+            "business_receipts": [read, write],
+            "failure_stage": "goal_verification",
+            "failure_kind": "goal_verification_required",
+            "failure_reason": "仍有原始目标未完成",
+            "model_request_attempts": 4,
+            "active_seconds": 12.0,
+        }
+        exhausted = project_receipt_state(parent, [read, write])
+        assert exhausted is not None and exhausted.status == "blocked"
+        after = exhausted.final_output["codex_result"]
+        assert after["exit_status"] == "goal_verification_required"
+        assert after["failure_stage"] == "goal_verification"
+        assert after["failure_kind"] == "goal_verification_required"
+        assert after["failure_reason"] == "仍有原始目标未完成"
+        assert after["model_request_attempts"] == 4 and after["active_seconds"] == 12.0

@@ -32,7 +32,7 @@ def _installed(relative):
 
 def test_host_navigation_uses_desktop_catalog_without_uninstalled_business_pages():
     menu = _menu()
-    assert menu["employee-workflow"]["path"] == "/workflow-employee-space"
+    assert menu["employee-workflow"]["path"] == "/employee-workbench"
     assert menu["persy-knowledge"]["path"] == "/persy/knowledge"
     assert menu["business-docking"]["mobile_group"] == "data"
     assert menu["ai-ecosystem"]["path"] == "/ai-ecosystem"
@@ -56,23 +56,36 @@ def test_personal_and_admin_roles_remain_distinct():
 
 def test_employee_child_alias_uses_the_existing_workspace_entry():
     menu = _menu([{"id": "office", "frontend_menu": [{"id": "workflow-employee-space"}]}])
-    assert menu["employee-workflow"]["path"] == "/workflow-employee-space"
+    assert menu["employee-workflow"]["path"] == "/employee-workbench"
     assert "mod-workflow-employee-space" not in menu
 
 
 def test_installed_bridge_menus_get_shared_keys_groups_and_browsable_templates():
     menu = _menu(
-        [_installed("bridge/xcagi-erp-domain-bridge"), _installed("bridge/xcagi-approval-bridge")]
+        [
+            _installed("bridge/xcagi-erp-domain-bridge"),
+            _installed("bridge/xcagi-approval-bridge"),
+            _installed("tools/kellai"),
+        ]
     )
     assert menu["purchase"]["mobile_group"] == "business"
     assert menu["materials"]["mobile_group"] == "data"
     assert menu["data-sources"]["mobile_group"] == "data"
+    assert menu["data-sources"]["path"] == "/kellai"
+    assert menu["data-sources"]["mod_id"] == "kellai"
     assert menu["approval-hub"]["mobile_group"] == "tasks"
     for key in ("print", "printer-list", "template-preview"):
         assert menu[key]["mobile_group"] == "computer"
         assert menu[key]["requires_desktop"] is False
     assert menu["template-preview"]["mod_id"] == "xcagi-erp-domain-bridge"
     assert "business-docking" in menu
+
+
+def test_kellai_navigation_requires_its_module_and_uses_tenant_destination():
+    assert "data-sources" not in _menu([_installed("bridge/xcagi-erp-domain-bridge")])
+    menu = _menu([_installed("tools/kellai")], tenant=True, tenant_member=True)
+    assert menu["data-sources"]["path"] == "/mod/kellai/workspace"
+    assert menu["data-sources"]["name"] == "客来来"
 
 
 def test_tenant_routes_require_authorized_owner_mod_and_elt_permission():

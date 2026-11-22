@@ -37,6 +37,7 @@ from app.db.models.tutorial import TutorialStepEvidence
 from app.db.models.user import User
 from app.infrastructure.tenant_scope import tenant_scope
 from app.schemas.tutorial_v2 import TutorialCourseDTO
+from app.utils.time import utc_now_naive
 
 
 def test_fresh_runtime_bootstrap_creates_tutorial_v2_tables():
@@ -370,7 +371,7 @@ def test_cookie_scope_validates_owner_course_allowlist_and_expiry_state(tutorial
     )
     assert invalid_owner.error_code == "tutorial_cookie_invalid"
 
-    run.last_entered_at = datetime.utcnow() - timedelta(hours=13)
+    run.last_entered_at = utc_now_naive() - timedelta(hours=13)
     db.commit()
     timed_out = resolve_tutorial_scope(
         db,
@@ -379,7 +380,7 @@ def test_cookie_scope_validates_owner_course_allowlist_and_expiry_state(tutorial
         source_tenant_id=users[0].tenant_id,
     )
     assert timed_out.error_code == "tutorial_cookie_expired"
-    run.last_entered_at = datetime.utcnow()
+    run.last_entered_at = utc_now_naive()
     run.workspace.status = "pending_cleanup"
     db.commit()
     expired = resolve_tutorial_scope(
@@ -415,9 +416,9 @@ def test_switching_courses_pauses_previous_and_reset_creates_new_generation(tuto
     assert replacement.workspace.generation == second.workspace.generation + 1
     assert replacement.workspace.tutorial_tenant_id != second.workspace.tutorial_tenant_id
     old_tenant_id = second.workspace.tutorial_tenant_id
-    second.workspace.purge_after = datetime.utcnow()
+    second.workspace.purge_after = utc_now_naive()
     db.commit()
-    assert service.purge_expired_workspaces(db, now=datetime.utcnow()) == 1
+    assert service.purge_expired_workspaces(db, now=utc_now_naive()) == 1
     with tenant_scope(old_tenant_id):
         assert db.query(Customer).count() == 0
     with tenant_scope(users[0].tenant_id):
@@ -483,7 +484,7 @@ def test_task_verifier_requires_persisted_execution_evidence(tutorial_db):
     db, users = tutorial_db
     service = TutorialV2Service()
     run = service.start_run(db, users[0], "task-workspace")
-    now = datetime.utcnow().isoformat()
+    now = utc_now_naive().isoformat()
     task = AgentTaskRecord(
         task_id="tutorial-task-1",
         user_id=str(users[0].id),
@@ -667,7 +668,7 @@ def test_trace_task_accepts_the_opened_independent_workspace(tutorial_db):
     db, users = tutorial_db
     service = TutorialV2Service()
     run = service.start_run(db, users[0], "task-workspace")
-    now = datetime.utcnow().isoformat()
+    now = utc_now_naive().isoformat()
     task = AgentTaskRecord(
         task_id="tutorial-sales-task",
         user_id=str(users[0].id),
@@ -788,7 +789,7 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
     service = TutorialV2Service()
     run = service.start_run(db, users[0], "data-import")
     tenant_id = run.workspace.tutorial_tenant_id
-    now = datetime.utcnow()
+    now = utc_now_naive()
     with tenant_scope(tenant_id):
         upload = EltUpload(
             id="tutorial-upload-1",

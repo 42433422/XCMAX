@@ -1,5 +1,5 @@
 # mypy: disable-error-code="arg-type, assignment, call-overload"
-# ruff: noqa: E402, F401
+# ruff: noqa: F401
 """Skill 组（画布）执行引擎：执行、沙盒追踪、拓扑校验。
 
 `workflow_id` 参数在存储层对应 ``workflows.id`` 行；产品侧同义称 **skill_group_id**
@@ -15,7 +15,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import (  # noqa: UP035 — facade compatibility exports
+    Any,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    cast,
+)
 
 from sqlalchemy.orm import Session
 
@@ -53,7 +60,7 @@ def _json_safe(value: Any, max_depth: int = 6, max_str: int = 8000) -> Any:
             return value[: max_str - 1] + "…"
         return value
     if isinstance(value, dict):
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         for i, (k, v) in enumerate(value.items()):
             if i >= 80:
                 out["__truncated__"] = True
@@ -83,9 +90,9 @@ class WorkflowEngine(_WorkflowEnginePart01Mixin, _WorkflowEnginePart02Mixin):
     # ── New node executors ──────────────────────────────────────
 
 
-def _topology_warnings(session: Session, workflow_id: int) -> List[str]:
+def _topology_warnings(session: Session, workflow_id: int) -> list[str]:
     """可达性、孤立节点等（不改变执行语义，仅提示）。"""
-    warnings: List[str] = []
+    warnings: list[str] = []
     nodes = session.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow_id).all()
     edges = session.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow_id).all()
     if not nodes:
@@ -95,7 +102,7 @@ def _topology_warnings(session: Session, workflow_id: int) -> List[str]:
     end_ids = {int(str(n.id)) for n in nodes if n.node_type == "end"}
     if len(start_ids) != 1:
         return warnings
-    adj: Dict[int, List[int]] = {nid: [] for nid in node_ids}
+    adj: dict[int, list[int]] = {nid: [] for nid in node_ids}
     for e in edges:
         if e.source_node_id in node_ids and e.target_node_id in node_ids:
             adj.setdefault(e.source_node_id, []).append(e.target_node_id)
@@ -127,14 +134,14 @@ def _topology_warnings(session: Session, workflow_id: int) -> List[str]:
     return warnings
 
 
-def _detect_cycle(adj: Dict[int, List[int]], start: int) -> List[int]:
+def _detect_cycle(adj: dict[int, list[int]], start: int) -> list[int]:
     """Return one cycle (as a list of node ids ending at the re-entry point)
     if the graph reachable from ``start`` contains any cycle, else ``[]``.
     """
     WHITE, GRAY, BLACK = 0, 1, 2
-    color: Dict[int, int] = dict.fromkeys(adj, WHITE)
-    parent: Dict[int, int] = {}
-    cycle: List[int] = []
+    color: dict[int, int] = dict.fromkeys(adj, WHITE)
+    parent: dict[int, int] = {}
+    cycle: list[int] = []
 
     def dfs(u: int) -> bool:
         color[u] = GRAY
@@ -163,7 +170,7 @@ def _detect_cycle(adj: Dict[int, List[int]], start: int) -> List[int]:
     return cycle
 
 
-def _format_node(nid: int, nodes: List[WorkflowNode]) -> str:
+def _format_node(nid: int, nodes: list[WorkflowNode]) -> str:
     for n in nodes:
         if n.id == nid:
             return f"{n.name or '?'}#{nid}"
@@ -174,8 +181,8 @@ class WorkflowValidator:
     """工作流静态校验。"""
 
     @staticmethod
-    def validate_workflow(workflow: Workflow, session: Session) -> List[str]:
-        errors: List[str] = []
+    def validate_workflow(workflow: Workflow, session: Session) -> list[str]:
+        errors: list[str] = []
         nodes = session.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow.id).all()
         edges = session.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow.id).all()
         start_nodes = [node for node in nodes if node.node_type == "start"]
@@ -252,15 +259,26 @@ class WorkflowValidator:
 
 
 def execute_workflow(
-    workflow_id: int, input_data: Optional[Dict[str, Any]] = None, *, user_id: int = 0
-) -> Dict[str, Any]:
+    workflow_id: int,
+    input_data: dict[str, Any] | None = None,
+    *,
+    user_id: int = 0,
+    expected_graph_fingerprint: str | None = None,
+    execution_id: int | None = None,
+) -> dict[str, Any]:
     return cast(
-        Dict[str, Any],
-        workflow_engine.execute_workflow(workflow_id, input_data or {}, user_id=user_id),
+        dict[str, Any],
+        workflow_engine.execute_workflow(
+            workflow_id,
+            input_data or {},
+            user_id=user_id,
+            expected_graph_fingerprint=expected_graph_fingerprint,
+            execution_id=execution_id,
+        ),
     )
 
 
-def validate_workflow(workflow_id: int) -> List[str]:
+def validate_workflow(workflow_id: int) -> list[str]:
     SessionFactory = get_session_factory()
     with SessionFactory() as session:
         workflow = session.query(Workflow).filter(Workflow.id == workflow_id).first()
@@ -271,12 +289,12 @@ def validate_workflow(workflow_id: int) -> List[str]:
 
 def run_workflow_sandbox(
     workflow_id: int,
-    input_data: Dict[str, Any],
+    input_data: dict[str, Any],
     *,
     mock_employees: bool = True,
     validate_only: bool = False,
     user_id: int = 0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     SessionFactory = get_session_factory()
     t0 = time.perf_counter()
     with SessionFactory() as session:
@@ -290,14 +308,24 @@ def run_workflow_sandbox(
                 "output": {},
                 "validate_only": validate_only,
             }
-        result = workflow_engine.run_sandbox(
-            session,
-            workflow,
-            input_data or {},
-            mock_employees=mock_employees,
-            validate_only=validate_only,
-            user_id=user_id,
-        )
+        if not mock_employees and not validate_only:
+            from modstore_server.workflow_event_runner import run_recorded_workflow
+
+            result = run_recorded_workflow(
+                workflow_id=workflow_id,
+                user_id=int(user_id or workflow.user_id or 0),
+                input_data=input_data,
+                real_sandbox=True,
+            )
+        else:
+            result = workflow_engine.run_sandbox(
+                session,
+                workflow,
+                input_data or {},
+                mock_employees=mock_employees,
+                validate_only=validate_only,
+                user_id=user_id,
+            )
         duration_ms = round((time.perf_counter() - t0) * 1000, 3)
         status = "success" if result.get("ok") else "failed"
         neuro_bus.publish(
@@ -316,7 +344,7 @@ def run_workflow_sandbox(
                 idempotency_key=f"{WORKFLOW_SANDBOX_COMPLETED}:{workflow_id}:{duration_ms}",
             )
         )
-        return cast(Dict[str, Any], result)
+        return cast(dict[str, Any], result)
 
 
 workflow_engine = WorkflowEngine()

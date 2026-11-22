@@ -265,75 +265,6 @@ class TestOrchestratorMainLinkWiring:
 
         return AgentOrchestrator(repository=InMemoryAgentRunRepository())
 
-    def test_plan_memory_recall_lands_on_run(self):
-        from app.application.workflow.workflow_types import PlanGraph
-
-        plan = PlanGraph(plan_id="p1", intent="test")
-        plan.metadata["memory_recall"] = {
-            "user_memory_rag": {
-                "summary": "【UserMemoryRAG】偏好摘要",
-                "hits": [{"content": "偏好企业微信通知", "score": 0.8}],
-            },
-            "memory_v2": {"summary": "用户偏好简明结论"},
-        }
-        orch = self._build_orchestrator()
-        with patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": []},
-        ):
-            run = orch.start_run_from_plan(
-                user_id="u1", message="查库存", plan=plan, auto_execute=False
-            )
-
-        assert len(run.memory_references) == 2
-        assert run.memory_references[0].source == "user_memory_rag"
-        assert run.memory_references[0].hits
-        assert run.memory_references[1].memory_type == "memory_v2"
-        assert any(e.event_type == "runtime.memory_recalled" for e in run.events)
-
-    def test_knowledge_recall_lands_on_retrieval_calls(self):
-        call = {
-            "query": "q",
-            "retriever": "dataset_rag",
-            "source": "ds1",
-            "top_k": 5,
-            "chunks": [{"text": "t"}],
-            "citations": [{"index": 1}],
-            "status": "completed",
-            "error": "",
-        }
-        orch = self._build_orchestrator()
-        from app.application.agent_orchestrator.run_models import AgentRun
-
-        run = AgentRun(user_id="u1", message="q")
-        with (
-            patch(
-                "app.application.agent_runtime.pipeline.agent_runtime_hooks_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.application.agent_runtime.pipeline.recall_knowledge_context",
-                return_value=call,
-            ),
-        ):
-            orch._recall_knowledge_for_run(run, context={})
-
-        assert len(run.retrieval_calls) == 1
-        assert run.retrieval_calls[0].source == "ds1"
-        assert any(e.event_type == "runtime.knowledge_recalled" for e in run.events)
-
-    def test_knowledge_recall_disabled_by_switch(self):
-        orch = self._build_orchestrator()
-        from app.application.agent_orchestrator.run_models import AgentRun
-
-        run = AgentRun(user_id="u1", message="q")
-        with patch(
-            "app.application.agent_runtime.pipeline.recall_knowledge_context"
-        ) as mock_recall:
-            orch._recall_knowledge_for_run(run, context={})
-        mock_recall.assert_not_called()
-        assert run.retrieval_calls == []
-
     def test_terminal_writeback_event_on_completed_run(self):
         orch = self._build_orchestrator()
         from app.application.agent_orchestrator.run_models import AgentRun
@@ -367,64 +298,6 @@ class TestOrchestratorMainLinkWiring:
         with patch("app.application.agent_runtime.pipeline.remember_run_outcome") as mock_remember:
             orch._remember_run_outcome_for(run)
         mock_remember.assert_not_called()
-
-    def test_gate_off_leaves_run_and_context_untouched(self):
-        # 开关关闭：不召回、不上账、不注入 planner context、无 runtime 事件
-        orch = self._build_orchestrator()
-        from app.application.agent_orchestrator.run_models import AgentRun
-
-        run = AgentRun(user_id="u1", message="q")
-        context: dict = {"message": "q"}
-        with patch(
-            "app.application.agent_runtime.pipeline.recall_knowledge_context"
-        ) as mock_recall:
-            orch._recall_knowledge_for_run(run, context=context)
-        mock_recall.assert_not_called()
-        assert run.retrieval_calls == []
-        assert "knowledge_rag" not in context
-        assert not any(e.event_type.startswith("runtime.") for e in run.events)
-
-    def test_gate_on_injects_knowledge_rag_into_context(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_AGENT_RUNTIME_HOOKS", "1")
-        call = {
-            "query": "q",
-            "retriever": "dataset_rag",
-            "source": "ds1",
-            "top_k": 5,
-            "chunks": [{"text": "t"}],
-            "citations": [{"index": 1}],
-            "status": "completed",
-            "error": "",
-        }
-        orch = self._build_orchestrator()
-        from app.application.agent_orchestrator.run_models import AgentRun
-
-        run = AgentRun(user_id="u1", message="q")
-        context: dict = {"dataset_id": "ds1"}
-        with patch(
-            "app.application.agent_runtime.pipeline.recall_knowledge_context",
-            return_value=call,
-        ) as mock_recall:
-            orch._recall_knowledge_for_run(run, context=context)
-        mock_recall.assert_called_once_with(query="q", dataset_id="ds1")
-        assert context["knowledge_rag"]["dataset_id"] == "ds1"
-        assert context["knowledge_rag"]["chunks"] == [{"text": "t"}]
-        assert run.retrieval_calls[0].source == "ds1"
-
-    def test_gate_on_skipped_recall_adds_no_retrieval(self, monkeypatch):
-        # hooks 开但未指定 dataset → skipped 短路：不上账、不发事件
-        monkeypatch.setenv("XCAGI_AGENT_RUNTIME_HOOKS", "1")
-        orch = self._build_orchestrator()
-        from app.application.agent_orchestrator.run_models import AgentRun
-
-        run = AgentRun(user_id="u1", message="q")
-        with patch(
-            "app.application.agent_runtime.pipeline.recall_knowledge_context",
-            return_value={"status": "skipped", "chunks": [], "citations": []},
-        ):
-            orch._recall_knowledge_for_run(run, context={})
-        assert run.retrieval_calls == []
-        assert not any(e.event_type == "runtime.knowledge_recalled" for e in run.events)
 
     def test_writeback_failure_still_traced_when_gate_on(self, monkeypatch):
         # hooks 开 + 回写后端失败 → 事件仍上账且 remembered=False（降级可观测）
@@ -479,38 +352,6 @@ class TestOrchestratorMainLinkWiring:
         assert run.status == "completed"
         mock_remember.assert_called_once()
         assert any(e.event_type == "runtime.memory_writeback" for e in run.events)
-
-
-class TestPlannerGatewayMetering:
-    @pytest.mark.parametrize("has_response", [True, False])
-    def test_common_provider_is_metered_only_on_completion(
-        self, tmp_path, monkeypatch, has_response
-    ):
-        from app.application.workflow import planner_llm_gateway
-        from app.infrastructure.llm.providers import registry
-
-        payload = {
-            "model": "test-model",
-            "choices": [{"message": {"content": "plan"}}],
-            "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
-        }
-        provider = MagicMock()
-        provider.chat_completion = AsyncMock(return_value=payload if has_response else None)
-        monkeypatch.setattr(registry, "get_active_provider", lambda **kwargs: provider)
-        result = planner_llm_gateway.request_planner_completion(
-            ai_service=object(),
-            context={},
-            messages=[{"role": "user", "content": "plan this"}],
-        )
-        entries = _read_ledger(tmp_path)
-        if has_response:
-            assert result == payload
-            assert len(entries) == 1
-            assert entries[0]["source"] == "agent_planner"
-            assert entries[0]["model"] == "test-model"
-            assert entries[0]["total_tokens"] == 20
-        else:
-            assert result is None and entries == []
 
 
 class TestEmployeeModLlmMetering:

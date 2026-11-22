@@ -160,7 +160,6 @@ def test_lost_queue_finish_reads_returned_runtime_result_without_another_turn(
                 "turn_id": parent.metadata["_codex_queued_request"]["worker_turn_id"],
             },
             completion_mode="auto",
-            admit_goal=True,
             _repository=_ClaimedRuntimeRepository(state.repository, first, "first-worker"),
         )
     assert result["ok"] is True and len(state.calls) == 1

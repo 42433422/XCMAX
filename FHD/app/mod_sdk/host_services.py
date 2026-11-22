@@ -410,6 +410,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.kitten_ai_document.pickup",
         "store_document_pickup",
     ),
+    "store_office_document_result": (
+        "app.application.tools.workflow_tools.documents",
+        "_store_result",
+    ),
     "svc": ("app.application.approval_workspace_app_service", ""),
     "sync_crm_from_pipeline_doc": (
         "app.domain.shared_services.user_cs_crm_store",

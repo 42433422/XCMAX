@@ -21,6 +21,8 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.run_attempt == 1
     runs-on: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && 'ubuntu-22.04' || 'ubuntu-24.04' }}
     timeout-minutes: 120
+    outputs:
+      strategic_report: ${{ steps.execute.outputs.strategic_report }}
     permissions:
       contents: read
     steps:
@@ -43,7 +45,9 @@ jobs:
           PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
+        id: execute
         env:
+          MODSTORE_PUBLIC_ORIGIN: ${{ vars.MODSTORE_PUBLIC_ORIGIN }}
           DEVFLEET_FORCE_OPENCODE: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && '1' || '0' }}
           PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
           DEVFLEET_OPENCODE_AGENT: ${{ runner.temp }}/para-worker/node_modules/opencode-linux-x64-baseline/bin/opencode
@@ -69,12 +73,23 @@ jobs:
           bash scripts/autonomy/runtime_tools/prepare_github_executor.sh configure
           node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
       - name: Hand off immutable candidate data
+        if: steps.execute.outputs.strategic_report != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: para-candidate-${{ inputs.request_id }}
           path: |
             ${{ runner.temp }}/para-candidate/manifest.json
             ${{ runner.temp }}/para-candidate/candidate.bundle
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain approved strategic business report
+        if: always() && steps.execute.outputs.strategic_report == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: para-strategic-report-${{ inputs.request_id }}
+          path: |
+            ${{ runner.temp }}/para-evidence/execution.json
+            ${{ runner.temp }}/para-evidence/report.md
           if-no-files-found: error
           retention-days: 7
       - name: Retain execution evidence
@@ -87,6 +102,7 @@ jobs:
 
   publish-candidate:
     needs: employee-workspace
+    if: needs.employee-workspace.outputs.strategic_report != 'true'
     outputs:
       original_pr: ${{ steps.publish.outputs.original_pr }}
     runs-on: ubuntu-24.04
@@ -162,6 +178,7 @@ jobs:
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
+          MODSTORE_PUBLIC_ORIGIN: ${{ vars.MODSTORE_PUBLIC_ORIGIN }}
           DEVFLEET_FORCE_OPENCODE: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && '1' || '0' }}
           PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
           DEVFLEET_OPENCODE_AGENT: ${{ runner.temp }}/para-worker/node_modules/opencode-linux-x64-baseline/bin/opencode

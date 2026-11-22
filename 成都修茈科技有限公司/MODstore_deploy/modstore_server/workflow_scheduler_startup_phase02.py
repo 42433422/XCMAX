@@ -162,40 +162,6 @@ def _register_scheduler_phase_02():
     except RECOVERABLE_ERRORS:
         _facade().logger.exception("register daily digest cron failed")
 
-    def _daily_vibe_line_execute_job() -> None:
-        try:
-            from modstore_server.daily_vibe_line_execute_job import (
-                run_daily_vibe_line_execute_job,
-            )
-
-            _facade()._run_daily_pipeline_stage(
-                "daily_vibe_line_execute", run_daily_vibe_line_execute_job
-            )
-        except RECOVERABLE_ERRORS:
-            _facade().logger.exception("daily vibe line execute job failed")
-
-    try:
-        from modstore_server.daily_vibe_line_execute_job import (
-            cron_trigger_for_vibe_line_execute,
-        )
-
-        if _facade()._env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
-            _facade()._scheduler.add_job(
-                _daily_vibe_line_execute_job,
-                cron_trigger_for_vibe_line_execute(),
-                id="daily_vibe_line_execute_job",
-                replace_existing=True,
-                misfire_grace_time=_facade()._business_misfire_grace_time(),
-                coalesce=True,
-                max_instances=1,
-            )
-        else:
-            _facade().logger.info(
-                "daily vibe line cron disabled; digest completion event is primary"
-            )
-    except RECOVERABLE_ERRORS:
-        _facade().logger.exception("register daily vibe line execute cron failed")
-
     def _daily_orchestrator_job() -> None:
         try:
             from modstore_server.daily_orchestrator_job import (
@@ -283,7 +249,7 @@ def _register_scheduler_phase_02():
         _facade().IntervalTrigger(
             minutes=max(
                 15,
-                _facade()._env_int("MODSTORE_SELF_MAINTENANCE_HEARTBEAT_MINUTES", 120),
+                _facade()._env_int("MODSTORE_SELF_MAINTENANCE_HEARTBEAT_MINUTES", 360),
             )
         ),
         id="self_maintenance_heartbeat",
@@ -292,40 +258,6 @@ def _register_scheduler_phase_02():
         coalesce=True,
         max_instances=1,
     )
-
-    def _daily_release_train_orchestrator_job() -> None:
-        try:
-            from modstore_server.daily_release_train_orchestrator_job import (
-                run_daily_release_train_orchestrator_job,
-            )
-
-            _facade()._run_daily_pipeline_stage(
-                "release_train_orchestrator", run_daily_release_train_orchestrator_job
-            )
-        except RECOVERABLE_ERRORS:
-            _facade().logger.exception("daily release_train orchestrator job failed")
-
-    try:
-        from modstore_server.daily_release_train_orchestrator_job import (
-            cron_trigger_for_release_train_orchestrator,
-        )
-
-        if _facade()._env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
-            _facade()._scheduler.add_job(
-                _daily_release_train_orchestrator_job,
-                cron_trigger_for_release_train_orchestrator(),
-                id="daily_release_train_orchestrator_job",
-                replace_existing=True,
-                misfire_grace_time=_facade()._business_misfire_grace_time(),
-                coalesce=True,
-                max_instances=1,
-            )
-        else:
-            _facade().logger.info(
-                "daily release_train cron disabled; digest completion event is primary"
-            )
-    except RECOVERABLE_ERRORS:
-        _facade().logger.exception("register daily release_train orchestrator cron failed")
 
     def _daily_backup_job() -> None:
         try:
@@ -370,9 +302,9 @@ def _register_scheduler_phase_02():
             _facade().logger.exception("dr recovery probe job failed")
 
     try:
-        probe_mins = int(_facade().os.environ.get("MODSTORE_DR_PROBE_INTERVAL_MINUTES", "30"))
+        probe_mins = int(_facade().os.environ.get("MODSTORE_DR_PROBE_INTERVAL_MINUTES", "60"))
     except ValueError:
-        probe_mins = 30
+        probe_mins = 60
     _facade()._scheduler.add_job(
         _dr_recovery_probe_job,
         _facade().IntervalTrigger(minutes=max(5, probe_mins)),

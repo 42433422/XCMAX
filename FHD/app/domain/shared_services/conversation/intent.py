@@ -13,7 +13,6 @@ class IntentMixin:
     if TYPE_CHECKING:
         intent_service: Any
         offline_intent_service: Any
-        task_agent: Any
         unified_recognizer: Any
         user_preference_service: Any
 
@@ -221,42 +220,7 @@ class IntentMixin:
     def _enhance_intent_slots(
         self, message: str, intent_result: dict[str, Any], user_id: str
     ) -> dict[str, Any]:
-        intent_result = self._enhance_with_task_agent(message, intent_result, user_id)
         intent_result = self._enhance_with_shipment_parser(message, intent_result)
-        return intent_result
-
-    def _enhance_with_task_agent(
-        self, message: str, intent_result: dict[str, Any], user_id: str
-    ) -> dict[str, Any]:
-        plan = self.task_agent.parse_task(message, {"user_id": user_id})
-        if not plan or not isinstance(plan, dict):
-            return intent_result
-
-        task_type = plan.get("task_type")
-        task_slots = plan.get("slots") or {}
-        task_to_tool = {
-            "shipment_generate": "shipment_generate",
-            "product_query": "products",
-            "customer_query": "customers",
-            "print_config": "system",
-            "customer_supplement": "customers",
-        }
-
-        if task_type not in task_to_tool:
-            return intent_result
-
-        merged_slots: dict[str, Any] = {}
-        merged_slots.update(intent_result.get("slots") or {})
-        merged_slots.update(task_slots)
-        intent_result["slots"] = merged_slots
-
-        if not intent_result.get("tool_key"):
-            intent_result["tool_key"] = task_to_tool[task_type]
-        if not intent_result.get("final_intent"):
-            intent_result["final_intent"] = task_type
-        if not intent_result.get("primary_intent"):
-            intent_result["primary_intent"] = task_type
-
         return intent_result
 
     def _enhance_with_shipment_parser(

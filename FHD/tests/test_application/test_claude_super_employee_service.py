@@ -10,6 +10,7 @@ from app.application.claude_super_employee_service import (
     CLAUDE_DIRECT_MESSAGE_KIND,
     ClaudeSuperEmployeeService,
 )
+from tests.test_application.test_super_employee_dispatch_recovery import _ack
 
 
 def fake_claude_runner(reply: str, seen: list[list[str]] | None = None):
@@ -90,7 +91,7 @@ def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, 
         payload = json.loads(request.content.decode("utf-8") or "{}") if request.content else {}
         seen.append((request.method, request.url.path, payload))
         if request.method == "GET" and request.url.path == "/api/health":
-            return httpx.Response(200, json={"success": True})
+            return httpx.Response(200, json={"success": True, "task_request_recovery_version": 1})
         if request.method == "POST" and request.url.path == "/api/auth/guest":
             return httpx.Response(200, json={"token": "token-1"})
         if request.method == "GET" and request.url.path == "/api/devices":
@@ -129,13 +130,7 @@ def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, 
         if request.method == "POST" and request.url.path == "/api/tasks":
             assert payload["device_id"] == "device-1"
             assert "提交到调度器分配的工作分支" in str(payload["prompt"])
-            return httpx.Response(
-                200,
-                json={
-                    "task": {"id": "task-1", "status": "running"},
-                    "subtask": {"id": "sub-1"},
-                },
-            )
+            return _ack(request, task_id="task-1")
         if request.method == "GET" and request.url.path == "/api/tasks/task-1":
             return httpx.Response(
                 200,

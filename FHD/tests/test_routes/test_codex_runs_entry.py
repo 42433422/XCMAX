@@ -40,11 +40,11 @@ def test_create_get_and_list_codex_parent_with_host_goal_admission(runtime_entry
     assert context["tenant_id"] == str(state.actor.tenant_id)
     assert context["_actor_authorization"] == state.actor.context["_actor_authorization"]
     assert context["source"] == "codex_runtime"
-    assert parent.metadata["runtime_expected_operations"] is None
+    assert "runtime_expected_operations" not in parent.metadata
     assert "runtime_expected_operations" not in context
     assert "untrusted instructions" not in parent.metadata["_codex_system_prompt"]
     assert state.calls[0]["completion_mode"] == "auto"
-    assert state.calls[0]["admit_goal"] is True
+    assert "admit_goal" not in state.calls[0]
     assert state.queue.get(parent.run_id).state == "succeeded"
     assert parent.steps == [] and parent.tool_calls == []
     assert "_actor_authorization" not in response.text
@@ -87,7 +87,7 @@ def test_auto_execute_false_persists_without_io_and_resumes_same_parent(runtime_
     assert state.calls == state.servers == []
     assert state.drain(run_id).status == "completed"
     assert len(state.calls) == len(state.servers) == 1
-    assert state.calls[0]["completion_mode"] == "auto" and state.calls[0]["admit_goal"] is True
+    assert state.calls[0]["completion_mode"] == "auto" and "admit_goal" not in state.calls[0]
     assert state.repository.get(run_id).metadata["codex_runtime"]["generation"] == 1
     assert len(state.repository.list_recent()) == 1
 

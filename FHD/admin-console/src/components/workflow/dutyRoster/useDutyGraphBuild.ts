@@ -15,12 +15,33 @@ import { computeAutoLayout, computeGridLayout } from '@host/composables/useAutoL
 import type { Node, Edge } from '@vue-flow/core'
 import { createDutyRosterLayout } from './dutyRosterLayout'
 import { ALL_PLANNED_IDS, CRAFT_PIPELINE_ORDER, AREA_COLORS, ALL_AREAS, isVirtualEmployee, isDutyGraphMember, CENTER_ID, CLIENT_CENTER_ID, NODE_W, WORKSHOP_NODE_W, WORKSHOP_NODE_H, HEALTH_COLOR, RUN_STATUS_COLOR, LLM_ACT_COLOR } from './dutyRosterConstants'
+import { useAgentTaskCenterStore } from '@host/stores/agentTaskCenter'
+import { employeeTaskSnapshot, tasksForEmployee } from '@host/utils/workflowEmployeeTaskState'
 export function useDutyGraphBuild(s: DutyRosterState, core: DutyLoopCore, data: DutyData, ctx: { fitView: DutyFitView; syncEmployeeRouteQuery: (employeeId?: string | null) => void }) {
   const { employees, missingLocalPackIds, healthMap, depsMap, loading, loadingP2, error, loadWarning, llmStatusMap, llmFernetConfigured, llmStatusFailed, empLlmMap, viewMode, showGapPanel, gapFocusHint, autoRefresh, countdown, capabilityMap, capLoading, runNodeStatusMap, loopRuntimeStatus, showStatsDetail, showMoreActions, detailCollapsed, empCapabilityViewMap, showNoKeyPanel, noKeyLoading, noKeyError, noKeyData, noKeyBusyRow, showAllHandsPanel, allHandsBusy, allHandsError, allHandsReport, allHandsWithResearch, allHandsExpanded, allHandsPlainOpen, allHandsPlainText, allHandsPlainLoading, allHandsPlainReqGen, allHandsMeetingMinutes, allHandsMeetingMinutesEmail, allHandsSessionId, allHandsQuestion, allHandsProgress, showRunPanel, runTargetId, runTaskBrief, runInputJson, runIncludeDependencies, runAllowHighRisk, runMaxConcurrency, runBusy, runError, latestRun, flowNodes, flowEdges, taskBrief, taskInputJson, dispatchConfirmHighRisk, taskRunning, taskResult, taskError, showDispatch, selectedEmp, selectedWorkshop, workshopRouteCopied, execItems, execTotal, execLoading, execLoadingMore, execError, onDutyEmployees, healthLevel, empAreaColor, llmActLevel, anyProviderHasUsableKey, runStatusLevel, capabilityLevel, capabilityColor, capabilityLabel, isDeployedDutyRosterRow } = s
   const { fitView, syncEmployeeRouteQuery } = ctx
   const { refreshLoopRuntimeStatus, loopParticipantIdSet, loopParticipantById, loopParticipantIds, loopUiBridgeRecord, loopGovernanceAuditRecord, loopCurrentGovernanceGateRecord, loopGovernanceAuditSummary, loopGovernanceAuditLast, loopGovernanceAuditLastTargets, loopGovernanceAuditLastSummary, loopRuntimeSchemaVersion, loopRuntimeContractRecord, loopRuntimeContractValidationRecord, loopRuntimeSurfaceReadinessCards, loopRuntimeContractRequiredFields, loopRuntimeContractMissingFields, loopRuntimeContractMissingNested, loopRuntimeSurfaceReadiness, loopRuntimeSurfaceReadinessOk, loopRuntimeSurfaceMissing, loopRuntimeSurfaceIncidents, loopRuntimeSurfaceIncident, loopRuntimeSurfaceIncidentSummary, loopRuntimeContractStatus, loopRuntimeContractPrimaryRoute, loopRuntimePrimaryRouteLocation, loopRuntimePrimaryRouteLabel, loopRuntimeContractOk, loopDutyRosterBridgeRecord, loopGovernanceActionRecord, loopGovernanceAllowedSurfaces, loopGovernanceActionAllowedInDutyGraph, loopBridgePrimaryEmployeeId, loopBridgeIsolationIds, loopRosterAlignment, loopRosterGateRecord, loopRosterRemediationRecord, loopRawParticipantIds, loopOutOfRosterParticipantIds, loopOutOfRosterCount, loopNotDeployedCount, loopGateRecord, loopEvidenceRecord, loopMergeDecisionRecord, loopMetricsRecord, loopOpenRunCount, loopRemediationBusy, loopRemediationError, loopRemediationResult, loopGovernanceReviewBusy, loopGovernanceReviewError, loopGovernanceReviewResult, loopCanReviewGovernanceAudit, loopRemediationResultSummary, loopRemediationTargetIds, loopCanRunDutyRegistration, nodeEmployeeId, nodeLoopActive, focusLoopParticipant, employeeSpaceLocation } = core
   const { buildRosterEmployeeRows, load, butlerEmployeeRow, seedVirtualEmployees, loadPhase2, loadCapabilities, startAutoRefresh, stopAutoRefresh } = data
   const { applyDepartmentLayout, applyLayout, applyAreaLayout } = createDutyRosterLayout(flowNodes, flowEdges)
+  const taskCenter = useAgentTaskCenterStore()
+  const taskSnapshots = computed(() => {
+    const snapshots = new Map<string, ReturnType<typeof employeeTaskSnapshot>>()
+    for (const node of flowNodes.value) {
+      const id = String(node.data?.id || '')
+      if (!id || node.data?.isWorkshop || snapshots.has(id)) continue
+      snapshots.set(id, employeeTaskSnapshot({
+        empId: id, panelTitle: String(node.label || id), shortName: String(node.data?.name || id),
+        enabled: node.data?.deployed ?? node.data?.source !== 'v1_catalog',
+        tasks: tasksForEmployee(taskCenter.tasks, id), stale: taskCenter.stale, lastVerifiedAt: taskCenter.lastVerifiedAt,
+      }))
+    }
+    return snapshots
+  })
+  // A task event changes node badges, never the user's layout or zoom.
+  const liveFlowNodes = computed<Node[]>(() => flowNodes.value.map(node => {
+    const snapshot = taskSnapshots.value.get(String(node.data?.id || ''))
+    return snapshot ? { ...node, data: { ...node.data, taskSnapshot: snapshot } } : node
+  }))
 
 function buildHubGraph(emps: EmpRow[]) {
   const rosterEmps = emps.filter(isDutyGraphMember)
@@ -536,6 +557,8 @@ const stats = computed(() => ({
     buildDepEdges,
     buildClientWorkshopGraph,
     stats,
+    liveFlowNodes,
+    taskSnapshots,
   }
 }
 

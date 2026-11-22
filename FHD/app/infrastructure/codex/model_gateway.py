@@ -8,6 +8,8 @@ native remote tools and client-supplied provider changes are rejected.
 from __future__ import annotations
 
 import json
+import math
+import time
 import uuid
 from contextlib import ExitStack
 from types import SimpleNamespace
@@ -54,7 +56,7 @@ def response_usage(response: dict[str, Any]) -> dict[str, int] | None:
 
 
 def _validate_tools(tools: Any) -> None:
-    from app.infrastructure.codex.tools import CODEX_TOOL_NAMES
+    from app.infrastructure.codex.tool_names import CODEX_TOOL_NAMES
 
     if not isinstance(tools, list):
         raise HTTPException(400, "Invalid model tool list")
@@ -95,7 +97,7 @@ def _controlled_tools(tools: Any) -> list[dict[str, Any]]:
 
 
 def _validate_output_item(item: Any) -> None:
-    from app.infrastructure.codex.tools import CODEX_TOOL_NAMES
+    from app.infrastructure.codex.tool_names import CODEX_TOOL_NAMES
 
     if not isinstance(item, dict):
         raise ValueError("Invalid model output item")
@@ -138,13 +140,32 @@ def _prepare_body(body: Any, route: ModelRoute) -> dict[str, Any]:
     }
 
 
-def _claim(store: Any, token: str, route: ModelRoute, request_id: str) -> tuple[Any, int]:
+def _remaining(binding: Any) -> float:
+    value = binding.metadata.get("deadline_at")
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise HTTPException(409, "Task model deadline is missing")
+    remaining = float(value) - time.time()
+    if remaining <= 0:
+        raise HTTPException(408, "Task model deadline is exhausted")
+    return remaining
+
+
+def _claim(
+    store: Any,
+    token: str,
+    route: ModelRoute,
+    request_id: str,
+    *,
+    request_group: str = "",
+    attempt: int = 1,
+) -> tuple[Any, int]:
     from app.application.agent_orchestrator.budget import budget_exceeded_payload
     from app.infrastructure.billing.model_usage import estimate_llm_cost_units
     from app.infrastructure.llm.model_admission import admit_model_call
 
     reserve = estimate_llm_cost_units(total_tokens=route.context_window)
     with store.scope(token, audience="model") as binding:
+        _remaining(binding)
         config = binding.metadata.get("runtime_config") or {}
         if config.get("route_identity") != route.identity or config.get("model") != route.model:
             raise HTTPException(409, "The configured gateway no longer matches this task")
@@ -169,6 +190,9 @@ def _claim(store: Any, token: str, route: ModelRoute, request_id: str) -> tuple[
                 "reserved_units": reserve,
                 "model": route.model,
                 "provider_id": route.provider_id,
+                "request_group": request_group or request_id,
+                "attempt": attempt,
+                "started_at": time.time(),
             }
 
         store.update(binding.run_id, claim, generation=binding.metadata.get("generation"))
@@ -199,6 +223,9 @@ def _finish(
             metadata["model_reconciliation_required"] = True
             return
         call.update(usage=usage, cost_units=settled["cost_units"])
+        if state == "completed":
+            for key in ("runtime_failure_kind", "runtime_failure_reason", "runtime_failure_stage"):
+                run.metadata.pop(key, None)
         run.metadata["reserved_cost_units"] = max(
             0,
             int(run.metadata.get("reserved_cost_units") or 0) - call["reserved_units"],
@@ -266,6 +293,7 @@ async def forward_responses(request: Request):
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid Responses request") from exc
     upstream_key = route.token()
+    request_group = "request_" + uuid.uuid4().hex
     request_id = "model_" + uuid.uuid4().hex
     usage_key = f"codex:{binding.run_id}:{request_id}"
     stack = ExitStack()
@@ -294,40 +322,115 @@ async def forward_responses(request: Request):
             stack.enter_context(
                 model_call_slot(SimpleNamespace(provider_id=route.provider_id), profile="codex")
             )
-        await anyio.to_thread.run_sync(lambda: _claim(store, token, route, request_id))
-        claimed = True
-        await anyio.to_thread.run_sync(
-            lambda: reserve_model_usage(
-                usage_key=usage_key,
-                run_id=binding.run_id,
-                user_id=binding.run.user_id,
-                provider_id=route.provider_id,
-                model=route.model,
-                token_ceiling=route.context_window,
+        from app.infrastructure.llm.retry_policy import (
+            is_safe_transport_retry,
+            model_failure_details,
+        )
+
+        async def record_failure(error: BaseException, *, output_started: bool = False) -> None:
+            details = model_failure_details(
+                error,
+                stage="codex.responses",
+                attempt=attempt,
+                elapsed_ms=(time.monotonic() - attempt_started) * 1000,
+                output_started=output_started,
             )
-        )
-        reserved = True
-        await anyio.to_thread.run_sync(lambda: store.authenticate(token, audience="model"))
-        client_factory = getattr(request.app.state, "codex_http_client_factory", httpx.AsyncClient)
-        client = client_factory(
-            timeout=httpx.Timeout(120, connect=15), trust_env=False, follow_redirects=False
-        )
-        headers = {"Accept": "text/event-stream" if body.get("stream") else "application/json"}
-        if upstream_key:
-            headers["Authorization"] = f"Bearer {upstream_key}"
-        outbound = client.build_request(
-            "POST",
-            route.base_url + "/responses",
-            headers=headers,
-            json=body,
-        )
-        network_started = True
-        upstream = await client.send(outbound, stream=True)
-        if upstream.status_code >= 300:
+            if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 429:
+                details.update(outcome="not_started", retryable=True)
+
+            def record(run: Any, metadata: dict[str, Any]) -> None:
+                call = metadata.get("model_requests", {}).get(request_id)
+                if call is not None:
+                    call["diagnostic"] = details
+                run.metadata["runtime_failure_kind"] = details["failure_kind"]
+                run.metadata["runtime_failure_reason"] = details["failure_reason"]
+                run.metadata["runtime_failure_stage"] = "model"
+                run.add_event("runtime.model.failure", details["failure_reason"], details)
+
+            await anyio.to_thread.run_sync(lambda: store.update(binding.run_id, record))
+
+        for attempt in range(1, 4):
+            attempt_started = time.monotonic()
+            request_id = "model_" + uuid.uuid4().hex
+            usage_key = f"codex:{binding.run_id}:{request_id}"
+            claimed = reserved = network_started = finished = False
+            binding = await anyio.to_thread.run_sync(
+                lambda: store.authenticate(token, audience="model")
+            )
+            remaining = _remaining(binding)
+            await anyio.to_thread.run_sync(
+                lambda: _claim(
+                    store, token, route, request_id, request_group=request_group, attempt=attempt
+                )
+            )
+            claimed = True
+            await anyio.to_thread.run_sync(
+                lambda: reserve_model_usage(
+                    usage_key=usage_key,
+                    run_id=binding.run_id,
+                    user_id=binding.run.user_id,
+                    provider_id=route.provider_id,
+                    model=route.model,
+                    token_ceiling=route.context_window,
+                )
+            )
+            reserved = True
+            await anyio.to_thread.run_sync(lambda: store.authenticate(token, audience="model"))
+            client_factory = getattr(
+                request.app.state, "codex_http_client_factory", httpx.AsyncClient
+            )
+            client = client_factory(
+                timeout=httpx.Timeout(min(60.0, remaining), connect=min(15.0, remaining)),
+                trust_env=False,
+                follow_redirects=False,
+            )
+            headers = {"Accept": "text/event-stream" if body.get("stream") else "application/json"}
+            if upstream_key:
+                headers["Authorization"] = f"Bearer {upstream_key}"
+            outbound = client.build_request(
+                "POST",
+                route.base_url + "/responses",
+                headers=headers,
+                json=body,
+            )
+            network_started = True
+            try:
+                with anyio.fail_after(min(60.0, _remaining(binding))):
+                    upstream = await client.send(outbound, stream=True)
+            except httpx.HTTPError as exc:
+                await record_failure(exc)
+                if not is_safe_transport_retry(exc):
+                    raise
+                await anyio.to_thread.run_sync(
+                    lambda: _finish(
+                        store,
+                        binding.run_id,
+                        request_id,
+                        usage=_ZERO_USAGE,
+                        usage_key=usage_key,
+                        state="failed",
+                    )
+                )
+                finished = True
+                if attempt == 3:
+                    raise
+                await client.aclose()
+                client = None
+                delay = 0.25 * 2 ** (attempt - 1)
+                if _remaining(binding) <= delay:
+                    raise HTTPException(
+                        408, "Task deadline cannot admit another model attempt"
+                    ) from exc
+                await anyio.sleep(delay)
+                continue
+            if upstream.status_code < 300:
+                break
             slot_failure = httpx.HTTPStatusError(
                 "Qualified gateway rejected request", request=outbound, response=upstream
             )
-            # Error bodies can contain credentials/echoed prompts. Do not relay them.
+            await record_failure(slot_failure)
+            # Explicit rejection has no generated completion. A 5xx/408 can
+            # hide a started model request and remains unresolved, without replay.
             definite = 400 <= upstream.status_code < 500 and upstream.status_code != 408
             await anyio.to_thread.run_sync(
                 lambda: _finish(
@@ -340,6 +443,18 @@ async def forward_responses(request: Request):
                 )
             )
             finished = True
+            if upstream.status_code == 429 and attempt < 3:
+                try:
+                    delay = max(0.25, min(float(upstream.headers.get("retry-after", "0.5")), 5.0))
+                except ValueError:
+                    delay = 0.5
+                if _remaining(binding) > delay:
+                    await upstream.aclose()
+                    await client.aclose()
+                    upstream = client = None
+                    slot_failure = None
+                    await anyio.sleep(delay)
+                    continue
             return JSONResponse(
                 {
                     "error": {
@@ -349,8 +464,11 @@ async def forward_responses(request: Request):
                 },
                 status_code=upstream.status_code if definite else 502,
             )
+        assert upstream is not None and client is not None
+        slot_failure = None
         if not body.get("stream"):
-            response = json.loads(await upstream.aread())
+            with anyio.fail_after(_remaining(binding)):
+                response = json.loads(await upstream.aread())
             _validate_model_output(response)
             usage = response_usage(response)
             await anyio.to_thread.run_sync(
@@ -371,42 +489,44 @@ async def forward_responses(request: Request):
             completed = False
             failure = None
             try:
-                async for event in EventSource(upstream).aiter_sse():
-                    if event.data == "[DONE]":
-                        continue
-                    payload = json.loads(event.data)
-                    if not isinstance(payload, dict):
-                        raise ValueError("Invalid model event")
-                    kind = payload.get("type", event.event)
-                    if kind in {"response.output_item.added", "response.output_item.done"}:
-                        _validate_output_item(payload.get("item"))
-                    if kind == "response.completed":
-                        _validate_model_output(payload.get("response"))
-                        usage = response_usage(payload.get("response") or {})
-                        await anyio.to_thread.run_sync(
-                            lambda: _finish(
-                                store,
-                                binding.run_id,
-                                request_id,
-                                usage=usage,
-                                usage_key=usage_key,
+                with anyio.fail_after(_remaining(binding)):
+                    async for event in EventSource(upstream).aiter_sse():
+                        if event.data == "[DONE]":
+                            continue
+                        payload = json.loads(event.data)
+                        if not isinstance(payload, dict):
+                            raise ValueError("Invalid model event")
+                        kind = payload.get("type", event.event)
+                        if kind in {"response.output_item.added", "response.output_item.done"}:
+                            _validate_output_item(payload.get("item"))
+                        if kind == "response.completed":
+                            _validate_model_output(payload.get("response"))
+                            usage = response_usage(payload.get("response") or {})
+                            await anyio.to_thread.run_sync(
+                                lambda: _finish(
+                                    store,
+                                    binding.run_id,
+                                    request_id,
+                                    usage=usage,
+                                    usage_key=usage_key,
+                                )
                             )
-                        )
-                        if usage is None:
-                            raise ModelReservationError("Gateway stream omitted verified usage")
-                        completed = True
-                    # Re-check token/session revocation before tool proposals become visible.
-                    if kind in {"response.output_item.done", "response.completed"}:
-                        await anyio.to_thread.run_sync(
-                            lambda: store.authenticate(token, audience="model")
-                        )
-                    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
-                    if completed:
-                        break
-                if not completed:
-                    raise ModelReservationError("Gateway stream ended without completion")
+                            if usage is None:
+                                raise ModelReservationError("Gateway stream omitted verified usage")
+                            completed = True
+                        # Re-check token/session revocation before tool proposals become visible.
+                        if kind in {"response.output_item.done", "response.completed"}:
+                            await anyio.to_thread.run_sync(
+                                lambda: store.authenticate(token, audience="model")
+                            )
+                        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
+                        if completed:
+                            break
+                    if not completed:
+                        raise ModelReservationError("Gateway stream ended without completion")
             except BOUNDARY_ERRORS as exc:
                 failure = exc
+                await record_failure(exc, output_started=True)
                 yield b'data: {"type":"error","error":{"message":"Model stream requires reconciliation"}}\n\n'
             finally:
                 with anyio.CancelScope(shield=True):
@@ -446,8 +566,15 @@ async def forward_responses(request: Request):
     except httpx.HTTPError as exc:
         slot_failure = exc
         raise HTTPException(502, "Qualified model gateway is unavailable") from exc
+    except TimeoutError as exc:
+        slot_failure = exc
+        if claimed:
+            await record_failure(exc)
+        raise HTTPException(504, "Task model deadline was exceeded") from exc
     except ValueError as exc:
         slot_failure = exc
+        if claimed:
+            await record_failure(exc)
         raise HTTPException(502, "Qualified model gateway returned an invalid response") from exc
     finally:
         if not streaming_handoff:
