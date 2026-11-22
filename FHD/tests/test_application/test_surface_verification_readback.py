@@ -285,11 +285,24 @@ def mcp_config(monkeypatch):
     invalidate_tool_specs_cache()
 
 
+@pytest.fixture
+def mcp_navigation(owner, mcp_config):
+    params = {
+        "url": "https://example.test/",
+        "verification": {"kind": "url", "expected": "https://example.test/"},
+    }
+    item = case(owner, "mcp__browser", "browser_navigate", params)
+    acceptance = item.call.metadata["verification_contract"]["surface_acceptance"]
+    assert acceptance["scope"] == "live_page_assertion"
+    assert acceptance["assertion"] == params["verification"]
+    return item
+
+
 @pytest.mark.parametrize(
     "change", ["none", "different_session", "different_url", "lost", "stale", "code_echo"]
 )
-def test_mcp_postcondition_uses_new_same_session_snapshot(owner, mcp_config, monkeypatch, change):
-    item = case(owner, "mcp__browser", "browser_navigate", {"url": "https://example.test/"})
+def test_mcp_postcondition_uses_new_same_session_snapshot(mcp_navigation, monkeypatch, change):
+    item = mcp_navigation
     complete(
         item, {"success": True, "server": "browser", "session_id": "generation-1", "verified": True}
     )
@@ -323,6 +336,15 @@ def test_mcp_postcondition_uses_new_same_session_snapshot(owner, mcp_config, mon
     report = verify(item)
     assert report["accepted"] is (change == "none"), report
     assert calls == [(item.run.run_id, item.step.step_id, item.call.call_id)]
+    expected_code = {
+        "none": "result_verified",
+        "different_session": "result_surface_readback_unavailable",
+        "different_url": "result_surface_postcondition_unmet",
+        "lost": "result_surface_readback_unavailable",
+        "stale": "result_surface_readback_unavailable",
+        "code_echo": "result_surface_postcondition_unmet",
+    }
+    assert report["code"] == expected_code[change]
 
 
 def test_mcp_click_without_frozen_postcondition_remains_inconclusive(
@@ -376,10 +398,10 @@ def test_aiopen_readback_only_verifies_current_owned_field(owner, monkeypatch, c
     assert "new value" not in str(report["checks"])
 
 
-def test_missing_browser_worker_is_not_recreated_for_verification(owner, mcp_config, monkeypatch):
+def test_missing_browser_worker_is_not_recreated_for_verification(mcp_navigation, monkeypatch):
     from app.application.agent_orchestrator import browser_tool_process as processes
 
-    item = case(owner, "mcp__browser", "browser_navigate", {"url": "https://example.test/"})
+    item = mcp_navigation
     complete(item, {"success": True, "server": "browser", "session_id": "lost-generation"})
     monkeypatch.setattr(processes, "_WORKERS", {})
     monkeypatch.setattr(
@@ -387,20 +409,20 @@ def test_missing_browser_worker_is_not_recreated_for_verification(owner, mcp_con
         "_BrowserWorker",
         lambda *_a: pytest.fail("readback created a replacement browser"),
     )
-    assert verify(item)["status"] == "inconclusive"
+    assert verify(item)["code"] == "result_surface_readback_unavailable"
 
 
 @pytest.mark.parametrize(
     "change", ["none", "wrong_call", "wrong_contract", "wrong_session", "changed_params"]
 )
 def test_existing_worker_read_port_accepts_only_original_contract(
-    owner, mcp_config, monkeypatch, change
+    mcp_navigation, monkeypatch, change
 ):
     from app.application.agent_orchestrator.browser_tool_process import _BrowserReadbackExecutor
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.tools.mcp import registry
 
-    item = case(owner, "mcp__browser", "browser_navigate", {"url": "https://example.test/"})
+    item = mcp_navigation
     complete(item, {"success": True, "server": "browser", "session_id": "generation-1"})
     repository = InMemoryAgentRunRepository()
     repository.save(item.run)
@@ -436,8 +458,8 @@ def test_existing_worker_read_port_accepts_only_original_contract(
     assert reads == ([("mcp__browser", "browser_snapshot", {})] if change == "none" else [])
 
 
-def test_current_permission_loss_never_invokes_surface_probe(owner, mcp_config, monkeypatch):
-    item = case(owner, "mcp__browser", "browser_navigate", {"url": "https://example.test/"})
+def test_current_permission_loss_never_invokes_surface_probe(mcp_navigation, monkeypatch):
+    item = mcp_navigation
     complete(item, {"success": True, "server": "browser", "session_id": "generation-1"})
     monkeypatch.setattr(
         "app.application.agent_orchestrator.tool_permission.actor_tool_denial",

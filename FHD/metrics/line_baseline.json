@@ -1,5 +1,5 @@
 {
-  "lines": 2673661,
+  "lines": 2673761,
   "updated": "2026-11-23",
-  "note": "Preserve the unified Codex runtime and removed legacy loops; document the existing task deadline, revocation polling and terminal exits without changing its AST or review rules; include current public error-boundary hardening in the exact maintained-line baseline."
+  "note": "在最新 main 的完整 Codex 改造范围重新统计：清退通用 Planner、重复模型循环和闲置预算层；保留原审批、SQL 累计预算、ELT 预演版本及独立读回。本轮修复完整 CI 暴露的旧测试合同与跨测试状态污染，未调整计数口径、覆盖率或安全门禁。"
 }

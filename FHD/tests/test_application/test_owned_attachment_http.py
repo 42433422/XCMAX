@@ -1,4 +1,4 @@
-"""Real HTTP/auth/SQL/compiler verify owned uploads before external model I/O."""
+"""Real HTTP/auth/SQL bind owned uploads before Codex and independent review."""
 
 import io
 import json
@@ -15,14 +15,14 @@ from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_http_runtime import fixture_goal_review
 from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
-from tests.fixtures.planner_model import goal_review_response
 
 
 @pytest.fixture
 def owned_runtime(runtime_entry, tmp_path, monkeypatch):
     state = runtime_entry
-    state.model_requests, state.plans, state.reviews, state.transports = [], [], [], []
+    state.model_requests, state.runtime_inputs, state.transports = [], [], []
     state.source = "Read the attached prices."
     state.reply = "The attached price is 120."
     real_openai = openai.OpenAI
@@ -30,22 +30,14 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
     def response(request):
         body = json.loads(request.content)
         assert body["tools"] == [] and body["store"] is False
-        prompt = json.loads(body["input"][-1]["content"])
+        prompt = json.loads(body["input"][1]["content"])
+        assert prompt["task"] == "verify_runtime_goal"
+        assert prompt["original_request"]["text"] == state.source
+        assert prompt["response"] == state.reply
+        assert prompt["evidence"] == []
+        _assert_owned_artifact(prompt["original_request"]["attachments"], state)
         state.model_requests.append(prompt)
-        uploads = prompt["context"]["file_context"]["verified_uploads"]
-        assert "paint,120" in uploads[0]["text"]
-        assert uploads[0]["coverage"]["truncated"] is False
-        if prompt.get("task") == "audit_goal_coverage":
-            state.reviews.append(prompt)
-            content = goal_review_response(
-                prompt,
-                source=getattr(state, "review_source", state.source),
-                node_ids=["model_reply"],
-                outcome="reply",
-            )["choices"][0]["message"]["content"]
-        else:
-            state.plans.append(prompt)
-            content = json.dumps({"mode": "reply", "reply": state.reply})
+        content = json.dumps(fixture_goal_review(prompt, kind="reply", source=state.source))
         return httpx.Response(
             200,
             json={
@@ -91,7 +83,13 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
             return None
 
         async def stream_turn(self, text):
-            assert state.reply in text and "host_reviewed_reply" in text
+            bridge = state.servers[-1].state.codex_tool_bridge
+            binding = bridge.store.authenticate(self.config.mcp_token)
+            request = binding.run.metadata["runtime_goal_contract"]["request"]
+            assert request["text"] == state.source
+            _assert_owned_artifact(request["attachments"], state)
+            assert json.dumps(request["attachments"], ensure_ascii=False) in text
+            state.runtime_inputs.append(text)
             for method, payload in (
                 ("turn/started", {"turn": {"status": "inProgress"}}),
                 (
@@ -113,10 +111,7 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
     monkeypatch.setattr(
         "app.application.agent_runtime.chat.runtime_settings", lambda: state.settings
     )
-    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(
-        "app.application.elt.service_uploads.get_app_data_dir", lambda: str(tmp_path)
-    )
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     with tenant_scope(state.actor.tenant_id), get_db() as db:
         state.upload = UploadServiceMixin().save_upload(
             db,
@@ -142,6 +137,7 @@ def _assert_owned_artifact(artifacts, state):
     assert artifact["source"] == "owned_elt_upload"
     assert artifact["uri"] == ""
     assert "paint,120" in artifact["preview"]["text"]
+    assert artifact["preview"]["coverage"]["truncated"] is False
     assert "/caller/forged.csv" not in json.dumps(artifact)
 
 
@@ -198,7 +194,9 @@ def test_authenticated_http_stages_upload_then_verifies_on_original_resume(owned
     assert run["run_id"] == run_id and run["status"] == "completed"
     _assert_owned_artifact(run["artifacts"], state)
     _assert_owned_artifact(run["final_output"]["codex_result"]["artifacts"], state)
-    assert len(state.plans) == len(state.reviews) == len(state.transports) == 1
+    assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1
+    assert state.model_requests[0]["answers"] == []
+    assert run["metadata"]["runtime_goal_verification"]["accepted"] is True
     assert not run["tool_calls"]
 
     staged = state.client.post("/api/agent/runs", json=payload).json()["data"]
@@ -210,7 +208,7 @@ def test_authenticated_http_stages_upload_then_verifies_on_original_resume(owned
     assert denied.status == "waiting_user"
     assert "重新上传" in denied.final_output["codex_result"]["output"]
     assert not denied.artifacts
-    assert len(state.plans) == len(state.reviews) == len(state.transports) == 1
+    assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1
     with tenant_scope(state.actor.tenant_id), get_db() as db:
         replacement = UploadServiceMixin().save_upload(
             db,
@@ -219,18 +217,7 @@ def test_authenticated_http_stages_upload_then_verifies_on_original_resume(owned
             content_type="text/csv",
             stream=io.BytesIO(b"product,price\npaint,120\n"),
         )
-    state.review_source = json.dumps(
-        {
-            "original_request": state.source,
-            "exchanges": [
-                {
-                    "question": denied.final_output["codex_result"]["output"],
-                    "answer": "已重新上传价格文件",
-                }
-            ],
-        },
-        ensure_ascii=False,
-    )
+    state.upload = replacement
     resumed = state.client.post(
         f"/api/agent/runs/{staged['run_id']}/resume",
         json={"message": "已重新上传价格文件", "attachment_upload_ids": [replacement["upload_id"]]},
@@ -238,9 +225,16 @@ def test_authenticated_http_stages_upload_then_verifies_on_original_resume(owned
     assert resumed.status_code == 202, resumed.text
     final = state.drain(staged["run_id"])
     assert final.status == "completed", final.to_dict()
-    state.upload = replacement
     _assert_owned_artifact([artifact.to_dict() for artifact in final.artifacts], state)
-    assert len(state.plans) == len(state.reviews) == len(state.transports) == 2
+    assert final.run_id == staged["run_id"]
+    assert final.message == state.source
+    assert final.metadata["runtime_goal_verification"]["accepted"] is True
+    assert not final.tool_calls
+    assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 2
+    [answer] = state.model_requests[-1]["answers"]
+    assert answer["question"] == denied.final_output["codex_result"]["output"]
+    assert answer["answer"] == "已重新上传价格文件"
+    assert answer["input_data"]["attachment_upload_ids"] == [replacement["upload_id"]]
     state.client.headers.pop("X-Session-ID")
     assert state.client.post("/api/agent/runs", json=payload).status_code == 401
 
@@ -262,14 +256,15 @@ def test_real_chat_routes_resolve_owned_attachment_before_model(
         payload = {"message": state.source, "context": state.context}
         response = client.post(endpoint, json=payload)
         assert response.status_code == 200, response.text
-        assert len(state.plans) == len(state.reviews) == len(state.transports) == 1, response.text
+        assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1
         assert state.reply in response.text
         assert "skip_dataset_ingest" in response.text
         parent = state.repository.list_recent()[0]
         _assert_owned_artifact([artifact.to_dict() for artifact in parent.artifacts], state)
+        assert parent.metadata["runtime_goal_verification"]["accepted"] is True
         assert not parent.tool_calls
         _transfer_upload(state)
         denied = client.post(endpoint, json=payload)
         assert denied.status_code == 200, denied.text
         assert "重新上传" in denied.text
-        assert len(state.plans) == len(state.reviews) == len(state.transports) == 1
+        assert len(state.runtime_inputs) == len(state.model_requests) == len(state.transports) == 1

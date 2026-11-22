@@ -409,7 +409,7 @@ def _valid_business_data(tenant_id=1, plan_id="plan-1", params=None):
 
 
 @pytest.fixture
-def db(tmp_path):
+def db(tmp_path, monkeypatch):
     """Real persistent SQLAlchemy session isolated through ``SessionLocal``.
 
     Patching the context-manager symbol itself can be captured by another module's
@@ -432,9 +432,12 @@ def db(tmp_path):
     Base.metadata.create_all(engine)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
+    # Authentication fixtures also patch this factory. Share their restoration
+    # stack so teardown cannot reinstall this disposed database after restoring
+    # the production router.
+    monkeypatch.setattr("app.db.session.SessionLocal", TestingSession)
     try:
-        with patch("app.db.session.SessionLocal", TestingSession):
-            yield TestingSession
+        yield TestingSession
     finally:
         engine.dispose()
 
