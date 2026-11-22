@@ -30,7 +30,12 @@ def test_native_httpx2_sdk_timeout_keeps_native_type_and_phase_caps():
     configured = httpx2.Timeout(30, connect=1)
     result = _bounded_sdk_timeout(configured, 10)
     assert isinstance(result, httpx2.Timeout)
-    assert result.as_dict() == {"connect": 1.0, "read": 10.0, "write": 10.0, "pool": 10.0}
+    assert result.as_dict() == {
+        "connect": 1.0,
+        "read": 10.0,
+        "write": 10.0,
+        "pool": 10.0,
+    }
 
 
 def test_native_httpx2_timeout_rejects_unknown_phase_instead_of_disabling_deadline():
