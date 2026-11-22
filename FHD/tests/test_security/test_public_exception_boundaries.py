@@ -214,3 +214,44 @@ def test_shared_chat_failure_boundary_preserves_nested_execution_receipt(outcome
     else:
         assert result["_http_status"] == 409
         assert result["requires_reconciliation"] and result["retryable"] is False
+
+
+@pytest.mark.parametrize(
+    "outcome,committed", [("partial", True), ("unknown", False), ("not_executed", False)]
+)
+def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outcome, committed):
+    """Actual workflow response builder emits a root execution receipt on failure."""
+    from app.fastapi_routes.ai_intent import _public_unified_chat_payload
+
+    execution = {
+        "committed": committed,
+        "effect": "none" if outcome == "not_executed" else outcome,
+        "outcome": outcome,
+    }
+    result = _public_unified_chat_payload(
+        {
+            "success": False,
+            "response": PRIVATE,
+            "run_id": "existing-run",
+            "execution": {**execution, "internal_diagnostic": PRIVATE},
+            "data": {
+                "data": {
+                    "plan_id": "existing-plan",
+                    "approval_request_id": "existing-approval",
+                }
+            },
+        }
+    )
+    assert result["execution"] == execution
+    assert result["data"]["data"]["execution"] == execution
+    assert result["run_id"] == "existing-run"
+    assert result["plan_id"] == "existing-plan"
+    assert result["approval_request_id"] == "existing-approval"
+    assert PRIVATE not in json.dumps(result)
+    if outcome == "not_executed":
+        assert result["execution_state"] == "not_executed"
+        assert result.get("requires_reconciliation") is not True
+    else:
+        assert result["_http_status"] == 409
+        assert result["requires_reconciliation"] is True
+        assert result["retryable"] is False
