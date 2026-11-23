@@ -60,12 +60,14 @@ def test_overlap_requires_review_and_half_open_successor_can_activate(governed_m
     ]
     refused = runtime.authority.confirm_memory_candidate(owner, second["memory_id"])
     assert refused["error_code"] == "memory_relation_review_required"
-    assert [row["memory_id"] for row in runtime.authority.list_memories(
-        owner, status="active"
-    )] == [first["memory_id"]]
+    assert [
+        row["memory_id"] for row in runtime.authority.list_memories(owner, status="active")
+    ] == [first["memory_id"]]
 
     corrected = runtime.authority.correct_memory(
-        owner, first["memory_id"], value=_value("Alice", end=boundary),
+        owner,
+        first["memory_id"],
+        value=_value("Alice", end=boundary),
         reason="reviewed end date",
     )
     assert corrected["success"]
@@ -91,8 +93,10 @@ def test_two_pending_confirms_cannot_both_win(governed_memory, monkeypatch):
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = list(executor.map(confirm, [first, second]))
     assert sum(result["success"] for result in results) == 1
-    assert sum(result.get("error_code") == "memory_relation_review_required"
-               for result in results) == 1
+    assert (
+        sum(result.get("error_code") == "memory_relation_review_required" for result in results)
+        == 1
+    )
     assert len(runtime.authority.list_memories(owner, status="active")) == 1
 
 
@@ -128,7 +132,9 @@ def test_shared_memory_review_and_revocation_cross_actor_but_not_mod(governed_me
     shared = _propose(runtime, _value("Alice"), tenant_owner)
     assert service.query(access_context=bob, query="Northwind")["chunks"] == []
     confirmed = service.mutate(
-        access_context=alice, memory_id=shared["memory_id"], action="confirm",
+        access_context=alice,
+        memory_id=shared["memory_id"],
+        action="confirm",
     )
     assert confirmed["success"]
     ids = {
@@ -139,14 +145,17 @@ def test_shared_memory_review_and_revocation_cross_actor_but_not_mod(governed_me
     for outsider in (access("8", tenant="3"), access("8", mod="finance")):
         assert service.query(access_context=outsider, query="Northwind")["chunks"] == []
     correction = service.mutate(
-        access_context=alice, memory_id=shared["memory_id"], action="correct",
-        patch={"value": _value("Bob")}, reason="reviewed change",
+        access_context=alice,
+        memory_id=shared["memory_id"],
+        action="correct",
+        patch={"value": _value("Bob")},
+        reason="reviewed change",
     )
     assert correction["success"]
     latest = service.query(access_context=bob, query="Northwind")["chunks"]
     assert len(latest) == 1 and "Bob" in latest[0]["text"]
     assert latest[0]["metadata"]["source_revision"] == correction["memory"]["revision"]
-    assert service.mutate(
-        access_context=alice, memory_id=shared["memory_id"], action="delete"
-    )["success"]
+    assert service.mutate(access_context=alice, memory_id=shared["memory_id"], action="delete")[
+        "success"
+    ]
     assert service.query(access_context=bob, query="Northwind")["chunks"] == []

@@ -22,8 +22,12 @@ class ExtractedMemory(BaseModel):
     subject: str = Field(default="", max_length=200)
     predicate: str = Field(default="", max_length=80)
     object: str = Field(default="", max_length=200)
-    subject_type: Literal["person", "organization", "project", "product", "place", "concept", "literal"] = "concept"
-    object_type: Literal["person", "organization", "project", "product", "place", "concept", "literal"] = "concept"
+    subject_type: Literal[
+        "person", "organization", "project", "product", "place", "concept", "literal"
+    ] = "concept"
+    object_type: Literal[
+        "person", "organization", "project", "product", "place", "concept", "literal"
+    ] = "concept"
 
 
 class ExtractedMemories(BaseModel):
@@ -100,7 +104,10 @@ def extract_candidates(user_message: str) -> list[dict[str, Any]] | None:
             "extraction_backend": "mem0",
         }
         if (
-            subject and predicate and object_text and subject != object_text
+            subject
+            and predicate
+            and object_text
+            and subject != object_text
             and all(part in user_message and part in text for part in (subject, object_text))
         ):
             value.update(

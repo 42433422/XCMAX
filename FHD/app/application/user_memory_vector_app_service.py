@@ -226,7 +226,9 @@ class UserMemoryRagApplicationService:
             else:
                 related = relation_recall_hits(user_id, query_text)
                 if channel:
-                    related = [hit for hit in related if allows_channel(hit.get("metadata"), channel)]
+                    related = [
+                        hit for hit in related if allows_channel(hit.get("metadata"), channel)
+                    ]
                 hits = merge_relation_hits(hits, related, limit=bounded)
         for hit in hits:
             if not isinstance(hit, dict):

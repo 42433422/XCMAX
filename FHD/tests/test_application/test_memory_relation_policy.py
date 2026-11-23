@@ -36,7 +36,9 @@ def fact(mid, subject, obj, *, predicate="employs", scope="owner", **extra):
 
 def test_effective_intervals_are_half_open_and_explicit():
     first = fact(
-        "a", "Acme", "Alice",
+        "a",
+        "Acme",
+        "Alice",
         relation_validity={
             "effective_from": "2026-01-01T00:00:00Z",
             "effective_until": "2026-07-01T00:00:00Z",
