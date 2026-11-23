@@ -215,6 +215,18 @@ def read_state() -> dict[str, Any]:
         data = json.loads(row.state_json)
         blockers = _blockers(data, session)
         active = data.pop("active_cycle", None)
+        data["self_identity_checks"] = [
+            _event_dict(event)
+            for event in session.scalars(
+                select(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind == "self_identity_check",
+                )
+                .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                .limit(20)
+            )
+        ]
         data["events"] = [
             _event_dict(event)
             for event in session.scalars(
@@ -439,7 +451,10 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         reserved = min(reserve_tokens, max(0, lane_cap - lane_used))
         if reserve_tokens and reserved <= 0:
             return None
+        from modstore_server.xiaoc_self_model import execution_scope
+
         cycle = {
+            "execution_scope": execution_scope(data, now=now),
             "cycle_id": uuid.uuid4().hex,
             "lease_token": uuid.uuid4().hex,
             "policy_revision": data["revision"],
@@ -611,6 +626,7 @@ def finish_cycle(
             details={
                 **(details or {}),
                 "policy_revision": claim["policy_revision"],
+                "execution_scope": active.get("execution_scope"),
                 "reservation": reserved,
                 "learning_applied": safe,
                 "owner_user_id": claim["owner_user_id"],
