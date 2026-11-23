@@ -11,7 +11,7 @@ from modstore_server.customer_issue_intake import enqueue_issue
 from modstore_server.customer_service_tools import json_dumps
 
 
-def start_failure_message(operation: str, exception_type: str) -> str:
+def start_failure_message(operation: str, exception_type: str, *, unconfirmed: bool = False) -> str:
     event_id = uuid.uuid4().hex
     logging.getLogger(__name__).warning(
         "custom_delivery_start_failed event_id=%s operation=%s exception_type=%s",
@@ -19,7 +19,10 @@ def start_failure_message(operation: str, exception_type: str) -> str:
         operation,
         exception_type,
     )
-    return f"交付启动暂时失败，请在原工单重试（诊断编号：{event_id}）"
+    message = (
+        "原生产结果尚待确认，请刷新原工单" if unconfirmed else "交付启动暂时失败，请在原工单重试"
+    )
+    return f"{message}（诊断编号：{event_id}）"
 
 
 def apply_runtime_failure(

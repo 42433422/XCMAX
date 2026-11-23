@@ -1,5 +1,5 @@
 import type { Router } from 'vue-router'
-import { pickRedirectFromRoute, pickRegistrationNextFromRoute, safeRedirectPath, xcagiRegistrationSource } from '../authPaths'
+import { accountLicensePlanId, pickRedirectFromRoute, pickRegistrationNextFromRoute, safeRedirectPath, xcagiRegistrationSource } from '../authPaths'
 import { consumeBrowserHandoff, takeBrowserHandoff } from '../infrastructure/storage/fhdMarketHandoff'
 import { useAuthStore } from '../stores/auth'
 
@@ -25,6 +25,12 @@ export function installAuthGuards(router: Router): void {
       } catch {
         return { name: 'login', query: { redirect: cleanTarget, handoff: 'expired' }, replace: true }
       }
+    }
+
+    // Consume the code against its original /plans target before moving a
+    // software purchase to the existing account checkout page.
+    if (to.name === 'plans' && accountLicensePlanId(to.query.plan)) {
+      return { name: 'account-plans', query: to.query, replace: true }
     }
 
     if ((String(to.name) === 'home' || String(to.name) === 'about') && to.hash === '#ai-market') {

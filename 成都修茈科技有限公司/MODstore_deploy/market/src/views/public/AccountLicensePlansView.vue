@@ -1,12 +1,18 @@
 <template>
   <main class="license-page">
     <header class="license-header">
-      <p class="eyebrow">XCAGI 使用方案</p>
-      <h1>选择适合你的方案</h1>
-      <p>个人使用版可免费开通。付费方案完成支付后即可在 XCAGI 登录使用。</p>
+      <p class="eyebrow">XCAGI 购买与费用</p>
+      <h1>{{ permanentActivated ? 'XCAGI 软件已开通' : selectedPlan ? selectedPlan.license_type === 'free' ? '免费体验 XCAGI' : '确认购买 XCAGI' : '软件一次买断，按需定制' }}</h1>
+      <p v-if="selectedPlan?.license_type === 'free'">个人基础功能免费使用，不含企业业务模块。AI 使用费另计。</p>
+      <p v-else-if="selectedPlan?.license_type === 'trial'">体验标准企业功能，时长与 AI 额度以以下说明为准。完成支付后即可在 XCAGI 登录使用。</p>
+      <p v-else>标准功能永久使用，AI 调用按量付费。完成支付后即可在 XCAGI 登录使用。</p>
     </header>
 
     <div v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</div>
+    <section v-if="permanentActivated" class="flow-note" role="status">
+      <strong>已开通永久使用，无需重复购买软件或体验。</strong>
+      <span>回到 XCAGI 登录使用，或<router-link to="/orders">查看购买订单</router-link>。</span>
+    </section>
     <section v-if="personalActivated" class="flow-note allowance-panel" aria-label="个人使用版和活动赠额">
       <strong role="status">个人使用版已开通。请回到 XCAGI 登录。</strong>
       <p id="allowance-status" role="status">{{ allowance?.message || '赠额状态暂未确认，请稍后查询。' }}</p>
@@ -32,31 +38,40 @@
     <div v-if="loading" class="loading">正在加载方案…</div>
     <section v-else class="license-grid" aria-label="XCAGI 使用方案">
       <article
-        v-for="plan in plans"
+        v-for="plan in visiblePlans"
         :key="plan.id"
         class="license-card"
-        :class="{ 'license-card--requested': requestedPlanId === plan.id }"
+        :class="{ 'license-card--requested': requestedPlanId === plan.id, 'license-card--standard': plan.id === 'saas-permanent-standard' }"
       >
         <div class="card-top">
           <span class="badge">{{ plan.badge || '使用方案' }}</span>
           <h2>{{ plan.name }}</h2>
           <p v-if="plan.license_type === 'free'" class="price">免费</p>
-          <p v-else class="price"><small>¥</small>{{ Number(plan.price || 0).toLocaleString('zh-CN') }}</p>
+          <p v-else class="price"><small>¥</small>{{ formatPrice(plan) }}<small v-if="plan.license_type === 'permanent'"> · 永久买断</small></p>
           <p class="description">{{ plan.description }}</p>
+          <p v-if="plan.license_type === 'free'" class="description">个人基础功能，不含企业业务模块。</p>
+          <p v-else-if="plan.license_type === 'permanent'" class="description">一次付费，标准功能永久使用；AI 使用费和定制费另计。</p>
         </div>
         <ul>
           <li v-for="feature in plan.features || []" :key="feature">{{ feature }}</li>
         </ul>
-        <button :disabled="checkingOut || ((accountLoading || personalActivated) && plan.license_type === 'free')" @click="buy(plan)">
+        <button :disabled="checkingOut || accountLoading || permanentActivated || (personalActivated && plan.license_type === 'free')" @click="buy(plan)">
           {{ planActionLabel(plan) }}
         </button>
       </article>
     </section>
 
-    <aside class="flow-note">
-      <strong>接下来</strong>
-      <span>付费方案通过支付宝完成支付。方案生效后，回到 XCAGI 登录即可。</span>
+    <aside class="flow-note" aria-label="其他费用">
+      <strong>费用分开，按需使用</strong>
+      <span>定制{{ customizationFrom === null ? '按需求报价' : ` ¥${(customizationFrom / 100).toLocaleString('zh-CN')} 起` }}：先确认需求、报价与验收内容，再下定制订单。起价不是全部需求的总价。<router-link to="/customer-service">咨询定制</router-link></span>
+      <span>AI 调用按实际用量付费，价格与余额以费用页为准。<router-link to="/recharge">查看 AI 费用与充值</router-link></span>
     </aside>
+    <p v-if="selectedPlan" class="other-options"><router-link :to="{ name: 'account-plans', query: { source: route.query.source } }">查看免费体验与软件说明</router-link></p>
+    <details v-if="trialPlan && selectedPlan?.id !== trialPlan.id" class="flow-note trial-entry">
+      <summary>需要验证企业功能？查看体验选项</summary>
+      <p>{{ trialPlan.name }} · ¥{{ formatPrice(trialPlan) }} / {{ trialPlan.duration_days || 30 }} 天。{{ trialPlan.description }}</p>
+      <button :disabled="checkingOut || accountLoading || permanentActivated" @click="buy(trialPlan)">{{ permanentActivated ? '已开通永久使用' : checkingOutId === trialPlan.id ? '正在前往支付…' : '购买体验' }}</button>
+    </details>
   </main>
 </template>
 
@@ -75,8 +90,10 @@ const router = useRouter()
 const authStore = useAuthStore()
 const plans = ref<AccountLicensePlan[]>([])
 const loading = ref(true)
+const customizationFrom = ref<number | null>(null)
 const checkingOut = ref(false)
 const activePlanId = ref('')
+const permanentActivated = computed(() => activePlanId.value.startsWith('saas-permanent-'))
 const personalPlan = computed(() => plans.value.find(plan => plan.license_type === 'free'))
 const personalActivated = computed(() => !!personalPlan.value && activePlanId.value === personalPlan.value.id)
 const allowance = ref<PersonalPlanAllowance | null>(null)
@@ -94,6 +111,10 @@ let accountToken = getAccessToken()
 const checkingOutId = ref('')
 const errorMessage = ref('')
 const requestedPlanId = computed(() => String(Array.isArray(route.query.plan) ? route.query.plan[0] : route.query.plan || ''))
+const selectedPlan = computed(() => plans.value.find(plan => plan.id === requestedPlanId.value))
+const visiblePlans = computed(() => selectedPlan.value ? [selectedPlan.value] : plans.value.filter(plan => plan.license_type !== 'trial').sort((a, b) => Number(a.license_type === 'free') - Number(b.license_type === 'free')))
+const trialPlan = computed(() => plans.value.find(plan => plan.id === 'saas-trial-30'))
+const formatPrice = (plan: AccountLicensePlan) => Number(plan.amount_cents == null ? plan.price : plan.amount_cents / 100).toLocaleString('zh-CN')
 
 onMounted(() => {
   window.addEventListener('storage', onStorage)
@@ -131,7 +152,8 @@ async function loadPlans() {
   try {
     const result = await api.paymentAccountPlans()
     if (disposed) return
-    plans.value = Array.isArray(result?.plans) ? result.plans : []
+    plans.value = Array.isArray(result?.plans) ? result.plans.filter(plan => ['saas-personal-free', 'saas-trial-30', 'saas-permanent-standard'].includes(plan.id)) : []
+    customizationFrom.value = result?.commercial_terms?.customization_from_cents ?? null
   } catch {
     if (!disposed) errorMessage.value = '暂时无法加载方案，请稍后重试。'
   } finally {
@@ -187,21 +209,23 @@ async function claimAllowance(verify = false) {
 }
 
 function planActionLabel(plan: AccountLicensePlan) {
+  if (permanentActivated.value) return '已开通永久使用'
   if (plan.license_type === 'free') {
     if (personalActivated.value) return '已开通'
-    return checkingOutId.value === plan.id ? '正在开通…' : '免费开通'
+    return checkingOutId.value === plan.id ? '正在开通…' : '免费体验'
   }
   if (checkingOutId.value === plan.id) return '正在前往支付…'
-  return plan.license_type === 'trial' ? '立即体验' : '选择此方案'
+  return plan.license_type === 'trial' ? `购买体验 ¥${formatPrice(plan)}` : `立即购买 ¥${formatPrice(plan)}`
 }
 
 async function buy(plan: AccountLicensePlan, verification?: PersonalPlanVerification) {
   if (disposed || syncAccountIdentity()) return
   if (!authStore.hasToken()) {
-    await router.push({ name: 'login', query: { redirect: route.fullPath, source: xcagiRegistrationSource(route) } })
+    const redirect = router.resolve({ name: 'account-plans', query: { ...route.query, plan: plan.id } }).fullPath
+    await router.push({ name: 'login', query: { redirect, source: xcagiRegistrationSource(route) } })
     return
   }
-  if (checkingOut.value) return
+  if (checkingOut.value || permanentActivated.value || accountLoading.value) return
   const token = accountToken
   checkingOut.value = true
   checkingOutId.value = plan.id
@@ -250,6 +274,13 @@ h1 { margin: 8px 0 14px; font-size: clamp(30px, 5vw, 48px); }
 .license-header > p:last-child { color: #aeb2bb; line-height: 1.8; }
 .license-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; max-width: 1280px; margin: auto; }
 .license-card { display: flex; flex-direction: column; padding: 24px; border: 1px solid #292d35; border-radius: 18px; background: #111318; }
+.license-card--standard { border-color: #74a7ff; }
+.license-card:not(.license-card--standard) button { background: #273447; }
+.other-options { max-width: 900px; margin: 24px auto; text-align: center; }
+a { color: #9ec1ff; }
+.trial-entry { display: block; }
+.trial-entry summary { cursor: pointer; }
+.trial-entry button { max-width: 260px; background: #273447; }
 .license-card--requested { outline: 2px solid #74a7ff; outline-offset: 3px; }
 .badge { display: inline-block; padding: 4px 9px; color: #9ec1ff; background: #17243a; border-radius: 999px; font-size: 12px; }
 h2 { min-height: 56px; margin: 14px 0 4px; font-size: 20px; }

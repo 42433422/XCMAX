@@ -65,24 +65,35 @@ describe('DEFAULT_POST_AUTH', () => {
 })
 
 describe('registration lifecycle redirect', () => {
+  it.each(['/account-plans?plan=saas-permanent-standard&source=official-site', '/plans?plan=saas-permanent-standard&source=fhd'])('keeps selected software intent across registration: %s', (redirect) => {
+    expect(pickRegistrationNextFromRoute({ query: { redirect } })).toBe(redirect)
+    expect(pickRedirectFromRoute({ query: { redirect } })).toBe(redirect)
+  })
+
+  it('preserves a direct selected SKU and never accepts an external registration redirect', () => {
+    expect(pickRegistrationNextFromRoute({ query: { plan: 'saas-permanent-standard', redirect: '//external.example' } })).toEqual({
+      name: 'account-plans', query: { plan: 'saas-permanent-standard' },
+    })
+  })
+
   it('always continues from account creation to plan selection', () => {
     expect(pickRegistrationNextFromRoute({ query: { redirect: '/workbench/home' } })).toEqual({
       name: 'account-plans',
-      query: { plan: 'saas-trial-30' },
+      query: { plan: 'saas-personal-free' },
     })
   })
 
   it.each(['xcagi-desktop', 'xcagi-mobile'])('keeps the %s source when choosing a plan', (source) => {
     expect(pickRegistrationNextFromRoute({ query: { source: [source, 'ignored'] } })).toEqual({
       name: 'account-plans',
-      query: { plan: 'saas-trial-30', source },
+      query: { plan: 'saas-personal-free', source },
     })
   })
 
   it('drops unknown sources', () => {
     expect(pickRegistrationNextFromRoute({ query: { source: '//external.example' } })).toEqual({
       name: 'account-plans',
-      query: { plan: 'saas-trial-30' },
+      query: { plan: 'saas-personal-free' },
     })
   })
 })
@@ -96,7 +107,7 @@ describe('pickRedirectFromRoute', () => {
   it('continues to plan selection after a mobile user logs in without a redirect', () => {
     expect(pickRedirectFromRoute({ query: { source: 'xcagi-mobile' } })).toEqual({
       name: 'account-plans',
-      query: { plan: 'saas-trial-30', source: 'xcagi-mobile' },
+      query: { plan: 'saas-personal-free', source: 'xcagi-mobile' },
     })
   })
 

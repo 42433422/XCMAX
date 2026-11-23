@@ -10,11 +10,15 @@ def setup_function() -> None:
     sp.load_saas_plans_config.cache_clear()
 
 
-def test_all_plans_includes_saas_tiers() -> None:
+def test_all_plans_excludes_retired_and_demo_plans_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("FHD_DEMO_PAYMENT", raising=False)
     ids = {p["id"] for p in _all_plans()}
-    assert "demo-starter" in ids
-    assert "saas-trial-30" in ids
-    assert "saas-permanent-starter" in ids
+    assert ids == {"saas-personal-free", "saas-trial-30", "saas-permanent-standard"}
+
+
+def test_demo_plans_remain_available_in_explicit_test_mode(monkeypatch) -> None:
+    monkeypatch.setenv("FHD_DEMO_PAYMENT", "1")
+    assert "demo-starter" in {p["id"] for p in _all_plans()}
 
 
 def test_plan_by_id_resolves_permanent_plan() -> None:

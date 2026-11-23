@@ -13,7 +13,12 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from modstore_server.account_license_plans import PERSONAL_PLAN_ID, is_account_license_plan_id
+from modstore_server.account_license_plans import (
+    PERSONAL_PLAN_ID,
+    account_license_priority,
+    is_account_license_plan_id,
+    is_legacy_account_license_plan_id,
+)
 from modstore_server.models import CatalogItem, PlanTemplate, Purchase, UserPlan
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -368,6 +373,14 @@ def _resolve_checkout_fields(
     elif body.plan_id:
         if body.plan_id.strip() == PERSONAL_PLAN_ID:
             raise HTTPException(400, "个人使用版可直接开通")
+        if is_legacy_account_license_plan_id(body.plan_id):
+            raise HTTPException(400, "此历史套餐不再新售，已有订单和已购权益保持不变")
+        if user_id and is_account_license_plan_id(body.plan_id):
+            from modstore_server.account_lifecycle import _active_plan
+
+            current = _active_plan(session, int(user_id), account_license=True)
+            if current and account_license_priority(current.plan_id)[0] == 2:
+                raise HTTPException(400, "您已拥有永久软件，无需重复购买或购买体验")
         plan_row = (
             session.query(PlanTemplate)
             .filter(PlanTemplate.id == body.plan_id, PlanTemplate.is_active.is_(True))

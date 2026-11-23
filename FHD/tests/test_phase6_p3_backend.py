@@ -354,7 +354,7 @@ def test_apply_notify_paid_saas_plan_without_local_user_id_logs_warning(
         reason, snap = order_store.apply_notify_paid(
             out_trade_no="OT-S2", trade_no="T-S2", total_amount="200.00"
         )
-    assert reason == "marked_paid"
+    assert reason == "fulfillment_pending"
     # local_user_id missing → no apply call
     mock_is_saas.assert_not_called()
     mock_apply.assert_not_called()
@@ -383,11 +383,11 @@ def test_apply_notify_paid_saas_plan_not_in_registry_skips_apply(
         reason, _ = order_store.apply_notify_paid(
             out_trade_no="OT-S3", trade_no="T", total_amount="1.00"
         )
-    assert reason == "marked_paid"
+    assert reason == "fulfillment_pending"
     mock_apply.assert_not_called()
 
 
-def test_apply_notify_paid_saas_plan_apply_recoverable_error_swallowed(
+def test_apply_notify_paid_saas_plan_apply_recoverable_error_stays_pending(
     isolated_order_store: Path,
 ) -> None:
     order_store.record_checkout_pending(
@@ -411,7 +411,7 @@ def test_apply_notify_paid_saas_plan_apply_recoverable_error_swallowed(
         reason, snap = order_store.apply_notify_paid(
             out_trade_no="OT-S4", trade_no="T", total_amount="1.00"
         )
-    assert reason == "marked_paid"
+    assert reason == "fulfillment_pending"
     assert snap is not None
 
 
