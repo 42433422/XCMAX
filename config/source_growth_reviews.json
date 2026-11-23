@@ -904,14 +904,14 @@
     "FHD/app/application/dataset_rag/document_lifecycle.py": {
       "review_owner": "@42433422",
       "base_file": "FHD/app/application/dataset_rag/document_lifecycle.py",
-      "base_blob": "9d216a6d2f802810dadfcdd5a1a754a91391d785",
-      "head_blob": "67e2e15e624c02862d6ce6eaabda31874ee677cf",
-      "before_lines": 669,
-      "after_lines": 907,
-      "reason": "本记录仅是精确变更的架构评审请求，不是审批证据。按用户“修3460并合入main”及“修好pr3460一遍过”的修复授权，复用原文档生命周期补齐入库和回滚的独立读取：原dataset store身份、耐久claim、文档版本/文本/chunks及冻结回滚目标均须一致。",
-      "boundary": "仍使用原repository和事务/锁，不建第二份内容账本；验证阶段不解析重新入库，不把mock文件路径当作PDF内容证明。",
-      "validation": "数据集真实入库/回滚、组件边界、队列rebuild/cancel及HTTP可信身份专项通过；生命周期最终43项、完整mypy通过。",
-      "follow_up": "精确base为main@d5184dad4897a30ec6b010264ad4cd1269c00a8a，blob与行数由source_growth_review.py重算。由@42433422核对本次薄适配及验证证据；本请求不替代架构审批，不纳入原明确排除的来源或draft。"
+      "base_blob": "67e2e15e624c02862d6ce6eaabda31874ee677cf",
+      "head_blob": "822b23bf8e9f173a7c35ba48f383c61717f0a345",
+      "before_lines": 907,
+      "after_lines": 938,
+      "reason": "仅为精确变更的架构评审请求，不是批准。按用户“修复闭环这个问题”的授权，ELT 辅助收尾复用原文档/chunks 内容核验；提取纯只读 helper，避免创建第二套正文、范围覆盖与 ACL 判定。",
+      "boundary": "仅抽取原文档内容核验并由独立工具和 ELT 共用；原工具审批、幂等回执、存储身份、回滚和输出绑定保留，不新建存储、不启动 writer、不自动解除历史 unknown 父任务。",
+      "validation": "原文档 inline/rollback 专项16项通过；邻接文档/模板验证41项通过；真实 ELT Codex 66项零跳过通过，含来源篡改、只读恢复与不重派；独立代码复审和 Ruff、mypy 检查通过。",
+      "follow_up": "base=main@e366d7b07df23d25c63d3bc719d5e8c91b7d26a4，blob与行数由 source_growth_review.py核对；@42433422可复核共享纯函数边界及最终head CI，本记录不代替外部审批。"
     },
     "FHD/app/fastapi_routes/domains/agent/agent_routes.py": {
       "base_file": "FHD/app/fastapi_routes/domains/agent/agent_routes.py",

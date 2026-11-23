@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import os
 import time
@@ -19,6 +18,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import or_
 
+from app.application.elt.auxiliary_assets import _knowledge_receipt, _template_receipt
 from app.application.tools.workflow_spreadsheet_scope import (
     TenantScopeError,
     _bound_actor,
@@ -44,15 +44,6 @@ EXECUTION_UNCERTAIN = EXECUTION_PENDING | {"outcome_unknown"}
 PREVIEW_TIMEOUT_SECONDS = 120
 EXECUTION_TIMEOUT_SECONDS = 240
 POLL_INTERVAL_SECONDS = 0.5
-
-# ELT 目标类型 → 模板库业务范围（与前端 templateScopeRules 的 scope key 一致）。
-_TEMPLATE_SCOPE_BY_TARGET = {
-    "shipment_records": "shipmentRecords",
-    "customer_products": "products",
-    "products": "products",
-    "customers": "customers",
-    "materials": "materials",
-}
 
 
 def _failure(code: str, message: str, **details: Any) -> dict[str, Any]:
@@ -442,399 +433,6 @@ def _error_row_details(run_id: str, owner_id: int, limit: int = 5) -> list[dict[
             return details
     except RECOVERABLE_ERRORS:
         return []
-
-
-def _knowledge_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
-    """业务入库完成后，把原件正文同步写入知识库（与数据对接中心同一通道）。
-
-    知识库写入失败不能回滚已完成的业务入库，但必须如实告诉用户。
-    """
-    upload_id = str(data.get("upload_id") or "")
-    file_name = str(data.get("file_name") or "")
-    if not upload_id:
-        return {"action": "skip", "reason": "missing_upload"}
-    from app.application.elt.auto_ingest_service import (
-        _extract_text,
-        get_auto_ingest_service,
-    )
-    from app.db.models.elt import EltUpload
-
-    tenant = tenant_id_for_write()
-    try:
-        with tenant_scope(tenant), get_db() as db:
-            upload = (
-                db.query(EltUpload)
-                .filter(
-                    EltUpload.id == upload_id,
-                    EltUpload.owner_user_id == owner_id,
-                    EltUpload.tenant_id == tenant,
-                )
-                .first()
-            )
-            if upload is None:
-                return {"action": "skip", "reason": "upload_not_found"}
-            storage_path = str(upload.storage_path or "")
-            sha = str(upload.sha256 or "")
-            label = file_name or str(upload.file_name or "elt-import")
-        if not storage_path:
-            return {"action": "skip", "reason": "upload_missing"}
-        text = _extract_text(Path(storage_path), owned_upload_user_id=owner_id)
-        if not text.strip():
-            return {"action": "skip", "reason": "empty_document"}
-        receipt = get_auto_ingest_service()._ingest_knowledge(
-            text=text,
-            source_key=label,
-            run_id=str(data.get("id") or ""),
-            owner_user_id=owner_id,
-            content_hash=sha,
-            note="",
-            tenant_id=tenant,
-        )
-        return receipt if isinstance(receipt, dict) else {"action": "new"}
-    except RECOVERABLE_ERRORS as exc:
-        return {"action": "error", "reason": str(exc)[:200]}
-
-
-def _grid_preview(file_path: str, max_rows: int = 12) -> dict[str, Any]:
-    """读取切分后的模板文件前若干行，作为模板库卡片的真实网格预览。"""
-    try:
-        from openpyxl import load_workbook
-
-        workbook = load_workbook(file_path, read_only=True, data_only=True)
-    except RECOVERABLE_ERRORS:
-        return {"rows": []}
-    try:
-        worksheet = workbook.active
-        if worksheet is None:
-            return {"rows": []}
-        rows: list[list[dict[str, Any]]] = []
-        for row_number, values in enumerate(
-            worksheet.iter_rows(max_row=min(worksheet.max_row or 1, max_rows), values_only=True),
-            start=1,
-        ):
-            cells = [
-                {
-                    "row": row_number,
-                    "col": column,
-                    "text": "" if value in (None, "") else str(value).strip(),
-                    "rowspan": 1,
-                    "colspan": 1,
-                }
-                for column, value in enumerate(values, start=1)
-            ]
-            rows.append(cells)
-        return {"rows": rows, "sheet_name": str(worksheet.title or "")}
-    finally:
-        workbook.close()
-
-
-def _template_name(meta: dict[str, Any], stem: str, target_type: str, *, primary: bool) -> str:
-    """按预演切出的区段生成模板名，而不是用整份文件名。"""
-    sheet = str(meta.get("sheet") or "").strip() or "送货单"
-    customer = str(meta.get("customer_name") or "").strip()
-    if target_type == "shipment_records" and primary and customer:
-        return f"{customer}-发货单版式"
-    title = str(meta.get("title") or "").strip()
-    return f"{stem}-{title or sheet}"
-
-
-def _template_scope(region: dict[str, Any], meta: dict[str, Any], target_type: str) -> str:
-    """按区段内容判断业务范围，而不是整次预演的目标类型。"""
-    if region.get("status") == "selected" or region.get("headerless"):
-        return _TEMPLATE_SCOPE_BY_TARGET.get(target_type, "")
-    headers = " ".join(str(item) for item in meta.get("headers") or [])
-    text = f"{meta.get('title') or ''} {headers}"
-    if "报价" in text or ("单价" in text and "型号" in text):
-        return "products"
-    return ""
-
-
-def _safe_file_component(value: str) -> str:
-    text = "".join(char if char.isalnum() or char in {" ", "-", "_"} else "-" for char in value)
-    return text.strip(" .-")[:80] or "elt-template"
-
-
-def _template_target_type(data: dict[str, Any]) -> str:
-    """模板登记必须用真实注册过的目标类型；auto/abnormal 一律按通用表处理。"""
-    target_type = str(data.get("target_type") or "").strip()
-    if target_type in {"", "auto", "abnormal"}:
-        return "dynamic_table"
-    return target_type
-
-
-def _template_payload(
-    name: str, key: str, kind: str, path: str, sheet: str, headers: list, **analysis: Any
-) -> dict:
-    return {
-        "template_name": name,
-        "template_key": key,
-        "template_type": kind,
-        "original_file_path": path,
-        "analyzed_data": {
-            "category": "excel",
-            **analysis,
-            "fields": [{"label": header, "value": "", "type": "dynamic"} for header in headers],
-            "preview_data": {
-                "sample_rows": [],
-                "sheet_name": sheet,
-                "grid_preview": _grid_preview(path),
-            },
-        },
-    }
-
-
-def _register_header_template(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
-    """通用表已经是模板库里的表：按每张通用表写一个可见模板。
-
-    模板库页面读的是 ``templates`` 表 + 模板文件；只写 ``elt_templates``
-    在页面上是看不见的，所以这里直接落成可见模板，名字与列沿用通用表本身。
-    """
-    import json
-
-    from app.application.template_app_service import get_template_app_service
-    from app.db.models.elt import EltDynamicTable
-    from app.utils.path_io.path_utils import get_app_data_dir
-
-    file_name = str(data.get("file_name") or "")
-    specs: list[tuple[str, list[str]]] = []
-    existing_names: set[str] = set()
-    try:
-        with get_db() as db:
-            tables = (
-                db.query(EltDynamicTable)
-                .filter(
-                    EltDynamicTable.tenant_id == tenant_id_for_write(),
-                    EltDynamicTable.owner_user_id == owner_id,
-                    EltDynamicTable.source_file == file_name,
-                )
-                .order_by(EltDynamicTable.created_at.asc())
-                .all()
-            )
-            for table in tables:
-                name = str(table.name or "").strip()
-                headers = [str(h) for h in json.loads(table.headers_json or "[]") or [] if str(h)]
-                if name and headers:
-                    specs.append((name, headers))
-    except RECOVERABLE_ERRORS:
-        return {}
-    if not specs:
-        return {}
-    service = get_template_app_service()
-    try:
-        existing_names = {
-            str(item.get("name") or "").strip()
-            for item in (service.get_templates().get("templates") or [])
-            if str(item.get("source") or "") == "db"
-        }
-    except RECOVERABLE_ERRORS:
-        existing_names = set()
-    out_dir = (
-        Path(get_app_data_dir()).resolve()
-        / "tenants"
-        / str(tenant_id_for_write())
-        / "template_library"
-        / str(owner_id)
-    )
-    out_dir.mkdir(parents=True, exist_ok=True)
-    names: list[str] = []
-    template_ids: list[Any] = []
-    for name, headers in specs:
-        if name in existing_names:
-            continue
-        try:
-            from openpyxl import Workbook
-
-            workbook = Workbook()
-            sheet = workbook.active
-            assert sheet is not None
-            sheet.title = name[:31] or "Sheet1"
-            sheet.append(headers)
-            digest = hashlib.sha1("|".join(headers).encode("utf-8")).hexdigest()[:12]
-            destination = out_dir / f"{_safe_file_component(name)}-{digest}.xlsx"
-            workbook.save(destination)
-            workbook.close()
-            result = service.save_template(
-                _template_payload(name, f"ELT_{digest}", "Excel", str(destination), name, headers)
-            )
-        except RECOVERABLE_ERRORS:
-            continue
-        if not result.get("success"):
-            continue
-        existing_names.add(name)
-        names.append(name)
-        template_ids.append(result.get("id"))
-    if not names:
-        return {"action": "skip", "reason": "duplicate_name"}
-    return {"action": "new", "names": names, "template_ids": template_ids}
-
-
-def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
-    """业务入库完成后，把预演切出的区段登记进模板库。
-
-    ELT 的第一步就是把上传文件切成模板区段，模板库应保存这些区段，
-    而不是整份原始文件（原始文件可能含多个模板甚至无关工作表）。
-    模板库写入失败不影响已完成的导入，但必须在回执里如实说明。
-    """
-    upload_id = str(data.get("upload_id") or "")
-    if not upload_id:
-        return {"action": "skip", "reason": "missing_upload"}
-    from app.application import template_ai
-    from app.application.template_app_service import get_template_app_service
-    from app.db.models.elt import EltUpload
-
-    target_type = str(data.get("target_type") or "").strip()
-    all_regions = [
-        region
-        for region in (data.get("source_features") or {}).get("regions") or []
-        if isinstance(region, dict) and str(region.get("id") or "").strip()
-    ]
-    # 模板库保存预演切出的全部区段；业务数据仍只写入预演选中的区段。
-    if not all_regions:
-        # 通用表没有区段信息时按表头登记，避免「导入完成但模板库空白」。
-        fallback = _register_header_template(data, owner_id)
-        if fallback:
-            return fallback
-        return {"action": "skip", "reason": "no_region"}
-    try:
-        from app.application.elt.errors import EltError
-        from app.application.elt.shipment_template_extractor import extract_region_template
-        from app.utils.path_io.path_utils import get_app_data_dir
-
-        tenant = tenant_id_for_write()
-        with tenant_scope(tenant), get_db() as db:
-            upload = (
-                db.query(EltUpload)
-                .filter(
-                    EltUpload.id == upload_id,
-                    EltUpload.owner_user_id == owner_id,
-                    EltUpload.tenant_id == tenant,
-                )
-                .first()
-            )
-            if upload is None:
-                return {"action": "skip", "reason": "upload_not_found"}
-            storage_path = str(upload.storage_path or "")
-            file_name = str(data.get("file_name") or upload.file_name or "")
-        if not storage_path or not os.path.exists(storage_path):
-            return {"action": "skip", "reason": "upload_missing"}
-        stem = Path(file_name).stem.strip() or Path(storage_path).stem or "ELT 模板"
-        template_type = _template_target_type(data)
-        service = get_template_app_service()
-        templates = [
-            item
-            for item in (service.get_templates().get("templates") or [])
-            if str(item.get("source") or "") == "db"
-        ]
-        existing_names = {
-            str(item.get("name") or "").strip(): str(
-                item.get("file_path") or item.get("path") or ""
-            )
-            for item in templates
-        }
-        existing_keys = {str(item.get("template_key") or "").strip() for item in templates}
-        # 已登记过的机器占位名（如“…-Sheet1”）有界地换成业务名，避免模板库越积越乱。
-        renamed = template_ai.rename_meaningless_templates(service)
-        for entry in renamed:
-            existing_names.pop(entry["from"], None)
-            existing_names[entry["to"]] = ""
-        digest = "".join(
-            char
-            for char in str(data.get("file_sha256") or "")[:12].lower()
-            if char in "0123456789abcdef"
-        )
-        out_dir = (
-            Path(get_app_data_dir()).resolve()
-            / "tenants"
-            / str(tenant)
-            / "template_library"
-            / str(owner_id)
-        )
-        names: list[str] = []
-        template_ids: list[int] = []
-        failures: list[str] = []
-        for region in all_regions:
-            region_id = str(region.get("id") or "")
-            # 用区段 id 派生稳定模板键：同一来源区段重复导入不会重复登记，
-            # 且与区段在文件中的先后顺序无关。
-            region_key = f"ELT_{hashlib.sha1(region_id.encode()).hexdigest()[:12]}"
-            if region_key in existing_keys:
-                continue
-            destination = (
-                out_dir / f"{_safe_file_component(stem)}-{region_key[-12:]}-{digest or 'seg'}.xlsx"
-            )
-            try:
-                meta = extract_region_template(
-                    storage_path,
-                    source_features={
-                        "regions": (data.get("source_features") or {}).get("regions") or []
-                    },
-                    destination=destination,
-                    source_region_id=region_id,
-                    clear_example_rows=target_type == "shipment_records",
-                )
-            except EltError as exc:
-                failures.append(str(exc.message)[:120])
-                continue
-            except RECOVERABLE_ERRORS as exc:
-                failures.append(str(exc)[:120])
-                continue
-            base = ""
-            if region.get("status") == "selected":
-                base = template_ai.suggest_template_name(
-                    file_name=file_name,
-                    sheet_title=str(meta.get("sheet") or ""),
-                    region_label=str(region.get("range") or ""),
-                    target_type=target_type,
-                    headers=meta.get("headers") or [],
-                )
-            if not base:
-                base = _template_name(
-                    meta,
-                    stem,
-                    target_type,
-                    primary=region.get("status") == "selected",
-                )
-            if region_key in existing_keys:
-                continue
-            name = base
-            suffix = 2
-            while name in existing_names:
-                name = f"{base}-{suffix}"
-                suffix += 1
-            headers = [header for header in meta.get("headers") or [] if header]
-            result = service.save_template(
-                _template_payload(
-                    name,
-                    region_key,
-                    template_type,
-                    str(meta.get("file_path") or ""),
-                    meta.get("sheet") or "",
-                    headers,
-                    business_scope=_template_scope(region, meta, target_type),
-                )
-            )
-            if not result.get("success"):
-                return {"action": "error", "reason": str(result.get("message") or "save_failed")}
-            existing_names[name] = str(meta.get("file_path") or "")
-            existing_keys.add(region_key)
-            names.append(name)
-            template_ids.append(int(result.get("id") or 0))
-        if not names:
-            if failures:
-                return {"action": "error", "reason": failures[0]}
-            return {"action": "skip", "reason": "duplicate_name"}
-        receipt: dict[str, Any] = {
-            "action": "new",
-            "names": names,
-            "template_ids": template_ids,
-        }
-        if renamed:
-            receipt["renamed"] = renamed
-        return receipt
-    except TenantScopeError:
-        return {"action": "error", "reason": "missing_tenant"}
-    except RECOVERABLE_ERRORS as exc:
-        return {"action": "error", "reason": str(exc)[:200]}
 
 
 def _resolve_template(upload: dict[str, str], owner_id: int) -> tuple[str, dict]:
@@ -1311,9 +909,8 @@ def _preview(
     }
 
 
-def _receipt_tenant(data: dict[str, Any]) -> int:
-    """登记线程拿不到调用线程的租户上下文，先固定本次运行的租户再进线程。"""
-
+def _receipt_tenant(data: dict[str, Any], owner_id: int) -> int:
+    """Resolve the owned run before handing its fixed tenant to worker threads."""
     try:
         return tenant_id_for_write()
     except TenantScopeError:
@@ -1323,7 +920,10 @@ def _receipt_tenant(data: dict[str, Any]) -> int:
     with get_db() as db:
         row = (
             db.query(EltRun.tenant_id)
-            .filter(EltRun.id == str(data.get("id") or data.get("run_id") or ""))
+            .filter(
+                EltRun.id == str(data.get("id") or data.get("run_id") or ""),
+                EltRun.owner_user_id == owner_id,
+            )
             .first()
         )
     if row is None:
@@ -1334,46 +934,200 @@ def _receipt_tenant(data: dict[str, Any]) -> int:
 def _parallel_receipts(
     data: dict[str, Any], owner_id: int
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """知识库与模板库互不依赖，一次导入内并行写，互不拖累。"""
+    """Keep each worker's original approval context and the fixed tenant scope."""
     from concurrent.futures import ThreadPoolExecutor
+    from contextvars import copy_context
 
-    tenant = _receipt_tenant(data)
+    tenant = _receipt_tenant(data, owner_id)
 
-    def knowledge_receipt() -> dict[str, Any]:
+    def run_receipt(writer: Callable[[dict[str, Any], int], dict[str, Any]]) -> dict[str, Any]:
         with tenant_scope(tenant):
-            return _knowledge_receipt(data, owner_id)
-
-    def template_receipt() -> dict[str, Any]:
-        with tenant_scope(tenant):
-            return _template_receipt(data, owner_id)
+            return writer(data, owner_id)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        knowledge_future = pool.submit(knowledge_receipt)
-        template_future = pool.submit(template_receipt)
-        try:
-            knowledge = knowledge_future.result()
-        except RECOVERABLE_ERRORS as exc:
-            knowledge = {"action": "error", "reason": str(exc)[:200]}
-        try:
-            template = template_future.result()
-        except RECOVERABLE_ERRORS as exc:
-            template = {"action": "error", "reason": str(exc)[:200]}
-    return knowledge, template
+        futures = [
+            pool.submit(copy_context().run, run_receipt, writer)
+            for writer in (_knowledge_receipt, _template_receipt)
+        ]
+        receipts: list[dict[str, Any]] = []
+        for future in futures:
+            try:
+                receipt = future.result()
+                receipts.append(
+                    receipt
+                    if isinstance(receipt, dict) and receipt
+                    else {"action": "unknown", "reason": "auxiliary_receipt_unavailable"}
+                )
+            except BOUNDARY_ERRORS as exc:
+                # The business transaction is already committed. Preserve its
+                # identity even when an auxiliary worker dies without a receipt.
+                receipts.append({"action": "unknown", "reason": type(exc).__name__})
+    return receipts[0], receipts[1]
+
+
+def _unknown_auxiliary(reason: str) -> tuple[dict[str, Any], dict[str, Any], str]:
+    knowledge = {"action": "unknown", "reason": reason}
+    template = dict(knowledge)
+    return knowledge, template, _receipt_notes(knowledge, template)
+
+
+def _auxiliary_projection(auxiliary: Any) -> tuple[dict[str, Any], dict[str, Any], str]:
+    if not isinstance(auxiliary, dict) or auxiliary.get("state") != "returned":
+        return _unknown_auxiliary("auxiliary_started")
+    knowledge, template = auxiliary.get("knowledge"), auxiliary.get("template")
+    if (
+        not isinstance(knowledge, dict)
+        or not knowledge
+        or not isinstance(template, dict)
+        or not template
+    ):
+        return _unknown_auxiliary("auxiliary_receipt_unavailable")
+    return knowledge, template, _receipt_notes(knowledge, template)
 
 
 def _finalize_import(
-    data: dict[str, Any], owner_id: int
+    data: dict[str, Any], owner_id: int, *, allow_start: bool = True
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
-    """执行后并行登记知识库与模板库，汇总两份回执。"""
-    knowledge, template = _parallel_receipts(data, owner_id)
-    return knowledge, template, _receipt_notes(knowledge, template)
+    """Claim once in the original run; restarts only read its persisted auxiliary result.
+
+    Auxiliary stores commit independently. The existing non-reclaimable batch
+    owner excludes rollback until their receipts are durably attached, and a
+    started stage is never retried after a lost return or process restart.
+    """
+    from typing import cast
+
+    from sqlalchemy import Table, update
+
+    from app.application.elt.operation_owner import claim_operation, finish_operation
+    from app.application.elt.preview_confirmation import CONFIRMATION_KEY
+    from app.application.elt.service_support import dump_json, load_json
+    from app.db.models.elt import EltRun
+
+    try:
+        tenant = _receipt_tenant(data, owner_id)
+        run_id = str(data.get("id") or data.get("run_id") or "")
+        table = cast("Table", EltRun.__table__)
+        columns = table.c
+        scope = [
+            columns.id == run_id,
+            columns.tenant_id == tenant,
+            columns.owner_user_id == owner_id,
+        ]
+        with tenant_scope(tenant), get_db() as db:
+            run = db.query(EltRun).filter(*scope).first()
+            if run is None:
+                return _unknown_auxiliary("auxiliary_run_unavailable")
+            original = run.receipt_json
+            receipt = load_json(original, None)
+            if not isinstance(receipt, dict):
+                return _unknown_auxiliary("auxiliary_receipt_unavailable")
+            details = load_json(run.summary_json, {})
+            confirmation = details.get(CONFIRMATION_KEY, {})
+            binding = {
+                "run_id": run.id,
+                "tenant_id": tenant,
+                "owner_user_id": owner_id,
+                "upload_id": run.upload_id,
+                "file_sha256": run.file_sha256,
+                "preview_revision": confirmation.get("preview_revision"),
+            }
+            if "auxiliary" in receipt:
+                auxiliary = receipt["auxiliary"]
+                if (
+                    not isinstance(auxiliary, dict)
+                    or auxiliary.get("schema") != "xcmax.elt-auxiliary.v1"
+                    or auxiliary.get("binding") != binding
+                ):
+                    return _unknown_auxiliary("auxiliary_binding_mismatch")
+                return _auxiliary_projection(auxiliary)
+            if run.operation_token or run.rollback_status or run.status != "completed":
+                return _unknown_auxiliary("auxiliary_run_busy")
+            if not allow_start:
+                return {}, {}, ""
+            if not all(binding.values()):
+                return _unknown_auxiliary("auxiliary_binding_unavailable")
+            unknown = {"action": "unknown", "reason": "auxiliary_started"}
+            auxiliary = {
+                "schema": "xcmax.elt-auxiliary.v1",
+                "binding": binding,
+                "state": "started",
+                "knowledge": dict(unknown),
+                "template": dict(unknown),
+            }
+            started = dump_json({**receipt, "auxiliary": auxiliary})
+            operation = claim_operation(
+                db,
+                run,
+                "batch_execute",
+                allowed_statuses={"completed"},
+                require_unrolled_back=True,
+            )
+            changed = db.execute(
+                update(table)
+                .where(
+                    *scope,
+                    columns.receipt_json == original,
+                    columns.status == "completed",
+                    columns.rollback_status.is_(None),
+                    columns.operation_token == operation.token,
+                )
+                .values(receipt_json=started)
+            )
+            if changed.rowcount != 1:
+                db.rollback()
+                return _unknown_auxiliary("auxiliary_claim_conflict")
+            source_data = {
+                **data,
+                "id": run.id,
+                "upload_id": run.upload_id,
+                "file_sha256": run.file_sha256,
+                "target_type": run.target_type,
+                "source_features": load_json(run.source_features_json, {}),
+            }
+            db.commit()
+        with tenant_scope(tenant):
+            knowledge, template = _parallel_receipts(source_data, owner_id)
+        returned = dump_json(
+            {
+                **receipt,
+                "auxiliary": {
+                    **auxiliary,
+                    "state": "returned",
+                    "knowledge": knowledge,
+                    "template": template,
+                },
+            }
+        )
+        with tenant_scope(tenant), get_db() as db:
+            changed = db.execute(
+                update(table)
+                .where(
+                    *scope,
+                    columns.receipt_json == started,
+                    columns.status == "completed",
+                    columns.rollback_status.is_(None),
+                    columns.operation_token == operation.token,
+                    columns.operation_kind == operation.kind,
+                )
+                .values(receipt_json=returned)
+            )
+            if changed.rowcount != 1:
+                db.rollback()
+                return _unknown_auxiliary("auxiliary_receipt_conflict")
+            finish_operation(db, operation)
+            db.commit()
+        return knowledge, template, _receipt_notes(knowledge, template)
+    except RECOVERABLE_ERRORS as exc:
+        return _unknown_auxiliary(str(exc)[:200])
 
 
 def _receipt_notes(knowledge: dict[str, Any], template: dict[str, Any]) -> str:
     """把知识库与模板库的登记结果转成一句说明；跳过与失败都必须写清原因。"""
     note = ""
     action = str(knowledge.get("action") or "")
-    if action == "error":
+    if action == "unknown":
+        note += "；知识库原回执待核对，请勿重复提交"
+    elif action == "error":
         note += "；知识库同步失败，业务数据已入库"
     elif action in {"new", "update"}:
         note += "；原件已同步到知识库"
@@ -1385,7 +1139,9 @@ def _receipt_notes(knowledge: dict[str, Any], template: dict[str, Any]) -> str:
             "upload_not_found": "未找到上传记录，未同步知识库",
         }.get(str(knowledge.get("reason") or ""), "知识库已有相同内容，已跳过")
     template_action = str(template.get("action") or "")
-    if template_action == "error":
+    if template_action == "unknown":
+        note += "；模板库原回执待核对，请勿重复提交"
+    elif template_action == "error":
         note += "；模板库登记失败，业务数据已入库"
     elif template_action == "new":
         names = [str(name) for name in template.get("names") or [] if name]
@@ -1552,11 +1308,10 @@ def _execute(params: dict, runtime_context: dict) -> dict:
     if not status or status in EXECUTION_UNCERTAIN:
         return _unknown_execution(run_id, summary)
     knowledge, template, notes = (
-        _finalize_import(data, actor.id)
-        if ok
-        and write_requested
-        and not _linked_shipment_id(data)
-        and _has_stage_budget(runtime_context)
+        _finalize_import(
+            data, actor.id, allow_start=write_requested and _has_stage_budget(runtime_context)
+        )
+        if ok and not _linked_shipment_id(data)
         else ({}, {}, "")
     )
     summary["knowledge"] = knowledge

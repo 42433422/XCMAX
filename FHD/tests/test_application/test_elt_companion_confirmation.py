@@ -393,7 +393,7 @@ def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: store.service)
     monkeypatch.setattr(
         "app.domain.shared_services.tools_workflow_elt._finalize_import",
-        lambda *_args: ({}, {}, ""),
+        lambda *_args, **_kwargs: ({}, {}, ""),
     )
     parent, child = _linked_preview(store, monkeypatch)
     submitted = Mock(wraps=store.service.execute)

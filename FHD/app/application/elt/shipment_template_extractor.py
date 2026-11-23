@@ -13,9 +13,9 @@ from openpyxl.utils import get_column_letter
 from app.application.elt.errors import EltError
 from app.application.elt.parser_structure import clean_cell_text, semantic_key
 from app.application.shipment_excel_elt_security import (
+    open_elt_input_file,
     open_elt_output_file,
     resolve_elt_output_path,
-    resolve_elt_path,
 )
 
 
@@ -165,6 +165,7 @@ def _slice_region(
     source_region_id: str | None = None,
     clear_example_rows: bool = True,
     require_total: bool = True,
+    owned_upload_user_id: int | None = None,
 ) -> tuple[Workbook, dict[str, Any]]:
     """把预演识别出的一个区段切出来，返回独立工作簿与区段元数据。"""
     regions = [item for item in source_features.get("regions") or [] if isinstance(item, dict)]
@@ -172,24 +173,25 @@ def _slice_region(
         regions,
         source_region_id=source_region_id,
     )
-    workbook = load_workbook(resolve_elt_path(source_path), data_only=False, keep_links=False)
-    try:
-        sheet_name = str(region.get("sheet") or "")
-        if sheet_name not in workbook.sheetnames:
-            raise EltError("ELT_SHIPMENT_TEMPLATE_SHEET_MISSING", "送货单版式所在工作表不存在")
-        source = workbook[sheet_name]
-        last_col = int(region.get("last_column") or source.max_column)
-        end_row = end_limit or source.max_row
-        end_row = _last_nonempty_row(source, start_row, end_row, last_col)
-        output = _copy_sheet_region(
-            source,
-            start_row=start_row,
-            end_row=end_row,
-            last_col=last_col,
-            title=sheet_name,
-        )
-    finally:
-        workbook.close()
+    with open_elt_input_file(source_path, owner_user_id=owned_upload_user_id) as input_file:
+        workbook = load_workbook(input_file, data_only=False, keep_links=False)
+        try:
+            sheet_name = str(region.get("sheet") or "")
+            if sheet_name not in workbook.sheetnames:
+                raise EltError("ELT_SHIPMENT_TEMPLATE_SHEET_MISSING", "送货单版式所在工作表不存在")
+            source = workbook[sheet_name]
+            last_col = int(region.get("last_column") or source.max_column)
+            end_row = end_limit or source.max_row
+            end_row = _last_nonempty_row(source, start_row, end_row, last_col)
+            output = _copy_sheet_region(
+                source,
+                start_row=start_row,
+                end_row=end_row,
+                last_col=last_col,
+                title=sheet_name,
+            )
+        finally:
+            workbook.close()
     header_row = max(1, int(region.get("header_row") or 0) - start_row + 1)
     headerless = bool(region.get("headerless"))
     # 无表头流水区段本身就是模板内容，不能按「表头 + 空数据行」清空。
@@ -238,6 +240,7 @@ def extract_region_template(
     source_region_id: str | None = None,
     clear_example_rows: bool = False,
     require_total: bool = False,
+    owned_upload_user_id: int | None = None,
 ) -> dict[str, Any]:
     """把区段切分成独立文件，供模板库登记。
 
@@ -250,6 +253,7 @@ def extract_region_template(
         source_region_id=source_region_id,
         clear_example_rows=clear_example_rows,
         require_total=require_total,
+        owned_upload_user_id=owned_upload_user_id,
     )
     try:
         destination_path = resolve_elt_output_path(destination)
