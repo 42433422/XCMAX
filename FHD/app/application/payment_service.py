@@ -15,7 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
-from app.db.models import ReceivableAllocation, SalesOrder
+from app.db.models import Customer, ReceivableAllocation, SalesOrder
 from app.db.models.receivable_allocation import (
     RECEIVABLE_STATUS_PAID,
     RECEIVABLE_STATUS_PARTIAL,
@@ -134,6 +134,8 @@ def payment(
         return {"success": False, "message": "idempotency_key 必须为 1–128 字符的非空字符串"}
     key = idempotency_key.strip() if idempotency_key is not None else None
     fingerprint = _fingerprint(amount_dec, partner_id, partner_name, reference, journal_date)
+    from app.application.sales.payment_verification import verified_sales_payment_total
+
     with get_db() if db is None else nullcontext(db) as ctx:
         order = _locked_order(ctx, sales_order_id)
         if order is None:
@@ -155,6 +157,16 @@ def payment(
                         "code": "IDEMPOTENCY_CONFLICT",
                         "message": "同一收款幂等键不能用于不同请求",
                     }
+                if (
+                    prior.reference_type != "payment"
+                    or verified_sales_payment_total(ctx, order.tenant_id, order) is None
+                ):
+                    return {
+                        "success": False,
+                        "code": "PAYMENT_RECEIPT_UNVERIFIED",
+                        "retryable": False,
+                        "message": "原收款与冲销账本无法核对，禁止重复收款",
+                    }
                 return {
                     "success": True,
                     "idempotent": True,
@@ -162,8 +174,38 @@ def payment(
                     "data": prior.to_dict(),
                 }
 
+        customer = (
+            (apply_tenant_filter(ctx.query(Customer), Customer, tenant_id=order.tenant_id))
+            .filter(Customer.id == order.customer_id)
+            .one_or_none()
+        )
+        if customer is None:
+            return {
+                "success": False,
+                "code": "PAYMENT_CUSTOMER_UNAVAILABLE",
+                "message": "原销售订单缺少当前租户客户，拒绝记账",
+            }
+        if partner_id is not None and (
+            type(partner_id) is not int or partner_id != order.customer_id
+        ):
+            return {
+                "success": False,
+                "code": "PAYMENT_PARTNER_MISMATCH",
+                "message": "收款客户与原销售订单不一致，拒绝记账",
+            }
+        # Resolve only the new journal. The original caller fingerprint and
+        # historical keyed receipt stay unchanged; missing evidence is not replayed.
+        resolved_partner_id = order.customer_id
+        resolved_partner_name = partner_name if partner_name is not None else order.customer_name
         receivable = _to_decimal(order.total_amount)
-        current_allocated = _sum_allocated(_existing_allocations(ctx, sales_order_id))
+        current_allocated = verified_sales_payment_total(ctx, order.tenant_id, order)
+        if current_allocated is None:
+            return {
+                "success": False,
+                "code": "PAYMENT_RECEIPT_UNVERIFIED",
+                "retryable": False,
+                "message": "原收款与冲销账本无法核对，拒绝继续收款",
+            }
         new_total = current_allocated + amount_dec
         if new_total > receivable + _MONEY_EPSILON:
             return {
@@ -192,8 +234,8 @@ def payment(
                         "account_name": "应收账款",
                         "debit": 0,
                         "credit": amount_dec,
-                        "partner_id": partner_id,
-                        "partner_name": partner_name,
+                        "partner_id": resolved_partner_id,
+                        "partner_name": resolved_partner_name,
                     },
                 ],
             },
@@ -227,6 +269,36 @@ def payment(
         }
 
 
+def _read_refund_replay(db: Any, alloc: ReceivableAllocation) -> dict[str, Any]:
+    """A refunded label never substitutes for its original posted counterpart."""
+    from app.application.sales.payment_verification import (
+        payment_receipt_journal,
+        verified_sales_payment_total,
+    )
+
+    order = (
+        apply_tenant_filter(db.query(SalesOrder), SalesOrder)
+        .filter(SalesOrder.id == alloc.sales_order_id)
+        .first()
+    )
+    if (
+        payment_receipt_journal(db, alloc.tenant_id, order, alloc) is None
+        or verified_sales_payment_total(db, alloc.tenant_id, order) is None
+    ):
+        return {
+            "success": False,
+            "code": "REFUND_RECEIPT_UNVERIFIED",
+            "retryable": False,
+            "message": "原收款与冲销凭证无法核对，禁止重复退款",
+        }
+    return {
+        "success": True,
+        "idempotent": True,
+        "message": "该收款分配已退款/冲销，核对原凭证后幂等返回",
+        "data": alloc.to_dict(),
+    }
+
+
 def refund(
     *, allocation_id: int, reference: str | None = None, journal_date: date | None = None
 ) -> dict[str, Any]:
@@ -238,8 +310,12 @@ def refund(
         alloc = query.first()
         if alloc is None:
             return {"success": False, "message": f"收款分配不存在: allocation_id={allocation_id}"}
+        if alloc.status == RECEIVABLE_STATUS_REFUNDED:
+            return _read_refund_replay(db, alloc)
+        order = None
         if alloc.sales_order_id is not None:
-            if _locked_order(db, alloc.sales_order_id) is None:
+            order = _locked_order(db, alloc.sales_order_id)
+            if order is None:
                 return {"success": False, "message": "销售订单不存在或不可访问"}
         else:
             query.update(
@@ -248,11 +324,19 @@ def refund(
             )
         alloc = query.populate_existing().one()
         if alloc.status == RECEIVABLE_STATUS_REFUNDED:
+            return _read_refund_replay(db, alloc)
+        from app.application.sales.payment_verification import (
+            payment_receipt_journal,
+            verified_sales_payment_total,
+        )
+
+        original = payment_receipt_journal(db, alloc.tenant_id, order, alloc)
+        if original is None or verified_sales_payment_total(db, alloc.tenant_id, order) is None:
             return {
-                "success": True,
-                "idempotent": True,
-                "message": "该收款分配已退款/冲销，幂等返回",
-                "data": alloc.to_dict(),
+                "success": False,
+                "code": "REFUND_RECEIPT_UNVERIFIED",
+                "retryable": False,
+                "message": "原收款与冲销账本无法核对，拒绝自动冲销",
             }
         amount_dec = _to_decimal(alloc.allocated_amount)
         entry_result = create_journal_entry(
@@ -264,17 +348,14 @@ def refund(
                 "reference_id": int(allocation_id),
                 "lines": [
                     {
-                        "account_code": RECEIVABLE_ACCOUNT_CODE,
-                        "account_name": "应收账款",
-                        "debit": amount_dec,
-                        "credit": 0,
-                    },
-                    {
-                        "account_code": CASH_ACCOUNT_CODE,
-                        "account_name": "库存现金",
-                        "debit": 0,
-                        "credit": amount_dec,
-                    },
+                        "account_code": line.account_code,
+                        "account_name": line.account_name,
+                        "debit": line.credit or 0,
+                        "credit": line.debit or 0,
+                        "partner_id": line.partner_id,
+                        "partner_name": line.partner_name,
+                    }
+                    for line in original.lines
                 ],
             },
             db=db,

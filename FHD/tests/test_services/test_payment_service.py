@@ -181,8 +181,8 @@ class TestPayment:
             result = psvc.payment(
                 sales_order_id=order.id,
                 amount=Decimal("400.00"),
-                partner_id=7,
-                partner_name="租户客户",
+                partner_id=order.customer_id,
+                partner_name=order.customer_name,
             )
             assert result["success"] is True
             entry_id = result["data"]["journal_entry_id"]
@@ -197,7 +197,7 @@ class TestPayment:
             assert ("1122", 0.0, 400.0) in codes
             # 应收行绑定 partner
             recv_line = [ln for ln in entry.lines if ln.account_code == "1122"][0]
-            assert recv_line.partner_id == 7
+            assert recv_line.partner_id == order.customer_id
 
 
 class TestRefund:
