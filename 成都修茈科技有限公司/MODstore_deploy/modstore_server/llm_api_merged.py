@@ -28,6 +28,7 @@ async def resolve_default_llm_route(
     model: str = "",
     platform_only: bool = False,
     operation: str = "chat",
+    runtime: str = "",
 ) -> dict[str, _facade().Any]:
     """Resolve a chat-capable route and bind its credentials before any catalog await."""
     import asyncio
@@ -135,7 +136,7 @@ async def resolve_default_llm_route(
             if not m:
                 return None
         snapshot = chat_route_snapshot(p, m, key, base, key_source, source)
-        if block is None and p == "litellm":
+        if block is None and (p == "litellm" or runtime == "codex"):
             # Explicit gateway aliases need the same deployment metadata as the
             # account default. Keep the credential and route chosen above.
             try:
@@ -148,7 +149,7 @@ async def resolve_default_llm_route(
         rows = (block or {}).get("models_detailed") or []
         row = next((item for item in rows if isinstance(item, dict) and item.get("id") == m), {})
         capabilities = model_context_capabilities(p, m, row)
-        return {
+        result = {
             "ok": True,
             **snapshot.public_metadata(),
             "source": source,
@@ -156,6 +157,26 @@ async def resolve_default_llm_route(
             "route_token": chat_route_token(snapshot, uid),
             "model_capabilities": capabilities,
         }
+        if runtime == "codex":
+            from modstore_server.llm_gateway_contract import codex_route_contract
+            from modstore_server.llm_responses_transport import validate_responses_route
+
+            validate_responses_route(snapshot)
+            result["runtime"] = codex_route_contract(p, m, capabilities)
+            result["route_token"] = chat_route_token(
+                snapshot,
+                uid,
+                runtime_contract={"runtime": result["runtime"], "model_capabilities": capabilities},
+            )
+            if not result["route_token"]:
+                raise HTTPException(
+                    503,
+                    {
+                        "code": "CODEX_ROUTE_SIGNING_UNAVAILABLE",
+                        "message": "平台模型配置加密服务未就绪，请管理员检查现有密钥服务。",
+                    },
+                )
+        return result
 
     if explicit:
         if pref_p not in _facade().KNOWN_PROVIDERS:
@@ -295,6 +316,7 @@ async def resolve_chat_default(
     model: str = "",
     platform_only: bool = False,
     operation: str = _facade().Query("chat", pattern="^(chat|vision)$"),
+    runtime: str = _facade().Query("", pattern="^(|codex)$"),
 ):
     """Resolve account selection (or an explicit route) with a short-lived tool-round snapshot."""
     response.headers["Cache-Control"] = "no-store"
@@ -305,6 +327,7 @@ async def resolve_chat_default(
         model=model,
         platform_only=platform_only,
         operation=operation,
+        **({"runtime": runtime} if runtime else {}),
     )
 
 

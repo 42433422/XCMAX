@@ -40,6 +40,95 @@ def test_export_numeric_values_survive_normalized_json(tmp_path):
         workbook.close()
 
 
+def test_export_labels_are_literal_and_overlong_values_are_rejected(tmp_path):
+    path = tmp_path / "result.xlsx"
+    options = {
+        "columns": [{"key": "value", "label": "=1+2", "type": "text"}],
+        "sheet_name": "结果",
+        "notes": [],
+    }
+    write_xlsx_result(path, rows=[{"value": "kept"}], **options)
+    with path.open("rb") as handle:
+        workbook = load_workbook(handle)
+        try:
+            assert workbook.active["A1"].data_type == "s"
+        finally:
+            workbook.close()
+    before = path.read_bytes()
+    with pytest.raises(EltError):
+        write_xlsx_result(path, rows=[{"value": "a" * 32768}], **options)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("damage", ["zip", "cell"])
+def test_export_readback_rejects_corruption_before_publishing(tmp_path, monkeypatch, damage):
+    from openpyxl import Workbook
+
+    path = tmp_path / "result.xlsx"
+    path.write_bytes(b"previous verified artifact")
+    save = Workbook.save
+
+    def corrupt_after_save(book, destination):
+        if damage == "cell":
+            book.active["A2"] = "different value"
+        save(book, destination)
+        from pathlib import Path
+
+        if damage == "zip":
+            Path(destination).write_bytes(b"incomplete zip")
+
+    monkeypatch.setattr(Workbook, "save", corrupt_after_save)
+    with pytest.raises(EltError):
+        write_xlsx_result(
+            path,
+            columns=[{"key": "value", "label": "值", "type": "text"}],
+            rows=[{"value": "reviewed"}],
+            sheet_name="结果",
+            notes=[],
+        )
+    assert path.read_bytes() == b"previous verified artifact"
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_csv_export_records_verified_bytes_and_preserves_original_headers(tmp_path, monkeypatch):
+    import csv
+    import hashlib
+
+    from app.application.elt.targets.batch import ExportCsvAdapter
+
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
+    header = "=1+2"
+    rows = [{header: "=1+3", "note": 'quoted,"line\nnext'}]
+    result = ExportCsvAdapter().execute_batch(rows, {"run_id": "csv", "row_count": 1})
+    path = tmp_path / "elt" / "exports" / result["receipt"]["file_name"]
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        assert list(csv.reader(handle)) == [["'=1+2", "note"], ["'=1+3", 'quoted,"line\nnext']]
+    assert result["receipt"]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert result["receipt"]["headers"] == [header, "note"]
+    assert result["receipt"]["readback_verified"] is True
+    assert result["executed"] == 1 and rows[0][header] == "=1+3"
+
+
+@pytest.mark.parametrize("target", ["export_csv", "export_xlsx"])
+def test_export_failure_preserves_original_and_cleans_staging(tmp_path, monkeypatch, target):
+    from app.application.elt.targets import get_adapter
+
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
+    adapter = get_adapter(target)
+    context = {"run_id": "atomic", "row_count": 1}
+    original = adapter.execute_batch([{"a": "before"}], context)
+    root = tmp_path / "elt" / "exports"
+    path = root / original["receipt"]["file_name"]
+    before = path.read_bytes()
+
+    def progress(*_):
+        raise RuntimeError("interrupted before publication")
+
+    with pytest.raises(RuntimeError, match="interrupted"):
+        adapter.execute_batch([{"a": "after"}], {**context, "progress_callback": progress})
+    assert path.read_bytes() == before and list(root.iterdir()) == [path]
+
+
 @pytest.mark.parametrize(
     "value",
     [

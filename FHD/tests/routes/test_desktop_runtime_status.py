@@ -66,6 +66,108 @@ def anon_client() -> TestClient:
         yield test_client
 
 
+def test_runtime_qualification_requires_login_before_any_model_probe(anon_client):
+    with patch("app.application.agent_runtime.configuration.get_account_runtime_settings") as setup:
+        response = anon_client.post(
+            "/api/desktop/agent-runtime/qualification", json={"retry": True}
+        )
+    assert response.status_code == 401
+    setup.assert_not_called()
+
+
+def test_runtime_qualification_uses_authenticated_owner_and_safe_result(client):
+    selected = MagicMock()
+    selected.require_qualified.return_value.runtime_identity.return_value = {
+        "route_identity": "public-route-id",
+        "model": "litellm/team-model",
+    }
+    with patch(
+        "app.application.agent_runtime.configuration.get_account_runtime_settings",
+        return_value=selected,
+    ) as setup:
+        response = client.post(
+            "/api/desktop/agent-runtime/qualification", json={"retry": True, "owner": "other-owner"}
+        )
+    assert response.status_code == 200
+    setup.assert_called_once_with("1", retry=True)
+    assert response.json()["qualification"] == "passed"
+    assert response.json()["route"]["route_identity"] == "public-route-id"
+
+
+def test_runtime_qualification_failure_remains_actionable(client):
+    from app.application.agent_runtime.configuration import RuntimeSetupError
+
+    with patch(
+        "app.application.agent_runtime.configuration.get_account_runtime_settings",
+        side_effect=RuntimeSetupError("runtime_configuration_required", "请核对模型设置"),
+    ):
+        response = client.post("/api/desktop/agent-runtime/qualification", json={})
+    assert response.status_code == 409
+    assert response.json() == {
+        "success": False,
+        "error_code": "runtime_configuration_required",
+        "message": "请核对模型设置",
+        "checks": {},
+    }
+
+
+@pytest.mark.parametrize("mode", ["qualified", "missing_receipt", "invalid_config"])
+def test_runtime_check_honors_explicit_deployment_without_qualifying_account_default(
+    client,
+    tmp_path,
+    monkeypatch,
+    mode,
+):
+    from app.infrastructure.codex.policy import CODEX_VERSION, QUALIFICATION_CHECKS, ModelRoute
+
+    route = ModelRoute(
+        "http://127.0.0.1:9876/v1", "operator-model", "enterprise", "local", 32000, 4000
+    )
+    receipt = tmp_path / "qualification.json"
+    if mode == "qualified":
+        # Synthetic contract fixture; never a production qualification receipt.
+        receipt.write_text(
+            json.dumps(
+                {
+                    "schema": "xcmax.runtime-qualification.v1",
+                    "route_identity": route.identity,
+                    "codex_version": CODEX_VERSION,
+                    "model_kind": "real",
+                    "evidence_refs": ["synthetic-operator-test-only"],
+                    "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
+                }
+            )
+        )
+    config = tmp_path / "runtime.json"
+    config.write_text(
+        "invalid"
+        if mode == "invalid_config"
+        else json.dumps(
+            {
+                "route": {
+                    "base_url": route.base_url,
+                    "model": route.model,
+                    "provider_id": route.provider_id,
+                    "upstream_vendor": route.upstream_vendor,
+                    "context_window": route.context_window,
+                    "max_output_tokens": route.max_output_tokens,
+                },
+                "runtime_root": str(tmp_path),
+                "qualification_file": str(receipt),
+            }
+        )
+    )
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", str(config))
+    with patch("app.application.agent_runtime.configuration.get_account_runtime_settings") as setup:
+        response = client.post("/api/desktop/agent-runtime/qualification", json={"retry": True})
+    setup.assert_not_called()
+    assert response.status_code == (200 if mode == "qualified" else 409)
+    if mode == "qualified":
+        assert response.json()["route"]["model"] == "operator-model"
+    else:
+        assert response.json()["success"] is False
+
+
 class TestDesktopStatus:
     def test_returns_full_status(self, client: TestClient) -> None:
         with (

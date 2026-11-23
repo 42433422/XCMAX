@@ -1,4 +1,12 @@
 {
+  "xiaomi": [{
+    "model": "mimo-v2.6-flash",
+    "display": "MiMo V2.6 Flash",
+    "type": "chat",
+    "context_window": 1000000,
+    "max_output_tokens": 128000,
+    "capability_source": "https://mimo.mi.com/models/en-US/mimo-v2.6-flash"
+  }],
   "doubao": [{ "model": "doubao-pro-32k", "display": "豆包 Pro 32K", "max_tokens": 4096 }],
   "dashscope": [
     { "model": "qwen-max", "display": "通义千问 Max", "max_tokens": 8192 },

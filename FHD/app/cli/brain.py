@@ -42,6 +42,12 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("status", help="真实运行时状态；不会探测执行 AI 草稿")
     models = commands.add_parser("models", help="分别列出本地模型目录及云模型目录")
     models.add_argument("--scope", choices=["all", "local", "cloud"], default="all")
+    runtime = commands.add_parser(
+        "runtime-check", help="验收当前账号模型的固定运行时（可能产生模型费用）"
+    )
+    runtime.add_argument(
+        "--retry", action="store_true", help="修复配置后，显式重试此前失败的运行验收"
+    )
     openapi = commands.add_parser("openapi", help="查询服务端 OpenAPI 文档")
     openapi.add_argument("--filter", default="")
     openapi.add_argument("--method", type=str.upper, default="")
@@ -117,7 +123,7 @@ def _collect(client: BrainClient, endpoints: dict[str, str]) -> dict:
 
 def execute(args: argparse.Namespace, client: BrainClient) -> dict:
     command = args.command
-    if command in {"models", "analyze", "draft", "edit", "diff", "apply"}:
+    if command in {"models", "runtime-check", "analyze", "draft", "edit", "diff", "apply"}:
         client.require_login()
     if command == "login":
         if args.password_stdin and sys.stdin.isatty():
@@ -156,6 +162,10 @@ def execute(args: argparse.Namespace, client: BrainClient) -> dict:
         if args.scope in {"all", "cloud"}:
             endpoints["cloud_catalog"] = "/api/market/llm-catalog"
         return _collect(client, endpoints)
+    if command == "runtime-check":
+        return client.request(
+            "POST", "/api/desktop/agent-runtime/qualification", {"retry": args.retry}
+        )
     if command == "openapi":
         specification = client.request("GET", "/api/system/openapi")
         paths = specification.get("paths")

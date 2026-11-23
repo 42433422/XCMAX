@@ -109,7 +109,7 @@ def owned_runtime(runtime_entry, tmp_path, monkeypatch):
     monkeypatch.setattr(gateway, "run_codex_agent", codex_runtime.run_codex_agent)
     monkeypatch.setattr("app.infrastructure.codex.CodexTransport", Transport)
     monkeypatch.setattr(
-        "app.application.agent_runtime.chat.runtime_settings", lambda: state.settings
+        "app.application.agent_runtime.gateway.runtime_settings", lambda: state.settings
     )
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     with tenant_scope(state.actor.tenant_id), get_db() as db:

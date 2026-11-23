@@ -12,6 +12,7 @@ from app.domain.task_lifecycle.results import (
     execution_result_envelopes,
     execution_result_error,
     execution_result_outcome_unknown,
+    execution_result_states,
 )
 from app.infrastructure.codex.binding import (
     CodexBinding,
@@ -58,6 +59,45 @@ def _verified_step(step: Any, record: Any) -> bool:
             isinstance(row.get("status_code"), int) and row["status_code"] >= 400
             for row in execution_result_envelopes(step.output)
         )
+    )
+
+
+def _no_effect_output(output: dict[str, Any]) -> bool:
+    if output.get("success") is not False or not isinstance(output.get("execution"), dict):
+        return False
+    if execution_result_outcome_unknown(output):
+        return False
+    for envelope in execution_result_envelopes(output):
+        if (
+            envelope.get("success") is True
+            or envelope.get("ok") is True
+            or execution_result_states(envelope) - {"failed", "not_executed"}
+            or ("committed" in envelope and envelope["committed"] is not False)
+        ):
+            return False
+        if "execution" in envelope:
+            proof = envelope["execution"]
+            if (
+                not isinstance(proof, dict)
+                or proof.get("outcome") != "not_executed"
+                or proof.get("committed") is not False
+                or proof.get("effect") not in (None, "none")
+            ):
+                return False
+    return True
+
+
+def _failed_without_effect(step: Any, records: list[Any]) -> bool:
+    """No latest failure may erase an earlier or mismatched business effect."""
+    if step.status != "failed" or not records or records[-1].output != step.output:
+        return False
+    identity = (step.step_id, step.node_id, step.tool_id, step.action, step.params)
+    return _no_effect_output(step.output) and all(
+        record.status == "failed"
+        and (record.step_id, record.node_id, record.tool_id, record.action, record.params)
+        == identity
+        and _no_effect_output(record.output)
+        for record in records
     )
 
 
@@ -209,6 +249,11 @@ def read_call_receipt(
         "success": verified,
         "verified": verified,
         "status": status,
+        **(
+            {"execution": {"outcome": "not_executed", "effect": "none", "committed": False}}
+            if child.status == "failed" and _failed_without_effect(step, child.tool_calls)
+            else {}
+        ),
         "run_id": child.run_id,
         "task_id": call["child_task_id"],
         "child_updated_at": child.updated_at,

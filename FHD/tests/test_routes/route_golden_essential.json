@@ -92,6 +92,7 @@
   "/api/control/input",
   "/api/control/input/latest",
   "/api/control/input/{cmd_id}/ack",
+  "/api/desktop/agent-runtime/qualification",
   "/api/desktop/automation/bootstrap",
   "/api/desktop/automation/find-element",
   "/api/desktop/automation/profiles",

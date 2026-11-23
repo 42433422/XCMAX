@@ -40,7 +40,7 @@ def test_neuro_failure_does_not_replace_fixed_executor(event):
             side_effect=RuntimeError("bus down"),
         ),
         patch(
-            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+            "app.application.agent_runtime.gateway.runtime_settings", return_value=RuntimeSettings()
         ),
         patch(
             "app.application.agent_runtime.gateway.run_runtime_task",

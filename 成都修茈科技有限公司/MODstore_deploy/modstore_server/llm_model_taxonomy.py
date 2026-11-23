@@ -480,6 +480,13 @@ def public_model_capabilities(metadata: Mapping[str, Any]) -> Dict[str, Any]:
             break
     if aggregated or metadata.get("source") == "litellm_model_info":
         out["source"] = "litellm_model_info"
+        identity = aggregate if aggregated and isinstance(aggregate, Mapping) else metadata
+        for key in ("upstream_vendor", "response_model"):
+            value = identity.get(key)
+            if isinstance(value, str) and re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}", value
+            ):
+                out[key] = value
     elif out:
         out["source"] = next(
             (
@@ -505,6 +512,15 @@ def model_context_capabilities(
         # This is the intersection of every deployment behind an alias. Missing
         # fields are unknown, not permission to refill a larger base-model limit.
         return out
+    from modstore_server.llm_catalog_data import declared_model_capabilities
+
+    declared = declared_model_capabilities(provider, model)
+    for key in ("context_window", "max_input_tokens", "max_output_tokens"):
+        value = declared.get(key)
+        if type(value) is int and value > 0:
+            out[key] = min(out.get(key, value), value)
+    if declared:
+        out.setdefault("source", "provider_metadata")
     registry_provider, registry_model = provider, model
     resolved = out.get("resolved_model")
     if resolved and "/" in resolved:
@@ -512,7 +528,7 @@ def model_context_capabilities(
     limits = model_limits(registry_provider, registry_model)
     if limits:
         for key, limit in limits.items():
-            out.setdefault(key, limit)
+            out[key] = min(out.get(key, limit), limit)
         out.setdefault("source", "litellm_registry")
     return out
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 from contextlib import nullcontext
@@ -13,6 +14,7 @@ import pytest
 from app.application.admin_control.protocols import ErrorPolicy
 from app.fastapi_routes.admin_control.profiles import UserProfiles
 from app.fastapi_routes.admin_control.synchronization import Synchronization
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 PRIVATE = "Traceback /private/state.sqlite token=secret-boundary-test"
 ERRORS = ErrorPolicy(lambda: (OSError, ValueError, RuntimeError), logging.getLogger(__name__))
@@ -221,9 +223,7 @@ def test_shared_chat_failure_boundary_preserves_nested_execution_receipt(outcome
     "outcome,committed",
     [("partial", True), ("unknown", False), ("not_executed", False)],
 )
-def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(
-    outcome, committed
-):
+def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outcome, committed):
     """Actual workflow response builder emits a root execution receipt on failure."""
     from app.fastapi_routes.ai_intent import _public_unified_chat_payload
 
@@ -289,9 +289,7 @@ def test_shared_chat_current_runtime_partial_write_requires_reconciliation(next_
     runtime = {"run_id": "original-run", "output": PRIVATE}
     assert classify_runtime_result(runtime, rows, {}, "business", "failed") == "blocked"
     assert runtime["business_receipts"][0]["receipt"]["verified"] is True
-    assert runtime["execution_state"] == (
-        "unknown" if next_state == "unknown" else "partial"
-    )
+    assert runtime["execution_state"] == ("unknown" if next_state == "unknown" else "partial")
 
     transport = runtime_chat_payload(runtime, conversation_id="original-session")
     assert transport["runtime_context_update"]["agent_runtime_run_id"] == "original-run"
@@ -332,9 +330,35 @@ def test_failed_step_only_discards_prior_effect_when_proven_read_only(read_only)
         assert result["reconciliation_required"] is True
         assert result["retryable"] is False
 
-@pytest.mark.parametrize("proven_no_effect", [True, False])
-def test_recovered_write_no_effect_receipt_requires_verified_goal(proven_no_effect):
-    """A superseded failed call must not hold a fully verified goal hostage."""
+
+@pytest.mark.parametrize(
+    "case,completed",
+    [
+        ("proven", True),
+        ("history_proven", True),
+        ("missing_proof", False),
+        ("committed", False),
+        ("unknown", False),
+        ("effect", False),
+        ("nested_committed", False),
+        ("success", False),
+        ("nested_success", False),
+        ("record_mismatch", False),
+        ("output_mismatch", False),
+        ("missing_record", False),
+        ("history_unknown", False),
+        ("history_success", False),
+        ("history_mismatch", False),
+        ("cancelled", False),
+        ("rejected", False),
+        ("stale_goal", False),
+        ("missing_goal", False),
+    ],
+)
+def test_recovered_write_no_effect_receipt_requires_verified_goal(trusted_actor, case, completed):
+    """Read the failed call from SQL before classifying the independently verified goal."""
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.domain.task_lifecycle.agent_runtime_contract import (
         GOAL_PROTOCOL,
         build_goal_contract,
@@ -342,34 +366,106 @@ def test_recovered_write_no_effect_receipt_requires_verified_goal(proven_no_effe
         goal_evidence_snapshot,
         goal_report_coverage,
     )
-    from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
-
-    original = SimpleNamespace(
-        run_id="original-goal",
-        user_id=7,
-        message="创建材料记录",
-        metadata={"runtime_context": {}, "runtime_allowed_actions": []},
+    from app.domain.task_lifecycle.agent_runtime_results import (
+        base_runtime_result,
+        classify_runtime_result,
     )
+    from app.infrastructure.codex.binding import CodexBinding, CodexBindingStore
+    from app.infrastructure.codex.receipts import read_call_receipt
+
+    actor = trusted_actor()
+    original = AgentRun(
+        run_id="original-goal",
+        user_id=str(actor.user_id),
+        message="创建材料记录",
+        metadata={"runtime_context": actor.context, "runtime_allowed_actions": []},
+    )
+    operation = {"tool_id": "materials", "action": "create", "params": {"name": "invalid"}}
+    output = {
+        "status": "failed",
+        "success": False,
+        "error": "invalid_material",
+        "execution": {"outcome": "not_executed", "effect": "none", "committed": False},
+    }
+    if case == "missing_proof":
+        output.pop("execution")
+    elif case == "committed":
+        output["execution"]["committed"] = True
+    elif case == "unknown":
+        output["execution"]["outcome"] = "unknown"
+    elif case == "effect":
+        output["execution"]["effect"] = "changed"
+    elif case == "success":
+        output["success"] = True
+    elif case == "nested_success":
+        output["data"] = {"success": True}
+    elif case == "nested_committed":
+        output["result"] = {"execution": {"outcome": "partial", "committed": True}}
+    step = AgentStep(
+        node_id="failed-node", **operation, status="failed", output=copy.deepcopy(output)
+    )
+    record = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        **operation,
+        status="failed",
+        output=copy.deepcopy(output),
+    )
+    records = [record]
+    if case == "record_mismatch":
+        record.params = {"name": "other-operation"}
+    elif case == "output_mismatch":
+        record.output["error"] = "different_execution"
+    elif case == "missing_record":
+        records = []
+    elif case.startswith("history_"):
+        historical = copy.deepcopy(record)
+        historical.call_id += "-previous"
+        historical.output["error"] = "earlier_attempt"
+        if case == "history_unknown":
+            historical.output.update(status="unknown")
+        elif case == "history_success":
+            historical.output.update(success=True)
+        elif case == "history_mismatch":
+            historical.params = {"name": "other-operation"}
+        records.insert(0, historical)
+    child = AgentRun(
+        user_id=original.user_id,
+        message=original.message,
+        run_id="failed-call",
+        status=case if case in {"cancelled", "rejected"} else "failed",
+        steps=[step],
+        tool_calls=records,
+        metadata={
+            "runtime_context": {**actor.context, "parent_run_id": original.run_id},
+            "task_context": {"task_id": "failed-task"},
+            "plan": {"nodes": [{"node_id": step.node_id, **operation, "depends_on": []}]},
+        },
+    )
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    repository.save(original)
+    repository.save(child)
+    call = {
+        **operation,
+        "state": child.status,
+        "read_only": False,
+        "child_run_id": child.run_id,
+        "child_task_id": "failed-task",
+        "fingerprint": canonical_digest(operation),
+    }
+    produced = read_call_receipt(CodexBindingStore(repository), CodexBinding(original), call)
+    assert produced["success"] is False and produced["verified"] is False
+    if case in {"proven", "history_proven", "stale_goal", "missing_goal"}:
+        assert produced.get("execution") == {
+            "outcome": "not_executed",
+            "effect": "none",
+            "committed": False,
+        }
+    else:
+        assert "execution" not in produced
     contract = build_goal_contract(original)
     rows = [
-        {
-            "state": "failed",
-            "read_only": False,
-            "tool_id": "materials",
-            "action": "create",
-            "params": {"name": "invalid"},
-            "child_run_id": "failed-call",
-            "child_task_id": "failed-task",
-            "receipt": {
-                "status": "failed",
-                "success": False,
-                **(
-                    {"execution": {"outcome": "not_executed", "committed": False}}
-                    if proven_no_effect
-                    else {}
-                ),
-            },
-        },
+        {**call, "receipt": produced},
         {
             "state": "completed",
             "read_only": False,
@@ -409,8 +505,12 @@ def test_recovered_write_no_effect_receipt_requires_verified_goal(proven_no_effe
     }
     report["report_digest"] = canonical_digest(report)
     assert goal_report_coverage(contract, rows, output, None, report)["completed"] is True
+    if case == "stale_goal":
+        report["evidence_digest"] = "stale-evidence"
+    elif case == "missing_goal":
+        report = {}
 
-    result = {"run_id": original.run_id, "output": output}
+    result = {**base_runtime_result(original.run_id), "output": output}
     state = classify_runtime_result(
         result,
         rows,
@@ -418,12 +518,12 @@ def test_recovered_write_no_effect_receipt_requires_verified_goal(proven_no_effe
         "business",
         "completed",
     )
-    if proven_no_effect:
+    if completed:
         assert state == "completed"
         assert result["ok"] is True and result["business_completed"] is True
         assert result.get("reconciliation_required") is not True
     else:
         assert state == "blocked"
-        assert result["execution_state"] == "partial"
+        assert result["execution_state"] in {"partial", "unknown"}
         assert result["reconciliation_required"] is True
         assert result["retryable"] is False

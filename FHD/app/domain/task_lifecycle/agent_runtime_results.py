@@ -160,7 +160,8 @@ def classify_runtime_result(
         receipt = row.get("receipt") or {}
         execution = receipt.get("execution")
         return (
-            receipt.get("success") is False
+            receipt_state(row) == "failed"
+            and receipt.get("success") is False
             and isinstance(execution, dict)
             and execution.get("outcome") == "not_executed"
             and execution.get("committed") is False
@@ -170,8 +171,7 @@ def classify_runtime_result(
         any(row.get("read_only") is not True for row in verified_rows)
         and terminal_failures
         and not (
-            coverage["completed"]
-            and all(_proven_not_executed(row) for row in terminal_failures)
+            coverage["completed"] and all(_proven_not_executed(row) for row in terminal_failures)
         )
     ):
         result.update(
