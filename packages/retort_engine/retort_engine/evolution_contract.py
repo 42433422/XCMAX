@@ -194,6 +194,7 @@ def verify_bundle(
     ):
         raise ValueError("incomplete or duplicate check results")
     root = root.resolve()
+    pairs: list[dict[str, Any]] = []
     for row in results:
         expected = expected_checks[row["id"]]
         if row.get("check_digest") != digest(expected):
@@ -224,13 +225,40 @@ def verify_bundle(
                 raise ValueError("incomplete execution result")
         if row["after"]["returncode"] != 0:
             raise ValueError(f"independent check failed: {row['id']}")
+        pairs.append(
+            {
+                "id": row["id"],
+                "check_digest": row["check_digest"],
+                "baseline_returncode": row["before"]["returncode"],
+                "candidate_returncode": row["after"]["returncode"],
+                "baseline_log_sha256": row["before"]["log_sha256"],
+                "candidate_log_sha256": row["after"]["log_sha256"],
+            }
+        )
+    # Report only verified exit codes. A nonzero baseline may be an
+    # environmental failure rather than evidence of a capability defect.
+    # Neither this report nor the number of changed checks awards a score.
+    comparison = {
+        "schema": "retort.paired-checks/v1",
+        "scope": "independent_check_exit_codes_not_capability_score",
+        "baseline_sha": protocol["source_sha"],
+        "candidate_sha": target_sha,
+        "protocol_digest": protocol["protocol_digest"],
+        "bundle_digest": digest(bundle),
+        "run_id": str(run_id),
+        "checks": sorted(pairs, key=lambda item: item["id"]),
+        "baseline_passed": sum(p["baseline_returncode"] == 0 for p in pairs),
+        "candidate_passed": sum(p["candidate_returncode"] == 0 for p in pairs),
+        "total": len(pairs),
+    }
     return {
         "status": "checks_passed",
         "request_id": protocol["request_id"],
         "protocol_digest": protocol["protocol_digest"],
         "target_sha": target_sha,
         "run_id": str(run_id),
-        "evidence_digest": digest(bundle),
+        "evidence_digest": comparison["bundle_digest"],
+        "comparison": comparison,
         "criterion_ids": list(protocol["criterion_ids"]),
         "evidence_level": "E2",
         "domain_status": "UNRATED",
