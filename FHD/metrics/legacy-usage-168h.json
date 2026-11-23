@@ -1,7 +1,8 @@
 {
-  "log_path": "/home/runner/work/XCMAX/XCMAX/FHD/logs/legacy_usage.log",
+  "log_path": "logs/legacy_usage.log",
   "since_hours": 168,
-  "total_events": 0,
-  "legacy_ratio": 0.0,
-  "modules": []
+  "total_events": null,
+  "legacy_ratio": null,
+  "modules": [],
+  "source_status": "missing"
 }
