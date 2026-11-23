@@ -113,7 +113,7 @@ def get_app_data_dir(*, create: bool = True) -> str:
     return app_data_dir
 
 
-def get_desktop_state_dir() -> str:
+def get_desktop_state_dir(*, create: bool = True) -> str:
     """获取桌面执行端的稳定状态目录（云中继配对凭证等）。
 
     与 :func:`get_app_data_dir` 不同，本函数**永远不会回落到源码/仓库目录**。
@@ -141,7 +141,8 @@ def get_desktop_state_dir() -> str:
         )
         state_dir = os.path.join(base, "XCAGI")
 
-    os.makedirs(state_dir, exist_ok=True)
+    if create:
+        os.makedirs(state_dir, exist_ok=True)
     return state_dir
 
 

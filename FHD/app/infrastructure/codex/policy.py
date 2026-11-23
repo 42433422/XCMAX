@@ -10,10 +10,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
+
+from app.utils.security.safe_download_path import resolve_under_allowed_dirs
 
 CODEX_VERSION = "0.171.0"
 QUALIFICATION_CHECKS = (
@@ -27,6 +31,9 @@ QUALIFICATION_CHECKS = (
     # One real run on this exact route/version must force local compaction,
     # restart the runtime, resume the same task and prove no effect was replayed.
     "forced_compaction_restart_same_task_no_replay",
+    # A completed first step must be read back before the dependent second step
+    # is executed in the resumed process, then independently verified again.
+    "multi_step_restart_continuation",
 )
 
 
@@ -34,11 +41,95 @@ class RuntimePolicyError(ValueError):
     """A configured runtime is unavailable or has not been qualified."""
 
 
+def qualification_host_identity() -> dict[str, str]:
+    """Bind evidence to the actual host source and platform, not mutable rollout metadata."""
+    from app.build_identity import verified_source_sha
+
+    try:
+        sha = verified_source_sha()
+    except ValueError as exc:
+        raise RuntimePolicyError(
+            "Runtime host build identity is unavailable or inconsistent"
+        ) from exc
+    return {"git_sha": sha, "system": platform.system(), "machine": platform.machine()}
+
+
+class QualificationUpgradeRequired(RuntimePolicyError):
+    """The exact route passed older checks but needs the new real probe once."""
+
+
 class _DefaultResponseModel(str):
     """Distinguish an omitted model binding from an explicitly invalid empty one."""
 
 
 _DEFAULT_RESPONSE_MODEL = _DefaultResponseModel()
+
+
+def _read_evidence(path: Path, root: Path, maximum: int) -> bytes:
+    """Bound and hash the same regular-file snapshot, rejecting redirected paths."""
+    try:
+        if not path.is_absolute() or not root.is_absolute() or root.is_symlink():
+            raise ValueError("invalid evidence path")
+        relative = path.relative_to(root)
+        if ".." in relative.parts:
+            raise ValueError("invalid evidence path")
+        for parent in (path, *path.parents):
+            if parent.is_symlink():
+                raise ValueError("redirected evidence path")
+            if parent == root:
+                break
+        safe = resolve_under_allowed_dirs(str(path), [root])
+        descriptor = os.open(
+            safe, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        )
+        with os.fdopen(descriptor, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size > maximum:
+                raise ValueError("invalid evidence file")
+            raw = stream.read(maximum + 1)
+            after = os.fstat(stream.fileno())
+            named = safe.lstat()
+            fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+            if (
+                len(raw) > maximum
+                or not stat.S_ISREG(named.st_mode)
+                or any(getattr(before, key) != getattr(after, key) for key in fields)
+                or any(getattr(after, key) != getattr(named, key) for key in fields)
+                or safe.resolve() != safe
+            ):
+                raise ValueError("evidence changed during read")
+        return raw
+    except (OSError, ValueError) as exc:
+        raise RuntimePolicyError("Runtime qualification evidence cannot be verified") from exc
+
+
+def _verify_evidence(receipt: dict, certificate: Path) -> None:
+    refs, digests = receipt["evidence_refs"], receipt.get("evidence_sha256")
+    if (
+        not 1 <= len(refs) <= 8
+        or len(set(refs)) != len(refs)
+        or not isinstance(digests, dict)
+        or set(digests) != set(refs)
+    ):
+        raise RuntimePolicyError("Runtime qualification evidence digests are missing")
+    for ref in refs:
+        raw = _read_evidence(Path(ref), certificate.parent, 1_048_576)
+        if hashlib.sha256(raw).hexdigest() != digests[ref]:
+            raise RuntimePolicyError("Runtime qualification evidence digest mismatch")
+        try:
+            evidence = json.loads(raw)
+        except (UnicodeError, ValueError) as exc:
+            raise RuntimePolicyError("Runtime qualification evidence cannot be decoded") from exc
+        if (
+            not isinstance(evidence, dict)
+            or evidence.get("schema") != "xcmax.runtime-qualification-evidence.v1"
+            or evidence.get("ok") is not True
+            or any(
+                evidence.get(key) != receipt[key]
+                for key in ("route_identity", "host_identity", "codex_version", "checks")
+            )
+        ):
+            raise RuntimePolicyError("Runtime qualification evidence binding mismatch")
 
 
 def _positive(value: Any, name: str, maximum: int) -> int:
@@ -217,7 +308,9 @@ class RuntimeSettings:
                 "Codex gateway qualification is missing; runtime was not started"
             )
         try:
-            receipt = json.loads(self.qualification_file.read_text(encoding="utf-8"))
+            receipt = json.loads(
+                _read_evidence(self.qualification_file, self.qualification_file.parent, 65_536)
+            )
         except (OSError, ValueError) as exc:
             raise RuntimePolicyError("Codex gateway qualification cannot be read") from exc
         if (
@@ -225,13 +318,21 @@ class RuntimeSettings:
             or receipt.get("schema") != "xcmax.runtime-qualification.v1"
             or receipt.get("route_identity") != self.route.identity
             or receipt.get("codex_version") != CODEX_VERSION
+            or receipt.get("host_identity") != qualification_host_identity()
             or receipt.get("model_kind") != "real"
             or not isinstance(receipt.get("evidence_refs"), list)
             or not receipt["evidence_refs"]
             or any(not isinstance(ref, str) or not ref.strip() for ref in receipt["evidence_refs"])
             or not isinstance(receipt.get("checks"), dict)
-            or any(receipt["checks"].get(key) != "PASS" for key in QUALIFICATION_CHECKS)
+            or any(receipt["checks"].get(key) != "PASS" for key in QUALIFICATION_CHECKS[:-1])
         ):
+            raise RuntimePolicyError("Exact route has not passed independent runtime qualification")
+        _verify_evidence(receipt, self.qualification_file)
+        if QUALIFICATION_CHECKS[-1] not in receipt["checks"]:
+            raise QualificationUpgradeRequired(
+                "Exact route requires multi-step runtime qualification"
+            )
+        if receipt["checks"][QUALIFICATION_CHECKS[-1]] != "PASS":
             raise RuntimePolicyError("Exact route has not passed independent runtime qualification")
         return self.route
 

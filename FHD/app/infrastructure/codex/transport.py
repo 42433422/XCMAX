@@ -105,9 +105,17 @@ class CodexTransportConfig:
 def _write_private(path: Path, text: str) -> None:
     fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".codex-write-")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
+        if os.name != "nt":
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         Path(temporary).unlink(missing_ok=True)
 

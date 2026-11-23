@@ -68,6 +68,21 @@ it('prevents duplicate recovery and keeps an unconfirmed save safe to retry expl
   expect(wrapper.text()).toBe('')
 })
 
+it('invalidates runtime qualification only after the current account model preference is saved', async () => {
+  resolveRoute.mockRejectedValue(preferenceError())
+  followPlatform.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: true })
+  const changed = vi.fn()
+  window.addEventListener(PLATFORM_MODEL_CHANGED_EVENT, changed)
+  try {
+    const wrapper = mount(ChatModelRecovery)
+    await flushPromises()
+    await wrapper.get('button').trigger('click'); await flushPromises()
+    expect(changed).not.toHaveBeenCalled()
+    await wrapper.get('button').trigger('click'); await flushPromises()
+    expect(changed).toHaveBeenCalledOnce()
+  } finally { window.removeEventListener(PLATFORM_MODEL_CHANGED_EVENT, changed) }
+})
+
 it.each(['account', 'auth', 'session', 'mod'])('ignores a stale %s query failure', async scope => {
   let rejectOld!: (error: unknown) => void
   resolveRoute.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectOld = reject }))
