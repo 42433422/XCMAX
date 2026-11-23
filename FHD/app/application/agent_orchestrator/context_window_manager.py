@@ -36,6 +36,7 @@ from app.infrastructure.llm._vendor.openhands_condenser import (
     tool_call_manipulation_indices,
 )
 from app.infrastructure.llm.model_context_windows import resolve_token_budget
+from app.infrastructure.llm.response_completion import normal_finish_reason
 from app.infrastructure.llm.token_estimator import (
     estimate_messages_tokens as _estimate_messages_tokens,
 )
@@ -510,6 +511,10 @@ class ContextWindowManager:
                 )
                 if not text:
                     raise ValueError("empty_summary")
+                if "finish_reason" in choices[0] and not normal_finish_reason(
+                    choices[0]["finish_reason"]
+                ):
+                    raise ValueError("incomplete_summary")
                 call.status = "completed"
                 return AIMessage(content=text)
             except RECOVERABLE_ERRORS as exc:
