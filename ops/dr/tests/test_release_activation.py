@@ -18,7 +18,6 @@ import tempfile
 import threading
 import unittest
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "xcmax_dr_apply_release.sh"
 ORDER = SCRIPT.with_name("xcmax_release_order.py")
 
@@ -359,6 +358,9 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertEqual(status["release_sha"], "")
 
     def test_http_200_with_wrong_artifact_restores_and_verifies_previous(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        verified = self.run_function("verify_current_release_pair")
+        self.assertEqual(verified.returncode, 0, verified.stderr + verified.stdout)
         self.bad_sha.add(self.new_sha)
         result = self.activate()
         self.assertNotEqual(result.returncode, 0)
@@ -368,6 +370,8 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertEqual(self.observed[-1], self.old_sha)
         self.assert_old_markers()
         self.assertFalse(self.pending.exists())
+        restored = self.run_function("verify_current_release_pair")
+        self.assertEqual(restored.returncode, 0, restored.stderr + restored.stdout)
 
     def test_verified_pair_receipt_survives_compensated_candidate_failure(self) -> None:
         self.add_fhd_release(self.old_sha)
@@ -434,15 +438,21 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
 
     def test_compensation_does_not_restore_a_mixed_release_receipt(self) -> None:
         self.add_fhd_release(self.new_sha)
-        self.env["PREPARE_FAIL_SHA"] = self.new_sha
-
-        failed = self.activate()
-
-        self.assertNotEqual(failed.returncode, 0)
-        self.assertEqual(self.current.resolve(), self.old)
-        self.assertFalse(self.pending.exists())
-        self.assertFalse((self.state / "release_applied_sha").exists())
-        self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)
+        for failure in ("prepare", "identity"):
+            with self.subTest(failure=failure):
+                (self.state / "release_applied_sha").write_text(self.old_sha + "\n")
+                if failure == "prepare":
+                    self.env["PREPARE_FAIL_SHA"] = self.new_sha
+                else:
+                    self.env.pop("PREPARE_FAIL_SHA", None)
+                    self.bad_sha.add(self.new_sha)
+                failed = self.activate()
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertEqual(self.current.resolve(), self.old)
+                self.assert_old_markers()
+                self.assertFalse(self.pending.exists())
+                self.assertFalse((self.state / "release_applied_sha").exists())
+                self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)
 
     def test_compensation_keeps_other_pending_or_unverified_component_blocked(self) -> None:
         self.add_fhd_release(self.old_sha)
@@ -457,6 +467,7 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
                     self.bad_components.add("fhd")
                 self.assertNotEqual(self.activate().returncode, 0)
                 self.assertEqual(self.current.resolve(), self.old)
+                self.assert_old_markers()
                 self.assertFalse(self.pending.exists())
                 self.assertFalse((self.state / "release_applied_sha").exists())
                 self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)

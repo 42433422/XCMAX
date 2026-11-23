@@ -248,6 +248,7 @@ def prepare_customer_delivery(
 
 
 def _freeze_node(db: Any, node: Any, inputs: dict, common: dict) -> dict[str, Any]:
+    from modstore_server.catalog_archive_integrity import sha256_file
     from modstore_server.employee_runtime import (
         load_employee_pack_resolved,
         parse_employee_config_v2,
@@ -255,6 +256,7 @@ def _freeze_node(db: Any, node: Any, inputs: dict, common: dict) -> dict[str, An
     from modstore_server.employee_runtime_policy import apply_policy_to_config
     from modstore_server.strategic_execution_contract import (
         _pack_identity,
+        _workspace_file,
         freeze_execution,
         validate_input,
     )
@@ -324,6 +326,14 @@ def _freeze_node(db: Any, node: Any, inputs: dict, common: dict) -> dict[str, An
     }
     if deferred:
         contract["deferred_input_mapping"] = deepcopy(mapping)
+    else:
+        # The payload digest binds the path, not the bytes the native employee
+        # will read. Keep that source identity in the original business contract,
+        # independently of whether optional offline training capture is available.
+        source = _workspace_file(
+            str(node_input["file_path"]), frozen["input_data"]["workspace_root"], owner, exists=True
+        )
+        contract["input_file_sha256"] = sha256_file(source)
     if "customer_deliverables" in config:
         contract["customer_deliverables"] = _declared_deliverables(config["customer_deliverables"])
     return {**contract, "contract_sha256": digest(contract)}

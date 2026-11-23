@@ -39,10 +39,17 @@ def expire(state, run_id):
         row.lease_expires_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
 
 
-def test_http_queue_request_and_worker_turn_have_separate_stable_identities(runtime_entry):
+@pytest.mark.parametrize("legacy_unstarted", [False, True])
+def test_http_queue_request_and_worker_turn_have_separate_stable_identities(
+    runtime_entry, legacy_unstarted
+):
     state = runtime_entry
     run_id = create(state)
     saved = state.repository.get(run_id)
+    assert saved.metadata["codex_runtime"]["version"] == 1
+    if legacy_unstarted:
+        saved.metadata["codex_runtime"].pop("version")
+        state.repository.save(saved)
     pending = saved.metadata["_codex_queued_request"]
     original = canonical_digest({"turn_id": "queued-request", "owner": saved.user_id})
     worker_id = canonical_digest({"turn_id": pending["worker_turn_id"], "owner": saved.user_id})
@@ -57,6 +64,7 @@ def test_http_queue_request_and_worker_turn_have_separate_stable_identities(runt
     assert state.queue.get(run_id).execution_count == 0
     state.drain(run_id)
     saved = state.repository.get(run_id)
+    assert saved.metadata["codex_runtime"]["version"] == 1
     assert set(saved.metadata["runtime_requests"]) == {original, worker_id}
     assert saved.metadata["runtime_requests"][original]["result"]["ok"] is True
     assert len(state.calls) == 1 and state.queue.get(run_id).state == "succeeded"

@@ -131,6 +131,34 @@ class CodexBindingStore:
     def _validate_goal(run: AgentRun, metadata: dict[str, Any]) -> str:
         from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
 
+        legacy_unstarted = (
+            "version" not in metadata
+            and type(metadata.get("generation")) is int
+            and metadata["generation"] == 0
+            and metadata.get("runtime_status") == "not_started"
+            and metadata.get("coordinator_active") is False
+            and metadata.get("revoked") is True
+            and not any(
+                metadata.get(key)
+                for key in (
+                    "calls",
+                    "token_hashes",
+                    "thread_id",
+                    "model_requests",
+                    "active_started_at",
+                    "active_seconds",
+                    "model_reconciliation_required",
+                )
+            )
+        )
+        if (
+            metadata
+            and not legacy_unstarted
+            and (type(metadata.get("version")) is not int or metadata["version"] != 1)
+        ):
+            raise CodexBindingError(
+                "runtime_contract_unsupported", "原运行绑定版本不受支持，请保留原件并核对兼容性"
+            )
         if not run.metadata.get("runtime_goal_contract"):
             if metadata.get("calls") or run.metadata.get("runtime_goal_digest"):
                 raise CodexBindingError("goal_changed", "原任务目标合同已丢失")
@@ -468,12 +496,23 @@ class CodexBindingStore:
         receipt: dict[str, Any] | None = None,
     ) -> CodexBinding:
         def record(run: AgentRun, metadata: dict[str, Any]) -> None:
+            self._validate_goal(run, metadata)
             call = metadata.get("calls", {}).get(call_id)
             if call is None:
                 raise CodexBindingError("call_missing", "调用未持久登记")
+            original_run_id = call["child_run_id"] or child_run_id
+            if receipt is not None and (
+                receipt.get("task_id") != call["child_task_id"]
+                or receipt.get("run_id") != original_run_id
+                or (not original_run_id and receipt.get("status") not in {"claimed", "unknown"})
+            ):
+                raise CodexBindingError("evidence_mismatch", "业务回执与原任务或执行标识不一致")
             previous_receipt = call.get("receipt") or {}
-            if receipt is not None and (previous_receipt.get("child_updated_at") or "") > (
-                receipt.get("child_updated_at") or ""
+            if (
+                receipt is not None
+                and receipt.get("status") != "unknown"
+                and (previous_receipt.get("child_updated_at") or "")
+                > (receipt.get("child_updated_at") or "")
             ):
                 return
             if child_run_id:

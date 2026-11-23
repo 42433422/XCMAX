@@ -206,21 +206,28 @@ def read_call_receipt(
     store: CodexBindingStore, binding: CodexBinding, call: dict[str, Any]
 ) -> dict[str, Any]:
     """Read business truth, never turn completion or MCP transport success."""
+    store._validate_goal(binding.run, binding.metadata)
     if (call.get("tool_id"), call.get("action")) == ("xcmax_workflow", "execute"):
         return {**_unknown(call), "error_code": "retired_runtime_contract"}
-    child = store.repository.get(str(call.get("child_run_id") or ""))
-    if child is None:
+    child_run_id = str(call.get("child_run_id") or "")
+    child = store.repository.get(child_run_id) if child_run_id else None
+    if child is None and not child_run_id:
         task = store.repository.get_task(
             user_id=binding.run.user_id,
             task_id=call["child_task_id"],
             tenant_id=tenant_id_of_run(binding.run),
         )
         if task is not None:
+            # A lost binding ACK may adopt only the sole original admission.
+            # A later active attempt cannot supply this call's original proof.
+            if task.attempt != 1 or task.run_count != 1:
+                return _unknown(call)
             child = store.repository.get(task.active_run_id)
     if child is None:
         metadata = binding.metadata
         if (
-            call.get("state") == "claimed"
+            not child_run_id
+            and call.get("state") == "claimed"
             and call.get("generation") == metadata.get("generation")
             and metadata.get("coordinator_active")
             and not metadata.get("revoked")
@@ -386,7 +393,6 @@ def action_parent(context: dict[str, Any]) -> tuple[CodexBindingStore, CodexBind
         return None
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
-    from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
 
     repository = get_agent_run_repository()
     if not isinstance(repository, SQLAlchemyAgentRunRepository):
@@ -413,7 +419,9 @@ def action_parent(context: dict[str, Any]) -> tuple[CodexBindingStore, CodexBind
     ):
         raise PermissionError("当前动作不属于原账号、租户与 Mod 任务")
     binding = CodexBinding(parent)
-    if binding.metadata.get("goal_digest") != validate_runtime_goal(parent):
+    if binding.metadata.get("goal_digest") != CodexBindingStore._validate_goal(
+        parent, binding.metadata
+    ):
         raise PermissionError("原任务目标绑定已变化")
     calls = list((binding.metadata.get("calls") or {}).values())
     if not any(

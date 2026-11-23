@@ -552,6 +552,7 @@ async def run_runtime_task_async(
             if start_paused or start_queued:
                 parent.status = "paused" if start_paused else "queued"
                 parent.metadata["codex_runtime"] = {
+                    "version": 1,
                     "generation": 0,
                     "coordinator_active": False,
                     "revoked": True,

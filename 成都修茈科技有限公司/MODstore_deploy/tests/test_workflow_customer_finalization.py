@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -10,13 +11,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select, update
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.sql.dml import Update
-
-from modstore_server import auth_service
+from modstore_server import auth_service, workflow_engine
 from modstore_server import workflow_customer_delivery as delivery
-from modstore_server import workflow_engine
 from modstore_server import workflow_event_runner as runner
 from modstore_server import workflow_execution_feedback as feedback
 from modstore_server.infrastructure.db import get_db
@@ -30,6 +26,10 @@ from modstore_server.models import (
     WorkflowNode,
 )
 from modstore_server.services.employee import get_default_employee_client
+from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.sql.dml import Update
+
 from tests import test_workflow_customer_delivery as customer_tests
 
 experiment_run = customer_tests.experiment_run
@@ -255,6 +255,47 @@ def test_customer_execute_api_recovers_terminal_without_repeating_billing(
     assert len(attempts) == len(billed) == 1 and state.charged == []
     assert billed[0][1]["user_id"] == state.env["customer_id"]
     assert len(state.feedback) == (1 if committed else 2)
+
+
+@pytest.mark.parametrize("interruption", [asyncio.CancelledError, SystemExit])
+def test_customer_graph_is_durable_before_waiting_for_wallet(
+    returned_customer_graph, monkeypatch, interruption
+):
+    from modstore_server import llm_billing
+    from modstore_server import workflow_customer_finalization as finalization
+    from modstore_server.workflow_api import execution as execution_api
+    from modstore_server.workflow_api.schemas import WorkflowExecuteBody
+    from starlette.requests import Request
+
+    state = returned_customer_graph
+    billed = []
+
+    async def interrupted_wallet(*_args, **kwargs):
+        with state.factory() as observer:
+            execution = _execution(state, observer)
+            event = delivery._event(observer, f"{finalization.RETURNED_EVENT}:{execution.id}")
+            billed.append((kwargs["user_id"], execution.status, event is not None))
+        raise interruption("request stopped while the original wallet call was in flight")
+
+    monkeypatch.setattr(llm_billing, "bill_internal_llm_floor", interrupted_wallet)
+    with state.factory() as db, pytest.raises(interruption):
+        asyncio.run(
+            execution_api.execute_workflow(
+                state.workflow_id,
+                WorkflowExecuteBody(input_data=state.inputs),
+                Request({"type": "http", "headers": []}),
+                db,
+                db.get(User, state.env["customer_id"]),
+            )
+        )
+    assert billed == [(state.env["customer_id"], "completed", True)]
+    _assert_one_original_native_delivery(state, completed=True)
+    assert (
+        finalization.recover_returned_customer_workflows(session_factory=state.factory)["completed"]
+        == 0
+    )
+    assert len(state.native) == len(state.feedback) == len(billed) == 1
+    assert state.charged == []
 
 
 @pytest.mark.parametrize("winner", ["completed", "failed"])

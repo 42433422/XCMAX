@@ -129,24 +129,33 @@ def test_running_delivery_reuses_its_original_optional_training_snapshot(
     assert env["artifact"]["artifact_sha256"] == replay._sha(
         (env["workspace"] / "outputs/output.csv").read_bytes()
     )
+    listing = env["http"].get("/api/customer-value/deliveries", params=customer_tests._query(env))
+    assert listing.status_code == 200, listing.text
+    downloaded = env["http"].get(listing.json()["items"][0]["download_url"])
+    assert downloaded.status_code == 200, downloaded.text
+    assert replay._equal_files("outputs/output.csv", downloaded.content, original_bytes)
 
 
+@pytest.mark.parametrize("capture_state", ["ready", "missing_reference", "changed_reference"])
 def test_frozen_training_snapshot_still_rejects_changed_business_input(
-    customer_workflow, monkeypatch
+    customer_workflow, monkeypatch, capture_state
 ):
     env = customer_workflow
-    source = _oracle(env, monkeypatch)
+    source = _oracle(env, monkeypatch, changed=capture_state == "changed_reference")
+    if capture_state == "missing_reference":
+        (env["workspace"] / "references/verified.csv").unlink()
     capture = replay.capture_business_replay
 
     def capture_then_change_input(*args):
         snapshot = capture(*args)
-        assert snapshot["replay_ready"] is True
+        assert snapshot["replay_ready"] is (capture_state == "ready")
         source.write_text('{"columns":["order","quantity"],"rows":[["changed",999]]}')
         return snapshot
 
     monkeypatch.setattr(replay, "capture_business_replay", capture_then_change_input)
 
-    assert env["execute"]().status_code == 500
+    response = env["execute"]()
+    assert response.status_code == 500, response.text
     assert not (env["workspace"] / "outputs/output.csv").exists()
 
 

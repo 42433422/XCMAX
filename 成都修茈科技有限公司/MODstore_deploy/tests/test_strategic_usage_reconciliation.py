@@ -167,7 +167,7 @@ async def authenticate_gateway(key=None):
     return authenticated
 
 
-def upstream_events(binding, *, prompt=12, completion=7):
+def upstream_events(binding, *, prompt=12, completion=7, attempt_id="original-provider-response"):
     # Derive the spend identity from real authentication, never from the binding.
     from litellm.proxy.litellm_pre_call_utils import LiteLLMProxyRequestSetup
     from litellm.proxy.spend_tracking.spend_tracking_utils import get_logging_payload
@@ -179,7 +179,7 @@ def upstream_events(binding, *, prompt=12, completion=7):
     now = datetime.now(UTC)
     context = UsageCaptureContext(
         caller_id=binding["request_id"],
-        attempt_id="original-provider-response",
+        attempt_id=attempt_id,
         parent_request_id=None,
         retry_of_attempt_id=None,
         job_id=None,
@@ -597,6 +597,129 @@ def test_invalid_earlier_portfolio_does_not_block_other_original_usage(database,
             )
             == invalid
         )
+
+
+@pytest.mark.parametrize("field", ["started_at", "deadline"])
+@pytest.mark.parametrize(
+    "invalid", [None, 17, [], {}, "0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"]
+)
+def test_malformed_original_time_preserves_hold_without_blocking_later_call(
+    database, gateway, field, invalid
+):
+    first, _, held, binding = admit(database, key="malformed")
+    second, _, _, valid = admit(database, key="valid")
+    malformed = {**binding, field: invalid}
+
+    def corrupt(_row, _proposal, state, _session):
+        call = state["tasks"]["a"]["calls"][held["request_id"]]
+        call.update(
+            status="pending" if field == "deadline" else "unknown",
+            transport_binding=malformed,
+            transport_binding_sha256=p.digest(malformed),
+        )
+
+    p.mutate_portfolio(first, corrupt)
+    with database() as session:
+        row = session.scalar(
+            select(StrategicDecision).where(StrategicDecision.decision_id == first)
+        )
+        row.updated_at = datetime.now(UTC) - timedelta(days=1)
+        session.commit()
+    before = p.portfolio_status(first)["tasks"]["a"]["calls"][held["request_id"]]
+    persist(gateway, upstream_events(binding))
+    persist(gateway, upstream_events(valid, attempt_id="second-provider-response"))
+
+    if field == "started_at":
+        assert source.read_usage(malformed) is None
+    assert recovery.reconcile_pending_usage()["settled"] == 1
+    after = p.portfolio_status(first)["tasks"]["a"]["calls"][held["request_id"]]
+    for key in ("status", "reserved_tokens", "reserved_cost_cents", "transport_binding"):
+        assert after[key] == before[key]
+    assert "actual_tokens" not in after
+    assert p.portfolio_status(first)["halted"] is True
+    assert p.portfolio_status(second)["tasks"]["a"]["actual_tokens"] == 19
+
+
+@pytest.mark.parametrize("field", ["started_at", "deadline"])
+@pytest.mark.parametrize(
+    "invalid", [None, 17, [], {}, "0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"]
+)
+def test_malformed_planning_time_keeps_owner_slot_without_starving_other_owner(
+    database, gateway, field, invalid
+):
+    from modstore_server.db.identity import User
+    from modstore_server.db.llm_chat import LlmClientRequest
+
+    base.seed_owner(database)
+    with database() as session:
+        session.add(
+            User(id=8, username="second-planning-owner", password_hash="unused", is_admin=True)
+        )
+        session.commit()
+    budget = base.planning_budget(provider="litellm", model=MODEL)
+    for owner in (7, 8):
+        with usage.planning_usage_scope(owner, budget):
+            held = usage.prepare_platform_call("litellm", MODEL, [], 100)
+            with usage.platform_call_reservation(held):
+                usage.require_call_reservation(
+                    provider="litellm", model=MODEL, start_transport=True
+                )
+            usage.complete_platform_call(held, None)
+        with database() as session:
+            row = session.scalar(
+                select(LlmClientRequest).where(
+                    LlmClientRequest.client_request_id == held["request_id"]
+                )
+            )
+            record = json.loads(row.done_json)
+            persist(
+                gateway,
+                upstream_events(record["transport_binding"], attempt_id=f"provider-{owner}"),
+            )
+            if owner == 7:
+                record["transport_binding"][field] = invalid
+                record["transport_binding_sha256"] = p.digest(record["transport_binding"])
+                row.state = "processing" if field == "deadline" else "unknown"
+                row.done_json = p._json(record)
+                row.updated_at = datetime.now(UTC) - timedelta(days=1)
+                malformed = row.done_json
+                expected_state = row.state
+                first_request = row.client_request_id
+                session.commit()
+
+    assert recovery.reconcile_pending_usage()["settled"] == 1
+    with database() as session:
+        original = session.scalar(
+            select(LlmClientRequest).where(LlmClientRequest.client_request_id == first_request)
+        )
+        assert original.state == expected_state and original.done_json == malformed
+        slots = session.scalars(
+            select(LlmClientRequest)
+            .where(LlmClientRequest.client_request_id == "strategy-planning-slot")
+            .order_by(LlmClientRequest.user_id)
+        ).all()
+        assert [row.state for row in slots] == ["unknown", "completed"]
+        assert json.loads(slots[1].done_json)["actual_tokens"] == 19
+    with usage.planning_usage_scope(7, budget):
+        with pytest.raises(p.PortfolioError, match="requires reconciliation"):
+            usage.prepare_platform_call("litellm", MODEL, [], 100)
+
+
+@pytest.mark.parametrize("invalid", ["0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"])
+def test_invalid_provider_time_does_not_starve_later_original_usage(database, gateway, invalid):
+    first, _, held, binding = admit(database, key="invalid-provider-time")
+    second, _, _, valid = admit(database, key="valid-provider-time")
+    events = upstream_events(binding)
+    for event in events:
+        event["payload"]["event"]["started_at"] = invalid
+    persist(gateway, events)
+    persist(gateway, upstream_events(valid, attempt_id="second-provider-response"))
+
+    assert recovery.reconcile_pending_usage()["settled"] == 1
+    call = p.portfolio_status(first)["tasks"]["a"]["calls"][held["request_id"]]
+    assert call["status"] == "unknown" and "actual_tokens" not in call
+    assert p.portfolio_status(first)["halted"] is True
+    assert p.portfolio_status(second)["tasks"]["a"]["actual_tokens"] == 19
 
 
 def test_usage_scan_rotates_same_timestamp_calls_before_readback(database, gateway, monkeypatch):

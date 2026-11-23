@@ -99,7 +99,11 @@ def read_usage(binding: dict[str, Any]) -> dict[str, Any] | None:
     from litellm.accounting import InboundUsageEvent, OutboundUsageEvent
     from litellm.constants import LITELLM_PROXY_MASTER_KEY_ALIAS
 
-    if binding.get("provider") != "litellm":
+    if binding.get("provider") != "litellm" or not isinstance(binding.get("started_at"), str):
+        return None
+    try:
+        started = _date(binding["started_at"])
+    except (PortfolioError, OverflowError):
         return None
     if "accounting_identity_scheme" in binding or "accounting_identity" in binding:
         identity = binding.get("accounting_identity")
@@ -139,7 +143,7 @@ def read_usage(binding: dict[str, Any]) -> dict[str, Any] | None:
             dimensions.get("key") != identity
             or dimensions.get("model_group") != binding["model"]
             or event.call_type.value not in {"acompletion", "completion", "aresponses", "responses"}
-            or event.started_at < _date(binding["started_at"])
+            or event.started_at < started
             or event.ended_at > datetime.now(UTC)
         ):
             return None

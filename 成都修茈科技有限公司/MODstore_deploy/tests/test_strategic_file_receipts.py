@@ -29,6 +29,72 @@ database = fixtures.database
 archived_python = contracts.archived_python
 
 
+@pytest.mark.parametrize("boundary", ["tenant", "project"])
+@pytest.mark.parametrize("case", ["absolute", "parent", "prefix", "loop"])
+def test_rejected_path_never_resolves_outside_selected_boundary(
+    tmp_path, monkeypatch, boundary, case
+):
+    from modstore_server.integrations.vibe_adapter import (
+        VibePathError,
+        ensure_within_workspace,
+    )
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant / "project"
+    workspace.mkdir(parents=True)
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant))
+    allowed = tenant if boundary == "tenant" else workspace
+    outside = allowed.with_name(allowed.name + "-private")
+    outside.mkdir()
+    source = outside / "source.json"
+    source.write_text("private")
+    if case == "loop":
+        source.unlink()
+        source.symlink_to(source)
+    supplied = allowed / ".." / outside.name / source.name if case == "parent" else source
+    if case == "prefix":
+        supplied = outside
+    accesses = []
+    lstat = os.lstat
+
+    def observe(path, *args, **kwargs):
+        accesses.append(Path(path))
+        return lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "lstat", observe)
+    error = VibePathError if boundary == "tenant" else portfolio.PortfolioError
+    with pytest.raises(error):
+        if boundary == "tenant":
+            ensure_within_workspace(supplied, user_id=7)
+        else:
+            _workspace_file(str(supplied), str(workspace), 7, exists=True)
+    assert not any(path == outside or outside in path.parents for path in accesses)
+
+
+def test_workspace_boundary_preserves_configured_and_in_project_symlinks(tmp_path, monkeypatch):
+    from modstore_server.integrations.vibe_adapter import ensure_within_workspace
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    project = tenant / "project"
+    project.mkdir(parents=True)
+    configured = tmp_path / "configured"
+    configured.symlink_to(tenant, target_is_directory=True)
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(configured))
+    source = project / "source.json"
+    source.write_text("authorized")
+    link = project / "linked.json"
+    link.symlink_to(source)
+    assert ensure_within_workspace(configured, user_id=7) == tenant
+    assert ensure_within_workspace(tenant, user_id=7) == tenant
+    assert ensure_within_workspace(configured / "project", user_id=7) == project
+    assert _workspace_file(str(link), str(project), 7, exists=True) == source
+    assert _workspace_file("outputs/result.csv", str(project), 7, exists=False) == (
+        project / "outputs/result.csv"
+    )
+
+
 @pytest.mark.parametrize("case", ["absolute", "parent", "prefix", "missing_output"])
 def test_file_path_escape_is_rejected_before_filesystem_resolution(tmp_path, monkeypatch, case):
     from modstore_server.strategic_execution_contract import _workspace_file
@@ -196,7 +262,7 @@ def test_input_symlink_changed_after_approval_is_rechecked_before_execution(data
 
 
 @pytest.mark.parametrize(
-    "path", ["../escape.csv", "/tmp/escape.csv", "other/result.csv", "docs/.env"]
+    "path", ["../escape.csv", "/tmp/escape.csv", "~/escape.csv", "other/result.csv", "docs/.env"]
 )
 def test_output_location_rejected_during_freeze(archived_python, path):
     from modstore_server.strategic_execution_contract import freeze_execution
