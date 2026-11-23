@@ -392,12 +392,30 @@ def _comparison_receipt(
     request_id: str, protocol: dict[str, Any], evidence: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Read the existing independent verifier's paired-check report, never re-score it."""
-    verification = evidence["snapshot"].get("verification") or {}
+    snapshot, effects = evidence["snapshot"], evidence["effects"]
+    verification = snapshot.get("verification") or {}
+    execution = snapshot.get("execution") or {}
+    failed = effects.get("failed_verification") or {}
+    failed_bound = (
+        evidence["status"] == snapshot.get("status") == "failed"
+        and execution.get("status") == "failed"
+        and failed.get("status") == "workflow_failed"
+        and failed.get("workflow_conclusion") == "failure"
+        and str(execution.get("run_id")) == failed.get("run_id")
+        and execution.get("target_sha") == failed.get("target_sha")
+        and execution.get("failed_verification_sha256") == failed.get("evidence_digest")
+        and bool(failed.get("evidence_digest"))
+    )
+    if failed_bound:
+        verification = failed
+    elif (
+        verification != effects.get("verification")
+        or verification.get("status") != "checks_passed"
+    ):
+        return None
     comparison = verification.get("comparison")
     if (
         not isinstance(comparison, dict)
-        or verification != evidence["effects"].get("verification")
-        or verification.get("status") != "checks_passed"
         or verification.get("request_id") != request_id
         or verification.get("protocol_digest") != protocol["protocol_digest"]
         or verification.get("run_id") != str(evidence["effects"].get("run_id"))
@@ -430,10 +448,12 @@ def _comparison_receipt(
         comparison.get("total") != len(rows)
         or comparison.get("baseline_passed") != baseline_passed
         or comparison.get("candidate_passed") != candidate_passed
-        or candidate_passed != len(rows)
+        or (not failed_bound and candidate_passed != len(rows))
     ):
         return None
     return {
+        "workflow_conclusion": "failure" if failed_bound else "success",
+        "archive_sha256": _archive_sha256(verification),
         "baseline_passed": baseline_passed,
         "candidate_passed": candidate_passed,
         "total": len(rows),
@@ -526,7 +546,9 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         "candidate_sha": candidate_sha,
         "candidate_identity": candidate_identity,
         "protocol_digest": protocol["protocol_digest"],
-        "verification_archive_sha256": _archive_sha256(verification),
+        "verification_archive_sha256": (
+            comparison["archive_sha256"] if comparison else _archive_sha256(verification)
+        ),
         "dispatch_approval_digest": (evidence["effects"].get("authorization") or {}).get(
             "digest", ""
         ),
@@ -536,7 +558,9 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         # Preserve the measured comparison separately from verified delivery
         # and actual impact. Historical reports may not include paired results.
         "comparison_status": (
-            "paired_exit_codes_verified" if comparison else "paired_measurement_not_established"
+            "paired_exit_codes_verified"
+            if comparison
+            else "paired_measurement_not_established"
         ),
         "comparison": comparison,
         "historical_rejection_ref": historical_rejection,
