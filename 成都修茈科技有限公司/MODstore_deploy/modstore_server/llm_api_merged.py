@@ -92,8 +92,10 @@ async def resolve_default_llm_route(
     )
     pref_m = model.strip() if explicit_query else str(prefs.get("model") or "").strip()
     explicit = bool(provider or model or (mode != "platform" and (pref_p or pref_m)))
+    contract_rejection: HTTPException | None = None
 
     async def select(p: str, m: str, source: str, *, platform_only: bool = False):
+        nonlocal contract_rejection
         block = None
         key, base, key_source = credentials.get(p, (None, None, "none"))
         if platform_only:
@@ -148,9 +150,11 @@ async def resolve_default_llm_route(
                             candidate,
                             model_context_capabilities(p, candidate, rows.get(candidate)),
                         )
-                    except HTTPException:
+                    except HTTPException as exc:
                         # A platform default may try the next advertised model;
                         # a user-selected explicit model still gets the exact 409.
+                        if contract_rejection is None:
+                            contract_rejection = exc
                         continue
                     m = candidate
                     break
@@ -214,6 +218,8 @@ async def resolve_default_llm_route(
             selected = await select(pref_p, "", "operation_preference")
         if selected:
             return selected
+        if contract_rejection is not None:
+            raise contract_rejection
         invalid("账户所选供应商没有可用聊天模型或密钥，请重新选择；未切换到收费平台")
     byok = [p for p, (_, _, source) in credentials.items() if source == "user_override"]
     if mode != "platform" and byok:
@@ -221,6 +227,8 @@ async def resolve_default_llm_route(
             selected = await select(p, "", "byok")
             if selected:
                 return selected
+        if contract_rejection is not None:
+            raise contract_rejection
         invalid(
             "BYOK 未提供可用聊天模型，请选择其他 BYOK 模型或明确恢复跟随平台", "NO_BYOK_CHAT_MODEL"
         )
@@ -243,6 +251,8 @@ async def resolve_default_llm_route(
         selected = await select(p, "", "fallback", platform_only=True)
         if selected:
             return selected
+    if contract_rejection is not None:
+        raise contract_rejection
     if platform_only:
         invalid("没有可用的平台聊天模型，请联系管理员配置平台模型", "NO_PLATFORM_CHAT_MODEL")
     invalid("没有可用的聊天模型，请联系管理员配置聊天模型或配置 BYOK", "NO_CHAT_MODEL")

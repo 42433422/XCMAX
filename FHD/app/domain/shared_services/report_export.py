@@ -21,6 +21,11 @@ def export_report_to_excel(
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             frame.to_excel(writer, index=False, sheet_name=report_type)
+            # Business names and headers are data, including strings beginning with '='.
+            for row in writer.sheets[report_type]:
+                for cell in row:
+                    if cell.data_type == "f":
+                        cell.data_type = "s"
         output.seek(0)
         return {
             "success": True,

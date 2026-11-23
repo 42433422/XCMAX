@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
 from app.application.agent_orchestrator.verification_readback import _report
 from app.db.models import (
+    Customer,
     InventoryTransaction,
     JournalEntry,
     PurchaseInbound,
@@ -142,30 +143,94 @@ def _matching_claim(data: dict, actual: dict) -> bool:
     return True
 
 
-def _journal(db, tenant, entry_id, order_id, kind, amount):
-    row = db.scalar(
-        select(JournalEntry).where(JournalEntry.tenant_id == tenant, JournalEntry.id == entry_id)
-    )
-    if (
-        row is None
-        or row.reference_id != order_id
-        or row.reference_type != kind
-        or row.status != "posted"
-        or row.reversed_at is not None
-        or not row.lines
-        or any(line.tenant_id != tenant for line in row.lines)
-        or _decimal(row.debit_total) != amount
-        or _decimal(row.credit_total) != amount
-        or not row.is_balanced()
-    ):
-        return None
+def _journal_lines_match(row, tenant, customer_id, kind, amount) -> bool:
     expected = {
         "sale": {("1122", amount, Decimal(0)), ("6001", Decimal(0), amount)},
         "payment": {("1001", amount, Decimal(0)), ("1122", Decimal(0), amount)},
         "credit-note": {("6001", amount, Decimal(0)), ("1122", Decimal(0), amount)},
+        "refund": {("1122", amount, Decimal(0)), ("1001", Decimal(0), amount)},
     }[kind]
-    lines = {(line.account_code, _decimal(line.debit), _decimal(line.credit)) for line in row.lines}
-    return row if len(row.lines) == 2 and lines == expected else None
+    return (
+        len(row.lines) == 2
+        and _decimal(row.debit_total) == amount
+        and _decimal(row.credit_total) == amount
+        and all(
+            line.tenant_id == tenant
+            and line.partner_id == (customer_id if line.account_code == "1122" else None)
+            for line in row.lines
+        )
+        and {(line.account_code, _decimal(line.debit), _decimal(line.credit)) for line in row.lines}
+        == expected
+    )
+
+
+def _invoice_journals_match(db, tenant, order, current) -> bool:
+    """Reconcile the active invoice and every original posted credit-note pair."""
+    posted = list(
+        db.scalars(
+            select(JournalEntry).where(
+                JournalEntry.tenant_id == tenant,
+                JournalEntry.reference_id == order.id,
+                JournalEntry.reference_type.in_({"sale", "credit-note"}),
+                JournalEntry.status == "posted",
+            )
+        )
+    )
+    invoices = {row.id: row for row in posted if row.reference_type == "sale"}
+    credits = {row.reversed_of_id: row for row in posted if row.reference_type == "credit-note"}
+    if len(invoices) + len(credits) != len(posted):
+        return False
+    active = set()
+    for original in invoices.values():
+        if original.is_credit_note or original.reversed_of_id is not None:
+            return False
+        if original.reversed_at is None:
+            active.add(original.id)
+            continue
+        credit = credits.pop(original.id, None)
+        if (
+            credit is None
+            or credit.is_credit_note != 1
+            or credit.reversed_at is not None
+            or credit.credit_note_of_id not in {None, original.id}
+            or not _journal_lines_match(
+                original, tenant, order.customer_id, "sale", _decimal(original.debit_total)
+            )
+            or not _journal_lines_match(
+                credit, tenant, order.customer_id, "credit-note", _decimal(original.debit_total)
+            )
+        ):
+            return False
+    expected = {current.id} if current.reference_type == "sale" else set()
+    return not credits and active == expected
+
+
+def _journal(db, tenant, entry_id, order_id, kind, amount, *, reference_id=None):
+    order = _order(db, tenant, order_id, SalesOrder)
+    row = db.scalar(
+        select(JournalEntry).where(JournalEntry.tenant_id == tenant, JournalEntry.id == entry_id)
+    )
+    if (
+        order is None
+        or order.customer_id is None
+        or db.scalar(
+            select(Customer.id).where(
+                Customer.tenant_id == tenant, Customer.id == order.customer_id
+            )
+        )
+        is None
+        or row is None
+        or row.reference_id != (order_id if reference_id is None else reference_id)
+        or row.reference_type != kind
+        or row.status != "posted"
+        or row.reversed_at is not None
+        or (kind != "credit-note" and (row.reversed_of_id is not None or row.is_credit_note))
+        or not _journal_lines_match(row, tenant, order.customer_id, kind, amount)
+    ):
+        return None
+    if kind in {"sale", "credit-note"} and not _invoice_journals_match(db, tenant, order, row):
+        return None
+    return row
 
 
 def _delivery(db, tenant, order, step, data, before):
@@ -239,6 +304,8 @@ def _delivery(db, tenant, order, step, data, before):
 
 
 def _accounting(db, tenant, order, step, data, before):
+    from app.application.sales.payment_verification import verified_sales_payment_total
+
     action = step.action
     row_id = data.get("id")
     if type(row_id) is not int or row_id <= 0:
@@ -279,20 +346,9 @@ def _accounting(db, tenant, order, step, data, before):
             )
         ):
             return None
-        paid = db.scalar(
-            select(func.sum(ReceivableAllocation.allocated_amount)).where(
-                ReceivableAllocation.tenant_id == tenant,
-                ReceivableAllocation.sales_order_id == order.id,
-                ReceivableAllocation.status != "refunded",
-            )
-        ) or Decimal(0)
-        if _decimal(order.paid_amount) != _decimal(paid):
+        if verified_sales_payment_total(db, tenant, order) is None:
             return None
         entry = _journal(db, tenant, allocation.journal_entry_id, order.id, "payment", amount)
-        from app.application.payment_service import _compute_status
-
-        if order.payment_state != _compute_status(_decimal(paid), _decimal(order.total_amount)):
-            return None
         if entry and not any(
             line.id == allocation.line_id and line.account_code == "1122" for line in entry.lines
         ):
@@ -319,27 +375,12 @@ def _accounting(db, tenant, order, step, data, before):
     if action == "invoice":
         if order.invoice_status != "invoiced" or entry.is_credit_note or entry.reversed_of_id:
             return None
-    else:
-        original = db.scalar(
-            select(JournalEntry).where(
-                JournalEntry.tenant_id == tenant,
-                JournalEntry.id == entry.reversed_of_id,
-                JournalEntry.reference_id == order.id,
-                JournalEntry.reference_type == "sale",
-            )
-        )
-        if (
-            order.invoice_status != "credit_note"
-            or entry.is_credit_note != 1
-            or entry.id <= before["journal_cursor"]
-            or original is None
-            or original.reversed_at is None
-            or _decimal(original.debit_total) != amount
-            or _decimal(original.credit_total) != amount
-            or not original.is_balanced()
-            or any(line.tenant_id != tenant for line in original.lines)
-        ):
-            return None
+    elif (
+        order.invoice_status != "credit_note"
+        or entry.is_credit_note != 1
+        or entry.id <= before["journal_cursor"]
+    ):
+        return None
     return {
         "journal_entry_id": entry.id,
         "reversed_of_id": entry.reversed_of_id,

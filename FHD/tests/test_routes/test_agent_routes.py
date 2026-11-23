@@ -1655,22 +1655,49 @@ def test_clarification_answer_is_bound_validated_and_does_not_approve_write():
     assert repeated.status_code == 400
 
 
-def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, monkeypatch):
+def test_exported_spreadsheet_download_checks_owner_and_file_content(
+    tmp_path, monkeypatch, trusted_actor
+):
     import json
     from io import BytesIO
 
     from openpyxl import load_workbook
 
     from app.application.agent_orchestrator.artifact_files import artifact_path
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
     from app.application.agent_orchestrator.run_models import artifact_from_dict
     from app.domain.shared_services.tools_workflow_erp import _registered_router_reports
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    run = AgentRun(user_id="u1", message="导出销售报表", status="completed")
+    actor = trusted_actor(role="admin")
+    other = trusted_actor(role="user", tenant_id=actor.tenant_id)
+    params = {"report_type": "sales", "data": [{"product_name": "产品甲", "amount": 125.5}]}
+    step = AgentStep(node_id="export", tool_id="reports", action="export", params=params)
+    run = AgentRun(
+        user_id=str(actor.user_id),
+        message="导出销售报表",
+        status="completed",
+        steps=[step],
+        metadata={"runtime_context": dict(actor.context)},
+    )
+    call = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        tool_id="reports",
+        action="export",
+        params=params,
+    )
     exported = _registered_router_reports(
         "export",
-        {"report_type": "sales", "data": [{"product_name": "产品甲", "amount": 125.5}]},
-        {"run_id": run.run_id},
+        params,
+        {
+            **actor.context,
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "call_id": call.call_id,
+            "input_sha256": canonical_hash(params),
+        },
         "pro_default",
         run.message,
     )
@@ -1679,14 +1706,19 @@ def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, m
     run.artifacts = [artifact_from_dict(item) for item in exported["artifacts"]]
     get_agent_run_repository().save(run)
     artifact = run.artifacts[0]
-    response = _client().get(artifact.uri)
+    assert artifact.metadata["owner_user_id"] == str(actor.user_id)
+    assert artifact.metadata["tenant_id"] == str(actor.tenant_id)
+    response = _client(actor=actor).get(artifact.uri)
     assert response.status_code == 200
     workbook = load_workbook(BytesIO(response.content), read_only=True, data_only=True)
-    assert list(workbook.active.values) == [("product_name", "amount"), ("产品甲", 125.5)]
-    workbook.close()
-    assert _client("someone-else").get(artifact.uri).status_code in {403, 404}
+    try:
+        assert workbook.sheetnames == ["sales"]
+        assert list(workbook.active.values) == [("product_name", "amount"), ("产品甲", 125.5)]
+    finally:
+        workbook.close()
+    assert _client(actor=other).get(artifact.uri).status_code in {403, 404}
     artifact_path(run.run_id, artifact.artifact_id).write_bytes(b"corrupt")
-    assert _client().get(artifact.uri).status_code == 410
+    assert _client(actor=actor).get(artifact.uri).status_code == 410
 
 
 @pytest.mark.parametrize("registered_template", [False, True])
