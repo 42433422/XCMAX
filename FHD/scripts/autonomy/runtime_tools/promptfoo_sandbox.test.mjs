@@ -216,6 +216,6 @@ def get_assert(output, context):
   assert.ok(received.every(row => row.path === '/v1/chat/completions'
     && row.data.model === model && row.authorization === 'Bearer ' + key));
   const rows = JSON.parse(readFileSync(output, 'utf8')).results.results;
-  assert.equal(rows.filter(row => row.success).length, 1);
+  assert.equal(rows.filter(row => row.success).length, 1, JSON.stringify(rows, null, 2));
   assert.equal(rows.filter(row => !row.success).length, 1);
 });
