@@ -74,6 +74,8 @@ A cognitive review is historical ledger consistency, not a future prediction,
 causal proof, model ability score or permission to change an approved goal.
 An experience candidate awaits review; it is not an adopted memory or causal proof.
 Human-reviewed comparisons are historical observations, not capability proof or authority.
+Frozen experiment estimates apply only to their original release, metric and cohort.
+A hold or missing experiment cannot demonstrate improvement; no causal generalization.
 Honor recorded stop decisions; suggestions never replace an existing approval.
 World forecasts concern the next recorded report only; they are not observations
 of the future, estimates of causal business benefit, or grounds for permission.

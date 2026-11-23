@@ -175,7 +175,6 @@ def test_original_owner_review_and_revocation_are_idempotent(
 ):
     import json
     from sqlalchemy import select
-    from modstore_server import strategic_portfolio as portfolio
     from modstore_server import xiaoc_life_reconciliation as reconciliation
     from modstore_server import xiaoc_life_store as life
     from modstore_server.db.strategic import StrategicDecision
