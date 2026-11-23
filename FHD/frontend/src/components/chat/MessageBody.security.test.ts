@@ -7,7 +7,10 @@ enableAutoUnmount(afterEach)
 describe('MessageBody with the real Markdown renderer', () => {
   it('displays original JSON code and notes without creating HTML elements', () => {
     const code = 'if a < b:\n    print("<script>literal()</script> &lt;entity&gt; A&B")'
-    const note = '客户备注 <img src=x onerror="literal()"> &lt;原实体&gt; A&B'
+    const fixture = new DOMParser().parseFromString('<img src=x>', 'text/html')
+    fixture.querySelector('img')?.setAttribute('onerror', 'literal()')
+    const note = `客户备注 ${fixture.body.innerHTML} &lt;原实体&gt; A&B`
+    expect(note).toContain('onerror="literal()"')
     const content = `\`\`\`text\n${code}\n\`\`\`\n\n${note}`
     const wrapper = mount(MessageBody, { props: { content } })
     expect(wrapper.get('.md-code__body').element.textContent).toBe(code)
