@@ -240,6 +240,7 @@ def create_portfolio_proposal(
     limits: dict[str, Any],
     opportunities: list[dict[str, Any]],
     idempotency_key: str,
+    decision_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create a reviewable financial proposal; never approve or spend its budget."""
     if (
@@ -262,7 +263,6 @@ def create_portfolio_proposal(
         freeze_execution(owner_user_id, Opportunity.model_validate(row).model_dump())
         for row in opportunities
     ]
-    allocation = optimize_portfolio(rows, cap.model_dump())
     proposal = {
         "schema": SCHEMA,
         "owner_user_id": owner_user_id,
@@ -271,6 +271,48 @@ def create_portfolio_proposal(
         "limits": cap.model_dump(),
         "opportunities": rows,
     }
+    record_key = f"portfolio:{owner_user_id}:{idempotency_key[:160]}"
+    request_sha = None
+    if decision_options is not None:
+        from modstore_server.business_decision_review import compare_options, proposal_content
+        from modstore_server.strategic_layer.decision_ledger import _model_to_record
+
+        if len(rows) != 1 or not isinstance(decision_options.get("alternatives"), list):
+            raise PortfolioError("decision comparison requires one primary and review alternatives")
+        request_sha = digest([proposal, decision_options])
+        stable_id = "dec-" + hashlib.sha256(record_key.encode()).hexdigest()[:16]
+        with get_session_factory()() as session:
+            previous = session.scalar(
+                select(StrategicDecision).where(StrategicDecision.decision_id == stable_id)
+            )
+            if previous is not None:
+                stored = json.loads(previous.decision_payload_json or "{}")
+                if (
+                    stored.get("_idempotency_key") != record_key
+                    or stored.get("decision_review", {}).get("request_sha256") != request_sha
+                    or digest(proposal_content(stored)) != stored.get("proposal_sha256")
+                ):
+                    raise PortfolioError("idempotency key already belongs to a different decision")
+                return {
+                    "schema": SCHEMA,
+                    "decision": _model_to_record(previous).to_dict(),
+                    "plan": json.loads(previous.execution_plan_json or "{}"),
+                    "decision_review": stored["decision_review"],
+                }
+        comparison, selected = compare_options(
+            owner=owner_user_id,
+            primary=rows[0],
+            limits=cap.model_dump(),
+            alternatives=decision_options["alternatives"],
+            context_sha256=decision_options["context_sha256"],
+            evidence_refs=decision_options["evidence_refs"],
+            request_sha256=request_sha,
+        )
+        if not selected:
+            return {"schema": SCHEMA, "decision": None, "plan": {}, "decision_review": comparison}
+        rows = selected
+        proposal.update(opportunities=rows, decision_review=comparison)
+    allocation = optimize_portfolio(rows, cap.model_dump())
     proposal_hash = digest(proposal)
     record = StrategicDecisionLedger(evaluator=AutonomyEvaluator()).propose(
         title=f"战略资源组合：{goal[:180]}",
@@ -284,8 +326,24 @@ def create_portfolio_proposal(
         scope="strategy_portfolio",
         scope_ref=f"user:{owner_user_id}:{period[:64]}",
         execution_plan=allocation,
-        idempotency_key=f"portfolio:{owner_user_id}:{idempotency_key[:160]}",
+        idempotency_key=record_key,
     )
+    if request_sha is not None:
+        # Concurrent same-request proposals keep the first frozen comparison.
+        from modstore_server.business_decision_review import proposal_content
+
+        stored = record.decision_payload
+        if (
+            stored.get("decision_review", {}).get("request_sha256") != request_sha
+            or digest(proposal_content(stored)) != stored.get("proposal_sha256")
+        ):
+            raise PortfolioError("idempotency key already belongs to a different decision")
+        return {
+            "schema": SCHEMA,
+            "decision": record.to_dict(),
+            "plan": record.execution_plan,
+            "decision_review": stored["decision_review"],
+        }
     if record.decision_payload.get("proposal_sha256") != proposal_hash:
         raise PortfolioError("idempotency key already belongs to a different proposal")
     return {"schema": SCHEMA, "decision": record.to_dict(), "plan": allocation}
@@ -418,10 +476,9 @@ def require_authorization(
         and authorization.get("proposal_sha256") == proposal["proposal_sha256"]
     ):
         raise PortfolioError("portfolio requires authenticated approval bound to this proposal")
-    canonical = {
-        key: proposal[key]
-        for key in ("schema", "owner_user_id", "goal", "period", "limits", "opportunities")
-    }
+    from modstore_server.business_decision_review import proposal_content
+
+    canonical = proposal_content(proposal)
     if (
         digest(canonical) != proposal.get("proposal_sha256")
         or state.get("proposal_sha256", proposal["proposal_sha256"]) != proposal["proposal_sha256"]
@@ -496,6 +553,7 @@ def portfolio_status(decision_id: str, *, owner_user_id: int | None = None) -> d
             "opportunities": proposal["opportunities"],
             "proposal_sha256": proposal["proposal_sha256"],
             **state,
+            **({"decision_review": proposal["decision_review"]} if "decision_review" in proposal else {}),
         }
 
 

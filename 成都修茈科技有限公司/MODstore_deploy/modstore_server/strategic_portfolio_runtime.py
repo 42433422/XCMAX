@@ -804,6 +804,12 @@ def review_portfolio(decision_id: str, *, owner_user_id: int | None = None) -> d
             ),
             "stop_reason": state.get("stop_reason", ""),
         }
+        if proposal.get("decision_review"):
+            from modstore_server.business_decision_review import evaluate_review
+
+            evaluation = evaluate_review(proposal, state, datetime.now(UTC))
+            if evaluation is not None:
+                report["decision_evaluation"] = evaluation
         state["reviews"] = [*state.get("reviews", [])[-89:], report]
         return report
 
