@@ -95,7 +95,9 @@ async def test_multiple_handler_failures_are_one_terminal_event(isolated_bus, mo
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("remote", [False, True])
-async def test_rejection_dedup_eviction_and_unhandled_are_distinct(isolated_bus, monkeypatch, remote):
+async def test_rejection_dedup_eviction_and_unhandled_are_distinct(
+    isolated_bus, monkeypatch, remote
+):
     bus = isolated_bus(max_queue_size=1)
     submit = bus.ingest_remote_event if remote else bus.publish
     done = _completion(bus, monkeypatch)
