@@ -630,3 +630,25 @@ def test_usage_scan_excludes_settled_history_and_rotates_unresolved_batches(
     if not historical_reconciled:
         assert reconcile.reconcile_usage()["resolved"] == 1
         assert store.read_state()["budget"]["reserved_tokens"] == 990
+
+ 
+def test_functional_identity_receipt_uses_original_sql_ledger(database, monkeypatch):
+    from modstore_server import xiaoc_self_model as self_model
+
+    monkeypatch.setenv("MODSTORE_GIT_SHA", "a" * 40)
+    monkeypatch.setenv("MODSTORE_EXPECTED_GIT_SHA", "a" * 40)
+    monkeypatch.setenv("MODSTORE_RELEASE_ARTIFACT_SHA256", "b" * 64)
+    configure()
+    receipt = self_model.record_identity_check()
+    assert receipt["status"] == "pass"
+    state = store.read_state()
+    assert self_model.project(state)["identity_readback"]["evidence_ref"] == receipt["evidence_ref"]
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=80)
+    assert claim["execution_scope"] == self_model.execution_scope(state)
+    finished = finish(claim)
+    assert self_model.project(finished)["performance"]["current_scope_count"] == 1
+    with database() as session:
+        principal = session.get(User, 7)
+        principal.account_state = "disabled"
+        session.commit()
+    assert self_model.project(store.read_state())["identity_readback"]["status"] == "unverified"
