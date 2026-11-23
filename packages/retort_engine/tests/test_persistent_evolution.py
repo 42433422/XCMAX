@@ -13,7 +13,7 @@ from uuid import uuid4
 import pytest
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
-from retort_engine.evolution_contract import digest, freeze_request, verify_bundle
+from retort_engine.evolution_contract import digest, freeze_request, inspect_bundle, verify_bundle
 from retort_engine.evolution_evidence import run_comparison
 from retort_engine.evolution_optimizer import CommandTrial, optimize_measured
 from retort_engine.evolution_workflow import build_evolution_graph
@@ -327,6 +327,13 @@ def test_paired_checks_pass_is_not_an_improvement_score(comparison):
         target_sha=target,
         isolation="local_test",
     )
+    failed = inspect_bundle(
+        protocol, bundle, output, run_id="43", target_sha=target, isolation="local_test"
+    )
+    assert failed["status"] == "checks_failed"
+    assert failed["comparison"]["baseline_passed"] == 1
+    assert failed["comparison"]["candidate_passed"] == 0
+    assert failed["domain_status"] == "UNRATED"
     with pytest.raises(ValueError, match="independent check failed"):
         verify_bundle(
             protocol, bundle, output, run_id="43", target_sha=target, isolation="local_test"
