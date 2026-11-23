@@ -2433,7 +2433,7 @@ class TestTWRShipmentRecords:
     """Cover ``_registered_router_shipment_records``."""
 
     def test_shipment_records_list(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.get_shipment_records.return_value = []
             mock_get.return_value = svc
@@ -2443,7 +2443,7 @@ class TestTWRShipmentRecords:
             assert result["success"] is True
 
     def test_shipment_records_list_no_unit(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.get_shipment_records.return_value = []
             mock_get.return_value = svc
@@ -2451,7 +2451,7 @@ class TestTWRShipmentRecords:
             svc.get_shipment_records.assert_called_once_with(None)
 
     def test_shipment_records_update(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.update_shipment_record.return_value = {"success": True}
             mock_get.return_value = svc
@@ -2461,7 +2461,7 @@ class TestTWRShipmentRecords:
             assert result["success"] is True
 
     def test_shipment_records_delete(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.delete_shipment_record.return_value = {"success": True}
             mock_get.return_value = svc
@@ -2471,7 +2471,7 @@ class TestTWRShipmentRecords:
             assert result["success"] is True
 
     def test_shipment_records_export(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.export_shipment_records.return_value = {"success": True}
             mock_get.return_value = svc
