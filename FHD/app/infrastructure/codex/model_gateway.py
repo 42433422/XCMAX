@@ -231,12 +231,29 @@ def _finish(
     usage: dict[str, int] | None,
     usage_key: str,
     state: str = "completed",
+    market_route: ModelRoute | None = None,
+    platform_receipt: Any = None,
 ) -> None:
     from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
     from app.application.agent_orchestrator.run_models import LLMCall
     from app.infrastructure.billing.model_reservation import settle_model_usage
 
-    settled = settle_model_usage(usage_key, usage) if usage is not None else None
+    settled: dict[str, Any] | None
+    if market_route is not None and usage is not None:
+        from app.infrastructure.billing.model_reservation import record_platform_model_usage
+
+        binding = store.get(run_id)
+        settled = record_platform_model_usage(
+            usage_key=usage_key,
+            run_id=run_id,
+            user_id=binding.run.user_id,
+            request_id=request_id,
+            route=market_route,
+            usage=usage,
+            receipt=platform_receipt,
+        )
+    else:
+        settled = settle_model_usage(usage_key, usage) if usage is not None else None
 
     def finish(run: Any, metadata: dict[str, Any]) -> None:
         call = metadata["model_requests"][request_id]
@@ -323,7 +340,7 @@ async def forward_responses(request: Request):
         body = _prepare_body(json.loads(raw), route)
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid Responses request") from exc
-    upstream_key = route.token()
+    route.token()  # Validate the account credential without persisting it.
     request_group = "request_" + uuid.uuid4().hex
     request_id = "model_" + uuid.uuid4().hex
     usage_key = f"codex:{binding.run_id}:{request_id}"
@@ -336,6 +353,15 @@ async def forward_responses(request: Request):
     finished = False
     streaming_handoff = False
     slot_failure: BaseException | None = None
+    platform_receipt: Any = None
+
+    def finish_usage(*args: Any, **kwargs: Any) -> None:
+        _finish(
+            *args,
+            **kwargs,
+            market_route=route if route.gateway_kind == "market" else None,
+            platform_receipt=platform_receipt,
+        )
 
     def close_slot(error: BaseException | None = None) -> None:
         stack.__exit__(
@@ -346,7 +372,7 @@ async def forward_responses(request: Request):
 
     def mark_unknown() -> None:
         if claimed:
-            _finish(store, binding.run_id, request_id, usage=None, usage_key=usage_key)
+            finish_usage(store, binding.run_id, request_id, usage=None, usage_key=usage_key)
 
     try:
         with model_rate_limit_scope(binding.context):
@@ -383,10 +409,15 @@ async def forward_responses(request: Request):
             await anyio.to_thread.run_sync(lambda: store.update(binding.run_id, record))
 
         async def observe_identity(response: Any) -> None:
+            nonlocal platform_receipt
             if not isinstance(response, dict):
                 raise ModelGatewayContractError(
                     "model_identity_missing", "Gateway response identity is missing"
                 )
+            if route.gateway_kind == "market" and response.get("status") in _TERMINAL_STATES:
+                platform_receipt = response.get("xcagi")
+                if not isinstance(platform_receipt, dict):
+                    raise ModelReservationError("Platform terminal settlement receipt is missing")
             raw = response.get("model")
             observed = (
                 raw if isinstance(raw, str) and 0 < len(raw) <= 256 and raw.isprintable() else None
@@ -409,7 +440,7 @@ async def forward_responses(request: Request):
                 usage = response_usage(response)
                 if response.get("status") in _TERMINAL_STATES and usage is not None:
                     await anyio.to_thread.run_sync(
-                        lambda: _finish(
+                        lambda: finish_usage(
                             store,
                             binding.run_id,
                             request_id,
@@ -428,6 +459,7 @@ async def forward_responses(request: Request):
             request_id = "model_" + uuid.uuid4().hex
             usage_key = f"codex:{binding.run_id}:{request_id}"
             claimed = reserved = network_started = finished = False
+            platform_receipt = None
             binding = await anyio.to_thread.run_sync(
                 lambda: store.authenticate(token, audience="model")
             )
@@ -438,29 +470,35 @@ async def forward_responses(request: Request):
                 )
             )
             claimed = True
-            await anyio.to_thread.run_sync(
-                lambda: reserve_model_usage(
-                    usage_key=usage_key,
-                    run_id=binding.run_id,
-                    user_id=binding.run.user_id,
-                    provider_id=route.provider_id,
-                    model=route.model,
-                    token_ceiling=route.context_window,
+            if route.gateway_kind != "market":
+                await anyio.to_thread.run_sync(
+                    lambda: reserve_model_usage(
+                        usage_key=usage_key,
+                        run_id=binding.run_id,
+                        user_id=binding.run.user_id,
+                        provider_id=route.provider_id,
+                        model=route.model,
+                        token_ceiling=route.context_window,
+                    )
                 )
-            )
+            # The platform reserves and settles its wallet. _claim still checks
+            # the original task's accumulated budget and model-call ceiling.
             reserved = True
             await anyio.to_thread.run_sync(lambda: store.authenticate(token, audience="model"))
-            client_factory = getattr(
-                request.app.state, "codex_http_client_factory", httpx.AsyncClient
-            )
-            client = client_factory(
-                timeout=httpx.Timeout(min(60.0, remaining), connect=min(15.0, remaining)),
-                trust_env=False,
-                follow_redirects=False,
-            )
+            client_factory = getattr(request.app.state, "codex_http_client_factory", None)
+            client_options: dict[str, Any] = {
+                "timeout": httpx.Timeout(min(60.0, remaining), connect=min(15.0, remaining)),
+                "trust_env": False,
+                "follow_redirects": False,
+            }
+            if client_factory is None:
+                from app.infrastructure.codex.qualification import IndependentModelTransport
+
+                client_options["transport"] = IndependentModelTransport(route)
+                client_factory = httpx.AsyncClient
+            client = client_factory(**client_options)
             headers = {"Accept": "text/event-stream" if body.get("stream") else "application/json"}
-            if upstream_key:
-                headers["Authorization"] = f"Bearer {upstream_key}"
+            headers.update(route.headers(request_id))
             outbound = client.build_request(
                 "POST",
                 route.base_url + "/responses",
@@ -476,7 +514,7 @@ async def forward_responses(request: Request):
                 if not is_safe_transport_retry(exc):
                     raise
                 await anyio.to_thread.run_sync(
-                    lambda: _finish(
+                    lambda: finish_usage(
                         store,
                         binding.run_id,
                         request_id,
@@ -497,10 +535,15 @@ async def forward_responses(request: Request):
                     ) from exc
                 await anyio.sleep(delay)
                 continue
-            if route.gateway_kind == "litellm":
+            if route.gateway_kind in {"litellm", "market"} and upstream.status_code < 300:
+                expected_headers = (
+                    {"x-xcmax-upstream-attempts": "1", "x-xcmax-upstream-fallbacks": "0"}
+                    if route.gateway_kind == "market"
+                    else {"x-litellm-attempted-retries": "0", "x-litellm-attempted-fallbacks": "0"}
+                )
                 verified = all(
-                    upstream.headers.get_list(name) == ["0"]
-                    for name in ("x-litellm-attempted-retries", "x-litellm-attempted-fallbacks")
+                    upstream.headers.get_list(name) == [value]
+                    for name, value in expected_headers.items()
                 )
                 await anyio.to_thread.run_sync(
                     lambda: store.update(
@@ -523,9 +566,13 @@ async def forward_responses(request: Request):
             await record_failure(slot_failure)
             # Explicit rejection has no generated completion. A 5xx/408 can
             # hide a started model request and remains unresolved, without replay.
-            definite = 400 <= upstream.status_code < 500 and upstream.status_code != 408
+            definite = (
+                400 <= upstream.status_code < 500
+                and upstream.status_code != 408
+                and not (route.gateway_kind == "market" and upstream.status_code == 409)
+            )
             await anyio.to_thread.run_sync(
-                lambda: _finish(
+                lambda: finish_usage(
                     store,
                     binding.run_id,
                     request_id,
@@ -570,7 +617,7 @@ async def forward_responses(request: Request):
                 )
             usage = response_usage(response)
             await anyio.to_thread.run_sync(
-                lambda: _finish(
+                lambda: finish_usage(
                     store,
                     binding.run_id,
                     request_id,
@@ -638,7 +685,7 @@ async def forward_responses(request: Request):
                                 )
                             usage = response_usage(response)
                             await anyio.to_thread.run_sync(
-                                lambda: _finish(
+                                lambda: finish_usage(
                                     store,
                                     binding.run_id,
                                     request_id,
@@ -762,7 +809,7 @@ async def forward_responses(request: Request):
             if claimed and not finished:
                 if reserved and not network_started:
                     await anyio.to_thread.run_sync(
-                        lambda: _finish(
+                        lambda: finish_usage(
                             store,
                             binding.run_id,
                             request_id,

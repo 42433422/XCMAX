@@ -221,34 +221,15 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 ## 固定本地 Agent 执行器
 
-`XCAGI_AGENT_RUNTIME_CONFIG` 指向部署方维护的 JSON 文件。请求不能选择供应商、凭据或引擎。Codex 路径使用独立私有目录、短期模型/工具令牌和本地 MCP/Responses 代理；不继承个人 Codex 配置、ChatGPT 登录或额外插件。仅开启受控业务工具，禁止 shell、文件修改、托管搜索及默认 OpenAI 回落。管理员强制策略仍然生效。该路径不改变已有开发超级员工的 Codex CLI 调度。
+聊天和员工从当前登录账号的既有模型设置读取运行路由，无需用户创建运行时 JSON 或资格文件。宿主先核验登录身份和原任务归属，再通过既有 `resolve-chat-default?runtime=codex` 取得同一模型的容量、实际上游身份及短期路由快照。账号令牌与路由令牌只保留在内存；私有目录与资格证据按平台、账号和精确路由隔离。恢复任务刷新原路由凭据，模型、容量或配置版本发生变化时保留原任务并提示恢复，不能改用新默认模型。
 
-配置示例（路径和容量必须替换成实际部署值，示例不构成验收）：
+首次使用自动运行真实资格验收：固定 CLI/App Server 经本机 Responses/MCP 与所选模型交互，在隔离 SQLite 探针中只写一次、独立读回，再强制压缩、关闭进程并恢复同一 thread。验收成功后按精确路由复用；失败或进程中断留下尝试记录，避免每次聊天重复消费。修复配置后可在现有模型设置发起运行验收，或使用 `xcagi-brain --timeout 600 runtime-check --retry`。缺登录、缺容量、缺上游身份或实际协议不兼容时返回具体配置错误，不能生成虚假 PASS。
 
-```json
-{
-  "engine": "codex",
-  "surfaces": ["chat", "employee"],
-  "runtime_root": "/var/lib/xcmax/agent-runtime",
-  "qualification_file": "/etc/xcmax/runtime-qualification.json",
-  "turn_timeout_seconds": 180,
-  "route": {
-    "base_url": "https://your-enterprise-gateway.example/v1",
-    "model": "your-verified-model",
-    "response_model": "your-verified-model",
-    "gateway_kind": "responses",
-    "failover_policy": "disabled",
-    "provider_id": "enterprise-gateway",
-    "upstream_vendor": "your-non-openai-provider",
-    "api_key_env": "XCMAX_RUNTIME_GATEWAY_KEY",
-    "context_window": 65536,
-    "max_output_tokens": 16384,
-    "max_model_calls": 24
-  }
-}
-```
+平台 `/v1/responses` 复用 [LiteLLM](https://github.com/BerriAI/litellm) `1.109.3`（MIT）的 Responses 适配与 [OpenAI Python SDK](https://github.com/openai/openai-python) `3.57.0`（Apache-2.0）、现有 LiteLLM 网关、加密路由快照及请求/钱包账本。协议与事件由成熟 SDK 处理；本地只增加账号隔离、原任务预算、独立验收及一次结算的控制。配置锁复用已锁定的 [filelock](https://github.com/tox-dev/filelock) `4.2.4`（Unlicense），出站连接复用 [HTTPX](https://github.com/encode/httpx) `0.28.1`（BSD-3-Clause）。平台仅在真实上游终态、精确用量和钱包结算均确认后释放终态；本机校验回执并记审计账，不再二次扣费。上游或结算状态未知时保留原请求键，禁止重新付费执行。
 
-仅支持网关真实提供的 Responses 多轮工具协议，不自行将 Chat Completions 拼装成 Responses。企业现有网关必须实际暴露该协议；平台聊天接口健康不代表已兼容。独立配置拒绝 OpenAI/ChatGPT/Azure OpenAI 地址和 OpenAI 上游声明，禁止重定向和通过 `previous_response_id` 借用其他任务的上游会话。任意代理域名本身不能证明上游独立，必须核对网关路由记录和网络隔离证据。`response_model` 是已验收的单个实际响应 ID，省略时等于请求 `model`；别名解析到快照时须由宿主显式绑定，不能由响应自行扩充允许列表。`gateway_kind=responses` 只发送标准 Responses 字段；明确验收为 `litellm` 时才由宿主下发 `num_retries=0`、`disable_fallbacks=true`，并检查原始 HTTP 两项 attempted-retries/fallbacks 头唯一且均为零。缺头、重复或非零保留未知用量，不结算为一次成功。通用 Responses 没有标准关闭换模参数，上游固定路由仍须实际资格证据；网关计数头是其协议声明，不能替代实际路由验收。
+部署方仍可显式设置 `XCAGI_AGENT_RUNTIME_CONFIG` 使用原独立网关合同；无效显式配置不会改走账号默认路由。该 JSON 继续包含 `engine=codex`、两种 `surfaces`、绝对私有 `runtime_root`、实际 `qualification_file` 及 `route`；路由必须明确独立 `base_url`、`model`、`response_model`、`provider_id`、`upstream_vendor`、`api_key_env`、容量和调用上限。请求不能选择凭据或引擎。Codex 使用短期模型/工具令牌及本地 MCP/Responses 代理，不继承个人 Codex 配置、ChatGPT 登录或额外插件；仅开启受控业务工具，禁止 shell、文件修改及托管搜索。既有开发超级员工的 Codex CLI 调度保持原路径。
+
+Responses 多轮工具协议由固定 SDK 处理：LiteLLM 代理保留真实原生 Responses 流，直连兼容模型使用 LiteLLM 的成熟适配，并在原始 HTTP 响应边界核对实际模型、实际用量和单次请求。适配器自行补出的用量不能作为结算或资格证据；平台聊天接口健康也不代表工具、压缩和恢复验收已通过。已发布的厂商总窗口声明沿用既有模型目录并标明来源（例如 [MiMo V2.6 Flash](https://mimo.mi.com/models/en-US/mimo-v2.6-flash)）；输入上限、输出上限和总窗口保持独立，不能从别名或 max_tokens 猜测总容量。独立配置拒绝 OpenAI/ChatGPT/Azure OpenAI 地址和 OpenAI 上游声明，禁止重定向和通过 `previous_response_id` 借用其他任务的上游会话。任意代理域名本身不能证明上游独立，必须核对网关路由记录和实际出站拒绝证据。宿主出站传输仅允许已绑定的 Responses 地址，在建立连接前拒绝 OpenAI 地址、其他端点和非 POST 请求，并禁用环境代理与重定向；资格证据明确记录范围为 `host_model_egress`，不声称完成操作系统级防火墙隔离。`response_model` 是已验收的单个实际响应 ID，省略时等于请求 `model`；别名解析到快照时须由宿主显式绑定，不能由响应自行扩充允许列表。`gateway_kind=responses` 只发送标准 Responses 字段；明确验收为 `litellm` 时才由宿主下发 `num_retries=0`、`disable_fallbacks=true`，并检查原始 HTTP 两项 attempted-retries/fallbacks 头唯一且均为零。缺头、重复或非零保留未知用量，不结算为一次成功。通用 Responses 没有标准关闭换模参数，上游固定路由仍须实际资格证据；网关计数头是其协议声明，不能替代实际路由验收。
 
 启用凭据采用 `xcmax.runtime-qualification.v1`，必须匹配 `ModelRoute.identity`、`codex_version=0.171.0`、`model_kind=real`，并带实际 `evidence_refs`。`checks` 中 `responses_stream`、`multi_turn_tools`、`openai_network_denied`、`business_receipt_verified`、`upstream_failover_disabled`、`response_model_identity`、`forced_compaction_restart_same_task_no_replay` 均需真实 PASS。除实际上游关闭故障转移与响应模型身份外，还须在同一固定非 OpenAI 路由和版本上强制压缩、重启执行器、恢复原任务，并用持久回执证明未重复执行；不能从固定请求模型或合成测试推定这些证据；旧摘要或缺少新检查的资格文件不可沿用。缺凭据、模型/容量/版本变化、合成模型或缺证据均拒绝启动；不能手填 PASS 代替验收。所有新自然语言任务使用同一 Codex 入口，配置不提供第二执行器。已持久化的正式工作流与审批仍从原任务恢复。引用已有 ELT 预演的执行必须绑定该次预演的精确版本；缺失、过期或批量映射遗漏目标时拒绝写入。历史缺版本的未完成审批保持原参数并要求重新预演、重新审批，已完成回执仍只读恢复。
 

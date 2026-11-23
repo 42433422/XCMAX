@@ -243,14 +243,9 @@ def run_employee_agent_loop(
 ) -> dict[str, Any]:
     """Delegate the sole model/tool loop to Codex without a native fallback."""
     from app.application.agent_runtime.gateway import run_runtime_task
-    from app.infrastructure.codex import policy
 
     deadline = time.monotonic() + remaining_invocation_seconds(max(0.001, wall_time_limit_sec))
-    try:
-        selected = settings if settings is not None else policy.runtime_settings()
-        if selected.engine != "codex" or "employee" not in selected.surfaces:
-            raise policy.RuntimePolicyError("员工 Agent 必须启用固定 Codex 执行器")
-    except policy.RuntimePolicyError:
+    if settings is not None and (settings.engine != "codex" or "employee" not in settings.surfaces):
         return _runtime_entry_error("runtime_configuration_invalid", "员工运行时配置无效")
     if gate is None:
         return _runtime_entry_error("gate_required", "员工工作空间和风险授权门尚未恢复，未执行")
@@ -272,7 +267,7 @@ def run_employee_agent_loop(
             allowed_actions=allowed_actions,
             gate=runtime_gate,
             on_event=on_event,
-            settings=selected,
+            settings=settings,
         )
 
 

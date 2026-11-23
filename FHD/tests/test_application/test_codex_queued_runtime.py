@@ -62,6 +62,29 @@ def test_http_queue_request_and_worker_turn_have_separate_stable_identities(runt
     assert len(state.calls) == 1 and state.queue.get(run_id).state == "succeeded"
 
 
+@pytest.mark.parametrize("qualified_at_execution", [False, True])
+def test_queue_admission_needs_no_qualification_but_worker_still_requires_it(
+    runtime_entry, qualified_at_execution
+):
+    state = runtime_entry
+    qualification = state.settings.qualification_file.read_text()
+    state.settings.qualification_file.unlink()
+    run_id = create(state)
+    saved = state.repository.get(run_id)
+    assert saved.metadata["runtime_route"] == state.settings.route.runtime_identity()
+    assert state.calls == state.servers == []
+    if qualified_at_execution:
+        state.settings.qualification_file.write_text(qualification)
+    state.drain(run_id)
+    if qualified_at_execution:
+        assert len(state.calls) == 1 and state.calls[0]["run_id"] == run_id
+        assert state.queue.get(run_id).state == "succeeded"
+    else:
+        assert state.calls == state.servers == []
+        assert state.queue.get(run_id).last_error_code == "runtime_policy_blocked"
+        assert state.repository.get(run_id).final_output["codex_result"]["run_id"] == run_id
+
+
 def test_failed_queue_insert_rolls_back_the_parent_admission(runtime_entry, monkeypatch):
     state = runtime_entry
 

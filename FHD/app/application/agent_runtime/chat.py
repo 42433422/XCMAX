@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.infrastructure.codex.policy import RuntimePolicyError, runtime_settings
+from app.infrastructure.codex.policy import RuntimePolicyError
 
 _INSTRUCTIONS = (
     "你是 XCMAX 企业助手小C。根据当前用户请求工作。先发现当前账号可用能力，再按工具契约调用。"
@@ -110,7 +110,6 @@ def run_runtime_chat(
     run_id = str(context.get("agent_runtime_run_id") or "")
     session = str(context.get("session_id") or context.get("conversation_id") or "")
     try:
-        settings = runtime_settings()
         from app.application.agent_runtime.gateway import run_runtime_task
 
         result = run_runtime_task(
@@ -129,7 +128,6 @@ def run_runtime_chat(
             or None,
             run_id=run_id or None,
             completion_mode="auto",
-            settings=settings,
             on_event=stream_runtime_event,
             # Chat turn admission supplies a new stable turn_id for a genuine user answer.
             answer_to_waiting_input=bool(run_id),
@@ -139,6 +137,17 @@ def run_runtime_chat(
             "runtime_not_qualified",
             "runtime_configuration_invalid",
             "runtime_policy_blocked",
+            "runtime_login_required",
+            "runtime_account_model_required",
+            "runtime_configuration_required",
+            "runtime_qualification_required",
+            "runtime_qualification_failed",
+            "runtime_qualification_unavailable",
+            "runtime_qualification_evidence_missing",
+            "runtime_qualification_in_progress",
+            "runtime_storage_invalid",
+            "runtime_changed",
+            "runtime_unavailable",
         }:
             # An unavailable deployment must not erase a prior task's pointer
             # and let the following chat turn create a duplicate business task.

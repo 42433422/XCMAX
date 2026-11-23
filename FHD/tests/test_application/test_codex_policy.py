@@ -249,3 +249,49 @@ def test_vendor_and_capacity_are_not_guessed():
         ModelRoute("https://gateway.test/v1", "model", "proxy", "openai", 32000, 4000)
     with pytest.raises(RuntimePolicyError):
         ModelRoute("https://gateway.test/v1", "model", "proxy", "local", 100, 100)
+
+
+def test_account_route_renews_credentials_without_rebinding_identity():
+    route = _route(
+        gateway_kind="market",
+        credential="account-secret",
+        route_token="route-secret",
+        config_revision="rev-1",
+        key_source="platform",
+    )
+    renewed = replace(
+        route, credential="renewed-account-secret", route_token="renewed-route-secret"
+    )
+    assert renewed.identity == route.identity
+    assert replace(route, config_revision="rev-2").identity != route.identity
+    assert replace(route, key_source="user_override").identity != route.identity
+    assert renewed.headers("req-1") == {
+        "Authorization": "Bearer renewed-account-secret",
+        "X-XCMax-Route-Token": "renewed-route-secret",
+        "Idempotency-Key": "req-1",
+    }
+    public = json.dumps(route.runtime_identity()) + repr(route)
+    assert "account-secret" not in public and "route-secret" not in public
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"credential": ""},
+        {"route_token": ""},
+        {"config_revision": ""},
+        {"key_source": ""},
+        {"credential": "token\r\ninjected: secret"},
+        {"api_key_env": "GLOBAL_CREDENTIAL"},
+    ],
+)
+def test_account_route_requires_request_scoped_credentials(override):
+    values = {
+        "gateway_kind": "market",
+        "credential": "token",
+        "route_token": "route-token",
+        "config_revision": "rev-1",
+        "key_source": "platform",
+    }
+    with pytest.raises(RuntimePolicyError):
+        _route(**{**values, **override})

@@ -376,6 +376,6 @@ def dynamic_chat_runtime(runtime_entry, monkeypatch):
     monkeypatch.setattr(gateway, "run_codex_agent", codex_runtime.run_codex_agent)
     monkeypatch.setattr("app.infrastructure.codex.CodexTransport", Transport)
     monkeypatch.setattr(
-        "app.application.agent_runtime.chat.runtime_settings", lambda: state.settings
+        "app.application.agent_runtime.gateway.runtime_settings", lambda: state.settings
     )
     return state

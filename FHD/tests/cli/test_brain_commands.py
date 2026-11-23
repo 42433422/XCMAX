@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import io
 import json
+from unittest.mock import Mock
 
 import pytest
 
@@ -16,6 +17,22 @@ def run(client, *args):
 
 def login(client):
     client.login("alice", "fixture-password", "enterprise")
+
+
+@pytest.mark.parametrize("flags,retry", [((), False), (("--retry",), True)])
+def test_runtime_check_reuses_authenticated_single_request(flags, retry):
+    client = Mock()
+    client.request.return_value = {"success": True, "qualification": "passed"}
+    assert run(client, "runtime-check", *flags)["qualification"] == "passed"
+    client.require_login.assert_called_once_with()
+    client.request.assert_called_once_with(
+        "POST", "/api/desktop/agent-runtime/qualification", {"retry": retry}
+    )
+    client.require_login.side_effect = BrainError("登录已失效")
+    client.request.reset_mock()
+    with pytest.raises(BrainError):
+        run(client, "runtime-check", "--retry")
+    client.request.assert_not_called()
 
 
 def test_real_editor_http_csrf_diff_apply_replay(brain_client, brain_server, monkeypatch, tmp_path):

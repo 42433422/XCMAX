@@ -55,8 +55,7 @@ export function resetSidebarNavigationForTests(): void {
   activeSidebarNavigation = null
   sidebarNavGeneration = 0
   userSidebarNavigationCount = 0
-  if (urlSyncTimer) clearInterval(urlSyncTimer)
-  urlSyncTimer = undefined
+  stopBrowserUrlSync()
   resetAppNavigationForTests()
 }
 
@@ -282,6 +281,11 @@ function drainSidebarNavigationQueue(): void {
 
 let urlSyncTimer: ReturnType<typeof setInterval> | undefined
 
+function stopBrowserUrlSync(): void {
+  if (urlSyncTimer !== undefined) clearInterval(urlSyncTimer)
+  urlSyncTimer = undefined
+}
+
 function syncBrowserUrlWithRouter(router: Router): boolean {
   const fullPath = router.currentRoute.value.fullPath
   if (!fullPath || typeof window === 'undefined') return true
@@ -300,17 +304,28 @@ function syncBrowserUrlWithRouter(router: Router): boolean {
 }
 
 function scheduleBrowserUrlSync(router: Router): void {
-  if (urlSyncTimer) clearInterval(urlSyncTimer)
+  stopBrowserUrlSync()
+  if (typeof window === 'undefined') return
+  const position: unknown = window.history.state?.position
+  const fullPath = router.currentRoute.value.fullPath
+  const generation = sidebarNavGeneration
+  if (typeof position !== 'number' || !Number.isFinite(position) || !fullPath) return
   let ticks = 0
   let stable = 0
   urlSyncTimer = setInterval(() => {
+    // A popstate changes the entry before its async router guards commit.
+    // The previous navigation must not repair that newer entry's address.
+    if (window.history.state?.position !== position ||
+      router.currentRoute.value.fullPath !== fullPath || sidebarNavGeneration !== generation) {
+      stopBrowserUrlSync()
+      return
+    }
     const matched = syncBrowserUrlWithRouter(router)
     stable = matched ? stable + 1 : 0
     ticks += 1
     // In-flight pushes keep rewriting the URL for a moment after the last click.
     if (stable >= 5 || ticks >= 200) {
-      clearInterval(urlSyncTimer)
-      urlSyncTimer = undefined
+      stopBrowserUrlSync()
     }
   }, 40)
 }
@@ -323,7 +338,7 @@ function finishSidebarNavigation(
   intentId?: number,
 ): void {
   if (activeSidebarNavigation !== request) return
-  if (intentId == null || isAppNavIntentCurrent(intentId)) scheduleBrowserUrlSync(request.router)
+  if (applied && (intentId == null || isAppNavIntentCurrent(intentId))) scheduleBrowserUrlSync(request.router)
   activeSidebarNavigation = null
   if (intentId != null) clearAppNavIntentIfCurrent(intentId)
   if (failed) request.reject(error)
@@ -347,6 +362,7 @@ export function navigateFromSidebarKey(router: Router, viewKey: string, options:
   const normalized = String(viewKey || '').trim()
   if (!normalized) return Promise.resolve(false)
 
+  stopBrowserUrlSync()
   sidebarNavGeneration += 1
   userSidebarNavigationCount += 1
   beginAppNavIntent(normalized, options.source || 'sidebar')

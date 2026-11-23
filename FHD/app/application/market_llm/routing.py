@@ -26,6 +26,7 @@ def resolve_account_route(
     route: Route | None = None,
     *,
     operation: str = "chat",
+    runtime: str | None = None,
 ) -> Payload:
     """Resolve account preferences/BYOK/platform defaults at their server-owned source."""
     with client_factory(
@@ -36,6 +37,8 @@ def resolve_account_route(
         params = {"provider": route[0], "model": route[1]} if route else {}
         if operation != "chat":
             params["operation"] = operation
+        if runtime is not None:
+            params["runtime"] = runtime
         response = client.get(url, params=params) if params else client.get(url)
         status = _response_status_code(response)
         try:
@@ -51,6 +54,18 @@ def resolve_account_route(
         }:
             error.code = detail["code"]
             error.recovery = "choose_chat_model_or_follow_platform"
+        elif (
+            runtime == "codex"
+            and isinstance(detail, dict)
+            and detail.get("code")
+            in {
+                "CODEX_MODEL_METADATA_REQUIRED",
+                "CODEX_MODEL_CAPACITY_REQUIRED",
+                "CODEX_ROUTE_SIGNING_UNAVAILABLE",
+                "CODEX_MODEL_UNSUPPORTED",
+            }
+        ):
+            error.code = detail["code"]
         raise error
     if isinstance(data, dict) and data.get("ok") is not False:
         if operation != "chat" and data.get("operation") != operation:
@@ -68,6 +83,11 @@ def resolve_account_route(
                 "model": model.strip(),
                 "route_source": data.get("route_source") or data.get("source") or "unknown",
                 "model_capabilities": public_model_capabilities(data.get("model_capabilities")),
+                **(
+                    {"runtime": data["runtime"]}
+                    if runtime and isinstance(data.get("runtime"), dict)
+                    else {}
+                ),
                 **(
                     {"route_token": data["route_token"]}
                     if isinstance(data.get("route_token"), str)

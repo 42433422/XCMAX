@@ -80,7 +80,12 @@ class ModelRoute:
     max_request_bytes: int = 4_194_304
     response_model: str = _DEFAULT_RESPONSE_MODEL
     failover_policy: Literal["disabled"] = "disabled"
-    gateway_kind: Literal["responses", "litellm"] = "responses"
+    gateway_kind: Literal["responses", "litellm", "market"] = "responses"
+    # Account credentials stay in the current request, never in persisted metadata.
+    credential: str = field(default="", repr=False, compare=False)
+    route_token: str = field(default="", repr=False, compare=False)
+    config_revision: str = ""
+    key_source: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "base_url", independent_gateway_url(self.base_url))
@@ -101,8 +106,27 @@ class ModelRoute:
             raise RuntimePolicyError("response_model must be one exact nonempty model identity")
         if type(self.failover_policy) is not str or self.failover_policy != "disabled":
             raise RuntimePolicyError("Runtime upstream failover must be disabled")
-        if type(self.gateway_kind) is not str or self.gateway_kind not in {"responses", "litellm"}:
-            raise RuntimePolicyError("gateway_kind must be responses or litellm")
+        if type(self.gateway_kind) is not str or self.gateway_kind not in {
+            "responses",
+            "litellm",
+            "market",
+        }:
+            raise RuntimePolicyError("gateway_kind must be responses, litellm or market")
+        if self.gateway_kind == "market":
+            for name in ("credential", "route_token", "config_revision", "key_source"):
+                value = getattr(self, name)
+                if (
+                    not isinstance(value, str)
+                    or not value
+                    or any(ord(char) < 32 or ord(char) == 127 for char in value)
+                ):
+                    raise RuntimePolicyError(
+                        "Authenticated account runtime configuration is incomplete"
+                    )
+            if self.api_key_env:
+                raise RuntimePolicyError(
+                    "Account runtime credentials cannot use process environment"
+                )
         if self.upstream_vendor.strip().lower() in {"openai", "azure-openai", "azure_openai"}:
             raise RuntimePolicyError("The independent runtime cannot require an OpenAI model")
         for name, maximum in (
@@ -134,9 +158,13 @@ class ModelRoute:
             )
         }
         values["codex_version"] = CODEX_VERSION
+        if self.gateway_kind == "market":
+            values.update(config_revision=self.config_revision, key_source=self.key_source)
         return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
     def token(self) -> str:
+        if self.gateway_kind == "market":
+            return self.credential
         if not self.api_key_env:
             if urlsplit(self.base_url).hostname not in {"127.0.0.1", "::1", "localhost"}:
                 raise RuntimePolicyError("Remote gateway credential is not configured")
@@ -145,6 +173,14 @@ class ModelRoute:
         if not value:
             raise RuntimePolicyError("Configured gateway credential is unavailable")
         return value
+
+    def headers(self, request_id: str) -> dict[str, str]:
+        """Bind the original account snapshot and one outbound request identity."""
+        token = self.token()
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        if self.gateway_kind == "market":
+            headers.update({"X-XCMax-Route-Token": self.route_token, "Idempotency-Key": request_id})
+        return headers
 
     def runtime_identity(self) -> dict[str, Any]:
         return {
@@ -157,6 +193,11 @@ class ModelRoute:
             "upstream_vendor": self.upstream_vendor,
             "independent": True,
             "max_model_calls": self.max_model_calls,
+            **(
+                {"config_revision": self.config_revision, "key_source": self.key_source}
+                if self.gateway_kind == "market"
+                else {}
+            ),
         }
 
 

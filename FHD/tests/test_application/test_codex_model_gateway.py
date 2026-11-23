@@ -34,6 +34,10 @@ class Store:
             metadata=self.run.metadata["codex_runtime"],
         )
 
+    def get(self, run_id):
+        assert run_id == self.run.run_id
+        return self.binding
+
     def authenticate(self, token, audience="mcp"):
         from app.infrastructure.codex.binding import CodexBindingError
 
@@ -873,3 +877,126 @@ def test_sql_model_call_budget_survives_repository_reopen_and_new_generation(
         assert saved.metadata["ai_cost_units_total"] == 4
         assert ledger.get_model_wallet("71")["balance_units"] == 96
         assert [run.run_id for run in store.repository.list_recent()] == [parent.run_id]
+
+
+@pytest.fixture
+def market_gateway(gateway, monkeypatch):
+    client, store, calls, response, app = gateway
+    route = replace(
+        app.state.codex_model_route,
+        model="enterprise/local-agent",
+        gateway_kind="market",
+        credential="account-secret",
+        route_token="snapshot-secret",
+        config_revision="rev-1",
+        key_source="platform",
+    )
+    app.state.codex_model_route = route
+    store.binding.metadata["runtime_config"] = route.runtime_identity()
+    control = {"status": 200, "receipt": True, "attempts": True}
+    monkeypatch.setattr(
+        "app.infrastructure.billing.model_reservation.reserve_model_usage",
+        lambda **kw: pytest.fail("platform request reserved wallet a second time"),
+    )
+
+    def handler(request):
+        calls.append(request)
+        assert ledger.get_model_wallet("71")["balance_units"] == 100
+        assert request.headers["authorization"] == "Bearer account-secret"
+        assert request.headers["x-xcmax-route-token"] == "snapshot-secret"
+        request_id = request.headers["idempotency-key"]
+        if control["status"] != 200:
+            return httpx.Response(control["status"])
+        headers = (
+            {"x-xcmax-upstream-attempts": "1", "x-xcmax-upstream-fallbacks": "0"}
+            if control["attempts"]
+            else {}
+        )
+        payload = dict(response)
+        if control["receipt"]:
+            payload["xcagi"] = {
+                "schema": "xcmax.responses-billing.v1",
+                "provider": "enterprise",
+                "model": "local-agent",
+                "key_source": "platform",
+                "config_revision": "rev-1",
+                "client_request_id": request_id,
+                "request_id": "platform-" + request_id,
+                "hold_no": "hold-" + request_id,
+                "billed": True,
+                "charge_amount": "0.02",
+                "billing_status": "settled",
+                "usage": response["usage"],
+            }
+        if b'"stream":true' in request.content:
+            headers["content-type"] = "text/event-stream"
+            data = json.dumps({"type": "response.completed", "response": payload})
+            return httpx.Response(200, headers=headers, content=f"data: {data}\n\n")
+        return httpx.Response(200, headers=headers, json=payload)
+
+    app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        **kwargs,
+    )
+    return client, store, calls, response, app, control
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_account_gateway_uses_platform_settlement_once_and_preserves_task_budget(
+    market_gateway, stream
+):
+    client, store, calls, _, _, _ = market_gateway
+    received = post(client, model="enterprise/local-agent", stream=stream)
+    assert received.status_code == 200 and "error" not in received.text
+    assert len(calls) == 1
+    assert ledger.get_model_wallet("71")["balance_units"] == 100
+    assert store.run.metadata["ai_cost_units_total"] == 2
+    assert store.run.metadata["reserved_cost_units"] == 0
+    entries = ledger.list_model_usage_entries(run_id=store.run.run_id)
+    assert len(entries) == 1 and entries[0]["wallet_backend"] == "audit"
+    assert store.run.llm_calls[0].total_tokens == 2000
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("zero_usage", [False, True])
+def test_account_missing_settlement_blocks_tools_and_requires_reconciliation(
+    market_gateway,
+    stream,
+    zero_usage,
+):
+    client, store, calls, response, _, control = market_gateway
+    control["receipt"] = False
+    if zero_usage:
+        response["usage"] = dict.fromkeys(response["usage"], 0)
+    response["output"] = [
+        {
+            "type": "function_call",
+            "name": "mcp__xcmax__execute_action",
+            "call_id": "must-not-run",
+            "arguments": "{}",
+        }
+    ]
+    received = post(client, model="enterprise/local-agent", stream=stream)
+    assert received.status_code == (200 if stream else 409)
+    assert "must-not-run" not in received.text
+    assert store.binding.metadata["model_reconciliation_required"] is True
+    assert post(client, model="enterprise/local-agent").status_code == 409
+    assert len(calls) == 1 and ledger.get_model_wallet("71")["balance_units"] == 100
+
+
+@pytest.mark.parametrize("status,unknown", [(401, False), (409, True), (502, True)])
+def test_account_gateway_distinguishes_nonstarted_rejection_from_pending_receipt(
+    market_gateway,
+    status,
+    unknown,
+):
+    client, store, calls, _, _, control = market_gateway
+    control["status"] = status
+    received = post(client, model="enterprise/local-agent")
+    assert received.status_code == (502 if unknown else status)
+    assert len(calls) == 1
+    assert bool(store.binding.metadata.get("model_reconciliation_required")) is unknown
+    assert ledger.get_model_wallet("71")["balance_units"] == 100
+    if unknown:
+        assert post(client, model="enterprise/local-agent").status_code == 409
+        assert len(calls) == 1

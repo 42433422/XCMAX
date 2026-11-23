@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.workflow_types import PlanGraph, plan_to_dict
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
-from app.infrastructure.codex.policy import RuntimeSettings
+from app.infrastructure.codex.policy import RuntimePolicyError
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
 from tests.fixtures.codex_http_runtime import fixture_goal_review
@@ -173,7 +173,10 @@ def test_stream_entry_hands_shipment_to_the_same_chat_service(
 )
 def test_legacy_in_memory_controls_cannot_start_retired_kernel(monkeypatch, message, case):
     _no_llm(monkeypatch)
-    monkeypatch.setattr("app.application.agent_runtime.chat.runtime_settings", RuntimeSettings)
+    monkeypatch.setattr(
+        "app.application.agent_runtime.gateway.runtime_settings",
+        MagicMock(side_effect=RuntimePolicyError("fixture qualification is missing")),
+    )
     service = AIChatApplicationService()
     assert not hasattr(service, "_pending_workflows")
     assert not hasattr(service, "_hydrate_pending_workflow")
