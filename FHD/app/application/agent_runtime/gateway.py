@@ -289,7 +289,38 @@ def _record_request_result(
                 "runtime.admission.failed", run.error, {"error_code": result.get("error_code")}
             )
 
-    store.update(run_id, finish)
+    try:
+        store.update(run_id, finish)
+    except RECOVERABLE_ERRORS:
+        # A commit ACK can be lost. Read this exact request before reporting an
+        # uncertain receipt; never replace its committed outcome with a failure.
+        current = store.repository.get(run_id)
+        request = (
+            (current.metadata.get("runtime_requests") or {}).get(request_key) if current else None
+        )
+        if not (
+            isinstance(request, dict)
+            and request.get("state") == "returned"
+            and request.get("result") == result
+        ):
+            raise
+
+
+def _request_persistence_uncertain(result: dict[str, Any]) -> dict[str, Any]:
+    message = "原请求收尾尚待核对，请读取原任务回执，不要重新提交业务操作"
+    return {
+        **result,
+        "ok": False,
+        "business_completed": False,
+        "reply_completed": False,
+        "retryable": False,
+        "error_code": "runtime_persistence_uncertain",
+        "exit_status": "unknown",
+        "execution_state": "unknown",
+        "reconciliation_required": True,
+        "error": message,
+        "output": message,
+    }
 
 
 async def run_runtime_task_async(
@@ -663,7 +694,10 @@ async def run_runtime_task_async(
                 else None,
             )
         result = dict(public_runtime_result(result))
-        _record_request_result(store, resolved_id, request_key, result)
+        try:
+            _record_request_result(store, resolved_id, request_key, result)
+        except RECOVERABLE_ERRORS:
+            return _request_persistence_uncertain(result)
         return result
     except asyncio.CancelledError:
         if store is not None and admitted:
@@ -697,11 +731,7 @@ async def run_runtime_task_async(
                 store, resolved_id, request_key, result, failed_before_execution=True
             )
         except RECOVERABLE_ERRORS:
-            result.update(
-                error_code="runtime_persistence_uncertain",
-                exit_status="unknown",
-                reconciliation_required=True,
-            )
+            result = _request_persistence_uncertain(result)
     return dict(public_runtime_result(result))
 
 

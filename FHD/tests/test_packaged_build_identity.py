@@ -12,7 +12,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.build_identity import build_identity
+from app.build_identity import build_identity, verified_source_sha
 
 SHA = "70da5cdf6ca18abc44eb5370734314ca6663fb8f"
 VERSION = "1.0.0.1"
@@ -172,3 +172,47 @@ def test_legacy_backend_location_and_build_sha_alias(packaged_identity, monkeypa
     identity = build_identity()
     assert identity["git_sha"] == SHA
     assert identity["built_at"] == "legacy-timestamp"
+
+
+def test_runtime_identity_cannot_reuse_stale_environment_after_package_upgrade(
+    packaged_identity, monkeypatch
+):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(packaged_identity / "backend/xcagi-backend"))
+    assert verified_source_sha() == SHA
+    monkeypatch.setenv("GIT_SHA", "a" * 40)
+    assert build_identity()["git_sha"] == "a" * 40  # Existing display compatibility is retained.
+    with pytest.raises(ValueError, match="conflicts"):
+        verified_source_sha()
+
+
+def test_runtime_identity_uses_this_executable_and_ignores_another_resources_override(
+    packaged_identity, monkeypatch, tmp_path
+):
+    other = tmp_path / "other-package"
+    other.mkdir()
+    (other / "build-info.json").write_text(json.dumps({"gitSha": "a" * 40, "version": VERSION}))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(packaged_identity / "backend/xcagi-backend.exe"))
+    monkeypatch.setenv("XCAGI_DESKTOP_RESOURCES", str(other))
+    assert build_identity()["git_sha"] == "a" * 40
+    assert verified_source_sha() == SHA
+
+
+def test_runtime_identity_uses_built_container_stamp_without_git(monkeypatch, tmp_path):
+    from app import build_identity as identity_module
+
+    source = tmp_path / "container-app"
+    (source / "app").mkdir(parents=True)
+    (source / ".build-identity.json").write_text(json.dumps({"git_sha": SHA}))
+    monkeypatch.setattr(identity_module, "__file__", str(source / "app/build_identity.py"))
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    for name in ("XCAGI_GIT_SHA", "FHD_GIT_SHA", "GIT_SHA"):
+        monkeypatch.delenv(name, raising=False)
+    assert verified_source_sha() == SHA
+    monkeypatch.setenv("XCAGI_GIT_SHA", "a" * 40)
+    with pytest.raises(ValueError, match="conflicts"):
+        verified_source_sha()
+    (source / ".build-identity.json").unlink()
+    with pytest.raises(ValueError, match="unavailable"):
+        verified_source_sha()

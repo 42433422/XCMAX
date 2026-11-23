@@ -533,12 +533,32 @@ def main(argv: list[str] | None = None) -> None:
     except BOUNDARY_ERRORS:
         pass
 
+    desktop = args.desktop or _env_truthy("XCAGI_DESKTOP_MODE")
+    if desktop and _is_frozen() and not args.migrate_only:
+        # Validate the installed executor before bootstrap refreshes Mods or
+        # migrates customer data. A broken update cannot reach HTTP readiness
+        # and commit its rollback marker. This never requests a model response.
+        _bootstrap_stage("agent-runtime-verification-begin")
+        try:
+            from app.infrastructure.codex.transport import verify_packaged_runtime
+
+            verify_packaged_runtime()
+        except RECOVERABLE_ERRORS as exc:
+            reason = getattr(exc, "code", type(exc).__name__)
+            print(
+                f"[run_fastapi] packaged Agent runtime failed: {reason}",
+                file=sys.stderr,
+                flush=True,
+            )
+            # Avoid the windowed bootloader's blocking unhandled-error dialog.
+            raise SystemExit(1) from None
+        _bootstrap_stage("agent-runtime-verification-ready")
+
     if args.desktop or args.data_dir or args.migrate_only:
         _bootstrap_stage("desktop-environment-begin")
         _apply_desktop_bootstrap(args)
         _bootstrap_stage("desktop-environment-ready")
 
-    desktop = args.desktop or _env_truthy("XCAGI_DESKTOP_MODE")
     if desktop:
         _apply_desktop_local_market_env()
 
