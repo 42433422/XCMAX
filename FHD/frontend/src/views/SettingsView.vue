@@ -153,6 +153,7 @@
                 <span class="settings-row__arrow" aria-hidden="true"></span>
               </summary>
               <div class="settings-card__body settings-card__body--flush">
+                <p class="settings-model-service-empty"><router-link to="/saas-pricing">软件买断与业务定制</router-link> · AI 调用单独按量计费</p>
                 <SettingsPlatformModelCard :can-manage="accountProfile.isAdminAccount && !accountProfile.isImpersonating" />
                 <div v-if="isLoggedIn && !accountProfile.isImpersonating" class="settings-model-service-empty" :aria-busy="runtimeChecking">
                   <p class="settings-model-service-empty__title">当前账号运行验收</p>

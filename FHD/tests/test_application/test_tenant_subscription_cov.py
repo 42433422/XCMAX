@@ -415,7 +415,7 @@ def test_apply_paid_plan_to_tenant_success():
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_tenant_changed"
             ) as mock_notify:
-                result = apply_paid_plan_to_tenant(tenant_id=5, plan_id="saas-pro")
+                result = apply_paid_plan_to_tenant(tenant_id=5, plan_id="saas-permanent-standard")
 
     assert result is True
     db.commit.assert_called_once()

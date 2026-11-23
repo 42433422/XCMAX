@@ -51,6 +51,9 @@ function makeRouter() {
     routes: [
       { path: '/account-plans', name: 'account-plans', component: AccountLicensePlansView },
       { path: '/login', name: 'login', component: { template: '<div />' } },
+      { path: '/customer-service', component: { template: '<div />' } },
+      { path: '/recharge', component: { template: '<div />' } },
+      { path: '/orders', component: { template: '<div />' } },
       { path: '/checkout/:orderId', name: 'checkout', component: { template: '<div />' } },
     ],
   })
@@ -92,7 +95,7 @@ describe('AccountLicensePlansView', () => {
     apiMock.activatePersonalPlan.mockResolvedValueOnce({ ok: true })
     const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })
     await flushPromises()
-    expect(wrapper.get('button').text()).toBe('免费开通')
+    expect(wrapper.get('button').text()).toBe('免费体验')
     await wrapper.get('button').trigger('click')
     await flushPromises()
     expect(apiMock.activatePersonalPlan).toHaveBeenCalledOnce()
@@ -269,7 +272,7 @@ describe('AccountLicensePlansView', () => {
     const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('选择适合你的方案')
+    expect(wrapper.text()).toContain('确认购买 XCAGI')
     expect(wrapper.text()).toContain('完成支付后即可在 XCAGI 登录使用')
     expect(wrapper.text()).toContain('30 天全功能体验')
     expect(wrapper.text()).not.toContain('账号授权')
@@ -281,6 +284,62 @@ describe('AccountLicensePlansView', () => {
     expect(apiMock.paymentCheckout).toHaveBeenCalledWith({ plan_id: 'saas-trial-30' })
     expect(router.currentRoute.value.name).toBe('checkout')
     expect(router.currentRoute.value.params.orderId).toBe('ORDER-1')
+  })
+
+  it.each(['precreate', 'wechat_native'])('keeps the selected software and original %s order in the existing checkout', async (type) => {
+    const router = makeRouter()
+    await router.push('/account-plans?plan=saas-permanent-standard')
+    apiMock.paymentAccountPlans.mockResolvedValue({ plans: [
+      freePlan,
+      { id: 'saas-trial-30', name: '30 天体验', price: 99, amount_cents: 9900, license_type: 'trial' },
+      { id: 'saas-permanent-standard', name: 'XCAGI 软件', price: 6800, amount_cents: 680000, license_type: 'permanent' },
+      { id: 'saas-permanent-growth', name: '旧成长版', price: 99999, license_type: 'permanent' },
+    ], commercial_terms: { customization_from_cents: 298000 } })
+    apiMock.paymentCheckout.mockResolvedValue({ ok: true, type, order_id: 'STANDARD-1' })
+    const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.findAll('.license-card')).toHaveLength(1)
+    expect(wrapper.get('.license-card button').text()).toBe('立即购买 ¥6,800')
+    expect(wrapper.text()).toContain('2,980 起')
+    expect(wrapper.text()).toContain('起价不是全部需求的总价')
+    expect(wrapper.text()).not.toContain('旧成长版')
+    expect(apiMock.paymentCheckout).not.toHaveBeenCalled()
+    await wrapper.get('.license-card button').trigger('click')
+    await flushPromises()
+    expect(apiMock.paymentCheckout).toHaveBeenCalledExactlyOnceWith({ plan_id: 'saas-permanent-standard' })
+    expect(router.currentRoute.value.params.orderId).toBe('STANDARD-1')
+  })
+
+  it('keeps a legacy permanent owner from buying the software or trial again', async () => {
+    apiMock.paymentAccountPlans.mockResolvedValue({ plans: [
+      { id: 'saas-permanent-standard', name: 'XCAGI 软件买断', amount_cents: 680000, price: 6800, license_type: 'permanent' },
+      { id: 'saas-trial-30', name: '企业功能体验', amount_cents: 9900, price: 99, license_type: 'trial' },
+    ] })
+    apiMock.accountBootstrap.mockResolvedValue({ user: {}, account: { active_plan_id: 'saas-permanent-ultra' } })
+    const router = makeRouter()
+    await router.push('/account-plans?plan=saas-permanent-standard')
+    const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.get('h1').text()).toBe('XCAGI 软件已开通')
+    expect(wrapper.get('.license-card button').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.trial-entry button').attributes('disabled')).toBeDefined()
+    await wrapper.get('.license-card button').trigger('click')
+    expect(apiMock.paymentCheckout).not.toHaveBeenCalled()
+    expect(wrapper.get('a[href="/orders"]').text()).toBe('查看购买订单')
+  })
+
+  it('preserves the software purchase through login even when the page had no selected plan', async () => {
+    hasTokenMock.mockReturnValue(false)
+    apiMock.paymentAccountPlans.mockResolvedValue({ plans: [{ id: 'saas-permanent-standard', name: 'XCAGI 软件', amount_cents: 680000, price: 6800, license_type: 'permanent' }] })
+    const router = makeRouter()
+    await router.push('/account-plans?source=official-site')
+    const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })
+    await flushPromises()
+    await wrapper.get('.license-card button').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/account-plans?source=official-site&plan=saas-permanent-standard')
+    expect(apiMock.paymentCheckout).not.toHaveBeenCalled()
   })
 
   it('does not expose underlying checkout failures', async () => {
@@ -310,7 +369,7 @@ describe('AccountLicensePlansView', () => {
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('login')
     expect(router.currentRoute.value.query).toEqual({
-      redirect: '/account-plans?source=xcagi-mobile',
+      redirect: '/account-plans?source=xcagi-mobile&plan=saas-trial-30',
       source: 'xcagi-mobile',
     })
     expect(apiMock.paymentCheckout).not.toHaveBeenCalled()

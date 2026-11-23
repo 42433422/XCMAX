@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.db.models.tenant import Tenant
@@ -20,6 +20,49 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
+_ACCOUNT_TIERS = ("normal", "pro", "max", "ultra")
+
+
+def _tier_rank(value: Any) -> int:
+    return _ACCOUNT_TIERS.index(value) if value in _ACCOUNT_TIERS else 0
+
+
+def _apply_tenant_license(
+    tenant: Tenant,
+    plan: dict[str, Any],
+    *,
+    sync_from_market: bool = False,
+    active_plan_expires_at: str | None = None,
+) -> dict[str, Any] | None:
+    """Keep stronger purchased rights; market sync uses the original trial deadline."""
+    current = plan_by_id(str(tenant.plan_id or "")) or {}
+    if current.get("license_type") == "permanent" and (
+        plan.get("license_type") != "permanent"
+        or _tier_rank(current.get("account_tier")) >= _tier_rank(plan.get("account_tier"))
+    ):
+        return current
+    if plan.get("license_type") == "trial":
+        if sync_from_market:
+            try:
+                expires = datetime.fromisoformat(str(active_plan_expires_at).replace("Z", "+00:00"))
+                if expires.tzinfo is None:
+                    expires = expires.replace(tzinfo=UTC)
+                expires = expires.astimezone(UTC).replace(tzinfo=None)
+            except (TypeError, ValueError):
+                return None
+            tenant.trial_expires_at = expires
+            tenant.trial_started_at = expires - timedelta(
+                days=max(1, int(plan.get("duration_days") or trial_days()))
+            )
+        else:
+            tenant.trial_started_at = utc_now_naive()
+            tenant.trial_expires_at = tenant.trial_started_at + timedelta(
+                days=max(1, int(plan.get("duration_days") or trial_days()))
+            )
+    elif plan.get("license_type") == "permanent":
+        tenant.trial_expires_at = None
+    tenant.plan_id = str(plan["id"])
+    return plan
 
 
 def _slug_code(username: str) -> str:
@@ -198,15 +241,10 @@ def apply_paid_plan_to_tenant(*, tenant_id: int, plan_id: str) -> bool:
         tenant = db.query(Tenant).filter(Tenant.id == int(tenant_id)).first()
         if not tenant:
             return False
-        tenant.plan_id = str(plan_id).strip()
-        plan = plan_by_id(plan_id) or {}
-        if str(plan.get("license_type") or "") == "trial":
-            now = utc_now_naive()
-            duration_days = max(1, int(plan.get("duration_days") or trial_days()))
-            tenant.trial_started_at = now
-            tenant.trial_expires_at = now + timedelta(days=duration_days)
-        elif str(plan_id).strip().startswith("saas-permanent-"):
-            tenant.trial_expires_at = None
+        plan = plan_by_id(plan_id)
+        if not plan or plan_id == PERSONAL_PLAN_ID:
+            return False
+        _apply_tenant_license(tenant, plan)
         db.commit()
         logger.info(
             "[tenant-subscription] plan applied tenant_id=%s plan_id=%s", tenant_id, plan_id
@@ -224,7 +262,13 @@ def apply_paid_plan_to_tenant(*, tenant_id: int, plan_id: str) -> bool:
         return True
 
 
-def apply_paid_plan_for_user(*, user_id: int, plan_id: str) -> bool:
+def apply_paid_plan_for_user(
+    *,
+    user_id: int,
+    plan_id: str,
+    sync_from_market: bool = False,
+    active_plan_expires_at: str | None = None,
+) -> bool:
     if not is_saas_plan_id(plan_id):
         return False
     plan = plan_by_id(plan_id) or {}
@@ -232,35 +276,50 @@ def apply_paid_plan_for_user(*, user_id: int, plan_id: str) -> bool:
         user = db.query(User).filter(User.id == int(user_id)).first()
         if not user:
             return False
+        tenant = (
+            db.query(Tenant).filter(Tenant.id == int(user.tenant_id)).first()
+            if user.tenant_id
+            else None
+        )
         if plan_id == PERSONAL_PLAN_ID:
+            current = plan_by_id(str(tenant.plan_id or "")) if tenant else None
+            if _tier_rank(user.account_tier) > 0 or (
+                current
+                and tenant is not None
+                and (
+                    current.get("license_type") == "permanent"
+                    or (
+                        current.get("license_type") == "trial"
+                        and tenant.trial_expires_at
+                        and tenant.trial_expires_at >= utc_now_naive()
+                    )
+                )
+            ):
+                return False
             user.account_tier = "personal"
             db.commit()
             return True
-        if not user.tenant_id:
-            return False
-        tenant_id = int(user.tenant_id)
-        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if tenant is None:
             return False
-        tenant.plan_id = str(plan_id).strip()
-        if str(plan.get("license_type") or "") == "trial":
-            now = utc_now_naive()
-            duration_days = max(1, int(plan.get("duration_days") or trial_days()))
-            tenant.trial_started_at = now
-            tenant.trial_expires_at = now + timedelta(days=duration_days)
-        elif str(plan_id).strip().startswith("saas-permanent-"):
-            tenant.trial_expires_at = None
-        user.tier = "enterprise"
-        account_tier = str(plan.get("account_tier") or "normal").strip().lower()
-        user.account_tier = (
-            account_tier if account_tier in {"normal", "pro", "max", "ultra"} else "normal"
+        effective = _apply_tenant_license(
+            tenant,
+            plan,
+            sync_from_market=sync_from_market,
+            active_plan_expires_at=active_plan_expires_at,
         )
+        if effective is None:
+            return False
+        if user.tier != "admin":
+            user.tier = "enterprise"
+        user.account_tier = _ACCOUNT_TIERS[
+            max(_tier_rank(user.account_tier), _tier_rank(effective.get("account_tier")))
+        ]
         db.commit()
         logger.info(
             "[tenant-subscription] market license applied user_id=%s tenant_id=%s account_tier=%s",
             user_id,
-            tenant_id,
-            account_tier,
+            tenant.id,
+            user.account_tier,
         )
         try:
             from app.neuro_bus.application_neuro_bridge import neuro_notify_tenant_changed
