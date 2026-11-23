@@ -237,20 +237,21 @@ def _reconcile_sql_and_download(business, run):
             (sale["order_id"], sale["order_no"]),
         ).fetchone()
         assert order == (actor.tenant_id, 1000, 0, "unpaid", "invoiced")
+        # One extra row still detects duplicate writes without an unbounded result list.
         rows = db.execute(
             "SELECT product_name,quantity,amount,delivered_quantity FROM sales_order_items "
             "WHERE order_id=? AND tenant_id=?",
             (sale["order_id"], actor.tenant_id),
-        ).fetchall()
+        ).fetchmany(2)
         assert rows == [("产品 B", 10, 1000, 10)]
         assert db.execute(
             "SELECT quantity FROM inventory_transactions WHERE sales_order_id=?",
             (sale["order_id"],),
-        ).fetchall() == [(-10,)]
+        ).fetchmany(2) == [(-10,)]
         assert db.execute(
             "SELECT available_quantity FROM inventory_ledger WHERE tenant_id=?",
             (actor.tenant_id,),
-        ).fetchall() == [(10,)]
+        ).fetchmany(2) == [(10,)]
         assert db.execute(
             "SELECT available_quantity FROM inventory_ledger WHERE tenant_id=?",
             (business.foreign_reviewer.tenant_id,),

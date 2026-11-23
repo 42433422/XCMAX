@@ -49,10 +49,8 @@ vi.mock('./rollback-macos.js', async importOriginal => {
 })
 function cleanRollbackState() {
   const userData = electronMocks.__userDataDir
-  const rollbackDir = path.join(userData, 'rollback')
-  try { fs.rmSync(rollbackDir, { recursive: true, force: true }) } catch {}
-  try { fs.unlinkSync(path.join(userData, 'rollback-marker.json')) } catch {}
-  for (const file of ['rollback-applied.json', 'rollback-applied.last.json']) { try { fs.unlinkSync(path.join(userData, file)) } catch {} }
+  fs.rmSync(userData, { recursive: true, force: true })
+  fs.mkdirSync(userData, { recursive: true })
 }
 beforeEach(() => {
   cleanRollbackState()
@@ -119,8 +117,12 @@ describe('rollback — prepareRollback', () => {
       write('data/mod_dbs/private/uploads/customer.db', 'private Mod DB below a specially named folder')
       write('data/xcagi.db', 'main DB')
       windowsRollbackMocks.launchWindowsFullRollback.mockClear()
-      const { prepareRollback, checkPendingRollback, triggerRollback } = await import('./rollback.js')
+      const { prepareRollback, attachDatabaseBackupToRollback, checkPendingRollback, triggerRollback } = await import('./rollback.js')
       await prepareRollback('10.3.0')
+      const database = path.join(userData, 'data', 'xcagi.db')
+      const databaseBackup = path.join(userData, 'data', 'xcagi.db.before-migration')
+      fs.copyFileSync(database, databaseBackup)
+      attachDatabaseBackupToRollback(databaseBackup)
       const marker = checkPendingRollback()
       const preparedMarkerBytes = fs.readFileSync(path.join(userData, 'rollback-marker.json'))
       const preparedSnapshotRoot = marker?.ownedBackupRoot
@@ -143,11 +145,16 @@ describe('rollback — prepareRollback', () => {
       expect(marker?.expectedOwnedFiles).toHaveProperty('mods\\northwind\\logs\\private.log')
       expect(Object.keys(marker?.expectedOwnedFiles || {}).some(name => /^(models|logs|uploads|secrets)[\\/]/i.test(name))).toBe(false)
       await triggerRollback('test owned state handoff')
-      const options = windowsRollbackMocks.launchWindowsFullRollback.mock.calls[0]?.[0] as { ownedUserDataRoot?: string; ownedBackupRoot?: string; expectedOwnedFiles?: Record<string, string>; expectedOwnedDirectories?: string[] }
+      const options = windowsRollbackMocks.launchWindowsFullRollback.mock.calls[0]?.[0] as import('./rollback-windows.js').WindowsRollbackLaunchOptions
       expect(options.ownedUserDataRoot).toBe(userData)
       expect(options.ownedBackupRoot).toBe(marker?.ownedBackupRoot)
       expect(options.expectedOwnedFiles).toEqual(marker?.expectedOwnedFiles)
       expect(options.expectedOwnedDirectories).toEqual(marker?.expectedOwnedDirectories)
+      expect(options).toMatchObject({
+        databasePath: database,
+        databaseBackupPath: databaseBackup,
+        expectedDatabaseSha256: createHash('sha256').update('main DB').digest('hex'),
+      })
       const rollbackRoot = path.join(userData, 'rollback')
       const unrelatedFailedSnapshot = path.join(rollbackRoot, 'windows-owned-state-failed-preserved')
       const unrelatedUnknownFolder = path.join(rollbackRoot, 'unknown-retained-folder')
