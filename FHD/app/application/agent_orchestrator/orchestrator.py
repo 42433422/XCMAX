@@ -439,7 +439,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             return None
         required = set((plan.metadata or {}).get("approval_required_node_ids") or [])
         approval_plan_sha256 = ""
-        if waiting_step.node_id in required:
+        if waiting_step.node_id in required or str(approval_request_id or "").strip():
             from app.application.workflow.approval_persistence import (
                 load_workflow_snapshot_for_execution,
             )

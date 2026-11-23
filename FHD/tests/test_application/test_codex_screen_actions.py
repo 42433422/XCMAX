@@ -218,6 +218,23 @@ def test_model_cannot_change_a_pending_action_or_its_approved_condition(dynamic_
     assert state.screen.repository.get(pending["run_id"]).steps[0].params == _type_params()
 
 
+def test_dynamic_screen_action_rejects_missing_workspace_proof(dynamic_screen):
+    state = dynamic_screen
+    pending = state.invoke("ui_type", _type_params())
+    child = state.screen.repository.get(pending["run_id"])
+    assert not child.metadata["plan"].get("metadata", {}).get("approval_required_node_ids")
+    run = state.bridge.orchestrator.continue_run(
+        child.run_id,
+        approved_by="71",
+        approved_step_id=child.steps[0].step_id,
+        approval_request_id="missing-workspace-approval",
+    )
+    assert run.status == "blocked"
+    assert run.error == "持久化审批与当前完整执行计划不匹配"
+    assert "approval_receipt" not in run.metadata
+    assert not run.tool_calls and not state.screen.own.sent and not state.screen.foreign.sent
+
+
 def test_workspace_review_resumes_the_original_screen_action(dynamic_screen, sessions, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -252,14 +269,14 @@ def test_workspace_review_resumes_the_original_screen_action(dynamic_screen, ses
         assert approvals.attach_pending_agent_run(
             request.request_id, agent_run_id=child.run_id, approved_step_id=waiting.node_id
         )
-    with sessions() as db:
+    with tenant_scope(7), sessions() as db:
         approval_id = db.query(ApprovalRequest).filter_by(request_no=request.request_id).one().id
     monkeypatch.setattr(workspace, "_approval_backend", lambda: approvals)
     monkeypatch.setattr(workspace, "_agent_executor", lambda: state.bridge.orchestrator)
     app = FastAPI()
     app.add_middleware(IndustryContextMiddleware)
     app.include_router(router)
-    with TestClient(app, headers={"X-Session-ID": "valid"}) as client:
+    with tenant_scope(None), TestClient(app, headers={"X-Session-ID": "valid"}) as client:
         url = f"/api/approval/requests/{approval_id}/approve"
         response = client.post(url, json={"opinion": "Approve this original screen action"})
         assert response.status_code == 200, response.text
@@ -275,6 +292,6 @@ def test_workspace_review_resumes_the_original_screen_action(dynamic_screen, ses
     reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=sessions))
     receipt = reopened.receipt_snapshot(state.parent.run_id)[0]["receipt"]
     assert receipt["run_id"] == child.run_id and receipt["verified"] is True
-    with sessions() as db:
+    with tenant_scope(7), sessions() as db:
         records = db.query(ApprovalRecord).filter_by(request_id=approval_id, action="approve").all()
         assert len(records) == 1 and records[0].approver_id == 71

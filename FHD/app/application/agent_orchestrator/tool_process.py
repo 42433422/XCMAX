@@ -996,5 +996,5 @@ def execute_isolated(executor, step, context, deadline: float) -> dict[str, Any]
         "outcome": "unknown",
         "error_code": "tool_worker_exited" if early_exit else "tool_worker_incomplete",
         "retryable": False,
-        **({"cleanup_unresolved": True} if not clean else {}),
+        **({"cleanup_unresolved": True, "reconciliation_required": True} if not clean else {}),
     }

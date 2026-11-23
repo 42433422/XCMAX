@@ -6,7 +6,7 @@
  */
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -1854,4 +1854,4 @@ if (process.argv.includes('--spawn')) {
 
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) startParaAgent();
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) startParaAgent();

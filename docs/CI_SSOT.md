@@ -390,6 +390,8 @@ part/mixin 分片、动态 facade 回调和同职责搬家。PR 正文列出触�
 
 GitHub 实配 11 项 required status checks（2026-10-21 API 复核）：`guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、`mutation-smoke`。本轮不调整此清单或 App 绑定。
 
+`arch-fitness` 的源码增长登记绑定当次实际检出的 PR merge SHA：先确认 checkout 等于 `github.sha`、提交恰有两个父节点且第二父节点等于事件 head，再以第一父节点和 head 的 merge-base 比较。事件 base SHA 仅留作诊断，不用已过期的事件基点或会移动的 `origin/main` 代替被测合并；身份或历史缺失仍阻断。登记继续读取精确 head 的已提交目录，不表示架构评审已批准。
+
 `backend-quality` 的 mypy/lint 失败由 `backend-test` 汇总阻断；`frontend-quality` 的 ESLint/any 棘轮失败由 `frontend-test` 汇总阻断。普通 CI 的 vue-tsc 保持 advisory；发布验证中的严格构建仍按原流程执行。后端同时检查 full 和 behavior 两个口径；前端在合并原生覆盖率后执行全局阈值与 ratchet。数值以 `FHD/metrics/coverage_ratchet_baseline.json` 及测试配置为准，不在此复制历史地板值。本地发布验证入口为 `bash FHD/scripts/dev/release_verify.sh`。
 
 **文档新鲜度门禁**（2026-09-09 起，`arch-fitness` job 内硬阻断，check 名仍为 `arch-fitness`）：`docs_ssot_lint.py --strict`（SSOT 声明与登记表一致）、`verify_doc_versions.py`（docs 版本表述对齐 `VERSION.md` 锚点）、`verify_doc_claims.py`（文档覆盖率数字必须源于 SSOT 快照）、`gen_claimed_vs_actual.py --check`（`CLAIMED_VS_ACTUAL.md` 与 `metrics/` 一致；日更 metrics 由 `fhd-slo-metrics-collect.yml` 同步重生成该文档）。

@@ -237,7 +237,7 @@ def _corpus_cases(path: Path, additions=()) -> tuple[list[dict[str, Any]], list[
     with os.fdopen(descriptor, "a+", encoding="utf-8") as lock:
         if hasattr(os, "fchmod"):
             os.fchmod(lock.fileno(), 0o600)
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             if os.fstat(lock.fileno()).st_size == 0:

@@ -985,7 +985,8 @@ jobs:
         env:
           GROWTH_BASE: ${{ github.event.pull_request.base.sha }}
           GROWTH_HEAD: ${{ github.event.pull_request.head.sha }}
-        run: python ../scripts/dev/source_growth_review.py --base "$GROWTH_BASE" --head "$GROWTH_HEAD"
+          GROWTH_SOURCE: ${{ github.sha }}
+        run: python ../scripts/dev/source_growth_review.py --base "$GROWTH_BASE" --head "$GROWTH_HEAD" --pr-merge-sha "$GROWTH_SOURCE"
 
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py

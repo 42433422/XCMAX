@@ -213,7 +213,7 @@ def test_windows_corpus_uses_native_lock_before_encrypting(tmp_path, monkeypatch
         locked.append(descriptor)
 
     monkeypatch.setitem(sys.modules, "msvcrt", SimpleNamespace(LK_LOCK=1, locking=lock))
-    monkeypatch.setattr(trainer, "os", SimpleNamespace(**{**vars(os), "name": "nt"}))
+    monkeypatch.setattr(trainer, "sys", SimpleNamespace(**{**vars(sys), "platform": "win32"}))
     clusters = trainer.cluster_failures([_rec()], min_count=1)
     written = trainer.append_cases(tmp_path, clusters)
     path = tmp_path / "daily-orchestrator.jsonl"

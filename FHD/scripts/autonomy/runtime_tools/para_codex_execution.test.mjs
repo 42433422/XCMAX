@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -236,15 +236,18 @@ test('legacy startup entry shares successful report-only sandbox and native rece
 
 test('installed compatibility agent preserves complete startup dependencies and native receipts',
   { ...native, timeout: 90000 }, async t => {
-    const target = mkdtempSync(join(tmpdir(), 'para-installed-contract-'));
-    t.after(() => rmSync(target, { recursive: true, force: true }));
+    const root = mkdtempSync(join(tmpdir(), 'para-installed-contract-'));
+    const target = join(root, 'installed'), entry = join(root, 'linked-install');
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    mkdirSync(target);
     execFileSync('bash', [join(directory, 'install_e2e_agent.sh')], {
       cwd: target, encoding: 'utf8', timeout: 45000,
       env: { PATH: process.env.PATH, E2E_AGENT_DEST_DIR: target },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    symlinkSync(target, entry, 'dir');
     const current = await worker(t, { mode: 'success', reportOnly: true, managed: true,
-      entry: relative(directory, join(target, 'e2e-agent.mjs')) });
+      entry: relative(directory, join(entry, 'e2e-agent.mjs')) });
     assert.equal((await current.terminal()).status, 'completed');
     assert.equal(current.receipt().thread_id, 'original-fixture-thread');
     assert.equal(current.calls()[0].sandbox, 'read-only');

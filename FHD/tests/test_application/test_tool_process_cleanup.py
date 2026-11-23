@@ -19,6 +19,7 @@ import pytest
 from app.application.agent_orchestrator import tool_process
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 class CleanupFixtureExecutor(AgentToolExecutor):
@@ -141,7 +142,7 @@ def _exit_tool_owner(root, browser, phase, report):
             for process in psutil.Process().children(recursive=True)
         ]
         report.send_bytes(json.dumps({"owned": owned, "folder": folder}).encode())
-    except BaseException as exc:
+    except BOUNDARY_ERRORS as exc:
         report.send_bytes(json.dumps({"error": repr(exc)}).encode())
         raise
     # Reproduce the desktop backend's parent-loss path, bypassing atexit.

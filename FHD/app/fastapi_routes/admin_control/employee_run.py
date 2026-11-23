@@ -119,7 +119,10 @@ class EmployeeRunner:
             error_code = (
                 str(result.get("error_code") or "")
                 if status == "failed"
-                and result.get("retryable") is not False
+                and all(
+                    receipt.get("retryable") is not False
+                    for receipt in execution_result_envelopes(result)
+                )
                 and str(result.get("error_code") or "") in RETRYABLE_CODES
                 else ""
             )

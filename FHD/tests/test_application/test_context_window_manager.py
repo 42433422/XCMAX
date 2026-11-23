@@ -186,7 +186,8 @@ class TestCompressSummarize:
         provider.chat_completion.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_compress_over_token_budget_triggers_summarize(self) -> None:
+    @pytest.mark.parametrize("finish_reason", ["stop", "end_turn", "stop_sequence"])
+    async def test_compress_over_token_budget_triggers_summarize(self, finish_reason) -> None:
         """token 超预算 → 触发摘要（即使消息数 ≤ 阈值）。"""
         from app.application.agent_orchestrator.context_window_manager import (
             ContextWindowManager,
@@ -194,6 +195,7 @@ class TestCompressSummarize:
 
         m = ContextWindowManager(token_budget=700, recent_keep=2, summarize_threshold=100)
         provider = _make_provider()
+        provider.chat_completion.return_value["choices"][0]["finish_reason"] = finish_reason
         # 5 条消息，每条 ~3 token，总 ~15 token > budget 10
         msgs = _make_messages(5)
         with patch(
@@ -374,6 +376,14 @@ class TestCompressionFailure:
             None,
             {"choices": []},
             {"choices": [{"message": {"content": ""}}]},
+            *[
+                {
+                    "choices": [
+                        {"finish_reason": reason, "message": {"content": "非空但未完成的摘要"}}
+                    ]
+                }
+                for reason in ("length", "content_filter", "tool_calls", None)
+            ],
         ],
     )
     async def test_summary_failure_rejects_without_mutating_history(self, answer):
@@ -385,11 +395,26 @@ class TestCompressionFailure:
                 else {"return_value": answer}
             )
         )
-        messages = _make_messages(6)
+        from app.application.agent_orchestrator.context_window_manager import summary_fingerprint
+
+        messages = _make_messages(8)
         original = [dict(row) for row in messages]
+        context = SimpleNamespace(
+            conversation_history=original,
+            summary="先前完整摘要",
+            summary_covered_until=1,
+            summary_fingerprint=summary_fingerprint(original[:2]),
+        )
+        saved = (context.summary, context.summary_covered_until, context.summary_fingerprint)
         with pytest.raises(ContextWindowExceeded):
-            await manager.compress(messages, user_id="u1", provider=provider)
+            await manager.compress(messages, user_id="u1", provider=provider, context=context)
+        assert provider.chat_completion.await_count == 1
         assert messages == original
+        assert (
+            context.summary,
+            context.summary_covered_until,
+            context.summary_fingerprint,
+        ) == saved
 
     @pytest.mark.asyncio
     async def test_missing_provider_rejects_without_losing_history(self):
