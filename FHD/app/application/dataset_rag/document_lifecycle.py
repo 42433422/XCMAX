@@ -129,6 +129,70 @@ def capture_agent_rollback(step, context: dict[str, Any]) -> dict[str, Any]:
         return {}
 
 
+def document_content_mismatch(
+    document: dict[str, Any],
+    chunks: list[dict[str, Any]],
+    *,
+    text: str,
+    access: DatasetAccessContext,
+    dataset_id: str,
+) -> str | None:
+    """Check one committed document and its chunks against normalized source text.
+
+    Callers retain authorization, receipt and source binding. This shared check
+    only reads the supplied snapshot; ``chunks`` must belong to this document.
+    """
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    tenant = access.tenant_id
+    metadata = document.get("metadata")
+    if (
+        not tenant
+        or document.get("tenant_id") != tenant
+        or not isinstance(metadata, dict)
+        or metadata.get("tenant_id") != tenant
+        or metadata.get("document_content_hash") != digest
+        or document.get("parser") != "inline_text"
+        or document.get("text_length") != len(text)
+        or type(document.get("version")) is not int
+        or document["version"] < 1
+        or type(metadata.get("document_version")) is not int
+        or metadata.get("document_version") != document["version"]
+        or type(document.get("chunk_count")) is not int
+        or document["chunk_count"] < 1
+        or not document_visible_to(metadata, access)
+    ):
+        return "result_document_mismatch"
+    if len(chunks) != document["chunk_count"] or any(
+        not isinstance(chunk, dict)
+        or not isinstance(chunk.get("metadata"), dict)
+        or type(chunk.get("char_start")) is not int
+        or type(chunk.get("char_end")) is not int
+        for chunk in chunks
+    ):
+        return "result_document_chunks_changed"
+    coverage = 0
+    for chunk in sorted(chunks, key=lambda chunk: chunk["char_start"]):
+        start, end, chunk_meta = chunk["char_start"], chunk["char_end"], chunk["metadata"]
+        if (
+            not (0 <= start < end <= len(text))
+            or (start > coverage and text[coverage:start].strip())
+            or str(chunk.get("text") or "").strip() != text[start:end].strip()
+            or chunk.get("source") != document.get("source")
+            or chunk.get("source_url") != document.get("source")
+            or chunk_meta.get("document_id") != document.get("document_id")
+            or chunk_meta.get("dataset_id") != dataset_id
+            or chunk_meta.get("tenant_id") != tenant
+            or type(chunk_meta.get("document_version")) is not int
+            or chunk_meta.get("document_version") != document["version"]
+            or chunk_meta.get("version_label") != document.get("version_label")
+            or chunk_meta.get("document_content_hash") != digest
+            or not document_visible_to(chunk_meta, access)
+        ):
+            return "result_document_chunks_changed"
+        coverage = max(coverage, end)
+    return "result_document_chunks_changed" if text[coverage:].strip() else None
+
+
 def verify_agent_document(
     step, call, output: dict[str, Any], context: dict[str, Any]
 ) -> dict[str, Any]:
@@ -214,29 +278,28 @@ def verify_agent_document(
         or document["version"] <= target_evidence["target_version"]
     ):
         return _report("failed", "result_rollback_mismatch", source)
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     tenant = str(context.get("tenant_id") or "")
     if (
         not tenant
         or document.get("tenant_id") != tenant
         or output.get("dataset_id") != dataset_id
         or document.get("document_id") != document_id
-        or not isinstance(metadata, dict)
-        or metadata.get("tenant_id") != tenant
-        or metadata.get("document_content_hash") != digest
-        or document.get("parser") != "inline_text"
-        or document.get("text_length") != len(text)
-        or type(document.get("version")) is not int
-        or document["version"] < 1
-        or type(metadata.get("document_version")) is not int
-        or metadata.get("document_version") != document["version"]
-        or type(document.get("chunk_count")) is not int
-        or document["chunk_count"] < 1
-        or output.get("chunk_count") != document["chunk_count"]
-        or not document_visible_to(metadata, access)
+        or output.get("chunk_count") != document.get("chunk_count")
         or (step.params.get("document_id") and step.params["document_id"] != document_id)
     ):
         return _report("failed", "result_document_mismatch", source)
+    chunks = snapshot["chunks"]
+    if any(
+        not isinstance(chunk, dict) or not isinstance(chunk.get("metadata"), dict)
+        for chunk in chunks
+    ):
+        return _report("inconclusive", "result_document_unavailable", source)
+    chunks = [chunk for chunk in chunks if chunk["metadata"].get("document_id") == document_id]
+    mismatch = document_content_mismatch(
+        document, chunks, text=text, access=access, dataset_id=dataset_id
+    )
+    if mismatch:
+        return _report("failed", mismatch, source)
     if (
         step.params.get("version")
         and document["version"]
@@ -251,38 +314,6 @@ def verify_agent_document(
         and document.get("source") != (str(step.params.get("source") or "").strip() or "inline")
     ):
         return _report("failed", "result_document_mismatch", source)
-    chunks = snapshot["chunks"]
-    if any(
-        not isinstance(chunk, dict) or not isinstance(chunk.get("metadata"), dict)
-        for chunk in chunks
-    ):
-        return _report("inconclusive", "result_document_unavailable", source)
-    chunks = [chunk for chunk in chunks if chunk["metadata"].get("document_id") == document_id]
-    if len(chunks) != document["chunk_count"]:
-        return _report("failed", "result_document_chunks_changed", source)
-    coverage = 0
-    for chunk in sorted(chunks, key=lambda chunk: chunk.get("char_start", -1)):
-        start, end, chunk_meta = chunk.get("char_start"), chunk.get("char_end"), chunk["metadata"]
-        if (
-            type(start) is not int
-            or type(end) is not int
-            or not (0 <= start < end <= len(text))
-            or (start > coverage and text[coverage:start].strip())
-            or str(chunk.get("text") or "").strip() != text[start:end].strip()
-            or chunk.get("source") != document.get("source")
-            or chunk.get("source_url") != document.get("source")
-            or chunk_meta.get("dataset_id") != dataset_id
-            or chunk_meta.get("tenant_id") != tenant
-            or type(chunk_meta.get("document_version")) is not int
-            or chunk_meta.get("document_version") != document["version"]
-            or chunk_meta.get("version_label") != document.get("version_label")
-            or chunk_meta.get("document_content_hash") != digest
-            or not document_visible_to(chunk_meta, access)
-        ):
-            return _report("failed", "result_document_chunks_changed", source)
-        coverage = max(coverage, end)
-    if text[coverage:].strip():
-        return _report("failed", "result_document_chunks_changed", source)
     return _report(
         "verified",
         "result_document_verified",
@@ -292,7 +323,7 @@ def verify_agent_document(
         tenant_id=tenant,
         actor_id=access.actor_id,
         document_version=document["version"],
-        text_sha256=digest,
+        text_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
         chunk_count=len(chunks),
         chunks_sha256=canonical_hash(chunks),
         receipt_sha256=canonical_hash(receipt["output"]),

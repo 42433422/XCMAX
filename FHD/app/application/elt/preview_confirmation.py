@@ -397,6 +397,7 @@ def capture_agent_execution(step: Any, context: dict[str, Any]) -> dict[str, Any
 
 def _capture_execution_target(run_id: str, context: dict[str, Any]) -> dict[str, Any]:
     from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
+    from app.application.elt.auxiliary_verification import capture_auxiliary_sources
     from app.application.elt.service_history import HistoryServiceMixin
     from app.domain.shared_services.tools_workflow_elt import _companion_summary
     from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -455,6 +456,7 @@ def _capture_execution_target(run_id: str, context: dict[str, Any]) -> dict[str,
                 "target_type": row.target_type,
                 "preview_revision": revision,
                 "source_sha256": _execution_source_hash(db, row),
+                **capture_auxiliary_sources(row),
                 # These are the reviewed, pre-dispatch projections. The writer
                 # later replaces after_json, so never accept that replacement
                 # as the only proof of the requested customer/product values.
@@ -687,6 +689,7 @@ def _verify_execution_target(
     """Reuse the original single-target SQL proof after binding the whole durable receipt."""
     from app.application.agent_orchestrator.verification_readback import _report
     from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
+    from app.application.elt.auxiliary_verification import verify_auxiliary_receipts
     from app.application.elt.batch_continuation import (
         _legacy_completed_receipt,
         unchanged_source_upload,
@@ -698,8 +701,6 @@ def _verify_execution_target(
     returned = output.get("data")
     if not isinstance(returned, dict) or returned.get("run_id") != params.get("run_id"):
         return _report("failed", "result_scope_mismatch", "elt_execution")
-    if returned.get("knowledge") or returned.get("template"):
-        return _report("inconclusive", "result_auxiliary_verification_required", "elt_execution")
     try:
         with _transaction_read_scope(context, {"elt.execute"}, "elt") as (db, tenant):
             row = (
@@ -767,6 +768,9 @@ def _verify_execution_target(
                     or not _execution_rows_current(db, parent)
                 ):
                     return _report("failed", "result_companion_mismatch", "elt_execution")
+            auxiliary = verify_auxiliary_receipts(db, row, baseline, returned)
+            if auxiliary is not None:
+                return auxiliary
             return _report(
                 "verified",
                 "result_verified",

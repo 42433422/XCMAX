@@ -218,7 +218,7 @@ def test_durable_identical_uploads_keep_each_approved_checkpoint(preview_store, 
     monkeypatch.setattr(
         target_detection, "detect_elt_target", lambda *_, **__: {"target_type": "customers"}
     )
-    monkeypatch.setattr(elt, "_finalize_import", lambda *_: ({}, {}, ""))
+    monkeypatch.setattr(elt, "_finalize_import", lambda *_, **__: ({}, {}, ""))
     paths = []
     with store.factory() as db:
         for _ in range(2):
