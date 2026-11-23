@@ -1,5 +1,5 @@
 {
-  "lines": 2679939,
+  "lines": 2681379,
   "updated": "2026-11-23",
-  "note": "按用户修复配置并提PR合入的授权，修复最终CI原设置页E2E暴露的历史导航竞态。实际生产同步器与vue-router createWebHistory诊断确认：前进已换entry、异步guard未完成时，旧40ms定时器以旧route覆盖新entry。仅让成功导航持有position/fullPath/generation一致的同步权，新导航/reset撤销旧timer，保留同entry地址纠正。生产净增16行、4项真实webHistory回归新增148行；旧3失败1正控通过，新4全过，相关48项及类型/ESLint通过。原Playwright断言未改，固定浏览器仍由最终CI验收；未删除无关功能或降低门禁。"
+  "note": "按用户本轮开箱即用配置、安装、升级与资格自动化授权，复用现有 Codex、filelock 和 Pinia 完成真实身份及证据读回、启动准备与失败恢复；生产净增554行、回归净增883行、既有文档净增3行，共1440行。删除设置页重复状态及六处资格夹具重复，不删除无关代码抵数；完整CI和主线合入另行核验。"
 }

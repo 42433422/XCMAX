@@ -48,6 +48,11 @@ def parser() -> argparse.ArgumentParser:
     runtime.add_argument(
         "--retry", action="store_true", help="修复配置后，显式重试此前失败的运行验收"
     )
+    runtime.add_argument(
+        "--deployment",
+        action="store_true",
+        help="在本机验收部署方指定的 XCAGI_AGENT_RUNTIME_CONFIG，不使用账号 HTTP 接口",
+    )
     openapi = commands.add_parser("openapi", help="查询服务端 OpenAPI 文档")
     openapi.add_argument("--filter", default="")
     openapi.add_argument("--method", type=str.upper, default="")
@@ -123,6 +128,19 @@ def _collect(client: BrainClient, endpoints: dict[str, str]) -> dict:
 
 def execute(args: argparse.Namespace, client: BrainClient) -> dict:
     command = args.command
+    if command == "runtime-check" and args.deployment:
+        from app.application.agent_runtime.configuration import prepare_deployment_runtime
+        from app.infrastructure.codex.policy import CODEX_VERSION
+
+        settings = prepare_deployment_runtime(retry=args.retry)
+        return {
+            "success": True,
+            "runtime": "codex",
+            "codex_version": CODEX_VERSION,
+            "qualification": "passed",
+            "managed_by": "deployment",
+            "route": settings.require_qualified().runtime_identity(),
+        }
     if command in {"models", "runtime-check", "analyze", "draft", "edit", "diff", "apply"}:
         client.require_login()
     if command == "login":

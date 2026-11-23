@@ -20,6 +20,7 @@ const state = await vi.hoisted(async () => {
       installSandboxBridge: vi.fn(), bindLegacyUploadHooks: vi.fn(), uninstall: vi.fn(),
     },
     sync: { start: vi.fn(), stop: vi.fn() },
+    runtime: { start: vi.fn(), stop: vi.fn() },
     stripModKeys: vi.fn(),
     loadFont: vi.fn(),
   }
@@ -27,6 +28,7 @@ const state = await vi.hoisted(async () => {
 vi.mock('vue-router', () => ({ useRoute: () => state.route, useRouter: () => state.router }))
 vi.mock('@/stores/mods', () => ({ useModsStore: () => state.mods }))
 vi.mock('@/stores/accountProfile', () => ({ useAccountProfileStore: () => state.account }))
+vi.mock('@/stores/accountRuntime', () => ({ useAccountRuntimeStore: () => state.runtime }))
 vi.mock('@/stores/workflowAiEmployees', () => ({ useWorkflowAiEmployeesStore: () => ({ stripModWorkflowEmployeeKeys: state.stripModKeys }) }))
 vi.mock('@/utils/authSessionCache', () => ({
   getAuthSessionEpoch: () => state.authEpoch.value,
@@ -86,6 +88,7 @@ beforeEach(() => {
   state.account.refreshFromServer.mockReset().mockImplementation(async () => undefined)
   state.mods.isLoaded = false; state.mods.clientModsUiOff = false; state.mods.loadError = null
   state.ensureAuth.mockReset().mockResolvedValue({ ok: true, entitledModIds: ['owned-mod'], accountUsername: 'synthetic-user' })
+  state.runtime.start.mockReset().mockResolvedValue(undefined)
   state.mods.initialize.mockReset().mockImplementation(async () => { state.mods.isLoaded = true })
   state.router.isReady.mockReset().mockResolvedValue(undefined)
   state.router.replace.mockReset().mockResolvedValue(undefined)
@@ -100,6 +103,24 @@ afterEach(() => {
 })
 
 describe('workspace startup readiness', () => {
+  it('prepares runtime after authenticated hydration without blocking the usable workspace', async () => {
+    const qualification = deferred()
+    state.runtime.start.mockReturnValue(qualification.promise)
+    state.account.workspaceHydrationReady = false
+    const boot = mountBoot()
+    await settle()
+    expect(state.runtime.start).not.toHaveBeenCalled()
+    state.account.workspaceHydrationReady = true
+    await settle()
+    expect(state.runtime.start).toHaveBeenCalledOnce()
+    expect(boot.appReady.value).toBe(true)
+    expect(boot.startupVisible.value).toBe(false)
+    state.route.name = 'login'; state.route.meta = { hideChrome: true }
+    await settle()
+    expect(state.runtime.stop).toHaveBeenCalled()
+    qualification.resolve()
+  })
+
   it('keeps verified workspace data while waiting for the latest hydration', async () => {
     state.account.workspaceHydrationReady = false
     const boot = mountBoot()
@@ -601,10 +622,12 @@ describe('workspace startup readiness', () => {
     expect(boot.appReady.value).toBe(true)
     state.mods.isLoaded = false
     state.mods.initialize.mockClear()
+    state.runtime.start.mockClear()
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
     document.dispatchEvent(new Event('visibilitychange'))
     await settle()
     expect(state.mods.initialize).toHaveBeenCalled()
+    expect(state.runtime.start).toHaveBeenCalledOnce()
   })
 
   it('retries startup from a persisted pageshow after bfcache restore', async () => {

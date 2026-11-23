@@ -2,6 +2,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, provide, readonly, ref,
 import { useRoute, useRouter } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
 import { useAccountProfileStore } from '@/stores/accountProfile'
+import { useAccountRuntimeStore } from '@/stores/accountRuntime'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useStartupAuth } from '@/composables/useStartupAuth'
@@ -17,6 +18,7 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
   const router = useRouter()
   const modsStore = useModsStore()
   const account = useAccountProfileStore()
+  const accountRuntime = useAccountRuntimeStore()
   const hideChrome = computed(() => route.meta?.hideChrome === true)
   const publicEntry = computed(() => route.meta?.publicAccess === true || hideChrome.value ||
     ['login', 'lan-gate', 'product-onboarding'].includes(String(route.name || '')))
@@ -128,12 +130,16 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
         catch (error) { if (pagePreparations.has(prepare)) throw error }
       }
       if (!await waitForWorkspace(current, signal)) return
+      // Qualification may take minutes. It runs behind the usable workspace;
+      // the server remains the gate for every actual task.
+      void accountRuntime.start()
       await nextTick()
     })
   }
 
   async function cancelStartup() {
     splash.cancelStartup()
+    accountRuntime.stop()
     const target = buildLoginLocation(window.location, import.meta.env.BASE_URL)
     try {
       await router.replace({ ...target, query: { ...target.query, error: '工作台准备已取消，请重新登录' } })
@@ -148,6 +154,7 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
   watch(() => [getAuthSessionEpoch(), publicEntry.value], () => {
     if (publicEntry.value) {
       splash.dismissStartupSplashImmediate()
+      accountRuntime.stop()
       xcmaxSync.stop()
     } else {
       xcmaxSync.start()
@@ -165,9 +172,9 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
   }, { flush: 'post' })
 
   const onVisibility = () => {
-    if (document.visibilityState === 'visible' && splash.appReady.value && !publicEntry.value && !modsStore.isLoaded) {
-      void modsStore.initialize()
-    }
+    if (document.visibilityState !== 'visible' || !splash.appReady.value || publicEntry.value) return
+    if (!modsStore.isLoaded) void modsStore.initialize()
+    void accountRuntime.start()
   }
   const onPageShow = (event: PageTransitionEvent) => {
     if (event.persisted && !publicEntry.value) retryStartup()
@@ -189,6 +196,7 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('pageshow', onPageShow)
     shellBridge.uninstall()
+    accountRuntime.stop()
     xcmaxSync.stop()
     splash.teardownOnUnmount()
   })

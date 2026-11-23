@@ -6,6 +6,7 @@ import copy
 import json
 import stat
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -14,7 +15,12 @@ import pytest
 
 from app.application.agent_runtime import configuration
 from app.application.market_llm.protocols import Connection
-from app.infrastructure.codex.policy import CODEX_VERSION, QUALIFICATION_CHECKS
+from app.infrastructure.codex.policy import (
+    CODEX_VERSION,
+    QUALIFICATION_CHECKS,
+    qualification_host_identity,
+)
+from tests.fixtures.codex_qualification import synthetic_qualification
 
 
 @pytest.fixture
@@ -63,14 +69,7 @@ def account(monkeypatch, tmp_path):
             # Deliberately synthetic: exercises the real receipt reader, not a model.
             settings.qualification_file.write_text(
                 json.dumps(
-                    {
-                        "schema": "xcmax.runtime-qualification.v1",
-                        "route_identity": settings.route.identity,
-                        "codex_version": CODEX_VERSION,
-                        "model_kind": "real",
-                        "evidence_refs": ["synthetic-account-wiring-test-only"],
-                        "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
-                    }
+                    synthetic_qualification(settings.route, settings.qualification_file.parent)
                 )
             )
         return {"ok": state.succeeds, "error_code": state.error_code, "checks": state.checks}
@@ -85,7 +84,7 @@ def account(monkeypatch, tmp_path):
         "_account_connection",
         lambda owner: Connection("https://market.test", f"private-account-{owner}", None, 5),
     )
-    monkeypatch.setattr(configuration, "get_desktop_state_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(configuration, "get_desktop_state_dir", lambda **_kwargs: str(tmp_path))
     monkeypatch.setattr("app.infrastructure.codex.qualification.qualify_runtime", qualify)
     monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
     monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "unrelated-host-account")
@@ -230,6 +229,7 @@ def test_first_setup_lock_prevents_concurrent_paid_probes(account, monkeypatch):
         first = pool.submit(configuration.get_account_runtime_settings, "41")
         try:
             assert entered.wait(5)
+            assert configuration.get_account_runtime_status("41")["qualification"] == "in_progress"
             with pytest.raises(configuration.RuntimeSetupError) as exc:
                 configuration.get_account_runtime_settings("41")
             assert exc.value.code == "runtime_qualification_in_progress"
@@ -296,3 +296,210 @@ def test_unproven_scoped_account_cannot_be_borrowed_by_background_owner(monkeypa
     token.assert_called_once_with(user_id=41)
     stolen.adapter._connection.assert_not_called()
     network.assert_not_called()
+
+
+def test_host_upgrade_requalifies_same_route_and_preserves_original_receipt(account, monkeypatch):
+    monkeypatch.setattr("app.build_identity.verified_source_sha", lambda: "a" * 40)
+    original = configuration.get_account_runtime_settings("41")
+    original_receipt = original.qualification_file.read_bytes()
+    monkeypatch.setattr("app.build_identity.verified_source_sha", lambda: "b" * 40)
+    upgraded = configuration.get_account_runtime_settings(
+        "41", previous=original.route.runtime_identity()
+    )
+    assert upgraded.route.identity == original.route.identity
+    assert upgraded.qualification_file != original.qualification_file
+    assert len(account.attempts) == 2
+    assert original.qualification_file.read_bytes() == original_receipt
+    monkeypatch.setattr("app.build_identity.verified_source_sha", lambda: "a" * 40)
+    restored = configuration.get_account_runtime_settings("41")
+    assert restored.qualification_file == original.qualification_file
+    assert len(account.attempts) == 2
+
+
+def test_only_proven_zero_model_attempt_may_retry_automatically(account, monkeypatch):
+    from app.infrastructure.codex import qualification
+
+    real_test_runner = qualification.qualify_runtime
+    attempts = []
+
+    def unavailable(settings, **kwargs):
+        attempts.append(settings)
+        journal = settings.qualification_file.with_name("setup-attempt.json")
+        assert json.loads(journal.read_text())["state"] == "started"
+        assert stat.S_IMODE(journal.stat().st_mode) == 0o600
+        if len(attempts) == 1:
+            return {
+                "ok": False,
+                "error_code": "runtime_qualification_unavailable",
+                "model_attempted": False,
+            }
+        return real_test_runner(settings, **kwargs)
+
+    monkeypatch.setattr(qualification, "qualify_runtime", unavailable)
+    with pytest.raises(configuration.RuntimeSetupError):
+        configuration.get_account_runtime_settings("41")
+    restored = configuration.get_account_runtime_settings("41")
+    assert restored.require_qualified() == restored.route
+    assert len(attempts) == 2
+
+
+def test_status_does_not_start_paid_qualification_or_create_state(account, tmp_path):
+    status = configuration.get_account_runtime_status("41")
+    assert status["qualification"] == "required"
+    assert status["route"]["model"] == "litellm/team-model"
+    assert account.attempts == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_interrupted_or_corrupt_attempt_requires_explicit_retry(account, monkeypatch):
+    from app.infrastructure.codex import qualification
+
+    run = qualification.qualify_runtime
+
+    def crashed(_settings, **_kwargs):
+        raise KeyboardInterrupt("simulated process termination")
+
+    monkeypatch.setattr(qualification, "qualify_runtime", crashed)
+    with pytest.raises(KeyboardInterrupt):
+        configuration.get_account_runtime_settings("41")
+    monkeypatch.setattr(qualification, "qualify_runtime", run)
+    status = configuration.get_account_runtime_status("41")
+    assert status["qualification"] == "interrupted"
+    assert status["error_code"] == "runtime_qualification_interrupted"
+    with pytest.raises(configuration.RuntimeSetupError):
+        configuration.get_account_runtime_settings("41")
+    assert account.attempts == []
+    staged = configuration.get_account_runtime_settings("41", qualify=False)
+    staged.qualification_file.with_name("setup-attempt.json").write_text("{truncated")
+    assert configuration.get_account_runtime_status("41")["qualification"] == "interrupted"
+    configuration.get_account_runtime_settings("41", retry=True)
+    assert configuration.get_account_runtime_status("41")["qualification"] == "passed"
+    assert len(account.attempts) == 1
+
+
+def test_storage_failure_stops_before_model_and_keeps_internal_path_private(account, monkeypatch):
+    def fail(_path, _text):
+        raise PermissionError("private-root/private-token")
+
+    monkeypatch.setattr(configuration, "_write_private", fail)
+    with pytest.raises(configuration.RuntimeSetupError) as exc:
+        configuration.get_account_runtime_settings("41")
+    assert exc.value.code == "runtime_storage_invalid"
+    assert "private-root" not in str(exc.value) and "private-token" not in str(exc.value)
+    assert account.attempts == []
+
+
+def test_status_cannot_borrow_another_accounts_directory(account):
+    first = configuration.get_account_runtime_settings("41")
+    second, _scope, _prepared = configuration._account_runtime_inputs("42")
+    second.runtime_root.symlink_to(first.runtime_root, target_is_directory=True)
+    for check in (
+        configuration.get_account_runtime_status,
+        configuration.get_account_runtime_settings,
+    ):
+        with pytest.raises(configuration.RuntimeSetupError) as exc:
+            check("42")
+        assert exc.value.code == "runtime_storage_invalid"
+    assert len(account.attempts) == 1
+
+
+def test_offline_configuration_stays_actionable_without_model_calls(account, monkeypatch):
+    def offline(*_args, **_kwargs):
+        raise httpx.ConnectError("private-account-token at private-gateway")
+
+    monkeypatch.setattr(configuration, "resolve_account_route", offline)
+    for check in (
+        configuration.get_account_runtime_status,
+        configuration.get_account_runtime_settings,
+    ):
+        with pytest.raises(configuration.RuntimeSetupError) as exc:
+            check("41")
+        assert exc.value.code == "runtime_platform_unavailable"
+        assert "private-" not in str(exc.value)
+    assert account.attempts == []
+
+
+def test_actual_path_helper_keeps_status_read_only(account, monkeypatch, tmp_path):
+    from app.utils.path_io.path_utils import get_desktop_state_dir
+
+    target = tmp_path / "uninitialized-state"
+    monkeypatch.setenv("XCAGI_DESKTOP_DATA_DIR", str(target))
+    monkeypatch.setattr(configuration, "get_desktop_state_dir", get_desktop_state_dir)
+    assert configuration.get_account_runtime_status("41")["qualification"] == "required"
+    assert not target.exists() and account.attempts == []
+
+
+def test_state_path_failure_is_safe_before_directory_setup(account, monkeypatch):
+    def denied(**_kwargs):
+        raise PermissionError("private-state-root")
+
+    monkeypatch.setattr(configuration, "get_desktop_state_dir", denied)
+    with pytest.raises(configuration.RuntimeSetupError) as exc:
+        configuration.get_account_runtime_status("41")
+    assert exc.value.code == "runtime_storage_invalid"
+    assert "private-state-root" not in str(exc.value)
+    assert account.attempts == []
+
+
+@pytest.mark.parametrize("method", ["is_symlink", "exists", "is_dir"])
+def test_directory_metadata_failure_is_safe_for_read_and_execution(account, monkeypatch, method):
+    settings = configuration.get_account_runtime_settings("41")
+    inspect = getattr(Path, method)
+
+    def denied(path):
+        if path == settings.runtime_root:
+            raise PermissionError("private-account-state-directory")
+        return inspect(path)
+
+    monkeypatch.setattr(Path, method, denied)
+    for check in (
+        configuration.get_account_runtime_status,
+        configuration.get_account_runtime_settings,
+    ):
+        with pytest.raises(configuration.RuntimeSetupError) as exc:
+            check("41")
+        assert exc.value.code == "runtime_storage_invalid"
+        assert "private-account-state-directory" not in str(exc.value)
+    assert len(account.attempts) == 1
+
+
+def test_explicit_deployment_upgrade_qualifies_new_host_once(account, monkeypatch):
+    monkeypatch.setattr("app.build_identity.verified_source_sha", lambda: "a" * 40)
+    settings = configuration.get_account_runtime_settings("41")
+    old_receipt = json.loads(settings.qualification_file.read_text())
+    monkeypatch.setattr("app.infrastructure.codex.policy.runtime_settings", lambda: settings)
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", "operator-runtime.json")
+    monkeypatch.setattr("app.build_identity.verified_source_sha", lambda: "b" * 40)
+    assert configuration.runtime_qualification_status(settings)["qualification"] == "required"
+    configuration.prepare_deployment_runtime()
+    configuration.prepare_deployment_runtime()
+    assert len(account.attempts) == 2
+    assert all(Path(ref).exists() for ref in old_receipt["evidence_refs"])
+
+
+@pytest.mark.parametrize(
+    "defect", ["missing_host", "partial_host", "malformed_sha", "bad_route", "started"]
+)
+def test_incomplete_previous_binding_never_triggers_silent_paid_retry(account, defect):
+    account.succeeds = False
+    with pytest.raises(configuration.RuntimeSetupError):
+        configuration.get_account_runtime_settings("41")
+    settings, _scope, _prepared = configuration._account_runtime_inputs("41")
+    attempt = settings.qualification_file.with_name("setup-attempt.json")
+    state = json.loads(attempt.read_text())
+    if defect == "missing_host":
+        state.pop("host_identity")
+    elif defect == "partial_host":
+        state["host_identity"] = {"git_sha": "b" * 40}
+    elif defect == "malformed_sha":
+        state["host_identity"]["git_sha"] = "unknown"
+    elif defect == "bad_route":
+        state["route_identity"] = "old-route"
+    else:
+        state["state"] = "started"
+        state["host_identity"]["git_sha"] = "b" * 40
+    attempt.write_text(json.dumps(state))
+    account.succeeds = True
+    with pytest.raises(configuration.RuntimeSetupError):
+        configuration.get_account_runtime_settings("41")
+    assert len(account.attempts) == 1

@@ -1,23 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h, KeepAlive } from 'vue'
+import { createPinia, disposePinia, type Pinia } from 'pinia'
 import { startupPageReadyKey } from '@/composables/useStartupSplash'
+import { PLATFORM_MODEL_CHANGED_EVENT, PLATFORM_MODEL_CHANGED_KEY } from '@/api/platformModel'
 
 const boundary = await vi.hoisted(async () => {
-  const { ref } = await import('vue')
+  const { reactive, ref } = await import('vue')
   return {
+    profile: reactive({ accountKind: 'personal', isAdminAccount: false, isImpersonating: false, localUserId: 41 as number | null, workspaceReady: true, workspaceHydrationReady: true }),
     account: { avatarInputRef: ref(null), localUser: ref({ id: 41, username: 'synthetic-user' }), isLoggedIn: ref(true), loadLocalUser: vi.fn(), loadAuditLogs: vi.fn() },
     mods: { currentIndustry: ref('default'), loadIndustries: vi.fn(), loadCurrentIndustryDetail: vi.fn(), loadIntentPackages: vi.fn() },
     basics: { sidebarThemePreset: ref('dark'), loadPreferences: vi.fn(), loadAutoLaunch: vi.fn(), loadDesktopDatabaseStatus: vi.fn(), loadDistillationVersions: vi.fn() },
     memory: { persyLoading: ref(false), loadPersyProfile: vi.fn() },
     runtimeCheck: vi.fn(),
+    runtimeStatus: vi.fn(),
   }
 })
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {}, fullPath: '/settings' }) }))
-vi.mock('@/api/core', () => ({ api: { post: boundary.runtimeCheck } }))
+vi.mock('@/api/core', () => ({ api: { post: boundary.runtimeCheck, get: boundary.runtimeStatus } }))
 vi.mock('@/stores/mods', () => ({ useModsStore: () => ({ isLoaded: true, initialize: vi.fn() }) }))
 vi.mock('@/stores/industry', () => ({ useIndustryStore: () => ({ currentIndustry: { id: 'server-selected' }, initialize: vi.fn().mockResolvedValue(undefined) }) }))
-vi.mock('@/stores/accountProfile', () => ({ useAccountProfileStore: () => ({ accountKind: 'personal', isAdminAccount: false, isImpersonating: false }) }))
+vi.mock('@/stores/accountProfile', () => ({ useAccountProfileStore: () => boundary.profile }))
 vi.mock('@/composables/settings/useSettingsAccount', () => ({ useSettingsAccount: () => boundary.account }))
 vi.mock('@/composables/settings/useSettingsMods', () => ({ useSettingsMods: () => boundary.mods }))
 vi.mock('@/composables/settings/useSettingsBasics', () => ({ useSettingsBasics: () => boundary.basics }))
@@ -39,18 +43,27 @@ function pending() {
   return { promise, resolve }
 }
 let wrapper: VueWrapper | undefined
+let pinia: Pinia
 let prepare!: (signal: AbortSignal) => Promise<void>
 const unregister = vi.fn()
 function open() {
+  pinia = createPinia()
   wrapper = mount(defineComponent({ setup() { return () => h(KeepAlive, null, { default: () => h(SettingsView) }) } }), {
-    global: { provide: { [startupPageReadyKey as symbol]: (read: typeof prepare) => { prepare = read; return unregister } }, stubs: { RouterLink: true } },
+    global: { plugins: [pinia], provide: { [startupPageReadyKey as symbol]: (read: typeof prepare) => { prepare = read; return unregister } }, stubs: { RouterLink: true } },
   })
 }
 beforeEach(() => {
   vi.clearAllMocks()
   boundary.account.isLoggedIn.value = true
   boundary.account.localUser.value = { id: 41, username: 'synthetic-user' }
-  boundary.runtimeCheck.mockReset().mockResolvedValue({ success: true, qualification: 'passed', route: { model: 'litellm/account-model' } })
+  boundary.profile.localUserId = 41
+  boundary.profile.isImpersonating = false
+  boundary.runtimeStatus.mockReset().mockResolvedValue({ success: true, qualification: 'required', managed_by: 'account' })
+  boundary.runtimeCheck.mockReset().mockImplementation(async () => {
+    const result = { success: true, qualification: 'passed', managed_by: 'account', route: { model: 'litellm/account-model', route_identity: 'route-1' } }
+    boundary.runtimeStatus.mockResolvedValue(result)
+    return result
+  })
   boundary.account.loadLocalUser.mockReset().mockResolvedValue(undefined)
   boundary.mods.loadIndustries.mockReset().mockResolvedValue(undefined)
   boundary.mods.loadCurrentIndustryDetail.mockReset().mockResolvedValue(undefined)
@@ -60,7 +73,7 @@ beforeEach(() => {
     background.mockReset().mockReturnValue(new Promise(() => {}))
   }
 })
-afterEach(() => { wrapper?.unmount(); wrapper = undefined })
+afterEach(() => { wrapper?.unmount(); wrapper = undefined; if (pinia) disposePinia(pinia) })
 
 describe('settings first-screen startup registration', () => {
   it('checks the account runtime only on an explicit click without posting credentials or model overrides', async () => {
@@ -71,7 +84,7 @@ describe('settings first-screen startup registration', () => {
     await flushPromises()
     expect(boundary.runtimeCheck).toHaveBeenCalledOnce()
     expect(boundary.runtimeCheck).toHaveBeenCalledWith('/api/desktop/agent-runtime/qualification', { retry: true }, expect.objectContaining({ timeoutMs: 600_000, retry: false, signal: expect.any(AbortSignal) }))
-    expect(wrapper!.text()).toContain('本次运行验收已通过（litellm/account-model）')
+    expect(wrapper!.text()).toContain('当前配置的运行验收已通过（litellm/account-model）')
   })
 
   it('disables repeat attempts and discards a late qualification result after account change', async () => {
@@ -80,11 +93,13 @@ describe('settings first-screen startup registration', () => {
     open()
     await flushPromises()
     await wrapper!.get('[data-testid="runtime-check"]').trigger('click')
+    await flushPromises()
     expect(wrapper!.get('[data-testid="runtime-check"]').attributes('disabled')).toBeDefined()
     await wrapper!.get('[data-testid="runtime-check"]').trigger('click')
     expect(boundary.runtimeCheck).toHaveBeenCalledOnce()
     const signal = boundary.runtimeCheck.mock.calls[0][2].signal as AbortSignal
     boundary.account.localUser.value = { id: 42, username: 'second-user' }
+    boundary.profile.localUserId = 42
     await flushPromises()
     expect(signal.aborted).toBe(true)
     finish({ success: true, qualification: 'passed', route: { model: 'previous-account-model' } })
@@ -102,7 +117,31 @@ describe('settings first-screen startup registration', () => {
     await wrapper!.get('[data-testid="runtime-check"]').trigger('click')
     await flushPromises()
     expect(wrapper!.text()).toContain('请补全模型容量')
-    expect(wrapper!.text()).not.toContain('本次运行验收已通过')
+    expect(wrapper!.text()).not.toContain('运行验收已通过')
+  })
+
+  it('reads persisted qualification on reopening settings and leaves deployment setup with its owner', async () => {
+    boundary.runtimeStatus.mockResolvedValue({ success: true, qualification: 'passed', managed_by: 'deployment', route: { model: 'operator-model', route_identity: 'operator-route' } })
+    open()
+    await flushPromises()
+    expect(wrapper!.text()).toContain('当前配置的运行验收已通过（operator-model）')
+    expect(wrapper!.text()).toContain('由部署方管理')
+    expect(wrapper!.get('[data-testid="runtime-check"]').text()).toBe('刷新状态')
+    await wrapper!.get('[data-testid="runtime-check"]').trigger('click')
+    await flushPromises()
+    expect(boundary.runtimeCheck).not.toHaveBeenCalled()
+  })
+
+  it.each(['same-tab', 'other-tab'])('retires a passed qualification when the saved model changes in %s', async source => {
+    open()
+    await flushPromises()
+    await wrapper!.get('[data-testid="runtime-check"]').trigger('click')
+    await flushPromises()
+    expect(wrapper!.text()).toContain('运行验收已通过')
+    if (source === 'same-tab') window.dispatchEvent(new Event(PLATFORM_MODEL_CHANGED_EVENT))
+    else window.dispatchEvent(new StorageEvent('storage', { key: PLATFORM_MODEL_CHANGED_KEY, newValue: 'updated' }))
+    await flushPromises()
+    expect(wrapper!.text()).not.toContain('运行验收已通过')
   })
 
   it.each(['account', 'industries', 'details'] as const)('keeps startup pending for actual %s data and coalesces first keep-alive activation', async resource => {

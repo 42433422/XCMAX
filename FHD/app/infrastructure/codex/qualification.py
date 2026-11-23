@@ -33,6 +33,7 @@ from app.infrastructure.codex.policy import (
     RuntimePolicyError,
     RuntimeSettings,
     independent_gateway_url,
+    qualification_host_identity,
 )
 from app.infrastructure.codex.transport import (
     CodexTransport,
@@ -492,6 +493,7 @@ def qualify_runtime(
         "message": "运行环境资格验证未通过，请检查模型配置与验收证据后重试。",
     }
     probe = None
+    host_identity: dict[str, str] = {}
     try:
         if (
             not owner_scope
@@ -505,6 +507,7 @@ def qualify_runtime(
             or not destination.resolve().is_relative_to(root.resolve())
         ):
             raise _QualificationError("runtime_qualification_config_invalid")
+        host_identity = qualification_host_identity()
         verify_installation()
         destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         directory = destination.parent / ("attempt-" + uuid.uuid4().hex)
@@ -514,6 +517,8 @@ def qualify_runtime(
         probe = candidate
         owner_hash = hashlib.sha256(owner_scope.encode()).hexdigest()
         asyncio.run(_run_probe(settings, owner_hash, probe))
+        if qualification_host_identity() != host_identity:
+            raise _QualificationError("runtime_host_changed")
         result["checks"] = _checks(probe, route)
         if any(status != "PASS" for status in result["checks"].values()):
             raise _QualificationError("runtime_qualification_evidence_missing")
@@ -536,6 +541,7 @@ def qualify_runtime(
             "schema": "xcmax.runtime-qualification-evidence.v1",
             "created_at": datetime.now(UTC).isoformat(),
             "codex_version": CODEX_VERSION,
+            "host_identity": host_identity,
             "route_identity": route.identity,
             "ok": result["ok"],
             "checks": result["checks"],
@@ -546,7 +552,8 @@ def qualify_runtime(
             "error_code": result.get("error_code"),
         }
         evidence_path = probe.directory / "evidence.json"
-        _write_private(evidence_path, json.dumps(evidence, ensure_ascii=False, indent=2))
+        evidence_text = json.dumps(evidence, ensure_ascii=False, indent=2)
+        _write_private(evidence_path, evidence_text)
         result["evidence_refs"] = [str(evidence_path)]
         if result["ok"]:
             _write_private(
@@ -556,12 +563,19 @@ def qualify_runtime(
                         "schema": "xcmax.runtime-qualification.v1",
                         "model_kind": "real",
                         "codex_version": CODEX_VERSION,
+                        "host_identity": host_identity,
                         "route_identity": route.identity,
                         "checks": result["checks"],
                         "evidence_refs": result["evidence_refs"],
+                        "evidence_sha256": {
+                            str(evidence_path): hashlib.sha256(evidence_text.encode()).hexdigest()
+                        },
                     },
                     ensure_ascii=False,
                     indent=2,
                 ),
             )
+    # A missing probe proves the preflight stopped before any upstream call.
+    # Once a probe starts, even a lost response must never trigger silent retries.
+    result["model_attempted"] = probe is not None
     return result

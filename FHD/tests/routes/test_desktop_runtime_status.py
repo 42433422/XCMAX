@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.desktop_runtime import router
+from tests.fixtures.codex_qualification import synthetic_qualification
 
 
 @_shared_scope_contextmanager
@@ -75,6 +76,80 @@ def test_runtime_qualification_requires_login_before_any_model_probe(anon_client
     setup.assert_not_called()
 
 
+def test_runtime_qualification_status_requires_login_without_preparing(anon_client):
+    with patch("app.application.agent_runtime.configuration.get_account_runtime_settings") as setup:
+        response = anon_client.get("/api/desktop/agent-runtime/qualification")
+    assert response.status_code == 401
+    setup.assert_not_called()
+
+
+def test_runtime_qualification_status_reads_authenticated_owner_without_model_calls(client):
+    public_status = {
+        "success": True,
+        "runtime": "codex",
+        "qualification": "in_progress",
+        "route": {"route_identity": "current-route"},
+        "checks": {},
+        "message": "当前账号正在验收",
+    }
+    with (
+        patch(
+            "app.application.agent_runtime.configuration.get_account_runtime_status",
+            return_value=public_status,
+            create=True,
+        ) as read_status,
+        patch("app.infrastructure.codex.qualification.qualify_runtime") as probe,
+    ):
+        response = client.get("/api/desktop/agent-runtime/qualification?owner=another-account")
+    assert response.status_code == 200
+    assert response.json() == {**public_status, "managed_by": "account"}
+    assert response.headers["cache-control"] == "no-store"
+    read_status.assert_called_once_with("1")
+    probe.assert_not_called()
+
+
+def test_runtime_qualification_status_preserves_actionable_configuration_failure(client):
+    from app.application.agent_runtime.configuration import RuntimeSetupError
+
+    with patch(
+        "app.application.agent_runtime.configuration.get_account_runtime_status",
+        side_effect=RuntimeSetupError("runtime_configuration_required", "请核对模型设置"),
+        create=True,
+    ):
+        response = client.get("/api/desktop/agent-runtime/qualification")
+    assert response.status_code == 409
+    assert response.json() == {
+        "success": False,
+        "qualification": "blocked",
+        "managed_by": "account",
+        "error_code": "runtime_configuration_required",
+        "message": "请核对模型设置",
+        "checks": {},
+    }
+
+
+def test_runtime_qualification_status_does_not_override_operator_configuration(client, monkeypatch):
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", "/operator/runtime.json")
+    settings = object()
+    with (
+        patch("app.infrastructure.codex.policy.runtime_settings", return_value=settings),
+        patch(
+            "app.application.agent_runtime.configuration.runtime_qualification_status",
+            return_value={"success": True, "qualification": "required", "checks": {}},
+            create=True,
+        ) as read_status,
+        patch("app.application.agent_runtime.configuration.get_account_runtime_settings") as setup,
+        patch("app.infrastructure.codex.qualification.qualify_runtime") as probe,
+    ):
+        response = client.get("/api/desktop/agent-runtime/qualification")
+    assert response.status_code == 200
+    assert response.json()["managed_by"] == "deployment"
+    assert response.json()["qualification"] == "required"
+    read_status.assert_called_once_with(settings)
+    setup.assert_not_called()
+    probe.assert_not_called()
+
+
 def test_runtime_qualification_uses_authenticated_owner_and_safe_result(client):
     selected = MagicMock()
     selected.require_qualified.return_value.runtime_identity.return_value = {
@@ -118,7 +193,12 @@ def test_runtime_check_honors_explicit_deployment_without_qualifying_account_def
     monkeypatch,
     mode,
 ):
-    from app.infrastructure.codex.policy import CODEX_VERSION, QUALIFICATION_CHECKS, ModelRoute
+    from app.infrastructure.codex.policy import (
+        CODEX_VERSION,
+        QUALIFICATION_CHECKS,
+        ModelRoute,
+        qualification_host_identity,
+    )
 
     route = ModelRoute(
         "http://127.0.0.1:9876/v1", "operator-model", "enterprise", "local", 32000, 4000
@@ -126,18 +206,7 @@ def test_runtime_check_honors_explicit_deployment_without_qualifying_account_def
     receipt = tmp_path / "qualification.json"
     if mode == "qualified":
         # Synthetic contract fixture; never a production qualification receipt.
-        receipt.write_text(
-            json.dumps(
-                {
-                    "schema": "xcmax.runtime-qualification.v1",
-                    "route_identity": route.identity,
-                    "codex_version": CODEX_VERSION,
-                    "model_kind": "real",
-                    "evidence_refs": ["synthetic-operator-test-only"],
-                    "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
-                }
-            )
-        )
+        receipt.write_text(json.dumps(synthetic_qualification(route, receipt.parent)))
     config = tmp_path / "runtime.json"
     config.write_text(
         "invalid"

@@ -35,6 +35,46 @@ def test_runtime_check_reuses_authenticated_single_request(flags, retry):
     client.request.assert_not_called()
 
 
+@pytest.mark.parametrize("flags,retry", [((), False), (("--retry",), True)])
+def test_deployment_runtime_check_uses_local_producer_without_account_http(
+    flags, retry, monkeypatch
+):
+    from app.application.agent_runtime import configuration
+
+    settings = Mock()
+    settings.require_qualified.return_value.runtime_identity.return_value = {
+        "route_identity": "operator-route",
+        "model": "configured-model",
+    }
+    prepare = Mock(return_value=settings)
+    monkeypatch.setattr(configuration, "prepare_deployment_runtime", prepare, raising=False)
+    client = Mock()
+    result = run(client, "runtime-check", "--deployment", *flags)
+    assert result["qualification"] == "passed"
+    assert result["managed_by"] == "deployment"
+    assert result["route"]["route_identity"] == "operator-route"
+    prepare.assert_called_once_with(retry=retry)
+    client.require_login.assert_not_called()
+    client.request.assert_not_called()
+
+
+def test_deployment_runtime_check_preserves_failure_without_remote_fallback(monkeypatch):
+    from app.application.agent_runtime import configuration
+
+    prepare = Mock(
+        side_effect=configuration.RuntimeSetupError(
+            "runtime_configuration_required", "请先提供部署运行配置"
+        )
+    )
+    monkeypatch.setattr(configuration, "prepare_deployment_runtime", prepare, raising=False)
+    client = Mock()
+    with pytest.raises(configuration.RuntimeSetupError, match="请先提供部署运行配置"):
+        run(client, "runtime-check", "--deployment")
+    client.require_login.assert_not_called()
+    client.request.assert_not_called()
+    assert prepare.call_count == 1
+
+
 def test_real_editor_http_csrf_diff_apply_replay(brain_client, brain_server, monkeypatch, tmp_path):
     login(brain_client)
     assert run(brain_client, "analyze", "note.txt")["preview"] == "before\n"

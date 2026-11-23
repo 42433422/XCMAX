@@ -254,6 +254,7 @@ def test_failed_qualification_keeps_evidence_without_publishing_pass(tmp_path, m
         },
     )
     assert not result["ok"] and not destination.exists()
+    assert result["model_attempted"] is True
     assert len(result["evidence_refs"]) == 1
     serialized = (
         json.dumps(result)
@@ -261,6 +262,73 @@ def test_failed_qualification_keeps_evidence_without_publishing_pass(tmp_path, m
     )
     assert "account-secret" not in serialized and "private-owner" not in serialized
     assert result["checks"]["responses_stream"] == "FAIL"
+
+
+def test_failed_installation_preflight_proves_no_model_attempt(tmp_path, monkeypatch):
+    destination = tmp_path / "qualification.json"
+    settings = RuntimeSettings(route=route(), runtime_root=tmp_path, qualification_file=destination)
+
+    def unavailable():
+        raise RuntimeError("private-component-path")
+
+    async def must_not_start(*_args):
+        raise AssertionError("installation failure must never contact a model")
+
+    monkeypatch.setattr(qualification, "verify_installation", unavailable)
+    monkeypatch.setattr(qualification, "_run_probe", must_not_start)
+    result = qualification.qualify_runtime(settings, owner_scope="fixture")
+    assert result["ok"] is False and result["model_attempted"] is False
+    assert result["error_code"] == "runtime_qualification_unavailable"
+    assert result["evidence_refs"] == [] and not destination.exists()
+    assert "private-component-path" not in json.dumps(result)
+
+
+def test_host_change_during_probe_preserves_failure_without_publishing_pass(tmp_path, monkeypatch):
+    destination = tmp_path / "qualification.json"
+    settings = RuntimeSettings(route=route(), runtime_root=tmp_path, qualification_file=destination)
+    monkeypatch.setattr("app.build_identity.verified_source_sha", lambda: "a" * 40)
+    monkeypatch.setattr(qualification, "verify_installation", lambda: None)
+
+    async def changed(*_args):
+        monkeypatch.setattr("app.build_identity.verified_source_sha", lambda: "b" * 40)
+
+    monkeypatch.setattr(qualification, "_run_probe", changed)
+    result = qualification.qualify_runtime(settings, owner_scope="fixture")
+    assert result["ok"] is False and result["model_attempted"] is True
+    assert result["error_code"] == "runtime_host_changed"
+    assert len(result["evidence_refs"]) == 1 and not destination.exists()
+
+
+def test_private_evidence_writer_preserves_digest_on_windows_newline_translation(
+    tmp_path, monkeypatch
+):
+    from app.infrastructure.codex import transport
+
+    fdopen = transport.os.fdopen
+
+    def windows_text_stream(fd, *args, **kwargs):
+        # TextIOWrapper's Windows default translates LF. Exercise those bytes on any host.
+        if args and "b" not in args[0]:
+            kwargs.setdefault("newline", "\r\n")
+        return fdopen(fd, *args, **kwargs)
+
+    monkeypatch.setattr(transport.os, "fdopen", windows_text_stream)
+    monkeypatch.setattr(qualification, "verify_installation", lambda: None)
+
+    async def synthetic_probe(*_args):
+        return None
+
+    # Exercise publication and readback, not real-provider qualification.
+    monkeypatch.setattr(qualification, "_run_probe", synthetic_probe)
+    monkeypatch.setattr(
+        qualification, "_checks", lambda *_args: dict.fromkeys(QUALIFICATION_CHECKS, "PASS")
+    )
+    settings = RuntimeSettings(
+        route=route(), runtime_root=tmp_path, qualification_file=tmp_path / "qualification.json"
+    )
+    result = qualification.qualify_runtime(settings, owner_scope="synthetic-test-only")
+    assert result["ok"] is True
+    assert settings.require_qualified() == settings.route
 
 
 @pytest.mark.parametrize("provider", ["deepseek", "litellm"])
