@@ -675,14 +675,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
-      "base_blob": "a4eb93d515424c689c1c86717f13b6776794306c",
-      "head_blob": "7dc99fc24bbf369e3d7ca00ca3f81c19727fa8df",
-      "before_lines": 1549,
-      "after_lines": 1572,
-      "reason": "本条为精确变更的审查请求，不是审批回执。用户要求解决配置后提交PR并合入；现有账号模型未接入固定执行器，补齐同一路由的资格准备、平台Responses合同和结算证据。",
-      "boundary": "复用现有账号默认路由、原任务与原账本，只增加身份和协议接线；保持显式管理员配置、原模型身份、未知费用不重放及业务审批边界。",
-      "validation": "本地完整Codex与受影响入口1125项通过；固定CLI/MCP/SQLite压缩重启、真实LiteLLM/OpenAI SDK协议、平台计费与账号隔离均有回归。真实收费模型资格由首次使用实际执行，不以fixture代替。",
-      "follow_up": "由@42433422按本条base/head blob核对增量；本次不混入无关架构拆分。保留同一配置来源和持久恢复合同，完整远端检查通过后按用户授权合入。",
+      "base_blob": "7dc99fc24bbf369e3d7ca00ca3f81c19727fa8df",
+      "head_blob": "2dd30e9512fa56c0dc93a084e1a69bb49dec3932",
+      "before_lines": 1572,
+      "after_lines": 1598,
+      "reason": "本条为精确变更的审查请求，不是审批回执。原门禁对本草稿实际报告base/head blob及前后行数四项失配，现按main07与作者5fc292a03e946fd07d3e486681b77dcb23dde540重新绑定。原作者默认Codex模型合同筛选增量为26行；本次只更新登记，不新增维护行或生产逻辑。",
+      "boundary": "保留作者5fc292a已完成的Black格式修复，以及原默认候选顺序、Codex路由合同、显式模型拒绝行为和chat忙碌准入/原任务指针；本次生产及测试文件逐字节不变。",
+      "validation": "使用固定Black26.10.1按原MODstore配置检查作者当前文件通过；原source-growth门禁用于核对精确身份，原preflight用于核对Changelog、能力页和维护行数。未新增行为测试或重跑真实模型、原生沙箱；新head完整正式CI仍需完成。",
+      "follow_up": "由@42433422核对本条精确base/head blob及作者原26行增量。此记录是审查请求，不构成代码审查批准或业务验收；保持draft直到原评审与门禁完成。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py": {
