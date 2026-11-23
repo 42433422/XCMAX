@@ -43,7 +43,7 @@ def test_sloth_v1_events_match_live_slo_contract() -> None:
         queries = entry["sli"]["events"]
         assert set(queries) == {"error_query", "total_query"}
         assert total_metric in queries["total_query"]
-        assert slo.SAMPLE_QUERIES[slo_id].split("(")[1].split("{")[0] in queries["total_query"]
+        assert total_metric in slo.SAMPLE_QUERIES[slo_id]
         assert "{{.window}}" in queries["total_query"]
         assert "{{.window}}" in queries["error_query"]
         assert 'environment="production"' in queries["total_query"]
@@ -52,11 +52,22 @@ def test_sloth_v1_events_match_live_slo_contract() -> None:
 
     # Sloth burn alerts and production eligibility are separate gates:
     # only the original collector enforces missing-source and sample floors.
-    assert slo.telemetry_admissible({"source_status": "available", "coverage": 1.0,
-                                     "scrape_coverage": 0.0, "readings": {}}) is False
+    assert (
+        slo.telemetry_admissible(
+            {
+                "source_status": "available",
+                "coverage": 1.0,
+                "scrape_coverage": 0.0,
+                "readings": {},
+            }
+        )
+        is False
+    )
 
 
-@pytest.mark.parametrize("raw", ["NaN", "nan", "+Inf", "-Inf", "inf", "-inf", "1e999", "", "broken"])
+@pytest.mark.parametrize(
+    "raw", ["NaN", "nan", "+Inf", "-Inf", "inf", "-inf", "1e999", "", "broken"]
+)
 def test_prometheus_non_finite_samples_are_missing_evidence(raw: str) -> None:
     assert slo._numeric(raw) is None
 
@@ -66,18 +77,20 @@ def test_prometheus_numeric_sample_preserved() -> None:
 
 
 def test_prometheus_multiple_series_refused() -> None:
-    response = {"status": "success", "data": {"result": [
-        {"value": [0, "1"]}, {"value": [0, "0"]}
-    ]}}
+    response = {
+        "status": "success",
+        "data": {"result": [{"value": [0, "1"]}, {"value": [0, "0"]}]},
+    }
     with patch.object(slo, "_prom_get", return_value=response):
         with pytest.raises(ValueError, match="ambiguous_series"):
             slo.prom_query("http://127.0.0.1:9091", "sum(metric)", attempts=1)
 
 
 def test_prometheus_broken_vector_refused() -> None:
-    response = {"status": "success", "data": {"result": [
-        {"value": ["only timestamp"]}
-    ]}}
+    response = {
+        "status": "success",
+        "data": {"result": [{"value": ["only timestamp"]}]},
+    }
     with patch.object(slo, "_prom_get", return_value=response):
         with pytest.raises(ValueError, match="invalid_sample"):
             slo.prom_query("http://127.0.0.1:9091", "sum(metric)", attempts=1)
