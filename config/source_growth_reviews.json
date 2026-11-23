@@ -992,9 +992,9 @@
       "follow_up": "请求 @42433422 基于本次精确源码身份与最终受保护CI审查既有核验边界；继续按业务职责复用原模块，不为行数拆出重复核验器。本登记不代表人工架构批准。",
       "review_owner": "@42433422",
       "base_file": "FHD/app/application/agent_orchestrator/verification_transactions.py",
-      "base_blob": "5c165e9f6621d67e5ad425a5d6fb37db045ce271",
+      "base_blob": "902af2294a88a43052b69236bc8eab6b02e1d4e9",
       "head_blob": "3337b2c888ba8fdcf6d094c55caeec35fe6d2ff9",
-      "before_lines": 757,
+      "before_lines": 798,
       "after_lines": 828
     },
     "FHD/app/domain/shared_services/tools_workflow_elt.py": {
