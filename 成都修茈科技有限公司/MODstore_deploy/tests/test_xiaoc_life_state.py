@@ -630,3 +630,111 @@ def test_usage_scan_excludes_settled_history_and_rotates_unresolved_batches(
     if not historical_reconciled:
         assert reconcile.reconcile_usage()["resolved"] == 1
         assert store.read_state()["budget"]["reserved_tokens"] == 990
+
+
+
+def test_explicit_stop_survives_new_sessions_and_requires_explicit_start(database):
+    initial = configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    store.record_cycle_phase(claim, "observe")
+    running = store.read_state()
+    assert running["state_version"] > initial["state_version"]
+    assert running["activity"]["phase"] == "observe"
+    assert "lease_token" not in running["activity"]
+    stopped = store.update_settings(
+        LifeUpdate(expected_revision=running["revision"], stopped=True), actor_user_id=7
+    )
+    assert stopped["status"] == "stopped" and stopped["paused"]
+    assert not store.cycle_active(claim)
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=100) is None
+    with pytest.raises(LifePolicyError):
+        store.update_settings(
+            LifeUpdate(expected_revision=stopped["revision"], paused=False), actor_user_id=7
+        )
+    with pytest.raises(LifePolicyError):
+        store.record_cycle_phase(claim, "decide")
+    finished = finish(claim, actual_tokens=50)
+    assert finished["identity_id"] == initial["identity_id"]
+    assert finished["status"] == "stopped"
+    assert finished["events"][0]["status"] == "policy_changed"
+    restarted = store.update_settings(
+        LifeUpdate(expected_revision=finished["revision"], stopped=False, paused=False),
+        actor_user_id=7,
+    )
+    assert restarted["identity_id"] == initial["identity_id"]
+    assert restarted["budget"]["used_tokens"] == 50
+    assert not restarted["stopped"] and not restarted["paused"]
+    assert not store.cycle_active(claim)
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=100)["cycle_id"] != claim["cycle_id"]
+
+
+def test_budget_exhaustion_blocks_even_zero_token_new_cycle(database):
+    configure(daily_token_limit=200, exploration_percent=0)
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert store.cycle_active(claim)  # Its own reservation must not revoke it.
+    finish(claim, actual_tokens=200)
+    state = store.read_state()
+    assert state["status"] == "blocked"
+    assert "今日自主活动模型预算已耗尽" in state["blockers"]
+    store.wake(actor_user_id=7, expected_revision=state["revision"])
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=0) is None
+
+
+def test_phase_does_not_skip_or_rewind_and_original_receipt_is_preserved(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    with pytest.raises(LifePolicyError):
+        store.record_cycle_phase(claim, "act")
+    for phase in ("observe", "decide", "act", "reflect"):
+        store.record_cycle_phase(claim, phase)
+        assert store.read_state()["activity"]["phase"] == phase
+    with pytest.raises(LifePolicyError):
+        store.record_cycle_phase(claim, "observe")
+    state = finish(claim)
+    assert state["events"][0]["details"]["last_phase"] == "reflect"
+    assert state["activity"] is None
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("domain", "exploration"), ("owner_user_id", 8), ("reserved_tokens", 9999), ("deadline", "forged")],
+)
+def test_wrong_lease_binding_cannot_journal_or_settle(database, field, value):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    forged = {**claim, field: value}
+    with pytest.raises(LifePolicyError):
+        store.record_cycle_step(forged, kind="model", details={"request_id": "forged-call"})
+    with pytest.raises(LifePolicyError):
+        finish(forged)
+    assert store.read_state()["budget"]["reserved_tokens"] == 200
+    assert store.cycle_active(claim)
+
+
+def test_late_original_finish_after_recovery_is_idempotent(database, monkeypatch):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    monkeypatch.setattr(reconcile, "utcnow", lambda: now)
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    store.record_cycle_step(claim, kind="model", details={"request_id": "late-original"})
+    with database() as session:
+        session.add(
+            LlmClientRequest(
+                user_id=7,
+                client_request_id="late-original",
+                request_sha256="a" * 64,
+                state="completed",
+                done_json=json.dumps({"status": "settled", "actual_tokens": 63}),
+            )
+        )
+        session.commit()
+    later = now + timedelta(minutes=6)
+    monkeypatch.setattr(store, "utcnow", lambda: later)
+    monkeypatch.setattr(reconcile, "utcnow", lambda: later)
+    assert reconcile.reconcile_usage()["resolved"] == 1
+    state = finish(claim, actual_tokens=63, goals=[{"id": "stale-learning"}])
+    assert state["budget"]["used_tokens"] == 63
+    assert state["budget"]["reserved_tokens"] == 0
+    assert state["goals"] == [] and state["activity"] is None
+    assert reconcile.reconcile_usage()["resolved"] == 0

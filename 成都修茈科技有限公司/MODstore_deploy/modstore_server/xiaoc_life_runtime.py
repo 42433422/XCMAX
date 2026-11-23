@@ -861,8 +861,16 @@ def build_life_graph(ports: CyclePorts):
     from langgraph.graph import END, START, StateGraph
 
     graph = StateGraph(LifeCycle)
+    def durable_node(name: str):
+        async def invoke(state: LifeCycle) -> LifeCycle:
+            ports.active()
+            _store().record_cycle_phase(ports.claim, name)
+            return await getattr(ports, name)(state)
+
+        return invoke
+
     for name in ("observe", "decide", "act", "reflect"):
-        graph.add_node(name, getattr(ports, name))
+        graph.add_node(name, durable_node(name))
     graph.add_edge(START, "observe")
     graph.add_edge("observe", "decide")
     graph.add_edge("decide", "act")

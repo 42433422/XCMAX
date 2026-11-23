@@ -16,9 +16,11 @@ const label = computed(() =>
 const activity = computed(() =>
   life.error
     ? '状态待同步'
-    : life.state?.paused
-      ? '自主活动已暂停'
-      : life.state?.activity?.summary || xiaocStateLabel(life.state?.status ?? ''),
+    : life.state?.stopped
+      ? '自主活动已停止'
+      : life.state?.paused
+        ? '自主活动已暂停'
+        : life.state?.activity?.summary || xiaocStateLabel(life.state?.status ?? ''),
 )
 watch(
   () => life.state?.level,
@@ -49,9 +51,15 @@ async function changeLevel(value: number | number[]) {
     <div class="xiaoc-life-control__head">
       <strong>{{ label }}</strong>
       <span>全企业生效</span>
-      <button v-if="life.state" type="button" :disabled="life.saving" @click="life.save({ paused: !life.state.paused })">
-        {{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}
+      <button v-if="life.state?.stopped" type="button" :disabled="life.saving" @click="life.save({ stopped: false, paused: false })">
+        启动自主活动
       </button>
+      <template v-else-if="life.state">
+        <button type="button" :disabled="life.saving" @click="life.save({ paused: !life.state.paused })">
+          {{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}
+        </button>
+        <button type="button" :disabled="life.saving" @click="life.save({ stopped: true })">停止自主活动</button>
+      </template>
     </div>
     <ElSlider
       :model-value="selection"
@@ -69,6 +77,13 @@ async function changeLevel(value: number | number[]) {
     <div class="xiaoc-life-control__foot">
       <span role="status">{{ life.state ? activity : '尚未读取运行状态' }}</span>
       <button type="button" @click="$emit('open-life')">目标与预算</button>
+    </div>
+    <div v-if="life.state?.state_version !== undefined" class="xiaoc-life-control__foot">
+      <span :title="life.state.identity_id">状态版本 {{ life.state.state_version }} · 授权版本 {{ life.state.revision }}</span>
+      <span v-if="life.state.activity?.phase">{{ life.state.activity.phase }}</span>
+    </div>
+    <div v-if="life.state?.blockers.length" class="xiaoc-life-control__error" role="status">
+      {{ life.state.blockers.join('；') }}
     </div>
     <div v-if="life.error" class="xiaoc-life-control__error" role="alert">
       {{ life.error }} <button type="button" :disabled="life.loading || life.saving" @click="life.refresh()">刷新</button>

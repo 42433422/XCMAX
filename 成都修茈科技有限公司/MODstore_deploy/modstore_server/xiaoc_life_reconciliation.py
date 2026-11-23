@@ -11,7 +11,7 @@ from sqlalchemy.orm import aliased
 from modstore_server.db.llm_chat import LlmClientRequest
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent
 from modstore_server.strategic_portfolio import PortfolioError, digest, portfolio_status
-from modstore_server.xiaoc_life_policy import IDENTITY_ID, parse_time, utcnow
+from modstore_server.xiaoc_life_policy import IDENTITY_ID, utcnow
 from modstore_server.xiaoc_life_store import _event, _mutate, get_session_factory, read_state
 
 
@@ -63,6 +63,7 @@ def _verified_usage(steps: list[dict[str, Any]], owner: int) -> int | None:
 
 def reconcile_usage() -> dict[str, int]:
     """Resolve only the original persisted receipt, never replay an uncertain call."""
+    from modstore_server.strategic_remote_life import waiting_deadline
     from modstore_server.strategic_usage_reconciliation import reconcile_pending_usage
 
     reconcile_pending_usage()
@@ -70,10 +71,11 @@ def reconcile_usage() -> dict[str, int]:
     def collect(data: dict[str, Any], session: Any) -> list[dict[str, Any]]:
         active = data.get("active_cycle")
         pending = []
-        if active and (active.get("awaiting_worker") or parse_time(active["deadline"]) <= utcnow()):
+        if active and (active.get("awaiting_worker") or waiting_deadline(data) <= utcnow()):
             pending.append(
                 {
                     "cycle_id": active["cycle_id"],
+                    "lease_token": active["lease_token"],
                     "domain": active["domain"],
                     "reservation": active["reserved_tokens"],
                     "steps": active.get("steps", []),
@@ -142,7 +144,14 @@ def reconcile_usage() -> dict[str, int]:
                 return False
             if item["active"]:
                 running = current.get("active_cycle") or {}
-                if running.get("cycle_id") != item["cycle_id"] or running.get("steps", []) != steps:
+                if (
+                    running.get("cycle_id") != item["cycle_id"]
+                    or running.get("lease_token") != item["lease_token"]
+                    or running.get("steps", []) != steps
+                    or not (
+                        running.get("awaiting_worker") or waiting_deadline(current) <= utcnow()
+                    )
+                ):
                     return False
                 current["active_cycle"] = None
             budget = current["budget"]

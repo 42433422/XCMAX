@@ -37,6 +37,7 @@ class Store:
         self.active = True
         self.claimed = False
         self.finished = []
+        self.phases = []
 
     def read_state(self):
         return copy.deepcopy(self.state)
@@ -57,6 +58,10 @@ class Store:
     def finish_cycle(self, claim, **result):
         self.finished.append(result)
         return {"cycle_id": claim["cycle_id"], **result}
+
+    def record_cycle_phase(self, claim, phase):
+        assert self.cycle_active(claim)
+        self.phases.append(phase)
 
     def record_cycle_step(self, claim, **details):
         assert self.cycle_active(claim)
@@ -151,6 +156,7 @@ def ports(monkeypatch):
 def test_real_graph_proposes_without_claiming_goal_completed_or_self_approval(ports):
     store, calls, current, _, _ = ports
     result = asyncio.run(runtime.tick_async())
+    assert store.phases == ["observe", "decide", "act", "reflect"]
     assert len(calls) == 1
     assert current["owner"] == 17
     assert result["actual_tokens"] == 42
