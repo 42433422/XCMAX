@@ -77,6 +77,18 @@ def test_ensure_within_workspace_rejects_traversal(tmp_path, monkeypatch):
     with pytest.raises(VibePathError):
         ensure_within_workspace(other, user_id=42)
 
+    sibling = workspace / "420"
+    sibling.mkdir()
+    link = user_root / "linked"
+    link.symlink_to(other, target_is_directory=True)
+    for rejected in (sibling, user_root / ".." / "99", link):
+        with pytest.raises(VibePathError):
+            ensure_within_workspace(rejected, user_id=42)
+    link.unlink()
+    link.symlink_to(user_root / "app", target_is_directory=True)
+    assert ensure_within_workspace(link, user_id=42) == (user_root / "app").resolve()
+    assert ensure_within_workspace(user_root, user_id=42) == user_root.resolve()
+
 
 @pytest.mark.parametrize("outside_name", ["outside", "42-other"])
 def test_workspace_rejects_external_path_before_resolving_it(tmp_path, monkeypatch, outside_name):

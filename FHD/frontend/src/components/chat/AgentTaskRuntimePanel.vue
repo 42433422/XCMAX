@@ -109,6 +109,7 @@ import agentRunsApi from '@/api/agentRuns'
 import { downloadBlob } from '@/utils'
 import { readActiveModIdFromStorage } from '@/utils/chatStorageKeys'
 import { productReadScopeKey } from '@/utils/productReadAccountScope'
+import { getAuthSessionEpoch } from '@/utils/authSessionCache'
 import type { TaskControlState } from '@/composables/useAgentTaskWorkspace'
 import type { TaskItem } from '@/composables/useChatPersistence'
 
@@ -181,7 +182,7 @@ const verificationPending = ref(false)
 const verificationMessage = ref('')
 const verificationError = ref('')
 let verificationEpoch = 0
-const verificationScope = () => JSON.stringify([props.task.id, runId.value, productReadScopeKey(readActiveModIdFromStorage())])
+const verificationScope = () => JSON.stringify([props.task.id, runId.value, getAuthSessionEpoch(), productReadScopeKey(readActiveModIdFromStorage())])
 function retireVerification(): void {
   verificationEpoch++
   verificationPending.value = false
@@ -221,6 +222,14 @@ async function reverify(): Promise<void> {
 }
 const downloadingId = ref('')
 const downloadError = ref('')
+let downloadEpoch = 0
+function retireDownload(): void {
+  downloadEpoch++
+  downloadingId.value = ''
+  downloadError.value = ''
+}
+watch(verificationScope, retireDownload, { flush: 'sync' })
+onBeforeUnmount(retireDownload)
 const downloadableArtifacts = computed(() =>
   artifacts.value.filter(
     (artifact) =>
@@ -231,15 +240,19 @@ const downloadableArtifacts = computed(() =>
 )
 async function downloadArtifact(artifact: AgentArtifact): Promise<void> {
   if (downloadingId.value || !downloadableArtifacts.value.includes(artifact)) return
+  const requestedRun = runId.value, requestedScope = verificationScope(), epoch = ++downloadEpoch
+  const isCurrent = () => epoch === downloadEpoch && requestedScope === verificationScope()
   downloadingId.value = artifact.artifact_id
   downloadError.value = ''
   try {
-    const response = await agentRunsApi.downloadArtifact(runId.value, artifact.artifact_id)
-    downloadBlob(await response.blob(), artifact.name || '报表.xlsx')
+    const response = await agentRunsApi.downloadArtifact(requestedRun, artifact.artifact_id)
+    if (!isCurrent()) return
+    const blob = await response.blob()
+    if (isCurrent()) downloadBlob(blob, artifact.name || '报表.xlsx')
   } catch {
-    downloadError.value = '下载失败，请重试；如果文件已失效，请重新导出。'
+    if (isCurrent()) downloadError.value = '下载失败，请重试；如果文件已失效，请重新导出。'
   } finally {
-    downloadingId.value = ''
+    if (epoch === downloadEpoch) downloadingId.value = ''
   }
 }
 const resultSummary = computed(() => {

@@ -66,22 +66,24 @@ export const isPendingAiWorkflowApproval = (request?: ApprovalRequest | null) =>
   !isFinalStatus(request.status) &&
   !request.current_node_id
 
-export const getWorkflowExecutionStatusLabel = (execution?: ApprovalWorkflowExecution) => {
-  if (!execution) return ''
-  if (!execution.workflow_executed) return '未触发执行'
-  if (execution.success === true) return '执行完成'
-  if (execution.success === false) return '执行失败'
-  return '已触发执行'
-}
-
 /** 列表行执行状态徽标；无执行记录时返回 null，不占位。 */
 export const getExecutionBadge = (execution?: ApprovalWorkflowExecution) => {
   if (!execution) return null
+  if (execution.requires_reconciliation || execution.code === 'outcome_unknown' || execution.execution_state === 'unknown') return { label: '结果待核对', tone: 'warn' }
+  const state = execution.execution_state || execution.code || (execution.execution_accepted ? 'queued' : '')
+  const pending: Record<string, string> = { queued: '等待执行', pending: '等待执行', planning: '规划中', running: '执行中', retrying: '恢复中', paused: '已暂停', blocked: '执行受阻', waiting_user: '等待补充信息', waiting_input: '等待补充信息', waiting_auth: '等待授权', waiting_approval: '等待后续审批', waiting_user_decision: '等待确认' }
+  if (!execution.workflow_executed && pending[state]) return { label: pending[state], tone: 'running' }
   if (!execution.workflow_executed) return { label: '未触发执行', tone: 'muted' }
   if (execution.success === true) return { label: '执行完成', tone: 'ok' }
   if (execution.success === false) return { label: '执行失败', tone: 'fail' }
   return { label: '执行中', tone: 'running' }
 }
+
+export const getWorkflowExecutionStatusLabel = (execution?: ApprovalWorkflowExecution) => getExecutionBadge(execution)?.label || ''
+
+export const isWorkflowExecutionRunning = (execution?: ApprovalWorkflowExecution) => !!execution &&
+  !execution.workflow_executed && !execution.requires_reconciliation && execution.code !== 'outcome_unknown' &&
+  ['queued', 'pending', 'planning', 'running', 'retrying'].includes(execution.execution_state || execution.code || (execution.execution_accepted ? 'queued' : ''))
 
 export const getStatusTone = (status: string) =>
   status === 'approved' ? 'ok'

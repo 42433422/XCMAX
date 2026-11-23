@@ -954,7 +954,7 @@ class TestAtomicTerminalStateNotOverwrittenByStaleSession:
 
 @pytest.mark.parametrize("reject_second", [False, True])
 def test_full_plan_survives_restart_between_two_approvals(
-    db, monkeypatch, reject_second, trusted_actor
+    monkeypatch, reject_second, trusted_actor
 ):
     import logging
     from types import SimpleNamespace
@@ -972,21 +972,17 @@ def test_full_plan_survives_restart_between_two_approvals(
         plan_fingerprint,
         plan_from_dict,
     )
-    from app.db.models import User
     from app.infrastructure.tenant_scope import tenant_scope
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    with db() as session:
-        session.add(User(id=41, username="synthetic-approval-user", password="test", tenant_id=1))
-        session.commit()
     actor = trusted_actor(
         user_id=41,
         tenant_id=1,
         permissions=["tool.business_db.read", "customer.view", "product.view"],
     )
-    # Keep host authentication isolated while approval snapshots use this
-    # test's original business database and survive repository recreation.
-    monkeypatch.setattr("app.db.session.SessionLocal", db)
+    # Permission readback, durable snapshots and recreated repositories must
+    # use the same test-owned database as the authenticated original actor.
+    db = actor.factory
     monkeypatch.setattr(
         "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
         lambda: SimpleNamespace(execute=AgentToolExecutor().execute),

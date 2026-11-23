@@ -109,8 +109,7 @@ export async function installE2eShellMocks(page: Page): Promise<void> {
     '/api/system/workflow-employee-catalog': { success: true, data: { catalog: [], static_catalog: [], scope: 'tenant' } },
     '/api/platform-shell/employee-directory': { success: true, data: { employees: [], count: 0, scope: 'tenant' } },
     // Shell readiness never grants a synthetic model route or execution qualification.
-    '/api/conversation/model-status': { ok: false, provider: '', model: '' },
-    '/api/desktop/agent-runtime/qualification': { success: true, qualification: 'required', managed_by: 'account' },
+    '/api/desktop/agent-runtime/qualification': { success: true, qualification: 'required', managed_by: 'account', checks: {} },
     '/api/conversations/active': { success: true, conversation_id: '' },
     '/api/conversations/sessions': { success: true, sessions: [], has_more: false },
     '/api/agent/tasks': { success: true, data: [], count: 0 },
@@ -119,6 +118,7 @@ export async function installE2eShellMocks(page: Page): Promise<void> {
     '/api/tutorial/v2/courses': { success: true, data: [] },
     '/api/tutorial/v2/runs/current': { success: true, data: null },
     '/api/im/unread-total': { success: true, unread_total: 0 },
+    '/api/conversation/model-status': { ok: false, degraded: true, provider: '', model: '', route_source: 'unavailable', key_source: 'unavailable', reason: 'Synthetic shell has no model route.' },
   }
   for (const [path, body] of Object.entries(accountReads)) {
     await page.route(url => url.pathname === path, route => {

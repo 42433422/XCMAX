@@ -25,6 +25,28 @@ from tests.test_strategic_portfolio import claim_proposal, limits, opportunity, 
 database = portfolio_fixtures.database
 
 
+@pytest.mark.parametrize("relative", ["../project-sibling/private.json", "linked.json"])
+@pytest.mark.parametrize("exists", [True, False])
+def test_file_contract_keeps_selected_workspace_boundary(tmp_path, monkeypatch, relative, exists):
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "42"
+    workspace = tenant / "project"
+    sibling = tenant / "project-sibling"
+    workspace.mkdir(parents=True)
+    sibling.mkdir()
+    outside = sibling / "private.json"
+    outside.write_text("other project")
+    (workspace / "linked.json").symlink_to(outside)
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "{user_id}"))
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        _workspace_file(relative, str(workspace), 42, exists=exists)
+    valid = workspace / "valid.json"
+    if exists:
+        valid.write_text("approved project")
+    assert _workspace_file("./valid.json", str(workspace), 42, exists=exists) == valid
+
+
 def test_dispatch_preserves_approved_business_input_and_tenant_workspace(database, monkeypatch):
     from modstore_server import employee_executor, employee_runtime
     from modstore_server.strategic_execution_contract import verify_execution_binding

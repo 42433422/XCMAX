@@ -230,6 +230,9 @@ jobs:
           if (-not $installer) { throw 'Candidate installer missing' }
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne $receipt.sha256) { throw 'Candidate file SHA-256 mismatch' }
+          . scripts/package/product-version.ps1
+          $candidateVersion = Resolve-ProductVersion -SourceSha $env:CANDIDATE_SHA
+          if ($receipt.version -cne $candidateVersion) { throw 'Candidate receipt version differs from its frozen source' }
           if ($env:CURRENT_RELEASE_ATTEMPT) {
             if ($receipt.build_workflow_run_id -ne $env:GITHUB_RUN_ID -or $receipt.build_workflow_run_attempt -ne $env:CURRENT_RELEASE_ATTEMPT -or $receipt.size -ne $installer.Length -or $receipt.filename -ne $installer.Name) { throw 'Formal candidate build run/attempt or original bytes mismatch' }
             if ((Get-AuthenticodeSignature -LiteralPath $installer.FullName).Status -ne 'Valid') { throw 'Formal lifecycle acceptance requires signed bytes' }
@@ -238,6 +241,7 @@ jobs:
             Mode = $env:MODE
             CandidatePath = $installer.FullName
             CandidateSha = $env:CANDIDATE_SHA
+            CandidateVersion = $candidateVersion
             EvidenceDir = "candidate/evidence-$env:MODE"
           }
           if ($env:MODE -in @('Upgrade','Rollback')) { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path; $args.BaselineVersion = $env:BASELINE_VERSION }

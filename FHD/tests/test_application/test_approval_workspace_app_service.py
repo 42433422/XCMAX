@@ -63,6 +63,7 @@ def _setup_shared_0():
     req = Mock()
     req.status = ApprovalStatus.PENDING.value
     req.id = 1
+    req.flow = ApprovalFlow(node_type="serial")
     return (request, mock_db, mock_query, req)
 
 
@@ -1206,7 +1207,7 @@ class TestApproveRequest:
         req.flow_id = 1
         req.title = "Test"
         req.applicant_id = 5
-        node = Mock()
+        node = Mock(node_type="serial", min_approvals=1)
         node.id = 10
         node.node_name = "Node1"
         node.node_order = 1
@@ -1249,7 +1250,7 @@ class TestApproveRequest:
         req.title = "AI 写库审批"
         req.business_data = "{}"
         req.applicant_id = None
-        node = Mock()
+        node = Mock(node_type="serial", min_approvals=1)
         node.id = 10
         node.node_name = "Node1"
         node.node_order = 1
@@ -1309,7 +1310,7 @@ class TestApproveRequest:
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
-        req = Mock()
+        req = Mock(flow=ApprovalFlow(node_type="serial"))
         req.status = ApprovalStatus.PENDING.value
         req.id = 1
         req.request_no = "req-ai-1"
@@ -1435,7 +1436,7 @@ class TestApproveRequest:
     def test_approve_ai_workflow_without_node_failure_cancels_and_commits(self):
         """工作流未成功执行 → 请求置为 cancelled、写有界 outcome、commit 并返回 success False。"""
         db = MagicMock()
-        req = Mock()
+        req = Mock(flow=ApprovalFlow(node_type="serial"))
         req.status = ApprovalStatus.PENDING.value
         req.id = 1
         req.request_no = "req-ai-1"
@@ -1507,7 +1508,7 @@ class TestApproveRequest:
         req.title = "AI 写库审批"
         req.business_data = "{}"
         req.applicant_id = None
-        node = Mock()
+        node = Mock(node_type="serial", min_approvals=1)
         node.id = 10
         node.node_name = "Node1"
         node.node_order = 1
@@ -2856,7 +2857,7 @@ class TestResumePendingAiWorkflow:
 
 def test_approval_workspace_reports_next_approval_without_claiming_completion():
     db = MagicMock()
-    req = Mock()
+    req = Mock(flow=ApprovalFlow(node_type="serial"))
     req.status = ApprovalStatus.PENDING.value
     req.id = 1
     req.request_no = "first"
@@ -2903,7 +2904,7 @@ def test_approval_workspace_reports_next_approval_without_claiming_completion():
 def test_approval_workspace_reports_user_decision_instead_of_cancelling():
     """预演要求人工确认时，审批应标记通过并原样带回问题，而不是「审批已取消」。"""
     db = MagicMock()
-    req = Mock()
+    req = Mock(flow=ApprovalFlow(node_type="serial"))
     req.status = ApprovalStatus.PENDING.value
     req.id = 1
     req.request_no = "first"
@@ -2952,6 +2953,7 @@ def test_approval_workspace_reports_user_decision_instead_of_cancelling():
 def test_concurrent_approval_conflict_does_not_cancel_request():
     db = MagicMock()
     req = Mock(
+        flow=ApprovalFlow(node_type="serial"),
         status=ApprovalStatus.PENDING.value,
         id=1,
         request_no="same",

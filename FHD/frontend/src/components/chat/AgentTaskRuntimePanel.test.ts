@@ -4,6 +4,7 @@ import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
 import agentRunsApi from '@/api/agentRuns'
 import { downloadBlob } from '@/utils'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
 import type { AgentRunResponse, AgentTaskSummary, AgentVerificationReport, AgentVerificationStatus } from '@/api/agentRuns'
 import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
@@ -82,6 +83,45 @@ describe('AgentTaskRuntimePanel', () => {
     expect(downloadBlob).toHaveBeenCalledWith(blob, '销售报表.xlsx')
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     download.mockRestore()
+  })
+
+  it.each(['run', 'task', 'account', 'session', 'mod', 'unmount'])('does not deliver old artifact bytes after the %s changes', async change => {
+    vi.mocked(downloadBlob).mockClear()
+    let finish!: (blob: Blob) => void
+    const bytes = new Promise<Blob>(resolve => { finish = resolve })
+    vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue({ blob: () => bytes } as Response)
+    const source = { ...task, payload: { activeRunId: 'run-1', artifacts: [
+      { artifact_id: 'xlsx-1', artifact_type: 'file', name: '隔离验收报表.xlsx', uri: '/api/agent/runs/run-1/artifacts/xlsx-1' },
+    ] } }
+    const wrapper = mountTask(source)
+    await wrapper.get('.agent-artifact-downloads button').trigger('click'); await flushPromises()
+    if (change === 'run') await wrapper.setProps({ task: { ...source, payload: { ...source.payload, activeRunId: 'run-2' } } })
+    if (change === 'task') await wrapper.setProps({ task: { ...source, id: 'agent_task_task-2' } })
+    if (change === 'account') productReadAccountEpoch.value++
+    if (change === 'session') invalidateEnterpriseSessionCache()
+    if (change === 'mod') writeActiveExtensionModIdToStorage('other-customer-mod')
+    if (change === 'unmount') wrapper.unmount()
+    finish(new Blob(['isolated business evidence']))
+    await flushPromises()
+    expect(downloadBlob).not.toHaveBeenCalled()
+    if (change !== 'unmount') wrapper.unmount()
+    if (change === 'mod') writeActiveExtensionModIdToStorage(null)
+  })
+
+  it('keeps a legitimate artifact download when only the same run status advances', async () => {
+    vi.mocked(downloadBlob).mockClear()
+    let finish!: (blob: Blob) => void
+    vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue({ blob: () => new Promise(resolve => { finish = resolve }) } as Response)
+    const source = { ...task, payload: { activeRunId: 'run-1', rawRunStatus: 'running', artifacts: [
+      { artifact_id: 'xlsx-1', artifact_type: 'file', name: '隔离验收报表.xlsx', uri: '/api/agent/runs/run-1/artifacts/xlsx-1' },
+    ] } }
+    const wrapper = mountTask(source)
+    await wrapper.get('.agent-artifact-downloads button').trigger('click'); await flushPromises()
+    await wrapper.setProps({ task: { ...source, payload: { ...source.payload, rawRunStatus: 'completed' } } })
+    const blob = new Blob(['isolated business evidence']); finish(blob)
+    await flushPromises()
+    expect(downloadBlob).toHaveBeenCalledExactlyOnceWith(blob, '隔离验收报表.xlsx')
+    wrapper.unmount()
   })
 
   it('shows traceable runtime details and controls the exact task', async () => {

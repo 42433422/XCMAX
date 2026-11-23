@@ -55,9 +55,9 @@ test.describe('Measured performance budgets', () => {
         expect(await marketHandoff?.json()).toEqual({ success: false, message: '当前会话未连接市场账号，请重新登录' })
         expect(marketHandoff?.headers()['cache-control']).toBe('no-store')
         expect(marketHandoff?.headers().pragma).toBe('no-cache')
-        expect(failedReads, 'Synthetic account startup reads must stay isolated').toEqual([])
       }
       expect(rendererErrors, 'Vue updates must complete without a renderer failure').toEqual([])
+      expect(failedReads, 'Startup reads must belong to the measured account').toEqual([])
     } finally {
       const state = await page.evaluate(() => ({
         path: location.pathname,

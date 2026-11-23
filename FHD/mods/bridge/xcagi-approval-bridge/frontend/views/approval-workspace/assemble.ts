@@ -7,10 +7,6 @@ import {
   formatRequestTitle, getWorkflowExecutionStatusLabel,
 } from './awHelpers'
 
-/**
- * 组装审批工作台视图全部状态与动作；子组件通过单一 ctx prop 共享，
- * 逻辑自 ApprovalWorkspaceView.vue 逐字迁移，行为不变。
- */
 export function assembleApprovalWorkspace() {
   const details = useApprovalDetails({ getCurrentUserId: () => data.getCurrentUserId() })
   const data = useApprovalData({ viewDetails: (id) => details.viewDetails(id), closeDetails: details.closeDetails })
@@ -18,10 +14,8 @@ export function assembleApprovalWorkspace() {
     getCurrentUserId: () => data.getCurrentUserId(),
     loadData: data.loadData,
     closeDetails: details.closeDetails,
+    viewDetails: details.viewDetails,
     initiatedRequests: data.initiatedRequests,
-    selectedRequest: details.selectedRequest,
-    canApprove: details.canApprove,
-    showDetails: details.showDetails,
   })
 
   onMounted(data.reloadAccount)
