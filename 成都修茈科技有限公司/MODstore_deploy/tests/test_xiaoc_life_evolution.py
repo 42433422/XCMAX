@@ -421,6 +421,13 @@ def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_
     messages, refs = cognition_messages(state, "reflection", evolution.feedback_facts(state))
     feedback = json.loads(messages[1]["content"])["observations"][0]["evolution_feedback"]
     assert feedback["terminal_verified"] is True and feedback["impact_status"] == "not_measured"
+    assert feedback["effect_verdict"] == "not_verified"
+    audit = state["goals"][0]["evolution_outcome"]["candidate_audit"]
+    assert audit["baseline_sha"] == "a" * 40
+    assert audit["candidate_sha"] == "d" * 40
+    assert audit["verification_archive_sha256"] == "b" * 64
+    assert audit["acceptance_approval_digest"] == contract.digest(verification)
+    assert audit["comparison_status"] == "paired_measurement_not_established"
     assert any(ref.startswith("evolution-outcome:") for ref in refs)
     assert not [call for call in calls if call[0] == "POST"]
     # An unchanged original receipt must still restore its stronger status after
@@ -461,6 +468,76 @@ def test_rejected_effect_requires_actual_rollback_receipt(reflection):
     observed = life.read_state()["goals"][0]["evolution_outcome"]
     assert observed["status"] == "evolution_failed"
     assert observed["metrics"]["recovery_status"] == "rollback_verified"
+    assert observed["metrics"]["effect_verdict"] == "rejected"
+    assert evolution.reconcile() == 0
+
+
+def test_failed_request_cannot_be_promoted_by_late_receipt(reflection):
+    factory, claim, goal, calls, _ = reflection
+    linked = evolution.propose(claim, goal)
+    finish(claim, linked)
+    request_id = linked["retort_request_id"]
+    with factory() as session:
+        row = session.get(RetortEvolutionRun, request_id)
+        row.status = "failed"
+        row.snapshot_json = json.dumps({"status": "failed"})
+        session.commit()
+    assert evolution.reconcile() == 1
+    failed = life.read_state()["goals"][0]["evolution_outcome"]
+    assert failed["status"] == "evolution_failed"
+    assert failed["metrics"]["effect_verdict"] == "rejected"
+    assert evolution.reconcile() == 0
+
+    # Remove the bounded projection, but retain the original append-only event.
+    life._mutate(lambda data, _session: data["goals"][0].pop("evolution_outcome"))
+    with factory() as session:
+        row = session.get(RetortEvolutionRun, request_id)
+        protocol = json.loads(row.protocol_json)
+        verification = {
+            "status": "checks_passed",
+            "request_id": request_id,
+            "protocol_digest": protocol["protocol_digest"],
+            "run_id": "41",
+            "target_sha": "d" * 40,
+            "evidence_archive": {"sha256": "b" * 64},
+        }
+        from modstore_server.integrations.repository_packages import load_repository_module
+
+        contract = load_repository_module("retort_engine.evolution_contract")
+        row.effects_json = json.dumps(
+            {**json.loads(row.effects_json), "verification": verification, "run_id": 41}
+        )
+        row.status = "completed"
+        row.snapshot_json = json.dumps(
+            {
+                "status": "completed",
+                "verification": verification,
+                "approval": {"approved": True, "digest": contract.digest(verification)},
+                "delivery": {
+                    "status": "deployment_verified",
+                    "candidate_sha": "d" * 40,
+                    "receipt": {"verified": True},
+                    "release_sha": "e" * 40,
+                    "identity": {"git_sha": "e" * 40, "artifact_sha256": "f" * 64},
+                },
+                "has_customer_feedback": True,
+                "impact": {
+                    "status": "customer_impact_verified",
+                    "release_sha": "e" * 40,
+                    "verified_at": "2026-11-24T00:00:00+00:00",
+                },
+            }
+        )
+        session.commit()
+    assert evolution.reconcile() == 1
+    state = life.read_state()
+    observed = state["goals"][0]["evolution_outcome"]
+    assert observed["status"] == "evolution_evidence_incomplete"
+    assert observed["metrics"]["terminal_verified"] is False
+    assert observed["metrics"]["effect_verdict"] == "rejected"
+    assert observed["candidate_audit"]["historical_rejection_ref"] == failed["evidence_ref"]
+    assert evolution.reconcile() == 0
+    assert not [call for call in calls if call[0] == "POST"]
 
 
 def test_runtime_consumes_customer_value_and_original_evolution_feedback(ports, monkeypatch):
