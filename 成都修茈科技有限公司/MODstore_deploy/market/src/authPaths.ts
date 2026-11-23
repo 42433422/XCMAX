@@ -4,6 +4,11 @@ function firstQueryValue(raw: unknown): unknown {
   return Array.isArray(raw) ? raw[0] : raw
 }
 
+export function accountLicensePlanId(raw: unknown): string | undefined {
+  const plan = firstQueryValue(raw)
+  return typeof plan === 'string' && ['saas-personal-free', 'saas-trial-30', 'saas-permanent-standard'].includes(plan) ? plan : undefined
+}
+
 export function xcagiRegistrationSource({ query }: Pick<RouteLocationNormalizedLoaded, 'query'>) {
   const source = firstQueryValue(query.source)
   return source === 'xcagi-desktop' || source === 'xcagi-mobile' ? source : undefined
@@ -36,20 +41,14 @@ export function safeRedirectPath(raw: unknown): string {
  */
 export const DEFAULT_POST_AUTH: RouteLocationRaw = { name: 'workbench-home' }
 
-/**
- * 注册只完成账号开立，不代表已获得产品权益。
- * 新用户的唯一默认下一步是选择 XCAGI 账号授权；VIP/SVIP 额度会员不是账号权限。
- */
-const DEFAULT_POST_REGISTER = {
-  name: 'account-plans',
-  query: { plan: 'saas-trial-30' },
-}
-
+/** 注册保留已选商品；无购买意图时先进入免费个人体验。 */
 export function pickRegistrationNextFromRoute(route: Pick<RouteLocationNormalizedLoaded, 'query'>): RouteLocationRaw {
+  const redirect = safeRedirectPath(firstQueryValue(route.query.redirect))
+  if (/^\/account-plans(?:[?#]|$)/.test(redirect)) return redirect
+  if (redirect.startsWith('/plans?') && accountLicensePlanId(new URLSearchParams(redirect.slice(7).split('#')[0]).get('plan'))) return redirect
   const source = xcagiRegistrationSource(route)
-  return source
-    ? { ...DEFAULT_POST_REGISTER, query: { ...DEFAULT_POST_REGISTER.query, source } }
-    : DEFAULT_POST_REGISTER
+  const plan = accountLicensePlanId(route.query.plan) || 'saas-personal-free'
+  return { name: 'account-plans', query: { plan, ...(source ? { source } : {}) } }
 }
 
 export function pickRedirectFromRoute(route: Pick<RouteLocationNormalizedLoaded, 'query'>): RouteLocationRaw {

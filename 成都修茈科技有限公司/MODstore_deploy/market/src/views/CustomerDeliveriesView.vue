@@ -4,7 +4,7 @@
       <div>
         <p>ACCOUNT DELIVERY</p>
         <h1>我的交付</h1>
-        <span>首次交付前的定制生产、测试和返工已包含在永久账户中；交付后新增需求将重新报价、付款后生产。</span>
+        <span>软件买断与业务定制分别收费。定制按确认的需求和报价付款后生产；已购历史套餐继续按原约定交付。</span>
       </div>
       <button type="button" :disabled="loading" @click="load">
         {{ loading ? '刷新中…' : '刷新进度' }}
@@ -14,11 +14,11 @@
     <section class="delivery-rules" aria-label="交付规则">
       <article>
         <strong>1</strong>
-        <div><b>购买永久账户</b><span>企业启航版、企业成长版、集团协同版、企业旗舰版</span></div>
+        <div><b>开通软件永久授权</b><span>标准软件永久使用，业务定制独立报价</span></div>
       </article>
       <article>
         <strong>2</strong>
-        <div><b>首次定制交付内含</b><span>交付前的开发和返工不重新报价</span></div>
+        <div><b>确认定制范围和费用</b><span>历史套餐内含的首次交付仍按原权益履行</span></div>
       </article>
       <article>
         <strong>3</strong>
@@ -33,7 +33,7 @@
       <header>
         <div>
           <h2>提交定制交付</h2>
-          <p>系统会自动判断是首次内含交付，还是交付后新增开发。</p>
+          <p>按已购权益判断是否包含首次交付；独立定制确认报价并付款后开始。</p>
         </div>
         <button type="button" class="toggle-button" @click="formOpen = !formOpen">{{ formOpen ? '收起' : '新建需求' }}</button>
       </header>
@@ -59,7 +59,7 @@
           ><textarea v-model.trim="form.acceptance_criteria" required minlength="4" rows="3" placeholder="写清可以判定通过或返工的标准。" />
         </label>
         <label><span>建议标识（可选）</span><input v-model.trim="form.suggested_id" maxlength="64" placeholder="contract-review" /></label>
-        <button type="submit" class="primary" :disabled="creating">{{ creating ? '提交中…' : '提交到生产员工' }}</button>
+        <button type="submit" class="primary" :disabled="creating">{{ creating ? '提交中…' : '提交定制需求' }}</button>
       </form>
     </section>
 
@@ -81,7 +81,7 @@
         </header>
 
         <div v-if="ticket.custom_delivery?.pricing_mode === 'post_delivery_addon'" class="commerce-strip">
-          <b>交付后新增开发</b>
+          <b>独立定制开发</b>
           <span v-if="ticket.custom_delivery?.crm?.quote?.amount"
             >报价 {{ money(ticket.custom_delivery.crm.quote.amount, ticket.custom_delivery.crm.quote.currency) }} ·
             {{ ticket.custom_delivery.crm.quote.quote_no || '待发送报价单' }}</span

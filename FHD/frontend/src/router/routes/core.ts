@@ -67,6 +67,12 @@ export const CORE_ROUTES: RouteRecordRaw[] = [
     meta: { title: 'Persy 知识库' },
   },
   {
+    path: '/saas-pricing',
+    name: 'saas-pricing',
+    component: () => import('../../views/SaasPricingView.vue'),
+    meta: { title: '购买与费用' },
+  },
+  {
     path: '/lan-gate',
     name: 'lan-gate',
     component: () => import('../../views/LanGateView.vue'),

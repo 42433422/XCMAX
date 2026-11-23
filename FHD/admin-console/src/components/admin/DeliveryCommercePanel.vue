@@ -2,7 +2,7 @@
   <section class="delivery-commerce" aria-label="商务交付信息">
     <header>
       <div>
-        <h3>{{ isInitialIncluded ? '首次交付费用规则' : '交付后新增开发·报价与收款' }}</h3>
+        <h3>{{ isInitialIncluded ? '首次交付费用规则' : '定制开发·报价与收款' }}</h3>
         <p class="delivery-commerce__rule">{{ ticket.custom_delivery?.pricing_label }}</p>
         <p v-if="ticket.custom_delivery?.commerce_ready">商务条件已齐备；安装仍需技术验收和交付产物。</p>
         <p v-else>{{ (ticket.custom_delivery?.commerce_blockers || []).join('、') || '商务资料待完善' }}</p>

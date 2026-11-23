@@ -2,7 +2,7 @@
   <div class="auth-page">
     <div class="auth-card">
       <h2>创建 XCAGI 账号</h2>
-      <p class="auth-intro">注册后可选择适合的 XCAGI 方案。</p>
+      <p class="auth-intro">注册后继续当前购买或免费体验。</p>
       <div v-if="err" class="flash flash-err">{{ err }}</div>
       <form @submit.prevent="doRegister">
         <div class="form-group">
