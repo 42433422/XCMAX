@@ -223,9 +223,16 @@ def prepare_customer_delivery(
         len(frozen_nodes) > 1 or any("customer_deliverables" in node for node in frozen_nodes)
     ) and not any(node.get("customer_deliverables") for node in frozen_nodes):
         raise ValueError("customer delivery requires explicit customer_deliverables")
-    if len(frozen_nodes) == 1:
-        return frozen_nodes[0]
-    contract = {**common, "nodes": frozen_nodes}
+    contract = (
+        {key: value for key, value in frozen_nodes[0].items() if key != "contract_sha256"}
+        if len(frozen_nodes) == 1
+        else {**common, "nodes": frozen_nodes}
+    )
+    from modstore_server.workflow_training_replay import capture_business_replay
+
+    replay = capture_business_replay(db, contract, inputs)
+    if replay is not None:
+        contract["business_replay"] = replay
     return {**contract, "contract_sha256": digest(contract)}
 
 

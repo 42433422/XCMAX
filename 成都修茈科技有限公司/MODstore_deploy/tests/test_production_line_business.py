@@ -233,6 +233,8 @@ def _create_value_facts(business, overrides=None):
         "agreement_sha256": "a" * 64,
         "customer_confirmed": True,
     }
+    outcome = ((overrides or {}).get("outcome") or {}).get("evidence") or {}
+    agreement.update({name: outcome[name] for name in ("baseline", "target") if name in outcome})
     _append(business, "goal", 1, evidence=agreement)
     _append(business, "delivery", 2)
     append(
@@ -326,6 +328,8 @@ def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(b
         ("first_use", {"evidence": {"artifact_sha256": "f" * 64}}),
         ("outcome", {"artifact_id": "different-delivery"}),
         ("outcome", {"evidence": {"measured_value": float("inf")}}),
+        ("outcome", {"evidence": {"measured_value": True, "target": 1}}),
+        ("outcome", {"evidence": {"baseline": float("-inf")}}),
     ],
 )
 def test_customer_value_cannot_reuse_other_artifact_or_nonfinite_measurement(

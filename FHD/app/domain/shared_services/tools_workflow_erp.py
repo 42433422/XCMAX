@@ -470,56 +470,36 @@ def _registered_router_sales(
 def _registered_router_reports(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.domain.shared_services.report_service import ReportService
+    from app.domain.shared_services.report_service import (
+        REPORT_FILTERS,
+        ReportService,
+        report_source_ambiguous,
+        resolve_report_type,
+    )
 
     svc = ReportService()
-    date_filters = ("start_date", "end_date", "group_by")
-    filters = {
-        "sales": (
-            *date_filters,
-            "customer_id",
-            "customer_name",
-            "order_no",
-            "status",
-            "payment_state",
-            "min_amount_exclusive",
-            "region",
-        ),
-        "inventory": ("warehouse_id", "category", "model_number"),
-        "purchase": date_filters,
-    }
-
-    def query(kind: str) -> dict[str, Any]:
-        return cast(
-            dict[str, Any],
-            getattr(svc, f"get_{kind}_report")(
-                **{key: params[key] for key in filters[kind] if params.get(key) is not None}
-            ),
-        )
-
-    if action.endswith("_summary") and action.removesuffix("_summary") in filters:
-        return query(action.removesuffix("_summary"))
+    if action.endswith("_summary") and action.removesuffix("_summary") in REPORT_FILTERS:
+        return svc.query_report(action.removesuffix("_summary"), params)
     if action == "dashboard":
         return svc.get_dashboard_summary()
     if action != "export":
         return {"success": False, "message": f"未注册的 reports 动作: {action}"}
-    requested = [
-        kind
-        for kind, word in zip(filters, ("销售", "库存", "采购"))
-        if kind in user_message.casefold() or word in user_message
-    ]
-    report_type = str(params.get("report_type") or "").removesuffix("_summary")
-    if not report_type or report_type == "report":
-        report_type = requested[0] if len(requested) == 1 else "report"
+    if report_source_ambiguous(params):
+        return {
+            "success": False,
+            "message": "显式表格数据不能同时指定数据库报表查询条件",
+            "error_code": "report_source_ambiguous",
+        }
+    report_type = resolve_report_type(params, user_message)
     rows = params.get("data")
     if rows is None:
-        if report_type not in filters:
+        if report_type not in REPORT_FILTERS:
             return {
                 "success": False,
                 "message": "请指定销售、库存或采购报表类型",
                 "error_code": "missing_report_type",
             }
-        report = query(report_type)
+        report = svc.query_report(report_type, params)
         if not report.get("success"):
             return report
         rows = report.get("data") or []
@@ -529,9 +509,11 @@ def _registered_router_reports(
     run_id = str(runtime_context.get("run_id") or "")
     if not run_id or not exported.get("success"):
         return exported
-    from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+    from app.application.agent_orchestrator.artifact_files import store_scoped_run_file
 
-    artifact = store_spreadsheet(run_id, exported["data"], name=exported["filename"])
+    artifact = store_scoped_run_file(
+        exported["data"], name=exported["filename"], context=runtime_context
+    )
     from app.application.agent_orchestrator.artifact_files import verified_spreadsheet_path
 
     return {

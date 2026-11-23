@@ -76,6 +76,21 @@ def test_only_superseded_runs_of_the_same_pr_are_cancelled(source, published):
     }
 
 
+@pytest.mark.parametrize("published", [False, True])
+def test_ai_review_keeps_pr_and_manual_run_groups_separate(published):
+    _, doc = workflow("FHD/.github/workflows/ai-review.yml", published)
+    assert set(doc["on"]) == {"pull_request", "workflow_dispatch"}
+    assert doc["concurrency"] == {
+        "group": (
+            "ai-review-${{ github.event_name == 'pull_request' && "
+            "format('pr-{0}', github.event.pull_request.number) || "
+            "format('run-{0}', github.run_id) }}"
+        ),
+        "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+    }
+    assert doc["permissions"] == {"contents": "read", "pull-requests": "write"}
+
+
 def test_global_secret_gate_and_scheduled_mobile_acceptance_remain():
     _, secrets = workflow(".github/workflows/gitleaks.yml")
     assert "paths" not in secrets["on"]["pull_request"]

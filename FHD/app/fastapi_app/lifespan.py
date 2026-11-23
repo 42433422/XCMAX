@@ -146,6 +146,18 @@ def _log_ai_capability_status() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Drain telemetry when the application lifespan exits, even after cleanup failure."""
+    try:
+        async with _application_lifespan(app):
+            yield
+    finally:
+        from app.infrastructure.llm.trace_store import reset_trace_store
+
+        await asyncio.to_thread(reset_trace_store)
+
+
+@asynccontextmanager
+async def _application_lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
     if getattr(app.state, "catalog_admission", None) is not None:
         from .guarded_catalog import lifespan as guarded_lifespan

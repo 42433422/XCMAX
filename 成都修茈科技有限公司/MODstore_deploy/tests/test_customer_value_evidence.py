@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
@@ -218,8 +219,10 @@ def test_evidence_excludes_test_internal_refund_and_unproved_orders(tmp_path, mo
     models._SessionFactory = None
 
 
+@pytest.mark.parametrize("release_sha", ["", "a" * 40])
 def test_admin_customer_value_endpoint_requires_admin_and_returns_aggregate(
     monkeypatch,
+    release_sha,
 ):
     app = FastAPI()
     app.include_router(router)
@@ -229,17 +232,24 @@ def test_admin_customer_value_endpoint_requires_admin_and_returns_aggregate(
     assert denied.status_code == 401
 
     app.dependency_overrides[require_admin] = lambda: SimpleNamespace(is_admin=True)
-    monkeypatch.setattr(
-        "modstore_server.customer_value_evidence_api.build_customer_value_evidence",
-        lambda window_days: {
+    build_evidence = Mock(
+        return_value={
             "schema": "customer_value_evidence.v1",
-            "window_days": window_days,
+            "window_days": 90,
             "value_ledger_ready": True,
             "verified_paid_count": 0,
         },
     )
-    allowed = client.get("/api/admin/customer-value/evidence?window_days=90")
+    monkeypatch.setattr(
+        "modstore_server.customer_value_evidence_api.build_customer_value_evidence",
+        build_evidence,
+    )
+    allowed = client.get(
+        "/api/admin/customer-value/evidence?window_days=90"
+        + (f"&release_sha={release_sha}" if release_sha else "")
+    )
 
+    build_evidence.assert_called_once_with(window_days=90, release_sha=release_sha)
     assert allowed.status_code == 200
     assert allowed.json() == {
         "ok": True,

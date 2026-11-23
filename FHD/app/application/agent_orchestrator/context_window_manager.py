@@ -27,10 +27,10 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.utils import count_tokens_approximately, get_buffer_string
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langgraph.runtime import Runtime
 from pydantic import Field, TypeAdapter
 
 from app.application.agent_orchestrator.run_models import LLMCall
+from app.di.registry import get_service_registry
 from app.infrastructure.chat_stream_lifetime import StreamStopped
 from app.infrastructure.llm._vendor.openhands_condenser import (
     get_shortest_prefix_above_token_count,
@@ -544,7 +544,7 @@ class ContextWindowManager:
         message_adapter = TypeAdapter(list[AnyMessage])
         pending = message_adapter.validate_python(convert_to_messages(to_summarize))
         summary: list[AnyMessage] = []
-        summary_runtime: Runtime[None] = Runtime(context=None)
+        summary_runtime = get_service_registry().summary_runtime()
         while pending:
             self._validate_context(context)
 

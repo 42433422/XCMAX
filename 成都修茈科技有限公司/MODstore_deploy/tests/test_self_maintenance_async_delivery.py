@@ -358,7 +358,10 @@ def test_production_adapter_uses_exact_release_and_real_scan_contract(dispatch_e
     assert "previous_security_scan_run_id=700" in request
     assert receipt.workflow_run_id == "900"
     assert receipt.head_sha == MERGE_SHA
-    assert any(call[0] == sys.executable and "--release-sha" in call for call in gateway.commands)
+    clearance = next(call for call in gateway.commands if call[0] == sys.executable)
+    assert clearance[clearance.index("--release-sha") + 1] == MERGE_SHA
+    assert clearance[clearance.index("--repository") + 1] == "owner/product"
+    assert clearance[clearance.index("--current-run-id") + 1] == "700"
     assert [row["event"] for row in store._read_ledger(limit=0)] == [
         "deploy_dispatch_intent",
         "deploy_dispatch_bound",

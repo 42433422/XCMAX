@@ -10,7 +10,7 @@
 <script setup lang="ts">
 import { onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import chatApi from '@/api/chat'
-import { PLATFORM_MODEL_CHANGED_EVENT, PLATFORM_MODEL_CHANGED_KEY } from '@/api/platformModel'
+import { notifyPlatformModelChanged, PLATFORM_MODEL_CHANGED_EVENT, PLATFORM_MODEL_CHANGED_KEY } from '@/api/platformModel'
 import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCache'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
@@ -44,6 +44,7 @@ async function followPlatform() {
     if (!current()) return
     if (!result?.ok) throw new Error('preference not saved')
     status.value = ''; needsRecovery.value = false
+    notifyPlatformModelChanged()
   } catch {
     if (current()) status.value = '恢复未确认，请稍后重试。'
   } finally { if (current()) loading.value = false }

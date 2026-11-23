@@ -45,6 +45,27 @@ def test_infer_related_test_files_for_auto_approve_module(tmp_path, monkeypatch)
     assert any("test_auto_approve" in f for f in found)
 
 
+def test_infer_related_test_files_respects_module_name_boundaries(tmp_path):
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    related = {
+        "test_foo.py",
+        "test_foo_extra.py",
+        "test_business_foo.py",
+        "test_business_foo_extra.py",
+    }
+    smoke = "test_orchestration_modules_smoke_extra.py"
+    for name in related | {"test_workflow_business_promptfoo.py", smoke}:
+        (tests / name).write_text("# fixture\n", encoding="utf-8")
+
+    assert set(infer_related_test_files("modstore_server/foo.py", root=tmp_path)) == {
+        f"tests/{name}" for name in related
+    }
+    for name in related:
+        (tests / name).unlink()
+    assert infer_related_test_files("modstore_server/foo.py", root=tmp_path) == [f"tests/{smoke}"]
+
+
 def test_run_narrow_ci_validation_py_compile_ok():
     out = run_narrow_ci_validation(
         "modstore_server/foo.py",

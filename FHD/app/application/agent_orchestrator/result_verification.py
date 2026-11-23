@@ -94,6 +94,10 @@ def freeze_verification_contract(
         "read_only": bool(spec and spec.is_read_only_call(call.params)),
         "output_schema": copy.deepcopy(spec.output_schema) if spec else {},
     }
+    if (step.tool_id, step.action) == ("reports", "export"):
+        from app.application.agent_orchestrator.verification_reports import capture_report_baseline
+
+        contract["report_baseline"] = capture_report_baseline(run, step, context)
     if step.tool_id == "sales":
         from app.application.agent_orchestrator.verification_transactions import (
             SALES_ACTIONS,

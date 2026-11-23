@@ -276,7 +276,7 @@ async def catalog_download_to(
 
 async def iter_catalog_packages() -> AsyncIterator[dict[str, Any]]:
     """Yield 可安装包：默认与 SUNBIRD 市场同源（/api/market/catalog），失败时回退过滤后的 index.json。"""
-    from app.domain.shared_services.catalog_visibility import is_public_catalog_row
+    from app.infrastructure.mods.catalog_visibility import is_public_catalog_row
 
     if _use_market_catalog():
         try:

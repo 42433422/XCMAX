@@ -255,7 +255,8 @@ def test_workflow_wires_validated_pool_and_preserves_release_provenance():
     assert "Candidate receipt SHA mismatch" in acceptance["run"]
     assert "run.head_sha !== sha" in text and "run.head_branch !== 'main'" in text
     publish = (ROOT / ".github/workflows/release-desktop.yml").read_text("utf-8")
-    assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in publish
+    assert "verify_upgrade_rollback_evidence.py" in publish
+    assert "--windows-native-dir" in publish
 
 
 def test_gui_checks_cloud_identity_before_business_and_names_fixtures_by_mode():

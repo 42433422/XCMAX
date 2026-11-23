@@ -70,6 +70,8 @@ cd /root/XCMAX && git pull && bash ops/install.sh
 
 产物：`/var/backups/xcmax/daily/<YYYYMMDD>/`（另有 weekly×4、monthly×6）。
 
+FHD 与 MODstore 的 SQLite 均通过 Python 标准库在线备份 API 读取，包含已提交 WAL；源库只读打开，快照经 `quick_check` 后原子替换压缩产物。源文件缺失、损坏或快照超时会失败，不能创建空库冒充备份。FHD 相对 `sqlite:///` / `sqlite+pysqlite:///` URL 按服务工作目录解析，配置见 `OPS_FHD_DIR`。PostgreSQL 归档检查读取原文件字节；清单可读仍须继续真实恢复演练。
+
 发布前只读检查使用 `corp-host-maintenance-preflight.yml`，归档解析复用 [PostgreSQL pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html)（[PostgreSQL License](https://www.postgresql.org/about/licence/)）。沿用已配置且已安装的客户端，容器执行锁定 immutable image ID，并记录实际版本；标准 PGDATA 声明卷仅可由精确的只读有界 tmpfs 覆盖，保留无网络、无宿主挂载、无数据库连接和资源限制。payment 专用 reader 未配置、宿主明确不支持且归档格式为 `1.15` 时，可由已核验为 PostgreSQL 16 或更新版本的通用 reader 离线执行固定 `--list`；专用配置无效不能被回退覆盖，导出端镜像与 server-major 政策不变。五项清单、哈希、归档读取和清理均成功，才确认归档完整且可读；这不等于实际数据库恢复演练或 RPO/RTO 测量。
 
 **恢复 FHD PostgreSQL**（先停写入方）：
@@ -90,8 +92,7 @@ systemctl start modstore modstore-scheduler
 
 **恢复配置**：`tar -xzf configs.tar.gz -C /`（内含 fhd-full.env、MODstore .env、nginx、systemd 单元、crontab 快照）。
 
-**季度演练**（放日历里）：挑最近一份 `fhd_pg.dump`，`pg_restore --list` 能列目录 +
-随机抽一表 `pg_restore -t <table> | head`，10 分钟完事。备份没验证过恢复 = 没有备份。
+**季度演练**：在隔离数据库或临时目录恢复最近的原始归档，核对关键业务行、提交回执与实际恢复版本，并记录备份时间、恢复耗时和数据缺口。`pg_restore --list` 与抽取 SQL 仅证明归档可解析，不能登记为恢复成功或 RPO/RTO 达标；真实宿主、原始备份及业务回读的证据应一起保留。
 
 ## 5. 剩余手动步骤（一次性，共约 10 分钟）
 

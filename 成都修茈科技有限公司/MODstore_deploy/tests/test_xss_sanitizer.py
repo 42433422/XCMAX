@@ -1,8 +1,21 @@
 from __future__ import annotations
 
-import pytest
+import base64
+import json
+from unittest.mock import Mock
 
-from modstore_server.api.xss_sanitizer import _sanitize_value, _strip_script_elements
+import pytest
+from fastapi import Depends, FastAPI, Request
+from fastapi.testclient import TestClient
+
+from modstore_server.api.xss_sanitizer import (
+    XSSSanitizerMiddleware,
+    _sanitize_value,
+    _strip_script_elements,
+)
+
+_CANDIDATE_PATH = "/api/service/mac-control/training/candidates"
+_SERVICE_TOKEN = "synthetic-candidate-transport-token-" + "t" * 32
 
 
 @pytest.mark.parametrize(
@@ -26,3 +39,121 @@ def test_sanitize_value_recurses_without_html_escaping_legitimate_text() -> None
     }
 
     assert _sanitize_value(value) == {"nested": ["a & b", "<!DOCTYPE html><b>kept</b>"]}
+
+
+def _candidate_body() -> dict:
+    text = "<FIELD>keep</FIELD>\n<script>literal()</script>"
+    package = base64.b64encode(b"synthetic-native-package\x00\xff").decode()
+    return {
+        "request_key": "opaque-transport-fixture",
+        "surface": "workflow_nl_prompt",
+        "resource_id": "workflow_nl_generator",
+        "source_sha": "a" * 40,
+        "failure_run_ids": ["workflow-customer:fixture"],
+        "workflow_run_id": 1,
+        "files": {
+            "baseline": text,
+            "candidate": text + "\nnext",
+            "tests": json.dumps({"task": text, "package": package}, indent=2),
+        },
+        "bundle_json": json.dumps({"task": text}, indent=2),
+        "result_json": json.dumps({"output": text, "package": package}, indent=2),
+    }
+
+
+@pytest.fixture
+def candidate_transport(monkeypatch):
+    """Exercise the original router/auth; capture the candidate gate's opaque inputs."""
+    from modstore_server import mac_control_dispatch_api as dispatch
+    from modstore_server import retort_evolution_api, retort_training_candidates
+
+    monkeypatch.setenv(dispatch.TOKEN_DIGESTS_ENV, dispatch.token_digest(_SERVICE_TOKEN))
+    submit = Mock(return_value="synthetic-candidate-request")
+    monkeypatch.setattr(retort_training_candidates, "create_training_candidate", submit)
+    monkeypatch.setattr(retort_evolution_api, "_advance", Mock())
+    received = []
+
+    async def capture_body(request: Request):
+        received.append(await request.body())
+
+    async def echo(request: Request):
+        return await request.json()
+
+    app = FastAPI()
+    app.include_router(dispatch.router, dependencies=[Depends(capture_body)])
+    app.add_api_route("/api/{rest:path}", echo, methods=["POST", "PUT"])
+    app.add_middleware(XSSSanitizerMiddleware)
+    with TestClient(app) as client:
+        yield client, submit, received
+
+
+def test_training_candidate_preserves_opaque_bytes_through_original_route(candidate_transport):
+    client, submit, received = candidate_transport
+    body = _candidate_body()
+    raw = json.dumps(body, indent=2).encode("utf-8")
+    response = client.post(
+        _CANDIDATE_PATH,
+        content=raw,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {_SERVICE_TOKEN}",
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    assert received == [raw]
+    submit.assert_called_once_with(body)
+
+
+@pytest.mark.parametrize("token", ["", "invalid-service-token-" + "x" * 32])
+def test_training_candidate_opaque_transport_still_requires_service_token(
+    candidate_transport, token
+):
+    client, submit, _ = candidate_transport
+    response = client.post(
+        _CANDIDATE_PATH,
+        json=_candidate_body(),
+        headers={"Authorization": f"Bearer {token}"} if token else {},
+    )
+
+    assert response.status_code == 401, response.text
+    submit.assert_not_called()
+
+
+def test_training_candidate_opaque_transport_keeps_gate_rejection(candidate_transport):
+    client, submit, _ = candidate_transport
+    submit.side_effect = ValueError("training_reproduction_source_unbound")
+    body = _candidate_body()
+    response = client.post(
+        _CANDIDATE_PATH,
+        json=body,
+        headers={"Authorization": f"Bearer {_SERVICE_TOKEN}"},
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "training_reproduction_source_unbound"
+    submit.assert_called_once_with(body)
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/api/ordinary-json"),
+        ("POST", _CANDIDATE_PATH + "/other"),
+        ("POST", _CANDIDATE_PATH + "-other"),
+        ("PUT", _CANDIDATE_PATH),
+    ],
+)
+def test_candidate_exception_does_not_expand_to_other_json_requests(
+    candidate_transport, method, path
+):
+    client, submit, _ = candidate_transport
+    response = client.request(
+        method,
+        path,
+        json={"nested": ["before<script>literal()</script>after"]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"nested": ["beforeafter"]}
+    submit.assert_not_called()

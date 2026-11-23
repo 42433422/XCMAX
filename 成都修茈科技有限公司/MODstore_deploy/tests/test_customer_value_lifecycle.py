@@ -15,6 +15,33 @@ from tests.customer_value_release_fixture import published_catalog
 NOW = datetime(2026, 9, 4, 8, 0, tzinfo=UTC)
 
 
+@pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan"), True])
+def test_outcome_request_rejects_non_numeric_or_nonfinite_kpi(bad):
+    from pydantic import ValidationError
+
+    from modstore_server.customer_value_lifecycle_api import OutcomeReceiptBody
+
+    fields = {
+        "order_no": "real-order",
+        "customer_goal_id": "goal-real",
+        "idempotency_key": "same-business-request-id",
+        "outcome_id": "artifact-real",
+        "artifact_sha256": "a" * 64,
+        "baseline": 10,
+        "target": 20,
+        "measured_value": 24,
+        "comparison": "ge",
+        "unit": "rows/hour",
+        "measurement_window": "independent production measurement",
+        "source_material_summary": "Independent throughput export",
+        "source_material_sha256": "b" * 64,
+    }
+    assert OutcomeReceiptBody.model_validate(fields).measured_value == 24
+    with pytest.raises(ValidationError) as exc:
+        OutcomeReceiptBody.model_validate({**fields, "measured_value": bad})
+    assert exc.value.errors()[0]["loc"] == ("measured_value",)
+
+
 def _init_db(tmp_path, monkeypatch):
     models._engine = None
     models._SessionFactory = None
@@ -42,6 +69,7 @@ def _order():
 def _append(sf, order, kind, occurred_at, **extra):
     evidence = {"artifact_sha256": "c" * 64, **extra.pop("evidence", {})}
     goal_id = extra.pop("goal_id", "goal-real-001")
+    artifact_id = extra.pop("artifact_id", f"artifact:{goal_id}")
     return append_customer_value_receipt(
         {
             "receipt_kind": kind,
@@ -51,7 +79,7 @@ def _append(sf, order, kind, occurred_at, **extra):
             "customer_ref": "paid-user:11",
             "customer_goal_id": goal_id,
             "order_no": order["out_trade_no"],
-            "artifact_id": f"artifact:{kind}",
+            "artifact_id": artifact_id,
             "acceptance_id": "customer-acceptance-001" if kind == "acceptance" else "",
             "occurred_at": occurred_at.isoformat(),
             "environment": "production",
@@ -63,7 +91,19 @@ def _append(sf, order, kind, occurred_at, **extra):
     )
 
 
-def test_complete_six_stage_chain_requires_post_acceptance_reuse(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("bad_kind", "bad_artifact_id", "bad_evidence"),
+    [
+        ("", None, {}),
+        ("unrelated", None, {}),
+        ("outcome", "different-artifact", {}),
+        ("outcome", None, {"measured_value": float("inf")}),
+        ("acceptance", None, {"artifact_sha256": "e" * 64}),
+    ],
+)
+def test_complete_six_stage_chain_requires_post_acceptance_reuse(
+    tmp_path, monkeypatch, bad_kind, bad_artifact_id, bad_evidence
+) -> None:
     sf = _init_db(tmp_path, monkeypatch)
     sha = "a" * 40
     published_catalog(tmp_path, monkeypatch, sha)
@@ -120,6 +160,20 @@ def test_complete_six_stage_chain_requires_post_acceptance_reuse(tmp_path, monke
             "task_type": "document-processing",
         },
     )
+    if bad_kind == "unrelated":
+        _append(
+            sf,
+            order,
+            "first_use",
+            first - timedelta(minutes=1),
+            artifact_id="earlier-unrelated-delivery",
+            evidence={
+                "run_id": "real-run-unrelated",
+                "success": True,
+                "business_output": True,
+                "task_type": "document-processing",
+            },
+        )
     _append(
         sf,
         order,
@@ -134,14 +188,19 @@ def test_complete_six_stage_chain_requires_post_acceptance_reuse(tmp_path, monke
             "measurement_window": "2026-09-04T08:00Z/2026-09-04T10:00Z",
             "source_material_summary": "Production document throughput export",
             "source_material_sha256": "d" * 64,
+            **(bad_evidence if bad_kind == "outcome" else {}),
         },
+        **({"artifact_id": bad_artifact_id} if bad_artifact_id else {}),
     )
     _append(
         sf,
         order,
         "acceptance",
         acceptance_at,
-        evidence={"customer_confirmed": True},
+        evidence={
+            "customer_confirmed": True,
+            **(bad_evidence if bad_kind == "acceptance" else {}),
+        },
     )
     _append(
         sf,
@@ -157,6 +216,11 @@ def test_complete_six_stage_chain_requires_post_acceptance_reuse(tmp_path, monke
     )
 
     result = build_customer_value_evidence(orders=[order], session_factory=sf, now=reuse_at)
+
+    if bad_kind in {"outcome", "acceptance"}:
+        assert result["complete_customer_count"] == 0
+        assert result["six_stage_counts"][bad_kind] == 0
+        return
 
     assert result["six_stage_counts"] == {
         "payment": 1,

@@ -155,7 +155,8 @@ def infer_related_test_files(rel_path: str, *, root: Optional[Path] = None) -> L
     patterns = [
         f"test_{module_hint}.py",
         f"test_{module_hint}_*.py",
-        f"test_*{module_hint}*.py",
+        f"test_*_{module_hint}.py",
+        f"test_*_{module_hint}_*.py",
     ]
     found: List[str] = []
     for pat in patterns:

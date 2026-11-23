@@ -980,11 +980,16 @@ jobs:
           import pathlib, subprocess, sys, tomllib
           config = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
           requirements = config["project"]["optional-dependencies"]["dev"]
-          requirement = next(value for value in requirements if value.startswith("import-linter"))
-          subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
+          assert any(value.startswith("import-linter") for value in requirements)
+          packages = tomllib.loads(pathlib.Path("uv.lock").read_text())["package"]
+          pinned = [
+              f"{name}=={next(p['version'] for p in packages if p['name'] == name)}"
+              for name in ("import-linter", "grimp")
+          ]
+          subprocess.check_call([sys.executable, "-m", "pip", "install", *pinned])
           PYTHON
 
-      - name: Check sync data-access import contracts
+      - name: Check architecture import contracts
         run: lint-imports --config pyproject.toml --no-cache
 
       - name: Require traceable oversized-source growth review requests
@@ -1428,6 +1433,17 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
 
+      - name: Check out the trusted security controller
+        if: ${{ inputs.release_channel == 'stable' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/security
+            scripts/ci
+
       - name: Download normalized security evidence for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         uses: actions/download-artifact@v8
@@ -1449,11 +1465,21 @@ jobs:
       - name: Enforce exact-SHA security clearance for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         working-directory: .
-        run: >-
-          python FHD/scripts/security/verify_security_scan_pair.py
-          --previous-dir "${RUNNER_TEMP}/security-reports/previous"
-          --current-dir "${RUNNER_TEMP}/security-reports/current"
-          --release-sha "${XCAGI_RELEASE_SHA}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROLLER_REF: ${{ github.ref }}
+          CONTROLLER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$CONTROLLER_REF" = refs/heads/main
+          test "$(git -C release-controller rev-parse HEAD)" = "$CONTROLLER_SHA"
+          python release-controller/FHD/scripts/security/verify_security_scan_pair.py \
+            --previous-dir "${RUNNER_TEMP}/security-reports/previous" \
+            --current-dir "${RUNNER_TEMP}/security-reports/current" \
+            --repository "${{ github.repository }}" \
+            --current-run-id "${{ inputs.security_scan_run_id }}" \
+            --previous-run-id "${{ inputs.previous_security_scan_run_id }}" \
+            --release-sha "${XCAGI_RELEASE_SHA}"
 
       - name: Download release artifacts
         uses: actions/download-artifact@v8

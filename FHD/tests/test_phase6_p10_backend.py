@@ -1438,15 +1438,17 @@ def test_run_collaboration_context_cognition_error_degrades_to_context() -> None
             runtime_context={"employee_collaboration_run": True},
         )
 
-    assert out["success"] is True
+    assert out["success"] is False
     assert out["degraded"] is True
     assert out["result"]["summary"] == "collaboration context"
     assert out["result"]["cognition_error"] == "llm timeout"
     assert out["result"]["outputs"][0]["handler"] == "collaboration_context"
+    assert out["result"]["outputs"][0]["ok"] is False
     assert "上游架构员工 协作上下文暂不可用" in out["result"]["outputs"][0]["output"]
     mock_upstream.assert_not_called()
     mock_actions.assert_not_called()
     mock_record.assert_called_once()
+    assert mock_record.call_args.kwargs["success"] is False
 
 
 # ---------------------------------------------------------------------------

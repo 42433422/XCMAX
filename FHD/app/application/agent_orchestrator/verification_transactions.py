@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
 from app.application.agent_orchestrator.verification_readback import _report
 from app.db.models import (
+    Customer,
     InventoryTransaction,
     JournalEntry,
     PurchaseInbound,
@@ -142,16 +143,26 @@ def _matching_claim(data: dict, actual: dict) -> bool:
     return True
 
 
-def _journal(db, tenant, entry_id, order_id, kind, amount):
+def _journal(db, tenant, entry_id, order_id, kind, amount, *, reference_id=None):
+    order = _order(db, tenant, order_id, SalesOrder)
     row = db.scalar(
         select(JournalEntry).where(JournalEntry.tenant_id == tenant, JournalEntry.id == entry_id)
     )
     if (
-        row is None
-        or row.reference_id != order_id
+        order is None
+        or order.customer_id is None
+        or db.scalar(
+            select(Customer.id).where(
+                Customer.tenant_id == tenant, Customer.id == order.customer_id
+            )
+        )
+        is None
+        or row is None
+        or row.reference_id != (order_id if reference_id is None else reference_id)
         or row.reference_type != kind
         or row.status != "posted"
         or row.reversed_at is not None
+        or (kind != "credit-note" and (row.reversed_of_id is not None or row.is_credit_note))
         or not row.lines
         or any(line.tenant_id != tenant for line in row.lines)
         or _decimal(row.debit_total) != amount
@@ -163,7 +174,13 @@ def _journal(db, tenant, entry_id, order_id, kind, amount):
         "sale": {("1122", amount, Decimal(0)), ("6001", Decimal(0), amount)},
         "payment": {("1001", amount, Decimal(0)), ("1122", Decimal(0), amount)},
         "credit-note": {("6001", amount, Decimal(0)), ("1122", Decimal(0), amount)},
+        "refund": {("1122", amount, Decimal(0)), ("1001", Decimal(0), amount)},
     }[kind]
+    if any(
+        line.partner_id != (order.customer_id if line.account_code == "1122" else None)
+        for line in row.lines
+    ):
+        return None
     lines = {(line.account_code, _decimal(line.debit), _decimal(line.credit)) for line in row.lines}
     return row if len(row.lines) == 2 and lines == expected else None
 
@@ -239,6 +256,8 @@ def _delivery(db, tenant, order, step, data, before):
 
 
 def _accounting(db, tenant, order, step, data, before):
+    from app.application.sales.payment_verification import verified_sales_payment_total
+
     action = step.action
     row_id = data.get("id")
     if type(row_id) is not int or row_id <= 0:
@@ -279,20 +298,9 @@ def _accounting(db, tenant, order, step, data, before):
             )
         ):
             return None
-        paid = db.scalar(
-            select(func.sum(ReceivableAllocation.allocated_amount)).where(
-                ReceivableAllocation.tenant_id == tenant,
-                ReceivableAllocation.sales_order_id == order.id,
-                ReceivableAllocation.status != "refunded",
-            )
-        ) or Decimal(0)
-        if _decimal(order.paid_amount) != _decimal(paid):
+        if verified_sales_payment_total(db, tenant, order) is None:
             return None
         entry = _journal(db, tenant, allocation.journal_entry_id, order.id, "payment", amount)
-        from app.application.payment_service import _compute_status
-
-        if order.payment_state != _compute_status(_decimal(paid), _decimal(order.total_amount)):
-            return None
         if entry and not any(
             line.id == allocation.line_id and line.account_code == "1122" for line in entry.lines
         ):

@@ -1,0 +1,75 @@
+# Sloth v0.16.0 (Apache-2.0), source for generated Prometheus burn-rate rules.
+# These alerts are NOT an acceptance oracle: collect_slo_metrics.py remains the
+# fail-closed source for sample floors, 24h scrape coverage, and release identity.
+# Missing telemetry must never be interpreted as a passing 0-error window.
+version: "prometheus/v1"
+service: "xcagi-production"
+labels:
+  owner: "xcagi-platform"
+  environment: "production"
+slos:
+  - name: "api-availability"
+    objective: 99.9
+    description: "Production API 5xx ratio; SLO-API-01/SLO-API-03."
+    sli:
+      events:
+        error_query: |
+          (sum(rate(api_requests_total{environment="production",status=~"5.."}[{{.window}}])) or vector(0))
+        total_query: |
+          sum(rate(api_requests_total{environment="production"}[{{.window}}]))
+    alerting:
+      name: "XCAGIApiAvailabilityBurn"
+      page_alert:
+        labels:
+          severity: "critical"
+      ticket_alert:
+        labels:
+          severity: "warning"
+  - name: "neurobus-delivery"
+    objective: 99.95
+    description: "Lost and dead-lettered NeuroBus events; SLO-BUS-01."
+    sli:
+      events:
+        error_query: |
+          (sum(rate(neurobus_events_dead_lettered_total{environment="production"}[{{.window}}])) or vector(0)) + (sum(rate(neurobus_events_lost_total{environment="production"}[{{.window}}])) or vector(0))
+        total_query: |
+          sum(rate(neurobus_events_published_total{environment="production"}[{{.window}}]))
+    alerting:
+      name: "XCAGINeurobusDeliveryBurn"
+      page_alert:
+        labels:
+          severity: "critical"
+      ticket_alert:
+        labels:
+          severity: "warning"
+  - name: "customer-operation-success"
+    objective: 99.5
+    description: "Customer operations excluding explicit error status; SLO-BIZ-02."
+    sli:
+      events:
+        error_query: |
+          (sum(rate(customer_op_total{environment="production",status="error"}[{{.window}}])) or vector(0))
+        total_query: |
+          sum(rate(customer_op_total{environment="production"}[{{.window}}]))
+    alerting:
+      name: "XCAGICustomerOperationBurn"
+      page_alert:
+        labels:
+          severity: "critical"
+      ticket_alert:
+        labels:
+          severity: "warning"
+  - name: "external-mod-install-success"
+    objective: 99.0
+    description: "External customer Mod installation result; SLO-BIZ-05."
+    sli:
+      events:
+        error_query: |
+          (sum(rate(mod_install_total{environment="production",device_scope="external_customer",status="error"}[{{.window}}])) or vector(0))
+        total_query: |
+          sum(rate(mod_install_total{environment="production",device_scope="external_customer"}[{{.window}}]))
+    alerting:
+      name: "XCAGIExternalModInstallBurn"
+      ticket_alert:
+        labels:
+          severity: "warning"

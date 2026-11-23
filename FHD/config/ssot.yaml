@@ -327,6 +327,9 @@ domains:
     ssot: FHD/docs/desktop_platform_parity_ssot.md
     derived:
       - FHD/.github/workflows/release-desktop.yml
+      - FHD/.github/workflows/desktop-soak.yml
+      - FHD/scripts/release/desktop_soak.py
+      - FHD/scripts/release/verify_desktop_soak.py
     mode: lint
     check: python scripts/dev/ssot_plugins/desktop_platform_parity.py check
     sync: null

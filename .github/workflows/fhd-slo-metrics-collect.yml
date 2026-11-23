@@ -69,6 +69,48 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Generate mature Sloth multi-window burn-rate rules (candidate)
+        id: sloth_generate
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # Sloth generates the Prometheus rules. Do not auto-activate them on
+          # production until the existing promtool + alert-drill rollout passes.
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "${PWD}/scripts/observability:/source:ro" \
+            -v "${RUNNER_TEMP}:/output" \
+            ghcr.io/slok/sloth:v0.16.0 \
+            generate -i /source/sloth.production.yml -o /output/xcagi-sloth-rules.yml
+          test -s "${RUNNER_TEMP}/xcagi-sloth-rules.yml"
+
+      - name: Upload generated Sloth candidate (not proof of activation)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-sloth-rules-${{ github.sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/xcagi-sloth-rules.yml
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Install collector components from the existing lock
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import tomllib
+
+          wanted = {"filelock", "tenacity"}
+          packages = [p for p in tomllib.loads(Path("uv.lock").read_text())["package"] if p["name"] in wanted]
+          assert {p["name"] for p in packages} == wanted
+          requirements = Path(os.environ["RUNNER_TEMP"]) / "slo-collector-requirements.txt"
+          requirements.write_text("".join(
+              f"{p['name']}=={p['version']} " + " ".join(f"--hash={w['hash']}" for w in p["wheels"]) + "\n"
+              for p in packages
+          ))
+          subprocess.run([sys.executable, "-m", "pip", "install", "--require-hashes", "--only-binary=:all:", "--no-deps", "-r", str(requirements)], check=True)
+          PY
+
       - name: Authorize formal Day 0 from live release convergence
         if: ${{ env.SLO_MODE == 'formal' }}
         env:
@@ -245,7 +287,7 @@ jobs:
           gh pr merge "$pr_url" --auto --squash --delete-branch
 
       - name: Fail closed when production SLO evidence is not admissible
-        if: always() && steps.slo_collect.outcome != 'success'
+        if: always() && (steps.slo_collect.outcome != 'success' || steps.sloth_generate.outcome != 'success')
         run: |
-          echo "::error::Production SLO evidence is unavailable, empty, or formal targets/sample floors failed; no PASS was emitted."
+          echo "::error::Production SLO evidence or Sloth rule generation failed; no PASS was emitted."
           exit 1

@@ -155,9 +155,3 @@ class PricingEngine:
 def get_pricing_engine() -> PricingEngine:
     """获取定价引擎实例"""
     return PricingEngine()
-
-
-# NEURO-DDD: 为 Services 层类添加 instrumentation
-from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
-
-instrument_service_layer_class(PricingEngine, "app.domain.product.services.pricing_engine")

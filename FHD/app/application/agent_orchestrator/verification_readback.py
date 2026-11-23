@@ -137,7 +137,9 @@ def _files(
     if not isinstance(artifacts, list) or not artifacts or len(artifacts) > 32:
         return _report("inconclusive", "result_artifact_missing", "run_artifact")
     office = (step.tool_id, step.action) == ("generate_office_document", "execute")
-    business_export = step.tool_id in {"customers", "shipment_records"} and step.action == "export"
+    business_export = (
+        step.tool_id in {"customers", "shipment_records", "reports"} and step.action == "export"
+    )
     if business_export:
         suffix = ".xlsx"
     if office:
@@ -582,6 +584,10 @@ def verify_independent_result(
 
             if "shipment.view" not in get_auth_service().get_user_permissions(actor):
                 return _report("inconclusive", "result_read_permission_unavailable", "task_scope")
+        if action == ("reports", "export"):
+            from app.application.agent_orchestrator.verification_reports import verify_report_export
+
+            return verify_report_export(run, step, call, output, context)
         return _files(run, step, call, output, context, _GENERATORS.get(employee, ""))
     except (PermissionError, OSError, RuntimeError, ImportError):
         return _report("inconclusive", "result_source_unavailable", "independent_readback")

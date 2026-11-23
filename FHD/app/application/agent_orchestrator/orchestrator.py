@@ -51,6 +51,7 @@ from app.application.workflow.workflow_types import (
     plan_from_dict,
     plan_to_dict,
 )
+from app.di.registry import get_service_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -973,7 +974,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         # delegates each side effect to StepExecution, retaining the existing
         # permission, idempotency, billing, approval and audit boundaries.
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
-        from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
 
         approved = str(approved_step_id or "").strip()
         steps_by_node = {step.node_id: step for step in run.steps}
@@ -1501,24 +1501,18 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return {**dict(step.output or {}), "success": False, "message": run.error}
 
         try:
-            from app.infrastructure.workflow.checkpoint_bridge import (
-                open_run_checkpointer,
-                run_checkpoint_thread,
-            )
-
             parallel = plan_parallel_enabled()
-            with open_run_checkpointer(self._repo) as saver:
-                thread_id = run_checkpoint_thread(run, plan, parallel=parallel) if saver else ""
-                if saver is not None:
+            with get_service_registry().workflow_runtime(
+                repository=self._repo, run=run, plan=plan, parallel=parallel, dispatch=dispatch
+            ) as (runtime, thread_id):
+                if thread_id:
                     run.metadata["checkpoint"] = {
                         "backend": "langgraph",
                         "schema_version": 1,
                         "thread_id": thread_id,
                     }
                     self._repo.save(run)
-                graph_result = XCAGILangGraphRuntime(
-                    tool_dispatcher=dispatch, native_checkpointer=saver, thread_id=thread_id
-                ).run(
+                graph_result = runtime.run(
                     plan,
                     runtime_context={
                         **runtime_context,

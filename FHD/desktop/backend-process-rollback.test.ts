@@ -13,7 +13,6 @@ const ports = vi.hoisted(() => ({
   pending: vi.fn(),
   rollback: vi.fn(),
   restore: vi.fn(),
-  log: { write: vi.fn(), end: vi.fn() },
 }))
 
 vi.mock('electron', () => ({
@@ -61,7 +60,6 @@ describe('backend stop and rollback writer exclusion', () => {
     vi.useFakeTimers()
     vi.resetModules()
     ports.userData = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-rollback-lifecycle-'))
-    vi.spyOn(fs, 'createWriteStream').mockReturnValue(ports.log as never)
     ports.available.mockReset().mockResolvedValue(true)
     ports.terminate.mockReset().mockResolvedValue('terminated')
     ports.handoff.mockReset().mockResolvedValue(undefined)

@@ -356,6 +356,20 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 > Phase 1（供应链）起 cosign **keyless**（Sigstore + GitHub OIDC）签名**免私钥**，不新增长期密钥。生产部署不依赖 kubeconfig。
 
+## 桌面双平台长时运行
+
+手动 `fhd-desktop-soak.yml` 使用 `main` 的验收控制代码，分别在已登记的 Windows、macOS 专用交互桌面执行安装版。输入的完整 `release_sha` 必须已在 main，`product_version` 必须在既有版本目录；预装应用的 build-info、后端运行 SHA、窗口版本和实测文件摘要必须一致。Windows/macOS 账号使用各自的专用测试身份，普通 PR 不在有凭据的 self-hosted 设备上执行。
+
+设备需有 `self-hosted`、对应 OS、`xcagi-physical` 标签及可用的交互桌面；标签由维护者按设备登记赋予，本身不是物理硬件的加密证明。仓库变量 `XCAGI_SOAK_WINDOWS_BINARY` / `XCAGI_SOAK_MACOS_BINARY` 指向实际可执行文件。对应 secrets 为 `XCAGI_SOAK_WINDOWS_USER` / `XCAGI_SOAK_WINDOWS_PASS` 和 `XCAGI_SOAK_MACOS_USER` / `XCAGI_SOAK_MACOS_PASS`。缺设备、安装包或凭据时保留阻断，不能用托管虚拟机或 Linux 短测替代。
+
+唯一采集入口为 `FHD/scripts/release/desktop_soak.py`；旧 `desktop-soak.sh` 已移除。脚本使用独立临时 userData 和回环端口，真实登录后交替打开设置、聊天、客户、产品页，持续至少 28,800 秒。稳定性策略统一在 `verify_desktop_soak.py`：采样缺口最多 90 秒，整棵进程树 RSS 最多 2 GiB、稳定窗口增长最多 256 MiB，句柄/文件描述符最多 16,384、增长最多 512，按主机逻辑 CPU 归一化的平均利用率最多 80%，95% 以上持续超过 180 秒阻断。这是当前桌面验收预算，不是实际测得结果或全部部署方式的容量承诺。
+
+长跑后实际执行渲染网络离线恢复、渲染进程崩溃恢复、后端崩溃恢复、桌面正常重启、附加窗口创建/关闭、正常退出；故障仅作用于本次启动的进程与隔离数据。正常退出必须留下本进程的干净退出标记且没有残留进程；失败清理无法确认完成时保留私有测试目录。主进程、后端、GUI、资源和版本任何必要观测缺失均不能通过。此流程覆盖桌面生命周期与界面活性；真实模型业务、系统睡眠唤醒和安装升级回滚仍使用各自的原始验收证据。
+
+每轮和每个故障阶段保存原始 JSON，取消或失败也上传；渲染崩溃和未处理页面错误即时落盘，采样间隙发生后自行恢复也不能漏报，错误内容仅保留摘要。双平台原始文件聚合为 `xcagi-desktop-soak`。独立验证器从原始样本重算时长、资源、页面覆盖和故障结果；单平台、短测、重复 PID 身份、静态窗口、非预期崩溃、伪 `passed` 字段及缺失证据均被拒绝。`--measurements-only` 的成功退出仅表示测量格式和内容合格，不能认证设备来源。
+
+既有 `closure-evidence-report` 增加 `desktop_soak_run_id`，由 `build_closure_reports.py collect` 核对原始工作流、当前 attempt、main 祖先、原始制品摘要以及两个不同的登记 runner 作业，再将报告字节摘要绑定到可靠性报告。缺少双平台长跑证据时，原生产可靠性报告继续阻断；既有 SLO、安装升级回滚、安全与客户验收条件同时保留。原生 runtime-contract 矩阵执行采集器和验证器回归，这些短测不产生八小时实机资格。
+
 ## 超大源码增长审查
 
 800 行仍是提醒线，不是文件长度硬上限。沿用 `scripts/dev/source_governance.py`
@@ -495,6 +509,14 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 全量安全扫描的定时任务只作趋势检查，历史风险 baseline 仅在此模式使用，制品命名为 `xcagi-security-trend-*`。
 手动发布扫描直接运行部署端同一个 `verify_security_scan_pair.py`，核对同 SHA、扫描器完整性、新鲜度、同 UTC 日及零适用高危；保留 `xcagi-security-release-*` 制品名称，趋势制品不能作为发布准入。
+
+发布消费者同时传入仓库与原始扫描 run ID，复用 `verify_modstore_release_approval` 回读成功的主线手动扫描、当前 attempt、原始 artifact 元数据及归档摘要，再逐文件比较下载内容。读取期间 attempt 变化、旧尝试制品、错误工作流、跨仓来源或扫描报告结构异常均阻断。扫描生产者在上传前可做本地自检；本地自检结果本身不能代替消费者的来源核验。
+
+正式 orchestrator 复用 `measure_required_checks.py --repository … --release-sha …` 读取当前 main 的完整 App 绑定规则、checks 和最新 workflow/jobs。保留真实事件及 run/attempt，拒绝同名工作流歧义、非成功的最新尝试和读取期间身份变化；历史 commit status 不能覆盖失败的 required check。该结果仅证明检查身份与状态，实际测试源码、安装包及生产读回由各自原有门禁核对。
+
+macOS 冻结双架构修复保留原发布开关和精确 SHA 授权：由主线控制器传 `--authorized-frozen-sha`，核对该 SHA 是当前 main 祖先，并执行相同的完整检查。门禁代码从控制器提交独立检出；原安装包、产品源及版本仍来自已授权的冻结提交。该参数携带原授权身份，不授予发布权限，也不适用于普通 orchestrator。
+
+冻结桌面、稳定制品上传、生产 apply 与 Windows hotfix 同样从触发工作流的主线 `github.sha` 独立检出校验器，并核对实际控制器提交；产品构建和原包仍绑定 `release_sha`，因此旧产品提交无需具备新版校验 CLI。正式桌面流程只允许当前 run/attempt 读取本次已完成作业的原制品，并核对调用工作流、控制器 SHA 和 `release_sha → controller → main` 祖先关系，不能沿用其他进行中的运行。Windows 临时下载指针分别核对原安装包、交付回执和摘要旁文件，任一不符均在发布前失败。
 
 > 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
 

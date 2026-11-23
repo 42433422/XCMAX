@@ -16,13 +16,13 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "b38c8ebac26205ce4dd3d548abc2fd6d5fb98ec1",
-      "head_blob": "600498eeeb6c14fca2b6b94eb08849d063b73da0",
+      "head_blob": "286040ae67fb3e92704b38845b1e61e21bc84af8",
       "before_lines": 1748,
-      "after_lines": 1771,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。将最终状态、下游步骤输入和反馈写回建立在当前独立核验回执上，保留已知pending状态和已保存终态，防止旧分支自报成功覆盖主线证据。 本轮还修复已授权屏幕动作在执行前和持久恢复审核中被默认目录遗漏的问题，显式使用同一能力目录的屏幕动作投影。 显式工作台审批同样核对持久原run、step及完整plan摘要，不再因动态计划缺少静态节点列表而跳过证明。",
+      "after_lines": 1765,
+      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。将最终状态、下游步骤输入和反馈写回建立在当前独立核验回执上，保留已知pending状态和已保存终态，防止旧分支自报成功覆盖主线证据。 本轮还修复已授权屏幕动作在执行前和持久恢复审核中被默认目录遗漏的问题，显式使用同一能力目录的屏幕动作投影。 显式工作台审批同样核对持久原run、step及完整plan摘要，不再因动态计划缺少静态节点列表而跳过证明。 本轮复用既有服务注册表创建同一 LangGraph runtime/checkpointer，保留原停止传播、租户、审批和持久回执。",
       "boundary": "仍使用原LangGraph、持久计划和现有审批；未知结果不重放，不增加第二执行入口。 普通目录仍不含 AIOPEN；执行审核仅纳入现有 supports_aiopen_step 支持的屏幕动作，继续排除 chat/API 递归入口，账号、租户及原签名审批校验保持。",
-      "validation": "原审批、ELT原回执续跑、pending核对、真实业务SQL和公开隐私专项已运行；最终提交仍需必需CI。 CI 原三个屏幕失败场景已在本地定向运行中通过；目录撤权、工作台恢复及最终 CI 仍分别核对实际结果。 本轮完整动态屏幕原场景和ELT checkpoint两支共11项通过；缺失工作台凭据不签发原审批回执。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "validation": "原审批、ELT原回执续跑、pending核对、真实业务SQL和公开隐私专项已运行；最终提交仍需必需CI。 CI 原三个屏幕失败场景已在本地定向运行中通过；目录撤权、工作台恢复及最终 CI 仍分别核对实际结果。 本轮完整动态屏幕原场景和ELT checkpoint两支共11项通过；缺失工作台凭据不签发原审批回执。 最终三组组合的真实 Import Linter 图为 2411 文件、18683 依赖，12 个合同全部通过；原核心运行时目录与已测分组逐 blob 相同。",
+      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。 本轮已按 main 34937513 与最终合解源码重新测量上述精确 blob 和行数；此登记仍是评审请求，不是批准。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
@@ -771,14 +771,14 @@
     },
     "FHD/app/application/agent_orchestrator/verification_readback.py": {
       "base_file": "FHD/app/application/agent_orchestrator/verification_readback.py",
-      "base_blob": "f4acbf37e7c54f852515a01c30efc323adc24bd1",
-      "head_blob": "3dac0f5fbe8143f31c8488f0c54885954bb2de9a",
-      "before_lines": 908,
-      "after_lines": 919,
-      "reason": "沿原独立读回分派补齐memory_v2.reject和ELT run_ids，复用既有持久记录与ELT整批声明，不增设备用执行或验证通道。",
-      "boundary": "记忆拒绝的状态、版本、历史链与原因必须匹配；ELT逐项目标和业务行均核验，缺失、部分或未知回执不能提升完成，验证阶段不重做写入。",
-      "validation": "本轮真实SQL审批、原EltService、持久回执和重复读回覆盖正向完成及缺版本、修订漂移、跨作用域和伪造结果；验证阶段SQL写入被监测。最终远端CI绑定实际候选提交。",
-      "follow_up": "按用户2026-11-23明确要求同步改造、集成最新主线并审查后合入；此记录提供精确blob供审查，不代表人工架构批准、生产资格或真实客户验收。",
+      "base_blob": "3dac0f5fbe8143f31c8488f0c54885954bb2de9a",
+      "head_blob": "9cf7b008ee79bd8f012eb6e427ec8fe85e2929f2",
+      "before_lines": 919,
+      "after_lines": 925,
+      "reason": "本记录仅登记精确源码增长的评审请求，不是审批证据。按用户真实业务全链路代码闭环要求，将 reports.export 接入原调用文件绑定和独立数据库报表验收。",
+      "boundary": "仅复用原 _files 与 verify_independent_result 分发；报表取数、逐格核对实现在专属 verification_reports 模块，不增加执行入口或旁路台账。",
+      "validation": "验证范围为原始调用绑定、SQL来源与XLSX逐格一致、撤权和错误金额拦截、重复恢复零业务写入；以本PR最终提交的测试与必需CI结果为准，登记不代表验收通过。",
+      "follow_up": "对本次薄分发增量与独立模块边界进行评审；后续读回类型继续放入专属模块，保持原总分发职责。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/super_employee_service.py": {
@@ -808,13 +808,13 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py",
       "base_blob": "e961e10eab3bdfbcfa537a6035de9e54cc56ae18",
-      "head_blob": "a5b7e7c9acf776f1634195672537bc4a35c1c4b0",
+      "head_blob": "6bd9805527f71b4cfbde295911c6b43e46eba118",
       "before_lines": 844,
-      "after_lines": 916,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。私有训练语料加密保存并做受控脱敏；合并Windows文件锁与既有原子写入、权限及符号链接拒绝。 以sys.platform选择原Windows锁分支，保持原生锁行为并让mypy正确识别平台类型。",
-      "boundary": "复用cryptography与既有训练存储；缺密钥或损坏语料拒绝读取，不降级为明文保存。",
-      "validation": "加密解密、脱敏、坏密钥、损坏记录、符号链接及Windows锁交点测试通过；最终CI验证。 本轮原训练模块32项通过；目标msvcrt类型错误已消除，完整依赖mypy仍待正式CI。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "after_lines": 1052,
+      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。私有训练语料加密保存并做受控脱敏；合并Windows文件锁与既有原子写入、权限及符号链接拒绝。 以sys.platform选择原Windows锁分支，保持原生锁行为并让mypy正确识别平台类型。 PR3512来源请求：按用户“全部复用成熟组件实现代码层闭环”授权，原 promptfoo trainer 增加真实业务样本分区、原生断言重验与完整结果矩阵绑定；本记录是精确源码增长评审请求，不是审批证明。",
+      "boundary": "复用cryptography与既有训练存储；缺密钥或损坏语料拒绝读取，不降级为明文保存。 PR3512来源请求：继续使用固定 promptfoo、原 SQL 来源及 Retort 候选入口；只适配来源、预算与结果证据，不实现新的模型评测器、发布器或状态机。",
+      "validation": "加密解密、脱敏、坏密钥、损坏记录、符号链接及Windows锁交点测试通过；最终CI验证。 本轮原训练模块32项通过；目标msvcrt类型错误已消除，完整依赖mypy仍待正式CI。 PR3512来源请求：真实 SQL 公共候选入口及幂等回读已验证；最终分区和候选/发布门禁 56 项通过，包含跨轮原件 holdout 隔离和静态证据拒绝。远端全量 CI 以最终提交为准。 最新业务分组 492 项通过、2 项真实 PostgreSQL 场景待 CI；固定 promptfoo 实际 CLI 对照确认 grader 返回契约旧红新绿，原 Excel holdout 在本树绑定解释器下通过。",
+      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。 PR3512来源请求：评审本次精确前后 blob 与有界两案例传输；继续由原审批、固定发布身份及 GrowthBook 控制推广，真实模型增益和客户验收须另有原始证据。 本轮保留私有语料加密与原子文件锁，并接入业务样本边界；最终合解源码的精确 base/head/blob 已重新测量。 本轮已按 main 34937513 与最终合解源码重新测量上述精确 blob 和行数；此登记仍是评审请求，不是批准。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py": {
@@ -927,14 +927,14 @@
     },
     "FHD/app/infrastructure/codex/model_gateway.py": {
       "base_file": "FHD/app/infrastructure/codex/model_gateway.py",
-      "base_blob": "050890bdd09e8da92a482044005e262540e84663",
-      "head_blob": "d12a1b1e7a4214ef57d6d659435952d95d7b4e53",
-      "before_lines": 781,
-      "after_lines": 828,
-      "reason": "本条为精确变更的审查请求，不是审批回执。用户要求解决配置后提交PR并合入；现有账号模型未接入固定执行器，补齐同一路由的资格准备、平台Responses合同和结算证据。",
-      "boundary": "复用现有账号默认路由、原任务与原账本，只增加身份和协议接线；保持显式管理员配置、原模型身份、未知费用不重放及业务审批边界。",
-      "validation": "本地完整Codex与受影响入口1125项通过；固定CLI/MCP/SQLite压缩重启、真实LiteLLM/OpenAI SDK协议、平台计费与账号隔离均有回归。真实收费模型资格由首次使用实际执行，不以fixture代替。",
-      "follow_up": "由@42433422按本条base/head blob核对增量；本次不混入无关架构拆分。保留同一配置来源和持久恢复合同，完整远端检查通过后按用户授权合入。",
+      "base_blob": "d12a1b1e7a4214ef57d6d659435952d95d7b4e53",
+      "head_blob": "5145d9050f80e18898194c23b494c1086de34f8a",
+      "before_lines": 828,
+      "after_lines": 872,
+      "reason": "用户于 2026-11-23 要求 Agent 长期可靠性代码闭环。本次补齐失败结算后的资源释放、流式断开清理和原模型回执恢复；这是精确源码增长评审请求，不表示已获人工架构批准。",
+      "boundary": "继续使用现有 Codex/HTTPX/AnyIO 与 Python AsyncExitStack、aclosing；无第二执行器。取消保留原异常，连接和并发槽各释放一次；未知用量保留原预留，可信原请求回执只能解除已确认的模型待核对，不能解除其他模型请求或业务写入限制。",
+      "validation": "当前源码模型网关与清理回归共 104 passed；新增原场景在修复前复现存储失败、连接关闭失败、取消与流式响应断开，以及迟到原用量已结算仍被永久阻断。实际并发计数、连接关闭与原钱包回执均有断言。",
+      "follow_up": "由 @42433422 按原主线流程核对该薄适配及精确提交 CI；标准 CI mypy 已定位流式错误载荷局部变量的类型冲突，修复只区分异常对象与 JSON 载荷名称；由最终提交的标准 mypy 再校验。真实模型运行与 PostgreSQL/设备验收以各自实际证据为准，不由本记录替代。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/elt/preview_confirmation.py": {
@@ -964,13 +964,25 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_customer_delivery.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_customer_delivery.py",
       "base_blob": "27d7ffa053800616daf2f19ef6f619a9bd8f3817",
-      "head_blob": "175f407c52b836e4d79ecafde8548d6dcf59bf26",
+      "head_blob": "9774bb0a19450e9116cb6c2a1b8d47768456fa41",
       "before_lines": 789,
-      "after_lines": 814,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。对新交付标明原图返回协议，并只读兼容已真实完成的旧交付记录，后续文件变化不能改写历史事实。",
+      "after_lines": 821,
+      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。对新交付标明原图返回协议，并只读兼容已真实完成的旧交付记录，后续文件变化不能改写历史事实。 本轮在原合同冻结前接入既有有界业务回放采集，并把其证据纳入同一合同摘要。",
       "boundary": "完成身份、原输出摘要与协议必须一致；下载和客户验收仍核对原私有制品，未完成图不能借兼容路径完成。",
-      "validation": "149项真实客户闭环和历史完成回读相关测试通过；最终平台CI验证。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "validation": "149项真实客户闭环和历史完成回读相关测试通过；最终平台CI验证。 最新业务分组 492 项通过、2 项真实 PostgreSQL 场景待 CI；三客户同目标、版本及原 artifact 的最终组合交点另作定向回归。",
+      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。 本轮已按 main 34937513 与最终合解源码重新测量上述精确 blob 和行数；此登记仍是评审请求，不是批准。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_replay.py": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "0150cbfbccbc3954d4df1002669d126f87d843fd",
+      "before_lines": 0,
+      "after_lines": 877,
+      "reason": "按用户成熟组件复用要求，新增产品适配层绑定原客户合同、授权员工包、执行前原件与独立参考；复用 WorkflowEngine、EmployeeRuntimeClient、openpyxl 和 CSV，不另写工作流或电子表格引擎。此记录不是审批。",
+      "boundary": "仅支持有界原生 CSV/XLSX 文件交付；使用原路径和权限校验、临时数据库及原进程回收。参考字节留在父进程，禁止由失败输出自造 oracle、代码节点或生产副作用。",
+      "validation": "原生 CSV/XLSX、执行前 capture、来源与路径漂移、进程回收回归已通过；新增独立 CSV 参考方言 12 项通过，拒绝错误单列并保留空白/转义。最终完整应用 HTTP + 原生 CSV + 原 SQL 到待审批/幂等回读再次通过；最终 CI 另验。",
+      "follow_up": "由指定 reviewer 核对 877 行适配边界与安全负控；后续格式或并行业务扩展仍接原组件合同，此记录不替代原客户原件、独立基准和生产验收。",
       "review_owner": "@42433422"
     }
   }

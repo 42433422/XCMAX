@@ -295,7 +295,7 @@ def _value_fact(db, step_id, scope, owner_id, number):
                 continue
             measured, target = evidence.get("measured_value"), evidence.get("target")
             if all(
-                type(value) in (int, float) and math.isfinite(value)
+                type(value) is int or (type(value) is float and math.isfinite(value))
                 for value in (measured, target, evidence.get("baseline"))
             ):
                 if (agreed.get("comparison") == "ge" and measured >= target) or (

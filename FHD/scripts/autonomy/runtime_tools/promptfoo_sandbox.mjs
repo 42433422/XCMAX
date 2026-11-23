@@ -111,7 +111,10 @@ export function trainerPolicy(spec, temp, key) {
   const settings = sandboxSettings(spec.directory, temp, spec.cli.path, process.execPath,
     spec.endpoint, false, spec.runtime.path);
   settings.filesystem.allowRead.push(dirname(entry), spec.pythonpath,
-    dirname(dirname(spec.python)), dirname(dirname(realpathSync(spec.python))));
+    dirname(dirname(spec.python)), dirname(dirname(realpathSync(spec.python))),
+    // Native file employees import the host SDK, including its existing app dependencies.
+    // Keep the adjacent source tree read-only; the FHD root/data/config stay denied.
+    realpathSync(resolve(dirname(entry), '../../../app')));
   return { ...settings,
     credentials: { envVars: [{ name: 'OPENAI_API_KEY', mode: 'deny' }, { name: 'XCAGI_LLM_API_KEY', mode: 'deny' }] },
     network: { allowedDomains: [`${spec.endpoint.hostname}:${spec.endpoint.port || 443}`],

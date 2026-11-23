@@ -1,0 +1,431 @@
+"""Synthetic business inputs through real approval, SQL, XLSX and independent readback.
+
+These integration cases do not constitute customer-original or production acceptance.
+Only test-owned storage and outbound notifications are replaced; business writes,
+approval authority, the worker lease and file downloads use the production code.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import sqlite3
+from contextlib import closing
+from copy import deepcopy
+from decimal import Decimal
+from io import BytesIO
+from types import SimpleNamespace
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from openpyxl import load_workbook
+from sqlalchemy import event
+
+from app.application.agent_orchestrator import AgentOrchestrator
+from app.application.agent_orchestrator.approval_grant import (
+    ApprovalGrantError,
+    issue_approval_grant,
+)
+from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+from app.application.agent_orchestrator.task_execution_sql_repository import (
+    SQLAlchemyTaskExecutionRepository,
+)
+from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.application.approval_workspace_app_service import approve_request
+from app.application.workflow.approval_service import ApprovalService
+from app.application.workflow.workflow_types import (
+    PlanGraph,
+    WorkflowNode,
+    plan_fingerprint,
+    plan_from_dict,
+)
+from app.db.models import SalesOrder, SalesOrderItem
+from app.db.models.approval import ApprovalRecord, ApprovalRequest
+from app.domain.shared_services.report_service import ReportService
+from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_sales_agent_acceptance import _seed_closed_loop_sale
+
+
+@pytest.fixture
+def business(trusted_actor, monkeypatch, tmp_path):
+    requester, payload, foreign_tenant = _seed_closed_loop_sale(
+        trusted_actor, monkeypatch, tmp_path, 0
+    )
+    reviewer = trusted_actor(role="admin")
+    unauthorized = trusted_actor(role="user", permissions=[])
+    foreign_reviewer = trusted_actor(role="admin", tenant_id=foreign_tenant)
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    engine = requester.factory.kw["bind"]
+    from app.domain.shared_services import ai_action_audit_service
+
+    monkeypatch.setattr(ai_action_audit_service, "engine", engine)
+    ai_action_audit_service.ensure_ai_action_audit_table()
+    repository = SQLAlchemyAgentRunRepository(session_factory=requester.factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=requester.factory)
+    executor = SimpleNamespace(execute=AgentToolExecutor().execute)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository._agent_run_repository", repository
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.task_execution_repository._task_execution_repository",
+        queue,
+    )
+    monkeypatch.setattr(
+        "app.application.approval_workspace_app_service._agent_executor",
+        lambda: AgentOrchestrator(repository=repository, tool_executor=executor),
+    )
+    monkeypatch.setattr(
+        "app.application.approval_workspace_app_service.notify_mobile_user", lambda *_args: None
+    )
+    # An unscoped export would include 9,900 from this unrelated order. The
+    # other tenant also has matching product names and must remain untouched.
+    with tenant_scope(requester.tenant_id), requester.factory.begin() as db:
+        unrelated = SalesOrder(
+            order_no="UNRELATED-ORDER", customer_name="其他订单客户", total_amount=9900
+        )
+        db.add(unrelated)
+        db.flush()
+        db.add(
+            SalesOrderItem(
+                order_id=unrelated.id,
+                product_name="产品 B",
+                quantity=99,
+                unit_price=100,
+                amount=9900,
+            )
+        )
+    return SimpleNamespace(
+        requester=requester,
+        reviewer=reviewer,
+        unauthorized=unauthorized,
+        foreign_reviewer=foreign_reviewer,
+        payload=payload,
+        repository=repository,
+        queue=queue,
+        executor=executor,
+        engine=engine,
+    )
+
+
+def _plan(payload, *, workspace):
+    return PlanGraph(
+        plan_id="full-business-acceptance",
+        intent="sales_write",
+        metadata={"approval_required_node_ids": ["sale"]} if workspace else {},
+        nodes=[
+            WorkflowNode(
+                "sale",
+                "sales",
+                "execute_closed_loop",
+                {"payload": deepcopy(payload)},
+                risk="high",
+                idempotent=True,
+            ),
+            WorkflowNode(
+                "verify",
+                "sales",
+                "verify_closed_loop",
+                {"payload": deepcopy(payload)},
+                risk="low",
+                idempotent=True,
+                depends_on=["sale"],
+            ),
+            WorkflowNode(
+                "export",
+                "reports",
+                "export",
+                {
+                    "report_type": "sales",
+                    "group_by": "product",
+                    "order_no": "{{sale.data.order_no}}",
+                    "filename": "原销售订单交付",
+                },
+                risk="low",
+                idempotent=True,
+                depends_on=["sale", "verify"],
+            ),
+        ],
+    )
+
+
+def _start(business, *, workspace):
+    actor = business.requester
+    with tenant_scope(actor.tenant_id):
+        run = AgentOrchestrator(
+            repository=business.repository, tool_executor=business.executor
+        ).start_task_from_plan(
+            user_id=str(actor.user_id),
+            message="批准后销售10件产品B、出库、记应收并交付该订单Excel，不得虚构收款。",
+            plan=_plan(business.payload, workspace=workspace),
+            runtime_context=actor.context,
+        )
+    assert run.status == "waiting_user" and not run.tool_calls
+    return run
+
+
+def _sql(business):
+    return closing(sqlite3.connect(f"file:{business.engine.url.database}?mode=ro", uri=True))
+
+
+def _no_effect(business):
+    with _sql(business) as db:
+        assert db.execute("SELECT count(*) FROM sales_orders").fetchone() == (1,)
+        for table in ("inventory_transactions", "journal_entries", "receivable_allocations"):
+            assert db.execute(f"SELECT count(*) FROM {table}").fetchone() == (0,)
+
+
+def _reconcile_sql_and_download(business, run):
+    from app.application.agent_orchestrator.result_verification import verify_step_result
+    from app.application.agent_orchestrator.task_background import task_execution_context
+
+    actor = business.requester
+    assert run.status == "completed", run.to_dict()
+    assert [step.node_id for step in run.steps] == ["sale", "verify", "export"]
+    assert [step.status for step in run.steps] == ["completed"] * 3
+    assert len(run.tool_calls) == 3
+    assert all(
+        call.metadata["verification"]["status"] in {"verified", "not_required"}
+        for call in run.tool_calls
+    )
+    sale = run.steps[0].output["data"]
+    assert run.steps[2].params["order_no"] == sale["order_no"]
+    with _sql(business) as db:
+        order = db.execute(
+            "SELECT tenant_id,total_amount,paid_amount,payment_state,invoice_status "
+            "FROM sales_orders WHERE id=? AND order_no=?",
+            (sale["order_id"], sale["order_no"]),
+        ).fetchone()
+        assert order == (actor.tenant_id, 1000, 0, "unpaid", "invoiced")
+        rows = db.execute(
+            "SELECT product_name,quantity,amount,delivered_quantity FROM sales_order_items "
+            "WHERE order_id=? AND tenant_id=?",
+            (sale["order_id"], actor.tenant_id),
+        ).fetchall()
+        assert rows == [("产品 B", 10, 1000, 10)]
+        assert db.execute(
+            "SELECT quantity FROM inventory_transactions WHERE sales_order_id=?",
+            (sale["order_id"],),
+        ).fetchall() == [(-10,)]
+        assert db.execute(
+            "SELECT available_quantity FROM inventory_ledger WHERE tenant_id=?",
+            (actor.tenant_id,),
+        ).fetchall() == [(10,)]
+        assert db.execute(
+            "SELECT available_quantity FROM inventory_ledger WHERE tenant_id=?",
+            (business.foreign_reviewer.tenant_id,),
+        ).fetchall() == [(20,)]
+        journal_id = sale["invoice_entry_id"]
+        assert db.execute(
+            "SELECT debit_total,credit_total,status FROM journal_entries WHERE id=?",
+            (journal_id,),
+        ).fetchone() == (1000, 1000, "posted")
+        debit, credit = db.execute(
+            "SELECT sum(debit),sum(credit) FROM journal_entry_lines WHERE entry_id=?",
+            (journal_id,),
+        ).fetchone()
+        assert Decimal(str(debit)) == Decimal(str(credit)) == Decimal("1000")
+        assert db.execute("SELECT count(*) FROM receivable_allocations").fetchone() == (0,)
+        assert db.execute("SELECT count(*) FROM sales_orders").fetchone() == (2,)
+
+    from app.fastapi_routes.domains.agent.artifact_routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+    artifact = run.steps[2].output["artifacts"][0]
+    with TestClient(app) as client:
+        response = client.get(artifact["uri"], headers=actor.headers)
+        assert response.status_code == 200, response.text
+        assert response.headers["cache-control"] == "private, no-store"
+        assert hashlib.sha256(response.content).hexdigest() == artifact["metadata"]["sha256"]
+        book = load_workbook(BytesIO(response.content), read_only=True, data_only=True)
+        try:
+            assert book.sheetnames == ["sales"]
+            assert list(book["sales"].values) == [
+                ("product_name", "quantity", "amount"),
+                ("产品 B", 10, 1000),
+            ]
+        finally:
+            book.close()
+        assert (
+            client.get(artifact["uri"], headers=business.foreign_reviewer.headers).status_code
+            == 403
+        )
+    writes = []
+
+    def observe(_connection, _cursor, statement, _params, _context, _many):
+        if statement.split()[0].upper() in {"INSERT", "UPDATE", "DELETE"}:
+            writes.append(statement)
+
+    event.listen(business.engine, "before_cursor_execute", observe)
+    try:
+        for step, call in zip(run.steps, run.tool_calls, strict=True):
+            result = verify_step_result(
+                run=run,
+                step=step,
+                call=call,
+                context={
+                    **run.metadata["runtime_context"],
+                    **task_execution_context(run, step),
+                    "run_id": run.run_id,
+                    "step_id": step.step_id,
+                },
+            )
+            assert result["accepted"] is True, result
+        assert writes == []
+    finally:
+        event.remove(business.engine, "before_cursor_execute", observe)
+    return artifact
+
+
+def test_separate_reviewer_resumes_original_approval_then_delivers_reconciled_order(
+    business, monkeypatch
+):
+    actor = business.requester
+    run = _start(business, workspace=True)
+    plan = plan_from_dict(run.metadata["plan"])
+    assert plan is not None
+    frozen = deepcopy(run.metadata["plan"])
+    approvals = ApprovalService()
+    with tenant_scope(actor.tenant_id):
+        request = approvals.create_approval_request(
+            plan_id=plan.plan_id,
+            node=plan.nodes[0],
+            plan=plan,
+            runtime_context={**actor.context, "_approval_agent_run_required": True},
+            require_persistence=True,
+        )
+        assert approvals.attach_pending_agent_run(
+            request.request_id, agent_run_id=run.run_id, approved_step_id="sale"
+        )
+        with actor.factory() as db:
+            request_id = db.query(ApprovalRequest).filter_by(request_no=request.request_id).one().id
+    # Fresh service and repository force reads of the original durable snapshots.
+    monkeypatch.setattr(
+        "app.application.workflow.approval_service._approval_service", ApprovalService()
+    )
+    fresh = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository._agent_run_repository", fresh
+    )
+    with tenant_scope(actor.tenant_id):
+        for denied_actor in (business.unauthorized, business.foreign_reviewer):
+            denied = approve_request(request_id, denied_actor.request, body={}, x_user_id=None)
+            assert denied.status_code == 403
+            _no_effect(business)
+        response = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+    assert isinstance(response, dict) and response["success"] is True, response
+    completed = fresh.get(run.run_id)
+    resolved = deepcopy(frozen)
+    resolved["nodes"][2]["params"]["order_no"] = completed.steps[0].output["data"]["order_no"]
+    assert completed.metadata["plan"] == resolved
+    assert completed.metadata["approval_receipt"]["approved_by"] == str(business.reviewer.user_id)
+    assert completed.metadata["runtime_context"]["_actor_authorization"]["user_id"] == str(
+        actor.user_id
+    )
+    _reconcile_sql_and_download(business, completed)
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        stored = db.get(ApprovalRequest, request_id)
+        assert stored.applicant_id == actor.user_id
+        assert stored.approved_by == business.reviewer.user_id != actor.user_id
+        snapshot = json.loads(stored.business_data)["durable_workflow_snapshot"]
+        assert snapshot["plan"] == frozen
+        assert snapshot["plan_sha256"] == plan_fingerprint(plan)
+        assert completed.metadata["approval_receipt"]["plan_sha256"] == snapshot["plan_sha256"]
+        assert db.query(ApprovalRecord).filter_by(request_id=request_id).count() == 1
+    original_calls = [call.to_dict() for call in fresh.get(run.run_id).tool_calls]
+    with tenant_scope(actor.tenant_id):
+        duplicate = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+    assert duplicate.status_code == 400
+    assert [call.to_dict() for call in fresh.get(run.run_id).tool_calls] == original_calls
+    _reconcile_sql_and_download(business, fresh.get(run.run_id))
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook(
+    business, monkeypatch, corrupt
+):
+    actor = business.requester
+    run = _start(business, workspace=False)
+    business.queue.enqueue_waiting_approval(run, approver=str(actor.user_id))
+    grant = issue_approval_grant(run, principal_id=str(actor.user_id))
+    assert grant is not None
+    with pytest.raises(ApprovalGrantError, match="无权审批"):
+        approve_and_enqueue(
+            business.repository,
+            business.queue,
+            run_id=run.run_id,
+            token=grant["grant"],
+            principal_id=str(business.unauthorized.user_id),
+            runtime_context={},
+        )
+    _no_effect(business)
+    if corrupt:
+        original = ReportService.export_to_excel
+
+        def wrong_amount(service, report_type, data, filename):
+            result = original(service, report_type, data, filename)
+            book = load_workbook(BytesIO(result["data"]))
+            try:
+                book["sales"]["C2"] = 1
+                altered = BytesIO()
+                book.save(altered)
+                result["data"] = altered.getvalue()
+            finally:
+                book.close()
+            return result
+
+        monkeypatch.setattr(ReportService, "export_to_excel", wrong_amount)
+    queued = approve_and_enqueue(
+        business.repository,
+        business.queue,
+        run_id=run.run_id,
+        token=grant["grant"],
+        principal_id=str(actor.user_id),
+        runtime_context={},
+        authenticated_binding=actor.principal.mod_authorization,
+    )
+    assert queued.status == "queued"
+    _no_effect(business)
+    # Recreate the SQL repositories/worker after durable approval, before execution.
+    fresh = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
+    dispatcher = AgentTaskDispatcher(
+        execution_repository=queue,
+        run_repository=fresh,
+        orchestrator_factory=lambda repo: AgentOrchestrator(
+            repository=repo, tool_executor=business.executor
+        ),
+    )
+    claim = queue.claim("business-acceptance-worker", run_id=run.run_id, lease_seconds=30)
+    assert claim is not None
+    dispatcher._execute_claim(claim, "business-acceptance-worker")
+    completed = fresh.get(run.run_id)
+    if corrupt:
+        assert completed.status != "completed", completed.to_dict()
+        assert queue.get(run.run_id).state != "succeeded"
+        export = next(call for call in completed.tool_calls if call.node_id == "export")
+        assert export.metadata["verification"]["accepted"] is False
+        # The sale committed once; a bad deliverable must not replay it.
+        with _sql(business) as db:
+            assert db.execute("SELECT count(*) FROM inventory_transactions").fetchone() == (1,)
+            assert db.execute("SELECT count(*) FROM journal_entries").fetchone() == (1,)
+    else:
+        _reconcile_sql_and_download(business, completed)
+        assert queue.get(run.run_id).state == "succeeded"
+    assert queue.claim("restarted-worker", run_id=run.run_id, lease_seconds=30) is None
+    with pytest.raises(ApprovalGrantError):
+        approve_and_enqueue(
+            fresh,
+            queue,
+            run_id=run.run_id,
+            token=grant["grant"],
+            principal_id=str(actor.user_id),
+            runtime_context={},
+            authenticated_binding=actor.principal.mod_authorization,
+        )
