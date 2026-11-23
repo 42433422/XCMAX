@@ -803,8 +803,6 @@ def test_build_agent_gate_all_imports_fail_denies() -> None:
     "target",
     [
         "workspace_guard.build_employee_gate",
-        "write_approval.build_write_approval_gate",
-        "write_approval.compose_gates",
     ],
 )
 @pytest.mark.parametrize("error", [ImportError("unavailable"), RuntimeError("failed")])
@@ -814,21 +812,19 @@ def test_build_agent_gate_partial_failure_denies(target, error):
     assert gate("t", {})["ok"] is False
 
 
-def test_build_agent_gate_compose_success() -> None:
+def test_build_agent_gate_leaves_business_approval_to_durable_child() -> None:
     agent = EmployeeAgent("emp-1")
     mock_ws_gate = MagicMock(name="ws_gate")
-    mock_write_gate = MagicMock(name="write_gate")
-    composed = MagicMock(name="composed")
     import app.application.employee_runtime.workspace_guard as ws_mod
     import app.application.employee_runtime.write_approval as wa_mod
 
     with (
         patch.object(ws_mod, "build_employee_gate", return_value=mock_ws_gate),
-        patch.object(wa_mod, "build_write_approval_gate", return_value=mock_write_gate),
-        patch.object(wa_mod, "compose_gates", return_value=composed),
+        patch.object(wa_mod, "build_write_approval_gate") as old_approval,
     ):
         out = agent._build_agent_gate({}, {}, "/ws", {"input": 1})
-    assert out is composed
+    assert out is mock_ws_gate
+    old_approval.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

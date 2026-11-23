@@ -15,7 +15,6 @@ from starlette.requests import Request
 
 from app.application.ai_chat_app_service import (
     AIChatApplicationService,
-    _skip_pro_excel_deterministic_import,
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 from app.fastapi_routes.domains.conversation.helpers import (
@@ -178,34 +177,6 @@ def test_extract_log_db_error_returns_failure() -> None:
 # ---------------------------------------------------------------------------
 # ai_chat_app_service helpers
 # ---------------------------------------------------------------------------
-
-
-def test_skip_pro_excel_deterministic_import_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert _skip_pro_excel_deterministic_import({"excel_import_ai_decides": True}) is True
-    assert (
-        _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True})
-        is False
-    )
-    monkeypatch.setenv("XCAGI_EXCEL_IMPORT_AI_DECIDES", "1")
-    assert _skip_pro_excel_deterministic_import({}) is True
-
-
-@pytest.mark.parametrize("source", ["xcagi-pro", "basic"])
-def test_ai_chat_merge_context_does_not_trust_source_as_identity(source: str) -> None:
-    ctx = AIChatApplicationService._merge_tool_runtime_context(
-        "u1",
-        "查产品",
-        {
-            "ui_surface": "chat",
-            "excel_analysis": {"sheet": "S1"},
-            "source": source,
-            "user_id": "forged-actor",
-        },
-    )
-    assert ctx["conversation_id"] == "u1"
-    assert "user_id" not in ctx  # Neither conversation nor source grants actor authority.
-    assert "source" not in ctx
-    assert ctx["excel_analysis"]["sheet"] == "S1"
 
 
 # ---------------------------------------------------------------------------

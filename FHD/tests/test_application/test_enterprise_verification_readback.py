@@ -15,20 +15,23 @@ from app.application.enterprise_cognition.goals import GoalService
 from app.application.enterprise_cognition.service import EnterpriseCognitionService
 from app.application.tools.enterprise_cognition import execute_enterprise_cognition
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.test_application.test_enterprise_acceptance import OrderPlanner, _seed_order
+from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.test_application.test_enterprise_acceptance import _seed_order
 from tests.test_application.test_sales_verification_readback import verify
 from tests.test_application.test_verification_readback import invocation
 
 
 @pytest.fixture
-def cognition(trusted_actor, monkeypatch, tmp_path):
+def cognition(dynamic_chat_runtime, monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    actor = trusted_actor(role="admin")
+    state = dynamic_chat_runtime
+    actor = state.actor
     monkeypatch.setattr("app.db.SessionLocal", actor.factory)
     order_id, item_id, warehouse_id, _ = _seed_order(actor)
-    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    repository = state.repository
     monkeypatch.setattr(
         "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
         lambda: repository,
@@ -37,8 +40,15 @@ def cognition(trusted_actor, monkeypatch, tmp_path):
     execution = EnterpriseExecutionService(
         goals=goals,
         orchestrator=AgentOrchestrator(repository=repository),
-        planner=OrderPlanner(order_id, item_id, warehouse_id),
     )
+    state.actions = [
+        {
+            "tool_id": "sales",
+            "action": "confirm",
+            "params": {"order_id": order_id},
+            "call_id": "confirm",
+        }
+    ]
     service = EnterpriseCognitionService(goals=goals, execution=execution)
     monkeypatch.setattr(
         "app.application.tools.enterprise_cognition.get_cognition_service", lambda: service
@@ -61,12 +71,14 @@ def case_for(cognition, action, params):
     case = invocation(actor, tool="enterprise_cognition", action=action, params=params)
     task_id = "original-parent-task"
     case.run.metadata["runtime_context"]["task_id"] = task_id
+    case.run.metadata["runtime_context"]["workspace_id"] = task_id
     case.run.metadata["task_context"] = {
         "task_id": task_id,
         "tenant_id": str(actor.tenant_id),
         "attempt": 1,
     }
     case.context["task_id"] = task_id
+    case.context["workspace_id"] = task_id
     freeze_verification_contract(
         case.run,
         case.step,
@@ -110,7 +122,9 @@ def test_goal_claim_without_original_persisted_binding_is_not_verified(cognition
     )
 
 
-def test_plan_verifies_only_original_child_admission_and_preserves_business_approval(cognition):
+def test_plan_verifies_only_original_child_admission_and_preserves_business_approval(
+    cognition, dynamic_chat_runtime
+):
     actor, repository, definition = cognition
     output = execute_enterprise_cognition("bind_goal", definition, actor.context)
     assert output["success"]
@@ -122,14 +136,14 @@ def test_plan_verifies_only_original_child_admission_and_preserves_business_appr
     case = case_for(cognition, "plan", params)
     output = AgentToolExecutor().execute(case.step, runtime_context=case.context)
     assert output["success"], output
-    assert output["pending_approval"]
+    assert not output["pending_approval"]
     result = verify(case, output)
     assert result["accepted"], result
     evidence = result["checks"][0]["evidence"]
     assert evidence["admission_verified"] and not evidence["business_execution_verified"]
     child = repository.get(output["data"]["run_id"])
-    assert child.status == "waiting_user" and not child.tool_calls
-    assert output["pending_approval"] and output["execution_state"] == "waiting_approval"
+    assert child.status == "queued" and not child.tool_calls
+    assert not output["pending_approval"] and output["execution_state"] == "queued"
     forged = copy.deepcopy(output)
     forged["data"]["task_id"] = "another-task"
     assert verify(case, forged)["accepted"] is False
@@ -150,34 +164,16 @@ def test_plan_verifies_only_original_child_admission_and_preserves_business_appr
     )
     # The admission remains inspectable after the real child advances. Rechecking
     # its admission neither completes the pending business nor changes the child.
-    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
-    from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
-    from app.application.agent_orchestrator.task_execution_sql_repository import (
-        SQLAlchemyTaskExecutionRepository,
-    )
-    from app.application.agent_orchestrator.verification_recovery import (
-        reverify_run,
-        verification_can_finalize,
-    )
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
-
-    grant = issue_approval_grant(child, principal_id=str(actor.user_id))
-    queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
-    queued = approve_and_enqueue(
-        repository,
-        queue,
-        run_id=child.run_id,
-        token=grant["grant"],
-        principal_id=str(actor.user_id),
-        runtime_context={},
-        authenticated_binding=actor.principal.mod_authorization,
-    )
-    assert queued.status == "queued" and not queued.tool_calls
     # A fresh read of the same admitted task can now say queued. Generic
     # execution normalization must not turn that known admission into unknown.
     from types import SimpleNamespace
 
     from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
+    from app.application.agent_orchestrator.verification_recovery import (
+        reverify_run,
+        verification_can_finalize,
+    )
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
     queued_receipt = execute_enterprise_cognition("plan", params, case.context)
     assert queued_receipt["execution_state"] == "queued" and not queued_receipt["pending_approval"]
@@ -196,6 +192,15 @@ def test_plan_verifies_only_original_child_admission_and_preserves_business_appr
     assert business["status"] == "pending" and business["success"] is False
     assert business["evidence"]["business_effect_verified"] is False
     assert business["evidence"]["admitted_tasks"][0]["source"] == "enterprise_authority"
+    waiting = dynamic_chat_runtime.drain(child.run_id)
+    assert waiting.status == "waiting_user"
+    business_child_id = waiting.metadata["codex_runtime"]["calls"]["confirm"]["child_run_id"]
+    business_child = repository.get(business_child_id)
+    assert business_child.steps[0].risk == "high" and not business_child.tool_calls
+    assert (
+        business_child.metadata["runtime_context"]["enterprise_cognition"]["goal"]["entity_id"]
+        == definition["entity_id"]
+    )
     assert verify(case, output)["accepted"]
     plan = PlanGraph(
         plan_id="parent-admission",
@@ -208,7 +213,7 @@ def test_plan_verifies_only_original_child_admission_and_preserves_business_appr
     recovered = reverify_run(repository, case.run.run_id)
     assert recovered.metadata["verification"]["accepted"]
     assert verification_can_finalize(recovered) is False
-    assert repository.get(child.run_id).status == "queued"
+    assert repository.get(child.run_id).status == "waiting_user"
     assert (
         len(repository.list_task_runs(user_id=str(actor.user_id), task_id=evidence["task_id"])) == 1
     )
@@ -228,7 +233,9 @@ def test_plan_cannot_verify_a_foreign_or_missing_task_with_a_pending_flag(cognit
     assert verify(case, output)["accepted"] is False
 
 
-def test_original_executor_deadline_step_and_verifier_preserve_only_child_admission(cognition):
+def test_original_executor_deadline_step_and_verifier_preserve_only_child_admission(
+    cognition, dynamic_chat_runtime
+):
     from types import SimpleNamespace
 
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -264,14 +271,16 @@ def test_original_executor_deadline_step_and_verifier_preserve_only_child_admiss
     )
     assert len(parent.tool_calls) == 1, parent.to_dict()
     call = parent.tool_calls[0]
-    assert call.status == "completed" and call.output["success"] is True, parent.to_dict()
-    assert call.output["pending_approval"] and call.output["execution_state"] == "waiting_approval"
+    assert call.status == "completed" and call.output["success"] is True, str(call.output)
+    assert not call.output["pending_approval"] and call.output["execution_state"] == "queued"
     assert call.metadata["verification"]["accepted"]
     assert call.metadata["verification"]["checks"][0]["evidence"]["admission_verified"]
     child = repository.get(call.output["data"]["run_id"])
-    assert child.status == "waiting_user" and not child.tool_calls
-    assert parent.final_output["business_result"]["pending_approval"]
-    assert parent.final_output["business_result"]["status"] != "completed"
+    assert child.status == "queued" and not child.tool_calls
+    assert parent.status in {"running", "blocked"}, (
+        "child admission cannot complete the parent business goal"
+    )
+    assert not parent.final_output.get("business_result", {}).get("success")
 
 
 @pytest.mark.parametrize(

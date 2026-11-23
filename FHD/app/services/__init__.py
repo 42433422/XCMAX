@@ -66,7 +66,6 @@ from app.domain.shared_services.intent_service import (
 
 # Lazy imports for services that cause circular dependencies with application layer
 # These are only imported when their getter functions are called
-from app.domain.shared_services.task_agent import TaskAgent, get_task_agent
 from app.domain.shared_services.user_service import UserService, get_user_service
 from app.domain.shared_services.database_service import get_database_service
 from app.utils.async_task.task_context import TaskContextService, get_task_context_service
@@ -197,8 +196,6 @@ __all__ = [
     "get_ai_conversation_service",
     "init_ai_conversation_service",
     "AIConversationService",
-    "get_task_agent",
-    "TaskAgent",
     "get_task_context_service",
     "TaskContextService",
     "get_database_service",

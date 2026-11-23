@@ -215,9 +215,12 @@ def _verify_frozen_elt_runtime() -> None:
 
 
 def _verify_frozen_critical_runtime() -> None:
-    """Exercise critical office and voice dependencies in the frozen executable."""
+    """Exercise the fixed executor, office and voice runtime in the executable."""
     import tempfile
 
+    from app.infrastructure.codex.transport import verify_packaged_runtime
+
+    verify_packaged_runtime()
     print("[frozen-runtime-probe] voice and PDF imports begin", file=sys.stderr, flush=True)
     import av
     import faster_whisper
@@ -434,8 +437,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--verify-frozen-critical-runtime",
         action="store_true",
-        help="验证冻结包内办公与语音关键依赖后退出",
+        help="验证冻结包内 Codex、办公与语音关键依赖后退出",
     )
+    parser.add_argument("--xcagi-codex-launch", default=None, help=argparse.SUPPRESS)
     parser.add_argument(
         "--verify-notice-publication-sha256",
         default=None,
@@ -479,6 +483,14 @@ def _resolve_reload(desktop: bool) -> bool:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+    if args.xcagi_codex_launch is not None:
+        # The SDK re-enters the frozen executable solely to exec the pinned CLI.
+        # Do not initialize databases, load dotenv or start the HTTP backend.
+        _ensure_sys_path()
+        from app.infrastructure.codex.launcher import main as launch_codex
+
+        launch_codex(args.xcagi_codex_launch)
+        return
     if args.verify_notice_publication_sha256 is not None:
         _run_notice_publication_probe(args.verify_notice_publication_sha256, args.data_dir)
         return

@@ -7,7 +7,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.application.ai_chat.workflow_session import WorkflowSession
 from app.application.workflow.clarification_lifecycle import (
     option_letter_ordinal,
     resolve_confirmed_target,
@@ -77,25 +76,6 @@ def test_continuation_message_keeps_prior_question() -> None:
     assert "A" in composed
     assert "请选择日期范围" in composed
     assert "不要再追问" in composed
-
-
-def test_no_pending_confirmation_resumes_prior_question(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.application.ai_chat.dialogue_memory.last_assistant_question",
-        lambda *args, **kwargs: "请选择日期范围：A. 当天 B. 整月",
-    )
-    session = WorkflowSession({}, SimpleNamespace())
-    handled, reply = session.resume_pending_dynamic_workflow("owner", "确认", "确认", {})
-    assert (handled, reply) == (False, None)
-
-
-def test_no_pending_confirmation_without_question_keeps_explicit_reply() -> None:
-    session = WorkflowSession({}, SimpleNamespace())
-    handled, reply = session.resume_pending_dynamic_workflow("owner", "确认", "确认", {})
-    assert handled is True
-    assert reply is not None
-    assert (reply.get("data") or {}).get("data", {}).get("reason") == "no_pending_workflow"
-    assert "没有待确认的操作" in str(reply.get("response"))
 
 
 def _plan(tool_id: str, action: str, risk: str) -> PlanGraph:

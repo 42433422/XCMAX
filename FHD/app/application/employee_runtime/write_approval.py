@@ -19,7 +19,7 @@ def build_write_approval_gate(
     *,
     runtime_context: dict[str, Any] | None = None,
 ):
-    """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
+    """返回员工工具 gate：(tool_name, args) -> {ok, reason}。
 
     代码修改工具（``patch_file`` / ``write_file``）统一委托 autonomy_guard；
     业务写操作从当前注册契约解析动作，绑定原 AgentRun 后持久化审批。

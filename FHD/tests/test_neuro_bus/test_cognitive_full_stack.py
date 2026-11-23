@@ -159,6 +159,28 @@ def test_plan_graph_log_redacts_nested_credentials_without_mutating_input(tmp_pa
     assert json.dumps({"plan": plan, "extra": extra}) == original
 
 
+def test_single_step_failure_keeps_actual_root_cause_and_model_attempts(tmp_path, monkeypatch):
+    path = tmp_path / "plans.jsonl"
+    monkeypatch.setenv("XCAGI_PLAN_GRAPH_LOG", str(path))
+    metadata = {
+        "failure_kind": "transport_unknown",
+        "failure_reason": "Read response unavailable; token=private-failure-token",
+        "model_diagnostics": {
+            "model_attempts": 2,
+            "stages": [{"stage": "goal_review", "attempt": 2, "elapsed_ms": 41.5}],
+        },
+    }
+    plan = {"plan_id": "original", "nodes": [{"node_id": "only"}], "metadata": metadata}
+    assert append_plan_graph(plan, phase="failed")
+    text = path.read_text()
+    record = json.loads(text)
+    assert record["schema_version"] == 2
+    assert record["planning_failure_kind"] == "transport_unknown"
+    assert record["planning_failure_reason"].startswith("Read response unavailable")
+    assert record["planning_diagnostics"]["model_diagnostics"]["model_attempts"] == 2
+    assert "private-failure-token" not in text
+
+
 def test_learning_feedback_reward_bounds():
     low = FeedbackEvent(kind="user_correction", success=False).reward()
     high = FeedbackEvent(kind="task_outcome", success=True, confidence=0.9).reward()

@@ -1,37 +1,31 @@
-"""Browser decision and page-evidence rules independent of model or tool IO."""
+"""Single-action browser postconditions and page evidence, with no decision loop."""
 
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-
-class BrowserDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
-
-    mode: Literal["action", "verify", "finish", "wait"]
-    action: str = ""
-    params: dict[str, Any] = Field(default_factory=dict)
-    assertion: str = Field(default="", max_length=500)
-    evidence_node_id: str = ""
-    reason: str = Field(default="", max_length=1000)
-
-    @model_validator(mode="after")
-    def valid_mode(self) -> BrowserDecision:
-        if self.mode == "action":
-            if not self.action or self.evidence_node_id:
-                raise ValueError("action requires exactly one registered action")
-        elif self.action or self.params:
-            raise ValueError("only action accepts tool parameters")
-        if self.mode == "verify" and not self.assertion:
-            raise ValueError("verification requires nonempty visible page text")
-        if self.mode == "finish" and not self.evidence_node_id:
-            raise ValueError("finish requires an independent verification receipt")
-        if self.mode == "wait" and not self.reason:
-            raise ValueError("handoff requires a question")
-        return self
+BROWSER_POSTCONDITION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind", "expected"],
+    "properties": {
+        "kind": {"enum": ["url", "text"]},
+        "expected": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": r"[\s\S]*\S[\s\S]*",
+        },
+        "observation_call_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    },
+    "allOf": [
+        {
+            "if": {"properties": {"kind": {"const": "text"}}},
+            "then": {"required": ["observation_call_id"]},
+        }
+    ],
+}
 
 
 def snapshot_text(output: dict[str, Any]) -> str:
@@ -52,12 +46,14 @@ def snapshot_url(output: dict[str, Any]) -> str:
 
 
 def targets_observed(params: dict[str, Any], snapshot: str) -> bool:
-    targets = [params["target"]] if "target" in params else []
+    targets = [params[key] for key in ("target", "ref") if key in params]
     if isinstance(params.get("fields"), list):
         targets.extend(
-            field["target"]
+            field[key]
             for field in params["fields"]
-            if isinstance(field, dict) and "target" in field
+            if isinstance(field, dict)
+            for key in ("target", "ref")
+            if key in field
         )
     if not targets:
         return True

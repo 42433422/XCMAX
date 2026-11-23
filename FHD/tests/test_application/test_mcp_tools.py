@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 
 from app.application.tools.mcp import registry as mcp_registry
@@ -347,27 +348,24 @@ def test_disabled_or_unregistered_calls_never_reach_transport(monkeypatch):
     assert calls == []
 
 
-@pytest.mark.parametrize("safe,expected", [(False, 1), (True, 2)])
-def test_only_trusted_reads_may_reconnect_after_unknown_transport_outcome(
-    monkeypatch, safe, expected
-):
+@pytest.mark.parametrize("safe", [False, True])
+def test_unknown_transport_outcome_cannot_reconnect_even_for_trusted_reads(monkeypatch, safe):
     from app.infrastructure.mcp import client
 
     calls = []
 
     def fail(factory, timeout):
         calls.append("possibly committed")
-        raise client.McpClientError("connection dropped after send")
+        raise httpx.ReadTimeout("connection dropped after send")
 
     monkeypatch.setattr(client, "_sync", fail)
     monkeypatch.setattr(client.time, "sleep", lambda _: None)
     result = client.call_tool(
         mcp_config.McpServerConfig(name="demo", command="x"), "write", {}, retry_safe=safe
     )
-    assert len(calls) == expected and result["success"] is False
-    if not safe:
-        assert result["outcome"] == "unknown" and result["retryable"] is False
-        assert result["reconciliation_required"] is True
+    assert len(calls) == 1 and result["success"] is False
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert result["reconciliation_required"] is True
 
 
 def test_mcp_reconnect_spends_one_inherited_deadline(monkeypatch):
@@ -391,7 +389,7 @@ def test_mcp_reconnect_spends_one_inherited_deadline(monkeypatch):
         calls.append(timeout)
         if len(calls) == 1:
             clock[0] += 0.4
-            raise ConnectionError("lost read response")
+            raise httpx.ConnectError("connection unavailable before send")
         return "same operation completed"
 
     monkeypatch.setattr(client, "_sync", once)
@@ -417,7 +415,7 @@ def test_mcp_read_retry_preserves_original_nested_arguments(monkeypatch):
             calls.append(copy.deepcopy(arguments))
             arguments["filter"]["query"] = "changed by transport"
             if len(calls) == 1:
-                raise ConnectionError("lost read response")
+                raise httpx.ConnectError("connection unavailable before send")
             return SimpleNamespace(isError=False, structuredContent={"items": []}, content=[])
 
     async def with_session(config, action):
@@ -448,7 +446,7 @@ def test_mcp_cannot_reconnect_after_total_budget_is_exhausted(monkeypatch):
     def once(factory, timeout):
         calls.append(timeout)
         clock[0] += 5
-        raise ConnectionError("lost response")
+        raise httpx.ConnectError("connection unavailable before send")
 
     monkeypatch.setattr(client, "_sync", once)
     with pytest.raises(client.McpClientError, match="预算"):
@@ -474,6 +472,36 @@ def test_mcp_thread_retains_trusted_invocation_context():
             assert client._sync(observe, 30) == ("original-tenant", budget.deadline)
     finally:
         tenant.reset(token)
+
+
+def test_real_mcp_timeout_cancels_the_original_call_without_reconnect(monkeypatch):
+    import asyncio
+    import threading
+    import time
+
+    from app.infrastructure.mcp import client
+
+    attempts, ended = [], threading.Event()
+
+    async def with_session(config, action):
+        attempts.append(1)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            ended.set()
+
+    monkeypatch.setattr(client, "_with_session", with_session)
+    started = time.monotonic()
+    result = client.call_tool(
+        mcp_config.McpServerConfig(name="demo", command="x", timeout_seconds=0.05),
+        "read",
+        {},
+        retry_safe=True,
+    )
+    assert attempts == [1] and ended.wait(0.5)
+    assert time.monotonic() - started < 0.75
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert result["reconciliation_required"] is True
 
 
 @pytest.mark.parametrize(

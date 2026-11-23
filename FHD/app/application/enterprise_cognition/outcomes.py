@@ -57,7 +57,92 @@ def _unknown(reason: str) -> dict[str, Any]:
     }
 
 
-def _execution_evidence(run: AgentRun, bound_at: datetime) -> tuple[dict[str, Any], list[dict]]:
+def _codex_execution_evidence(
+    run: AgentRun, bound_at: datetime, repository
+) -> tuple[dict[str, Any], list[dict]]:
+    """Read the original approved child effects, never a parent's projected transcript."""
+    from app.domain.task_lifecycle.agent_runtime_contract import (
+        goal_answers,
+        goal_report_coverage,
+        validate_runtime_goal,
+    )
+    from app.domain.task_lifecycle.agent_runtime_results import model_unsettled
+    from app.infrastructure.codex.binding import CodexBinding, CodexBindingStore
+    from app.infrastructure.codex.receipts import read_call_receipt
+
+    try:
+        validate_runtime_goal(run)
+    except ValueError as exc:
+        raise OutcomeEvidenceError("goal_contract_changed") from exc
+    result = ensure_terminal_business_result(run)
+    runtime_result = run.final_output.get("codex_result") or {}
+    metadata = run.metadata.get("codex_runtime") or {}
+    if (
+        run.status != "completed"
+        or result.get("success") is not True
+        or runtime_result.get("business_completed") is not True
+        or model_unsettled(metadata)
+        or metadata.get("coordinator_active")
+        or not isinstance(repository, SQLAlchemyAgentRunRepository)
+    ):
+        raise OutcomeEvidenceError("execution_not_verified")
+    # Outcome verification is read-only until its one observation CAS. Using
+    # receipt_snapshot here would refresh the parent ledger mid-read and make
+    # that CAS stale (or accidentally include a later runtime generation).
+    store, runtime_binding = CodexBindingStore(repository), CodexBinding(run)
+    rows = []
+    for call_id, call in metadata.get("calls", {}).items():
+        receipt = read_call_receipt(store, runtime_binding, call)
+        rows.append(
+            {
+                "call_id": call_id,
+                **copy.deepcopy(call),
+                "receipt": receipt,
+                "state": receipt["status"],
+            }
+        )
+    coverage = goal_report_coverage(
+        run.metadata.get("runtime_goal_contract"),
+        rows,
+        str(runtime_result.get("goal_response", runtime_result.get("output")) or ""),
+        goal_answers(run),
+        run.metadata.get("runtime_goal_verification"),
+    )
+    if not coverage["completed"] or coverage["mode"] != "business":
+        raise OutcomeEvidenceError("execution_not_verified")
+    original = (run.metadata.get("runtime_context") or {}).get("enterprise_cognition") or {}
+    seen: set[str] = set()
+    calls: list[dict[str, Any]] = []
+    for row in rows:
+        if row.get("read_only") is True or (row.get("receipt") or {}).get("success") is not True:
+            continue
+        child_id = str(row.get("child_run_id") or "")
+        if child_id in seen:
+            continue
+        seen.add(child_id)
+        child = repository.get(child_id)
+        binding = (
+            ((child.metadata.get("runtime_context") or {}).get("enterprise_cognition") or {})
+            if child
+            else {}
+        )
+        if child is None or any(
+            binding.get(key) != original.get(key)
+            for key in ("goal", "baseline", "bound_at", "request_sha256")
+        ):
+            raise OutcomeEvidenceError("action_entity_binding_missing")
+        _child_result, child_calls = _execution_evidence(child, bound_at, repository=repository)
+        calls.extend({**call, "run_id": child.run_id} for call in child_calls)
+    if not calls:
+        raise OutcomeEvidenceError("action_receipt_or_approval_missing")
+    return result, calls
+
+
+def _execution_evidence(
+    run: AgentRun, bound_at: datetime, *, repository=None
+) -> tuple[dict[str, Any], list[dict]]:
+    if run.metadata.get("runtime_type") == "codex":
+        return _codex_execution_evidence(run, bound_at, repository or get_agent_run_repository())
     result = ensure_terminal_business_result(run)
     if (
         run.status != "completed"
@@ -175,7 +260,9 @@ def _execution_evidence(run: AgentRun, bound_at: datetime) -> tuple[dict[str, An
     return result, calls
 
 
-def _observe(run: AgentRun, binding: dict, after: dict, now: datetime) -> dict[str, Any]:
+def _observe(
+    run: AgentRun, binding: dict, after: dict, now: datetime, *, repository=None
+) -> dict[str, Any]:
     goal = binding["goal"]
     bound_at = _time(binding.get("bound_at"))
     scope = {
@@ -185,7 +272,7 @@ def _observe(run: AgentRun, binding: dict, after: dict, now: datetime) -> dict[s
     }
     baseline = authority_sample(binding["baseline"], goal, scope=scope)
     current = authority_sample(after, goal, scope=scope)
-    result, calls = _execution_evidence(run, bound_at)
+    result, calls = _execution_evidence(run, bound_at, repository=repository)
     if not (
         _time(baseline["observed_at"]) <= bound_at < _time(baseline["expires_at"])
         and max(_time(call["finished_at"]) for call in calls)
@@ -298,10 +385,30 @@ class OutcomeService:
         runtime = run.metadata.get("runtime_context") or {}
         if str(runtime.get("mod_id") or "") != mod_id:
             return _unknown("run_not_accessible")
+        # The original goal belongs to the Codex parent. A single approved
+        # action may change an intermediate state without finishing that goal.
+        # Its receipt remains evidence; it must not create a separate outcome
+        # or memory candidate for the whole parent's objective.
+        if (
+            run.metadata.get("runtime_type") != "codex"
+            and runtime.get("source") == "codex_runtime"
+            and runtime.get("parent_run_id")
+        ):
+            parent = repository.get(str(runtime["parent_run_id"]))
+            if parent and parent.metadata.get("runtime_type") == "codex":
+                return _unknown("original_goal_parent_required")
         binding = runtime.get("enterprise_cognition") or {}
         plan_binding = ((run.metadata.get("plan") or {}).get("metadata") or {}).get(
             "enterprise_cognition"
         )
+        if run.metadata.get("runtime_type") == "codex":
+            from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
+
+            try:
+                validate_runtime_goal(run)
+                plan_binding = binding
+            except ValueError:
+                return _unknown("goal_contract_changed")
         if not binding or binding != plan_binding:
             return _unknown("approved_plan_binding_mismatch")
         goal = binding.get("goal") or {}
@@ -337,7 +444,7 @@ class OutcomeService:
             return _unknown(str(exc))
         if observation is None:
             try:
-                observation = _observe(run, binding, after, self.clock())
+                observation = _observe(run, binding, after, self.clock(), repository=repository)
             except OutcomeEvidenceError as exc:
                 return _unknown(str(exc))
             run.add_event(_EVENT, "经营指标已回查；因果归因仍未证实", {"observation": observation})
@@ -512,9 +619,15 @@ _LEASE_SECONDS = 120.0
 
 def _eligible(run, now: float) -> bool:
     state = run.metadata.get(_KEY) or {}
+    context = run.metadata.get("runtime_context") or {}
     return bool(
         run.status == "completed"
-        and (run.metadata.get("runtime_context") or {}).get("enterprise_cognition")
+        and context.get("enterprise_cognition")
+        and not (
+            run.metadata.get("runtime_type") != "codex"
+            and context.get("source") == "codex_runtime"
+            and context.get("parent_run_id")
+        )
         and state.get("status") != "recorded"
         and float(state.get("next_attempt_at") or 0) <= now
         and float(state.get("lease_until") or 0) <= now
@@ -524,7 +637,7 @@ def _eligible(run, now: float) -> bool:
 def _candidates(repository, now: float, limit: int):
     if not isinstance(repository, SQLAlchemyAgentRunRepository):
         return repository.list_recent(limit=limit, matches=lambda run: _eligible(run, now))
-    from sqlalchemy import JSON, case, cast, func
+    from sqlalchemy import JSON, case, cast, func, or_
     from sqlalchemy.sql.elements import ColumnElement
 
     from app.db.models.agent import AgentRunRecord
@@ -563,6 +676,11 @@ def _candidates(repository, now: float, limit: int):
             .filter(
                 AgentRunRecord.status == "completed",
                 field("metadata", "runtime_context", "enterprise_cognition").is_not(None),
+                or_(
+                    field("metadata", "runtime_type") == "codex",
+                    func.coalesce(field("metadata", "runtime_context", "source"), "")
+                    != "codex_runtime",
+                ),
                 func.coalesce(field("metadata", _KEY, "status"), "") != "recorded",
                 func.coalesce(field("metadata", _KEY, "next_attempt_at"), 0) <= now,
                 func.coalesce(field("metadata", _KEY, "lease_until"), 0) <= now,

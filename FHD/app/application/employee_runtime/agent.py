@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -38,6 +40,16 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _employee_gate_contract(
+    manifest: dict[str, Any],
+    config: dict[str, Any],
+    tools: list[dict[str, Any]],
+) -> str:
+    from app.infrastructure.codex.binding import canonical_digest
+
+    return canonical_digest({"manifest": manifest, "config": config, "tools": tools})
+
+
 class EmployeeAgent:
     """单个已安装 employee_pack 的运行时实例。"""
 
@@ -66,20 +78,13 @@ class EmployeeAgent:
         workspace_root: str | None,
         runtime_context: dict[str, Any] | None = None,
     ) -> Any:
-        """任一必需授权门初始化失败时拒绝执行。"""
+        """Keep employee file policy; durable child tasks own business approvals."""
         try:
             from app.application.employee_runtime.workspace_guard import (
                 build_employee_gate,
             )
-            from app.application.employee_runtime.write_approval import (
-                build_write_approval_gate,
-                compose_gates,
-            )
 
-            return compose_gates(
-                build_employee_gate(self.employee_id, manifest, config, workspace_root),
-                build_write_approval_gate(self.employee_id, runtime_context=runtime_context),
-            )
+            return build_employee_gate(self.employee_id, manifest, config, workspace_root)
         except RECOVERABLE_ERRORS:
             logger.exception("employee authorization initialization failed closed")
             return lambda name, args: {
@@ -230,6 +235,7 @@ class EmployeeAgent:
         workspace_root: str | None = None,
         session_id: str | None = None,
         runtime_context: dict[str, Any] | None = None,
+        on_event: Callable[[dict[str, Any]], Any] | None = None,
     ) -> dict[str, Any]:
         employee_id = self.employee_id
         t0 = time.perf_counter()
@@ -301,6 +307,7 @@ class EmployeeAgent:
                 }
             pack_root = Path(str(pack.get("pack_dir") or resolve_pack_dir(employee_id) or ""))
             config = parse_employee_config_v2(manifest)
+            declared_config = deepcopy(config)
             actions_cfg = _ex._normalize_actions_cfg(config)
             handler_list = _ex._handler_list(actions_cfg)
             upstream: dict[str, Any] | None = None
@@ -397,6 +404,46 @@ class EmployeeAgent:
             build_employee_context(employee_id, payload)
             perceived = self._perceive(config, payload)
 
+            selected_runtime = None
+            defer_cognition = False
+            if "agent" in handler_list and not (
+                is_interactive_chat_payload(payload) or is_collaboration_context_payload(payload)
+            ):
+                from app.infrastructure.codex import policy
+
+                try:
+                    selected_runtime = policy.runtime_settings()
+                    if (
+                        selected_runtime.engine != "codex"
+                        or "employee" not in selected_runtime.surfaces
+                    ):
+                        raise policy.RuntimePolicyError("员工 Agent 必须启用固定 Codex 执行器")
+                except policy.RuntimePolicyError:
+                    return self._cognition_failed_result(
+                        pack,
+                        task,
+                        handler_list,
+                        {
+                            "error": "员工运行时配置无效",
+                            "error_code": "runtime_configuration_invalid",
+                            "retryable": False,
+                        },
+                        t0,
+                    )
+                defer_cognition = True
+                if handler_list != ["agent"]:
+                    return self._cognition_failed_result(
+                        pack,
+                        task,
+                        handler_list,
+                        {
+                            "error": "Codex 员工入口暂不支持混合执行器配置",
+                            "error_code": "employee_runtime_handlers_unsupported",
+                            "retryable": False,
+                        },
+                        t0,
+                    )
+
             file_path_fast = str(payload.get("file_path") or payload.get("path") or "").strip()
             direct_only = handler_list == ["direct_python"] and (
                 bool(file_path_fast) or is_deterministic_office_worker(employee_id, handler_list)
@@ -412,7 +459,11 @@ class EmployeeAgent:
                 }
             else:
                 memory = _ex._memory_light({"employee_id": employee_id})
-                reasoning = _ex._cognition_fhd(config, perceived, memory, task)
+                reasoning = (
+                    _ex._cognition_fhd(config, perceived, memory, task, defer_to_runtime=True)
+                    if defer_cognition
+                    else _ex._cognition_fhd(config, perceived, memory, task)
+                )
                 if reasoning.get("error") and is_collaboration_context_payload(payload):
                     from app.application.employee_runtime.metrics import (
                         record_employee_run,
@@ -508,6 +559,12 @@ class EmployeeAgent:
                 if "agent" in handler_list
                 else None
             )
+            if defer_cognition:
+                trusted_context["_employee_gate_contract"] = _employee_gate_contract(
+                    manifest,
+                    declared_config,
+                    agent_tools or [],
+                )
             result = _ex._actions_fhd(
                 config,
                 reasoning,
@@ -518,6 +575,8 @@ class EmployeeAgent:
                 agent_tools=agent_tools,
                 agent_gate=agent_gate,
                 runtime_context=trusted_context,
+                on_event=on_event,
+                settings=selected_runtime,
             )
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             ok = _ex._handlers_execution_ok(result)
@@ -604,4 +663,42 @@ class EmployeeAgent:
         )
 
 
-__all__ = ["EmployeeAgent"]
+def restore_codex_employee_gate(
+    employee_id: str,
+    original_runtime_context: dict[str, Any],
+    *,
+    input_data: dict[str, Any] | None = None,
+) -> tuple[list[str], Callable[[str, str, dict[str, Any]], dict[str, Any]]]:
+    """Rebuild a gate only from the original host-owned employee binding.
+
+    The caller must provide persisted context/input, never the resume body's
+    fields. A changed pack or tool schema requires a new authorization; this
+    helper cannot silently widen an existing run's permissions.
+    """
+    from app.application.employee_runtime.agent_runner import _codex_employee_tool_scope
+    from app.mod_sdk.product_plane import employee_execution_block_reason
+
+    if not employee_id or original_runtime_context.get("employee_id") != employee_id:
+        raise ValueError("原员工运行绑定不一致")
+    expected = original_runtime_context.get("_employee_gate_contract")
+    if not isinstance(expected, str) or not expected:
+        raise ValueError("原员工工具授权契约缺失，不能恢复")
+    pack = load_employee_pack_from_disk(employee_id)
+    manifest = pack.get("manifest") or {}
+    if employee_execution_block_reason(employee_id, manifest):
+        raise ValueError("原员工当前不可执行")
+    config = parse_employee_config_v2(manifest)
+    employee = EmployeeAgent(employee_id)
+    tools = employee._build_agent_tools(manifest, config)
+    if _employee_gate_contract(manifest, config, tools) != expected:
+        raise ValueError("原员工配置或工具授权契约已变化，不能恢复")
+    workspace = original_runtime_context.get("workspace_root")
+    if workspace is not None and not isinstance(workspace, str):
+        raise ValueError("原员工工作空间绑定无效")
+    gate = employee._build_agent_gate(manifest, config, workspace, input_data)
+    if gate is None:
+        raise ValueError("原员工工具授权门未恢复")
+    return _codex_employee_tool_scope(tools, gate)
+
+
+__all__ = ["EmployeeAgent", "restore_codex_employee_gate"]

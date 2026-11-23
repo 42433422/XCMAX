@@ -150,6 +150,7 @@ def test_customer_query_uses_view_permission_and_only_owned_tenant(trusted_actor
     from app.db.models.purchase_unit import PurchaseUnit
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(permissions=["customer.view"])
     service = CustomerApplicationService()
     monkeypatch.setattr(service, "_get_session", actor.factory)
@@ -162,191 +163,47 @@ def test_customer_query_uses_view_permission_and_only_owned_tenant(trusted_actor
     assert result["total"] == 21
     assert len(result["data"]) == 20
     assert all(row["customer_name"].startswith("owned-") for row in result["data"])
-    from types import SimpleNamespace
-
-    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-
-    item = SimpleNamespace(tool_id="customers", action="query", node_id="read", output=result)
-    lines = AIChatWorkflowResponseMixin()._format_workflow_tool_success_line(item, {})
-    assert "客户总数：21；本次显示 20 条" in lines[0]
-    assert all("foreign" not in line for line in lines)
 
 
-def test_empty_customer_query_reports_zero():
-    from types import SimpleNamespace
+def test_empty_customer_query_reports_zero(trusted_actor, monkeypatch):
+    from app.application.customer_app_service import CustomerApplicationService
 
-    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-
-    item = SimpleNamespace(
-        tool_id="customers", action="query", node_id="read", output={"data": [], "total": 0}
-    )
-    lines = AIChatWorkflowResponseMixin()._format_workflow_tool_success_line(item, {})
-    assert "客户总数：0；本次显示 0 条" in lines[0]
-
-
-def test_knowledge_query_reply_answers_from_retrieval_not_plan_dump():
-    """TODO 最后一步是「根据检索结果作答」，不能只回「n1: 成功」的执行计划。"""
-    from types import SimpleNamespace
-
-    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-
-    node = SimpleNamespace(
-        node_id="n1",
-        tool_id="dataset_rag",
-        action="query",
-        description="在文档库中检索白浆加工费相关记录",
-        risk="low",
-        params={"dataset_id": "office-docking", "query": "白浆加工费"},
-    )
-    plan = SimpleNamespace(
-        intent="查询白浆加工费",
-        plan_id="internal-plan",
-        nodes=[node],
-        todo_steps=["检索文档库中关于白浆加工费的记录", "根据检索结果确认白浆加工费金额并作答"],
-        metadata={},
-    )
-    step = SimpleNamespace(
-        status="completed",
-        tool_id="dataset_rag",
-        action="query",
-        node_id="n1",
-        output={
-            "success": True,
-            "query": "白浆加工费",
-            "answer": "730浆加工费 1 件 1176 元，折后 940.8 元。",
-            "chunks": [
-                {
-                    "text": "R335 | 46119 | 730浆加工费 | 1 | 1176",
-                    "source": "hybrid",
-                    "source_url": "邻居贾总.xlsx",
-                    "metadata": {"source": "邻居贾总.xlsx"},
-                }
-            ],
-        },
-        duration_ms=1,
-    )
-    run = SimpleNamespace(
-        status="completed",
-        run_id="internal-run",
-        steps=[step],
-        metadata={},
-        artifacts=[],
-        tool_calls=[],
-    )
-    builder = AIChatWorkflowResponseMixin()
-    reply = builder._format_agent_run_response(
-        plan, run, thinking_steps="工作编排", user_message="白浆加工费多少你知道不"
-    )
-    assert reply["response"].startswith("730浆加工费 1 件 1176 元")
-    assert "来源：邻居贾总.xlsx" in reply["response"]
-    assert reply["response"] != "- n1: 成功"
-    assert "计划ID: internal-plan" not in reply["response"]
-
-
-def test_raw_knowledge_query_uses_model_synthesis_when_available():
-    from types import SimpleNamespace
-
-    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-
-    class Planner:
-        def complete_messages(self, **_kwargs):
-            return {
-                "choices": [
-                    {"message": {"content": "白浆加工费按 1 件 1176 元计，折后 940.8 元。"}}
-                ]
-            }
-
-    builder = AIChatWorkflowResponseMixin()
-    builder.workflow_planner = Planner()
-    step = SimpleNamespace(
-        output={
-            "query": "白浆加工费多少",
-            "chunks": [{"text": "R335 | 730浆加工费 | 1 | 1176", "source_url": "邻居贾总.xlsx"}],
-        }
-    )
-    answer = builder._knowledge_answer(step, "白浆加工费多少")
-    assert answer.startswith("白浆加工费按 1 件 1176 元计")
-    assert "来源：邻居贾总.xlsx" in answer
-
-
-def test_customer_reply_does_not_echo_internal_memory_or_plan():
-    from types import SimpleNamespace
-
-    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-
-    node = SimpleNamespace(
-        node_id="read", tool_id="customers", action="query", description="", risk="low", params={}
-    )
-    plan = SimpleNamespace(
-        intent="customer_query",
-        plan_id="internal-plan",
-        nodes=[node],
-        todo_steps=[],
-        metadata={
-            "user_memory_rag_summary": "private-memory-marker",
-            "memory_v2_summary": "private-v2-marker",
-        },
-    )
-    step = SimpleNamespace(
-        status="completed",
-        tool_id="customers",
-        action="query",
-        node_id="read",
-        output={"success": True, "data": [], "total": 0},
-        duration_ms=1,
-    )
-    run = SimpleNamespace(
-        status="completed",
-        run_id="internal-run",
-        steps=[step],
-        metadata={},
-        artifacts=[],
-        tool_calls=[],
-    )
-    builder = AIChatWorkflowResponseMixin()
-    thinking = builder._build_workflow_thinking_steps(plan, "")
-    reply = builder._format_agent_run_response(plan, run, thinking_steps=thinking)
-    assert reply["response"] == "客户总数：0；本次显示 0 条。"
-    assert "private-memory-marker" not in str(reply)
-    assert "private-v2-marker" not in str(reply)
-    assert plan.metadata["user_memory_rag_summary"] == "private-memory-marker"
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(permissions=["customer.view"])
+    service = CustomerApplicationService()
+    monkeypatch.setattr(service, "_get_session", actor.factory)
+    monkeypatch.setattr("app.application.get_customer_app_service", lambda: service)
+    result = execute(actor, tool="customers", action="query")
+    assert result["success"] is True, result
+    assert result["data"] == [] and result["total"] == 0
 
 
 @pytest.mark.parametrize(
-    ("output", "expected", "committed"),
+    "output",
     [
-        ({"outcome": "unknown", "requires_reconciliation": True}, "unknown", False),
-        (
-            {"outcome": "unknown", "reconciliation_evidence": {"data": {"executed_rows": 4}}},
-            "unknown",
-            True,
-        ),
-        ({"data": {"executed_rows": 4}}, "partial", True),
-        ({"data": {"executed_rows": 0}}, "not_executed", False),
+        {"outcome": "unknown", "requires_reconciliation": True},
+        {"outcome": "unknown", "reconciliation_evidence": {"data": {"executed_rows": 4}}},
     ],
 )
-def test_workflow_failure_preserves_import_commit_evidence(output, expected, committed):
-    from types import SimpleNamespace
+def test_unknown_import_evidence_stays_unknown_in_public_chat(output):
+    from app.application.agent_orchestrator.trace_payloads import _payload_status
+    from app.application.agent_runtime.chat import runtime_chat_payload
+    from app.fastapi_routes.ai_intent import _public_unified_chat_payload
 
-    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-
-    step = SimpleNamespace(
-        status="failed",
-        tool_id="elt_import",
-        action="execute",
-        node_id="import",
-        output={"success": False, **output},
-        duration_ms=1,
-    )
-    plan = SimpleNamespace(intent="import", plan_id="plan", nodes=[], todo_steps=[])
-    run = SimpleNamespace(status="failed", run_id="original-run", steps=[step], metadata={})
-    reply = AIChatWorkflowResponseMixin()._format_agent_run_response(plan, run)
-
-    assert reply["execution"]["outcome"] == expected
-    assert reply["execution"]["committed"] is committed
-    if expected == "unknown":
-        assert reply["requires_reconciliation"] is True
-        assert reply["retryable"] is False
+    # A readback count cannot establish the disposition of the original request.
+    assert _payload_status({"success": False, **output}) == "blocked"
+    receipt = {
+        "ok": False,
+        "run_id": "original-run",
+        "execution_state": "unknown",
+        "retryable": False,
+        "reconciliation_required": True,
+        "business_receipts": [{"receipt": output}],
+    }
+    reply = _public_unified_chat_payload(runtime_chat_payload(receipt))
+    assert reply["run_id"] == "original-run"
+    assert reply["execution_state"] == "unknown"
+    assert reply["requires_reconciliation"] is True and reply["retryable"] is False
 
 
 def test_customer_query_denies_without_view_permission(trusted_actor, dispatch_calls):

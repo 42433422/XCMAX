@@ -28,12 +28,13 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
     from app.application.agent_orchestrator import tool_executor as tools
 
     monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
-    moments = iter((10.0, 12.0 if late else 10.5))
-    monkeypatch.setattr(tools, "time", SimpleNamespace(monotonic=lambda: next(moments)))
+    clock = SimpleNamespace(now=10.0)
+    monkeypatch.setattr(tools, "time", SimpleNamespace(monotonic=lambda: clock.now))
     seen = []
 
     def execute(step, *, runtime_context):
         seen.append(runtime_context)
+        clock.now = 12.0 if late else 10.5
         return {
             "success": late,
             "outcome": "completed" if late else "unknown",
@@ -54,6 +55,42 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
     assert result["reconciliation_evidence"]["task_id"] == "existing-task"
     assert result["reconciliation_evidence"]["attempt_id"] == "attempt-1"
     assert result["retryable"] is False and result["reconciliation_required"] is True
+
+
+def test_existing_parent_budget_bounds_isolated_deadline_not_caller_fields():
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    seen = []
+
+    def bounded(step, *, runtime_context, deadline_monotonic):
+        seen.append((deadline_monotonic, runtime_context["deadline_monotonic"]))
+        return {"success": True}
+
+    ceiling = time.monotonic() + 0.5
+    with invocation_deadline(ceiling):
+        result = execute_with_tool_deadline(
+            SimpleNamespace(execute_with_deadline=bounded),
+            _step(),
+            runtime_context={"deadline_monotonic": 1e20, "timeout_seconds": 1000},
+            timeout_seconds=60,
+        )
+    assert result["success"] is True
+    assert len(seen) == 1 and seen[0][0] == seen[0][1] <= ceiling
+
+
+def test_expired_trusted_budget_is_not_started_and_never_dispatches():
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    calls = []
+    with invocation_deadline(time.monotonic() - 1):
+        result = execute_with_tool_deadline(
+            SimpleNamespace(execute=lambda *a, **kw: calls.append(True)),
+            _step(),
+            runtime_context={"deadline_monotonic": 1e20},
+            timeout_seconds=60,
+        )
+    assert result["outcome"] == result["execution_status"] == "not_started"
+    assert result["retryable"] is False and calls == []
 
 
 @pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
@@ -330,7 +367,7 @@ def test_remote_write_failure_cannot_be_hidden_by_employee_success(monkeypatch, 
     ]
 
 
-@pytest.mark.parametrize("entry", ["prepare_repair_or_retry", "prepare_llm_repair_or_retry"])
+@pytest.mark.parametrize("entry", ["prepare_repair_or_retry"])
 @pytest.mark.parametrize(
     "output",
     [
@@ -354,7 +391,7 @@ def test_repair_rechecks_receipt_when_old_run_lacks_non_retryable_flag(entry, ou
     assert not getattr(repair, entry)(run, step, runtime_context={})
 
 
-@pytest.mark.parametrize("entry", ["prepare_repair_or_retry", "prepare_llm_repair_or_retry"])
+@pytest.mark.parametrize("entry", ["prepare_repair_or_retry"])
 def test_repair_override_cannot_extend_server_attempt_limit(entry):
     from app.application.agent_orchestrator.run_repair import RunRepair
 
@@ -388,8 +425,8 @@ def test_reconciliation_receipt_preserves_evidence_and_only_exposes_timely_artif
     from app.application.tool_execution_deadline import invocation_deadline
 
     monkeypatch.setenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", "true")
-    moments = iter((10.0, 12.0 if condition == "late" else 10.5))
-    monkeypatch.setattr(tools, "time", SimpleNamespace(monotonic=lambda: next(moments)))
+    clock = SimpleNamespace(now=10.0)
+    monkeypatch.setattr(tools, "time", SimpleNamespace(monotonic=lambda: clock.now))
     receipt = {
         "success": claimed_success,
         "outcome": "succeeded" if claimed_success else "unknown",
@@ -407,6 +444,7 @@ def test_reconciliation_receipt_preserves_evidence_and_only_exposes_timely_artif
 
     def execute(step, *, runtime_context, deadline_monotonic):
         calls.append(deadline_monotonic)
+        clock.now = 12.0 if condition == "late" else 10.5
         if condition == "unknown_io":
             with invocation_deadline(deadline_monotonic) as budget:
                 budget.uncertain.append({"kind": "http_timeout", "method": "POST"})

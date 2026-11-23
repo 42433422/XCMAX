@@ -9,22 +9,29 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize(
-    "response,expected",
+    "metadata,expected",
     [
-        (None, False),
-        ({"error": "unauthorized"}, False),
-        ({"choices": []}, False),
-        ({"choices": [{"message": {"content": ""}}]}, False),
-        ({"choices": [{"message": {"content": "invalid plan, genuine response"}}]}, True),
+        ({}, 0),
+        ({"codex_runtime": {"model_requests": {"x": {"state": "unknown", "usage": {}}}}}, 0),
+        ({"codex_runtime": {"model_requests": {"x": {"state": "failed", "usage": {}}}}}, 0),
+        ({"codex_runtime": {"model_requests": {"x": {"state": "completed"}}}}, 0),
+        (
+            {
+                "codex_runtime": {
+                    "model_requests": {"x": {"state": "completed", "usage": {"total_tokens": 20}}}
+                }
+            },
+            1,
+        ),
     ],
 )
-def test_response_evidence_requires_provider_content(response, expected):
+def test_response_evidence_requires_settled_original_runtime_request(metadata, expected):
     spec = importlib.util.spec_from_file_location(
         "trial_runner", ROOT / "tests/benchmarks/task_success_runner.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module._model_response_received(response) is expected
+    assert module._completed_model_requests(metadata) == expected
 
 
 @pytest.mark.parametrize(

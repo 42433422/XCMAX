@@ -1,4 +1,4 @@
-"""Owned-file planner contracts: real parsing/session, deterministic model boundary."""
+"""Owned-file Codex contracts: real parsing/session/SQL, scripted external model I/O."""
 
 from __future__ import annotations
 
@@ -12,59 +12,290 @@ from unittest.mock import Mock, patch
 
 
 def _scripted_model_response(task: dict, prompt: dict) -> dict | None:
-    """Return only a fixture's explicit generation/review response for its exact plan."""
-    if prompt.get("user_message") != task["message"]:
+    """Judge only a declared fixture goal and its exact original request/effects.
+
+    The positive judgement is fixture data, never inferred from a tool's success.
+    Production still independently checks ownership, receipt and goal digests.
+    """
+    if (
+        prompt.get("task") != "verify_runtime_goal"
+        or prompt.get("original_request", {}).get("text") != task["message"]
+        or not isinstance(task.get("runtime_review"), dict)
+    ):
         return None
-    response = task["model_response"]
-    if prompt.get("task") == "audit_reply":
-        review = task.get("reply_review")
-        if (
-            response.get("mode") != "reply"
-            or prompt.get("reply") != response.get("reply")
-            or not isinstance(review, dict)
-        ):
-            return None
-        return {"choices": [{"message": {"content": json.dumps(review, ensure_ascii=False)}}]}
-    if prompt.get("task") == "audit_goal_coverage":
-        review = task.get("goal_review")
-        if not isinstance(review, dict):
-            return None
-        expected_nodes = response.get("nodes") or [
+    actions = task.get("runtime_actions", [])
+    evidence = prompt.get("evidence", [])
+    keys = ("tool_id", "action", "params")
+    expected = [{key: row[key] for key in keys} for row in actions]
+    actual = [{key: row.get(key) for key in keys} for row in evidence]
+    if actual != expected or prompt.get("response") != task.get(
+        "runtime_reply", "本轮模型已结束。"
+    ):
+        return None
+    result = json.loads(json.dumps(task["runtime_review"]))
+    for goal in result["goals"]:
+        selected = goal.pop("action_indexes", [])
+        goal["evidence_ids"] = (
+            ["response"]
+            if goal["kind"] == "reply"
+            else [evidence[index]["evidence_id"] for index in selected]
+        )
+    return result
+
+
+def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
+    """Real SQL admission, MCP, approval and reviewer; scripted external model I/O.
+
+    This is explicitly a local fixture, not a real-model qualification or score.
+    It never imports pytest helpers or substitutes business verification results.
+    """
+    import weakref
+
+    import httpx
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app import db as host_db
+    from app.application.agent_orchestrator import run_repository, task_execution_repository
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.application.agent_runtime import gateway
+    from app.application.ai_chat import dialogue_memory
+    from app.fastapi_routes.domains.agent.agent_routes import router
+    from app.infrastructure.codex.binding import CodexBindingStore
+    from app.infrastructure.codex.local_server import LocalRuntimeServer
+    from app.infrastructure.codex.policy import (
+        CODEX_VERSION,
+        QUALIFICATION_CHECKS,
+        ModelRoute,
+        RuntimeSettings,
+    )
+    from app.infrastructure.codex.receipt_projection import (
+        refresh_codex_receipts,
+        resume_ready_codex_runs,
+    )
+
+    repository = SQLAlchemyAgentRunRepository(session_factory=host_db.HostSessionLocal)
+    stack.enter_context(
+        patch.object(task_execution_repository, "_OPEN_REPOSITORIES", weakref.WeakSet())
+    )
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=host_db.HostSessionLocal)
+    state = SimpleNamespace(
+        repository=repository, queue=queue, inputs=[], reviews=[], receipts=[], servers=[]
+    )
+    stack.enter_context(
+        patch.dict("os.environ", {"XCAGI_DIALOGUE_MEMORY_DIR": str(root / "dialogue")})
+    )
+    stack.enter_context(patch.object(dialogue_memory, "_INFLIGHT", {}))
+
+    def release_turn_locks():
+        for lock in tuple(dialogue_memory._INFLIGHT.values()):
+            lock.release()
+        dialogue_memory._INFLIGHT.clear()
+
+    stack.callback(release_turn_locks)
+    stack.enter_context(patch.object(run_repository, "_agent_run_repository", repository))
+    stack.enter_context(
+        patch.object(task_execution_repository, "_task_execution_repository", queue)
+    )
+    stack.enter_context(
+        patch("app.fastapi_routes.domains.agent.agent_routes.notify_agent_task_dispatcher")
+    )
+    route = ModelRoute(
+        base_url="http://127.0.0.1:19112/v1",
+        model="offline-eval-fixture",
+        provider_id="fixture",
+        upstream_vendor="offline-fixture",
+        context_window=32000,
+        max_output_tokens=4000,
+    )
+    qualification = root / "offline-fixture-qualification.json"
+    qualification.write_text(
+        json.dumps(
             {
-                "node_id": "model_reply",
-                "tool_id": "conversation",
-                "action": "reply",
-                "params": {"response": response.get("reply")},
+                "schema": "xcmax.runtime-qualification.v1",
+                "route_identity": route.identity,
+                "codex_version": CODEX_VERSION,
+                "model_kind": "real",
+                "evidence_refs": ["offline-fixture-only; not production qualification"],
+                "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
             }
-        ]
-        candidate_nodes = prompt.get("plan", {}).get("nodes", [])
-        defaults = {
-            "node_id": "",
-            "tool_id": "",
-            "action": "",
-            "params": {},
-            "depends_on": [],
-            "next": None,
-            "branches": [],
-        }
-        expected = [
-            {key: node.get(key, value) for key, value in defaults.items()}
-            for node in expected_nodes
-        ]
-        actual = [
-            {key: node.get(key, value) for key, value in defaults.items()}
-            for node in candidate_nodes
-        ]
-        if actual != expected:
+        )
+    )
+    settings = RuntimeSettings(
+        route=route, runtime_root=root / "runtime", qualification_file=qualification
+    )
+    stack.enter_context(patch.object(gateway, "runtime_settings", lambda: settings))
+    stack.enter_context(
+        patch.dict(
+            "os.environ", {"XCAGI_PRODUCT_SKU": "enterprise", "MODEL_USAGE_WALLET_BACKEND": "audit"}
+        )
+    )
+
+    def upstream(request):
+        body = json.loads(request.content)
+        assert body["tools"] == [] and body["store"] is False
+        prompt = json.loads(body["input"][1]["content"])
+        state.reviews.append(prompt)
+        review = _scripted_model_response(task, prompt)
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp_offline_fixture",
+                "object": "response",
+                "created_at": 1,
+                "model": body["model"],
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "id": "msg_offline_fixture",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": json.dumps(review, ensure_ascii=False),
+                                "annotations": [],
+                            }
+                        ],
+                    }
+                ],
+                "usage": {"input_tokens": 10, "output_tokens": 10, "total_tokens": 20},
+            },
+        )
+
+    class Server(LocalRuntimeServer):
+        def __init__(self, app):
+            state.servers.append(app)
+            app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+                transport=httpx.MockTransport(upstream), **kwargs
+            )
+            super().__init__(app)
+
+    class Transport:
+        def __init__(self, config):
+            self.config = config
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
             return None
-        response = review
-    return {"choices": [{"message": {"content": json.dumps(response, ensure_ascii=False)}}]}
+
+        async def start_thread(self, *, developer_instructions):
+            return "offline-eval-thread"
+
+        async def resume_thread(self, thread_id, *, developer_instructions):
+            return thread_id
+
+        async def interrupt(self):
+            return None
+
+        async def stream_turn(self, text):
+            state.inputs.append(text)
+            bridge = state.servers[-1].state.codex_tool_bridge
+            for action in task.get("runtime_actions", []):
+                described = bridge.invoke(
+                    self.config.mcp_token,
+                    "capability_describe",
+                    {key: action[key] for key in ("tool_id", "action")},
+                )
+                receipt = bridge.invoke(
+                    self.config.mcp_token,
+                    "execute_action",
+                    {**action, "schema_digest": described["capability"]["schema_digest"]},
+                )
+                state.receipts.append(receipt)
+                if receipt.get("status") in {
+                    "waiting_user",
+                    "blocked",
+                    "unknown",
+                    "running",
+                    "queued",
+                }:
+                    break
+            for method, payload in (
+                ("turn/started", {"turn": {"status": "inProgress"}}),
+                (
+                    "item/completed",
+                    {
+                        "item": {
+                            "type": "agentMessage",
+                            "text": task.get("runtime_reply", "本轮模型已结束。"),
+                        }
+                    },
+                ),
+                ("turn/completed", {"turn": {"status": "completed"}}),
+            ):
+                yield {
+                    "method": method,
+                    "payload": payload,
+                    "thread_id": "offline-eval-thread",
+                    "turn_id": "offline-eval-turn",
+                }
+
+    stack.enter_context(patch.object(gateway, "LocalRuntimeServer", Server))
+    stack.enter_context(patch("app.infrastructure.codex.CodexTransport", Transport))
+    app = FastAPI()
+    app.include_router(router)
+    state.client = stack.enter_context(TestClient(app, headers=client.headers))
+
+    def drain(run_id):
+        owner = "offline-eval-worker"
+        claimed = queue.claim(owner, lease_seconds=120)
+        assert claimed is not None and claimed.run_id == run_id, "original SQL task was not claimed"
+        AgentTaskDispatcher(execution_repository=queue, run_repository=repository)._execute_claim(
+            claimed, owner
+        )
+        return repository.get(run_id)
+
+    def start(context):
+        from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+
+        context.setdefault("turn_id", "eval-" + task["id"])
+        prepared = prepare_chat_turn(task["message"], context)
+        assert prepared is None, prepared
+        result = gateway.run_runtime_task(
+            task=task["message"],
+            system_prompt="",
+            runtime_context=context,
+            completion_mode="auto",
+            start_queued=True,
+            _repository=repository,
+        )
+        assert result.get("execution_state") == "queued", result
+        return drain(result["run_id"])
+
+    def approve(parent):
+        store = CodexBindingStore(repository)
+        for row in store.receipt_snapshot(parent.run_id):
+            child_id = row["child_run_id"]
+            child = repository.get(child_id)
+            if child is None or child.status != "waiting_user":
+                continue
+            current = state.client.get(f"/api/agent/runs/{child_id}")
+            assert current.status_code == 200, current.text
+            grant = current.json()["approval"]["grant"]
+            approved = state.client.post(
+                f"/api/agent/runs/{child_id}/continue", json={"approval_grant": grant}
+            )
+            assert approved.status_code == 202, approved.text
+            drain(child_id)
+        if resume_ready_codex_runs(repository=repository):
+            drain(parent.run_id)
+        return refresh_codex_receipts(repository.get(parent.run_id), repository=repository)
+
+    state.start, state.approve = start, approve
+    return state
 
 
 def run_owned_attachment_task(task):
     from starlette.requests import Request
 
-    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
     from app.application.elt.service_uploads import UploadServiceMixin
     from app.db.session import get_db
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
@@ -120,14 +351,6 @@ def run_owned_attachment_task(task):
         canvas.save()
         filename, mime = "policy.pdf", "application/pdf"
     raw.seek(0)
-    captured = []
-
-    def completion(**kwargs):
-        captured.append(kwargs["context"]["file_context"]["verified_uploads"][0]["text"])
-        prompt = json.loads(kwargs["messages"][1]["content"])
-        return _scripted_model_response(task, prompt)
-
-    repo = InMemoryAgentRunRepository()
     checks = []
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as root, ExitStack() as stack:
         client = SimpleNamespace(headers={})
@@ -138,12 +361,7 @@ def run_owned_attachment_task(task):
         stack.enter_context(
             patch("app.application.elt.service_uploads.get_app_data_dir", return_value=root)
         )
-        stack.enter_context(
-            patch(
-                "app.application.workflow.planner.request_planner_completion",
-                side_effect=completion,
-            )
-        )
+        runtime = codex_eval_runtime(stack, Path(root), client, task)
         if kind == "image":
             stack.enter_context(
                 patch(
@@ -199,17 +417,14 @@ def run_owned_attachment_task(task):
         ingest = stack.enter_context(
             patch.object(dataset, "ingest_document", wraps=dataset.ingest_document)
         )
-        orchestrator = AgentOrchestrator(repository=repo)
-        run = orchestrator.start_run(
-            user_id=principal.user_id, message=task["message"], runtime_context=context
-        )
+        run = runtime.start(context)
         initial = run.status
         _check_equal(checks, "no_knowledge_write_before_approval", ingest.call_count, 0)
         _check_equal(
             checks, "no_business_write_before_approval", products.create_product.call_count, 0
         )
         if expected.get("continue_after_approval"):
-            run = orchestrator.continue_run(run.run_id, approved_by=principal.user_id) or run
+            run = runtime.approve(run)
         if kind == "excel":
             _check_equal(checks, "approved_business_write", products.create_product.call_count, 1)
         if task.get("explicit_knowledge_import"):
@@ -223,7 +438,7 @@ def run_owned_attachment_task(task):
         _check_equal(
             checks,
             "parsed_evidence_reaches_model",
-            bool(captured and evidence in captured[0]),
+            bool(runtime.inputs and evidence in runtime.inputs[0]),
             True,
         )
         _check_equal(
@@ -231,7 +446,7 @@ def run_owned_attachment_task(task):
             "source_artifact_is_owned",
             bool(
                 run.artifacts
-                and run.artifacts[0].source == "plan.metadata"
+                and run.artifacts[0].source == "owned_elt_upload"
                 and run.artifacts[0].metadata.get("upload_id") == upload["upload_id"]
                 and run.artifacts[0].metadata.get("parser_used") == "owned_upload"
             ),
@@ -248,14 +463,26 @@ def run_owned_attachment_task(task):
         )
         _check_equal(checks, "initial_status", initial, expected["initial_status"])
         _check_equal(checks, "final_status", run.status, expected["final_status"])
+        from app.infrastructure.codex.binding import CodexBindingStore
+
+        children = [
+            runtime.repository.get(row["child_run_id"])
+            for row in CodexBindingStore(runtime.repository).receipt_snapshot(run.run_id)
+        ]
+        calls = [call for child in children for call in child.tool_calls]
+        events = [*run.events, *(event for child in children for event in child.events)]
+        _check_equal(checks, "runtime", run.metadata.get("runtime_type"), "codex")
+        _check_equal(checks, "no_retired_plan", "runtime_frozen_plan" in run.metadata, False)
+        _check_tool_calls(checks, calls, expected.get("tool_calls", []))
+        _check_event_types(checks, events, expected["event_types"])
+        import hashlib
+
         _check_equal(
             checks,
-            "planner",
-            run.metadata.get("plan", {}).get("metadata", {}).get("planner"),
-            "llm",
+            "source_hash",
+            run.artifacts[0].metadata.get("sha256") if run.artifacts else None,
+            hashlib.sha256(raw.getvalue()).hexdigest(),
         )
-        _check_tool_calls(checks, run.tool_calls, expected.get("tool_calls", []))
-        _check_event_types(checks, run.events, expected["event_types"])
         _check_equal(
             checks,
             "source_implicit_ingest_count",
@@ -266,4 +493,18 @@ def run_owned_attachment_task(task):
             ),
             0,
         )
-    return _result(task, checks, {"run": run.to_dict()})
+        observed = {
+            **run.to_dict(),
+            "tool_calls": [call.to_dict() for call in calls],
+            "steps": [step.to_dict() for child in children for step in child.steps],
+            "events": [event.to_dict() for event in events],
+        }
+    return _result(
+        task,
+        checks,
+        {
+            "run": observed,
+            "child_runs": [child.to_dict() for child in children],
+            "runtime_inputs": runtime.inputs,
+        },
+    )

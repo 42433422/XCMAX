@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from app.application.tools.workflow_tools.contracts import Payload
 from app.application.tools.workflow_tools.registry import tool_spec
 
 
 def excel_tool_specs() -> list[Payload]:
-    return [
+    specs = [
         tool_spec(
             "excel_analysis",
             "分析 Excel 文件内容，支持读取、结构识别、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。不确定表头或列名时先用 action=structure 获取列名/类型/样例/日期列，再用 action=query 提自然语言问题。read/query/aggregate 单次默认返回 1000 行；当结果 has_more=true 时，用 next_offset 作为 offset 继续分页读取，直到 has_more=false。",
             {
                 "file_path": {
                     "type": "string",
-                    "description": "Excel 文件路径（相对于工作区的相对路径或绝对路径）",
+                    "description": "当前账号的上传 ID/文件名，或同原任务已核验的工作簿产物 URI；宿主核对归属和原文件哈希后读取，不需要猜测本机路径。",
                 },
                 "sheet_name": {
                     "type": "string",
@@ -69,23 +71,6 @@ def excel_tool_specs() -> list[Payload]:
                 },
             },
             ["file_path", "action"],
-        ),
-        tool_spec(
-            "excel_schema_understand",
-            "理解 Excel 文件的数据结构和 schema，返回列名、数据类型、样本数据、数值列与日期列。适合在分析前先了解文件结构。未传 header_row 时自动探测表头。",
-            {
-                "file_path": {
-                    "type": "string",
-                    "description": "Excel 文件路径（相对于工作区的相对路径或绝对路径）",
-                },
-                "sheet_name": {"type": "string", "description": "可选：工作表名称，默认第一个表。"},
-                "header_row": {
-                    "type": "integer",
-                    "description": "可选：表头行号（Excel 从 1 开始）。多行标题表若不填则默认第一行为表头，易产生 Unnamed "
-                    "列。",
-                },
-            },
-            ["file_path"],
         ),
         tool_spec(
             "excel_join_compare",
@@ -219,3 +204,17 @@ def excel_tool_specs() -> list[Payload]:
             ["user_request", "output_format"],
         ),
     ]
+    # Existing registered Excel Mods still call this name. Its shape comes from
+    # the same canonical analysis fields; employee discovery publishes structure
+    # once through excel_analysis instead of advertising both aliases.
+    fields = specs[0]["function"]["parameters"]["properties"]
+    specs.insert(
+        1,
+        tool_spec(
+            "excel_schema_understand",
+            "读取 Excel 列名、类型、样例和日期列；与 excel_analysis.structure 使用同一契约。",
+            {name: deepcopy(fields[name]) for name in ("file_path", "sheet_name", "header_row")},
+            ["file_path"],
+        ),
+    )
+    return specs

@@ -16,89 +16,47 @@ from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.enterprise_goal import EnterpriseGoalBinding
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
 from tests.test_application.test_enterprise_goals import Projections, definition
 
 MESSAGE = "为订单 42 安排剩余数量出库，先审批"
 CONTEXT = {"tenant_id": "7", "user_id": "19", "actor_id": "19", "mod_id": ""}
 
 
-class Planner:
-    def __init__(self, *, barrier=None, order_id=42):
-        self.barrier = barrier
-        self.order_id = order_id
-        self.calls = []
-        self.remove_coverage = False
-        self.foreign_source = False
-        self.extra_node = False
-        self.change_source = None
-
-    def plan(self, user_id, message, registry, context):
-        self.calls.append((user_id, message, copy.deepcopy(context)))
-        if self.barrier:
-            self.barrier.wait(timeout=15)
-        if self.change_source:
-            self.change_source.version = "concurrent-source-change"
-        plan = PlanGraph(
-            plan_id=f"plan-{uuid.uuid4().hex}",
-            intent="fulfill_order",
-            nodes=[
-                WorkflowNode(
-                    "deliver",
-                    "sales",
-                    "deliver",
-                    {
-                        "order_id": self.order_id,
-                        "item_id": 3,
-                        "quantity": 10.125,
-                        "warehouse_id": 4,
-                    },
-                )
-            ],
-        )
-        if self.extra_node:
-            plan.nodes.append(WorkflowNode("unrelated", "customers", "query", {}))
-        if not self.remove_coverage:
-            plan.metadata["goal_coverage"] = {
-                "goals": [
-                    {
-                        "goal_id": "delivery",
-                        "source": "another request" if self.foreign_source else message,
-                        "outcome": "execute",
-                        "node_ids": ["deliver"],
-                    }
-                ],
-                "violations": [],
-            }
-        return plan
-
-    def complete_messages(self, **kwargs):
-        return None
-
-
 @pytest.fixture
-def execution_env(tmp_path, monkeypatch):
-    engine = create_engine(f"sqlite:///{tmp_path / 'goals-tasks.sqlite'}")
-    EnterpriseGoalBinding.__table__.create(engine)
-    factory = sessionmaker(bind=engine)
+def execution_env(dynamic_chat_runtime, trusted_actor):
+    state = dynamic_chat_runtime
+    actor = trusted_actor(user_id=19, tenant_id=7, role="admin")
     projections = Projections()
-    goals = GoalService(factory, projections=projections)
+    goals = GoalService(actor.factory, projections=projections)
     goals.create(definition(), tenant_id=7, actor_id="19")
-    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
-    repo._ensure_schema()
-    planner = Planner()
-    # Authenticated route/tool tests exercise the real sealed-session boundary.
-    # These tests isolate proposal admission, concurrent SQL and source binding.
-    monkeypatch.setattr(
-        "app.application.enterprise_cognition.execution.validate_actor_context", lambda _ctx: None
-    )
-    monkeypatch.setattr(
-        "app.application.enterprise_cognition.execution.actor_tool_denial", lambda *_args: None
-    )
+    repo = state.repository
     service = EnterpriseExecutionService(
-        goals=goals, orchestrator=AgentOrchestrator(repository=repo), planner=planner
+        goals=goals, orchestrator=AgentOrchestrator(repository=repo)
     )
-    yield service, goals, projections, repo, planner, factory
-    engine.dispose()
+    service.test_context = actor.context
+    state.enterprise_actor = actor
+    return service, goals, projections, repo, state, actor.factory
+
+
+def pending_write(execution_env):
+    service, _goals, _projection, repo, state, _factory = execution_env
+    parent = submit(service)
+    state.actions = [
+        {
+            "tool_id": "sales",
+            "action": "deliver",
+            "params": {"order_id": 42, "item_id": 3, "quantity": 10.125, "warehouse_id": 4},
+            "call_id": "deliver",
+        }
+    ]
+    state.drain(parent.run_id)
+    parent = repo.get(parent.run_id)
+    rows = parent.metadata["codex_runtime"]["calls"]
+    child = repo.get(rows["deliver"]["child_run_id"])
+    assert child.status == "waiting_user" and not child.tool_calls
+    return child
 
 
 def submit(service, **kwargs):
@@ -108,32 +66,35 @@ def submit(service, **kwargs):
         kwargs.pop("message", MESSAGE),
         tenant_id=7,
         actor_id="19",
-        runtime_context=kwargs.pop("runtime_context", CONTEXT),
+        runtime_context=kwargs.pop("runtime_context", service.test_context),
         **kwargs,
     )
 
 
-def test_plan_is_durable_waiting_approval_with_goal_baseline_and_original_graph(execution_env):
-    service, _goals, _projection, repo, planner, factory = execution_env
-    run = submit(service)
-    assert run.status == run.steps[0].status == "waiting_user"
-    assert not run.tool_calls
-    assert run.steps[0].risk == "high"
-    binding = run.metadata["runtime_context"]["enterprise_cognition"]
+def test_goal_admission_is_queued_without_plan_and_child_keeps_original_approval(execution_env):
+    service, _goals, _projection, repo, state, factory = execution_env
+    parent = submit(service)
+    assert parent.status == "queued" and not parent.steps and not parent.tool_calls
+    assert state.transports == [] and state.model_requests == []
+    assert not parent.metadata.get("plan")
+    binding = parent.metadata["runtime_context"]["enterprise_cognition"]
     assert binding["goal"]["entity_id"] == "42"
     assert binding["baseline"]["state"]["remaining_quantity"] == "10.125"
-    assert binding["action_bindings"][0]["entity_id"] == "42"
-    assert run.metadata["plan"]["metadata"]["approval_required_node_ids"] == ["deliver"]
-    assert "把订单 42 的剩余待发数量降为 0 件" in planner.calls[0][1]
-    assert repo.get(run.run_id).to_dict() == run.to_dict()
+    child = pending_write(execution_env)
+    assert child.steps[0].risk == "high"
+    child_binding = child.metadata["runtime_context"]["enterprise_cognition"]
+    assert child_binding["baseline"] == binding["baseline"]
+    assert child_binding["action_bindings"][0]["entity_id"] == "42"
+    assert child.metadata["plan"]["metadata"]["approval_required_node_ids"] == [
+        child.steps[0].node_id
+    ]
+    assert repo.get(child.run_id).to_dict() == child.to_dict()
     with factory() as db:
-        task = db.query(AgentTaskRecord).one()
-        assert task.active_run_id == run.run_id
-        assert db.query(AgentRunRecord).count() == 1
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 2
 
 
 def test_retry_reuses_original_run_without_model_or_tool_replay(execution_env):
-    service, _goals, projections, _repo, planner, _factory = execution_env
+    service, _goals, projections, _repo, state, _factory = execution_env
     first = submit(service)
     projections.version = "new-source-after-original-request"
     second = submit(service)
@@ -142,7 +103,7 @@ def test_retry_reuses_original_run_without_model_or_tool_replay(execution_env):
         second.metadata["runtime_context"]["enterprise_cognition"]
         == first.metadata["runtime_context"]["enterprise_cognition"]
     )
-    assert len(planner.calls) == 1
+    assert len(state.transports) == 0
     assert not second.tool_calls
     with pytest.raises(GoalBindingError, match="request_id_already_bound"):
         submit(service, message="改成取消订单")
@@ -155,7 +116,7 @@ def test_model_tool_attaches_one_child_to_original_parent_and_projects_its_state
     from app.application.tools.enterprise_cognition import execute_enterprise_cognition
     from app.fastapi_routes.domains.agent.route_support import public_run_dict
 
-    service, _goals, _projection, repo, planner, factory = execution_env
+    service, _goals, _projection, repo, state, factory = execution_env
     actor = trusted_actor(user_id=19, tenant_id=7, role="admin")
     params = {"goal_id": "fulfill-order-42", "request_id": "child-request", "message": MESSAGE}
     parent_context = {**actor.context, "task_id": "parent-task", "workspace_id": "parent-task"}
@@ -175,10 +136,10 @@ def test_model_tool_attaches_one_child_to_original_parent_and_projects_its_state
     )
     tool_context = {**parent_context, "agent_run_id": parent.run_id}
     response = execute_enterprise_cognition("plan", params, tool_context)
-    assert response["success"] and response["pending_approval"], response
+    assert response["success"] and not response["pending_approval"], response
     child_id = response["data"]["run_id"]
     child = repo.get(child_id)
-    assert child is not None and child.status == "waiting_user"
+    assert child is not None and child.status == "queued"
     runtime = child.metadata["runtime_context"]
     assert runtime["parent_run_id"] == parent.run_id
     assert runtime["parent_task_id"] == "parent-task"
@@ -189,7 +150,7 @@ def test_model_tool_attaches_one_child_to_original_parent_and_projects_its_state
         child_id
     ]
     assert receipt["source"] == "child_run"
-    assert receipt["execution_state"] == "waiting_approval"
+    assert receipt["execution_state"] == "queued"
     assert receipt["success"] is False
     assert receipt["run_id"] == child_id and receipt["parent_task_id"] == "parent-task"
     attach_events = [
@@ -198,7 +159,7 @@ def test_model_tool_attaches_one_child_to_original_parent_and_projects_its_state
     assert len(attach_events) == 1 and attach_events[0].data["child_run_id"] == child_id
 
     retried = execute_enterprise_cognition("plan", params, tool_context)
-    assert retried["data"]["run_id"] == child_id and len(planner.calls) == 1
+    assert retried["data"]["run_id"] == child_id and len(state.transports) == 0
     reloaded = repo.get(parent.run_id)
     assert [
         event.to_dict()
@@ -225,7 +186,7 @@ def test_boolean_approval_and_context_baseline_do_not_authorize_execution(execut
     run = submit(
         service,
         runtime_context={
-            **CONTEXT,
+            **service.test_context,
             "approved": True,
             "approved_step_id": "deliver",
             "task_id": "parent-task",
@@ -233,7 +194,7 @@ def test_boolean_approval_and_context_baseline_do_not_authorize_execution(execut
         },
     )
     runtime = run.metadata["runtime_context"]
-    assert run.status == "waiting_user" and not run.tool_calls
+    assert run.status == "queued" and not run.tool_calls
     assert "approved" not in runtime and "approved_step_id" not in runtime
     assert runtime["task_id"] != "parent-task"
     assert runtime["enterprise_cognition"]["baseline"]["state"]["remaining_quantity"] == "10.125"
@@ -249,7 +210,7 @@ def test_approval_grant_binds_the_whole_plan_and_cannot_downgrade_evidence(execu
     from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 
     service, *_ = execution_env
-    run = submit(service)
+    run = pending_write(execution_env)
     grant = issue_approval_grant(run, principal_id="19")
     claims = validate_approval_grant(grant["grant"], run=run, principal_id="19")
     assert claims["plan_sha256"] == canonical_hash(run.metadata["plan"])
@@ -280,35 +241,64 @@ def test_approval_grant_binds_the_whole_plan_and_cannot_downgrade_evidence(execu
         validate_approval_grant(grant["grant"], run=changed, principal_id="19")
 
 
-@pytest.mark.parametrize("fault", ["foreign_source", "extra_node", "remove_coverage"])
-def test_unreviewed_or_partial_goal_plan_never_creates_a_task(execution_env, fault):
-    service, _goals, _projection, _repo, planner, factory = execution_env
-    setattr(planner, fault, True)
-    with pytest.raises(GoalBindingError, match="coverage"):
-        submit(service)
+@pytest.mark.parametrize("fault", ["foreign_source", "unrelated_write", "remove_binding"])
+def test_dynamic_action_cannot_expand_original_goal_scope(execution_env, fault):
+    from app.application.enterprise_cognition.execution import validate_goal_action
+
+    service, _goals, _projection, _repo, _state, factory = execution_env
+    run = submit(service)
+    context = copy.deepcopy(run.metadata["runtime_context"])
+    tool, action, params = "sales", "deliver", {"order_id": 42}
+    if fault == "foreign_source":
+        context["enterprise_cognition"]["goal"]["source"] = {"kind": "model_claim"}
+    elif fault == "unrelated_write":
+        tool, action, params = "customers", "ensure_exists", {"unit_name": "unrelated"}
+    else:
+        context.pop("enterprise_cognition")
+    with pytest.raises(GoalBindingError):
+        validate_goal_action(context, tool, action, params, read_only=False)
     with factory() as db:
-        assert db.query(AgentTaskRecord).count() == db.query(AgentRunRecord).count() == 0
+        assert db.query(AgentTaskRecord).count() == db.query(AgentRunRecord).count() == 1
 
 
 def test_other_order_cannot_use_current_orders_goal_as_its_effect_binding(execution_env):
-    service, _goals, _projection, _repo, planner, _factory = execution_env
-    planner.order_id = 999
+    from app.application.enterprise_cognition.execution import validate_goal_action
+
+    service, *_ = execution_env
+    run = submit(service)
     with pytest.raises(GoalBindingError, match="target_unsupported_or_mismatched"):
-        submit(service)
+        validate_goal_action(
+            run.metadata["runtime_context"], "sales", "deliver", {"order_id": 999}, read_only=False
+        )
 
 
-def test_source_change_during_planning_rejects_the_stale_proposal(execution_env):
-    service, _goals, projections, _repo, planner, factory = execution_env
-    planner.change_source = projections
-    with pytest.raises(GoalBindingError, match="changed_during_planning"):
+def test_source_change_during_admission_rejects_stale_baseline(execution_env, monkeypatch):
+    service, _goals, projections, _repo, _state, factory = execution_env
+    original = projections.get
+    calls = []
+
+    def changing(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 3:
+            projections.version = "source-changed-during-admission"
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(projections, "get", changing)
+    with pytest.raises(GoalBindingError, match="changed_during_admission"):
         submit(service)
     with factory() as db:
         assert db.query(AgentTaskRecord).count() == 0
 
 
 def test_two_independent_services_admit_one_complete_original_task(execution_env):
-    _service, goals, projections, _repo, _planner, factory = execution_env
+    original, goals, projections, _repo, state, factory = execution_env
     barrier = threading.Barrier(2)
+
+    def admit(**kwargs):
+        from app.application.agent_runtime.gateway import run_runtime_task
+
+        barrier.wait(timeout=15)
+        return run_runtime_task(**kwargs)
 
     def attempt(_index):
         service = EnterpriseExecutionService(
@@ -316,8 +306,9 @@ def test_two_independent_services_admit_one_complete_original_task(execution_env
             orchestrator=AgentOrchestrator(
                 repository=SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
             ),
-            planner=Planner(barrier=barrier),
+            runtime_gateway=admit,
         )
+        service.test_context = original.test_context
         return submit(service)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -326,7 +317,7 @@ def test_two_independent_services_admit_one_complete_original_task(execution_env
     assert results[0].to_dict() == results[1].to_dict()
     with factory() as db:
         assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
-    assert results[0].status == "waiting_user" and not results[0].tool_calls
+    assert results[0].status == "queued" and not results[0].tool_calls
 
 
 def test_approval_and_resume_cannot_replace_frozen_business_evidence(execution_env):

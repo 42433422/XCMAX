@@ -1,4 +1,4 @@
-"""真实 process_chat 确认后，杀掉进程再审批，原计划继续执行且只写一次。"""
+"""正式持久业务图等待原审批；进程重启与会话撤回不能重写、重放或扩大目标。"""
 
 from __future__ import annotations
 
@@ -25,7 +25,6 @@ from app.db.models import (
     SalesOrderItem,
 )
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.fixtures.planner_model import goal_review_response
 
 SENTENCE = (
     "帮我给测试客户 A 销售 10 件产品 B，每件 100 元。先检查客户和库存，生成订单给我确认。"
@@ -111,11 +110,8 @@ def _seed(factory) -> int:
     return user_id
 
 
-def _chat_service():
-    from unittest.mock import Mock, patch
-
-    from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.planner import LLMWorkflowPlanner
+def _historical_plan():
+    from app.application.workflow.workflow_types import plan_from_dict
 
     payload = {
         "idempotency_key": "sales-restart-contract",
@@ -150,9 +146,10 @@ def _chat_service():
         },
     }
     plan = {
-        "mode": "workflow",
+        "plan_id": "sales-restart-plan",
         "intent": "sales_write",
         "risk_level": "high",
+        "metadata": {"approval_required_node_ids": ["sales_execute_closed_loop"]},
         "nodes": [
             {
                 "node_id": "sales_execute_closed_loop",
@@ -182,37 +179,9 @@ def _chat_service():
             },
         ],
     }
-    conversation = Mock(get_context=Mock(return_value=None))
-    with patch(
-        "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=conversation
-    ):
-        service = AIChatApplicationService()
-
-    def completion(**kwargs):
-        prompt = json.loads(kwargs["messages"][-1]["content"])
-        if prompt.get("task") == "audit_goal_coverage":
-            actual = prompt["plan"]["nodes"]
-            expected = json.loads(json.dumps(plan["nodes"]))
-            # The model sees business inputs, never execution idempotency authority.
-            for node in expected[:2]:
-                node["params"]["payload"].pop("idempotency_key")
-            fields = ("node_id", "tool_id", "action", "params", "depends_on")
-            assert [{field: node.get(field, []) for field in fields} for node in actual] == [
-                {field: node.get(field, []) for field in fields} for node in expected
-            ]
-            return goal_review_response(
-                prompt,
-                source=SENTENCE,
-                node_ids=["sales_execute_closed_loop", "verify_sales_result", "export_sales"],
-                outcome="execute",
-            )
-        return {"choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]}
-
-    service.workflow_planner = LLMWorkflowPlanner(
-        ai_service=conversation,
-        completion=completion,
-    )
-    return service
+    restored = plan_from_dict(plan)
+    assert restored is not None
+    return restored
 
 
 def _actor(factory, user_id):
@@ -248,32 +217,66 @@ def _actor(factory, user_id):
 
 
 def confirm_phase(db_path: Path, marker: Path) -> None:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.application.ai_chat.conversation_history import persist_chat_turn
+    from app.application.workflow.approval_service import ApprovalService
+    from app.application.workflow.workflow_types import plan_from_dict
+
     factory = _prepare(db_path)
     user_id = _seed(factory)
-    service = _chat_service()
     context = _actor(factory, user_id)
     with tenant_scope(1):
-        first = service.process_chat(
+        # This restart suite retains a historical approval graph across the
+        # rollout. New public tasks are covered by the fixed Codex suites.
+        from uuid import uuid4
+
+        from app.application.agent_orchestrator.business_harness import (
+            ensure_business_harness_context,
+        )
+        from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
+
+        historical_context = {
+            **context,
+            "conversation_id": str(user_id),
+            "turn_id": uuid4().hex,
+        }
+        bind_chat_turn_context(SENTENCE, historical_context)
+        historical_context = ensure_business_harness_context(historical_context, message=SENTENCE)
+        waiting_run = AgentOrchestrator(repository=get_agent_run_repository()).start_run_from_plan(
             user_id=str(user_id),
             message=SENTENCE,
-            context=context,
-            source="pro",
+            plan=_historical_plan(),
+            runtime_context=historical_context,
         )
-        assert first["data"]["action"] == "workflow_confirmation_required", first
-        second = service.process_chat(
-            user_id=str(user_id),
-            message="确认",
-            context=context,
-            source="pro",
+        assert waiting_run.status == "waiting_user", waiting_run.to_dict()
+        stored_plan = plan_from_dict(waiting_run.metadata["plan"])
+        assert stored_plan is not None
+        approvals = ApprovalService()
+        request = approvals.create_approval_request(
+            plan_id=stored_plan.plan_id,
+            node=stored_plan.nodes[0],
+            runtime_context={**historical_context, "_approval_agent_run_required": True},
+            plan=stored_plan,
+            require_persistence=True,
         )
-    assert second["data"]["action"] == "approval_pending", second
-    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
-
-    waiting_run = get_agent_run_repository().get(second["data"]["data"]["agent_run_id"])
+        request_no, run_id = request.request_id, waiting_run.run_id
+        assert approvals.attach_pending_agent_run(
+            request_no, agent_run_id=run_id, approved_step_id="sales_execute_closed_loop"
+        )
+        saved = persist_chat_turn(
+            str(user_id),
+            SENTENCE,
+            historical_context,
+            {
+                "success": True,
+                "response": "原任务已保存，正在等待原审批。",
+                "data": {"execution_state": "waiting_user", "run_id": run_id},
+            },
+        )
+        assert saved["status"] == "saved", saved
+    waiting_run = get_agent_run_repository().get(run_id)
     assert waiting_run.metadata["runtime_context"]["_conversation_revision"] == 0
-    request_no = second["data"]["data"]["approval_request_ids"][0]
-    run_id = second["data"]["data"]["agent_run_id"]
-    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
     from app.db.models.approval import ApprovalRequest
 
     runtime = get_agent_run_repository().get(run_id).metadata["runtime_context"]
@@ -443,7 +446,9 @@ def _wait_for(path: Path, proc: subprocess.Popen, timeout: float = 60) -> None:
 @pytest.mark.parametrize(
     "kill,invalidate", [(False, None), (True, None), (False, "delete"), (False, "withdraw")]
 )
-def test_process_chat_survives_restart_and_exports_once(tmp_path: Path, kill: bool, invalidate):
+def test_persisted_sales_plan_survives_restart_and_exports_once(
+    tmp_path: Path, kill: bool, invalidate
+):
     db_path = tmp_path / "sales.db"
     marker = tmp_path / "marker.json"
     result_path = tmp_path / "result.json"

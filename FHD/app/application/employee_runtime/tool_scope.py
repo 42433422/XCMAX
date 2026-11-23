@@ -19,7 +19,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-READ_TOOLS = ("excel_analysis", "excel_schema_understand", "excel_join_compare")
+READ_TOOLS = ("excel_analysis", "excel_join_compare")
 CHART_TOOLS = ("excel_chart_recommend",)
 DOC_TOOLS = ("generate_office_document",)
 
@@ -220,13 +220,12 @@ def resolve_employee_tools(
         for n in DOC_TOOLS:
             add(n)
     if not read_only and any(k in text for k in _IMPORT_KW):
-        for n in ("import_excel_to_database", "products_bulk_import"):
-            add(n)
+        # products_bulk_import only reports a count; it has no persisted write.
+        add("import_excel_to_database")
 
     if not selected:
         for n in (
             "excel_analysis",
-            "excel_schema_understand",
             "generate_office_document",
         ):
             add(n)

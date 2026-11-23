@@ -182,27 +182,17 @@ def _repair_owner(step, policy, legacy_limit=4):
     spec = replace(spec, retry=policy)
     requests = []
 
-    def request_repair(_run, current, _context):
-        requests.append(current.attempt_count)
-        return {
-            "success": True,
-            "params_patch": {"start_date": f"2026-01-0{current.attempt_count}"},
-        }
-
     dependencies = RuntimeDependencies(
         action_spec=lambda *_: spec,
         validate=validate_tool_call,
         refresh_budget=lambda _: None,
-        repair_enabled=lambda *_: True,
-        repair_limit=lambda *_: legacy_limit,
-        request_repair=request_repair,
     )
     repository = InMemoryAgentRunRepository()
     run = AgentRun(user_id="retry-policy", message="query", steps=[step])
     return RunRepair(repository, RunUsageLedger(dependencies), dependencies), run, requests
 
 
-@pytest.mark.parametrize("entry", ["prepare_repair_or_retry", "prepare_llm_repair_or_retry"])
+@pytest.mark.parametrize("entry", ["prepare_repair_or_retry"])
 @pytest.mark.parametrize(
     "total,expected_repairs",
     [
@@ -239,7 +229,8 @@ def test_tool_spec_bounds_existing_repair_owner_without_reinterpreting_legacy_ze
         step.output = {"success": False, "retryable": True}
     assert len(step.repair_history) == expected_repairs
     assert step.attempt_count == expected_repairs + 1
-    assert len(requests) == (expected_repairs if entry == "prepare_llm_repair_or_retry" else 0)
+    assert requests == []
+    assert not hasattr(repair, "prepare_llm_repair_or_retry")
 
 
 @pytest.mark.parametrize("unknown", [False, True])

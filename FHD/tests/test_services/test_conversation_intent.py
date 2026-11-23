@@ -206,58 +206,6 @@ class TestConvertRecognizerResult:
         assert result["slots"] == {"key": "val"}
 
 
-# ========================= _enhance_with_task_agent ======================
-
-
-class TestEnhanceWithTaskAgent:
-    def test_shipment_generate(self):
-        m = IntentMixin()
-        m.task_agent = MagicMock()
-        m.task_agent.parse_task.return_value = {
-            "task_type": "shipment_generate",
-            "slots": {"unit_name": "测试客户"},
-        }
-        intent = {"slots": {}, "tool_key": None, "final_intent": None, "primary_intent": None}
-        result = m._enhance_with_task_agent("给测试客户生成发货单", intent, "user1")
-        assert result["slots"]["unit_name"] == "测试客户"
-        assert result["tool_key"] == "shipment_generate"
-
-    def test_unknown_task_type(self):
-        m = IntentMixin()
-        m.task_agent = MagicMock()
-        m.task_agent.parse_task.return_value = {
-            "task_type": "unknown_type",
-            "slots": {},
-        }
-        intent = {"slots": {}, "tool_key": None, "final_intent": None, "primary_intent": None}
-        result = m._enhance_with_task_agent("hello", intent, "user1")
-        assert result["tool_key"] is None
-
-    def test_none_plan(self):
-        m = IntentMixin()
-        m.task_agent = MagicMock()
-        m.task_agent.parse_task.return_value = None
-        intent = {"slots": {}}
-        result = m._enhance_with_task_agent("hello", intent, "user1")
-        assert result == intent
-
-    def test_existing_tool_key_not_overwritten(self):
-        m = IntentMixin()
-        m.task_agent = MagicMock()
-        m.task_agent.parse_task.return_value = {
-            "task_type": "products",
-            "slots": {"keyword": "test"},
-        }
-        intent = {
-            "slots": {},
-            "tool_key": "existing",
-            "final_intent": "existing",
-            "primary_intent": "existing",
-        }
-        result = m._enhance_with_task_agent("查询产品", intent, "user1")
-        assert result["tool_key"] == "existing"
-
-
 # ========================= _resolve_ai_mode ==============================
 
 

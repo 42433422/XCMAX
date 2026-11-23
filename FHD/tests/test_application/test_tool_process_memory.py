@@ -269,10 +269,12 @@ def _orphan_worker(control, start, deadline, folder):
         orphan = os.fork()
         if orphan == 0:
             memory = bytearray(48 * MIB)
-            (folder / "orphan").write_text(str(os.getpid()))
+            (folder / "orphan.pending").write_text(str(os.getpid()))
+            (folder / "orphan.pending").replace(folder / "orphan")
             time.sleep(30)
             os._exit(0)
-        (folder / "intermediate").write_text(str(os.getpid()))
+        (folder / "intermediate.pending").write_text(str(os.getpid()))
+        (folder / "intermediate.pending").replace(folder / "intermediate")
         while not (folder / "reparent").exists():
             time.sleep(0.01)
         os._exit(0)
@@ -292,6 +294,7 @@ def test_observed_orphan_is_still_counted_and_reaped_after_intermediate_exit(tmp
         sender.close()
         assert supervisor.wait_ack(receiver, b"r", deadline) == (True, False)
         supervisor.release(start)
+        # Published names become visible only after the complete PID has been written.
         _wait_for(lambda: (tmp_path / "orphan").exists() and (tmp_path / "intermediate").exists())
         orphan = psutil.Process(int((tmp_path / "orphan").read_text()))
         middle = int((tmp_path / "intermediate").read_text())

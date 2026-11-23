@@ -140,9 +140,6 @@ def test_voice_command_preserves_unknown_write_receipt(client):
         "unknown",
         "nested_partial",
         "not_executed",
-        "workflow_partial",
-        "workflow_unknown",
-        "workflow_not_executed",
     ],
 )
 def test_voice_command_sanitizes_failure_and_preserves_execution_receipt(client, kind):
@@ -163,51 +160,6 @@ def test_voice_command_sanitizes_failure_and_preserves_execution_receipt(client,
                 },
             }
         }
-    if kind.startswith("workflow_"):
-        from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
-        from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-        from app.application.workflow.workflow_types import PlanGraph
-
-        outcome = kind.removeprefix("workflow_")
-        steps = [
-            AgentStep(
-                node_id="failed",
-                tool_id="customers",
-                action="create",
-                status="failed",
-                error=private,
-                output={
-                    "success": False,
-                    **({"outcome": "unknown"} if outcome == "unknown" else {}),
-                },
-            )
-        ]
-        if outcome == "partial":
-            steps.insert(
-                0,
-                AgentStep(
-                    node_id="written",
-                    tool_id="customers",
-                    action="create",
-                    status="completed",
-                    output={"success": True, "message": private},
-                ),
-            )
-        run = AgentRun(
-            user_id="user-7",
-            message="新增客户",
-            run_id="existing-run",
-            status="failed",
-            steps=steps,
-        )
-        result = AIChatWorkflowResponseMixin()._format_agent_run_response(
-            PlanGraph(plan_id="existing-plan", intent="customer_write"),
-            run,
-        )
-        assert result["execution"]["outcome"] == outcome
-        assert "execution" not in result["data"]["data"]
-        result["data"]["data"]["approval_request_id"] = "existing-approval"
-        result["execution"]["error"] = private
     with (
         patch(
             "app.fastapi_routes.voice_routes._platform_transcribe",
@@ -231,27 +183,27 @@ def test_voice_command_sanitizes_failure_and_preserves_execution_receipt(client,
         )
     assert response.status_code == 200
     data = response.json()["data"]
-    committed = kind in {"nested_partial", "workflow_partial"}
+    committed = kind in {"nested_partial"}
     assert data["executed"] is committed and data["result"]["success"] is False
     assert private not in response.text
-    if kind in {"unknown", "nested_partial", "workflow_partial", "workflow_unknown"}:
+    if kind in {"unknown", "nested_partial"}:
         assert data["reason"] == "requires_reconciliation"
         assert data["result"]["requires_reconciliation"] and data["result"]["retryable"] is False
         assert data["result"]["run_id"] == "existing-run"
         assert "勿重复提交" in data["result"]["message"]
-    if kind in {"nested_partial", "not_executed"} or kind.startswith("workflow_"):
+    if kind in {"nested_partial", "not_executed"}:
         assert data["result"]["approval_request_id"] == "existing-approval"
         assert data["result"]["plan_id"] == "existing-plan"
         receipt = data["result"]["data"]["data"]["execution"]
         assert receipt["committed"] is committed
-        outcome = kind.removeprefix("workflow_").removeprefix("nested_")
+        outcome = kind.removeprefix("nested_")
         assert receipt == {
             "committed": committed,
             "effect": "none" if outcome == "not_executed" else outcome,
             "outcome": outcome,
         }
         assert data["result"]["execution"] == receipt
-    if kind in {"not_executed", "workflow_not_executed"}:
+    if kind in {"not_executed"}:
         assert data["result"]["execution_state"] == "not_executed"
         assert data["result"].get("requires_reconciliation") is not True
 
@@ -262,3 +214,80 @@ def test_transcribe_audio_returns_normalized_text(tmp_path: Path):
         return_value={"text": "  hello world  ", "language": "en"},
     ):
         assert _transcribe_audio(tmp_path / "audio.wav") == "hello world"
+
+
+@pytest.mark.parametrize("condition", ["failed", "unknown", "unproved_prior_step"])
+def test_voice_command_preserves_canonical_run_receipt_without_inventing_a_commit(
+    client, condition
+):
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.approval_workspace.outcomes import run_execution_receipt
+
+    private = "Traceback /private/tool.db"
+    failed = AgentStep(
+        node_id="failed",
+        tool_id="customers",
+        action="create",
+        status="failed",
+        error=private,
+        output={"success": False, **({"outcome": "unknown"} if condition == "unknown" else {})},
+    )
+    steps = [failed]
+    if condition == "unproved_prior_step":
+        steps.insert(
+            0,
+            AgentStep(
+                node_id="prior",
+                tool_id="customers",
+                action="create",
+                status="completed",
+                output={"success": True},
+            ),
+        )
+    run = AgentRun(
+        user_id="user-7",
+        message="新增客户",
+        run_id="existing-run",
+        plan_id="existing-plan",
+        status="failed",
+        steps=steps,
+    )
+    receipt = run_execution_receipt(run)
+    assert receipt["nodes_executed"] == int(condition == "unproved_prior_step")
+    assert "committed" not in receipt
+    receipt["approval_request_id"] = "existing-approval"
+    receipt["error"] = private
+    with (
+        patch(
+            "app.fastapi_routes.voice_routes._platform_transcribe",
+            new=AsyncMock(return_value={"text": "新增客户"}),
+        ),
+        patch("app.application.ai_chat_app_service.get_ai_chat_app_service") as service,
+        patch(
+            "app.fastapi_routes.xcagi_compat_chat_helpers._runtime_context_with_authenticated_actor",
+            return_value={"actor_id": "user-7"},
+        ),
+        patch(
+            "app.application.ai_chat.chat_evidence.prepare_chat_evidence",
+            side_effect=lambda _r, c, _m: c,
+        ),
+    ):
+        service.return_value.process_chat.return_value = receipt
+        response = client.post(
+            "/api/voice/command",
+            files={"file": ("audio.wav", b"audio", "audio/wav")},
+            data={"auto_execute": "true"},
+        )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["executed"] is False
+    assert data["result"]["success"] is False
+    assert data["result"]["run_id"] == "existing-run"
+    assert data["result"]["plan_id"] == "existing-plan"
+    assert data["result"]["approval_request_id"] == "existing-approval"
+    assert private not in response.text
+    if condition == "unknown":
+        assert data["reason"] == "requires_reconciliation"
+        assert data["result"]["requires_reconciliation"] is True
+        assert data["result"]["retryable"] is False
+        assert "勿重复提交" in data["result"]["message"]

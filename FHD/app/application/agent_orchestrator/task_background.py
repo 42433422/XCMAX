@@ -127,6 +127,8 @@ class BackgroundTaskExecutionMixin:
         step_id: str,
         parameters: dict[str, Any],
         requested_by: str,
+        queue: Any = None,
+        parent_snapshot: AgentRun | None = None,
     ) -> AgentRun | None:
         from app.application.agent_orchestrator.clarification import (
             apply_clarification_answer,
@@ -135,7 +137,12 @@ class BackgroundTaskExecutionMixin:
         run = self._repo.get(run_id)
         if run is None:
             return None
-        apply_clarification_answer(run, step_id=step_id, parameters=parameters)
+        if str(requested_by or "") != run.user_id:
+            return None
+        previous = copy.deepcopy(run)
+        apply_clarification_answer(
+            run, step_id=step_id, parameters=parameters, answered_by=requested_by
+        )
         run.status = "queued"
         run.metadata["dispatch"] = {
             "state": "queued",
@@ -144,7 +151,47 @@ class BackgroundTaskExecutionMixin:
             "queued_at": utc_now_iso(),
         }
         run.add_event("task.queued", "已补充信息，任务等待继续执行")
-        return cast("AgentRun", self._repo.save(run))
+        if queue is not None:
+            from app.application.agent_orchestrator.run_sql_repository import (
+                SQLAlchemyAgentRunRepository,
+            )
+            from app.application.agent_orchestrator.task_execution_sql_repository import (
+                SQLAlchemyTaskExecutionRepository,
+            )
+            from app.db.models.agent import AgentTaskExecutionRecord
+            from app.domain.task_lifecycle.adapters import LEASED_STATES, execution_requeue_allowed
+
+            if not isinstance(self._repo, SQLAlchemyAgentRunRepository) or not isinstance(
+                queue, SQLAlchemyTaskExecutionRepository
+            ):
+                return None
+            queue._ensure_schema()
+            with self._repo.transaction() as db:
+                with queue.transaction(read_only=True) as queue_db:
+                    if db.get_bind() is not queue_db.get_bind():
+                        return None
+                execution = db.get(AgentTaskExecutionRecord, run_id, with_for_update=True)
+                if execution is not None and (
+                    execution.state in LEASED_STATES
+                    or not execution_requeue_allowed(str(execution.state))
+                ):
+                    return None
+                if parent_snapshot is not None and (
+                    parent_snapshot.user_id != run.user_id
+                    or (run.metadata.get("runtime_context") or {}).get("parent_run_id")
+                    != parent_snapshot.run_id
+                    or not self._repo.save_if_unchanged_in_session(
+                        db, parent_snapshot, copy.deepcopy(parent_snapshot)
+                    )
+                ):
+                    return None
+                if not self._repo.save_if_unchanged_in_session(db, run, previous):
+                    return None
+                queue.enqueue_in_session(db, run, requested_by=requested_by)
+            return cast("AgentRun", self._repo.get(run_id))
+        if not self._repo.save_if_unchanged(run, previous):
+            return None
+        return cast("AgentRun", self._repo.get(run_id))
 
     def stage_run_for_dispatch(
         self,

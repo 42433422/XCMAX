@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from app.domain.browser_contract import BROWSER_INPUT_SCHEMAS
@@ -132,7 +133,7 @@ _SALES_QUOTE_INPUT = {
 }
 
 _MEMORY_V2_REJECT_INPUT = _object_schema(
-    ["user_id", "memory_id"],
+    ["memory_id"],
     {
         "user_id": {"type": "string"},
         "memory_id": {"type": "string"},
@@ -865,12 +866,14 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "run_id": {"type": "string", "description": "单个预演编号"},
             "preview_revision": {
                 "type": "string",
-                "description": "用户核对并确认的预演版本；关联客户产品预演必须提供",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "引用已有预演执行时必须提供用户核对的精确版本；请先读取 elt_import.preview",
             },
             "preview_revisions": {
                 "type": "object",
-                "additionalProperties": {"type": "string"},
-                "description": "批量确认时逐个预演编号对应的版本",
+                "minProperties": 1,
+                "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "description": "run_ids 中每个已有预演编号对应的精确已核对版本，不能遗漏",
             },
             "run_ids": {
                 "type": "array",
@@ -884,7 +887,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
                 "description": "用户明确接受 AI 建议映射时传 true，可免去逐字段确认",
             },
         },
-    ),
+    )
+    | {"dependentRequired": {"run_id": ["preview_revision"], "run_ids": ["preview_revisions"]}},
     ("excel_import", "execute_import"): _object_schema(
         ["pending_import_id"], {"pending_import_id": {"type": "string"}}
     ),
@@ -1049,7 +1053,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("memory_v2", "propose_candidate"): _object_schema(
-        ["user_id", "memory_type", "key", "value"],
+        ["memory_type", "key", "value"],
         {
             "user_id": {"type": "string"},
             "memory_type": {"type": "string", "enum": ["preference", "entity", "episodic"]},
@@ -1062,7 +1066,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         },
     ),
     ("memory_v2", "confirm"): _object_schema(
-        ["user_id", "memory_id"],
+        ["memory_id"],
         {
             "user_id": {"type": "string"},
             "memory_id": {"type": "string"},
@@ -1071,7 +1075,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ),
     ("memory_v2", "reject"): _MEMORY_V2_REJECT_INPUT,
     ("memory_v2", "correct"): _object_schema(
-        ["user_id", "memory_id"],
+        ["memory_id"],
         {
             "user_id": {"type": "string"},
             "memory_id": {"type": "string"},
@@ -1187,3 +1191,52 @@ _SPECIAL_INPUT_SCHEMAS[("desktop_automation", "computer_execute")] = {
     ),
     "additionalProperties": False,
 }
+
+
+def _workbook_input_schema(name: str, required: list[str]) -> dict[str, Any]:
+    from app.application.tools.workflow_tools.catalog_excel import excel_tool_specs
+
+    function = next(
+        tool["function"] for tool in excel_tool_specs() if tool["function"]["name"] == name
+    )
+    schema: dict[str, Any] = deepcopy(function["parameters"])
+    schema["properties"].pop("action", None)
+    schema["required"] = required
+    return schema
+
+
+def workbook_input_schemas() -> dict[tuple[str, str], dict[str, Any]]:
+    """Reuse the public catalog after ToolSpec initialization, without eager tool imports."""
+    from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT, WORKBOOK_WRITER
+
+    schemas = {
+        ("excel_analysis", "structure"): _workbook_input_schema("excel_analysis", ["file_path"]),
+        ("excel_analysis", "aggregate"): _workbook_input_schema(
+            "excel_analysis", ["file_path", "metrics"]
+        ),
+        ("excel_join_compare", "join"): _workbook_input_schema(
+            "excel_join_compare", ["file_paths", "join_keys"]
+        ),
+        ("excel_join_compare", "diff"): _workbook_input_schema(
+            "excel_join_compare", ["file_path_a", "file_path_b", "key_columns"]
+        ),
+    }
+    schemas[("excel_join_compare", "join")]["properties"]["file_paths"].update(
+        minItems=2, maxItems=2
+    )
+    for action, key in (("join", "join_keys"), ("diff", "key_columns")):
+        schemas[("excel_join_compare", action)]["properties"][key]["minItems"] = 1
+    employee = deepcopy(_SPECIAL_INPUT_SCHEMAS[("employee", "execute")])
+    employee["allOf"] = [
+        {
+            "if": {
+                "anyOf": [
+                    {"required": [key], "properties": {key: {"const": WORKBOOK_WRITER}}}
+                    for key in ("employee_id", "pack_id", "tool_name", "id")
+                ]
+            },
+            "then": {"required": ["input"], "properties": {"input": WORKBOOK_WRITE_INPUT}},
+        }
+    ]
+    schemas[("employee", "execute")] = employee
+    return schemas

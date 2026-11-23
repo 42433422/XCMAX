@@ -167,6 +167,21 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             assert svc.get_preference(memory_owner, "default_customer") is None
             assert svc.get_preference(memory_owner, "favorite_customer") == "彩虹乐园"
 
+            rejected = client.post(
+                f"/memory/v2/{memory_id}/reject",
+                json={"user_id": "7", "reason": "用户拒绝"},
+                headers={"X-User-Id": "7"},
+            )
+            assert rejected.status_code == 200, rejected.json()
+            rejected_body = rejected.json()
+            assert rejected_body["memory"]["status"] == "rejected"
+            assert rejected_body["memory"]["revision"] == corrected_body["memory"]["revision"] + 1
+            assert (
+                repo.get(rejected_body["run_id"]).tool_calls[0].metadata["verification"]["accepted"]
+                is True
+            )
+            assert svc.get_preference(memory_owner, "favorite_customer") is None
+
             deleted = client.delete(
                 f"/memory/v2/{memory_id}",
                 params={"user_id": "7", "reason": "用户删除"},
@@ -442,6 +457,7 @@ def test_memory_readback_rejects_changed_original_store(memory_case, monkeypatch
         ("confirm", "key", "requested-key", "wrong-key"),
         ("confirm", "memory_type", "entity", "episodic"),
         ("confirm", "confidence", 0.8, 0.2),
+        ("reject", "reason", "requested reason", "wrong reason"),
     ],
 )
 def test_memory_readback_rejects_wrong_effect_even_when_real_claim_and_output_match(
@@ -452,7 +468,11 @@ def test_memory_readback_rejects_wrong_effect_even_when_real_claim_and_output_ma
     # Fault injection only changes the writer input; its real JSON transaction,
     # original durable tool claim and host readback all remain in use.
     service = memory_mod.get_user_memory_service()
-    method = "correct_memory" if action == "correct" else "confirm_memory_candidate"
+    method = {
+        "correct": "correct_memory",
+        "confirm": "confirm_memory_candidate",
+        "reject": "reject_memory_candidate",
+    }[action]
     original = getattr(service, method)
 
     def write_wrong_effect(*args, **kwargs):
@@ -465,10 +485,12 @@ def test_memory_readback_rejects_wrong_effect_even_when_real_claim_and_output_ma
     writer = Mock(side_effect=write_wrong_effect)
     monkeypatch.setattr(service, method, writer)
     payload = {"user_id": "7", field: requested}
-    if action == "confirm":
+    if action in {"confirm", "reject"}:
         response = memory_case.client.post(
-            f"/memory/v2/{memory_case.memory_id}/confirm",
-            json={"user_id": "7", "correction": {field: requested}},
+            f"/memory/v2/{memory_case.memory_id}/{action}",
+            json={"user_id": "7", "correction": {field: requested}}
+            if action == "confirm"
+            else payload,
         )
     else:
         response = memory_case.client.patch(f"/memory/v2/{memory_case.memory_id}", json=payload)
@@ -479,7 +501,7 @@ def test_memory_readback_rejects_wrong_effect_even_when_real_claim_and_output_ma
     assert run.status == "blocked"
     call = run.tool_calls[0]
     assert call.output["success"] is True
-    assert call.output["memory"][field] == actual
+    assert call.output["memory"]["rejected_reason" if action == "reject" else field] == actual
     assert call.metadata["verification"]["code"] == "result_memory_effect_mismatch"
     assert call.metadata["verification"]["accepted"] is False
     assert writer.call_count == 1
@@ -614,6 +636,105 @@ def test_memory_noop_confirmation_deduplication_and_delete_keep_original_record(
     repeated = memory_case.client.delete(f"/memory/v2/{memory_case.memory_id}")
     assert repeated.status_code == 200, repeated.json()
     assert repeated.json()["memory"] == deleted.json()["memory"]
+
+
+@pytest.mark.parametrize("initial_status", ["pending", "active"])
+def test_memory_rejection_verifies_original_history_and_preserves_terminal_records(
+    memory_case, local_tools, initial_status
+):
+    previous = memory_case.run.tool_calls[0].output["candidate"]
+    if initial_status == "active":
+        confirmed = memory_case.client.post(
+            f"/memory/v2/{memory_case.memory_id}/confirm", json={"user_id": "7"}
+        )
+        assert confirmed.status_code == 200, confirmed.json()
+        previous = confirmed.json()["memory"]
+    response = memory_case.client.post(
+        f"/memory/v2/{memory_case.memory_id}/reject",
+        json={"user_id": "7", "reason": "user rejected this preference"},
+    )
+    assert response.status_code == 200, response.json()
+    current = response.json()["memory"]
+    run = memory_case.repo.get(response.json()["run_id"])
+    assert run.status == "completed"
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is True
+    assert current["status"] == "rejected" and current["eligible_for_planner"] is False
+    assert current["revision"] == previous["revision"] + 1
+    assert current["rejected_at"] == current["updated_at"]
+    assert current["rejected_reason"] == "user rejected this preference"
+    assert current["history"] == [
+        *previous["history"],
+        {
+            "action": "rejected",
+            "at": current["updated_at"],
+            "previous": {key: value for key, value in previous.items() if key != "history"},
+        },
+    ]
+    persisted = json.loads(memory_case.path.read_text())
+    assert not next(iter(persisted.values()))["preferences"]
+    repeated = memory_case.client.post(
+        f"/memory/v2/{memory_case.memory_id}/reject",
+        json={"user_id": "7", "reason": "a second reason must not rewrite the first"},
+    )
+    assert repeated.status_code == 200, repeated.json()
+    assert repeated.json()["memory"] == current
+    assert _memory_readback(memory_case.repo.get(repeated.json()["run_id"]))["status"] == "verified"
+    deleted = memory_case.client.delete(f"/memory/v2/{memory_case.memory_id}")
+    assert deleted.status_code == 200, deleted.json()
+    original = memory_case.path.read_bytes()
+    refused = memory_case.client.post(f"/memory/v2/{memory_case.memory_id}/reject")
+    assert refused.status_code == 202, refused.json()
+    assert refused.json()["success"] is False
+    failed = memory_case.repo.get(refused.json()["run_id"])
+    assert failed.status != "completed"
+    assert failed.tool_calls[0].metadata["verification"]["accepted"] is False
+    assert memory_case.path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ["revision", "eligible", "rejected_at", "history_action", "history_previous", "history_prefix"],
+)
+def test_memory_rejection_readback_requires_the_frozen_transition(
+    memory_case, monkeypatch, local_tools, tamper
+):
+    import app.domain.shared_services.user_memory_service as memory_mod
+
+    service = memory_mod.get_user_memory_service()
+    original = service.reject_memory_candidate
+
+    def corrupt_committed_transition(*args, **kwargs):
+        output = original(*args, **kwargs)
+        record = deepcopy(output["memory"])
+        if tamper == "revision":
+            record["revision"] -= 1
+        elif tamper == "eligible":
+            record["eligible_for_planner"] = True
+        elif tamper == "rejected_at":
+            record["rejected_at"] = "unrelated rejection time"
+        elif tamper == "history_action":
+            record["history"][-1]["action"] = "deleted"
+        elif tamper == "history_previous":
+            record["history"][-1]["previous"]["value"] = "another prior value"
+        else:
+            record["history"].insert(0, {"action": "injected history"})
+        persisted = json.loads(memory_case.path.read_text())
+        next(iter(persisted.values()))["memory_v2_records"][0] = record
+        memory_case.path.write_text(json.dumps(persisted))
+        return {**output, "memory": record}
+
+    writer = Mock(side_effect=corrupt_committed_transition)
+    monkeypatch.setattr(service, "reject_memory_candidate", writer)
+    response = memory_case.client.post(f"/memory/v2/{memory_case.memory_id}/reject")
+    assert response.status_code == 202, response.json()
+    run = memory_case.repo.get(response.json()["run_id"])
+    call = run.tool_calls[0]
+    assert run.status == "blocked" and response.json()["success"] is False
+    assert call.output["success"] is True and writer.call_count == 1
+    assert call.metadata["verification"]["code"] == "result_memory_effect_mismatch"
+    assert call.metadata["verification"]["accepted"] is False
+    persisted = json.loads(memory_case.path.read_text())
+    assert next(iter(persisted.values()))["memory_v2_records"][0] == call.output["memory"]
 
 
 def test_memory_store_keeps_concurrent_same_and_other_user_writes(tmp_path, monkeypatch) -> None:

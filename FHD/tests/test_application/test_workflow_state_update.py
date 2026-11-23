@@ -10,7 +10,7 @@ import pytest
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
-from tests.test_application.ai_chat_test_helpers import _make_svc
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _engine(dispatch_result):
@@ -139,7 +139,7 @@ class TestWorkflowStateUpdate:
         assert len(result.node_results) == 1
 
 
-class TestAiChatProjectsRunState:
+class TestPublicRunState:
     @pytest.mark.parametrize("status", ["completed", "failed"])
     def test_workflow_response_projects_authoritative_step_state(self, status):
         plan = _plan([_node("n1")])
@@ -154,33 +154,37 @@ class TestAiChatProjectsRunState:
                 error="private failure" if status == "failed" else "",
             )
         ]
-        payload = _make_svc()._format_agent_run_response(plan, run)
-        projected = payload["data"]["data"]["node_results"]
+        from app.fastapi_routes.domains.agent.route_support import public_run_dict
+
+        payload = public_run_dict(run)
+        projected = payload["steps"]
         assert projected[0]["node_id"] == "n1"
-        assert projected[0]["success"] is (status == "completed")
-        assert payload["data"]["data"]["agent_status"] == status
+        assert projected[0]["status"] == status
+        assert payload["status"] == status
         assert payload["run_id"] == run.run_id
         assert "private failure" not in str(payload)
 
-    def test_unified_run_retains_completion_event_for_frontend(self):
+    def test_formal_read_retains_completion_event_for_frontend(self, trusted_actor):
         from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
         from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
+        actor = trusted_actor(role="admin")
         repository = InMemoryAgentRunRepository()
         orchestrator = AgentOrchestrator(repository=repository)
         plan = _plan(
             [
                 WorkflowNode(
-                    node_id="model_reply",
-                    tool_id="conversation",
-                    action="reply",
-                    params={"response": "说明"},
+                    node_id="read",
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": "customers"},
                     idempotent=True,
                 )
             ]
         )
-        plan.metadata = {"response_mode": "reply", "reply": "说明"}
-        run = orchestrator.start_run_from_plan(user_id="state-test", message="说明", plan=plan)
+        run = orchestrator.start_run_from_plan(
+            user_id=str(actor.user_id), message="查客户", plan=plan, runtime_context=actor.context
+        )
         assert run.status == "completed", (run.error, run.final_output)
         assert run.steps[0].status == "completed"
         events = orchestrator.list_events(run.run_id)
@@ -188,4 +192,4 @@ class TestAiChatProjectsRunState:
         assert events[-1].event_type == "run.observed"
         assert events[-1].data["status"] == "completed"
         assert all(event.run_id == run.run_id for event in events)
-        assert repository.get(run.run_id).final_output["response"] == "说明"
+        assert repository.get(run.run_id).steps[0].output["data"] == []

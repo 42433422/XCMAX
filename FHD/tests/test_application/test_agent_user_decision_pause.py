@@ -88,7 +88,10 @@ def _run(actor) -> AgentRun:
         node_id="elt_execute",
         tool_id="elt_import",
         action="execute",
-        params={"run_id": "{{elt_preview.data.run_id}}"},
+        params={
+            "run_id": "{{elt_preview.data.run_id}}",
+            "preview_revision": "{{elt_preview.data.preview_revision}}",
+        },
         risk="high",
         idempotent=False,
         depends_on=["elt_preview"],
@@ -216,6 +219,11 @@ def test_approved_pause_reruns_step_with_resume_params(preview_evidence, storage
 
     second_params = executor.execute_with_deadline.call_args_list[1].args[0].params
     assert second_params["valid_rows_only"] is True
+    assert run.steps[1].depends_on == ["elt_preview"]
+    assert run.steps[1].params == {
+        "run_id": data["run_id"],
+        "preview_revision": data["preview_revision"],
+    }
     assert len(run.tool_calls) == 2
     retained, resumed = repo.get(run.run_id).tool_calls
     assert retained.params == original.params and retained.output == original.output

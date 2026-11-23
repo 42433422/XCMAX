@@ -220,12 +220,12 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
 
 
 # These modules were re-reviewed 2026-11-16 on the final PR #3245 sources.
-# artifact_files changed its I/O and may not inherit its former approval.
+# artifact_files and workflow_spreadsheet_scope changed their I/O and may not
+# inherit their former approval.
 # These single-component / dir_fd
 # sinks have guards that CodeQL cannot model.
 _REVIEWED_FILE_SINKS = {
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
-    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
     "FHD/app/application/shipment_excel_elt_security.py": (
         459,
         460,
@@ -279,10 +279,16 @@ def _sink_source_tree(tmp_path, uri, source):
     return tmp_path
 
 
-def test_changed_artifact_io_cannot_reuse_former_suppression():
+@pytest.mark.parametrize(
+    "path",
+    [
+        "FHD/app/application/agent_orchestrator/artifact_files.py",
+        "FHD/app/application/tools/workflow_spreadsheet_scope.py",
+    ],
+)
+def test_changed_file_io_cannot_reuse_former_suppression(path):
     import ast
 
-    path = "FHD/app/application/agent_orchestrator/artifact_files.py"
     source = (_SCRIPT.parents[2] / path).read_text(encoding="utf-8")
     tree = ast.parse(source)
     reviewed_hash, former_lines = _SCRIPT_NS["_REVIEWED_FILE_SINKS"][path]

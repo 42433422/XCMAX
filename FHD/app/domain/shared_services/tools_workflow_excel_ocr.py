@@ -9,6 +9,87 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _read_workbook_tool(tool_name: str, payload: dict, runtime_context: dict) -> dict:
+    """Reuse workbook operations after opening each input under its durable owner."""
+    import json
+    from contextlib import ExitStack
+
+    from app.application.tools.workflow import execute_workflow_tool
+
+    arguments = dict(payload)
+    keys = (
+        ["file_path"]
+        if tool_name == "excel_schema_understand"
+        else (
+            ["file_paths"] if arguments.get("action") == "join" else ["file_path_a", "file_path_b"]
+        )
+    )
+    try:
+        with ExitStack() as stack:
+            for key in keys:
+                values = arguments.get(key) if key == "file_paths" else [arguments.get(key)]
+                if (
+                    not isinstance(values, list)
+                    or len(values) != (2 if key == "file_paths" else 1)
+                    or any(not isinstance(value, str) or not value.strip() for value in values)
+                ):
+                    return {"success": False, "error_code": "spreadsheet_inputs_invalid"}
+                if "_actor_authorization" in runtime_context:
+                    from app.application.tools.workflow_spreadsheet_scope import (
+                        workflow_file_snapshot,
+                    )
+
+                    snapshots = [
+                        stack.enter_context(workflow_file_snapshot(value, runtime_context))
+                        for value in values
+                    ]
+                    if any(
+                        path.suffix not in {".xlsx", ".xls", ".xlsm", ".csv"} for path in snapshots
+                    ):
+                        raise PermissionError("文件类型不支持表格分析")
+                    values = [str(path) for path in snapshots]
+                arguments[key] = values if key == "file_paths" else values[0]
+            raw = execute_workflow_tool(
+                tool_name,
+                arguments,
+                workspace_root=runtime_context.get("workspace_root"),
+                runtime_context=runtime_context,
+            )
+        result = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(result, dict) or result.get("success") is False or result.get("error"):
+            return {"success": False, "error_code": "spreadsheet_read_failed"}
+        if tool_name == "excel_schema_understand":
+            snapshot = result.get("snapshot")
+            if not isinstance(snapshot, dict):
+                return {"success": False, "error_code": "spreadsheet_receipt_invalid"}
+            # The legacy service also supplies placeholder LLM prose. Only the
+            # observed DataFrame snapshot is a receipt for this read operation.
+            return {
+                "success": True,
+                "action": "structure",
+                "data": snapshot,
+                "file_path": payload["file_path"],
+            }
+        if result.get("action") != payload.get("action") or not any(
+            key in result for key in ("row_count", "rows_with_value_changes")
+        ):
+            return {"success": False, "error_code": "spreadsheet_receipt_invalid"}
+        return {"success": True, **result}
+    except PermissionError as exc:
+        return {"success": False, "error_code": "spreadsheet_access_denied", "message": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("registered workbook operation failed: %s", tool_name)
+        return {"success": False, "error_code": "spreadsheet_read_failed"}
+
+
+def _registered_router_excel_join_compare(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    if action not in {"join", "diff"}:
+        return {"success": False, "error_code": "unknown_tool_action"}
+    return _read_workbook_tool("excel_join_compare", {**params, "action": action}, runtime_context)
+
+
 def _registered_router_import_excel_to_database(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -54,6 +135,8 @@ def _registered_router_excel_analysis(
         payload["file_path"] = str(excel_ctx.get("file_path") or "").strip()
     if not str(payload.get("file_path") or "").strip():
         return {"success": False, "message": "excel_analysis 缺少 file_path 参数"}
+    if action == "structure":
+        return _read_workbook_tool("excel_schema_understand", payload, runtime_context)
     if action == "query" and not payload.get("query_expression"):
         payload["action"] = "excel_query"
         payload["natural_language"] = str(payload.get("question") or user_message).strip()
@@ -65,7 +148,7 @@ def _registered_router_excel_analysis(
 
             result = export_workflow_spreadsheet(payload, runtime_context, handle_excel_analysis)
         elif (
-            action in {"read", "structure", "query", "statistics"}
+            action in {"read", "query", "aggregate", "statistics"}
             and "_actor_authorization" in runtime_context
         ):
             from app.application.tools.workflow_spreadsheet_scope import (

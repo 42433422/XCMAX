@@ -7,7 +7,7 @@
 - ``scope_globs``：对「写类」工具与「输出路径」参数强制（避免误读上传文件被错杀）。
 - ``read_only`` 员工：直接拒绝写库类工具。
 
-gate 签名与 ``agent_loop.GateFn`` 一致：``(tool_name, args) -> {"ok": bool, "reason": str}``。
+gate 签名与 ``agent_runner.GateFn`` 一致：``(tool_name, args) -> {"ok": bool, "reason": str}``。
 """
 
 from __future__ import annotations
@@ -22,7 +22,16 @@ from app.application.employee_runtime.tool_scope import is_read_only
 logger = logging.getLogger(__name__)
 
 # 触碰文件的参数键
-_INPUT_PATH_KEYS = ("file_path", "path", "filepath", "input_path", "src", "source")
+_INPUT_PATH_KEYS = (
+    "file_path",
+    "file_path_a",
+    "file_path_b",
+    "path",
+    "filepath",
+    "input_path",
+    "src",
+    "source",
+)
 _OUTPUT_PATH_KEYS = (
     "output_path",
     "out_path",

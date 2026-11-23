@@ -307,7 +307,12 @@ def _action_direct_python_module(
 
 
 def _cognition_fhd(
-    config: dict[str, Any], perceived: dict[str, Any], memory: dict[str, Any], task: str
+    config: dict[str, Any],
+    perceived: dict[str, Any],
+    memory: dict[str, Any],
+    task: str,
+    *,
+    defer_to_runtime: bool = False,
 ) -> dict[str, Any]:
     cog_cfg = _get_section(config, "cognition")
     agent = cog_cfg.get("agent") if isinstance(cog_cfg.get("agent"), dict) else {}
@@ -316,11 +321,19 @@ def _cognition_fhd(
     system_prompt = str(
         agent.get("system_prompt") or cog_cfg.get("system_prompt") or "你是智能员工助手。"
     )
+    normalized = perceived.get("normalized_input") if isinstance(perceived, dict) else {}
+    if defer_to_runtime:
+        return {
+            "reasoning": "",
+            "input": normalized if isinstance(normalized, dict) else {},
+            "memory": memory,
+            "system_prompt": system_prompt,
+            "skipped_cognition": True,
+        }
     model_cfg = agent.get("model") if isinstance(agent.get("model"), dict) else {}
     if not isinstance(model_cfg, dict):
         model_cfg = {}
     max_tokens = int(model_cfg.get("max_tokens") or 4000)
-    normalized = perceived.get("normalized_input") if isinstance(perceived, dict) else {}
     user_payload = json.dumps({"task": task, "input": normalized}, ensure_ascii=False)[:12000]
     messages = [
         {"role": "system", "content": system_prompt},
@@ -366,8 +379,9 @@ def _actions_fhd(
     *,
     agent_tools: list[dict[str, Any]] | None = None,
     agent_gate: Any = None,
-    agent_max_iterations: int | None = None,
     runtime_context: dict[str, Any] | None = None,
+    on_event: Any = None,
+    settings: Any = None,
 ) -> dict[str, Any]:
     actions_cfg = _normalize_actions_cfg(config)
     handlers = _handler_list(actions_cfg)
@@ -423,8 +437,9 @@ def _actions_fhd(
                     workspace_root=workspace_root,
                     tools=agent_tools,
                     gate=agent_gate,
-                    max_iterations=agent_max_iterations,
                     runtime_context=runtime_context,
+                    on_event=on_event,
+                    settings=settings,
                 )
             )
         elif handler == "llm_md":
@@ -470,13 +485,19 @@ def execute_employee_task_local(
     from app.application.employee_runtime.loader import candidate_pack_ids
     from app.application.employee_runtime.tool_scope import host_employee_denial
     from app.application.office_parse_app_service import EMPLOYEE_BY_SUFFIX
-    from app.application.tools.workflow_spreadsheet_scope import office_reader_input
+    from app.application.tools.workflow_spreadsheet_scope import (
+        office_reader_input,
+        publish_written_workbook,
+        workbook_writer_input,
+    )
+    from app.domain.workbook_write_contract import WORKBOOK_WRITER
 
     context = runtime_context or {}
     candidates = candidate_pack_ids(employee_id) if "_actor_authorization" in context else []
     if denial := host_employee_denial(candidates, input_data or {}, context):
         return denial
     reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
+    writer = WORKBOOK_WRITER in candidates
     if (
         reader
         and context_only
@@ -503,18 +524,25 @@ def execute_employee_task_local(
     scope = (
         office_reader_input(reader, input_data or {}, context)
         if reader
+        else workbook_writer_input(input_data or {}, context)
+        if writer
         else nullcontext(input_data)
     )
     try:
         with scope as payload:
-            return EmployeeAgent(employee_id).run(
+            result = EmployeeAgent(employee_id).run(
                 task,
                 payload,
                 user_id=user_id,
-                workspace_root=payload["workspace_root"] if reader and payload else workspace_root,
+                workspace_root=payload["workspace_root"]
+                if (reader or writer) and payload
+                else workspace_root,
                 session_id=session_id,
                 runtime_context=runtime_context,
             )
+            if writer and payload and result.get("success") is True:
+                return publish_written_workbook(result, context, payload["workspace_root"])
+            return result
     except PermissionError as exc:
         return {"success": False, "error_code": "employee_file_access_denied", "error": str(exc)}
 

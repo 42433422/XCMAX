@@ -22,7 +22,9 @@ _NATIVE = frozenset(
     {("browser", "observe"), ("browser", "execute"), ("desktop_automation", "computer_execute")}
 )
 _MAX_BYTES = 25 * 1024 * 1024
-_SCREEN_WRITES = frozenset({"ui_navigate", "ui_click", "ui_type", "ui_select", "ui_upload"})
+_SCREEN_WRITES = frozenset(
+    {"ui_navigate", "ui_click", "ui_type", "ui_select", "ui_upload", "ui_scroll"}
+)
 
 
 def supports_surface_verification(tool_id: str, action: str) -> bool:
@@ -85,44 +87,7 @@ def capture_surface_acceptance(run: Any, step: Any, context: dict) -> dict:
                     raise ValueError("screen postcondition is already present or unavailable")
                 acceptance["before_observation_sha256"] = evidence_hash(before["checks"])
         elif step.tool_id.startswith("mcp__"):
-            from app.application.tools.mcp.registry import browser_server_config, mcp_session_scope
-            from app.domain.autonomy.browser_evidence import snapshot_text
-
-            config = browser_server_config(step.tool_id)
-            if config is None:
-                raise ValueError("original browser server unavailable")
-            state = run.metadata.get("browser_loop") or {}
-            condition = (state.get("postconditions") or {}).get(step.node_id) or {}
-            if step.action == "browser_navigate":
-                condition = {"kind": "url", "expected": step.params.get("url")}
-            elif condition.get("kind") == "text" and condition.get("expected"):
-                before_snapshot = next(
-                    (
-                        item
-                        for item in run.steps
-                        if item.node_id == condition.get("before_snapshot_node_id")
-                    ),
-                    None,
-                )
-                if (
-                    before_snapshot is None
-                    or before_snapshot.action != "browser_snapshot"
-                    or before_snapshot.status != "completed"
-                ):
-                    raise ValueError("missing original browser observation")
-                snapshot = snapshot_text(before_snapshot.output)
-                if not snapshot or condition["expected"] in snapshot:
-                    raise ValueError("postcondition already present before action")
-                condition = {**condition, "before_snapshot_sha256": evidence_hash(snapshot)}
-            else:
-                raise ValueError("action has no frozen postcondition")
-            acceptance.update(
-                scope="live_page_assertion",
-                assertion=copy.deepcopy(condition),
-                config_sha256=canonical_hash(asdict(config)),
-                session_scope=mcp_session_scope({**context, "run_id": run.run_id}),
-                current_state_verified=True,
-            )
+            acceptance.update(_mcp_action_acceptance(run, step, context))
         elif step.tool_id == "browser":
             model = BrowserExecute if step.action == "execute" else BrowserObserve
             plan = model.model_validate(step.params).model_dump(exclude_none=True)
@@ -154,6 +119,82 @@ def capture_surface_acceptance(run: Any, step: Any, context: dict) -> dict:
     except (TypeError, PermissionError) + RECOVERABLE_ERRORS:
         acceptance["scope"] = "unavailable"
     return acceptance
+
+
+def _mcp_action_acceptance(run: Any, step: Any, context: dict) -> dict:
+    """Freeze one Codex-selected action against original, current page evidence."""
+    from jsonschema import Draft202012Validator
+
+    from app.application.agent_orchestrator.browser_tool_process import read_browser_snapshot
+    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.application.tools.mcp.registry import browser_server_config, mcp_session_scope
+    from app.domain.autonomy.browser_evidence import (
+        BROWSER_POSTCONDITION_SCHEMA,
+        snapshot_text,
+        targets_observed,
+    )
+    from app.infrastructure.codex.receipts import browser_action_receipts
+
+    config = browser_server_config(step.tool_id)
+    scope = mcp_session_scope({**context, "run_id": run.run_id})
+    condition = copy.deepcopy(step.params.get("verification"))
+    if (
+        config is None
+        or not scope
+        or not Draft202012Validator(BROWSER_POSTCONDITION_SCHEMA).is_valid(condition)
+    ):
+        raise ValueError("original browser contract unavailable")
+    if step.action == "browser_navigate":
+        if condition["kind"] != "url" or condition["expected"] != step.params.get("url"):
+            raise ValueError("navigation must verify its exact target URL")
+    else:
+        records = browser_action_receipts({**context, "run_id": run.run_id}, step.tool_id)
+        previous = records[-1] if records else None
+        if (
+            condition["kind"] != "text"
+            or previous is None
+            or previous["step"].action != "browser_snapshot"
+            or condition.get("observation_call_id") not in previous["call_ids"]
+        ):
+            raise ValueError("action requires the latest original page observation")
+        child, observed_step, call = previous["child"], previous["step"], previous["record"]
+        observed_context = {
+            **copy.deepcopy(child.metadata.get("runtime_context") or {}),
+            **task_execution_context(child, observed_step),
+            "run_id": child.run_id,
+            "step_id": observed_step.step_id,
+            "node_id": observed_step.node_id,
+            "call_id": call.call_id,
+            "input_sha256": (call.metadata.get("verification_contract") or {}).get("input_sha256"),
+            "node_outputs": {item.node_id: item.output for item in child.steps},
+        }
+        observed_at = time.time()
+        before = read_browser_snapshot(child, observed_step, call, observed_context, config)
+        snapshot = snapshot_text(before)
+        if (
+            before.get("success") is not True
+            or not call.output.get("session_id")
+            or before.get("session_id") != call.output["session_id"]
+            or type(before.get("observed_at")) not in {int, float}
+            or not observed_at <= before["observed_at"] <= time.time() + 5
+            or not snapshot
+            or not targets_observed(step.params, snapshot)
+            or condition["expected"] in snapshot
+        ):
+            raise ValueError("page changed, target absent or postcondition already present")
+        condition.update(
+            before_snapshot_sha256=evidence_hash(snapshot),
+            before_run_id=child.run_id,
+            before_call_id=call.call_id,
+            session_id=call.output["session_id"],
+        )
+    return {
+        "scope": "live_page_assertion",
+        "assertion": condition,
+        "config_sha256": canonical_hash(asdict(config)),
+        "session_scope": scope,
+        "current_state_verified": True,
+    }
 
 
 def _binding(contract: dict) -> dict:

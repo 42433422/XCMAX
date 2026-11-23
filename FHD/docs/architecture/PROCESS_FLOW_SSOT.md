@@ -2,7 +2,7 @@
 
 > **本文件为 XCMAX「工作流程 + 交付流程」的唯一真相源（SSOT）**，供 AGI 编排（Agent Orchestrator / Workflow Engine / NeuroBus 事件驱动）消费。
 > 本文件约束跨组件职责与迁移验收；账号授权、事件、版本和发布仍分别服从已登记领域的规范。实现现状以指定提交的源码与实际回执为证，文档不能覆盖运行事实。
-> 最后更新：2026-11-22 · 登记：[SSOT_INDEX.md](../SSOT_INDEX.md)（领域 `process-flow`）。§2.2 保留集成候选的执行入口与回执契约，§2.3 保留企业认知候选；其他业务域未重新验收。§9 的 2026-11-21 源码核查基线为 [main@171418352d24667a7123b6556c55bad445ef3440](https://github.com/42433422/XCMAX/commit/171418352d24667a7123b6556c55bad445ef3440)，当时的开放候选身份见 §9.3。
+> 最后更新：2026-11-23 · 登记：[SSOT_INDEX.md](../SSOT_INDEX.md)（领域 `process-flow`）。§2.2 保留集成候选的执行入口与回执契约，§2.3 保留企业认知候选；其他业务域未重新验收。§9 的 2026-11-21 源码核查基线为 [main@171418352d24667a7123b6556c55bad445ef3440](https://github.com/42433422/XCMAX/commit/171418352d24667a7123b6556c55bad445ef3440)，当时的开放候选身份见 §9.3。
 
 ---
 
@@ -30,15 +30,19 @@
 
 ### 2.1 智能对话与业务工作流的唯一执行链
 
-以下为宿主聊天主链规范；公共工具、员工、移动端与外部执行器的迁移范围和剩余边界见 §9，不能据此宣称全部入口已统一。
+新聊天、语音/compat 聊天、agent 型员工和自然语言 `/api/agent/runs` 由固定本地 Codex `0.171.0` 执行。独立路由同时绑定已验收的请求别名、实际响应模型和网关协议；禁止故障转移与响应身份纳入资格，LiteLLM 路径逐次核对原始零重试/零换模计数，标准 Responses 不盲发非标准参数。新任务的配置或独立模型资格证缺失时明确阻断；已经持久化的旧计划、审批和澄清仍在原任务恢复。显式业务工具、人工操作和开发超级员工保留各自已授权的入口；本节不代表 §9 的全部消费者已完成统一。
 
-在线聊天流式、非流式及语音命令入口共用 `AIChatApplicationService`；compat 端点只做鉴权、格式适配和调用该主服务。每条消息都交给账户配置的平台模型，由模型选择生成普通回复或完整业务计划；不再用本地对话分类分流，也不保留独立直回复路径。两种输出都进入同一个 `LangGraph StateGraph`：普通回复作为内部无副作用节点运行，业务计划则在图执行前经独立于模型的确定性审核，核对图结构、工具动作、参数引用、服务端风险/幂等属性、当前权限和计划节点绑定。模型输出缺失、无效或被拒绝时明确失败，不回退到规则计划或未核验的业务回答。会话历史、跨会话个人记忆及本轮授权知识随请求提供；个人记忆按当前用户、租户和 Mod 授权独立注入，不依赖企业知识库权限。审批快照绑定完整计划和当前工具契约摘要；恢复时复核请求归属、租户、参数、整张计划、步骤清单及当前工具契约。代码在副作用后读取工具回执及业务状态；模型回复和运行状态不能代替业务核验。语音命令不再本地分类后直接调用工具。旧 workflow engine、旧普通聊天意图执行器和 shadow/canary 执行分支已退役。
+宿主首次保存原请求、约束、授权附件及来源摘要，不先生成完整计划。Codex `0.171.0` 是唯一通用模型工具循环：发现能力、取得完整 ToolSpec 与 `schema_digest`、执行当前动作、观察原回执、继续或纠正。原 SQL 任务和 AgentOrchestrator 为动作登记子任务，审批绑定原参数与工具合同；正式业务图继续由 LangGraph 处理依赖、分支和检查点。通用 Planner、整图修复、执行前覆盖审核、员工/浏览器第二模型循环与 `execute_plan` 均已移除。
 
-LangGraph 处理 AND 依赖、条件分支、未选分支、澄清/审批暂停、失败终止与死端。工具错误、超时、权限拒绝、限流和熔断保留结构化结果及恢复提示；安全的短暂故障可自动重试，配额/并发拒绝标为未执行并等待后续重试，副作用结果未知则转人工核对，禁止自动重放。审批驳回会取消挂起计划。只有工具自带明确补偿契约的动作才可回滚，系统不猜测通用回滚。
+每轮动作结束后，独立业务核验先回读 SQL、文件或同会话页面事实；无工具的目标审计再核对原始请求、全部持久补答和当前证据。报告与原目标及证据摘要绑定，缺口返回同一 thread 继续，执行—核验最多三轮。审计按规模分配输出预算，格式错误或截断只重试一次，并受原任务剩余时限/模型调用数/费用控制。等待输入、审批、活动调用、未知效果或用量不明优先暂停；动作成功、模型结束或最终回复丢失都不自动完成原目标。
 
-模型入口按认证账户限 60 次/分钟、租户限 600 次/分钟（可用 `XCAGI_MODEL_CALLS_PER_MINUTE` 与 `XCAGI_TENANT_MODEL_CALLS_PER_MINUTE` 覆盖），进程并发上限默认 32，单账户/供应商连续 5 次瞬时失败后熔断 30 秒；工具入口按租户/动作限 120 次/分钟，单进程并发上限 32、单租户上限 16、单租户动作上限 8，连续 5 次瞬时故障后按租户动作熔断 30 秒。生产/预发布要求 Redis 分布式速率限流；Redis 不可用时限流门禁 fail-closed；并发闸门和熔断在每个应用进程内生效。平台余额与套餐仍由模型平台核算。
+令牌、记忆召回、工作簿产物和浏览器会话绑定原父任务、主体、租户、Mod 与员工范围。记忆/历史只提供可追溯上下文，不能改变授权；补答累积进原账本而不覆盖目标。浏览器/AIOPEN 写动作必须具有原观察与后置条件，同会话只读回查才可验证；单动作子任务不能提前关闭父浏览器会话。Excel 读写、公式存储及数值重算采用各自真实证据，不推断未运行的计算。
 
-短期会话历史按用户、租户、Mod 与会话隔离；可召回个人记忆跨会话共享，但仍按用户、租户和 Mod 隔离。向量记忆最多保留 90 天/400 个片段，并在写入或召回时物理清理过期/超额片段，单次模型上下文最多 120 条、48,000 字符。凭据在记忆存储与模型上下文中脱敏；附件记忆只保留名称、类型和大小。线上业务查询不再由旧 slot 路由或直达处理器短路，模型没有生成有效计划时不执行。离线模式只开放原有受限本地业务处理，不提供普通离线大模型问答。代码、模型回复或 checkpoint 状态都不是业务成功证据；验收须以原始场景核对业务读回。
+确定未发送的连接故障与明确拒绝的限流可有限退避，未知写入与未知计量仅核对原回执。审批通过后，后台 dispatcher 从原子任务的确定回执登记一次父任务续接，恢复同一 thread；GET 只更新可读投影，不触发执行。正式工作流的确定性重试仍遵守原工具契约，补偿只按工具已声明的回滚能力执行。
+
+保留的宿主公共模型入口按认证账户限 60 次/分钟、租户限 600 次/分钟（可用 `XCAGI_MODEL_CALLS_PER_MINUTE` 与 `XCAGI_TENANT_MODEL_CALLS_PER_MINUTE` 覆盖），进程并发上限默认 32，单账户/供应商连续 5 次瞬时失败后熔断 30 秒；工具入口按租户/动作限 120 次/分钟，单进程并发上限 32、单租户上限 16、单租户动作上限 8，连续 5 次瞬时故障后按租户动作熔断 30 秒。生产/预发布要求 Redis 分布式速率限流；Redis 不可用时限流门禁 fail-closed；并发闸门和熔断在每个应用进程内生效。固定 Codex 路径的模型预留、usage 结算、未知计量和Codex 跨轮累计活跃时限（不含审批等待及独立后台业务 worker；后者保留原工具超时与租约）服从 [运行时合同](../../README.md#固定本地-agent-执行器)，不借用旧入口的成功状态。
+
+短期会话历史按用户、租户、Mod 与会话隔离；可召回个人记忆跨会话共享，但仍按用户、租户和 Mod 隔离。向量记忆最多保留 90 天/400 个片段，并在写入或召回时物理清理过期/超额片段，单次模型上下文最多 120 条、48,000 字符。凭据在记忆存储与模型上下文中脱敏；附件记忆只保留名称、类型和大小。线上业务查询不再由旧 slot 路由或直达处理器短路，没有已授权的动作契约时不执行。离线模式只开放原有受限本地业务处理，不提供普通离线大模型问答。代码、模型回复或 checkpoint 状态都不是业务成功证据；验收须以原始场景核对业务读回。
 
 ### 2.2 统一执行入口与任务状态：实现与证据边界
 
@@ -51,14 +55,14 @@ LangGraph 处理 AND 依赖、条件分支、未选分支、澄清/审批暂停�
 | 缺口 | 当前实现 | 验证入口 |
 |---|---|---|
 | 同一 task 的并发创建和旧 plan 先查后写导致重复执行 | 现有 SQL 事务原子登记 task/run；败选者只读；失败整体回滚 | `test_agent_task_admission.py`：独立 session、真实副作用计数、普通/续接/子任务 |
-| 迟到保存抢占 active_run 或复活终态 | task 投影检查 attempt/run/version；规划澄清换代须通过原快照 CAS，普通迟到保存不能替换新代或终态 | 同上及 `test_planning_clarification_roundtrip.py`，内存与独立 SQLite 仓储 |
+| 迟到保存抢占 active_run 或复活终态 | task 投影检查 attempt/run/version；持久补答与原任务续接须通过原快照 CAS，普通迟到保存不能替换新代或终态 | 同上及 `test_codex_goal_lifecycle.py`，内存与独立 SQLite 仓储 |
 | 失效 worker 写入副作用账本、过期租约把未知写入重试 | 认领、状态及副作用登记使用同一 owner/版本条件；未知写结果保留 `unknown` | `test_task_execution_repository.py`、`test_native_task_recovery.py` |
 | paused/blocked/input 被压成失败或审批，接受回执被当完成 | 共用 `domain/task_lifecycle` 归一化与嵌套回执判定，等待态没有 finished_at | `test_task_dispatcher.py`、`test_task_lifecycle_acceptance.py` |
 | 注册能力绕开统一登记，重复模型调用创建新 run | 复用统一发布和可信 turn/call 身份；只有原子赢家调用原执行器 | `test_registered_capabilities.py` |
-| 员工写审批只有提示文本，没有可恢复原 run | 从现有工具契约准备计划，登记原 run 并绑定审批；不同 call 使用不同审批身份，旧审批先只读核验；gate 回执进入同一结果管道 | `test_employee_runtime_write_approval.py`、`test_agent_loop.py` |
+| 员工写审批只有提示文本，没有可恢复原 run | 从现有工具契约准备计划，登记原 run 并绑定审批；不同 call 使用不同审批身份，旧审批先只读核验；gate 回执进入同一结果管道 | `test_employee_runtime_write_approval.py`、`test_codex_employee_entry.py` |
 | 审批通过后 queued/unknown 被误报取消或新建审批 | 读取原 plan/run/审批；等待和待核对保持原身份 | `test_approval_persistence.py`、`test_approval_workspace_components.py` |
 | 执行回执保存失败后提前清理 pending plan | 完成回执持久化后再清理；恢复读取原 run，不重执行 | `test_workflow_plan_store.py`、`test_chat_component_boundaries.py` |
-| 模型继续解释待审批/未知结果，并记作员工成功或失败 | 未完成回执立即退出工具循环；指标单列 pending，账本不填完成时间 | `test_agent_loop.py`、`test_employee_runtime_metrics.py` |
+| 模型继续解释待审批/未知结果，并记作员工成功或失败 | 未完成回执立即退出工具循环；指标单列 pending，账本不填完成时间 | `test_codex_employee_entry.py`、`test_employee_runtime_metrics.py` |
 | 扩展调用异常或内部 TypeError 后回退再次执行 | 调用前识别签名；已调用异常返回待核对，只有明确未注册才选下一适配器 | `test_workflow_tool_components.py` |
 | 手机员工及 LAN 超级员工没有持久 turn，断线后可能重新调用 | 复用聊天轮次准入、保存和结算；相同 turn 返回原回执；服务端绑定实际工具与执行上下文，断线继续保存原调用结果 | `test_mobile_component_boundaries.py`、`test_mobile_super_employee_receipts.py` |
 | 普通回复/员工历史不能恢复，SQL 历史范围混用 | 保存只读 turn 回执；带 run 的记录读取原运行并复核 owner/tenant/Mod/conversation/revision | `test_conversation_turn_receipts.py`、`test_conversation_lifecycle.py` |
@@ -117,7 +121,7 @@ LangGraph 处理 AND 依赖、条件分支、未选分支、澄清/审批暂停�
 
 #### 七步接线与验收证据入口
 
-下表中的认知模块文件均位于 `app/application/enterprise_cognition/`；规划与目标覆盖复用 `app/application/workflow/`，战略读取复用 `app/application/autonomy/`。测试名是核验入口，实际运行范围与结果须另附回执。
+下表中的认知模块文件均位于 `app/application/enterprise_cognition/`；通用执行与目标核验复用 `app/application/agent_runtime/`，战略读取复用 `app/application/autonomy/`。测试名是核验入口，实际运行范围与结果须另附回执。
 
 | 步骤 | 当前接线 | 核验入口与仍需证明的事实 |
 |---|---|---|
@@ -125,8 +129,8 @@ LangGraph 处理 AND 依赖、条件分支、未选分支、澄清/审批暂停�
 | 2. 只读事件订阅 | 原 `neuro_bus_events.yaml` → `source_events.py` → 原 NeuroBus → `subscriptions.py` | 同上：真实总线消费、仅提交后发布、嵌套回滚、重复 / 乱序、发布失败；bulk SQL 边界单列 |
 | 3. 状态投影 | `sources.py` → `projection.py` → 两张派生表 | 同上：五类详情 / 列表、缓存权限重验、TTL、子明细指纹、故障时 `unknown`，原业务数据不因查询而改变 |
 | 4. 经营目标 | `domain/enterprise_cognition/goal_contract.py` 与 `application/enterprise_cognition/goals.py` 绑定原实体、指标、单位、方向、目标值及可选期限；只读引用 `autonomy/strategic_plan_app_service.latest_plan` 的精确内容指纹和条目 | `tests/test_application/test_enterprise_goals.py`：租户 / 主体 / Mod 隔离、单位可比、策略来源校验；目标变更用新 ID，旧绑定不覆盖。研发战略条目不自动成为企业经营事实 |
-| 5. 规划与任务 | `execution.py` 复用 `workflow/planner.py`、`workflow/goal_coverage.py` 与原 `AgentOrchestrator` 原子任务准入 | `tests/test_application/test_enterprise_execution.py`：完整目标覆盖、当前工具权限、规划前后实体版本、稳定请求键、原任务回读、审批前无副作用。首批业务写动作仅接与同一 `order_id` 绑定的原 `sales` 生命周期动作；其他实体的写动作仍需各自审核过的选择器契约 |
-| 6. 指标与记忆 | `outcomes.py` 读取原 Business Harness 终态及动作回执，强制回查同一权威实体，冻结前后观测；`memory.py` 复用 MemoryV2 追加带证据的经历候选 | `tests/test_application/test_enterprise_outcomes.py`：原任务 / 审批 / 动作绑定、同来源同单位、观测窗口、重复评估、未知回执与记忆失败恢复。观察到变化不证明因果，保留 `attribution=unproven`；记忆候选沿原确认治理，不覆盖原始事实 |
+| 5. 规划与任务 | `execution.py` 将原 goal、order、task/request 身份交给唯一 Codex 入口；原 `AgentOrchestrator` 原子准入实际业务子动作 | `tests/test_application/test_enterprise_execution.py`：完整目标覆盖、当前工具权限、规划前后实体版本、稳定请求键、原任务回读、审批前无副作用。首批业务写动作仅接与同一 `order_id` 绑定的原 `sales` 生命周期动作；其他实体的写动作仍需各自审核过的选择器契约 |
+| 6. 指标与记忆 | `outcomes.py` 只接受原父目标核验终态及对应动作回执，强制回查同一权威实体，冻结前后观测；单动作子任务不得提前结算整体目标；`memory.py` 复用 MemoryV2 追加带证据的经历候选 | `tests/test_application/test_enterprise_outcomes.py`：原任务 / 审批 / 动作绑定、同来源同单位、观测窗口、重复评估、未知回执与记忆失败恢复。观察到变化不证明因果，保留 `attribution=unproven`；记忆候选沿原确认治理，不覆盖原始事实 |
 | 7. 同一订单场景 | 同一实体引用串联状态、目标、计划、审批、原任务、工具回执、指标观测和记忆证据 | 组合验收须保留原订单 ID、目标 ID、请求键、task / run / node ID、审批凭证及前后源版本；代码测试、真实模型、真实客户数据、发布身份分别记录，未取得证据的层级不能记为通过 |
 
 该候选的只读回答明确区分：已观察到的未履约数量、用户目标是否达到、用户目标期限是否错过，以及仍未知的订单承诺交期和延期原因。**当前 `SalesOrder` 没有权威交期字段，用户目标的 `deadline` 不是订单的承诺交期。** 因此不得仅凭未交数量或目标过期给出“订单已延期若干天”或断言原因。完整订单延期验收还需要可追溯的原承诺交期和原因证据；不能用固定样例或模型解释补成事实。

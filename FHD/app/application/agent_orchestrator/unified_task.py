@@ -33,14 +33,33 @@ def task_capabilities(run: AgentRun) -> dict[str, bool]:
     from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
 
     status = str(run.status or "")
-    retryable = status in {"failed", "blocked"} and not safe_continuation_error(run)
+    if run.metadata.get("runtime_type") == "codex":
+        from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+
+        safe = not requires_retry_reconciliation(run) and not (
+            run.metadata.get("codex_runtime") or {}
+        ).get("model_reconciliation_required")
+        return {
+            "pause": status in {"queued", "planning", "running", "retrying", "waiting_user"},
+            "cancel": status
+            in {"queued", "planning", "running", "retrying", "waiting_user", "paused", "blocked"},
+            "retry": safe and status in {"failed", "blocked"},
+            "approve": False,
+            "resume": safe and status in {"paused", "waiting_user"},
+            "evidence": True,
+        }
+    context = run.metadata.get("runtime_context") or {}
+    codex_child = context.get("source") == "codex_runtime" and bool(context.get("parent_run_id"))
+    retryable = (
+        status in {"failed", "blocked"} and not codex_child and not safe_continuation_error(run)
+    )
     return {
         "pause": status in {"queued", "planning", "running", "retrying", "waiting_user"},
         "cancel": status
         in {"queued", "planning", "running", "retrying", "waiting_user", "paused", "blocked"},
         "retry": retryable,
         "approve": status == "waiting_user",
-        "resume": status == "paused",
+        "resume": status == "paused" and not codex_child,
         "evidence": True,
     }
 
@@ -239,6 +258,10 @@ def create_unified_task(
             "task_model_version": 1,
         },
     )
+    if context.get("enterprise_cognition"):
+        from app.application.enterprise_cognition.execution import bind_goal_action_plan
+
+        context = bind_goal_action_plan(plan, context)
     run = orchestrator.start_task_from_plan(
         user_id=user_id,
         message=normalized_message,

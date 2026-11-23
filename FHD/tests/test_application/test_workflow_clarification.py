@@ -186,8 +186,8 @@ class TestBuildClarifyNode:
 
 class TestClarificationTTL:
     def test_expired_clarification_is_swept(self, monkeypatch):
-        service = AIChatApplicationService()
-        service._pending_workflows["u1"] = make_pending_entry(
+        pending = {}
+        pending["u1"] = make_pending_entry(
             plan=_ambiguous_delete_plan(),
             runtime_context={"session_id": "s"},
             thinking_steps="s",
@@ -196,10 +196,8 @@ class TestClarificationTTL:
             target_node_id="delete_customer",
             now=1000.0,
         )
-        monkeypatch.setattr(service, "_hydrate_pending_workflow", lambda *_a: False)
-        result = service.process_chat("u1", "好的", context={"session_id": "s"}, source="normal")
-        assert result["data"]["action"] == "clarification_required"
-        assert "u1" not in service._pending_workflows
+        assert sweep_expired(pending, now=1000000.0) == ["u1"]
+        assert "u1" not in pending
 
     def test_non_clarification_pending_is_not_swept(self):
         pending = {"u1": {"kind": "confirmation", "created_at": 1.0, "ttl_seconds": 30}}

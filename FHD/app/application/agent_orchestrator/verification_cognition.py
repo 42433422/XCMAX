@@ -255,15 +255,41 @@ def _plan(run, step, data, context, goal):
         and event.run_id == child.run_id
         for event in child.events
     )
+    dynamic = child.metadata.get("runtime_type") == "codex"
+    if dynamic:
+        from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
+
+        if child.metadata.get("runtime_goal_contract") is not None:
+            try:
+                validate_runtime_goal(child)
+            except ValueError:
+                return None
+        constraints = runtime.get("_runtime_goal_constraints") or {}
+        if (
+            child.intent != "codex.runtime"
+            or child.message != step.params["message"]
+            or child.metadata.get("runtime_task_id") != task_id
+            or constraints.get("goal_binding_sha256") != goal["binding_sha256"]
+            or constraints.get("request_sha256") != expected
+            or constraints.get("requires_approval") is not True
+            or not any(event.event_type == "runtime.queued" for event in child.events)
+        ):
+            return None
+        historical_approval = historical_approval or data.get("status") == "queued"
     if (
         binding.get("goal") != goal
         or binding.get("request_sha256") != expected
-        or child.metadata.get("task_request_fingerprint") != expected
+        or (not dynamic and child.metadata.get("task_request_fingerprint") != expected)
         or runtime.get("parent_run_id") != run.run_id
         or runtime.get("parent_task_id") != parent_task
         or (child.metadata.get("task_context") or {}).get("task_id") != task_id
-        or ((child.metadata.get("plan") or {}).get("metadata") or {}).get("enterprise_cognition")
-        != binding
+        or (
+            not dynamic
+            and ((child.metadata.get("plan") or {}).get("metadata") or {}).get(
+                "enterprise_cognition"
+            )
+            != binding
+        )
         or data != {**harness_event_context(child), "status": data.get("status")}
         or (data.get("status") != child.status and not historical_approval)
     ):

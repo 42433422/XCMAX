@@ -23,11 +23,7 @@ from app.application.agent_orchestrator.clarification import (
 )
 from app.application.agent_orchestrator.compensation import plan_parallel_enabled
 from app.application.agent_orchestrator.param_references import refuse_unresolved_step
-from app.application.agent_orchestrator.repair_advisor import (
-    is_llm_repair_enabled,
-    llm_repair_attempt_limit,
-    request_llm_repair,
-)
+from app.application.agent_orchestrator.run_knowledge import RunKnowledge
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
@@ -36,7 +32,6 @@ from app.application.agent_orchestrator.run_models import (
     ToolCall,
     utc_now_iso,
 )
-from app.application.agent_orchestrator.run_planning import RunPlanning
 from app.application.agent_orchestrator.run_repair import RunRepair
 from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
@@ -247,9 +242,6 @@ def _runtime_dependencies() -> RuntimeDependencies:
         action_spec=lambda tool, action: get_tool_action_spec(tool, action),
         validate=lambda tool, action, params: validate_tool_call(tool, action, params),
         refresh_budget=lambda run: refresh_ai_budget_metadata(run),
-        repair_enabled=lambda run, context: is_llm_repair_enabled(run, context),
-        repair_limit=lambda run, step, context: llm_repair_attempt_limit(run, step, context),
-        request_repair=lambda run, step, context: request_llm_repair(run, step, context),
     )
 
 
@@ -270,7 +262,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         }
         self._tool_executor = tool_executor or AgentToolExecutor()
         runtime = dependencies if dependencies is not None else _runtime_dependencies()
-        self._planning = RunPlanning(self._repo)
+        self._knowledge = RunKnowledge(self._repo)
         self._usage = RunUsageLedger(runtime)
         self._repair = RunRepair(self._repo, self._usage, runtime)
         self._step_execution = StepExecution(
@@ -287,35 +279,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     @staticmethod
     def _ingest_artifact_to_dataset(run: AgentRun, artifact: Any) -> None:
         ingest_artifact_to_dataset(run, artifact)
-
-    def start_run(
-        self,
-        *,
-        user_id: str,
-        message: str,
-        runtime_context: dict[str, Any] | None = None,
-        auto_execute: bool = True,
-    ) -> AgentRun:
-        run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
-        run.metadata["persistence"] = dict(self._repository_status)
-        run.metadata["runtime_context"] = dict(runtime_context or {})
-        apply_task_context(run, runtime_context)
-        run.add_event("run.created", "Agent run 已创建")
-        self._repo.save(run)
-        try:
-            plan = self._plan(run, runtime_context=dict(runtime_context or {}))
-            self._apply_plan(run, plan)
-            apply_ai_budget_metadata(run, dict(plan.metadata or {}), dict(runtime_context or {}))
-            self._repo.save(run)
-            if auto_execute:
-                self._execute_with_durable_lease(run, runtime_context=dict(runtime_context or {}))
-            return cast("AgentRun", self._repo.save(run))
-        except RECOVERABLE_ERRORS:
-            logger.exception("agent run start failed")
-            run.status = "failed"
-            run.error = _INTERNAL_RUN_ERROR
-            run.add_event("run.failed", "Agent run 失败", {"error_code": _INTERNAL_RUN_ERROR})
-            return cast("AgentRun", self._repo.save(run))
 
     def start_run_from_plan(
         self,
@@ -710,6 +673,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             parameters=parameters,
             confirmed=confirmed,
             allowed_fields=allowed_fields,
+            answered_by=answered_by,
         )
         run.metadata["runtime_context"] = context
         apply_ai_budget_metadata(run, context)
@@ -760,77 +724,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             stored = cast("AgentRun", self._repo.get(run_id))
             self._release_browser_run_resources(stored)
             return stored
-        self._execute_with_durable_lease(run, runtime_context=context)
-        return cast("AgentRun", self._repo.save(run))
-
-    def continue_planning_clarification(
-        self,
-        run_id: str,
-        *,
-        answered_by: str,
-        clarification_step_id: str,
-        expected_plan_sha256: str,
-        expected_snapshot_sha256: str,
-        plan: PlanGraph,
-        answer: str,
-        runtime_context: dict[str, Any],
-    ) -> AgentRun | None:
-        """Replace only a pristine planning question, executing only after its run CAS wins."""
-        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
-        from app.application.agent_orchestrator.clarification import is_planning_clarification
-        from app.application.agent_orchestrator.runtime_context import merge_runtime_context
-        from app.application.workflow.workflow_types import plan_fingerprint
-
-        run = self._repo.get(run_id)
-        if run is None or run.user_id != answered_by or not str(answer).strip():
-            return None
-        waiting = find_waiting_step(run, approved_step_id=clarification_step_id)
-        previous_plan = plan_from_dict(run.metadata.get("plan"))
-        if (
-            waiting is None
-            or not is_planning_clarification(run, waiting)
-            or previous_plan is None
-            or plan_fingerprint(previous_plan) != expected_plan_sha256
-            or canonical_hash(run.to_dict()) != expected_snapshot_sha256
-            or plan.metadata.get("planning_rejected")
-        ):
-            return None
-        context = merge_runtime_context(run, runtime_context)
-        if self._preflight_resume_plan(run, context):
-            return None
-        previous = copy.deepcopy(run)
-        replacement = copy.deepcopy(plan)
-        replacement.plan_id = run.plan_id
-        self._apply_plan(run, replacement, stable_step_ids=True)
-        if replacement.metadata.get("response_mode") == "reply":
-            from app.application.agent_orchestrator.reply_plan import valid_reply_plan
-
-            if not valid_reply_plan(run, replacement):
-                return None
-        elif self._preflight_resume_plan(run, context):
-            return None
-        # A validated graph replacement starts a new generation even when the
-        # caller reuses its context. Never accept a caller-supplied generation:
-        # bind it to the original snapshot already verified above and by the CAS.
-        context["_planning_clarification_snapshot"] = expected_snapshot_sha256
-        run.metadata["runtime_context"] = context
-        run.metadata["plan_sha256"] = plan_fingerprint(replacement)
-        run.final_output, run.error = {}, ""
-        apply_ai_budget_metadata(run, context)
-        run.add_event(
-            "run.clarification_resumed",
-            "已将用户答复绑定原任务并重新核对执行计划",
-            {
-                "kind": "planning_scope",
-                "step_id": clarification_step_id,
-                "question": str(waiting.params.get("question") or ""),
-                "answer": str(answer),
-                "previous_plan_sha256": expected_plan_sha256,
-                "plan_sha256": run.metadata["plan_sha256"],
-            },
-        )
-        if not self._repo.save_if_unchanged(run, previous):
-            return None
         self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun", self._repo.save(run))
 
@@ -970,15 +863,11 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         return cast("list[RunEvent]", self._repo.list_events(run_id, after_event_id=after_event_id))
 
     def _apply_plan(self, run: AgentRun, plan: PlanGraph, *, stable_step_ids: bool = False) -> None:
-        from app.application.agent_orchestrator.browser_loop import initialize_browser_run
-
-        browser_error = initialize_browser_run(run, plan)
         self._apply_approval_risk_policy(plan)
         run.plan_id = plan.plan_id
         run.intent = plan.intent
         plan_metadata = dict(plan.metadata or {})
         run.metadata["plan"] = plan_to_dict(plan)
-        self._attach_memory_recall(run, plan_metadata.get("memory_recall"))
         from app.application.workflow.workflow_types import step_plan_nodes
 
         nodes, graph_error = step_plan_nodes(plan)
@@ -994,10 +883,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             for step in run.steps:
                 if step.node_id in required_ids:
                     step.risk = "high"
-        if browser_error or graph_error:
+        if graph_error:
             run.status = "blocked"
-            run.error = browser_error or graph_error or "browser_graph_invalid"
-            run.add_event("planner.blocked", run.error)
+            run.error = graph_error
+            run.add_event("workflow.graph_rejected", run.error)
             return
         self._apply_repair_policy(run, plan_metadata)
         self._attach_artifacts_from_payload(run, plan_metadata, source="plan.metadata")
@@ -1130,14 +1019,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 self._repo.save(run)
                 return
-        from app.application.agent_orchestrator.reply_plan import execute_reply_plan
         from app.application.workflow.planning_graph_policy import validate_required_params
         from app.application.workflow.workflow_types import validate_plan_graph
         from app.application.workflow_registry_app import get_workflow_tool_registry
 
-        if execute_reply_plan(run, plan, runtime_context):
-            self._repo.save(run)
-            return
         registry = get_workflow_tool_registry()
         plan_error = validate_plan_graph(plan) or validate_required_params(plan, registry)
         if plan_error:
@@ -1701,12 +1586,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 run.add_event(
                     "step.skipped", step.error, {"step_id": step.step_id, "node_id": step.node_id}
                 )
-        from app.application.agent_orchestrator.browser_loop import advance_browser_run
-
         if self._apply_requested_control(run):
-            return
-        if advance_browser_run(run, runtime_context, self._usage):
-            self._repo.save(run)
             return
         run.status = "completed"
         self._ingest_confirmed_plan_artifacts(run)
@@ -1721,9 +1601,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "repair_count": run.metadata.get("repair_count", 0),
             "verification": copy.deepcopy(run.metadata.get("verification") or {}),
         }
-        browser = run.metadata.get("browser_loop")
-        if isinstance(browser, dict) and browser.get("phase") == "verified":
-            run.final_output["browser"] = copy.deepcopy(browser.get("result"))
         self._append_llm_summary_to_final_output(run)
         self._remember_run_outcome_for(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)
@@ -1797,21 +1674,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         run.add_event("observation.recorded", f"记录 {step.node_id} 执行观察", observation)
         return observation
 
-    def _plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
-        from app.application.agent_orchestrator.task_context import observe_run_phase
-
-        with observe_run_phase(run, "planning"):
-            return self._planning.plan(run, runtime_context=runtime_context)
-
-    def _recall_knowledge_for_run(self, run: AgentRun, *, context: dict[str, Any]) -> None:
-        return self._planning.recall_knowledge_for_run(run, context=context)
-
-    _attach_memory_recall = staticmethod(RunPlanning.attach_memory_recall)
-
     def _remember_run_outcome_for(self, run: AgentRun) -> None:
-        return self._planning.remember_run_outcome_for(run)
+        return self._knowledge.remember_run_outcome_for(run)
 
-    _run_outcome_summary = staticmethod(RunPlanning.run_outcome_summary)
+    _run_outcome_summary = staticmethod(RunKnowledge.run_outcome_summary)
 
     def _record_tool_usage_entry(self, run: AgentRun, tool_call: ToolCall) -> bool:
         return self._usage.record_tool_usage_entry(run, tool_call)
@@ -1833,11 +1699,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     def _refresh_run_cost_metadata(self, run: AgentRun) -> None:
         return self._usage.refresh_run_cost_metadata(run)
 
-    def _record_repair_llm_call(
-        self, run: AgentRun, step: AgentStep, advice: dict[str, Any]
-    ) -> bool:
-        return self._usage.record_repair_llm_call(run, step, advice)
-
     _refresh_model_usage_metadata = staticmethod(RunUsageLedger.refresh_model_usage_metadata)
 
     def _refresh_llm_metadata(self, run: AgentRun) -> None:
@@ -1857,15 +1718,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         runtime_context: dict[str, Any],
     ) -> bool:
         return self._repair.prepare_repair_or_retry(run, step, runtime_context=runtime_context)
-
-    def _prepare_llm_repair_or_retry(
-        self,
-        run: AgentRun,
-        step: AgentStep,
-        *,
-        runtime_context: dict[str, Any],
-    ) -> bool:
-        return self._repair.prepare_llm_repair_or_retry(run, step, runtime_context=runtime_context)
 
     _coerce_positive_int = staticmethod(RunRepair.coerce_positive_int)
 

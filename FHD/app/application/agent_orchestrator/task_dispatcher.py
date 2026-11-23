@@ -93,6 +93,7 @@ class AgentTaskDispatcher:
         self._coordinator: threading.Thread | None = None
         self._outcome_worker: threading.Thread | None = None
         self._last_outcome_recovery = float("-inf")
+        self._codex_resume_cursor: dict[str, str] = {}
 
     @property
     def instance_id(self) -> str:
@@ -202,6 +203,7 @@ class AgentTaskDispatcher:
                 reconcile_pending_verifications,
             )
             from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
+            from app.infrastructure.codex.receipt_projection import resume_ready_codex_runs
 
             try:
                 reconcile_pending_verifications(
@@ -213,6 +215,14 @@ class AgentTaskDispatcher:
                 reconcile_pending_outcomes(repository=self._run_repo, stopped=self._stop.is_set)
             except RECOVERABLE_ERRORS:
                 logger.warning("enterprise outcome reconciliation remains pending", exc_info=True)
+            try:
+                resume_ready_codex_runs(
+                    repository=self._run_repo,
+                    stopped=self._stop.is_set,
+                    cursor=self._codex_resume_cursor,
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("original Codex continuation remains pending", exc_info=True)
             self._wake.set()
 
         self._outcome_worker = threading.Thread(
@@ -250,6 +260,11 @@ class AgentTaskDispatcher:
         from contextlib import nullcontext
 
         from app.application.agent_orchestrator.business_write_guard import worker_claim_scope
+        from app.application.agent_orchestrator.cross_module_chain import (
+            InjectedTransactionFault,
+            cross_module_ready,
+            execute_claimed_cross_module,
+        )
         from app.application.agent_orchestrator.elt_checkpoint_recovery import (
             EltCheckpointWorkerExited,
         )
@@ -267,16 +282,34 @@ class AgentTaskDispatcher:
         error_code = ""
         state = "failed"
         abandon = False
+        codex_run = False
         effect_token = _open_effect.set((self._execution_repo, execution.run_id, owner_id))
         try:
             orchestrator = self._orchestrator_factory(repository)
             preview = self._run_repo.get(execution.run_id)
-            from app.application.agent_orchestrator.cross_module_chain import (
-                InjectedTransactionFault,
-                cross_module_ready,
-                execute_claimed_cross_module,
-            )
+            if preview is not None and preview.metadata.get("runtime_type") == "codex":
+                from app.infrastructure.codex.queued_runtime import execute_queued_runtime
 
+                codex_run = True
+                if not isinstance(self._run_repo, SQLAlchemyAgentRunRepository):
+                    raise RuntimeError("queued Codex execution requires durable SQL storage")
+                with worker_claim_scope(self._run_repo, execution, owner_id):
+                    result = execute_queued_runtime(self._run_repo, execution, owner_id)
+                state = {
+                    "completed": "succeeded",
+                    "waiting_user": "waiting_approval",
+                    "waiting_approval": "waiting_approval",
+                    "running": "waiting_approval",
+                    "paused": "waiting_approval",
+                    "cancelled": "cancelled",
+                }.get(str(result.get("execution_state") or ""), "failed")
+                if state == "failed":
+                    error_code = (
+                        "needs_verification"
+                        if result.get("reconciliation_required")
+                        else str(result.get("error_code") or "codex_request_failed")
+                    )
+                return
             if preview is not None and cross_module_ready(preview):
                 try:
                     request_id = str(preview.metadata.get("approval_request_id") or "")
@@ -337,11 +370,14 @@ class AgentTaskDispatcher:
             logger.exception("agent task worker failed for run %s", execution.run_id)
             error_code = "worker_execution_failed"
             try:
-                failed_run = self._orchestrator_factory(repository).fail_dispatched_run(
-                    execution.run_id
-                )
-                if failed_run is not None:
-                    state, error_code = dispatched_run_state(failed_run)
+                if codex_run:
+                    error_code = "needs_verification"
+                else:
+                    failed_run = self._orchestrator_factory(repository).fail_dispatched_run(
+                        execution.run_id
+                    )
+                    if failed_run is not None:
+                        state, error_code = dispatched_run_state(failed_run)
             except RECOVERABLE_ERRORS:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:

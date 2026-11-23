@@ -24,6 +24,7 @@ from app.domain.shared_services.tools_workflow_erp_master import (
 )
 from app.domain.shared_services.tools_workflow_excel_ocr import (
     _registered_router_excel_analysis,
+    _registered_router_excel_join_compare,
     _registered_router_excel_vector_index,
     _registered_router_generate_office_document,
     _registered_router_import_excel_to_database,
@@ -212,6 +213,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "kellai": _registered_router_kellai,
         "image_generate": _registered_router_image_generate,
         "excel_analysis": _registered_router_excel_analysis,
+        "excel_join_compare": _registered_router_excel_join_compare,
         "import_excel_to_database": _registered_router_import_excel_to_database,
         "elt_import": _registered_router_elt_import,
         "generate_office_document": _registered_router_generate_office_document,
