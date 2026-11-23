@@ -311,3 +311,43 @@ def select_effective_records(
             "resolution": "review_required",
         })
     return [row for row in eligible if record_key(row) not in withheld], conflicts, unavailable
+
+def relation_write_conflicts(
+    rows: list[dict[str, Any]], candidate: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Find overlapping explicit singleton assertions in one owner transaction.
+
+    An unbounded interval is not evidence of succession. Never pick a winner,
+    merge typed names with IDs, or infer cardinality for a many-valued relation.
+    Historical non-overlapping intervals may coexist.
+    """
+    relation = _relation_key(candidate)
+    if relation is None:
+        return []
+    key, object_key = relation
+    value = candidate["value"]
+    start, end = validity_bounds(value)
+    conflicts: list[dict[str, Any]] = []
+    for row in rows:
+        if not is_recallable_memory(row) or row.get("memory_id") == candidate.get("memory_id"):
+            continue
+        other = _relation_key(row)
+        if other is None or other[0] != key or other[1] == object_key:
+            continue
+        other_value = row["value"]
+        if "one" not in (value.get("relation_cardinality"), other_value.get("relation_cardinality")):
+            continue
+        try:
+            other_start, other_end = validity_bounds(other_value)
+        except ValueError:
+            # Existing invalid intervals cannot safely establish non-overlap.
+            other_start, other_end = None, None
+        if end is not None and other_start is not None and end <= other_start:
+            continue
+        if other_end is not None and start is not None and other_end <= start:
+            continue
+        conflicts.append({
+            "memory_id": str(row["memory_id"]),
+            "revision": int(row.get("revision") or 1),
+        })
+    return sorted(conflicts, key=lambda item: item["memory_id"])
