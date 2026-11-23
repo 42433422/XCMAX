@@ -362,6 +362,11 @@ def invalidate_tool_specs_cache() -> None:
     _TOOL_SPECS_SOURCE = None
 
 
+def snapshot_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
+    """Read the host's last validated catalog without triggering MCP discovery."""
+    return dict(_TOOL_SPECS_CACHE or {})
+
+
 def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
     global _TOOL_SPECS_CACHE, _TOOL_SPECS_SOURCE
     from app.application.agent_orchestrator.tool_spec_data.input_schemas import (
@@ -480,6 +485,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                         "requires_write_approval",
                         "provider_scope",
                         "data_scope",
+                        "result_verification",
                     )
                     if key in action_meta
                 },

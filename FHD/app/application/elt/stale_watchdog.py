@@ -1,4 +1,4 @@
-"""标记租约已失效的 ELT 运行；数据库状态回收不会终止工作线程。"""
+"""Recover stale database ownership; resource cleanup belongs to the owned supervisor."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import cast
 
 from sqlalchemy import Table, case, exists, func, or_, select, update
 
+from app.application.elt.operation_owner import BATCH_KINDS
 from app.db.models.elt import EltRun, EltRunRow
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -51,7 +52,7 @@ def sweep_stale_runs() -> int:
 
     runs = _RUNS.c
     rows = cast("Table", EltRunRow.__table__).c
-    batch = runs.operation_kind.in_(("batch_execute", "batch_rollback"))
+    batch = runs.operation_kind.in_(BATCH_KINDS)
     no_write = (
         (runs.target_type == "abnormal")
         & (runs.operation_kind == "batch_execute")

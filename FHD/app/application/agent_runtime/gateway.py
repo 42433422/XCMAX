@@ -22,6 +22,7 @@ from app.application.agent_orchestrator.run_repository import get_agent_run_repo
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.application.agent_orchestrator.task_context import apply_task_context
+from app.application.agent_orchestrator.task_execution_models import TaskQueueCapacityError
 from app.application.agent_orchestrator.tool_permission import redact
 from app.application.agent_runtime.codex_runtime import run_codex_agent
 from app.application.agent_runtime.configuration import (
@@ -712,6 +713,9 @@ async def run_runtime_task_async(
             except RECOVERABLE_ERRORS:
                 pass  # Preserve cancellation; durable coordinator receipts remain authoritative.
         raise
+    except TaskQueueCapacityError as exc:
+        result = _failure(exc.code, str(exc), run_id=resolved_id)
+        result.update(exc.result(), failure_stage="queue_admission", execution_state="blocked")
     except (AgentModAuthorizationError, RuntimePolicyError, CodexBindingError) as exc:
         result = _failure(
             getattr(exc, "code", "runtime_policy_blocked"), str(exc), run_id=resolved_id

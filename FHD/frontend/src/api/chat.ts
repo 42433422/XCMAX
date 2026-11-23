@@ -190,7 +190,7 @@ export const chatApi = {
     return api.post<ApiResponse<{ deleted: number }>>('/api/conversations/sessions/clear', data)
   },
 
-  getConversation(sessionId: string, params: { limit?: number; before_id?: number; turn_id?: string } = {}): Promise<ApiResponse<ChatSession>> {
+  getConversation(sessionId: string, params: { limit?: number; before_id?: number; after_id?: number; through_id?: number; turn_id?: string } = {}): Promise<ApiResponse<ChatSession>> {
     return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`, params, { timeoutMs: 20_000, cache: 'no-store' })
   },
 

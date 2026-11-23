@@ -336,6 +336,7 @@ def reverify_run(
     # action must not require replaying or accepting those other steps.
     from app.application.agent_orchestrator.verification_cognition import plan_admission_receipt
     from app.application.agent_orchestrator.verification_kellai import can_observe_kellai_delivery
+    from app.application.tools.mcp.verification import can_observe_unknown
 
     calls = [
         call
@@ -353,6 +354,7 @@ def reverify_run(
             )
         )
         or can_observe_kellai_delivery(run, steps[call.step_id], call)
+        or can_observe_unknown(run, steps[call.step_id], call)
     ]
     if not calls:
         raise VerificationRecoveryError(
@@ -360,7 +362,7 @@ def reverify_run(
         )
     unknown_delivery = any(
         can_observe_kellai_delivery(run, steps[call.step_id], call) for call in calls
-    )
+    ) or any(can_observe_unknown(run, steps[call.step_id], call) for call in calls)
     proof = (
         _stopped_queue_proof(
             repository,

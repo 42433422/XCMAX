@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import copy_context
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from threading import Event, Thread
 from time import monotonic
@@ -33,7 +33,10 @@ logger = logging.getLogger(__name__)
 LEASE_SECONDS = 300
 _SESSION_KEY = "elt_operation_owner"
 _SKIP_FENCE = "elt_internal_owner_dml"
-BATCH_KINDS = frozenset({"batch_execute", "batch_rollback"})
+# An owned process can disappear after dispatch but before its receipt. Its
+# lease must not authorize a replacement, including transactional row adapters.
+OWNED_EXECUTE = "owned_execute"
+BATCH_KINDS = frozenset({"batch_execute", "batch_rollback", OWNED_EXECUTE})
 TRANSACTION_ERRORS: tuple[type[Exception], ...] = (SQLAlchemyError, *RECOVERABLE_ERRORS)
 _RUN_TABLE = cast("Table", EltRun.__table__)
 _ROW_RECEIPT_FIELDS = (
@@ -206,14 +209,21 @@ def claim_operation(
 
 def activate_operation(db: Session, run: EltRun, kind: str, token: str) -> OperationOwner:
     owner = OperationOwner(run.id, run.owner_user_id, tenant_id_for_write(), kind, token)
-    queued_kind = "execute_queue" if kind in {"execute", "batch_execute"} else "preview_queue"
+    queued_kind = (
+        "execute_start"
+        if kind == OWNED_EXECUTE
+        else "execute_queue"
+        if kind in {"execute", "batch_execute"}
+        else "preview_queue"
+    )
+    queued_kinds = {queued_kind, "preview_start"} if kind == "preview" else {queued_kind}
     result = _dml(
         db,
         update(_RUN_TABLE)
         .where(
             *_scope(owner),
             _RUN_TABLE.c.operation_token == token,
-            _RUN_TABLE.c.operation_kind == queued_kind,
+            _RUN_TABLE.c.operation_kind.in_(queued_kinds),
             _RUN_TABLE.c.operation_lease_until > _clock(db),
         )
         .values(operation_kind=kind, operation_lease_until=_expiry(db)),
@@ -223,6 +233,25 @@ def activate_operation(db: Session, run: EltRun, kind: str, token: str) -> Opera
             "ELT_OPERATION_LEASE_LOST", "任务已被其他 worker 领取或执行权已失效，已停止重复执行"
         )
     return owner
+
+
+def freeze_background_operation(db: Session, owner: OperationOwner) -> OperationOwner:
+    """Only one server process may dispatch this queued token to an owned child."""
+    kind = "execute_start" if owner.kind == "execute_queue" else "preview_start"
+    result = _dml(
+        db,
+        update(_RUN_TABLE)
+        .where(
+            *_scope(owner),
+            _RUN_TABLE.c.operation_token == owner.token,
+            _RUN_TABLE.c.operation_kind == owner.kind,
+            _RUN_TABLE.c.operation_lease_until > _clock(db),
+        )
+        .values(operation_kind=kind, operation_lease_until=_expiry(db)),
+    )
+    if result.rowcount != 1:
+        raise EltConflict("ELT_RUN_BUSY", "任务已提交或执行权已失效，已停止重复提交")
+    return replace(owner, kind=kind)
 
 
 def bind_owner(db: Session, owner: OperationOwner) -> None:
@@ -308,6 +337,7 @@ def fail_operation(
     message: str,
     outcome_unknown: bool = False,
     receipt_json: str | None = None,
+    not_started: bool = False,
 ) -> bool:
     """A stale worker may never overwrite a replacement owner's status or token."""
     db.rollback()
@@ -343,7 +373,11 @@ def fail_operation(
         _audit_terminal_failure(
             db,
             owner,
-            outcome="outcome_unknown" if outcome_unknown else "failed",
+            outcome="outcome_unknown"
+            if outcome_unknown
+            else "not_started"
+            if not_started
+            else "failed",
             code=values["error_code"],
         )
     db.commit()

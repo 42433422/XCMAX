@@ -337,7 +337,12 @@ def test_preview_ready_and_owner_release_are_published_in_one_transaction(
 
 
 def test_rejected_preview_submission_releases_process_registration(preview_store, monkeypatch):
-    run_id = "rejected-preview-submission"
+    run_id = create_preview(preview_store)
+    wait_for_job(preview_store)
+    with preview_store.factory() as db:
+        run = db.get(EltRun, run_id)
+        run.status = run.stage = "queued"
+        db.commit()
 
     def reject_submission(*_args, **_kwargs):
         raise RuntimeError("executor unavailable")

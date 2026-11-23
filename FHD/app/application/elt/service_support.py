@@ -29,9 +29,8 @@ READ_ONLY_MODE = 0o400
 ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION = "ELT_SHIPMENT_DOCUMENT_TEMPLATE"
 
 
-# 预演与执行共用这个池。批量导入时文件多，线程太少会让执行排在预演后面，
-# 表现为「状态 executing 但进度一直是 0」。这里保留余量，避免个别卡死任务
-# 占满全部槽位；stale_watchdog 只标记失效运行，不会终止工作线程。
+# Threads only supervise owned child processes. Admission in service_background
+# bounds all submitted work and reserves capacity for confirmed executions.
 def _executor_workers() -> int:
     raw = str(os.environ.get("ELT_EXECUTOR_WORKERS") or "12").strip()
     try:
@@ -40,7 +39,8 @@ def _executor_workers() -> int:
         return 12
 
 
-EXECUTOR = ThreadPoolExecutor(max_workers=_executor_workers(), thread_name_prefix="fhd-etl")
+EXECUTOR_WORKERS = _executor_workers()
+EXECUTOR = ThreadPoolExecutor(max_workers=EXECUTOR_WORKERS, thread_name_prefix="fhd-etl")
 SUBMITTED: set[str] = set()
 SUBMITTED_LOCK = threading.Lock()
 SENSITIVE_WEBHOOK_HEADER_PARTS = (

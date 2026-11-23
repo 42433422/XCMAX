@@ -127,6 +127,7 @@ import { useImSounds } from '@/composables/useImSounds'
 import { showAppToast } from '@/composables/useAppToast'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { captureAuthSession } from '@/utils/authSessionCache'
 import { useChatSession } from '@/composables/messenger/useChatSession'
 import { useContactPicker } from '@/composables/messenger/useContactPicker'
 import { useConversationList } from '@/composables/messenger/useConversationList'
@@ -439,9 +440,13 @@ async function startChatWith(contact: ImContact): Promise<void> {
   }
 }
 
-async function resolveLocalUserId(): Promise<number | null> {
+const initialization = new AbortController()
+let disposed = false
+
+async function resolveLocalUserId(isCurrent: () => boolean): Promise<number | null> {
   try {
-    const me = await authApi.getCurrentUser()
+    const me = await authApi.getCurrentUser({ signal: initialization.signal })
+    if (!isCurrent()) return null
     const data = me?.data as CurrentUserPayload | undefined
     isAdminCustomerServiceConsole.value = Boolean(!isDesktopShell() && data?.account_kind === 'admin' && data?.market_is_admin)
     const id = Number(data?.user?.id)
@@ -535,17 +540,21 @@ function knownLocalUserId(): number | null {
 }
 
 onMounted(() => {
+  const currentSession = captureAuthSession()
+  const isCurrent = () => !disposed && !initialization.signal.aborted && currentSession()
   const knownId = knownLocalUserId()
   if (knownId) localUserId.value = knownId
   const contactsPromise = loadContacts()
-  const identityPromise = resolveLocalUserId()
+  const identityPromise = resolveLocalUserId(isCurrent)
   void (async () => {
     if (!localUserId.value || !isDesktopShell()) {
       const id = await identityPromise
+      if (!isCurrent()) return
       if (id) localUserId.value = id
     } else {
-      void identityPromise.then((id) => { if (id) localUserId.value = id })
+      void identityPromise.then((id) => { if (isCurrent() && id) localUserId.value = id })
     }
+    if (!isCurrent()) return
     if (!localUserId.value) {
       showAppToast('请先登录后使用信息功能', 'warning')
       return
@@ -568,6 +577,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  disposed = true
+  initialization.abort()
   restoreOverlappingAssistantFloat()
   stopCodexPolling()
   stopCodexTypewriter(true)

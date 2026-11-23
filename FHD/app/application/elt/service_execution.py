@@ -6,7 +6,6 @@ import logging
 import math
 import time
 from contextlib import nullcontext
-from contextvars import copy_context
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -17,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.application.elt.chat_recall import record_import_origin
 from app.application.elt.errors import EltConflict, EltError
 from app.application.elt.operation_owner import (
+    OWNED_EXECUTE,
     TRANSACTION_ERRORS,
     OperationOwner,
     activate_operation,
@@ -40,8 +40,6 @@ from app.application.elt.preview_confirmation import (
 from app.application.elt.service_rollback import RollbackServiceMixin
 from app.application.elt.service_support import (
     EXECUTOR,
-    SUBMITTED,
-    SUBMITTED_LOCK,
     dump_json,
     load_json,
     new_session,
@@ -51,7 +49,7 @@ from app.application.elt.service_support import (
 from app.application.elt.targets import TargetAdapter, get_adapter
 from app.application.elt.targets.batch import AttendanceAdapter
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
-from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
+from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -251,22 +249,19 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         *,
         operation_token: str | None = None,
     ) -> None:
-        with SUBMITTED_LOCK:
-            if run_id in SUBMITTED and operation_token is None:
-                return
-            SUBMITTED.add(run_id)
+        from app.application.elt.service_background import submit_background
 
-        def work() -> None:
-            try:
-                with tenant_scope(tenant_id):
-                    self._execute_worker(
-                        run_id, owner_user_id, valid_rows_only, operation_token=operation_token
-                    )
-            finally:
-                with SUBMITTED_LOCK:
-                    SUBMITTED.discard(run_id)
-
-        EXECUTOR.submit(copy_context().run, work)
+        submit_background(
+            self,
+            kind="execute",
+            run_id=run_id,
+            tenant_id=tenant_id,
+            owner_user_id=owner_user_id,
+            operation_token=operation_token,
+            options={"valid_rows_only": valid_rows_only},
+            executor=EXECUTOR,
+            session_factory=new_session,
+        )
 
     def _execute_worker(
         self,
@@ -275,6 +270,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         valid_rows_only: bool,
         *,
         operation_token: str | None = None,
+        owned_background: bool = False,
     ) -> None:
         db = new_session()
         started_at = time.monotonic()
@@ -292,7 +288,13 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 and getattr(batch_executor, "__func__", batch_executor)
                 is not TargetAdapter.execute_batch
             )
-            kind = "batch_execute" if uses_batch or run.target_type == "knowledge" else "execute"
+            kind = (
+                OWNED_EXECUTE
+                if owned_background
+                else "batch_execute"
+                if uses_batch or run.target_type == "knowledge"
+                else "execute"
+            )
             operation = (
                 activate_operation(db, run, kind, operation_token)
                 if operation_token

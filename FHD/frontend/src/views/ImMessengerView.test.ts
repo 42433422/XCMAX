@@ -159,6 +159,24 @@ describe('ImMessengerView.vue', () => {
     vi.unstubAllEnvs()
   })
 
+  it.each(['resolve', 'reject'])('retires a pending identity request before unmount (%s)', async outcome => {
+    const { authApi } = await import('@/api/auth')
+    const { fetchImConversations, imWebSocketUrl } = await import('@/api/im')
+    let resolve!: (value: never) => void
+    let reject!: (reason: Error) => void
+    vi.mocked(authApi.getCurrentUser).mockImplementationOnce(() => new Promise((yes, no) => { resolve = yes; reject = no }))
+    const wrapper = mount(ImMessengerView, { global: { stubs: { RouterLink: true } } })
+    const signal = vi.mocked(authApi.getCurrentUser).mock.calls.at(-1)?.[0]?.signal
+    wrapper.unmount()
+    expect(signal?.aborted).toBe(true)
+    if (outcome === 'resolve') resolve({ data: { user: { id: 1 } } } as never)
+    else reject(new Error('request cancelled'))
+    await flushPromises()
+    expect(MockWebSocket.instances).toHaveLength(0)
+    expect(imWebSocketUrl).not.toHaveBeenCalled()
+    expect(fetchImConversations).not.toHaveBeenCalled()
+  })
+
   it('uses the authenticated production CS bridge inside the installed desktop client', async () => {
     const { fetchEnterpriseCsThread, fetchImMessages, sendEnterpriseCsMessage } = await import('@/api/im')
     ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {}

@@ -12,7 +12,7 @@ vi.mock('@/utils/pretext', () => ({ estimateMessageHeight: () => 100 }))
 enableAutoUnmount(afterEach)
 afterEach(() => vi.restoreAllMocks())
 
-function fixture(count = 500) {
+function fixture(count = 500, history: Record<string, unknown> = {}) {
   const messages = ref<ChatMessage[]>(Array.from({ length: count }, (_, i) => ({ role: i % 2 ? 'ai' : 'user', content: `消息 ${i}`, time: '12:00' })))
   const sessionKey = ref('tenant-a/session-a')
   const host = ref<HTMLElement | null>(null)
@@ -25,6 +25,7 @@ function fixture(count = 500) {
       messageHeights: ui.messageHeights.value, latestAiMessageIndex: ui.latestAiMessageIndex.value, playingMsgIdx: -1,
       isMessageCollapsed: ui.isMessageCollapsed, canSpeakMessage: ui.canSpeakMessage,
       onExpandMessage: ui.expandMessage, onCollapseMessage: ui.collapseMessage,
+      ...history,
     })
   } })
   const button = (label: string) => wrapper.findAll('button').find((item) => item.text() === label)!
@@ -33,6 +34,14 @@ function fixture(count = 500) {
 }
 
 describe('bounded chat history and derived content', () => {
+  it('fetches evicted newer/latest pages even when the resident DOM window is already at its end', async () => {
+    const loadNewer = vi.fn().mockResolvedValue(undefined), loadLatest = vi.fn().mockResolvedValue(undefined)
+    const f = fixture(20, { hasLater: true, loadNewer, loadLatest })
+    await f.button('较新消息').trigger('click')
+    expect(loadNewer).toHaveBeenCalledOnce()
+    await f.button('最新消息').trigger('click')
+    expect(loadLatest).toHaveBeenCalledOnce()
+  })
   it('sanitizes only changed content while keeping XSS removal and invalidation', async () => {
     const sanitize = vi.spyOn(DOMPurify, 'sanitize')
     const f = fixture()

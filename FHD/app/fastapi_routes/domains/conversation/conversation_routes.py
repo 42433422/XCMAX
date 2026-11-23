@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -104,11 +105,15 @@ def conversations_get(
     limit: int = Query(default=50, ge=1, le=200),
     before_id: int | None = Query(default=None, ge=1),
     turn_id: str | None = Query(default=None, max_length=256),
+    after_id: Annotated[int | None, Query(ge=1)] = None,
+    through_id: Annotated[int | None, Query(ge=1)] = None,
 ):
     from app.application.ai_chat.conversation_history import apply_history_fault
     from app.application.task_conversation_store import task_conversation_store
     from app.request_active_mod_ctx import get_request_active_mod_id
 
+    if before_id is not None and after_id is not None:
+        raise HTTPException(status_code=422, detail="before_id and after_id are mutually exclusive")
     return apply_history_fault(
         task_conversation_store.get_history(
             session_id=session_id.strip(),
@@ -116,6 +121,8 @@ def conversations_get(
             mod_id=get_request_active_mod_id() or "",
             limit=limit,
             before_id=before_id,
+            after_id=after_id,
+            through_id=through_id,
             turn_id=turn_id,
         )
     )

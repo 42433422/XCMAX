@@ -9,10 +9,12 @@ import os
 import socket
 import subprocess
 import sys
+import time
 import zipfile
 from copy import deepcopy
 from pathlib import Path
 
+import psutil
 import pytest
 from openpyxl import Workbook
 
@@ -518,5 +520,14 @@ def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
     with pytest.raises(subprocess.TimeoutExpired):
         replay._run_worker({}, tmp_path, dict(os.environ), timeout=1)
     child = int(pid_file.read_text())
-    state = Path(f"/proc/{child}/stat")
-    assert not state.exists() or state.read_text().split()[2] == "Z"
+    deadline = time.monotonic() + 2
+    while True:
+        try:
+            state = psutil.Process(child).status()
+        except psutil.NoSuchProcess:
+            break
+        if state in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD}:
+            break
+        if time.monotonic() >= deadline:
+            pytest.fail(f"descendant {child} survived worker timeout with status {state}")
+        time.sleep(0.02)

@@ -8,7 +8,7 @@ import os
 import random
 import threading
 import weakref
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import cast
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
@@ -18,11 +18,18 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 from app.application.agent_orchestrator.task_execution_models import (
+    ADMITTED_STATES,
     AgentTaskExecution,
     ExecutionState,
+    TaskDispatchLimits,
     TaskExecutionRepository,
+    TaskQueueCapacityError,
     _deadline,
     _task_id_of,
+    dispatch_capacity_allows,
+    dispatch_order_key,
+    dispatch_tenant,
+    freeze_dispatch_policy,
 )
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
@@ -58,8 +65,14 @@ class InMemoryTaskExecutionRepository:
         fingerprint: str = "",
     ) -> AgentTaskExecution:
         now = utc_now_iso()
+        from app.application.agent_orchestrator.tool_spec import snapshot_tool_specs_v2
+
+        policy = freeze_dispatch_policy(run, snapshot_tool_specs_v2())
         with self._lock:
-            if idempotency_key:
+            if (
+                idempotency_key
+                and ("agent", tenant_id_of_run(run), idempotency_key) in self._book.idem
+            ):
                 prior = self._book.claim_key(
                     "agent",
                     tenant_id_of_run(run),
@@ -93,12 +106,29 @@ class InMemoryTaskExecutionRepository:
                 row.state, retryable=retryable
             ):
                 return copy.deepcopy(row)
+            if run.run_id not in self._rows or row.state not in ADMITTED_STATES:
+                limits = TaskDispatchLimits.configured()
+                admitted = [item for item in self._rows.values() if item.state in ADMITTED_STATES]
+                if len(admitted) >= limits.admitted:
+                    raise TaskQueueCapacityError("global")
+                if (
+                    sum(dispatch_tenant(item) == dispatch_tenant(row) for item in admitted)
+                    >= limits.tenant_admitted
+                ):
+                    raise TaskQueueCapacityError("tenant")
+            if idempotency_key:
+                self._book.claim_key(
+                    "agent", row.tenant_id, idempotency_key, fingerprint or run.message, run.run_id
+                )
             if row.state not in LEASED_STATES:
                 row.state = "queued"
                 row.lease_owner = ""
                 row.lease_expires_at = ""
                 row.heartbeat_at = ""
                 row.finished_at = ""
+                self._book.get("agent", row.tenant_id, row.run_id)["dispatch_policy"] = policy
+                row.dispatch_class = str(policy["class"])
+                row.dispatch_deadline_seconds = int(policy.get("deadline_seconds") or 0)
             row.priority = int(priority)
             row.available_at = now
             row.requested_by = str(requested_by or "")
@@ -143,13 +173,31 @@ class InMemoryTaskExecutionRepository:
         now: str | None = None,
         run_id: str | None = None,
         tenant_id: str | None = None,
+        interactive_only: bool = False,
     ) -> AgentTaskExecution | None:
         current = str(now or utc_now_iso())
         wanted = str(run_id or "")
+        from app.application.agent_orchestrator.tool_spec import snapshot_tool_specs_v2
+
+        specs = snapshot_tool_specs_v2()
         with self._lock:
             from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 
             self._expire_approvals_locked(current)
+            limits = TaskDispatchLimits.configured()
+            active = [
+                row
+                for row in self._rows.values()
+                if row.state in LEASED_STATES and row.lease_expires_at > current
+            ]
+            last_served: dict[str, str] = {}
+            aged_before = (
+                datetime.fromisoformat(current) - timedelta(seconds=limits.aging_seconds)
+            ).isoformat()
+            for row in self._rows.values():
+                if row.execution_count and row.updated_at >= aged_before:
+                    key = dispatch_tenant(row)
+                    last_served[key] = max(last_served.get(key, ""), row.updated_at)
             eligible = [
                 row
                 for row in self._rows.values()
@@ -168,11 +216,31 @@ class InMemoryTaskExecutionRepository:
             if not eligible:
                 return None
             eligible.sort(
-                key=lambda row: (row.priority, row.available_at, row.created_at, row.run_id)
+                key=lambda row: dispatch_order_key(row, active, last_served, current, limits)
             )
             for row in eligible:
                 recovered = row.state in LEASED_STATES
                 body = self._book.get("agent", row.tenant_id, row.run_id)
+                if row.dispatch_class == "interactive":
+                    policy = body.get("dispatch_policy") or {}
+                    spec = (
+                        specs.get(
+                            (str(policy.get("tool_id") or ""), str(policy.get("action") or ""))
+                        )
+                        if isinstance(policy, dict)
+                        else None
+                    )
+                    if (
+                        spec is None
+                        or spec.schema_digest != policy.get("contract_sha256")
+                        or row.dispatch_deadline_seconds > limits.interactive_seconds
+                    ):
+                        row.dispatch_class, row.dispatch_deadline_seconds = "background", 0
+                        body["dispatch_policy"] = {"class": "background"}
+                if (
+                    interactive_only and row.dispatch_class != "interactive"
+                ) or not dispatch_capacity_allows(active, row, limits):
+                    continue
                 if recovered and body.get("effects"):
                     self._stop_locked(row, current, "unknown", "needs_verification")
                     continue

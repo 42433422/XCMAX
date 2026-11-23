@@ -141,10 +141,17 @@ def configure_desktop_environment(
                     os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
             elif marker.exists():
                 os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
+            elif recovery["action"] == "unavailable":
+                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "unavailable"
             else:
                 os.environ.pop("XCAGI_DESKTOP_DB_RECOVERY", None)
         except RECOVERABLE_ERRORS as exc:
-            logging.getLogger(__name__).warning("recover_if_corrupt failed (non-fatal): %s", exc)
+            os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "unavailable"
+            logging.getLogger(__name__).warning("database check unavailable: %s", exc)
+        if os.environ.get("XCAGI_DESKTOP_DB_RECOVERY") == "unavailable":
+            raise RuntimeError(
+                "desktop database check unavailable; retry after storage becomes available"
+            )
     os.environ.setdefault("DATABASE_PATH", str(dirs["data"]))
     # 考勤模板 424/… 与上传输出均相对工作区根；桌面默认=userData
     os.environ.setdefault("WORKSPACE_ROOT", str(root))

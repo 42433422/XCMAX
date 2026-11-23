@@ -949,3 +949,64 @@ def test_customer_evidence_preserves_authorized_full_name_only(store, monkeypatc
         actor_id="42", tenant_id="3", permissions=frozenset({"customer.view"})
     )
     assert "chat_customer_evidence" not in prepare_chat_evidence(object(), context, "验收客户甲")
+
+
+@pytest.mark.parametrize("entrypoint", ["native", "compat"])
+def test_history_http_keyset_replays_both_directions_with_stable_snapshot(
+    store, monkeypatch, entrypoint
+):
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes.domains.conversation.conversation_routes import router as native
+    from app.legacy.routes.conversation.compat_extra import router as compat
+
+    actor = SimpleNamespace(id=41)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user", lambda _: actor
+    )
+    ids = [
+        store.save_message(session_id="window", user_id=41, role="ai", content=f"row {index}")
+        for index in range(6)
+    ]
+    app = FastAPI()
+    app.include_router(
+        native if entrypoint == "native" else compat,
+        prefix="" if entrypoint == "native" else "/api",
+    )
+    with TestClient(app) as client:
+        url = "/api/conversations/window"
+        latest = client.get(url, params={"limit": 2}).json()
+        assert [row["id"] for row in latest["messages"]] == ids[-2:]
+        snapshot = latest["snapshot_latest_id"]
+        appended = store.save_message(
+            session_id="window", user_id=41, role="ai", content="arrived later"
+        )
+        older = client.get(
+            url, params={"limit": 2, "before_id": ids[-2], "through_id": snapshot}
+        ).json()
+        assert [row["id"] for row in older["messages"]] == ids[2:4]
+        newer = client.get(
+            url, params={"limit": 2, "after_id": ids[3], "through_id": snapshot}
+        ).json()
+        assert [row["id"] for row in newer["messages"]] == ids[4:]
+        assert newer["has_more"] is False
+        assert newer["snapshot_latest_id"] == appended
+        assert (
+            client.get(url, params={"after_id": ids[-1], "through_id": snapshot}).json()["messages"]
+            == []
+        )
+        assert [
+            row["id"] for row in client.get(url, params={"after_id": ids[-1]}).json()["messages"]
+        ] == [appended]
+        assert client.get(url, params={"before_id": ids[-1], "after_id": ids[0]}).status_code == 422
+        assert client.get(url, params={"through_id": 0}).status_code == 422
+        actor.id = 42
+        assert (
+            client.get(
+                url, params={"after_id": ids[0], "through_id": snapshot, "user_id": "41"}
+            ).json()["messages"]
+            == []
+        )
