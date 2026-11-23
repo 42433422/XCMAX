@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from scripts.release.verify_desktop_soak import verify_bundle
+from scripts.release.verify_desktop_soak import PLATFORMS, runner_labels, verify_bundle
 
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 REPORT_FILENAMES = (
@@ -114,7 +114,7 @@ def _native_jobs(api, route: str, run: dict, start: datetime, end: datetime) -> 
     ):
         raise ValueError("desktop_soak: incomplete original native job listing")
     jobs = {}
-    for platform in ("windows", "macos"):
+    for platform in PLATFORMS:
         matches = [row for row in rows if row.get("name") == f"Desktop soak ({platform})"]
         if len(matches) != 1:
             raise ValueError(f"desktop_soak: {platform} original job missing or ambiguous")
@@ -131,8 +131,7 @@ def _native_jobs(api, route: str, run: dict, start: datetime, end: datetime) -> 
             and row["runner_id"] > 0
             and isinstance(row.get("runner_name"), str)
             and row["runner_name"]
-            and {"self-hosted", "xcagi-physical", platform}
-            <= {str(label).lower() for label in labels}
+            and runner_labels(platform) <= {str(label).lower() for label in labels}
             and start <= _stamp(row.get("started_at")) <= _stamp(row.get("completed_at")) <= end
         ):
             raise ValueError(f"desktop_soak: {platform} original registered-device job mismatch")
@@ -147,8 +146,8 @@ def _native_jobs(api, route: str, run: dict, start: datetime, end: datetime) -> 
                 "completed_at",
             )
         }
-    if jobs["windows"]["runner_id"] == jobs["macos"]["runner_id"]:
-        raise ValueError("desktop_soak: two distinct registered native runners are required")
+    if len({row["runner_id"] for row in jobs.values()}) != len(PLATFORMS):
+        raise ValueError("desktop_soak: three distinct registered native runners are required")
     return jobs
 
 
@@ -278,8 +277,7 @@ def collect_source_artifact(
     if label == "desktop_soak":
         evidence["native_jobs"] = _native_jobs(api, route, run, start, end)
         evidence["reports"] = {
-            platform: _digest(output_dir / label / f"{platform}.json")
-            for platform in ("windows", "macos")
+            platform: _digest(output_dir / label / f"{platform}.json") for platform in PLATFORMS
         }
     latest = api(route)
     if any(
@@ -525,7 +523,7 @@ def build_reports(
                 desktop_soak_dir / f"{platform}.json",
                 {"schema": "xcagi.desktop_soak/v1"},
             )
-            for platform in ("windows", "macos")
+            for platform in PLATFORMS
             if desktop_soak_dir and (desktop_soak_dir / f"{platform}.json").is_file()
         ],
     }

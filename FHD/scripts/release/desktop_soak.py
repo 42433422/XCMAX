@@ -3,13 +3,15 @@
 
 Playwright drives the real renderer; psutil observes only this launch's process
 tree. Raw measurements are checkpointed even on failure. The independent
-verifier, not this producer, decides whether the two platforms qualify.
+verifier, not this producer, decides whether all three native targets qualify.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import ctypes
+import errno
 import hashlib
 import json
 import math
@@ -28,10 +30,13 @@ from pathlib import Path
 import httpx
 import psutil
 from verify_desktop_soak import (
+    ARCHITECTURES,
     MAX_HANDLES,
     MAX_RENDERER_EVENTS,
     MAX_RSS_BYTES,
     MIN_DURATION_SECONDS,
+    PLATFORMS,
+    native_architecture,
     verify_platform,
 )
 
@@ -63,6 +68,57 @@ def free_port() -> int:
         return listener.getsockname()[1]
 
 
+def executable_architecture(binary: Path, system: str) -> str:
+    """Read the native machine field; macOS uses the existing frozen-pair check."""
+    with binary.open("rb") as stream:
+        header = stream.read(64)
+        if system == "Windows" and len(header) == 64 and header[:2] == b"MZ":
+            offset = int.from_bytes(header[60:64], "little")
+            if not 64 <= offset <= binary.stat().st_size - 6:
+                raise ValueError("native_executable_header_invalid")
+            stream.seek(offset)
+            header = stream.read(6)
+            if header[:4] == b"PE\x00\x00":
+                architecture = {0x8664: "x64", 0xAA64: "arm64"}.get(
+                    int.from_bytes(header[4:6], "little")
+                )
+                if architecture:
+                    return architecture
+        elif (
+            system == "Darwin"
+            and len(header) >= 8
+            and int.from_bytes(header[:4], "little") == 0xFEEDFACF
+        ):
+            architecture = {0x1000007: "x64", 0x100000C: "arm64"}.get(
+                int.from_bytes(header[4:8], "little")
+            )
+            if architecture:
+                return architecture
+    raise ValueError("native_executable_header_invalid")
+
+
+def rosetta_translated() -> bool:
+    """Query this process, not a native sysctl subprocess launched by Rosetta."""
+    query = ctypes.CDLL(None, use_errno=True).sysctlbyname
+    query.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_size_t),
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    value = ctypes.c_int()
+    size = ctypes.c_size_t(ctypes.sizeof(value))
+    if query(b"sysctl.proc_translated", ctypes.byref(value), ctypes.byref(size), None, 0) == -1:
+        if ctypes.get_errno() == errno.ENOENT:
+            return False  # Apple's native Intel compatibility case.
+        raise ValueError("native_translation_status_unavailable")
+    if size.value != ctypes.sizeof(value) or value.value not in (0, 1):
+        raise ValueError("native_translation_status_invalid")
+    return value.value == 1
+
+
 def artifact_identity(binary: Path, release_sha: str, version: str) -> tuple[dict, Path]:
     resources = (
         binary.parent.parent / "Resources"
@@ -80,6 +136,12 @@ def artifact_identity(binary: Path, release_sha: str, version: str) -> tuple[dic
     backend = next((candidate for candidate in candidates if candidate.is_file()), None)
     if backend is None:
         raise ValueError("packaged_backend_missing")
+    architecture = native_architecture(platform.machine())
+    if architecture is None or any(
+        executable_architecture(path, platform.system()) != architecture
+        for path in (binary, backend)
+    ):
+        raise ValueError("installed_native_architecture_mismatch")
     return {
         "executable_sha256": digest(binary),
         "build_info_sha256": digest(identity),
@@ -87,6 +149,7 @@ def artifact_identity(binary: Path, release_sha: str, version: str) -> tuple[dic
         "backend_sha256": digest(backend),
         "build_sha": release_sha,
         "version": version,
+        "architecture": architecture,
     }, backend
 
 
@@ -601,7 +664,15 @@ async def run(args) -> int:
         KeyboardInterrupt,
         asyncio.CancelledError,
     )
-    native = {"Windows": "windows", "Darwin": "macos"}.get(platform.system(), "unsupported")
+    native = next(
+        (
+            target
+            for target, system in PLATFORMS.items()
+            if system == platform.system()
+            and ARCHITECTURES[target] == native_architecture(platform.machine())
+        ),
+        "unsupported",
+    )
     report = {
         "schema": "xcagi.desktop_soak/v1",
         "platform": native,
@@ -632,6 +703,12 @@ async def run(args) -> int:
     try:
         if native == "unsupported":
             raise ValueError("native_windows_or_macos_required")
+        if getattr(args, "platform", None) not in (None, native):
+            raise ValueError("requested_native_target_mismatch")
+        if platform.system() == "Darwin":
+            report["machine"]["rosetta_translated"] = rosetta_translated()
+            if report["machine"]["rosetta_translated"]:
+                raise ValueError("native_macos_execution_required")
         if (
             not math.isfinite(args.duration_seconds)
             or not math.isfinite(args.interval_seconds)
@@ -765,6 +842,7 @@ def main() -> int:
     parser.add_argument("--binary", type=lambda value: Path(value).resolve(), required=True)
     parser.add_argument("--release-sha", required=True)
     parser.add_argument("--product-version", required=True)
+    parser.add_argument("--platform", choices=PLATFORMS)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--duration-seconds", type=float, default=28800)
     parser.add_argument("--interval-seconds", type=float, default=30)

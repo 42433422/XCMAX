@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from datetime import UTC, date, datetime, timedelta
@@ -19,23 +18,11 @@ from collect_slo_metrics import (
     SCRAPE_TARGETS,
     TARGETS,
     _numeric,
+    load_evidence_chain,
     meets_target,
     scrape_errors,
     telemetry_admissible,
 )
-
-
-def _canonical(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def _record_hash_is_valid(payload: dict[str, Any]) -> bool:
-    candidate = dict(payload)
-    expected = str(candidate.pop("evidence_hash", ""))
-    candidate.pop("chain_hash", None)
-    candidate.pop("all_pass", None)
-    actual = hashlib.sha256(_canonical(candidate).encode()).hexdigest()
-    return bool(expected and expected == actual)
 
 
 def _timestamp(value: Any) -> datetime | None:
@@ -51,46 +38,16 @@ def _day(payload: dict[str, Any]) -> date | None:
     return stamp.date() if stamp is not None else None
 
 
-def _load_records(evidence_dir: Path) -> tuple[list[dict[str, Any]], list[str], str]:
-    blockers: list[str] = []
-    records: list[dict[str, Any]] = []
-    pending: list[tuple[Path, dict[str, Any]]] = []
-    previous_hash = "0" * 64
-    for path in sorted(evidence_dir.glob("*.json")):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, TypeError, ValueError):
-            blockers.append(f"{path.name}:invalid_json")
-            continue
-        if not isinstance(payload, dict) or not _record_hash_is_valid(payload):
-            blockers.append(f"{path.name}:invalid_evidence_hash")
-            continue
-        if (
-            payload.get("schema") != "xcagi.production_slo_evidence/v1"
-            or payload.get("environment") != "production"
-            or _day(payload) is None
-        ):
-            blockers.append(f"{path.name}:invalid_production_record")
-        pending.append((path, payload))
-    # Concurrent/backfilled collections may publish in a different order from
-    # their filenames. Follow the committed hash links, rejecting forks/gaps.
-    while pending:
-        successors = [
-            item for item in pending if item[1].get("previous_chain_hash") == previous_hash
-        ]
-        if len(successors) != 1:
-            blockers.append("forked_hash_chain" if successors else "broken_hash_chain")
-            break
-        path, payload = successors[0]
-        pending.remove(successors[0])
-        expected_chain = hashlib.sha256(
-            f"{previous_hash}:{payload['evidence_hash']}".encode()
-        ).hexdigest()
-        if payload.get("chain_hash") != expected_chain:
-            blockers.append(f"{path.name}:invalid_chain_hash")
-        previous_hash = str(payload.get("chain_hash") or "")
-        records.append(payload)
-    return records, blockers, previous_hash
+def _audit_summary(epoch: str, audit: dict[str, Any] | None) -> dict[str, Any] | None:
+    if audit is None:
+        return None
+    return {
+        "epoch": epoch,
+        "reason": audit["reason"],
+        "record_count": audit["record_count"],
+        "forks": audit["forks"],
+        "tips": audit["tips"],
+    }
 
 
 def _metric_errors(payload: dict[str, Any]) -> list[str]:
@@ -129,7 +86,7 @@ def verify_window(
     if required_days <= 0 or not release_id:
         raise ValueError("a release identity and positive observation length are required")
     observed_at = observed_at.astimezone(UTC)
-    records, blockers, previous_hash = _load_records(evidence_dir)
+    records, blockers, previous_hash, epoch, audit = load_evidence_chain(evidence_dir)
 
     latest_by_day: dict[date, dict[str, Any]] = {}
     for payload in records:
@@ -197,6 +154,7 @@ def verify_window(
         "day_n": continuous[-1].isoformat() if continuous else "",
         "blockers": blockers,
         "chain_tip": previous_hash,
+        "legacy_chain_audit": _audit_summary(epoch, audit),
     }
 
 
@@ -210,7 +168,7 @@ def observation_ledger(
     if observed_at.tzinfo is None:
         raise ValueError("observation time must include a timezone")
     end = observed_at.astimezone(UTC).date()
-    records, gaps, _chain_tip = _load_records(evidence_dir)
+    records, gaps, _chain_tip, epoch, audit = load_evidence_chain(evidence_dir)
     by_day: dict[date, list[dict[str, Any]]] = {}
     for payload in records:
         day = _day(payload)
@@ -220,7 +178,13 @@ def observation_ledger(
                 continue
             by_day.setdefault(day, []).append(payload)
     if not by_day:
-        return {"passed": False, "days": [], "gaps": gaps + ["no_evidence"], "retention": None}
+        return {
+            "passed": False,
+            "days": [],
+            "gaps": gaps + ["no_evidence"],
+            "retention": None,
+            "legacy_chain_audit": _audit_summary(epoch, audit),
+        }
     entries: list[dict[str, Any]] = []
     for offset in range(days - 1, -1, -1):
         day = end - timedelta(days=offset)
@@ -268,6 +232,7 @@ def observation_ledger(
         "days": entries,
         "gaps": sorted(set(gaps)),
         "retention": retention,
+        "legacy_chain_audit": _audit_summary(epoch, audit),
     }
 
 

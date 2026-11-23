@@ -6,6 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook
 
 from app.application.elt.customer_excel_gate import (
@@ -360,3 +361,103 @@ def test_rows_without_destination_fail_the_gate(tmp_path, monkeypatch):
     assert report["status"] == "FAIL"
     assert report["checks"]["B31-16"] == "fail"
     assert any("没有去向" in note for note in report["notes"])
+    assert report["checks"]["B31-35"] == "not_tested"
+    assert not list(tmp_path.glob("**/*.sqlite"))
+
+
+def _synthetic_daily_book(path, *, sheets=1, wide=False):
+    book = Workbook()
+    columns = (0, 26, 27, 28, 29) if wide else range(5)
+    for index in range(sheets):
+        sheet = book.active if index == 0 else book.create_sheet()
+        sheet.title = f"业务{index + 1}"
+        for values in (
+            ("姓名", "工号", "日期", "上班1打卡时间", "下班1打卡时间"),
+            ("测试甲", f"E{index}", "2026-03-02", "2026-03-02 08:00", "2026-03-02 17:30"),
+        ):
+            line = [None] * (max(columns) + 1)
+            for column, value in zip(columns, values):
+                line[column] = value
+            sheet.append(line)
+    book.save(path)
+    book.close()
+
+
+@pytest.mark.parametrize(
+    ("oracle", "failed_check"),
+    [
+        ({"sha256": "0" * 64}, "B31-02"),
+        ({"regions": [{"sheet": "业务1", "range": "A9:E9"}]}, "B31-07"),
+    ],
+)
+def test_failed_source_checks_prevent_persistence(tmp_path, monkeypatch, oracle, failed_check):
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    path = tmp_path / "unit-attendance.xlsx"
+    _synthetic_daily_book(path)
+    report = evaluate_workbook(
+        path,
+        {"version": "test", "task_id": "source-failure", "confirmed": True, **oracle},
+        data_dir=tmp_path / "gate",
+        evidence_class="unit_test",
+    )
+    assert report["checks"][failed_check] == "fail"
+    assert report["checks"]["B31-35"] == "not_tested"
+    assert not list(tmp_path.glob("**/*.sqlite"))
+
+
+def test_wide_multisheet_slices_match_original_coordinates(tmp_path):
+    from app.application.elt.parsers import parse_file
+
+    path = tmp_path / "unit-attendance.xlsx"
+    _synthetic_daily_book(path, sheets=2, wide=True)
+    dataset = parse_file(path, target_type="attendance")
+    assert len(dataset.rows) == 2
+    assert all(row.provenance["slice"]["table_region"] == "A1:AD2" for row in dataset.rows)
+    report = evaluate_workbook(path, {}, data_dir=tmp_path / "gate", evidence_class="unit_test")
+    assert report["checks"]["B31-17"] == "pass"
+    assert report["checks"]["B31-18"] == "pass"
+    assert report["status"] == "BLOCKED"
+
+
+def test_invalid_slice_boundary_blocks_persistence(tmp_path, monkeypatch):
+    from app.application.elt import customer_excel_gate as gate
+
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    path = tmp_path / "unit-attendance.xlsx"
+    _synthetic_daily_book(path)
+    parse = gate.parse_file
+
+    def corrupt_slice(*args, **kwargs):
+        dataset = parse(*args, **kwargs)
+        dataset.rows[0].provenance["slice"]["table_region"] = "A1:A1"
+        return dataset
+
+    monkeypatch.setattr(gate, "parse_file", corrupt_slice)
+    report = evaluate_workbook(
+        path,
+        {"version": "test", "task_id": "bad-slice", "confirmed": True},
+        data_dir=tmp_path / "gate",
+        evidence_class="unit_test",
+    )
+    assert report["checks"]["B31-17"] == "fail"
+    assert report["checks"]["B31-18"] == "not_tested"
+    assert report["checks"]["B31-35"] == "not_tested"
+    assert not list(tmp_path.glob("**/*.sqlite"))
+
+
+def test_missing_business_sheet_is_not_a_multisheet_pass(tmp_path, monkeypatch):
+    from app.application.elt import customer_excel_gate as gate
+
+    path = tmp_path / "unit-attendance.xlsx"
+    _synthetic_daily_book(path, sheets=2)
+    parse = gate.parse_file
+
+    def omit_sheet(*args, **kwargs):
+        dataset = parse(*args, **kwargs)
+        dataset.rows = dataset.rows[:1]
+        return dataset
+
+    monkeypatch.setattr(gate, "parse_file", omit_sheet)
+    report = evaluate_workbook(path, {}, data_dir=tmp_path / "gate", evidence_class="unit_test")
+    assert report["checks"]["B31-18"] == "fail"
+    assert report["checks"]["B31-16"] == "fail"

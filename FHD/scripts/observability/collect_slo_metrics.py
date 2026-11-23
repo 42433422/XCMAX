@@ -367,24 +367,168 @@ def meets_target(slo_id: str, value: float | None) -> bool | None:
     return value >= threshold if op == "ge" else value < threshold
 
 
-def _latest_chain_hash(directory: Path) -> str:
+def _record_hash_is_valid(payload: dict[str, Any]) -> bool:
+    candidate = dict(payload)
+    expected = str(candidate.pop("evidence_hash", ""))
+    candidate.pop("chain_hash", None)
+    candidate.pop("all_pass", None)
+    return bool(
+        expected and expected == hashlib.sha256(_canonical_json(candidate).encode()).hexdigest()
+    )
+
+
+def _order_chain(
+    pending: list[tuple[Path, dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], list[str], str]:
+    pending = list(pending)
+    records: list[dict[str, Any]] = []
+    blockers: list[str] = []
+    previous_hash = "0" * 64
+    while pending:
+        successors = [
+            item for item in pending if item[1].get("previous_chain_hash") == previous_hash
+        ]
+        if len(successors) != 1:
+            blockers.append("forked_hash_chain" if successors else "broken_hash_chain")
+            break
+        path, payload = successors[0]
+        pending.remove(successors[0])
+        expected = hashlib.sha256(
+            f"{previous_hash}:{payload['evidence_hash']}".encode()
+        ).hexdigest()
+        if payload.get("chain_hash") != expected:
+            blockers.append(f"{path.name}:invalid_chain_hash")
+        previous_hash = str(payload.get("chain_hash") or "")
+        records.append(payload)
+    return records, blockers, previous_hash
+
+
+def _legacy_preflight_audit(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
+    """Fingerprint a reachable fork of unbound preflight records, never formal history."""
+    successors: dict[str, list[str]] = {}
+    inventory: list[dict[str, str]] = []
     hashes: set[str] = set()
-    predecessors: set[str] = set()
-    for path in directory.glob("*.json"):
+    for path, payload in records:
+        if payload.get("mode") != "preflight" or payload.get("release_id") != "":
+            raise ValueError("legacy_fork_contains_formal_or_release_bound_evidence")
+        if "chain_epoch" in payload or "legacy_chain_audit" in payload:
+            raise ValueError("legacy_fork_contains_epoch_metadata")
+        previous = str(payload.get("previous_chain_hash") or "")
+        chain_hash = str(payload.get("chain_hash") or "")
+        expected = hashlib.sha256(f"{previous}:{payload['evidence_hash']}".encode()).hexdigest()
+        if not re.fullmatch(r"[0-9a-f]{64}", previous) or chain_hash != expected:
+            raise ValueError("legacy_fork_has_invalid_chain_hash")
+        if chain_hash in hashes:
+            raise ValueError("legacy_fork_has_duplicate_record")
+        hashes.add(chain_hash)
+        successors.setdefault(previous, []).append(chain_hash)
+        inventory.append(
+            {
+                "file": path.name,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "evidence_hash": payload["evidence_hash"],
+                "chain_hash": chain_hash,
+                "previous_chain_hash": previous,
+            }
+        )
+    reached: set[str] = set()
+    pending = list(successors.get("0" * 64, []))
+    while pending:
+        chain_hash = pending.pop()
+        if chain_hash in reached:
+            raise ValueError("legacy_fork_has_cycle")
+        reached.add(chain_hash)
+        pending.extend(successors.get(chain_hash, []))
+    if reached != hashes:
+        raise ValueError("legacy_fork_has_missing_predecessor")
+    forks = [
+        {"previous_chain_hash": previous, "successors": sorted(children)}
+        for previous, children in sorted(successors.items())
+        if len(children) > 1
+    ]
+    if not forks:
+        raise ValueError("legacy_fork_audit_requires_a_fork")
+    return {
+        "schema": "xcagi.production_slo_legacy_fork_audit/v1",
+        "reason": "legacy_unbound_preflight_fork",
+        "record_count": len(inventory),
+        "records": inventory,
+        "forks": forks,
+        "tips": sorted(hashes - successors.keys()),
+    }
+
+
+def load_evidence_chain(
+    directory: Path, *, recover_preflight_fork: bool = False
+) -> tuple[list[dict[str, Any]], list[str], str, str, dict[str, Any] | None]:
+    """Validate the existing chain, including one explicitly audited legacy recovery.
+
+    Old bytes stay in place. Only a fork made entirely of unbound preflight
+    records can be archived by the first new epoch record. Its hash-bound
+    payload contains the full original inventory; later deletion, rewriting,
+    extra legacy records, or a fork in the new epoch fails closed.
+    """
+    blockers: list[str] = []
+    legacy: list[tuple[Path, dict[str, Any]]] = []
+    active: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted(directory.glob("*.json")):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError):
+        except (OSError, TypeError, ValueError):
+            blockers.append(f"{path.name}:invalid_json")
             continue
-        if not isinstance(payload, dict):
+        if not isinstance(payload, dict) or not _record_hash_is_valid(payload):
+            blockers.append(f"{path.name}:invalid_evidence_hash")
             continue
-        value = str(payload.get("chain_hash") or "")
-        if re.fullmatch(r"[0-9a-f]{64}", value):
-            hashes.add(value)
-            predecessors.add(str(payload.get("previous_chain_hash") or ""))
-    tips = hashes - predecessors
-    if len(tips) > 1 or (hashes and not tips):
-        raise ValueError("SLO evidence chain has no unique tip")
-    return next(iter(tips), "0" * 64)
+        try:
+            stamp = datetime.fromisoformat(str(payload.get("generated_at")).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            stamp = None
+        if (
+            payload.get("schema") != "xcagi.production_slo_evidence/v1"
+            or payload.get("environment") != "production"
+            or stamp is None
+            or stamp.tzinfo is None
+        ):
+            blockers.append(f"{path.name}:invalid_production_record")
+        (active if "chain_epoch" in payload else legacy).append((path, payload))
+
+    if not active:
+        records, errors, tip = _order_chain(legacy)
+        if recover_preflight_fork and not blockers and errors == ["forked_hash_chain"]:
+            try:
+                audit = _legacy_preflight_audit(legacy)
+            except ValueError as exc:
+                errors.append(str(exc))
+            else:
+                epoch = hashlib.sha256(_canonical_json(audit).encode()).hexdigest()
+                return [], [], "0" * 64, epoch, audit
+        return records, blockers + errors, tip, "", None
+
+    records, errors, tip = _order_chain(active)
+    blockers.extend(errors)
+    audit = None
+    epoch = ""
+    try:
+        audit = _legacy_preflight_audit(legacy)
+    except ValueError as exc:
+        blockers.append(str(exc))
+    else:
+        epoch = hashlib.sha256(_canonical_json(audit).encode()).hexdigest()
+        if any(payload.get("chain_epoch") != epoch for _path, payload in active):
+            blockers.append("legacy_chain_epoch_mismatch")
+        roots = [
+            payload for _path, payload in active if payload.get("previous_chain_hash") == "0" * 64
+        ]
+        if len(roots) != 1 or roots[0].get("legacy_chain_audit") != audit:
+            blockers.append("legacy_chain_audit_mismatch")
+        if any(
+            "legacy_chain_audit" in payload for _path, payload in active if payload not in roots
+        ):
+            blockers.append("unexpected_legacy_chain_audit")
+    # Audited preflight observations remain visible in the daily ledger. The
+    # formal verifier still counts only the requested release's formal samples.
+    return [payload for _path, payload in legacy] + records, blockers, tip, epoch, audit
 
 
 def _write_immutable(path: Path, payload: dict[str, Any]) -> None:
@@ -561,7 +705,15 @@ def collect(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with FileLock(out_path.parent / ".slo-evidence.lock", timeout=30):
-        previous_hash = _latest_chain_hash(out_path.parent)
+        _records, blockers, previous_hash, epoch, audit = load_evidence_chain(
+            out_path.parent, recover_preflight_fork=True
+        )
+        if blockers:
+            raise ValueError("SLO evidence chain is invalid: " + ";".join(blockers))
+        if epoch:
+            payload["chain_epoch"] = epoch
+            if previous_hash == "0" * 64:
+                payload["legacy_chain_audit"] = audit
         payload["previous_chain_hash"] = previous_hash
         payload["evidence_hash"] = hashlib.sha256(_canonical_json(payload).encode()).hexdigest()
         payload["chain_hash"] = hashlib.sha256(

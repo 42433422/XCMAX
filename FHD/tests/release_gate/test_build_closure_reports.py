@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.release_gate.test_desktop_soak_evidence import raw_report, write_bundle
+from tests.release_gate.test_desktop_soak_evidence import TARGETS, raw_report, write_bundle
 
 
 def _module():
@@ -209,7 +209,7 @@ def _actions_fixture(mod, *, member="release-convergence.json"):
         with zipfile.ZipFile(blob, "w") as archive:
             archive.writestr(member, json.dumps({"release_sha": "a" * 40}))
             if label == "desktop_soak":
-                for platform in ("windows", "macos"):
+                for platform in TARGETS:
                     archive.writestr(f"{platform}.json", json.dumps(raw_report(platform)))
         raw = blob.getvalue()
         run = {
@@ -244,7 +244,7 @@ def _actions_fixture(mod, *, member="release-convergence.json"):
         }
         if label == "desktop_soak":
             records[route + "/attempts/2/jobs?per_page=100&page=1"] = {
-                "total_count": 2,
+                "total_count": 3,
                 "jobs": [
                     {
                         "id": 50 + index,
@@ -255,11 +255,16 @@ def _actions_fixture(mod, *, member="release-convergence.json"):
                         "conclusion": "success",
                         "runner_id": index,
                         "runner_name": f"fixture-{platform}",
-                        "labels": ["self-hosted", "xcagi-physical", platform],
+                        "labels": [
+                            "self-hosted",
+                            "xcagi-physical",
+                            "windows" if platform == "windows" else "macos",
+                            TARGETS[platform][1],
+                        ],
                         "started_at": "2026-11-22T23:59:00Z",
                         "completed_at": "2026-11-23T08:03:00Z",
                     }
-                    for index, platform in enumerate(("windows", "macos"), 1)
+                    for index, platform in enumerate(TARGETS, 1)
                 ],
             }
         archives[f"repos/{repo}/actions/artifacts/{number + 10}/zip"] = raw
@@ -294,7 +299,8 @@ def test_original_workflow_attempt_and_archive_bytes_are_read_back(tmp_path):
     assert json.loads((tmp_path / "sources/provenance.json").read_text()) == proof
     source = proof["sources"]["desktop_soak"]
     assert (
-        source["native_jobs"]["windows"]["runner_id"] != source["native_jobs"]["macos"]["runner_id"]
+        source["native_jobs"]["windows"]["runner_id"]
+        != source["native_jobs"]["macos-arm64"]["runner_id"]
     )
     assert (
         source["reports"]["windows"]
@@ -312,7 +318,16 @@ def test_original_workflow_attempt_and_archive_bytes_are_read_back(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "fault", ["hosted", "missing_platform", "failed", "prior_attempt", "different_commit"]
+    "fault",
+    [
+        "hosted",
+        "missing_platform",
+        "wrong_architecture",
+        "same_mac_runner",
+        "failed",
+        "prior_attempt",
+        "different_commit",
+    ],
 )
 def test_desktop_sources_require_current_successful_registered_device_jobs(tmp_path, fault):
     mod = _module()
@@ -323,7 +338,11 @@ def test_desktop_sources_require_current_successful_registered_device_jobs(tmp_p
         row["labels"] = ["windows-latest"]
     elif fault == "missing_platform":
         listing["jobs"].pop()
-        listing["total_count"] = 1
+        listing["total_count"] = 2
+    elif fault == "wrong_architecture":
+        listing["jobs"][1]["labels"] = ["self-hosted", "macos", "xcagi-physical", "x64"]
+    elif fault == "same_mac_runner":
+        listing["jobs"][2]["runner_id"] = listing["jobs"][1]["runner_id"]
     elif fault == "failed":
         row["conclusion"] = "failure"
     elif fault == "prior_attempt":
@@ -457,3 +476,43 @@ def test_only_catalog_versions_can_be_reported():
     assert mod.resolve_product_version("1.0.0.1") == "1.0.0.1"
     with pytest.raises(ValueError, match="catalog|registered"):
         mod.resolve_product_version("9.9.9.9")
+
+
+def test_desktop_workflow_routes_and_aggregates_all_three_native_architectures(tmp_path):
+    fhd = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load((fhd / ".github/workflows/desktop-soak.yml").read_text())
+    native = workflow["jobs"]["native"]
+    matrix = native["strategy"]["matrix"]["include"]
+    assert len(matrix) == 3 and {row["platform"] for row in matrix} == set(TARGETS)
+    assert {"self-hosted", "xcagi-physical", "${{ matrix.os }}", "${{ matrix.arch }}"} <= set(
+        native["runs-on"]
+    )
+    assert len({row["binary_var"] for row in matrix}) == 3
+    for row in matrix:
+        assert row["arch"].lower() == TARGETS[row["platform"]][1]
+        assert row["os"] == ("Windows" if row["platform"] == "windows" else "macOS")
+    directory, _ = write_bundle(tmp_path / "desktop-soak")
+    step = next(
+        row
+        for row in workflow["jobs"]["aggregate"]["steps"]
+        if "verify_desktop_soak.py" in row.get("run", "")
+    )
+    identity = raw_report("windows")
+    result = subprocess.run(
+        ["bash", "-c", step["run"]],
+        cwd=fhd,
+        env={
+            **os.environ,
+            "RELEASE_SHA": identity["release_sha"],
+            "PRODUCT_VERSION": identity["product_version"],
+            "RUNNER_TEMP": str(tmp_path),
+            "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads((directory / "verification.json").read_text())
+    assert report["measurements_passed"] is True and set(report["per_platform"]) == set(TARGETS)
+    assert report["passed"] is False  # Aggregation alone has no original-runner attestation.

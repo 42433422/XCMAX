@@ -345,6 +345,19 @@ def ensure_within_workspace(
 
     try:
         configured = _tenant_workspace_root(user_id).absolute()
+        template = os.environ.get("MODSTORE_TENANT_WORKSPACE_ROOT", "").strip()
+        if not template or "{user_id}" in template:
+            from modstore_server.employee_change_request_verification import _guard_under_workspace
+
+            # Static administrator aliases remain allowed; an identity-derived
+            # tenant directory cannot redirect that identity to another tenant.
+            tenant = os.fspath(configured)
+            if template:
+                parts = Path(template).parts
+                index = next(i for i, part in enumerate(parts) if "{user_id}" in part)
+                tenant = str(Path(*parts[: index + 1])).replace("{user_id}", str(int(user_id or 0)))
+            if _guard_under_workspace(tenant, os.fspath(configured)) is None:
+                raise VibePathError("租户目录含符号链接或越界;拒绝执行")
         boundary = configured.resolve()
         if within is not None:
             boundary = ensure_within_workspace(within, user_id=user_id)

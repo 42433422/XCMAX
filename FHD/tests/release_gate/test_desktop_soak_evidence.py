@@ -15,6 +15,11 @@ from scripts.release.verify_desktop_soak import verify_bundle, verify_platform
 
 SHA, VERSION = "a" * 40, "1.0.0.1"
 START = datetime(2026, 11, 23, tzinfo=UTC)
+TARGETS = {
+    "windows": ("AMD64", "x64"),
+    "macos-arm64": ("arm64", "arm64"),
+    "macos-x64": ("x86_64", "x64"),
+}
 
 
 def raw_report(platform: str) -> dict:
@@ -56,11 +61,13 @@ def raw_report(platform: str) -> dict:
             "runner_name": f"fixture-{platform}",
             "system": "Windows" if platform == "windows" else "Darwin",
             "release": "test-os",
-            "machine": "test-architecture",
+            "machine": TARGETS.get(platform, TARGETS["macos-arm64"])[0],
+            "rosetta_translated": False,
         },
         "artifact": {
             "build_sha": SHA,
             "version": VERSION,
+            "architecture": TARGETS.get(platform, TARGETS["macos-arm64"])[1],
             **dict.fromkeys(
                 ("executable_sha256", "build_info_sha256", "app_asar_sha256", "backend_sha256"),
                 "c" * 64,
@@ -93,7 +100,7 @@ def raw_report(platform: str) -> dict:
 def write_bundle(directory: Path) -> tuple[Path, Path]:
     directory.mkdir(parents=True, exist_ok=True)
     reports, jobs = {}, {}
-    for index, platform in enumerate(("windows", "macos"), 1):
+    for index, platform in enumerate(TARGETS, 1):
         target = directory / f"{platform}.json"
         target.write_text(json.dumps(raw_report(platform)), encoding="utf-8")
         reports[platform] = hashlib.sha256(target.read_bytes()).hexdigest()
@@ -105,6 +112,7 @@ def write_bundle(directory: Path) -> tuple[Path, Path]:
                 "self-hosted",
                 "xcagi-physical",
                 "Windows" if platform == "windows" else "macOS",
+                TARGETS[platform][1],
             ],
             "started_at": (START - timedelta(minutes=1)).isoformat(),
             "completed_at": (START + timedelta(hours=8, minutes=3)).isoformat(),
@@ -142,6 +150,74 @@ def test_full_measurements_need_original_native_provenance(tmp_path):
     assert result["passed"] is True
     assert result["verification_scope"] == "registered_native_runner"
     assert result["per_platform"]["windows"]["measured_duration_seconds"] == 28800
+    assert {key: row["architecture"] for key, row in result["per_platform"].items()} == {
+        "windows": "x64",
+        "macos-arm64": "arm64",
+        "macos-x64": "x64",
+    }
+
+
+def test_legacy_dual_os_receipts_cannot_certify_both_mac_architectures(tmp_path):
+    directory, path = write_bundle(tmp_path)
+    for platform in ("macos-arm64", "macos-x64"):
+        (directory / f"{platform}.json").unlink(missing_ok=True)
+    (directory / "macos.json").write_text(json.dumps(raw_report("macos")), encoding="utf-8")
+    result = verify_bundle(
+        directory, release_sha=SHA, product_version=VERSION, provenance=json.loads(path.read_text())
+    )
+    assert result["passed"] is False
+
+
+def test_windows_arm_receipt_cannot_certify_native_x64():
+    payload = raw_report("windows")
+    payload["machine"]["machine"] = "ARM64"
+    payload["artifact"]["architecture"] = "arm64"
+    assert not verify_platform(
+        payload, platform="windows", release_sha=SHA, product_version=VERSION
+    )["passed"]
+
+
+@pytest.mark.parametrize("translated", [True, None, 0])
+def test_translated_or_unobserved_mac_process_cannot_certify_native_x64(translated):
+    payload = raw_report("macos-x64")
+    payload["machine"]["rosetta_translated"] = translated
+    assert not verify_platform(
+        payload, platform="macos-x64", release_sha=SHA, product_version=VERSION
+    )["passed"]
+
+
+@pytest.mark.parametrize(
+    "fault", ["machine", "binary", "runner_arch", "same_mac_device", "missing_mac_x64"]
+)
+def test_mac_architectures_and_device_provenance_cannot_be_substituted(tmp_path, fault):
+    directory, path = write_bundle(tmp_path)
+    proof = json.loads(path.read_text())
+    source = proof["sources"]["desktop_soak"]
+    if fault in {"machine", "binary"}:
+        report_path = directory / "macos-arm64.json"
+        payload = json.loads(report_path.read_text())
+        if fault == "machine":
+            payload["machine"]["machine"] = "x86_64"
+        else:
+            payload["artifact"]["architecture"] = "x64"
+        report_path.write_text(json.dumps(payload))
+        source["reports"]["macos-arm64"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+    elif fault == "runner_arch":
+        source["native_jobs"]["macos-arm64"]["labels"] = [
+            "self-hosted",
+            "macos",
+            "xcagi-physical",
+            "x64",
+        ]
+    elif fault == "same_mac_device":
+        source["native_jobs"]["macos-x64"]["runner_id"] = source["native_jobs"]["macos-arm64"][
+            "runner_id"
+        ]
+    else:
+        (directory / "macos-x64.json").unlink()
+    assert not verify_bundle(directory, release_sha=SHA, product_version=VERSION, provenance=proof)[
+        "passed"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -212,7 +288,7 @@ def test_incomplete_or_inconsistent_observations_cannot_pass(fault):
     ],
 )
 def test_resource_leaks_and_unobserved_recovery_are_blocked(fault):
-    payload = raw_report("macos")
+    payload = raw_report("macos-arm64")
     if fault in ("rss_growth", "handles_growth"):
         field, value = ("rss_bytes", 600 * 1024**2) if fault == "rss_growth" else ("handles", 2000)
         for row in payload["samples"][-11:]:
@@ -230,7 +306,9 @@ def test_resource_leaks_and_unobserved_recovery_are_blocked(fault):
         payload["scenarios"]["renderer_crash"]["recovered"] = False
     else:
         payload["scenarios"]["clean_exit"]["remaining_processes"] = 1
-    result = verify_platform(payload, platform="macos", release_sha=SHA, product_version=VERSION)
+    result = verify_platform(
+        payload, platform="macos-arm64", release_sha=SHA, product_version=VERSION
+    )
     assert result["passed"] is False
     assert result["blockers"]
 
@@ -242,9 +320,9 @@ def test_measurements_bind_to_original_artifact_and_registered_jobs(tmp_path, fa
     directory, proof_path = write_bundle(tmp_path)
     proof = json.loads(proof_path.read_text())
     source = proof["sources"]["desktop_soak"]
-    job = source["native_jobs"]["macos"]
+    job = source["native_jobs"]["macos-arm64"]
     if fault == "substituted_bytes":
-        path = directory / "macos.json"
+        path = directory / "macos-arm64.json"
         path.write_text(
             path.read_text() + "\n"
         )  # Even equivalent JSON is different original evidence.
@@ -273,7 +351,9 @@ def test_cli_records_missing_platform_and_cannot_self_certify(tmp_path):
         "--windows",
         str(directory / "windows.json"),
         "--macos",
-        str(directory / "macos.json"),
+        str(directory / "macos-arm64.json"),
+        "--macos-x64",
+        str(directory / "macos-x64.json"),
         "--release-sha",
         SHA,
         "--product-version",
@@ -289,7 +369,7 @@ def test_cli_records_missing_platform_and_cannot_self_certify(tmp_path):
         == 0
     )
     assert json.loads(output.read_text())["passed"] is False
-    (directory / "macos.json").unlink()
+    (directory / "macos-arm64.json").unlink()
     assert (
         subprocess.run(
             [*command, "--measurements-only"], capture_output=True, timeout=10
@@ -297,7 +377,7 @@ def test_cli_records_missing_platform_and_cannot_self_certify(tmp_path):
         == 1
     )
     result = json.loads(output.read_text())
-    assert result["per_platform"]["macos"]["blockers"] == ["raw_report_missing_or_invalid"]
+    assert result["per_platform"]["macos-arm64"]["blockers"] == ["raw_report_missing_or_invalid"]
 
 
 def test_expected_injected_renderer_crash_event_is_allowed():
@@ -316,7 +396,7 @@ def test_expected_injected_renderer_crash_event_is_allowed():
 
 @pytest.mark.parametrize("fault", ["missing", "not_array", "malformed", "overflow"])
 def test_renderer_event_log_is_mandatory_and_bounded(fault):
-    payload = raw_report("macos")
+    payload = raw_report("macos-arm64")
     if fault == "missing":
         del payload["events"]
     elif fault == "not_array":
@@ -331,7 +411,7 @@ def test_renderer_event_log_is_mandatory_and_bounded(fault):
         }
         payload["events"] = [event] * 101
     assert (
-        verify_platform(payload, platform="macos", release_sha=SHA, product_version=VERSION)[
+        verify_platform(payload, platform="macos-arm64", release_sha=SHA, product_version=VERSION)[
             "passed"
         ]
         is False

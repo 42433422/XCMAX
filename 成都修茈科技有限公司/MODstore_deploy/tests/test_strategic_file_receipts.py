@@ -230,8 +230,9 @@ def test_file_input_alias_cannot_bypass_selected_workspace(archived_python, tmp_
     "case", ["bundled", "workspace_first", "escape", "symlink", "default_output"]
 )
 def test_actual_file_support_resolver_keeps_frozen_templates_and_rejects_escape(
-    archived_python, tmp_path, case
+    archived_python, tmp_path, case, monkeypatch
 ):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "FHD"))
     from app.mod_sdk.file_employee_support import FileEmployeeSupport
 
     from modstore_server.strategic_execution_contract import _verify_file_support

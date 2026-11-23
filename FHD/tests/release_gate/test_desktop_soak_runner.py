@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
 import hashlib
 import importlib.util
 import json
@@ -38,6 +39,75 @@ def runner(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize(
+    "system,architecture", [("Windows", "x64"), ("Darwin", "arm64"), ("Darwin", "x64")]
+)
+@pytest.mark.parametrize("fault", [None, "desktop", "backend", "invalid_header"])
+def test_installed_machine_fields_bind_both_executables(
+    runner, tmp_path, monkeypatch, system, architecture, fault
+):
+    def executable(arch):
+        if system == "Darwin":
+            return bytes.fromhex("cffaedfe") + (
+                0x100000C if arch == "arm64" else 0x1000007
+            ).to_bytes(4, "little")
+        return (
+            b"MZ"
+            + bytes(58)
+            + (64).to_bytes(4, "little")
+            + b"PE\x00\x00"
+            + (0xAA64 if arch == "arm64" else 0x8664).to_bytes(2, "little")
+        )
+
+    monkeypatch.setattr(runner.platform, "system", lambda: system)
+    monkeypatch.setattr(
+        runner.platform, "machine", lambda: "AMD64" if architecture == "x64" else "arm64"
+    )
+    binary = tmp_path / ("XCAGI.app/Contents/MacOS/XCAGI" if system == "Darwin" else "XCAGI.exe")
+    resources = (
+        binary.parent.parent / "Resources" if system == "Darwin" else binary.parent / "resources"
+    )
+    backend = (
+        resources / "backend" / ("xcagi-backend" if system == "Darwin" else "xcagi-backend.exe")
+    )
+    for target in (binary, backend):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(executable(architecture))
+    (resources / "build-info.json").write_text(json.dumps({"gitSha": SHA, "version": VERSION}))
+    (resources / "app.asar").write_bytes(b"fixture application bytes")
+    if fault:
+        wrong = "arm64" if architecture == "x64" else "x64"
+        target = backend if fault == "backend" else binary
+        target.write_bytes(b"not an executable" if fault == "invalid_header" else executable(wrong))
+        with pytest.raises(ValueError, match="native_.*(invalid|mismatch)"):
+            runner.artifact_identity(binary, SHA, VERSION)
+    else:
+        identity, observed = runner.artifact_identity(binary, SHA, VERSION)
+        assert observed == backend and identity["architecture"] == architecture
+        assert identity["executable_sha256"] == hashlib.sha256(binary.read_bytes()).hexdigest()
+        assert identity["backend_sha256"] == hashlib.sha256(backend.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("value,error", [(0, 0), (1, 0), (0, errno.ENOENT), (0, errno.EIO), (2, 0)])
+def test_rosetta_query_distinguishes_native_translated_and_failed_observations(
+    runner, monkeypatch, value, error
+):
+    def query(name, observed, size, *_):
+        assert name == b"sysctl.proc_translated"
+        observed._obj.value = value
+        return -1 if error else 0
+
+    monkeypatch.setattr(
+        runner.ctypes, "CDLL", lambda *_args, **_kwargs: SimpleNamespace(sysctlbyname=query)
+    )
+    monkeypatch.setattr(runner.ctypes, "get_errno", lambda: error)
+    if error == errno.EIO or value == 2:
+        with pytest.raises(ValueError, match="native_translation_status_"):
+            runner.rosetta_translated()
+    else:
+        assert runner.rosetta_translated() is (value == 1)
 
 
 @pytest.mark.parametrize(
@@ -391,10 +461,40 @@ def test_linux_writes_blocked_receipt_without_launching_or_leaking_credentials(
     assert "must-not-publish" not in evidence and not args.output.with_suffix(".tmp").exists()
 
 
+@pytest.mark.parametrize("fault", ["target", "translated", "unknown"])
+def test_macos_target_or_translation_mismatch_blocks_before_launch(
+    runner, tmp_path, monkeypatch, fault
+):
+    monkeypatch.setattr(runner.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(runner.platform, "machine", lambda: "x86_64")
+    args = arguments(tmp_path)
+    args.platform = "macos-arm64" if fault == "target" else "macos-x64"
+
+    def observe():
+        if fault == "unknown":
+            raise ValueError("native_translation_status_unavailable")
+        return True
+
+    monkeypatch.setattr(runner, "rosetta_translated", observe)
+    assert asyncio.run(runner.run(args)) == 1
+    report = json.loads(args.output.read_text())
+    assert report["status"] == "blocked" and report["samples"] == []
+    assert report["blockers"] == [
+        {
+            "target": "requested_native_target_mismatch",
+            "translated": "native_macos_execution_required",
+            "unknown": "native_translation_status_unavailable",
+        }[fault]
+    ]
+    if fault == "translated":
+        assert report["machine"]["rosetta_translated"] is True
+
+
 def test_cancellation_cleans_owned_process_and_commits_failure_receipt(
     runner, tmp_path, monkeypatch, spawn_owned
 ):
     monkeypatch.setattr(runner.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(runner.platform, "machine", lambda: "AMD64")
     monkeypatch.setenv("XCAGI_TEST_USER", "acceptance-fixture")
     monkeypatch.setenv("XCAGI_TEST_PASS", "private-fixture-password")
     args = arguments(tmp_path)

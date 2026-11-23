@@ -27,7 +27,8 @@ MAX_HANDLE_GROWTH = 512
 MAX_AVERAGE_CPU = 80
 MAX_SUSTAINED_CPU = 95
 MAX_SUSTAINED_CPU_SECONDS = 180
-PLATFORMS = {"windows": "Windows", "macos": "Darwin"}
+PLATFORMS = {"windows": "Windows", "macos-arm64": "Darwin", "macos-x64": "Darwin"}
+ARCHITECTURES = {"windows": "x64", "macos-arm64": "arm64", "macos-x64": "x64"}
 SCENARIOS = (
     "renderer_offline",
     "renderer_crash",
@@ -42,6 +43,25 @@ FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_REPORT_BYTES = 16 * 1024**2
 MAX_RENDERER_EVENTS = 100
+
+
+def native_architecture(machine: Any) -> str | None:
+    return {
+        "amd64": "x64",
+        "x86_64": "x64",
+        "x64": "x64",
+        "arm64": "arm64",
+        "aarch64": "arm64",
+    }.get(str(machine).lower())
+
+
+def runner_labels(platform: str) -> set[str]:
+    return {
+        "self-hosted",
+        "xcagi-physical",
+        "windows" if platform == "windows" else "macos",
+        ARCHITECTURES[platform],
+    }
 
 
 def _number(value: Any) -> bool:
@@ -91,13 +111,15 @@ def verify_platform(
     if (
         machine.get("system") != PLATFORMS.get(platform)
         or not machine.get("release")
-        or not machine.get("machine")
+        or native_architecture(machine.get("machine")) != ARCHITECTURES.get(platform)
+        or (PLATFORMS.get(platform) == "Darwin" and machine.get("rosetta_translated") is not False)
     ):
         blockers.add("native_os_identity_missing")
     artifact = _object(payload.get("artifact"))
     if (
         artifact.get("build_sha") != release_sha
         or artifact.get("version") != product_version
+        or artifact.get("architecture") != ARCHITECTURES.get(platform)
         or any(
             not SHA256.fullmatch(str(artifact.get(key) or ""))
             for key in (
@@ -322,6 +344,7 @@ def verify_platform(
         "passed": not blockers,
         "verification_scope": "measurement_validation",
         "platform": platform,
+        "architecture": ARCHITECTURES.get(platform),
         "measured_duration_seconds": max(0.0, duration),
         "summary": summary,
         "blockers": sorted(blockers),
@@ -397,8 +420,7 @@ def verify_files(
             and machine.get("runner_environment") == "self-hosted"
             and machine.get("runner_name")
             and machine["runner_name"] == job.get("runner_name")
-            and {"self-hosted", "xcagi-physical", platform}
-            <= {str(label).lower() for label in labels}
+            and runner_labels(platform) <= {str(label).lower() for label in labels}
             and job_start
             and start
             and end
@@ -443,7 +465,11 @@ def verify_bundle(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--windows", type=Path, required=True)
-    parser.add_argument("--macos", type=Path, required=True)
+    parser.add_argument(
+        "--macos", type=Path, help="Legacy arm64 report path; x64 evidence is still required"
+    )
+    parser.add_argument("--macos-arm64", type=Path)
+    parser.add_argument("--macos-x64", type=Path)
     parser.add_argument("--release-sha", required=True)
     parser.add_argument("--product-version", required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -454,7 +480,15 @@ def main() -> int:
     )
     args = parser.parse_args()
     result = verify_files(
-        {"windows": args.windows, "macos": args.macos},
+        {
+            platform: path
+            for platform, path in {
+                "windows": args.windows,
+                "macos-arm64": args.macos_arm64 or args.macos,
+                "macos-x64": args.macos_x64,
+            }.items()
+            if path is not None
+        },
         release_sha=args.release_sha,
         product_version=args.product_version,
     )

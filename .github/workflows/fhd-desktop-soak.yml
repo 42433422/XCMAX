@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       release_sha:
-        description: Exact mainline SHA embedded in both installed acceptance applications
+        description: Exact mainline SHA embedded in all three installed acceptance applications
         required: true
         type: string
       product_version:
-        description: Catalog version installed on both controlled acceptance devices
+        description: Catalog version installed on the three controlled acceptance devices
         required: true
         type: string
 
@@ -29,7 +29,7 @@ jobs:
     name: Desktop soak (${{ matrix.platform }})
     # xcagi-physical is assigned only to enrolled acceptance devices. The label
     # routes work; independent original job metadata is verified at closeout.
-    runs-on: [self-hosted, '${{ matrix.os }}', xcagi-physical]
+    runs-on: [self-hosted, '${{ matrix.os }}', '${{ matrix.arch }}', xcagi-physical]
     timeout-minutes: 600
     concurrency:
       group: xcagi-desktop-soak-${{ matrix.platform }}
@@ -40,12 +40,20 @@ jobs:
         include:
           - platform: windows
             os: Windows
+            arch: X64
             binary_var: XCAGI_SOAK_WINDOWS_BINARY
             user_secret: XCAGI_SOAK_WINDOWS_USER
             pass_secret: XCAGI_SOAK_WINDOWS_PASS
-          - platform: macos
+          - platform: macos-arm64
             os: macOS
-            binary_var: XCAGI_SOAK_MACOS_BINARY
+            arch: ARM64
+            binary_var: XCAGI_SOAK_MACOS_ARM64_BINARY
+            user_secret: XCAGI_SOAK_MACOS_USER
+            pass_secret: XCAGI_SOAK_MACOS_PASS
+          - platform: macos-x64
+            os: macOS
+            arch: X64
+            binary_var: XCAGI_SOAK_MACOS_X64_BINARY
             user_secret: XCAGI_SOAK_MACOS_USER
             pass_secret: XCAGI_SOAK_MACOS_PASS
     steps:
@@ -63,13 +71,16 @@ jobs:
           RELEASE_SHA: ${{ inputs.release_sha }}
           PRODUCT_VERSION: ${{ inputs.product_version }}
           EXPECTED_OS: ${{ matrix.os }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
           RUNNER_KIND: ${{ runner.environment }}
         run: |
           import os, re, subprocess, sys
           sha = os.environ['RELEASE_SHA']
           if not re.fullmatch(r'[0-9a-f]{40}', sha):
               raise SystemExit('Exact lowercase release SHA required')
-          if os.environ['RUNNER_OS'] != os.environ['EXPECTED_OS'] or os.environ['RUNNER_KIND'] != 'self-hosted':
+          if (os.environ['RUNNER_OS'] != os.environ['EXPECTED_OS']
+              or os.environ['RUNNER_ARCH'] != os.environ['EXPECTED_ARCH']
+              or os.environ['RUNNER_KIND'] != 'self-hosted'):
               raise SystemExit('Controlled native runner required')
           subprocess.run(['git', 'merge-base', '--is-ancestor', sha, 'HEAD'], check=True)
           subprocess.run([sys.executable, 'scripts/release/build_closure_reports.py', 'version',
@@ -101,6 +112,7 @@ jobs:
           output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'desktop-soak' / (os.environ['TARGET_PLATFORM'] + '.json')
           subprocess.run([os.environ['SOAK_PYTHON'], 'scripts/release/desktop_soak.py',
                           '--binary', os.environ['DESKTOP_BINARY'], '--release-sha', os.environ['RELEASE_SHA'],
+                          '--platform', os.environ['TARGET_PLATFORM'],
                           '--product-version', os.environ['PRODUCT_VERSION'], '--output', str(output),
                           '--duration-seconds', '28800', '--interval-seconds', '30'], check=True)
       - name: Preserve raw native measurements on every outcome
@@ -138,7 +150,8 @@ jobs:
         run: |
           python scripts/release/verify_desktop_soak.py \
             --windows "${RUNNER_TEMP}/desktop-soak/windows.json" \
-            --macos "${RUNNER_TEMP}/desktop-soak/macos.json" \
+            --macos-arm64 "${RUNNER_TEMP}/desktop-soak/macos-arm64.json" \
+            --macos-x64 "${RUNNER_TEMP}/desktop-soak/macos-x64.json" \
             --release-sha "$RELEASE_SHA" --product-version "$PRODUCT_VERSION" \
             --measurements-only --output "${RUNNER_TEMP}/desktop-soak/verification.json"
       - name: Preserve combined evidence and blockers
