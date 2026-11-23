@@ -68,6 +68,7 @@ def authorized_employee(workspace, monkeypatch):
         session.add(
             User(id=1, username="vibe-owner", password_hash="unused", account_state="active")
         )
+        session.flush()
         session.add(
             CatalogItem(
                 pkg_id="emp",

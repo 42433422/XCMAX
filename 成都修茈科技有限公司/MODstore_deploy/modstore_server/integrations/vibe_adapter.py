@@ -311,13 +311,14 @@ def _tenant_workspace_root(user_id: int) -> Path:
     2. ``MODSTORE_DATA_DIR/workspaces/{user_id}``
     3. ``./var/workspaces/{user_id}``
     """
+    tenant_id = str(int(user_id or 0))
     tpl = os.environ.get("MODSTORE_TENANT_WORKSPACE_ROOT", "").strip()
     if tpl:
         if "{user_id}" in tpl:
-            tpl = tpl.replace("{user_id}", str(user_id or 0))
+            tpl = tpl.replace("{user_id}", tenant_id)
         return Path(tpl)
     base = os.environ.get("MODSTORE_DATA_DIR") or str(Path.cwd() / "var")
-    return Path(base) / "workspaces" / str(user_id or 0)
+    return Path(base) / "workspaces" / tenant_id
 
 
 def ensure_within_workspace(
@@ -327,45 +328,51 @@ def ensure_within_workspace(
     within: Path | None = None,
     must_exist: bool = True,
 ) -> Path:
-    """校验 ``root`` 落在用户工作区内,否则抛 :class:`VibePathError`。
+    """Authorize the tenant boundary, then reuse the shared native-path resolver.
 
-    ``within`` 可进一步限制到已解析的项目目录;相对路径从该目录解释。
-    ``must_exist=False`` 仅允许规划尚未落盘的输出,不扩大租户或项目边界。
+    ``within`` is an already resolved project directory that narrows the tenant
+    boundary and anchors relative file names. New output paths may opt out of
+    the existence check only.
     """
     if not root:
         raise VibePathError("缺少 root 参数")
-    workspace_name = os.path.abspath(_tenant_workspace_root(user_id))
-    workspace = os.path.realpath(workspace_name)
-    scope_name, scope = workspace_name, workspace
-    if within is not None:
-        scope_name = os.path.abspath(within)
-        scope = os.fspath(ensure_within_workspace(within, user_id=user_id))
-        if scope != scope_name:
-            raise VibePathError("选定的项目工作区已改变;拒绝执行")
-    requested = os.fspath(root)
-    if within is not None:
-        requested = os.path.join(scope, requested)
-    lexical = os.path.abspath(requested)
-    scope_prefix = scope.rstrip(os.sep) + os.sep
-    declared_prefix = scope_name.rstrip(os.sep) + os.sep
-    # Reject lexical escapes before following any caller-selected symlink.
-    if (
-        lexical != scope_name
-        and not lexical.startswith(declared_prefix)
-        and lexical != scope
-        and not lexical.startswith(scope_prefix)
-    ):
-        raise VibePathError(f"root={lexical} 不在选定工作区 {scope} 下;拒绝执行")
-    target = os.path.realpath(requested)
-    workspace_prefix = workspace.rstrip(os.sep) + os.sep
-    if target != workspace and not target.startswith(workspace_prefix):
-        raise VibePathError(f"root={target} 不在用户工作区 {workspace} 下;拒绝执行")
-    if target != scope and not target.startswith(scope_prefix):
-        raise VibePathError(f"root={target} 不在选定工作区 {scope} 下;拒绝执行")
-    Path(workspace).mkdir(parents=True, exist_ok=True)
-    if must_exist and not os.path.exists(target):
-        raise VibePathError(f"root={target} 不存在")
-    return Path(target)
+    from fastapi import HTTPException
+
+    from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+
+    ensure_fhd_on_path()
+    from app.infrastructure.workspace import resolve_safe_workspace_relpath
+
+    try:
+        configured = _tenant_workspace_root(user_id).absolute()
+        boundary = configured.resolve()
+        if within is not None:
+            boundary = ensure_within_workspace(within, user_id=user_id)
+            configured = Path(os.path.abspath(within))
+            if boundary != configured:
+                raise VibePathError("选定的项目工作区已改变;拒绝执行")
+            if not boundary.is_dir():
+                raise VibePathError("指定工作区不是目录")
+        candidate = Path(root)
+        if within is not None and not candidate.is_absolute():
+            candidate = boundary / candidate
+        # These operations are lexical. The shared resolver checks parent
+        # components and symlinks only after the selected root is authorized.
+        candidate = candidate.absolute()
+        try:
+            relative = candidate.relative_to(boundary)
+        except ValueError:
+            relative = candidate.relative_to(configured)
+        target = resolve_safe_workspace_relpath(relative.as_posix(), base=boundary)
+        if within is None:
+            boundary.mkdir(parents=True, exist_ok=True)
+        if must_exist and not target.exists():
+            raise VibePathError("root 不存在")
+        return target
+    except (HTTPException, OSError, TypeError, ValueError, RuntimeError) as exc:
+        if isinstance(exc, VibePathError):
+            raise
+        raise VibePathError("root 无法在用户工作区内解析") from exc
 
 
 # ---------------------------------------------------------------------------

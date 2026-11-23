@@ -129,6 +129,93 @@ time.sleep(60)
         child.stdout.close()
 
 
+def _ledger_write_process(root, action, started, proceed, finished, result):
+    from pathlib import Path
+
+    ais.get_app_data_dir = lambda: root
+    ais.get_request_active_mod_id = lambda: "test-mod"
+    if action == "paused_patch":
+        save = ais._save_ledger
+
+        def paused_save(*args):
+            started.set()
+            if not proceed.wait(45):
+                raise TimeoutError("ledger interleave timed out")
+            return save(*args)
+
+        ais._save_ledger = paused_save
+    else:
+        started.set()
+        if not proceed.wait(45):
+            raise TimeoutError("ledger peer was not released")
+    try:
+        if action in {"patch", "paused_patch"}:
+            target = "batch" if action == "paused_patch" else "second"
+            ais._patch_batch(1, target, status="applied")
+        elif action == "cancel":
+            ais.AutoIngestService().cancel_unreleased_batch(batch_id="second", tenant_id=1)
+        else:
+            ais._resolve_auto_ingest_source = lambda path, **_: Path(path)
+            ais.AutoIngestService().queue_for_approval(
+                tenant_id=1, owner_user_id=7, source_path="new.csv"
+            )
+        result.put("ok")
+    finally:
+        finished.set()
+
+
+@pytest.mark.parametrize("peer", ["patch", "cancel", "queue"])
+def test_cross_process_batch_updates_do_not_erase_each_other(batch, peer, spawn_context):
+    root = str(ais.get_app_data_dir())
+    second = {**batch, "batch_id": "second"}
+    ais._save_ledger(1, {"batches": {"batch": batch, "second": second}})
+    ready, peer_ready, proceed, peer_go = (spawn_context.Event() for _ in range(4))
+    finished, peer_finished = spawn_context.Event(), spawn_context.Event()
+    result = spawn_context.Queue()
+    first = spawn_context.Process(
+        target=_ledger_write_process,
+        args=(root, "paused_patch", ready, proceed, finished, result),
+    )
+    other = spawn_context.Process(
+        target=_ledger_write_process,
+        args=(root, peer, peer_ready, peer_go, peer_finished, result),
+    )
+    other.start()
+    try:
+        assert peer_ready.wait(45)
+        first.start()
+        assert ready.wait(45)
+        peer_go.set()
+        # Let a competing writer finish if the critical section isn't shared.
+        peer_finished.wait(0.5)
+        proceed.set()
+        assert result.get(timeout=45) == "ok"
+        assert result.get(timeout=45) == "ok"
+        first.join(10)
+        other.join(10)
+        assert first.exitcode == other.exitcode == 0
+        rows = ais._load_ledger(1)["batches"]
+        assert rows["batch"]["status"] == "applied"
+        assert rows["second"]["status"] == (
+            "rejected"
+            if peer == "cancel"
+            else "applied"
+            if peer == "patch"
+            else "awaiting_approval"
+        )
+        if peer == "queue":
+            assert len(rows) == 3
+    finally:
+        proceed.set()
+        peer_go.set()
+        for child in (first, other):
+            if child.is_alive():
+                child.kill()
+                child.join(10)
+        result.close()
+        result.join_thread()
+
+
 def test_interrupted_worker_reconciles_existing_business_receipt(batch, monkeypatch):
     from unittest.mock import MagicMock
 

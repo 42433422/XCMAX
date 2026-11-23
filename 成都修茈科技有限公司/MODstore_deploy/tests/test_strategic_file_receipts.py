@@ -15,6 +15,7 @@ from modstore_server import strategic_portfolio_usage as usage
 from modstore_server.employee_path_guard import check_path_guard
 from modstore_server.employee_verification import run_verification
 from modstore_server.strategic_execution_contract import (
+    _workspace_file,
     bind_file_receipts,
     execution_payload,
     verify_execution_binding,
@@ -149,6 +150,30 @@ def test_file_input_is_rejected_before_approval(database, tmp_path, case):
         )
 
 
+def test_native_file_path_is_not_url_decoded_before_approval(database, tmp_path):
+    workspace = tmp_path / "workspaces/7"
+    safe = workspace / "a/private.json"
+    safe.parent.mkdir(parents=True)
+    safe.write_text("approved")
+    outside = tmp_path / "workspaces/8/private.json"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("private")
+    (workspace / "%61").symlink_to(outside.parent, target_is_directory=True)
+
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        proposal(database, rows=[opportunity(input_data={"file_path": "%61/private.json"})])
+
+
+@pytest.mark.parametrize("path", ["~/new.csv", "./~/new.csv", ".//~/new.csv", "./~other/new.csv"])
+def test_file_path_rejects_normalized_home_aliases(tmp_path, monkeypatch, path):
+    workspace = tmp_path / "7"
+    workspace.mkdir()
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "{user_id}"))
+
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        _workspace_file(path, str(workspace), 7, exists=False)
+
+
 def test_input_symlink_changed_after_approval_is_rechecked_before_execution(database, tmp_path):
     workspace = tmp_path / "workspaces/7"
     workspace.mkdir(parents=True)
@@ -268,11 +293,11 @@ def test_actual_file_support_resolver_keeps_frozen_templates_and_rejects_escape(
         "pending",
         "false_success",
         "changed",
+        "file_replaced_after_check",
+        "parent_replaced_after_check",
     ],
 )
 def test_legacy_receipt_needs_real_stable_in_scope_bytes(database, tmp_path, monkeypatch, case):
-    from modstore_server import catalog_archive_integrity
-
     decision, task = claim_proposal(database)
     payload = execution_payload(task)
     workspace = Path(payload["project_root"])
@@ -308,14 +333,33 @@ def test_legacy_receipt_needs_real_stable_in_scope_bytes(database, tmp_path, mon
     elif case == "false_success":
         output["ok"] = "true"
     elif case == "changed":
-        digest = catalog_archive_integrity.sha256_file
+        digest = hashlib.file_digest
 
-        def change_after_read(path):
-            value = digest(path)
-            path.write_text("changed after digest")
+        def change_after_read(source, *args, **kwargs):
+            value = digest(source, *args, **kwargs)
+            artifact.write_text("changed after digest")
             return value
 
-        monkeypatch.setattr(catalog_archive_integrity, "sha256_file", change_after_read)
+        monkeypatch.setattr(hashlib, "file_digest", change_after_read)
+    elif case in {"file_replaced_after_check", "parent_replaced_after_check"}:
+        from modstore_server import strategic_execution_contract as contract
+
+        outside = tmp_path / "private/result.csv"
+        outside.parent.mkdir(parents=True)
+        outside.write_bytes(b"private,other-tenant\nsecret,99\n")
+        validate = contract._workspace_file
+
+        def replace_after_check(path, *args, **kwargs):
+            target = validate(path, *args, **kwargs)
+            if case == "file_replaced_after_check":
+                artifact.unlink()
+                artifact.symlink_to(outside)
+            else:
+                artifact.parent.rename(workspace / "original-docs")
+                artifact.parent.symlink_to(outside.parent, target_is_directory=True)
+            return target
+
+        monkeypatch.setattr(contract, "_workspace_file", replace_after_check)
     result = {"outputs": [{"handler": "direct_python", "ok": True, "output": output}]}
     config = {"workspace_policy": {"scope_globs": ["docs/**"], "forbidden_globs": ["**/.env"]}}
     ordinary = deepcopy(result)

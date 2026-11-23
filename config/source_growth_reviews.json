@@ -183,14 +183,14 @@
     },
     "FHD/app/application/elt/auto_ingest_service.py": {
       "base_file": "FHD/app/application/elt/auto_ingest_service.py",
-      "base_blob": "d6fa1b295a042d8e9cfbf9cc5693ca55302bbd72",
-      "head_blob": "95f1782b1c911406ce68cd5f97cbd8f221f5a790",
-      "before_lines": 1374,
-      "after_lines": 1580,
-      "reason": "Preserve verified attendance partial-write receipts through initial execution, progress refresh and explicit rollback; retain durable knowledge cleanup, strict receipt evidence and process-local bounded polling. Review request extension: permit verified recoverable failed rollback to resume remaining transactional rows before knowledge cleanup.",
-      "boundary": "Owned and tenant-scoped receipts remain mandatory; unknown, missing, running or contradictory evidence fails closed. Successful business rollback is not replayed during knowledge cleanup recovery. Only a typed document-not-found response is idempotent; conflicts stay blocked. Polling limits remain per process (8 total, 2 per tenant), not global. Knowledge deletion failures invalidate cached revision; not-found requires strict durable JSON verification so persistence failure cannot be mistaken for successful deletion. Partial is accepted only for attendance with strict executed/error counts proving both writes and errors; arbitrary partial statuses remain blocked, and tenant/owner/reversibility checks stay enforced. Attendance withdrawal now requires a run-bound exclusive-source snapshot, unchanged source digest and no ambiguous external references; legacy missing evidence and shared source A/B must be rejected rather than independently withdrawn. Any DELETE failure now aborts the SQLite transaction rather than continuing partial deletion. Failed retry requires reversible=true, positive integer executed count, nonzero writes and no contradictory rollback receipt; existing owner fencing and per-row rollback remain authoritative. Running, outcome_unknown and unknown rollback states remain blocked.",
-      "validation": "Final independent integrated sorted-file suite passed 919/919, including actual attendance imports, shared-source rejection, durable cleanup recovery, provider fixture isolation and first/later DELETE broken-trigger rollback. Ruff passed eight patch files; mypy passed six production files. Human architecture approval and new-head CI remain separate. Follow-up candidate: 121 passed, 14 skipped across rollback field scope, partial/empty withdrawal, receipt resources and operation-owner suites; real two-row conflict leaves knowledge intact, retry preserves edits to restored rows and deletes knowledge only after completion. This is not human approval or new-head CI evidence.",
-      "follow_up": "Human architecture review of +206 lines required, including the additional 17-line failed-withdrawal recovery guard; prior review request does not approve this extension. Do not mechanically split to hide receipt lifecycle growth.",
+      "base_blob": "32c357b55e686c13edbce18b748491dadfd23a94",
+      "head_blob": "979d427a2ef334a94434bf30f0e0403f20e7655a",
+      "before_lines": 1580,
+      "after_lines": 1591,
+      "reason": "本次精确变更净增11行，复用既有FileLock为租户批次账本的完整读改写加跨进程互斥，并在原文件损坏时保留回执、停止写入。",
+      "boundary": "保持原JSON账本、租户/Mod/账号归属、worker所有权与审批后的原计划核对；数据库回执读回不占账本锁。未知结果不重放，业务撤回与知识回执规则保持。",
+      "validation": "本次服务/恢复71项、原stale_pending隔离复验2项及真实spawn交叉写入3项均通过，共76个不同用例；初轮2个子进程就绪超时保留记录。Ruff与格式通过，mypy未完成，最终以同一提交CI为准。",
+      "follow_up": "请沿既有架构评审核对这11行的职责和并发边界；复用现有账本，不另造调度或持久化系统。本记录是评审请求，不代表人工批准或生产验收。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/elt/llm_assist.py": {

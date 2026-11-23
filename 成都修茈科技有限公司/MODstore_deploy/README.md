@@ -95,6 +95,10 @@ RAG 的 `rag_context_prompt` / `employee_rag_context` 消费者位于原员工�
 SearXNG 参考提交用于固定接口与许可证审查，不代表 `MODSTORE_SEARXNG_URL` 指向的现有实例已经核验版本或启用 JSON。
 战略 Python 任务复用标准库 ZipFile/SourceFileLoader 与原员工解析器，从已批准归档字节创建执行快照；
 这项合同核验不代表新建 OS 沙箱，也不把宿主所有依赖声明为不可变。
+文件输入和输出复用 `ensure_within_workspace` 的租户及选定工作区边界，先检查规范化路径再访问文件系统。
+交付摘要复用现有 `_workspace_fd` 的逐层目录句柄、`O_NOFOLLOW` 和 Python 3.11 的 `hashlib.file_digest`；
+读取前后及重新打开当前路径时核对文件身份，检查后替换文件或父目录不能生成合格交付回执。
+宿主缺少安全目录句柄能力时该交付核验返回失败；原始文件与任务保留，实机资格继续独立核验。
 组件版本、配置可用性、测试、生产回执分别核验；接入组件不代表 L6 生产验收完成。
 
 生产步骤复用原 `PendingBriefTask` 唯一指纹、`DutyGraphRun`、变更请求和发布者记录。

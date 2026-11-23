@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 from app.infrastructure.workspace import (
     allocate_generated_workspace_file,
@@ -88,3 +90,51 @@ def test_workspace_resolvers_reject_normalized_escape(
 
     with pytest.raises(Exception, match="invalid path"):
         resolver("nested/../../outside.txt")
+
+
+@pytest.mark.parametrize(
+    "relative", ["reports/report%20one.csv", "reports\\report one.csv", "/reports/report one.csv"]
+)
+def test_default_workspace_resolver_keeps_url_path_contract(tmp_path: Path, monkeypatch, relative):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
+    assert resolve_safe_workspace_relpath(relative) == tmp_path / "reports/report one.csv"
+
+
+@pytest.mark.parametrize(
+    "relative", ["", "../outside", "nested/../../file", "/etc/passwd", "bad\x00name"]
+)
+def test_explicit_workspace_root_rejects_non_relative_paths(tmp_path: Path, relative):
+    with pytest.raises(HTTPException, match="invalid path|missing path"):
+        resolve_safe_workspace_relpath(relative, base=tmp_path)
+
+
+def test_explicit_workspace_root_preserves_native_names_and_checks_links(tmp_path: Path):
+    root = tmp_path / "tenant"
+    outside = tmp_path / "private"
+    root.mkdir()
+    outside.mkdir()
+    (root / "a").mkdir()
+    (root / "a/file").write_text("approved")
+    (outside / "file").write_text("private")
+    (outside / "nested").mkdir()
+    (root / "%61").symlink_to(outside, target_is_directory=True)
+    (root / "inside").symlink_to(root / "a", target_is_directory=True)
+    (root / "jump").symlink_to(outside / "nested", target_is_directory=True)
+
+    with pytest.raises(HTTPException, match="invalid path"):
+        resolve_safe_workspace_relpath("%61/file", base=root)
+    with pytest.raises(HTTPException, match="invalid path"):
+        resolve_safe_workspace_relpath("jump/../file", base=root)
+    assert resolve_safe_workspace_relpath("inside/file", base=root) == root / "a/file"
+    assert resolve_safe_workspace_relpath("a/../a/file", base=root) == root / "a/file"
+    assert resolve_safe_workspace_relpath("new/output.csv", base=root) == root / "new/output.csv"
+    assert not (root / "new").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX native backslash filename")
+def test_explicit_workspace_root_does_not_rewrite_native_backslashes(tmp_path: Path):
+    literal = tmp_path / "a\\b"
+    literal.write_text("literal filename")
+
+    assert resolve_safe_workspace_relpath(literal.name, base=tmp_path) == literal
