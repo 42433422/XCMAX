@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -166,10 +166,14 @@ def test_invalid_lease_cancels_only_unstarted_worker_and_keeps_prior_cost(
     with database() as session:
         persisted = json.loads(session.get(XiaoCLifeState, life.IDENTITY_ID).state_json)
     assert persisted["budget"]["used_tokens"] == 5
-    assert life.read_state()["budget"]["used_tokens"] == (
-        5 if persisted["budget"]["date"] == life._day() else 0
-    )
-    assert life.read_state()["budget"]["reserved_tokens"] == 0
+    original_day = date.fromisoformat(persisted["budget"]["date"])
+    for offset, used in ((0, 5), (1, 0)):
+        day = (original_day + timedelta(days=offset)).isoformat()
+        monkeypatch.setattr(life, "_day", lambda: day)
+        budget = life.read_state()["budget"]
+        assert budget["date"] == day
+        assert budget["used_tokens"] == used
+        assert budget["reserved_tokens"] == 0
 
 
 @pytest.mark.parametrize("tamper", ["owner", "lease", "scope_revision"])

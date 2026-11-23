@@ -155,11 +155,12 @@
               <div class="settings-card__body settings-card__body--flush">
                 <p class="settings-model-service-empty"><router-link to="/saas-pricing">软件买断与业务定制</router-link> · AI 调用单独按量计费</p>
                 <SettingsPlatformModelCard :can-manage="accountProfile.isAdminAccount && !accountProfile.isImpersonating" />
-                <div v-if="isLoggedIn && !accountProfile.isImpersonating" class="settings-model-service-empty" :aria-busy="runtimeChecking">
+                <div v-if="isLoggedIn && !accountProfile.isImpersonating" class="settings-model-service-empty" :aria-busy="accountRuntime.busy">
                   <p class="settings-model-service-empty__title">当前账号运行验收</p>
-                  <p class="muted">首次使用会自动验收已保存的模型。修复配置后可在这里重新验收，过程可能产生模型用量；已通过的相同配置会直接复用。</p>
-                  <button type="button" class="btn btn-sm btn-secondary" data-testid="runtime-check" :disabled="runtimeChecking" @click="checkAccountRuntime">{{ runtimeChecking ? '验收中…' : '运行验收' }}</button>
-                  <p v-if="runtimeCheckMessage" :role="runtimeCheckFailed ? 'alert' : 'status'">{{ runtimeCheckMessage }}</p>
+                  <p v-if="accountRuntime.status?.managed_by === 'deployment'" class="muted">当前运行配置由部署方管理，此处会检查已有验收结果。配置或安装版本变化后，请由部署方重新完成验收。</p>
+                  <p v-else class="muted">登录和恢复窗口只读取验收状态。首次主动执行任务前，或点击“运行验收”时按需验收，过程可能产生模型用量。相同配置与安装版本的有效结果会复用；失败或中断后可在这里重新验收。</p>
+                  <button type="button" class="btn btn-sm btn-secondary" data-testid="runtime-check" :disabled="accountRuntime.loading || accountRuntime.checking" @click="accountRuntime.status?.qualification === 'in_progress' || accountRuntime.status?.managed_by === 'deployment' ? accountRuntime.refresh() : accountRuntime.retry()">{{ accountRuntime.checking ? '验收中…' : accountRuntime.loading ? '读取中…' : accountRuntime.status?.qualification === 'in_progress' || accountRuntime.status?.managed_by === 'deployment' ? '刷新状态' : '运行验收' }}</button>
+                  <p v-if="accountRuntime.message" :role="accountRuntime.failed ? 'alert' : 'status'">{{ accountRuntime.message }}</p>
                 </div>
                 <HostModBridgeView
                   v-if="showModelPaymentBridge"
@@ -270,7 +271,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 const compactSettings = isAdminConsoleSpa()
 import { computed, onBeforeUnmount, onMounted, onActivated, ref, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { api } from '@/api/core'
+import { useAccountRuntimeStore } from '@/stores/accountRuntime'
 import { readStoredSidebarTheme, applySidebarTheme } from '@/utils/sidebarTheme'
 import HostModBridgeView from '@/components/HostModBridgeView.vue'
 import { useSettingsAccount } from '@/composables/settings/useSettingsAccount'
@@ -297,6 +298,7 @@ import settingsModelServiceArtSrc from '@/assets/icons/settings/r1c3.png'
 
 const route = useRoute()
 const accountProfile = useAccountProfileStore()
+const accountRuntime = useAccountRuntimeStore()
 
 const {
   localUser,
@@ -336,44 +338,6 @@ const {
   saveProfile,
   onLogout,
 } = useSettingsAccount()
-const runtimeChecking = ref(false)
-const runtimeCheckMessage = ref('')
-const runtimeCheckFailed = ref(false)
-let runtimeCheckRequest: AbortController | null = null
-function resetRuntimeCheck() {
-  runtimeCheckRequest?.abort()
-  runtimeCheckRequest = null
-  runtimeChecking.value = false
-  runtimeCheckMessage.value = ''
-  runtimeCheckFailed.value = false
-}
-async function checkAccountRuntime() {
-  if (!isLoggedIn.value || accountProfile.isImpersonating || runtimeChecking.value) return
-  const request = new AbortController()
-  runtimeCheckRequest = request
-  runtimeChecking.value = true
-  runtimeCheckMessage.value = ''
-  runtimeCheckFailed.value = false
-  try {
-    const result = await api.post<{ success: boolean; qualification: string; route?: { model?: string } }>(
-      '/api/desktop/agent-runtime/qualification', { retry: true },
-      { signal: request.signal, timeoutMs: 600_000, retry: false, quiet: true },
-    )
-    if (runtimeCheckRequest !== request) return
-    if (!result.success || result.qualification !== 'passed') throw new Error('qualification incomplete')
-    runtimeCheckMessage.value = `本次运行验收已通过${result.route?.model ? `（${result.route.model}）` : ''}。`
-  } catch (error) {
-    if (runtimeCheckRequest !== request) return
-    runtimeCheckFailed.value = true
-    const detail = (error as { data?: { error_code?: unknown; message?: unknown } } | null)?.data
-    runtimeCheckMessage.value = typeof detail?.error_code === 'string' && detail.error_code.startsWith('runtime_') && typeof detail.message === 'string'
-      ? detail.message : '运行验收未完成，请检查登录状态、模型配置和本机运行环境后重试。'
-  } finally {
-    if (runtimeCheckRequest === request) { runtimeChecking.value = false; runtimeCheckRequest = null }
-  }
-}
-watch([isLoggedIn, () => localUser.value?.id, () => accountProfile.isImpersonating], resetRuntimeCheck)
-onBeforeUnmount(resetRuntimeCheck)
 const adminSessionOnly = computed(() => !isLoggedIn.value && accountProfile.isAdminAccount) // 管理员会话已过守卫，市场会话未绑定时只改展示
 const canManageTenantRoles = computed(
   () => accountProfile.accountKind === 'enterprise' && accountProfile.tenantId !== null &&
@@ -607,6 +571,7 @@ onMounted(() => {
   applySidebarTheme(sidebarThemePreset.value)
   scrollToSettingsSection()
   prepareSettingsPage()
+  void accountRuntime.refresh()
   void loadDesktopDatabaseStatus()
   void loadPreferences()
   loadAutoLaunch()
@@ -617,6 +582,7 @@ let activatedOnce = false
 onActivated(() => {
   if (!activatedOnce) { activatedOnce = true; return }
   prepareSettingsPage()
+  void accountRuntime.refresh()
 })
 
 </script>

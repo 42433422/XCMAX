@@ -283,15 +283,20 @@ def apply_paid_plan_for_user(
         )
         if plan_id == PERSONAL_PLAN_ID:
             current = plan_by_id(str(tenant.plan_id or "")) if tenant else None
-            if _tier_rank(user.account_tier) > 0 or (
-                current
-                and tenant is not None
-                and (
-                    current.get("license_type") == "permanent"
-                    or (
-                        current.get("license_type") == "trial"
-                        and tenant.trial_expires_at
-                        and tenant.trial_expires_at >= utc_now_naive()
+            # Ordinary purchases preserve paid rights; authenticated market sync
+            # can reclaim this account's grant after the market revokes it.
+            if not sync_from_market and (
+                _tier_rank(user.account_tier) > 0
+                or (
+                    current
+                    and tenant is not None
+                    and (
+                        current.get("license_type") == "permanent"
+                        or (
+                            current.get("license_type") == "trial"
+                            and tenant.trial_expires_at
+                            and tenant.trial_expires_at >= utc_now_naive()
+                        )
                     )
                 )
             ):

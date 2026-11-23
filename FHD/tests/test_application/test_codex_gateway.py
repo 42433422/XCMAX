@@ -19,8 +19,10 @@ from app.infrastructure.codex.policy import (
     QUALIFICATION_CHECKS,
     ModelRoute,
     RuntimeSettings,
+    qualification_host_identity,
 )
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_qualification import synthetic_qualification
 
 
 @pytest.fixture
@@ -37,18 +39,7 @@ def setup_gateway(trusted_actor, tmp_path, monkeypatch):
     )
     # Synthetic receipt for contract tests, never evidence of real route qualification.
     qualification = tmp_path / "fixture-qualification.json"
-    qualification.write_text(
-        json.dumps(
-            {
-                "schema": "xcmax.runtime-qualification.v1",
-                "route_identity": route.identity,
-                "codex_version": CODEX_VERSION,
-                "model_kind": "real",
-                "evidence_refs": ["synthetic-gateway-test-only"],
-                "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
-            }
-        )
-    )
+    qualification.write_text(json.dumps(synthetic_qualification(route, qualification.parent)))
     settings = RuntimeSettings(
         engine="codex",
         route=route,
@@ -568,9 +559,11 @@ def test_unqualified_or_changed_route_never_starts_runtime(setup_gateway):
     assert rejected["error_code"] == "runtime_policy_blocked" and state.calls == []
     first = asyncio.run(state.invoke())
     changed_route = replace(state.settings.route, model="other-model")
-    receipt = json.loads(state.settings.qualification_file.read_text())
-    receipt["route_identity"] = changed_route.identity
-    state.settings.qualification_file.write_text(json.dumps(receipt))
+    # A changed route must carry its own complete evidence binding.
+    # Rewriting just route_identity would rightfully fail the qualification gate.
+    state.settings.qualification_file.write_text(
+        json.dumps(synthetic_qualification(changed_route, state.settings.qualification_file.parent))
+    )
     result = asyncio.run(
         state.invoke(
             run_id=first["run_id"],

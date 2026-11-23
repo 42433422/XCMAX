@@ -11,6 +11,9 @@ from app.application.agent_orchestrator.task_execution_repository import (
     InMemoryTaskExecutionRepository,
     SQLAlchemyTaskExecutionRepository,
 )
+from tests.test_application.test_agent_task_admission import (
+    admission_sessions as admission_sessions,
+)
 
 
 @pytest.fixture(params=["memory", "sql"])
@@ -178,6 +181,114 @@ def test_independent_processes_cannot_claim_the_same_run(tmp_path):
                 process.terminate()
                 process.join(timeout=5)
         engine.dispose()
+
+
+def _enqueue_in_process(url, connect_args, run_id, fingerprint, barrier, results):
+    from sqlalchemy import event
+    from sqlalchemy.exc import IntegrityError
+
+    from app.domain.task_lifecycle.control import TaskLifecycleError
+
+    engine = create_engine(url, connect_args=connect_args)
+    repository = SQLAlchemyTaskExecutionRepository(
+        session_factory=sessionmaker(bind=engine), auto_create=False
+    )
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def race_insert(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.startswith("INSERT INTO task_lifecycle_idempotency"):
+            barrier.wait(timeout=15)
+
+    run = AgentRun(run_id=run_id, user_id="owner", message="same task", status="queued")
+    run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
+    try:
+        stored = repository.enqueue(run, idempotency_key="request-1", fingerprint=fingerprint)
+        results.put(("queued", stored.run_id))
+    except (TaskLifecycleError, IntegrityError) as error:
+        results.put((type(error).__name__, run_id))
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("fingerprint", ["same-body", "changed-body"])
+def test_processes_share_idempotent_admission_or_report_conflicting_body(
+    admission_sessions, fingerprint
+):
+    import multiprocessing
+
+    factory = admission_sessions
+    with factory() as db:
+        engine = db.get_bind()
+        connect_args = (
+            {
+                "options": "-csearch_path="
+                + db.connection().exec_driver_sql("SHOW search_path").scalar_one()
+            }
+            if engine.dialect.name == "postgresql"
+            else {}
+        )
+    repository = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    assert repository.get("schema-setup") is None
+    ctx = multiprocessing.get_context("spawn")
+    barrier, results = ctx.Barrier(2), ctx.Queue()
+    processes = [
+        ctx.Process(
+            target=_enqueue_in_process,
+            args=(engine.url, connect_args, run_id, body, barrier, results),
+        )
+        for run_id, body in (("first", "same-body"), ("second", fingerprint))
+    ]
+    try:
+        for process in processes:
+            process.start()
+        outcomes = [results.get(timeout=20), results.get(timeout=20)]
+        for process in processes:
+            process.join(timeout=15)
+            assert process.exitcode == 0
+        expected = (
+            ["queued", "queued"] if fingerprint == "same-body" else ["TaskLifecycleError", "queued"]
+        )
+        assert sorted(status for status, _ in outcomes) == sorted(expected)
+        queued = [run_id for status, run_id in outcomes if status == "queued"]
+        assert len(set(queued)) == 1
+        reopened = SQLAlchemyTaskExecutionRepository(session_factory=factory, auto_create=False)
+        assert list(reopened.list_for_run_ids(["first", "second"])) == [queued[0]]
+        claim = reopened.claim("one-worker", lease_seconds=60)
+        assert claim is not None and claim.run_id == queued[0]
+        assert reopened.claim("duplicate-worker", lease_seconds=60) is None
+        assert reopened.mark_open_effect(queued[0], "write", owner_id="one-worker")
+        assert reopened.finish(queued[0], "one-worker", "failed", error_code="timeout").state == (
+            "unknown"
+        )
+        retry = AgentRun(user_id="owner", message="same task", status="queued")
+        retry.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
+        original_body = "same-body" if queued[0] == "first" else fingerprint
+        retained = reopened.enqueue(retry, idempotency_key="request-1", fingerprint=original_body)
+        assert (retained.run_id, retained.state) == (queued[0], "unknown")
+        assert reopened.get(retry.run_id) is None
+        assert reopened.claim("replay-worker", lease_seconds=60) is None
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+
+
+def test_failed_queue_insert_rolls_back_idempotency_claim(admission_sessions, monkeypatch):
+    factory = admission_sessions
+    repository = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    run = AgentRun(user_id="owner", message="admit once", status="queued")
+
+    def fail_after_claim(*_args, **_kwargs):
+        raise RuntimeError("queue persistence interrupted")
+
+    monkeypatch.setattr(repository, "enqueue_in_session", fail_after_claim)
+    with pytest.raises(RuntimeError, match="queue persistence interrupted"):
+        repository.enqueue(run, idempotency_key="request-1", fingerprint="body")
+    reopened = SQLAlchemyTaskExecutionRepository(session_factory=factory, auto_create=False)
+    assert reopened.get(run.run_id) is None
+    accepted = reopened.enqueue(run, idempotency_key="request-1", fingerprint="body")
+    assert accepted.run_id == run.run_id and accepted.state == "queued"
 
 
 def test_expired_owner_cannot_renew_or_finish_before_replacement(tmp_path, monkeypatch):
