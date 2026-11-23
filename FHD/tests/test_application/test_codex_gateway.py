@@ -319,6 +319,71 @@ def test_same_request_reuses_persisted_result_and_different_content_conflicts(se
     assert len(state.calls) == 1
 
 
+@pytest.mark.parametrize("resume", [False, True])
+def test_replay_and_conflict_do_not_load_configuration_when_qualification_is_missing(
+    setup_gateway, monkeypatch, resume
+):
+    state = setup_gateway
+    first = asyncio.run(state.invoke())
+    state.settings.qualification_file.unlink()
+    unavailable = Mock(side_effect=AssertionError("read-only replay must not resolve or qualify"))
+    monkeypatch.setattr(gateway, "runtime_settings", unavailable)
+    monkeypatch.setattr(gateway, "get_account_runtime_settings", unavailable)
+    options = {"settings": None, "run_id": first["run_id"] if resume else None}
+    replay = asyncio.run(state.invoke(**options))
+    assert replay == {**first, "deduplicated": True}
+    conflict = asyncio.run(state.invoke(task="不同任务内容", **options))
+    assert conflict["error_code"] == "request_conflict"
+    unavailable.assert_not_called()
+    assert len(state.calls) == 1
+
+
+def test_paused_account_task_defers_qualification_until_original_task_runs(
+    setup_gateway, monkeypatch
+):
+    from app.infrastructure.codex.binding import CodexBindingStore
+
+    state = setup_gateway
+    qualification = state.settings.qualification_file.read_text()
+    state.settings.qualification_file.unlink()
+    monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
+    monkeypatch.setattr(gateway, "runtime_settings", RuntimeSettings)
+    configure = Mock(return_value=state.settings)
+    monkeypatch.setattr(gateway, "get_account_runtime_settings", configure)
+    staged = asyncio.run(state.invoke(settings=None, start_paused=True))
+    assert staged["execution_state"] == "paused"
+    configure.assert_called_once_with(str(state.actor.user_id), previous=None, qualify=False)
+    parent = state.repository.get(staged["run_id"])
+    original = state.settings.route.runtime_identity()
+    assert parent.metadata["runtime_route"] == original
+    assert state.calls == state.servers == []
+    CodexBindingStore(state.repository).update(
+        parent.run_id, lambda run, _meta: setattr(run, "status", "running")
+    )
+    resumed = asyncio.run(
+        state.invoke(
+            settings=None,
+            run_id=parent.run_id,
+            runtime_context={**state.context, "turn_id": "start-paused-task"},
+        )
+    )
+    configure.assert_called_with(str(state.actor.user_id), previous=original)
+    assert resumed["error_code"] == "runtime_policy_blocked"
+    assert resumed["run_id"] == parent.run_id
+    assert state.calls == state.servers == []  # Missing qualification still blocks execution.
+    state.settings.qualification_file.write_text(qualification)
+    started = asyncio.run(
+        state.invoke(
+            settings=None,
+            run_id=parent.run_id,
+            runtime_context={**state.context, "turn_id": "start-after-qualified"},
+        )
+    )
+    configure.assert_called_with(str(state.actor.user_id), previous=original)
+    assert started["run_id"] == parent.run_id and len(state.calls) == 1
+    assert state.calls[0]["runtime_config"]["route_identity"] == original["route_identity"]
+
+
 def test_concurrent_duplicate_cannot_start_another_turn(setup_gateway):
     state = setup_gateway
 

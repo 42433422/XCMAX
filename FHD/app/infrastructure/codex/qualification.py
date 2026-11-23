@@ -41,6 +41,8 @@ from app.infrastructure.codex.transport import (
 )
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
+_MAX_PROBE_CALLS = 64
+
 
 class ModelEgressDenied(httpx.RequestError):
     """Rejected before HTTPX opens a connection; contains no destination/secret."""
@@ -106,7 +108,7 @@ class _Probe:
         # accepted from the model. Even a repeated rejected write is audited.
         valid = arguments == {"nonce": self.nonce}
         with sqlite3.connect(self.database) as db:
-            exists = db.execute("SELECT nonce FROM receipt").fetchall() == [(self.nonce,)]
+            exists = db.execute("SELECT nonce FROM receipt LIMIT 2").fetchmany(2) == [(self.nonce,)]
             accepted = valid and (
                 name == "task_evidence"
                 and exists
@@ -122,9 +124,18 @@ class _Probe:
     def snapshot(self) -> dict:
         # Independent, read-only connection; an MCP success string is not proof.
         with sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True) as db:
-            rows = db.execute("SELECT nonce FROM receipt").fetchall()
-            calls = db.execute("SELECT tool, phase, accepted FROM calls ORDER BY rowid").fetchall()
-        return {"row_verified": rows == [(self.nonce,)], "calls": calls}
+            rows = db.execute("SELECT nonce FROM receipt LIMIT 2").fetchmany(2)
+            calls = db.execute(
+                "SELECT tool, phase, accepted FROM calls ORDER BY rowid LIMIT ?",
+                (_MAX_PROBE_CALLS + 1,),
+            ).fetchmany(_MAX_PROBE_CALLS + 1)
+        # The extra row detects overflow; a truncated ledger is never proof that
+        # no replay or rejected action occurred after the visible prefix.
+        return {
+            "row_verified": rows == [(self.nonce,)],
+            "calls": calls,
+            "calls_complete": len(calls) <= _MAX_PROBE_CALLS,
+        }
 
 
 class _ProbeMcpResponse(Response):
@@ -397,6 +408,8 @@ async def _run_probe(settings: RuntimeSettings, owner_scope: str, probe: _Probe)
                 "is verified. Do not repeat execute_action.",
             )
             first = probe.snapshot()
+            if not first["calls_complete"]:
+                raise _QualificationError("runtime_qualification_limit")
             if not first["row_verified"]:
                 raise _QualificationError("runtime_probe_receipt_missing")
             probe.phase = "compact"
@@ -431,16 +444,20 @@ def _checks(probe: _Probe, route: ModelRoute) -> dict[str, str]:
     facts = {
         "responses_stream": models_complete
         and all(item.get("stream_deltas", 0) > 0 for item in probe.models),
-        "multi_turn_tools": {"initial", "resumed"} <= read_phases and len(writes) == 1,
+        "multi_turn_tools": snapshot["calls_complete"]
+        and {"initial", "resumed"} <= read_phases
+        and len(writes) == 1,
         "openai_network_denied": probe.network.get("denied_before_connect") is True,
-        "business_receipt_verified": snapshot["row_verified"]
+        "business_receipt_verified": snapshot["calls_complete"]
+        and snapshot["row_verified"]
         and all(call[2] == 1 for call in calls),
         "upstream_failover_disabled": models_complete
         and all(item.get("single_attempt") for item in probe.models),
         "response_model_identity": models_complete
         and all(item.get("model") == route.response_model for item in probe.models),
         "forced_compaction_restart_same_task_no_replay": (
-            len(writes) == 1
+            snapshot["calls_complete"]
+            and len(writes) == 1
             and writes[0] == ("execute_action", "initial", 1)
             and "resumed" in read_phases
             and bool(recovery.get("thread_id"))

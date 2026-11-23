@@ -252,7 +252,11 @@ def _prepared_route(connection: Connection, selected: tuple[str, str] | None) ->
 
 
 def get_account_runtime_settings(
-    owner: str, *, previous: dict[str, Any] | None = None, retry: bool = False
+    owner: str,
+    *,
+    previous: dict[str, Any] | None = None,
+    retry: bool = False,
+    qualify: bool = True,
 ) -> RuntimeSettings:
     """Called only after the gateway verifies the actor and any existing task owner."""
     connection = _account_connection(owner)
@@ -287,6 +291,8 @@ def get_account_runtime_settings(
         runtime_root=root,
         qualification_file=evidence_root / "qualification.json",
     )
+    if not qualify:
+        return settings  # Staging freezes the route without paid model calls.
     settings, fresh = _qualified_settings(
         settings, owner_scope=scope, evidence=prepared.snapshot["runtime"], retry=retry
     )

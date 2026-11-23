@@ -134,6 +134,20 @@ def test_failed_setup_is_not_rebilled_on_each_chat_and_explicit_retry_is_bounded
     assert len(account.attempts) == 2
 
 
+def test_staging_only_prepares_a_pinned_route_and_qualifies_on_execution(account):
+    staged = configuration.get_account_runtime_settings("41", qualify=False)
+    assert account.attempts == []
+    assert not staged.qualification_file.exists()
+    assert not staged.qualification_file.with_name("setup-attempt.json").exists()
+    account.snapshot["model"] = "different-default"
+    started = configuration.get_account_runtime_settings(
+        "41", previous=staged.route.runtime_identity()
+    )
+    assert started.require_qualified().identity == staged.route.identity
+    assert len(account.attempts) == 1
+    assert account.calls[-1].url.params["model"] == "team-model"
+
+
 def test_failed_setup_preserves_only_safe_diagnostic_code_and_checks(account, tmp_path):
     account.succeeds = False
     account.error_code = "runtime_billing_evidence_missing"

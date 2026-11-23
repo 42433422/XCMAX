@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 from dataclasses import replace
 
 import httpx
@@ -94,6 +95,47 @@ def test_probe_audits_rejected_replay_and_has_no_production_tool_surface(tmp_pat
     checks = qualification._checks(probe, route())
     assert checks["business_receipt_verified"] == "FAIL"
     assert checks["forced_compaction_restart_same_task_no_replay"] == "FAIL"
+
+
+def test_probe_rejects_extra_receipt_rows_in_bounded_read(tmp_path):
+    probe = probe_at(tmp_path)
+    assert probe.invoke("execute_action", {"nonce": probe.nonce})["success"]
+    with sqlite3.connect(probe.database) as db:
+        db.executemany("INSERT INTO receipt VALUES (?)", [("extra-one",), ("extra-two",)])
+    assert not probe.invoke("task_evidence", {"nonce": probe.nonce})["verified"]
+    assert not probe.snapshot()["row_verified"]
+    assert qualification._checks(probe, route())["business_receipt_verified"] == "FAIL"
+
+
+@pytest.mark.parametrize("overflow", [False, True])
+def test_probe_call_ledger_limit_cannot_hide_later_replay(tmp_path, overflow):
+    probe = probe_at(tmp_path)
+    probe.invoke("execute_action", {"nonce": probe.nonce})
+    probe.invoke("task_evidence", {"nonce": probe.nonce})
+    probe.phase = "resumed"
+    for _ in range(qualification._MAX_PROBE_CALLS - 2 + int(overflow)):
+        assert probe.invoke("task_evidence", {"nonce": probe.nonce})["verified"]
+    if overflow:
+        # The replay lies after the bounded prefix; merely inspecting its calls
+        # would falsely see exactly one write and successful reads in both phases.
+        assert not probe.invoke("execute_action", {"nonce": probe.nonce})["success"]
+    probe.recovery = {
+        "thread_id": "thread-fixture",
+        "resumed_thread_id": "thread-fixture",
+        "compaction": {"thread_id": "thread-fixture", "turn_id": "compact-fixture"},
+        "first_process_id": 1,
+        "second_process_id": 2,
+    }
+    snapshot = probe.snapshot()
+    assert snapshot["calls_complete"] is (not overflow)
+    assert len(snapshot["calls"]) == qualification._MAX_PROBE_CALLS + int(overflow)
+    checks = qualification._checks(probe, route())
+    for name in (
+        "multi_turn_tools",
+        "business_receipt_verified",
+        "forced_compaction_restart_same_task_no_replay",
+    ):
+        assert checks[name] == ("FAIL" if overflow else "PASS")
 
 
 @pytest.mark.parametrize(

@@ -362,45 +362,12 @@ async def run_runtime_task_async(
             if ancestor is None:
                 raise CodexBindingError("parent_missing", "员工父任务不存在")
             _same_owner(ancestor, context, owner, ancestor=True)
-        explicit_settings = settings is not None
-        settings = settings or runtime_settings()
-        if settings.engine != "codex":
-            return _failure(
-                "runtime_not_selected", "当前部署未选择 Codex 运行时", run_id=resolved_id
-            )
-        if (
-            not explicit_settings
-            and settings.route is None
-            and not os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip()
-        ):
-            if run_id and previous is None:
-                raise CodexBindingError(
-                    "runtime_changed", "原任务缺少模型路由绑定，请恢复原部署配置。"
-                )
-            settings = await asyncio.to_thread(
-                get_account_runtime_settings, owner, previous=previous
-            )
-        surface = "employee" if context.get("employee_id") else "chat"
-        if surface not in settings.surfaces:
-            raise RuntimePolicyError("当前入口未启用固定 Codex 执行器")
-        route = settings.require_qualified()
-        route.token()  # Credentials and real qualification precede business admission.
-        if settings.runtime_root is None:
-            raise RuntimePolicyError("Codex private runtime_root is required")
-        queue = None
         queued_payload = {
             "task": task,
             "input_data": input_data,
             "history": history,
             "answer_to_waiting_input": answer_to_waiting_input,
         }
-        if start_queued:
-            from app.infrastructure.codex.queued_runtime import (
-                durable_queue,
-                stage_queued_request,
-            )
-
-            queue = durable_queue(repository)
         request_key = canonical_digest({"turn_id": context["turn_id"], "owner": owner})
         instruction_digest = canonical_digest(system_prompt)
         requested = {
@@ -426,8 +393,6 @@ async def run_runtime_task_async(
             ):
                 raise CodexBindingError("request_conflict", "原运行任务的任务绑定已改变")
             requested["task_id"] = stored_task_id
-            if parent.metadata.get("runtime_route_identity") != route.identity:
-                raise CodexBindingError("runtime_changed", "原任务的模型路由不能改变")
             if parent.metadata.get("runtime_gate_required") and gate is None:
                 raise CodexBindingError("gate_required", "原任务的员工工具检查不可省略")
             if parent.metadata.get("runtime_instruction_digest") != instruction_digest:
@@ -468,6 +433,65 @@ async def run_runtime_task_async(
             else:
                 context["root_run_id"] = resolved_id
             context.update(task_id=_task_id or resolved_id, source="codex_runtime")
+            parent = repository.get(resolved_id)
+            if parent is not None:
+                _same_owner(parent, context, owner)
+        digest = canonical_digest(requested)
+        if parent is not None:
+            request = (parent.metadata.get("runtime_requests") or {}).get(request_key)
+            if request is not None:
+                if request.get("digest") != digest:
+                    raise CodexBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
+                return _duplicate_result(parent, request)
+            if not is_resume:
+                raise CodexBindingError("request_conflict", "原运行任务缺少已绑定的请求标识")
+            if parent.status != "blocked":
+                store._validate_control(parent)
+        elif ancestor is not None:
+            store._validate_control(ancestor)
+        # Read-only replay and deferred execution never start paid qualification.
+        deferred = (
+            start_paused or start_queued or (parent is not None and parent.status == "blocked")
+        )
+        explicit_settings = settings is not None
+        settings = settings or runtime_settings()
+        if settings.engine != "codex":
+            return _failure(
+                "runtime_not_selected", "当前部署未选择 Codex 运行时", run_id=resolved_id
+            )
+        if (
+            not explicit_settings
+            and settings.route is None
+            and not os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip()
+        ):
+            if run_id and previous is None:
+                raise CodexBindingError(
+                    "runtime_changed", "原任务缺少模型路由绑定，请恢复原部署配置。"
+                )
+            options = {"qualify": False} if deferred else {}
+            settings = await asyncio.to_thread(
+                get_account_runtime_settings, owner, previous=previous, **options
+            )
+        surface = "employee" if context.get("employee_id") else "chat"
+        if surface not in settings.surfaces:
+            raise RuntimePolicyError("当前入口未启用固定 Codex 执行器")
+        route = settings.route if deferred else settings.require_qualified()
+        if route is None or settings.runtime_root is None:
+            raise RuntimePolicyError("Codex model route and private runtime_root are required")
+        if not deferred:
+            route.token()  # Credentials and real qualification precede business execution.
+        if is_resume and parent is not None:
+            if parent.metadata.get("runtime_route_identity") != route.identity:
+                raise CodexBindingError("runtime_changed", "原任务的模型路由不能改变")
+        queue = None
+        if start_queued:
+            from app.infrastructure.codex.queued_runtime import (
+                durable_queue,
+                stage_queued_request,
+            )
+
+            queue = durable_queue(repository)
+        if not is_resume:
             parent = AgentRun(
                 user_id=owner, message=task, run_id=resolved_id, intent="codex.runtime"
             )
@@ -526,7 +550,7 @@ async def run_runtime_task_async(
             _same_owner(parent, context, owner)
             if created:
                 admitted = True
-        digest = canonical_digest(requested)
+        assert parent is not None
         request = (parent.metadata.get("runtime_requests") or {}).get(request_key)
         if request is not None and request.get("digest") != digest:
             raise CodexBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
