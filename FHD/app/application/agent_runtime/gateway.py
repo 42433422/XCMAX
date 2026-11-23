@@ -178,9 +178,15 @@ def _trusted_context(raw: dict[str, Any]) -> tuple[dict[str, Any], str]:
 def _goal_instructions(system_prompt: str) -> str:
     """One decision kernel; the host authorizes actions and verifies outcomes."""
     return system_prompt + (
-        "\n\n你是本任务唯一的动态决策执行者。先使用 capability_search 和 capability_describe "
-        "发现当前账户真实可用的能力，读取完整输入 Schema 与契约摘要；允许先观察文件、"
-        "数据和环境，再决定下一步，不需要先生成完整业务图。"
+        "\n\n你是本任务唯一的动态决策执行者。先判断用户要的是文本交付还是实际操作。"
+        "纯解释、翻译、写作、方案、代码示例等只需生成回复的任务，直接交付完整正文；"
+        "此类目标不要求目录、上传ID、文件写入或执行权限，不得因为缺工具而反复向用户追问。"
+        "只有真实读取受限业务数据、改动文件、运行程序或执行业务时，才先使用"
+        " capability_search 和 capability_describe 发现当前账户真实可用的能力，"
+        "读取完整输入 Schema 与契约摘要；允许先观察文件、数据和环境，再决定下一步。"
+        "涉及'这家餐厅'等指代时，先从当前会话历史找唯一实体，不得凭空编造；"
+        "确有多个候选才询问一个必要信息。没有查询能力则明确限制并给出可用一般建议，"
+        "不得重复询问已经提供的信息。"
         "只通过宿主公布的工具执行，不能编造工具名称、动作或完成回执。"
         "工具参数或已知无副作用的失败可依据反馈修正；结果未知、待审批、待认证、"
         "取消或预算耗尽必须保留原任务，不重复提交写入。"

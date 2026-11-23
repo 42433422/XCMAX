@@ -169,7 +169,11 @@ def classify_runtime_result(
             exit_status="goal_verification_required",
             execution_state="blocked",
             error="已执行动作不等于整体目标完成，原任务目标仍需核对",
-            output=f"已核验 {len(verified_rows)} 项操作，整体目标尚未完成。\n{feedback}",
+            output=(
+                f"已核验 {len(verified_rows)} 项操作，整体目标尚未完成。\\n{feedback}"
+                if verified_rows
+                else f"原任务的回复或业务目标尚未核验完成。\\n{feedback}"
+            ),
             goal_response=reviewed_output,
             verification_feedback=feedback,
             retryable=isinstance(report, dict)
