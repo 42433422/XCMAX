@@ -217,9 +217,12 @@ def test_shared_chat_failure_boundary_preserves_nested_execution_receipt(outcome
 
 
 @pytest.mark.parametrize(
-    "outcome,committed", [("partial", True), ("unknown", False), ("not_executed", False)]
+    "outcome,committed",
+    [("partial", True), ("unknown", False), ("not_executed", False)],
 )
-def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outcome, committed):
+def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(
+    outcome, committed
+):
     """Actual workflow response builder emits a root execution receipt on failure."""
     from app.fastapi_routes.ai_intent import _public_unified_chat_payload
 
@@ -256,6 +259,7 @@ def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outc
         assert result["requires_reconciliation"] is True
         assert result["retryable"] is False
 
+
 @pytest.mark.parametrize("next_state", ["unknown", "failed", "cancelled"])
 def test_shared_chat_current_runtime_partial_write_requires_reconciliation(next_state):
     """The current Codex runtime retains confirmed writes after later failures."""
@@ -284,7 +288,9 @@ def test_shared_chat_current_runtime_partial_write_requires_reconciliation(next_
     runtime = {"run_id": "original-run", "output": PRIVATE}
     assert classify_runtime_result(runtime, rows, {}, "business", "failed") == "blocked"
     assert runtime["business_receipts"][0]["receipt"]["verified"] is True
-    assert runtime["execution_state"] == ("unknown" if next_state == "unknown" else "partial")
+    assert runtime["execution_state"] == (
+        "unknown" if next_state == "unknown" else "partial"
+    )
 
     transport = runtime_chat_payload(runtime, conversation_id="original-session")
     assert transport["runtime_context_update"]["agent_runtime_run_id"] == "original-run"
