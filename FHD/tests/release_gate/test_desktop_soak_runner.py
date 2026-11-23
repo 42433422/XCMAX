@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import threading
+from contextlib import nullcontext
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,6 +38,63 @@ def runner(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize(
+    "lost", ["child", "child_lookup", "backend", "root", "replaced_backend", "churn", "denied"]
+)
+def test_snapshot_retries_only_noncritical_process_disappearance(runner, lost):
+    binary = str(Path(sys.executable).resolve())
+
+    def process(pid, *, created=1.0, parent=1):
+        return SimpleNamespace(
+            pid=pid,
+            create_time=lambda: created,
+            ppid=lambda: parent,
+            exe=lambda: binary,
+            is_running=lambda: True,
+            oneshot=nullcontext,
+            cpu_times=lambda: SimpleNamespace(user=0, system=0),
+            memory_info=lambda: SimpleNamespace(rss=1024),
+            num_fds=lambda: 1,
+            num_handles=lambda: 1,
+        )
+
+    def disappear(pid, error=psutil.NoSuchProcess):
+        def get_info():
+            raise error(pid)
+
+        return get_info
+
+    root, backend, child = process(100), process(200, parent=100), process(300, parent=100)
+    child.exe = lambda: str(Path(__file__).resolve())  # Not an owned backend.
+    lost_process = {"root": root, "backend": backend}.get(lost, child)
+    if lost == "child_lookup":
+        child.ppid = disappear(child.pid)
+    else:
+        error = psutil.AccessDenied if lost == "denied" else psutil.NoSuchProcess
+        lost_process.memory_info = disappear(lost_process.pid, error)
+    owner = process(200, created=2.0, parent=100) if lost == "replaced_backend" else backend
+    snapshots = iter(
+        ([root, backend, child], [root, owner, child] if lost == "churn" else [root, owner])
+    )
+    tree = runner.ProcessTree.__new__(runner.ProcessTree)
+    tree.root, tree.binary, tree.backend = root, Path(binary), Path(binary)
+    tree.previous_at, tree.previous_cpu = 0, {(100, 1.0): 0}
+    tree.living = lambda: next(snapshots)
+    if lost in {"child", "child_lookup"}:
+        sample = tree.sample()
+        assert sample["process_count"] == 2 and sample["rss_bytes"] == 2048
+        assert sample["backend_pid"] == 200 and sample["backend_create_time"] == 1.0
+    else:
+        error = {
+            "backend": psutil.NoSuchProcess,
+            "root": psutil.NoSuchProcess,
+            "denied": psutil.AccessDenied,
+        }.get(lost, ValueError)
+        with pytest.raises(error):
+            tree.sample()
+        assert tree.previous_at == 0 and tree.previous_cpu == {(100, 1.0): 0}
 
 
 @pytest.fixture

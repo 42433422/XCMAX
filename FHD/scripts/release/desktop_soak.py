@@ -163,16 +163,41 @@ class ProcessTree:
         return living
 
     def sample(self) -> dict:
-        if not self.root.is_running() or not Path(self.root.exe()).samefile(self.binary):
-            raise ValueError("desktop_process_missing_or_replaced")
-        processes = self.living()
-        owners = [
-            p
-            for p in processes
-            if p.ppid() == self.root.pid and Path(p.exe()).samefile(self.backend)
-        ]
-        if len(owners) != 1:
-            raise ValueError("owned_backend_missing_or_ambiguous")
+        root_identity = (self.root.pid, self.root.create_time())
+        expected_backend = None
+        for _ in range(2):
+            if not self.root.is_running() or not Path(self.root.exe()).samefile(self.binary):
+                raise ValueError("desktop_process_missing_or_replaced")
+            processes = self.living()
+            owners, vanished = [], False
+            for process in processes:
+                try:
+                    if process.ppid() == self.root.pid and Path(process.exe()).samefile(
+                        self.backend
+                    ):
+                        owners.append((process, (process.pid, process.create_time())))
+                except psutil.NoSuchProcess:
+                    if process.pid == self.root.pid:
+                        raise
+                    vanished = True
+            if len(owners) != 1:
+                raise ValueError("owned_backend_missing_or_ambiguous")
+            backend, identity = owners[0]
+            if expected_backend is not None and identity != expected_backend:
+                raise ValueError("owned_backend_missing_or_replaced")
+            expected_backend = identity
+            if not vanished:
+                try:
+                    return self._collect_sample(
+                        processes, self.root, root_identity, backend, identity
+                    )
+                except psutil.NoSuchProcess as exc:
+                    if exc.pid in (root_identity[0], identity[0]):
+                        raise
+            # Discard the incomplete snapshot. Never advance the CPU baseline on retry.
+        raise ValueError("desktop_process_snapshot_unstable")
+
+    def _collect_sample(self, processes, root, root_identity, backend, backend_identity) -> dict:
         now, rss, handles, used = time.monotonic(), 0, 0, 0.0
         current = {}
         for process in processes:
@@ -187,13 +212,16 @@ class ProcessTree:
         cpu_percent = 100 * used / max(now - self.previous_at, 0.001) / (psutil.cpu_count() or 1)
         if not self.previous_cpu:
             cpu_percent = 0.0  # The first observation establishes the interval baseline.
+        if not root.is_running() or root_identity not in current:
+            raise ValueError("desktop_process_missing_or_replaced")
+        if not backend.is_running() or backend_identity not in current:
+            raise ValueError("owned_backend_missing_or_replaced")
         self.previous_at, self.previous_cpu = now, current
-        backend = owners[0]
         return {
-            "root_pid": self.root.pid,
-            "root_create_time": self.root.create_time(),
-            "backend_pid": backend.pid,
-            "backend_create_time": backend.create_time(),
+            "root_pid": root_identity[0],
+            "root_create_time": root_identity[1],
+            "backend_pid": backend_identity[0],
+            "backend_create_time": backend_identity[1],
             "rss_bytes": rss,
             "cpu_percent": cpu_percent,
             "handles": handles,
