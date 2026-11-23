@@ -179,9 +179,11 @@ def run_runtime_chat(
             file_context=file_context,
         )
     finally:
-        if disk_lock is not None and disk_lock.is_locked:
-            disk_lock.release()
-        slot.release()
+        try:
+            if disk_lock is not None and disk_lock.is_locked:
+                disk_lock.release()
+        finally:
+            slot.release()
 
 
 def _run_runtime_chat(

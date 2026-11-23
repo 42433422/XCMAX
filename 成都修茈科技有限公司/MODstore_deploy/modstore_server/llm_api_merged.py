@@ -129,10 +129,34 @@ async def resolve_default_llm_route(
                     for r in block.get("models_detailed", [])
                     if r.get("runtime_selectable") is True
                 ]
-            m = next(
-                (str(mid).strip() for mid in mids if classify_model(p, str(mid)) in {"llm", "vlm"}),
-                "",
-            )
+            if runtime == "codex":
+                from modstore_server.llm_gateway_contract import codex_route_contract
+
+                rows = {
+                    str(row["id"]): row
+                    for row in block.get("models_detailed", [])
+                    if isinstance(row, dict) and isinstance(row.get("id"), str)
+                }
+                m = ""
+                for mid in mids:
+                    candidate = str(mid).strip()
+                    if classify_model(p, candidate) not in {"llm", "vlm"}:
+                        continue
+                    try:
+                        codex_route_contract(
+                            p, candidate, model_context_capabilities(p, candidate, rows.get(candidate))
+                        )
+                    except HTTPException:
+                        # A platform default may try the next advertised model;
+                        # a user-selected explicit model still gets the exact 409.
+                        continue
+                    m = candidate
+                    break
+            else:
+                m = next(
+                    (str(mid).strip() for mid in mids if classify_model(p, str(mid)) in {"llm", "vlm"}),
+                    "",
+                )
             if not m:
                 return None
         snapshot = chat_route_snapshot(p, m, key, base, key_source, source)
