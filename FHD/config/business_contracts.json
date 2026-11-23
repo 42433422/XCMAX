@@ -607,6 +607,75 @@
       "database_modes": ["sqlite"],
       "resources": [],
       "required_for_merge": true
+    },
+    {
+      "requirement_id": "R05",
+      "scenario_id": "R05-approved-sales-full-chain",
+      "rule": "另一位有权限的同租户审批人批准持久化原计划后，销售、出库、记账、文件交付和只读独立对账必须一致。",
+      "source": "合成客户、库存和固定 PlanGraph 经真实审批服务、SQLite 业务服务及 XLSX 下载路径；不是客户原始资料或生产验收 PASS。",
+      "preconditions": ["不同申请人与审批人的真实会话和角色已落库", "另一租户有同名产品和库存", "本租户有金额 9900 的无关订单", "原计划和待审任务已持久化"],
+      "inputs": ["销售产品 B 10 件，每件 100 元", "出库 10 件，开票 1000 元，不核销收款", "无权限及跨租户审批请求", "重建审批服务和任务仓库后批准原单", "重复审批原单"],
+      "allowed": ["拒绝无权限及跨租户审批且没有业务写入", "审批快照及摘要保持原计划，原申请人的权限约束执行", "三步各执行一次，重复审批被拒绝", "本租户可下载仅含原销售订单的 XLSX，另一租户被拒绝"],
+      "forbidden_effects": ["审批前产生销售、库存或凭证业务写入", "重复审批重放业务", "把无关订单或另一租户数据纳入交付", "独立复核产生 INSERT、UPDATE 或 DELETE"],
+      "oracle": "独立 sqlite3 只读连接核对订单金额 1000、出库 -10、库存 20→10、凭证行借贷各 1000、收款核销为 0；下载字节 SHA256 与实际 XLSX 单元格逐项核对；原审批快照摘要、审批人和一次审批记录相符；生产复核无写入。",
+      "tests": ["tests/test_application/test_business_full_chain_acceptance.py::test_separate_reviewer_resumes_original_approval_then_delivers_reconciled_order"],
+      "boundary": {
+        "real": ["SQLite sessions and role grants", "durable approval and original plan snapshot", "sales, fulfillment and ledger writes", "independent sqlite3 readback", "openpyxl workbook", "authenticated FastAPI artifact download", "production read-only verification"],
+        "doubles": ["synthetic customer, inventory and fixed PlanGraph instead of live model", "temporary database, claim store and artifact directory", "enterprise SKU selected for the fixture", "in-process AgentToolExecutor composition", "outbound mobile notification suppressed"],
+        "execution": "real"
+      },
+      "known_defects": [],
+      "fault_version": "未经授权执行、原计划被替换、重复落库或交付混入其他订单",
+      "platforms": ["linux"],
+      "database_modes": ["sqlite"],
+      "resources": ["temporary SQLite", "XLSX", "in-process HTTP client"],
+      "required_for_merge": true
+    },
+    {
+      "requirement_id": "R07",
+      "scenario_id": "R07-approved-sales-worker-restart",
+      "rule": "审批与排队事务落库后重建 SQL 仓库和 worker，原销售计划只执行一次且交付经过独立对账。",
+      "source": "合成输入走真实 approve_and_enqueue、SQL 队列租约、AgentTaskDispatcher 和 XLSX 下载；重建服务对象，不宣称进程崩溃恢复或客户生产验收。",
+      "preconditions": ["有权限的本租户管理员申请和审批原计划", "销售任务待审且业务未执行", "无关订单与另一租户库存已作为隔离对照落库"],
+      "inputs": ["无权限主体使用审批令牌", "授权主体批准并入队", "重建 SQL 仓库后 worker 认领并执行", "再次认领与重复审批"],
+      "allowed": ["无权限审批被拒绝", "批准入队尚不产生业务写入", "worker 执行后任务和队列成功", "重复认领无任务，重复审批被拒绝"],
+      "forbidden_effects": ["绕过审批执行", "worker 重建后丢失原计划", "重复销售、扣库存或记账", "把未验证的导出标记为已交付"],
+      "oracle": "独立 sqlite3 连接核对一次销售、一次出库及借贷平衡凭证；认证下载字节及订单范围内 XLSX 的产品、数量和金额精确一致；生产复核无写入；队列最终 succeeded 且无法再次认领。",
+      "tests": ["tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[False]"],
+      "boundary": {
+        "real": ["SQLite sessions and role grants", "transactional approval and durable queue", "SQL worker lease and AgentTaskDispatcher", "sales, fulfillment and ledger writes", "independent sqlite3 readback", "openpyxl workbook", "authenticated FastAPI artifact download", "production read-only verification"],
+        "doubles": ["synthetic customer, inventory and fixed PlanGraph instead of live model", "temporary database, claim store and artifact directory", "enterprise SKU selected for the fixture", "in-process AgentToolExecutor composition"],
+        "execution": "real"
+      },
+      "known_defects": [],
+      "fault_version": "审批队列重建后重复执行销售或导出未对账即完成",
+      "platforms": ["linux"],
+      "database_modes": ["sqlite"],
+      "resources": ["temporary SQLite", "durable worker queue", "XLSX", "in-process HTTP client"],
+      "required_for_merge": true
+    },
+    {
+      "requirement_id": "R04",
+      "scenario_id": "R04-corrupt-sales-report-rejected",
+      "rule": "即使 XLSX 可正常打开，金额与原销售订单不一致也必须阻止任务和队列宣告成功。",
+      "source": "合成销售经真实审批、worker、SQLite 和导出后，仅将有效 XLSX 的金额单元格改为 1；用于证明内容对账会拒绝错误交付，不代表客户原始资料验收。",
+      "preconditions": ["销售金额 1000、出库和凭证已由原批准计划执行", "真实导出服务生成可打开的 XLSX"],
+      "inputs": ["把 sales 工作表 C2 金额从 1000 改为 1，保留有效 XLSX 结构", "worker 完成原计划", "重复认领和审批"],
+      "allowed": ["导出独立验证 accepted 为 false", "任务不为 completed，队列不为 succeeded", "已提交的销售仅产生一次出库和一次凭证"],
+      "forbidden_effects": ["仅凭 XLSX 能打开或工具返回成功即完成交付", "为了处理错误交付重放已提交业务", "重复认领或重复审批再次执行"],
+      "oracle": "真实 worker 返回后检查导出验证拒绝、任务和队列失败关闭；独立 sqlite3 读取出库和凭证各一条；重复队列认领为空，重复审批被拒绝。",
+      "tests": ["tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[True]"],
+      "boundary": {
+        "real": ["SQLite sessions and role grants", "transactional approval and durable queue", "SQL worker lease and AgentTaskDispatcher", "sales, fulfillment and ledger writes", "original ReportService export", "production report content verification", "independent sqlite3 readback"],
+        "doubles": ["synthetic customer, inventory and fixed PlanGraph instead of live model", "temporary database, claim store and artifact directory", "enterprise SKU selected for the fixture", "in-process AgentToolExecutor composition", "post-export XLSX amount fault injection"],
+        "execution": "real"
+      },
+      "known_defects": [],
+      "fault_version": "格式有效但金额错误的 XLSX 被标记为交付成功",
+      "platforms": ["linux"],
+      "database_modes": ["sqlite"],
+      "resources": ["temporary SQLite", "durable worker queue", "XLSX"],
+      "required_for_merge": true
     }
   ]
 }

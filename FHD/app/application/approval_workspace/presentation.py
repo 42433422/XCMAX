@@ -58,9 +58,47 @@ def _current_run_receipt(
             or str(runtime.get("tenant_id") or "") != str(req.tenant_id)
             or plan is None
             or run.plan_id != snapshot["plan"].plan_id
-            or plan_fingerprint(plan) != plan_fingerprint(snapshot["plan"])
         ):
             return unavailable
+        if plan_fingerprint(plan) != plan_fingerprint(snapshot["plan"]):
+            from app.application.agent_orchestrator.param_references import resolve_references
+            from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+            expected = plan_from_dict(snapshot["plan"])
+            steps = {step.node_id: step for step in run.steps}
+            nodes = {node.node_id: node for node in plan.nodes}
+            if (
+                expected is None
+                or len(steps) != len(run.steps)
+                or len(nodes) != len(plan.nodes)
+                or set(steps) != set(nodes)
+                or set(nodes) != {node.node_id for node in expected.nodes}
+            ):
+                return unavailable
+            for node in expected.nodes:
+                current, step = nodes[node.node_id], steps[node.node_id]
+                if (current.tool_id, current.action, current.params, current.depends_on) != (
+                    step.tool_id,
+                    step.action,
+                    step.params,
+                    step.depends_on,
+                ):
+                    return unavailable
+                if node.params != current.params:
+                    problems: list[str] = []
+                    outputs = {
+                        key: steps[key].output
+                        for key in node.depends_on
+                        if key in steps and steps[key].status == "completed"
+                    }
+                    spec = get_tool_action_spec(node.tool_id, node.action)
+                    node.params = resolve_references(
+                        node.params, outputs, problems, spec.input_schema if spec else None
+                    )
+                    if problems:
+                        return unavailable
+            if plan_fingerprint(plan) != plan_fingerprint(expected):
+                return unavailable
         return {
             **run_execution_receipt(run),
             "status": req.status,

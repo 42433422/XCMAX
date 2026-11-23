@@ -386,13 +386,20 @@ class TestRealSqliteAtomicClosedLoop:
             with factory() as db:
                 receipt = db.query(ReceivableAllocation).filter_by(reference_type="payment").one()
                 receipt_id = receipt.id
+            if refunded:
+                # Create a real historical refund before removing its ownership evidence.
+                assert refund(allocation_id=receipt_id)["success"]
+            with factory() as db:
+                receipt = db.get(ReceivableAllocation, receipt_id)
                 receipt.request_key = receipt.request_fingerprint = None
                 if legacy_null_tenant:
                     receipt.tenant_id = None
                 db.commit()
-            if refunded:
-                assert refund(allocation_id=receipt_id)["success"]
             before = _count_business_rows(factory, 1)
+            if legacy_null_tenant:
+                rejected = refund(allocation_id=receipt_id)
+                assert rejected["success"] is False
+                assert rejected["code"] == "REFUND_RECEIPT_UNVERIFIED"
             with factory() as db:
                 paid = db.query(SalesOrder).one().paid_amount
             result = service.execute_closed_loop(payload)
