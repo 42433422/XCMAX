@@ -16,15 +16,18 @@ from dataclasses import dataclass, field
 class CollaborationGraph:
     # employee_id -> 它依赖（需先执行）的 employee_id 列表
     edges: dict[str, list[str]] = field(default_factory=dict)
+    _rejected_self_references: set[str] = field(default_factory=set, init=False, repr=False)
 
     def add(self, employee_id: str, depends_on: list[str]) -> None:
         eid = str(employee_id or "").strip()
         if not eid:
             return
-        # A self-dependency is a cycle, not a dependency that may be silently
-        # removed. Preserve it so execution admission can reject it.
         deps = [str(d).strip() for d in (depends_on or []) if str(d).strip()]
-        self.edges[eid] = list(dict.fromkeys(deps))
+        # Preserve the public normalized edges and retain invalid input for admission.
+        self._rejected_self_references.discard(eid)
+        if eid in deps:
+            self._rejected_self_references.add(eid)
+        self.edges[eid] = list(dict.fromkeys(dep for dep in deps if dep != eid))
 
     def detect_cycle(self) -> list[str] | None:
         """返回检测到的一条环路径（含重复起点）；无环返回 None。"""
@@ -33,6 +36,8 @@ class CollaborationGraph:
         path: list[str] = []
 
         def visit(node: str) -> list[str] | None:
+            if node in self.edges and node in self._rejected_self_references:
+                return [node, node]
             color[node] = GRAY
             path.append(node)
             for dep in self.edges.get(node, []):
@@ -59,9 +64,11 @@ class CollaborationGraph:
     def execution_cycle(self, root: str) -> list[str] | None:
         """Find cycles reachable from root; unrelated components are irrelevant."""
         reachable = self.execution_order(root)
-        return CollaborationGraph(
-            {node: list(self.edges.get(node, [])) for node in reachable}
-        ).detect_cycle()
+        graph = CollaborationGraph({node: list(self.edges.get(node, [])) for node in reachable})
+        graph._rejected_self_references = self._rejected_self_references.intersection(
+            self.edges, reachable
+        )
+        return graph.detect_cycle()
 
     def execution_order(self, root: str) -> list[str]:
         """返回执行 root 所需的顺序：依赖在前，root 在最后。

@@ -1,4 +1,5 @@
 """Regression contracts for the existing employee collaboration runtime."""
+
 from __future__ import annotations
 
 import json
@@ -127,9 +128,7 @@ def test_split_is_atomic_idempotent_and_responsibility_bound(tmp_path):
     changed = _specs()
     changed[-1]["params"]["token"] = "different"
     assert split(changed)["error_code"] == "split_plan_conflict"
-    wrong = _run(
-        tmp_path, "lead", continuity_action="child_return", task_id=children[0], **scope
-    )
+    wrong = _run(tmp_path, "lead", continuity_action="child_return", task_id=children[0], **scope)
     assert wrong["success"] is False
     assert not _effects(tmp_path, "child_work")
     for spec, child in zip(_specs(), children):
@@ -163,13 +162,9 @@ def test_sealed_split_rechecks_employee_identity_before_new_work(tmp_path):
     )
     request = {"op": "split", "task_id": parent, "children": _specs(), **scope}
     assert runtime.dispatch("lead", "", request)["error_code"] == "handoff_cross_tenant"
-    foreign.write_text(
-        json.dumps({"employee_id": "finance", "tenant_id": "t1"}), encoding="utf-8"
-    )
+    foreign.write_text(json.dumps({"employee_id": "finance", "tenant_id": "t1"}), encoding="utf-8")
     children = runtime.dispatch("lead", "", request)["task"]["child_task_ids"]
     (folder / "sales.json").unlink()
-    denied = runtime.dispatch(
-        "sales", "", {"op": "child_return", "task_id": children[0], **scope}
-    )
+    denied = runtime.dispatch("sales", "", {"op": "child_return", "task_id": children[0], **scope})
     assert denied["success"] is False
     assert not _effects(tmp_path, "child_work")

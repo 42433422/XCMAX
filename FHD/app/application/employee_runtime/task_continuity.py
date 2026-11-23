@@ -613,7 +613,9 @@ class TaskContinuityRuntime:
         original = parent.get("split_request_sha256")
         if original:
             if original != request_hash:
-                return self._fail(parent, "split_plan_conflict", "原拆分计划已冻结，禁止追加重复子任务")
+                return self._fail(
+                    parent, "split_plan_conflict", "原拆分计划已冻结，禁止追加重复子任务"
+                )
             children, unavailable = bound_task_children(self.state, parent)
             if unavailable or len(children) != len(specs):
                 return self._fail(parent, "child_result_unavailable", "原子任务清单待核对")
@@ -625,6 +627,23 @@ class TaskContinuityRuntime:
         for spec in specs:
             child_id = _new_id("task")
             employee = spec["employee_id"]
+            grants = [spec["tool"]]
+            if requires_identity and spec["tool"] == "handoff_commit":
+                from app.application.employee_runtime.handoff_commit import _split_tool, _task_grant
+
+                parent_grant = set(_task_grant(parent, actor))
+                requested = spec["params"].get("permissions")
+                if isinstance(requested, list):
+                    for value in requested:
+                        token = str(value or "").strip()
+                        parsed = _split_tool(token)
+                        if parsed and (
+                            "*" in parent_grant
+                            or token in parent_grant
+                            or parsed[0] in parent_grant
+                        ):
+                            # The registered handoff still validates the live actor and call.
+                            grants.append(token)
             child = {
                 **_clone(parent),
                 "task_id": child_id,
@@ -635,7 +654,7 @@ class TaskContinuityRuntime:
                 "owner_employee": employee,
                 "holder_employee": employee,
                 "authorized_employees": list(dict.fromkeys([employee, parent["owner_employee"]])),
-                "grants": {employee: [spec["tool"]]},
+                "grants": {employee: list(dict.fromkeys(grants))},
                 "collaboration_assignment": {
                     "employee_id": employee,
                     "tool": spec["tool"],
@@ -1620,7 +1639,10 @@ class TaskContinuityRuntime:
             if write and isinstance(assignment, dict):
                 if actor != assignment.get("employee_id"):
                     return self._fail(
-                        found, "employee_assignment_mismatch", "非责任员工不得执行子任务", redact=True
+                        found,
+                        "employee_assignment_mismatch",
+                        "非责任员工不得执行子任务",
+                        redact=True,
                     )
                 if assignment.get("requires_live_identity"):
                     if not isinstance(self._trusted_context.get("_actor_authorization"), dict):
@@ -2083,9 +2105,7 @@ def _find_step(task: dict[str, Any] | None, step_id: str) -> dict[str, Any] | No
 
 def _deps_ok(task: dict[str, Any], step: dict[str, Any]) -> bool:
     by_id = {item["step_id"]: item for item in task["steps"]}
-    return all(
-        dep in by_id and by_id[dep]["status"] == "success" for dep in step["depends_on"]
-    )
+    return all(dep in by_id and by_id[dep]["status"] == "success" for dep in step["depends_on"])
 
 
 def _merge_conditions(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:

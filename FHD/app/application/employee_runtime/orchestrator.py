@@ -271,9 +271,7 @@ class EmployeeOrchestrator:
         return _project_collaboration_result(employee_id, plan, run)
 
 
-def _project_collaboration_result(
-    employee_id: str, plan: PlanGraph, run: Any
-) -> dict[str, Any]:
+def _project_collaboration_result(employee_id: str, plan: PlanGraph, run: Any) -> dict[str, Any]:
     """The original AgentRun steps, not a group status or model text, decide completion."""
     from app.domain.task_lifecycle.results import (
         execution_result_error,
