@@ -303,7 +303,7 @@ def test_worker_dispatches_the_exact_verified_target_snapshot(preview_store, mon
 
     def dispatch(rows, context):
         dispatched.append(context["target_config"]["endpoint_url"])
-        return {"executed": len(list(rows))}
+        return {"executed": len(list(rows)), "receipt": {"business_verified": False}}
 
     monkeypatch.setattr(service_execution, "verify_execution", change_after_verification)
     monkeypatch.setattr(get_adapter("webhook"), "execute_batch", dispatch)

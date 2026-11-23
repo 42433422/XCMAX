@@ -910,34 +910,43 @@ class TestServiceTargets:
         res = svc.target_config_for_test(elt_db, config_id=cfg.id, owner_user_id=1)
         assert res["success"] is True
 
-    def test_download_path(self, elt_db, svc, app_data, fake_adapter):
+    def test_download_content(self, elt_db, svc, app_data, fake_adapter):
         run = _make_run(elt_db, target_type="export_xlsx", status="completed")
-        run.receipt_json = dump_json({"file_name": "out.xlsx"})
+        run.receipt_json = dump_json(
+            {"file_name": "out.xlsx", "sha256": hashlib.sha256(b"x").hexdigest()}
+        )
         elt_db.commit()
         p = app_data / "elt" / "exports"
         p.mkdir(parents=True)
         f = p / "out.xlsx"
         f.write_bytes(b"x")
-        path = svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
-        assert path.is_file()
+        content, name = svc.download_content(elt_db, run_id=run.id, owner_user_id=1)
+        with content:
+            assert name == f.name and content.read() == b"x"
 
-    def test_download_path_wrong_type(self, elt_db, svc, app_data, fake_adapter):
+    def test_download_content_wrong_type(self, elt_db, svc, app_data, fake_adapter):
         run = _make_run(elt_db, target_type="shipment_records", status="completed")
         with pytest.raises(EltNotFound):
-            svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
+            svc.download_content(elt_db, run_id=run.id, owner_user_id=1)
 
-    def test_download_path_shipment_result(self, elt_db, svc, app_data, fake_adapter):
+    def test_download_content_shipment_result(self, elt_db, svc, app_data, fake_adapter):
         run = _make_run(elt_db, target_type="shipment_records", status="completed")
-        run.receipt_json = dump_json({"file_name": "elt-shipment.xlsx", "sha256": "abc"})
+        run.receipt_json = dump_json(
+            {
+                "file_name": "elt-shipment.xlsx",
+                "sha256": hashlib.sha256(b"delivery-note").hexdigest(),
+            }
+        )
         elt_db.commit()
         folder = app_data / "elt" / "exports"
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / "elt-shipment.xlsx"
         target.write_bytes(b"delivery-note")
-        path = svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
-        assert path.read_bytes() == b"delivery-note"
+        content, name = svc.download_content(elt_db, run_id=run.id, owner_user_id=1)
+        with content:
+            assert name == target.name and content.read() == b"delivery-note"
         with pytest.raises(EltNotFound):
-            svc.download_path(elt_db, run_id=run.id, owner_user_id=2)
+            svc.download_content(elt_db, run_id=run.id, owner_user_id=2)
 
     def test_attendance_download_matches_bytes_and_denies_other_owner(
         self, elt_db, svc, app_data, fake_adapter
@@ -952,20 +961,20 @@ class TestServiceTargets:
         folder.mkdir(parents=True)
         target = folder / "elt-attendance.xlsx"
         target.write_bytes(payload)
-        path = svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
-        assert path.read_bytes() == payload
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == hashlib.sha256(payload).hexdigest()
+        content, name = svc.download_content(elt_db, run_id=run.id, owner_user_id=1)
+        with content:
+            assert name == target.name and content.read() == payload
         with pytest.raises(EltNotFound):
-            svc.download_path(elt_db, run_id=run.id, owner_user_id=2)
+            svc.download_content(elt_db, run_id=run.id, owner_user_id=2)
         token = set_current_tenant_id(2)
         try:
             with pytest.raises(EltNotFound):
-                svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
+                svc.download_content(elt_db, run_id=run.id, owner_user_id=1)
         finally:
             reset_current_tenant_id(token)
         target.unlink()
         with pytest.raises(EltNotFound):
-            svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
+            svc.download_content(elt_db, run_id=run.id, owner_user_id=1)
 
     def test_export_error_rows(self, elt_db, svc, app_data, fake_adapter):
         run = _make_run(elt_db)

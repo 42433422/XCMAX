@@ -8,7 +8,11 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from app.application.elt.errors import EltError
-from app.application.elt.parser_structure import business_note_text, is_footer_or_note_row
+from app.application.elt.parser_structure import (
+    _compose_headers,
+    business_note_text,
+    is_footer_or_note_row,
+)
 from app.application.elt.parser_types import ParsedDataset, ParsedRow
 from app.application.elt.targets import get_adapter
 from app.application.elt.targets.helpers import is_column_header_label
@@ -59,8 +63,16 @@ def read_candidate_table(path: str | Path | bytes | bytearray) -> ParsedDataset:
             if header_at is None:
                 continue
             header_row = occupied[header_at][1]
+            active_columns = {
+                pos
+                for _, raw in occupied[header_at:]
+                for pos, cell in enumerate(raw)
+                if _cell_text(cell)
+            }
             named = [
-                (pos, _cell_text(cell)) for pos, cell in enumerate(header_row) if _cell_text(cell)
+                (pos, name)
+                for pos, name in enumerate(_compose_headers([list(header_row)], [], 0))
+                if pos in active_columns
             ]
             for name in (item[1] for item in named):
                 if name not in headers:
@@ -83,7 +95,17 @@ def read_candidate_table(path: str | Path | bytes | bytearray) -> ParsedDataset:
                         sheet=worksheet.title,
                         row_number=number,
                         values=values,
-                        provenance={"source": "reviewed_candidate"},
+                        provenance={
+                            "source": "reviewed_candidate",
+                            "header_rows": {
+                                "start": occupied[header_at][0],
+                                "end": occupied[header_at][0],
+                            },
+                            "columns": {name: pos + 1 for pos, name in named},
+                            "original_headers": {
+                                name: _cell_text(header_row[pos]) for pos, name in named
+                            },
+                        },
                     )
                 )
     finally:
