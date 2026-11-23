@@ -22,7 +22,8 @@ class ExternalObservation(BaseModel):
     publication_date_reported: str | None = Field(default=None, max_length=128)
     published_at: AwareDatetime | None = None
     collected_at: AwareDatetime
-    knowledge_kind: Literal["inference"] = "inference"
+    observation_kind: Literal["retrieved_source"] = "retrieved_source"
+    knowledge_kind: Literal["unknown"] = "unknown"
     claim_confidence: Literal["unverified"] = "unverified"
     probability: None = None
 
