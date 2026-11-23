@@ -130,6 +130,11 @@ test('fixed native replay policy denies network and preserves the namespace/writ
   const databaseSource = join(hostApp, 'infrastructure/database/database_manager.py');
   assert.ok(policy.filesystem.allowRead.includes(databaseSource));
   assert.ok(policy.filesystem.denyRead.includes(dirname(databaseSource)));
+  const policyDirectory = join(dirname(hostApp), 'config');
+  for (const name of ['risk_actions.registry.json', 'autonomy_boundaries.yaml']) {
+    assert.ok(policy.filesystem.allowRead.includes(join(policyDirectory, name)), name);
+  }
+  assert.ok(!policy.filesystem.allowRead.includes(policyDirectory));
   assert.ok(!policy.filesystem.allowRead.includes(dirname(hostApp)));
   assert.ok(!policy.filesystem.allowRead.includes(spec.project));
   assert.ok(!policy.filesystem.allowRead.includes(resolve(dirname(wrapper), '../../../packages')));
