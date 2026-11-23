@@ -45,6 +45,8 @@ def _same_delivery(*rows: CustomerValueReceipt | None) -> bool:
 
 def _kpi_achieved(evidence: dict[str, Any]) -> bool:
     measured, target = evidence.get("measured_value"), evidence.get("target")
+    if measured is None or target is None:
+        return False
     if not all(
         type(value) is int or (type(value) is float and math.isfinite(value))
         for value in (measured, target, evidence.get("baseline"))

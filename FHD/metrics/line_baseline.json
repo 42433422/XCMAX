@@ -1,5 +1,5 @@
 {
-  "lines": 2681668,
+  "lines": 2681670,
   "updated": "2026-11-23",
-  "note": "Preserve same-delivery identity in production-line and six-stage evidence consumers; fail closed on ambiguous or nonfinite KPI with original-reader regression"
+  "note": "按用户本轮修复 CI 并合入的授权，#3511 显式拒绝空 KPI 比较操作数以修复实际 mypy 错误；保留有限数值与布尔拒绝合同，生产净增 2 行，原消费者测试覆盖保持。"
 }
