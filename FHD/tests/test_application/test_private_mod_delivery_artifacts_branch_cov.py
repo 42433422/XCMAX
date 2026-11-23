@@ -67,9 +67,7 @@ def _market_client(client):
         yield
 
 
-# ---------------------------------------------------------------------------
 # version_key / is_newer_version / _auth_header
-# ---------------------------------------------------------------------------
 
 
 class TestVersionHelpers:
@@ -108,9 +106,7 @@ class TestVersionHelpers:
         assert mod._auth_header("  tok  ") == "Bearer tok"
 
 
-# ---------------------------------------------------------------------------
 # custom_delivery_remote_json
-# ---------------------------------------------------------------------------
 
 
 class TestCustomDeliveryRemoteJson:
@@ -191,9 +187,7 @@ def httpx_connect_error():
     return httpx.ConnectError("boom", request=httpx.Request("GET", "http://x"))
 
 
-# ---------------------------------------------------------------------------
 # install_custom_delivery_artifact
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -605,9 +599,7 @@ class TestInstallCustomDeliveryArtifact:
             real_unlink(path, missing_ok=True)
 
 
-# ---------------------------------------------------------------------------
 # fetch_private_mod_library / _library_row_by_id
-# ---------------------------------------------------------------------------
 
 
 class TestFetchPrivateModLibrary:
@@ -657,9 +649,7 @@ class TestFetchPrivateModLibrary:
         assert mod._library_row_by_id([{"id": "m1"}], "m1") is not None
 
 
-# ---------------------------------------------------------------------------
 # update_private_mod_from_library
-# ---------------------------------------------------------------------------
 
 
 class TestUpdatePrivateModFromLibrary:

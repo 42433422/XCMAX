@@ -33,7 +33,7 @@
       "after_lines": 1318,
       "reason": "本记录为本次全部开放PR集成的精确架构评审请求。保护原unknown与不可重试证据；仅原pending回执经独立核验后允许结算，迟到快照不能恢复已消耗的执行权。CI原事务回滚测试发现异常分类收紧后普通RuntimeError不再触发回滚；本轮合解复用contextlib.closing与ExitStack覆盖读写scope的失败清理，并按SQLAlchemy实际状态保留已提交或已回滚事实。",
       "boundary": "保持原SQLAlchemy事务、租约及CAS。清理不依赖可恢复异常集合；退出时读取公开is_active状态，成功后移除回滚callback，不将普通RuntimeError重新纳入恢复集合。",
-      "validation": "原CI未改测试先复现rollback=0。本轮将peer三个scope原样装入独立进程，63项中6项失败：只读外部事务、提交后hook原异常保留及共享会话回滚；合解后两会话模块与完整run repository模块90项通过、零跳过。此前e14753a事务/DI/contexts/异常分类190项通过，包含SQLite外部事务、提交前后hook和flush约束失败。完整mutmut杀死率和PostgreSQL服务仍由最终正式CI验证，本地通过不替代这些门禁。",
+      "validation": "原CI未改测试先复现rollback=0。本轮将peer三个scope原样装入独立进程，63项中6项失败：只读外部事务、提交后hook原异常保留及共享会话回滚；合解后两会话模块与完整run repository模块90项通过、零跳过。此前e14753a事务/DI/contexts/异常分类190项通过，包含SQLite外部事务、提交前后hook和flush约束失败。完整mutmut杀死率和PostgreSQL服务仍由最终正式CI验证，本地通过不替代这些门禁。 本轮合解公共975后，原事务/仓库/回执组合及完整Session模块118项通过、零跳过；原正式失败修复组44项在975合解树上再次通过。真实SQLAlchemy2.0.51的before_commit、after_commit、flush失败和外层事务参与均覆盖：已提交内容不宣称可撤销，原异常身份、连接释放及原回执字节保留。",
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },

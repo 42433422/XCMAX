@@ -419,7 +419,8 @@ def test_wide_multisheet_slices_match_original_coordinates(tmp_path):
     assert report["status"] == "BLOCKED"
 
 
-def test_invalid_slice_boundary_blocks_persistence(tmp_path, monkeypatch):
+@pytest.mark.parametrize("table_region", ["A1:A1", "A:E", "1:2"])
+def test_invalid_slice_boundary_blocks_persistence(tmp_path, monkeypatch, table_region):
     from app.application.elt import customer_excel_gate as gate
 
     monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
@@ -429,7 +430,7 @@ def test_invalid_slice_boundary_blocks_persistence(tmp_path, monkeypatch):
 
     def corrupt_slice(*args, **kwargs):
         dataset = parse(*args, **kwargs)
-        dataset.rows[0].provenance["slice"]["table_region"] = "A1:A1"
+        dataset.rows[0].provenance["slice"]["table_region"] = table_region
         return dataset
 
     monkeypatch.setattr(gate, "parse_file", corrupt_slice)
