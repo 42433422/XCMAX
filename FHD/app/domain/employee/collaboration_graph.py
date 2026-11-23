@@ -21,9 +21,9 @@ class CollaborationGraph:
         eid = str(employee_id or "").strip()
         if not eid:
             return
-        deps = [
-            str(d).strip() for d in (depends_on or []) if str(d).strip() and str(d).strip() != eid
-        ]
+        # A self-dependency is a cycle, not a dependency that may be silently
+        # removed. Preserve it so execution admission can reject it.
+        deps = [str(d).strip() for d in (depends_on or []) if str(d).strip()]
         self.edges[eid] = list(dict.fromkeys(deps))
 
     def detect_cycle(self) -> list[str] | None:
@@ -55,6 +55,13 @@ class CollaborationGraph:
                 if found:
                     return found
         return None
+
+    def execution_cycle(self, root: str) -> list[str] | None:
+        """Find cycles reachable from root; unrelated components are irrelevant."""
+        reachable = self.execution_order(root)
+        return CollaborationGraph(
+            {node: list(self.edges.get(node, [])) for node in reachable}
+        ).detect_cycle()
 
     def execution_order(self, root: str) -> list[str]:
         """返回执行 root 所需的顺序：依赖在前，root 在最后。
