@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from typing import Any
 
 SCHEMA = "xiaoc-life-graph-receipt/v1"
@@ -23,9 +24,9 @@ def _digest(payload: dict[str, Any]) -> str:
 
 
 def _refs(values: list[Any]) -> list[str]:
-    return list(dict.fromkeys(
-        value for value in values if isinstance(value, str) and 0 < len(value) <= 256
-    ))[:32]
+    return list(
+        dict.fromkeys(value for value in values if isinstance(value, str) and 0 < len(value) <= 256)
+    )[:32]
 
 
 def make_checkpoint(
@@ -47,7 +48,9 @@ def make_checkpoint(
         if not isinstance(goal, dict):
             continue
         for key, prefix in (
-            ("id", "goal"), ("decision_id", "portfolio"), ("retort_request_id", "retort")
+            ("id", "goal"),
+            ("decision_id", "portfolio"),
+            ("retort_request_id", "retort"),
         ):
             value = goal.get(key)
             if isinstance(value, str) and 0 < len(value) <= 240:
@@ -61,7 +64,8 @@ def make_checkpoint(
         "phase": phase,
         "recorded_at": recorded_at,
         "reported_status": (
-            reported_status if isinstance(reported_status, str) and reported_status in STATUSES
+            reported_status
+            if isinstance(reported_status, str) and reported_status in STATUSES
             else "unknown"
         ),
         "reported_tokens": actual_tokens,
@@ -78,12 +82,60 @@ def make_checkpoint(
     return {**body, "sha256": _digest(body)}
 
 
+def _validated_body(entry: Any) -> dict[str, Any] | None:
+    if not isinstance(entry, dict):
+        return None
+    body = {key: value for key, value in entry.items() if key != "sha256"}
+    if set(body) != {
+        "schema", "cycle_id", "owner_user_id", "policy_revision", "phase", "recorded_at",
+        "reported_status", "reported_tokens", "evidence_refs", "result_refs", "reflection_status",
+    }:
+        return None
+    try:
+        if entry.get("sha256") != _digest(body):
+            return None
+        recorded = datetime.fromisoformat(body["recorded_at"])
+        if recorded.tzinfo is None:
+            return None
+    except (TypeError, ValueError):
+        return None
+    if (
+        body["schema"] != SCHEMA
+        or not isinstance(body["cycle_id"], str)
+        or not 0 < len(body["cycle_id"]) <= 96
+        or type(body["owner_user_id"]) is not int
+        or body["owner_user_id"] <= 0
+        or type(body["policy_revision"]) is not int
+        or body["policy_revision"] <= 0
+        or body["phase"] not in PHASES
+        or not isinstance(body["reported_status"], str)
+        or body["reported_status"] not in STATUSES | {"unknown"}
+    ):
+        return None
+    tokens = body["reported_tokens"]
+    if tokens is not None and (type(tokens) is not int or tokens < 0):
+        return None
+    for key in ("evidence_refs", "result_refs"):
+        refs = body[key]
+        if not isinstance(refs, list) or refs != _refs(refs):
+            return None
+    status = body["reflection_status"]
+    if status is not None and (
+        not isinstance(status, str)
+        or not 0 < len(status) <= 64
+        or not status.replace("_", "").isalnum()
+    ):
+        return None
+    return body
+
+
 def same_checkpoint(left: dict[str, Any], right: dict[str, Any]) -> bool:
-    """Retrying persistence of one returned node is idempotent."""
-    return {
-        key: value for key, value in left.items() if key not in {"recorded_at", "sha256"}
-    } == {
-        key: value for key, value in right.items() if key not in {"recorded_at", "sha256"}
+    """Retrying persistence of one returned node is idempotent, not a repair."""
+    old, new = _validated_body(left), _validated_body(right)
+    if old is None or new is None:
+        return False
+    return {k: v for k, v in old.items() if k != "recorded_at"} == {
+        k: v for k, v in new.items() if k != "recorded_at"
     }
 
 
@@ -98,16 +150,9 @@ def recover_checkpoint(
         return invalid
     phase = "reflect" if "reflect" in records else "act"
     entry = records.get(phase)
-    if not isinstance(entry, dict):
-        return invalid
-    body = {key: value for key, value in entry.items() if key != "sha256"}
-    try:
-        valid = entry.get("sha256") == _digest(body)
-    except (TypeError, ValueError):
-        return invalid
+    body = _validated_body(entry)
     if (
-        not valid
-        or body.get("schema") != SCHEMA
+        body is None
         or body.get("cycle_id") != cycle_id
         or body.get("owner_user_id") != owner_user_id
         or body.get("policy_revision") != policy_revision
@@ -118,7 +163,7 @@ def recover_checkpoint(
     return {
         "status": "receipt_readback_only",
         "phase": phase,
-        "checkpoint_sha256": entry["sha256"],
+        "checkpoint_sha256": _digest(body),
         "reported_status": body.get("reported_status"),
         "recorded_at": body.get("recorded_at"),
         "evidence_refs": _refs(body.get("evidence_refs") or []),

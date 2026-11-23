@@ -186,13 +186,15 @@ def reconcile_usage() -> dict[str, int]:
                 budget["exploration_tokens"] += actual
             current["unknown_usage"] = budget["reserved_tokens"] > 0
             current["last_status"] = "waiting"
-            checkpoint = recover_checkpoint(
-                item.get("graph_checkpoints"),
-                cycle_id=item["cycle_id"],
-                owner_user_id=item["owner_user_id"],
-                policy_revision=item.get("policy_revision", 0),
-                actual_tokens=actual,
-            )
+            checkpoint = None
+            if item.get("graph_checkpoints"):
+                checkpoint = recover_checkpoint(
+                    item["graph_checkpoints"],
+                    cycle_id=item["cycle_id"],
+                    owner_user_id=item.get("owner_user_id", 0),
+                    policy_revision=item.get("policy_revision", 0),
+                    actual_tokens=actual,
+                )
             _event(
                 session,
                 event_id,

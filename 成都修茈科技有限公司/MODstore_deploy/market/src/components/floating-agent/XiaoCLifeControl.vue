@@ -81,6 +81,9 @@ async function changeLevel(value: number | number[]) {
     <div v-if="life.state?.state_version !== undefined" class="xiaoc-life-control__foot">
       <span :title="life.state.identity_id">状态版本 {{ life.state.state_version }} · 授权版本 {{ life.state.revision }}</span>
       <span v-if="life.state.activity?.phase">{{ life.state.activity.phase }}</span>
+      <span v-if="life.state.activity?.checkpoint_phase">
+        {{ life.state.activity.checkpoint_phase === 'reflect' ? '已保存复盘回执' : '已保存执行回执' }}
+      </span>
     </div>
     <div v-if="life.state?.blockers.length" class="xiaoc-life-control__error" role="status">
       {{ life.state.blockers.join('；') }}

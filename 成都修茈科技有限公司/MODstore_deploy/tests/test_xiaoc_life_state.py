@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import sessionmaker
 
 from modstore_server import xiaoc_life_api as api
@@ -26,9 +28,7 @@ from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
 from modstore_server.xiaoc_life_policy import LifePolicyError, LifeUpdate
 
 
-@pytest.fixture
-def database(tmp_path, monkeypatch):
-    engine = create_engine(f"sqlite:///{tmp_path / 'life.sqlite'}", connect_args={"timeout": 10})
+def _prepare_database(engine, monkeypatch):
     Base.metadata.create_all(
         engine,
         tables=[
@@ -56,8 +56,16 @@ def database(tmp_path, monkeypatch):
             ]
         )
         session.commit()
-    yield factory
-    engine.dispose()
+    return factory
+
+
+@pytest.fixture
+def database(tmp_path, monkeypatch):
+    engine = create_engine(f"sqlite:///{tmp_path / 'life.sqlite'}", connect_args={"timeout": 10})
+    try:
+        yield _prepare_database(engine, monkeypatch)
+    finally:
+        engine.dispose()
 
 
 def configure(**policy):
@@ -918,8 +926,8 @@ def test_recovery_counts_new_calls_on_existing_task_and_requires_journal_receipt
     assert reconcile._verified_usage(steps, 7) is None
 
 
-def _process_claim_life(db_url, start, output):
-    engine = create_engine(db_url, connect_args={"timeout": 10})
+def _process_claim_life(db_url, start, output, connect_args):
+    engine = create_engine(db_url, connect_args=connect_args)
     factory = sessionmaker(bind=engine)
     store.get_session_factory = lambda: factory
     try:
@@ -931,16 +939,15 @@ def _process_claim_life(db_url, start, output):
         engine.dispose()
 
 
-def test_spawned_processes_share_persistent_identity_and_one_claim(database):
+def _spawn_claims(database, connect_args):
     import multiprocessing
-
-    state = configure()
     ctx = multiprocessing.get_context("spawn")
     start = ctx.Event()
     output = ctx.Queue()
-    url = str(database.kw["bind"].url)
+    url = database.kw["bind"].url
     workers = [
-        ctx.Process(target=_process_claim_life, args=(url, start, output)) for _ in range(2)
+        ctx.Process(target=_process_claim_life, args=(url, start, output, connect_args))
+        for _ in range(2)
     ]
     try:
         for worker in workers:
@@ -950,11 +957,7 @@ def test_spawned_processes_share_persistent_identity_and_one_claim(database):
         for worker in workers:
             worker.join(10)
             assert worker.exitcode == 0
-        assert {identity for identity, _ in results} == {state["identity_id"]}
-        claims = [claim for _, claim in results if claim is not None]
-        assert len(claims) == 1
-        assert store.read_state()["activity"]["id"] == claims[0]["cycle_id"]
-        assert finish(claims[0])["budget"]["used_tokens"] == 50
+        return results
     finally:
         for worker in workers:
             if worker.pid is not None:
@@ -964,6 +967,20 @@ def test_spawned_processes_share_persistent_identity_and_one_claim(database):
                 worker.close()
         output.close()
         output.join_thread()
+
+
+def _assert_one_claim(results, state):
+    assert {identity for identity, _ in results} == {state["identity_id"]}
+    claims = [claim for _, claim in results if claim is not None]
+    assert len(claims) == 1
+    assert store.read_state()["activity"]["id"] == claims[0]["cycle_id"]
+    return claims[0]
+
+
+def test_spawned_processes_share_persistent_identity_and_one_claim(database):
+    state = configure()
+    claim = _assert_one_claim(_spawn_claims(database, {"timeout": 10}), state)
+    assert finish(claim)["budget"]["used_tokens"] == 50
 
 
 def _checkpoint_act(claim, actual_tokens):
@@ -1043,3 +1060,59 @@ def test_checkpoint_survives_stop_and_is_not_execution_authority(database):
     assert final["status"] == "stopped" and final["goals"] == []
     assert final["budget"]["reserved_tokens"] == 200
     assert final["events"][0]["details"]["graph_checkpoints"]["reflect"]["reported_tokens"] is None
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MODSTORE_TEST_POSTGRES_URL"),
+    reason="isolated native PostgreSQL acceptance requires MODSTORE_TEST_POSTGRES_URL",
+)
+def test_native_postgres_process_claim_checkpoint_and_pool_release(monkeypatch):
+    url = os.environ["MODSTORE_TEST_POSTGRES_URL"]
+    admin = create_engine(url)
+    assert admin.dialect.name == "postgresql"
+    schema = f"xiaoc_life_{uuid4().hex}"
+    with admin.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = None
+    try:
+        options = {"options": f"-csearch_path={schema}"}
+        engine = create_engine(url, connect_args=options, pool_pre_ping=True)
+        factory = _prepare_database(engine, monkeypatch)
+        initial = configure()
+        claim = _assert_one_claim(_spawn_claims(factory, options), initial)
+        _checkpoint_act(claim, 63)
+        with factory() as session:
+            session.add(
+                LlmClientRequest(
+                    user_id=7,
+                    client_request_id="checkpoint-original",
+                    request_sha256="e" * 64,
+                    state="completed",
+                    done_json=json.dumps({"status": "settled", "actual_tokens": 63}),
+                )
+            )
+            session.commit()
+        stopped = store.update_settings(
+            LifeUpdate(expected_revision=store.read_state()["revision"], stopped=True),
+            actor_user_id=7,
+        )
+        assert stopped["status"] == "stopped" and not store.cycle_active(claim)
+        later = store.utcnow() + timedelta(minutes=6)
+        monkeypatch.setattr(store, "utcnow", lambda: later)
+        monkeypatch.setattr(reconcile, "utcnow", lambda: later)
+        assert reconcile.reconcile_usage()["resolved"] == 1
+        assert reconcile.reconcile_usage()["resolved"] == 0
+        state = store.read_state()
+        assert state["identity_id"] == initial["identity_id"]
+        assert state["budget"]["reserved_tokens"] == 0
+        assert state["events"][0]["actual_tokens"] == 63
+        assert not state["events"][0]["details"]["graph_checkpoint_recovery"]["replayed"]
+        assert engine.pool.checkedout() == 0
+    finally:
+        try:
+            if engine is not None:
+                engine.dispose()
+            with admin.begin() as connection:
+                connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        finally:
+            admin.dispose()

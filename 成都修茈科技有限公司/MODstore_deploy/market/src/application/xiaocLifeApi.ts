@@ -87,7 +87,7 @@ export interface XiaoCLifeState {
   state_version?: number
   status: string
   mission: string
-  activity: { id?: string; phase?: string; phase_started_at?: string; summary?: string; title?: string; status?: string; model?: string } | null
+  activity: { id?: string; phase?: string; phase_started_at?: string; checkpoint_phase?: 'act' | 'reflect' | null; summary?: string; title?: string; status?: string; model?: string } | null
   goals: XiaoCLifeGoal[]
   interests: { topic: string; confidence: number; evidence_refs: string[] }[]
   self_model: Record<string, unknown>

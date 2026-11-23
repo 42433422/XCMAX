@@ -10,12 +10,10 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from modstore_server import xiaoc_life_telemetry as telemetry
-from modstore_server.xiaoc_life_checkpoint import (
-    make_checkpoint, recover_checkpoint, same_checkpoint,
-)
+from modstore_server.xiaoc_life_checkpoint import make_checkpoint, recover_checkpoint, same_checkpoint
 
 
-def _checkpoint(phase="act", actual_tokens=10):
+def _checkpoint(phase="act", actual_tokens=10, recorded_at="2026-11-24T00:00:00+00:00"):
     return make_checkpoint(
         {"cycle_id": "cycle-1", "owner_user_id": 7, "policy_revision": 3, "lease_token": "secret"},
         phase,
@@ -27,14 +25,20 @@ def _checkpoint(phase="act", actual_tokens=10):
         actual_tokens=actual_tokens,
         evidence_refs=["receipt:one", "receipt:one", "x" * 257],
         reflection_status=None,
-        recorded_at="2026-11-24T00:00:00+00:00",
+        recorded_at=recorded_at,
     )
 
 
 def _recover(records, **changes):
     return recover_checkpoint(
-        records, **{"cycle_id": "cycle-1", "owner_user_id": 7, "policy_revision": 3,
-                    "actual_tokens": 10, **changes}
+        records,
+        **{
+            "cycle_id": "cycle-1",
+            "owner_user_id": 7,
+            "policy_revision": 3,
+            "actual_tokens": 10,
+            **changes,
+        },
     )
 
 
@@ -56,8 +60,9 @@ def test_newest_reflection_selected_but_unknown_usage_is_not_proof():
     reflect = _checkpoint("reflect", None)
     result = _recover({"act": act, "reflect": reflect})
     assert result["phase"] == "reflect" and result["usage_matches_reported"] is None
-    assert same_checkpoint(act, {**act, "recorded_at": "later", "sha256": "different"})
-    assert not same_checkpoint(act, {**act, "reported_tokens": 2})
+    assert same_checkpoint(act, _checkpoint(recorded_at="2026-11-24T00:00:01+00:00"))
+    assert not same_checkpoint(act, {**act, "recorded_at": "later", "sha256": "different"})
+    assert not same_checkpoint(act, _checkpoint(actual_tokens=2))
 
 
 def test_otel_and_prometheus_observe_return_error_and_cancel_without_payload(monkeypatch):
@@ -77,7 +82,9 @@ def test_otel_and_prometheus_observe_return_error_and_cancel_without_payload(mon
             raise asyncio.CancelledError()
         spans = exporter.get_finished_spans()
         assert [span.attributes["xiaoc.outcome"] for span in spans] == [
-            "returned", "error", "cancelled"
+            "returned",
+            "error",
+            "cancelled",
         ]
         assert all(not span.events for span in spans)
         assert all("private-error" not in str(span.attributes) for span in spans)

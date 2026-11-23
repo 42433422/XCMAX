@@ -277,7 +277,8 @@ def read_state() -> dict[str, Any]:
                 "phase": active.get("phase", "claimed"),
                 "phase_started_at": active.get("phase_started_at", active["started_at"]),
                 "checkpoint_phase": (
-                    "reflect" if "reflect" in active.get("graph_checkpoints", {})
+                    "reflect"
+                    if "reflect" in active.get("graph_checkpoints", {})
                     else "act" if "act" in active.get("graph_checkpoints", {}) else None
                 ),
                 "summary": (
@@ -853,8 +854,12 @@ def record_cycle_checkpoint(
 ) -> None:
     """Keep bounded returned-node evidence in the same SQL CAS authority."""
     checkpoint = make_checkpoint(
-        claim, phase, result=result, actual_tokens=actual_tokens,
-        evidence_refs=evidence_refs, reflection_status=reflection_status,
+        claim,
+        phase,
+        result=result,
+        actual_tokens=actual_tokens,
+        evidence_refs=evidence_refs,
+        reflection_status=reflection_status,
         recorded_at=utcnow().isoformat(),
     )
 
