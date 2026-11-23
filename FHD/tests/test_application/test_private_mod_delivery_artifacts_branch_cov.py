@@ -529,7 +529,7 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_module_api_ready_failure_does_not_claim_running(self, delivery):
         delivery.client.get.return_value = delivery.response(delivery.package())
-        delivery.api_ready.side_effect = RuntimeError("flush failed")
+        delivery.api_ready.side_effect = OSError("flush failed")
         result = await mod.install_custom_delivery_artifact(
             "tok", 9, "module", owner_scope="tenant:1"
         )
@@ -859,7 +859,7 @@ class TestUpdatePrivateModFromLibrary:
         assert rows[0]["runtime_reported"] is False
 
     async def test_api_ready_recoverable_error_logged(self, delivery, library):
-        delivery.api_ready.side_effect = RuntimeError("flush failed")
+        delivery.api_ready.side_effect = OSError("flush failed")
         result = await mod.update_private_mod_from_library(
             "fixture-mod", "tok", owner_scope="tenant:1"
         )

@@ -77,9 +77,14 @@ async def test_response_loss_retries_same_install_id_and_body(pending, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_programming_failure_propagates_without_reporting_install(pending, monkeypatch):
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
+async def test_programming_failure_propagates_without_reporting_install(
+    pending, monkeypatch, error_type
+):
     request, root = pending
-    error = RuntimeError("invalid internal contract")
+    path = next(root.glob("mod-delivery-receipts/*/*.json"))
+    original = path.read_bytes()
+    error = error_type("invalid internal contract")
 
     async def post(*args, **kwargs):
         raise error
@@ -87,11 +92,12 @@ async def test_programming_failure_propagates_without_reporting_install(pending,
     monkeypatch.setattr(
         "app.application.private_mod_delivery_artifacts.custom_delivery_remote_json", post
     )
-    with pytest.raises(RuntimeError) as caught:
+    with pytest.raises(error_type) as caught:
         await outbox.retry_delivery_receipts(request, "current-token")
     assert caught.value is error
-    row = json.loads(next(root.glob("mod-delivery-receipts/*/*.json")).read_text())
+    row = json.loads(path.read_text())
     assert row["installed_reported"] is row["runtime_reported"] is False
+    assert path.read_bytes() == original
 
 
 @pytest.mark.asyncio
