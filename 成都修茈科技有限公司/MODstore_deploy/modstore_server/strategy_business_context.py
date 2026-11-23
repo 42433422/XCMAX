@@ -51,6 +51,14 @@ def customer_value_context() -> dict[str, Any]:
         ):
             return result
         counts = {key: evidence.get(key) for key in _COUNTS}
+        payments = evidence.get("provider_payment_breakdown_cents")
+        if (
+            not isinstance(payments, dict)
+            or set(payments) != {"wallet_topup", "product_service", "other"}
+            or any(type(value) is not int or value < 0 for value in payments.values())
+            or sum(payments.values()) != counts["verified_paid_amount_cents"]
+        ):
+            return result
         stages = {key: evidence.get("six_stage_counts", {}).get(key) for key in _STAGES}
         gaps = {
             key: evidence.get("lifecycle_gaps", {}).get(key, 0)
@@ -66,6 +74,8 @@ def customer_value_context() -> dict[str, Any]:
             "status": "ok",
             "value_ledger_ready": True,
             **counts,
+            "provider_payment_breakdown_cents": payments,
+            "financial_basis": "eligible_CNY_provider_payments_not_bank_or_accounting",
             "six_stage_counts": stages,
             "lifecycle_gaps": gaps,
             "desktop_release_source_available": evidence.get("desktop_release_source_available")

@@ -610,3 +610,51 @@ def test_scoped_paid_outcome_requires_same_owner_goal_artifact_and_time(tmp_path
     assert verify(55, digest, NOW)["verified_paid_amount_cents"] == 0
     assert verify(54, "d" * 64, NOW)["verified_paid_amount_cents"] == 0
     assert verify(54, digest, NOW + timedelta(seconds=1))["paid_acceptance_count"] == 0
+
+def test_provider_payment_breakdown_separates_topups_from_product_payment(tmp_path, monkeypatch):
+    sf = _init_db(tmp_path, monkeypatch)
+    orders = [
+        _verified_payment("wallet-1", order_kind="wallet", provider_trade_no="t1"),
+        _verified_payment("plan-1", order_kind="plan", provider_trade_no="t2"),
+        _verified_payment("service-1", order_kind="custom_delivery", provider_trade_no="t3"),
+        _verified_payment("other-1", provider_trade_no="t4"),
+        _verified_payment("refund-1", refunded=True, provider_trade_no="t5"),
+    ]
+    result = build_customer_value_evidence(
+        orders=orders + [dict(orders[0])], session_factory=sf, now=NOW
+    )
+    assert result["verified_paid_count"] == 4
+    assert result["verified_paid_amount_cents"] == 39600
+    assert result["provider_payment_breakdown_cents"] == {
+        "wallet_topup": 9900,
+        "product_service": 19800,
+        "other": 9900,
+    }
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"provider_trade_no": "provider_trade_001"},
+        {"currency": "USD", "provider_trade_no": "another"},
+        {"paid_at": "2027-01-01T00:00:00+00:00", "provider_trade_no": "another"},
+    ],
+)
+def test_ambiguous_provider_money_is_not_an_operating_fact(tmp_path, monkeypatch, overrides):
+    sf = _init_db(tmp_path, monkeypatch)
+    result = build_customer_value_evidence(
+        orders=[_verified_payment(), _verified_payment("other-1", **overrides)],
+        session_factory=sf,
+        now=NOW,
+    )
+    assert result["provider_payment_breakdown_cents"] is None
+
+
+def test_conflicting_duplicate_order_is_not_an_operating_fact(tmp_path, monkeypatch):
+    sf = _init_db(tmp_path, monkeypatch)
+    result = build_customer_value_evidence(
+        orders=[_verified_payment(), _verified_payment(amount_cents=10000)],
+        session_factory=sf,
+        now=NOW,
+    )
+    assert result["provider_payment_breakdown_cents"] is None

@@ -27,6 +27,7 @@ from modstore_server.customer_value_classification import (
 from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
 from modstore_server.customer_value_classification import (
     payment_amount_cents,
+    provider_payment_breakdown,
 )
 from modstore_server.customer_value_classification import sanitize_evidence as _sanitize_evidence
 from modstore_server.customer_value_classification import text as _text
@@ -441,15 +442,23 @@ def build_customer_value_evidence(
 
     excluded: Counter[str] = Counter()
     eligible_orders: dict[str, dict[str, Any]] = {}
+    observed_orders: dict[str, dict[str, Any]] = {}
+    ambiguous_orders = False
     for order in raw_orders:
+        order_no = _text(order.get("out_trade_no") or order.get("order_no"), 96)
+        if order_no in observed_orders and observed_orders[order_no] != order:
+            ambiguous_orders = True
+        if order_no:
+            observed_orders[order_no] = order
         eligible, reason = classify_payment_order(order, cutoff=cutoff)
         if not eligible:
             if reason != "not_paid":
                 excluded[reason] += 1
             continue
-        order_no = _text(order.get("out_trade_no") or order.get("order_no"), 96)
         if order_no:
             eligible_orders[order_no] = order
+        else:
+            ambiguous_orders = True
 
     sf = session_factory or get_session_factory()
     append_only_store_available = True
@@ -597,6 +606,14 @@ def build_customer_value_evidence(
         "append_only_store_available": append_only_store_available,
         "verified_paid_count": len(eligible_orders),
         "verified_paid_amount_cents": paid_amount_cents,
+        # This additional projection is deliberately separate from legacy
+        # customer-value counts and cannot prove revenue, cash or profit.
+        "provider_payment_breakdown_cents": (
+            provider_payment_breakdown(eligible_orders, now=current)
+            if source_available and source_authoritative
+            and append_only_store_available and not ambiguous_orders
+            else None
+        ),
         "customer_goal_count": len(customer_goal_ids),
         "delivered_count": len(delivered_receipts),
         "unproven_delivery_count": len(raw_delivered_receipts) - len(delivered_receipts),

@@ -280,6 +280,28 @@ class CyclePorts:
                     }
                     original = context[key]
                     if value.get("status") == "ok":
+                        payments = original.get("provider_payment_breakdown_cents")
+                        if (
+                            isinstance(payments, dict)
+                            and set(payments) == {"wallet_topup", "product_service", "other"}
+                            and all(type(amount) is int and amount >= 0 for amount in payments.values())
+                            and sum(payments.values()) == original.get("verified_paid_amount_cents")
+                        ):
+                            facts.insert(
+                                0,
+                                _fact(
+                                    "company:provider_payments",
+                                    {
+                                        "source": value.get("source_owner"),
+                                        "as_of": value.get("observed_at"),
+                                        "window_days": value.get("window_days"),
+                                        "currency": "CNY",
+                                        "wallet_topup_paid_cents": payments["wallet_topup"],
+                                        "product_service_paid_cents": payments["product_service"],
+                                        "other_paid_cents": payments["other"],
+                                    },
+                                ),
+                            )
                         for name in (
                             "verified_paid_count",
                             "verified_paid_amount_cents",
