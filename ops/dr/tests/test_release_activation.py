@@ -408,6 +408,30 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         verified = self.run_function("verify_current_release_pair")
         self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
 
+    def test_failed_fhd_prepare_preserves_verified_original_pair(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        self.component = "fhd"
+        self.make_release(self.new_sha)
+        self.current = self.runtime / "fhd"
+        self.env["CURRENT_NAME"] = "fhd"
+        self.write_marker("created_at", "100")
+        before = self.run_function("verify_current_release_pair")
+        self.assertEqual(before.returncode, 0, before.stdout + before.stderr)
+        self.env["PREPARE_FAIL_SHA"] = self.new_sha
+
+        failed = self.activate()
+
+        self.assertEqual(failed.returncode, 17, failed.stdout + failed.stderr)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assert_old_markers()
+        self.assertFalse(self.pending.exists())
+        verified = self.run_function("verify_current_release_pair")
+        self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
+        self.assertEqual(
+            (self.state / "release_applied_sha").read_text().strip(), self.old_sha
+        )
+        self.assertEqual(self.observed[-2:], [self.old_sha, self.old_sha])
+
     def test_compensation_does_not_restore_a_mixed_release_receipt(self) -> None:
         self.add_fhd_release(self.new_sha)
         self.env["PREPARE_FAIL_SHA"] = self.new_sha
@@ -451,6 +475,25 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertFalse(self.pending.exists())
         self.assertFalse((self.state / "release_applied_sha").exists())
         self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)
+
+    def test_compensation_never_reinstates_an_invalid_original_pair_receipt(
+        self,
+    ) -> None:
+        self.add_fhd_release(self.old_sha)
+        aggregate = self.state / "release_applied_sha"
+        aggregate.write_text("invalid\n")
+        self.env["PREPARE_FAIL_SHA"] = self.new_sha
+
+        failed = self.activate()
+
+        self.assertEqual(failed.returncode, 17, failed.stdout + failed.stderr)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assert_old_markers()
+        self.assertFalse(self.pending.exists())
+        self.assertFalse(aggregate.exists())
+        self.assertNotEqual(
+            self.run_function("verify_current_release_pair").returncode, 0
+        )
 
     def test_prepare_failure_restores_without_accepting_candidate(self) -> None:
         self.env["PREPARE_FAIL_SHA"] = self.new_sha

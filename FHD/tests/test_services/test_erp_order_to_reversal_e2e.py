@@ -32,6 +32,7 @@ from app.application import invoicing_service, payment_service
 from app.application.invoicing_service import invoice as post_invoice
 from app.db.db_base import Base
 from app.db.models import (
+    Customer,
     InventoryLedger,
     InventoryTransaction,
     JournalEntry,
@@ -81,7 +82,8 @@ def erp_chain_env():
 
 
 def _seed_confirmed_order(db) -> tuple:
-    """建单：销售订单（已确认）+ 单明细 + 产品 + 仓库 + 初始库存。"""
+    """建单：同租户客户 + 已确认订单 + 单明细 + 产品 + 仓库 + 初始库存。"""
+    customer = Customer(customer_name="端到端客户", tenant_id=1)
     product = Product(
         model_number="E2E-P1",
         name="端到端产品",
@@ -90,11 +92,12 @@ def _seed_confirmed_order(db) -> tuple:
         is_active=1,
     )
     warehouse = Warehouse(code="WH-E2E", name="端到端仓", status="active")
-    db.add_all([product, warehouse])
+    db.add_all([customer, product, warehouse])
     db.flush()
     order = SalesOrder(
         order_no="SO-E2E-LOOP-001",
-        customer_name="端到端客户",
+        customer_id=customer.id,
+        customer_name=customer.customer_name,
         state="confirmed",
         status="confirmed",
         total_amount=ORDER_TOTAL,

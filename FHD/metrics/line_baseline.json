@@ -1,5 +1,5 @@
 {
-  "lines": 2708438,
+  "lines": 2708487,
   "updated": "2026-11-24",
-  "note": "maturity verifier binding after preserving commerce integration 67904da: add extracted artifact comparator to original business validation hashes and direct/deferred drift rejection regressions; actual maintained growth over the published parent is measured, and all commerce history, assertions and original gate limits are preserved"
+  "note": "用户已授权解决全部PR阻塞。完整保留公开501aa514的训练封印、67904da9商务及全部并行来源历史；本次仅追加3513最新业务夹具与两项恢复回归，净增49行全部为测试：同租户客户和报表权限6行，FHD prepare失败及非法旧回执43行。原ERP和员工链路三模块50通过、恢复2项通过、公开生命周期三模块53通过，均零跳过；商务八模块合解阶段199通过。最终行数由原脚本实测，不预留额度、不删无关代码抵数；生产、审批、财务、幂等、覆盖率、安全和架构门禁不变。此记录不是最终CI或人工批准。"
 }
