@@ -1,9 +1,6 @@
 # Architecture debt snapshot. New keys fail the gate; remove keys as files are split.
-[domain->infrastructure] app/domain/product/product_compat_ports.py:149
 [domain->infrastructure] app/domain/shared_services/ai_product_parser.py:296
 [domain->infrastructure] app/domain/shared_services/ai_product_parser.py:377
-[domain->infrastructure] app/domain/shared_services/catalog_client.py:3
-[domain->infrastructure] app/domain/shared_services/catalog_visibility.py:3
 [domain->infrastructure] app/domain/shared_services/contract_lifecycle.py:98
 [domain->infrastructure] app/domain/shared_services/conversation/api.py:44
 [domain->infrastructure] app/domain/shared_services/conversation/api.py:6

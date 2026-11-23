@@ -34,6 +34,8 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+业务导入边界复用现有 [Import Linter 2.15](https://github.com/seddonym/import-linter/) 与 [Grimp 3.17](https://github.com/python-grimp/grimp/)（均为 BSD-2-Clause），CI 从 `uv.lock` 安装精确版本。12 条合同统一在 `pyproject.toml`，覆盖领域纯度、工作流端口、LangGraph 接入和回执读取边界；已清退旧 AST 扫描器及其 YAML 规则副本。LangGraph 由原 `ServiceContainer` 组装，缓存失效、聊天显示与流式取消分别复用原工具注册表、显示规则和 `StreamWorker`；回执分类与投影由原领域结果模块和基础设施回执模块共同承接。边界检查及其负例沿用现有 arch-fitness 门禁，运行时改动由原变更分类器触发业务合同测试。
+
 企业 Agent 的固定本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK/App Server 负责唯一通用模型工具循环、会话与事件；XCMAX 负责身份、额度、工具权限、持久任务与独立结果核验。受控工具使用已锁定的 MCP Python SDK `2.3.0`（MIT）；模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。标准服务器、Linux 热更新和桌面依赖均安装固定 SDK/CLI，已移除旧 `codex-runtime` 空 extra。桌面包收集 SDK 模块、CLI 资源及版本元数据，构建门禁实际启动 App Server 并核验协议版本。
 
 CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。

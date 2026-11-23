@@ -128,6 +128,23 @@ def test_planner_registry_includes_installed_employee_pack(employee_mods_root):
     assert pack_id in names
 
 
+def test_employee_install_refreshes_one_registry_once(employee_mods_root, monkeypatch):
+    from unittest.mock import Mock
+
+    from app.mod_sdk import employee_tool_registry as registry
+
+    registry._cached_tool_rows.cache_clear()
+    assert not registry.is_employee_tool("csv-full-read-employee")
+    _write_csv_read_pack(employee_mods_root)
+    clear = Mock(wraps=registry._cached_tool_rows.cache_clear)
+    monkeypatch.setattr(registry._cached_tool_rows, "cache_clear", clear)
+
+    registry.invalidate_employee_tool_cache()
+
+    clear.assert_called_once_with()
+    assert registry.is_employee_tool("csv-full-read-employee")
+
+
 def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatch, trusted_actor):
     from io import BytesIO
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from typing import Any, Literal
 
-from app.domain.task_lifecycle.agent_runtime_contract import goal_report_coverage
+from app.domain.task_lifecycle.agent_runtime_contract import goal_answers, goal_report_coverage
 from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 
 ClassifiedRunStatus = Literal["blocked", "waiting_user", "running", "failed", "completed"]
@@ -45,6 +45,40 @@ def model_unsettled(metadata: dict[str, Any]) -> bool:
         isinstance(request, dict) and request.get("state") in {"reserved", "unknown"}
         for request in (metadata.get("model_requests") or {}).values()
     )
+
+
+def classification_metadata(run: Any) -> dict[str, Any]:
+    return {
+        **copy.deepcopy(run.metadata["codex_runtime"]),
+        "goal_contract": run.metadata.get("runtime_goal_contract"),
+        "goal_verification": run.metadata.get("runtime_goal_verification"),
+        "goal_answers": goal_answers(run),
+    }
+
+
+def failure_diagnostics(run: Any, result: dict[str, Any]) -> dict[str, str]:
+    """Describe the current failure; recovered attempts remain in their own ledger."""
+    stage = kind = reason = ""
+    if result.get("exit_status") == "goal_verification_required":
+        report = run.metadata.get("runtime_goal_verification") or {}
+        stage = "goal_verification"
+        kind = str(report.get("error_code") or "goal_verification_required")
+        reason = str(report.get("feedback") or result.get("error") or "")
+    elif result.get("execution_state") == "unknown":
+        model_unknown = model_unsettled(run.metadata.get("codex_runtime") or {})
+        stage = "model" if model_unknown else "business"
+        kind = "model_usage_unknown" if model_unknown else "business_outcome_unknown"
+        reason = str(result.get("error") or "")
+    elif not result.get("ok") and result.get("execution_state") in {"failed", "blocked"}:
+        stage = str(run.metadata.get("runtime_failure_stage") or "runtime")
+        kind = str(
+            run.metadata.get("runtime_failure_kind")
+            or result.get("error_code")
+            or result.get("exit_status")
+            or "runtime_failed"
+        )
+        reason = str(run.metadata.get("runtime_failure_reason") or result.get("error") or "")
+    return {"failure_stage": stage, "failure_kind": kind, "failure_reason": reason}
 
 
 def classify_runtime_result(

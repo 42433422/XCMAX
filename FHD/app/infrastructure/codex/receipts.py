@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import re
 import time
 from typing import Any
 
+from app.application.agent_orchestrator import run_lifecycle
+from app.application.agent_orchestrator.run_models import AgentRun, tool_call_from_dict
 from app.application.agent_orchestrator.task_models import mod_id_of_run, tenant_id_of_run
 from app.application.agent_orchestrator.tool_permission import redact
+from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_state
 from app.domain.task_lifecycle.results import (
     execution_result_envelopes,
     execution_result_error,
@@ -19,6 +24,70 @@ from app.infrastructure.codex.binding import (
     CodexBindingStore,
     canonical_digest,
 )
+
+
+def project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
+    """Display child receipts while retaining their original verification owner."""
+    known = {call.call_id for call in run.tool_calls}
+    for row in rows:
+        child_id = str(row.get("child_run_id") or "")
+        if not child_id:
+            continue
+        for raw in (row.get("receipt") or {}).get("tool_calls") or []:
+            if not isinstance(raw, dict) or not raw.get("call_id"):
+                continue
+            projection_id = (
+                "codex_" + hashlib.sha256(f"{child_id}:{raw['call_id']}".encode()).hexdigest()[:40]
+            )
+            if projection_id in known:
+                continue
+            payload = copy.deepcopy(raw)
+            payload["call_id"] = projection_id
+            child_metadata = payload.get("metadata") or {}
+            payload["metadata"] = {
+                **{
+                    key: value
+                    for key, value in child_metadata.items()
+                    if not key.startswith("verification")
+                },
+                "source": "codex_child_receipt",
+                "child_run_id": child_id,
+                "child_call_id": raw["call_id"],
+                # The redacted display payload is not the original child's
+                # output. Its hash/contract must never become a parent-step
+                # verification record. Completion re-reads the original child.
+                "child_verification": {
+                    "contract_sha256": (child_metadata.get("verification_contract") or {}).get(
+                        "contract_sha256"
+                    ),
+                    "output_sha256": child_metadata.get("verification_output_sha256"),
+                    "report_sha256": (child_metadata.get("verification") or {}).get(
+                        "report_sha256"
+                    ),
+                },
+            }
+            run.tool_calls.append(tool_call_from_dict(payload))
+            known.add(projection_id)
+
+
+def resume_error(
+    store: CodexBindingStore, binding: CodexBinding, rows: list[dict[str, Any]]
+) -> str:
+    if error := run_lifecycle.continuation_conversation_error(binding.run, binding.context):
+        return error
+    if model_unsettled(binding.metadata):
+        return "原模型请求或计量结果尚待核对，禁止自动恢复"
+    for row in rows:
+        if receipt_state(row) == "unknown":
+            return "业务结果尚未确定，禁止恢复模型执行或重放工具"
+        child_id = str(row.get("child_run_id") or "")
+        child = store.repository.get(child_id) if child_id else None
+        if child is not None and child.status in {"failed", "blocked"}:
+            # We never retry a child here; nevertheless enforce the existing
+            # continuation guard before allowing a model to propose more work.
+            if error := run_lifecycle.safe_continuation_error(child):
+                return error
+    return ""
 
 
 def _safe_output(value: Any) -> Any:

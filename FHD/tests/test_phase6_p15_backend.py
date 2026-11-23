@@ -18,7 +18,7 @@ def _shared_scope_iter_catalog_packages_market_0():
             "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
         ) as mock_get,
         patch(
-            "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+            "app.infrastructure.mods.catalog_visibility.is_public_catalog_row",
             return_value=True,
         ),
     ):
@@ -37,7 +37,7 @@ def _shared_scope_iter_catalog_packages_1(case_value_1_value, case_value_2_value
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+            "app.infrastructure.mods.catalog_visibility.is_public_catalog_row",
             return_value=True,
         ),
     ):

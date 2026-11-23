@@ -980,11 +980,16 @@ jobs:
           import pathlib, subprocess, sys, tomllib
           config = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
           requirements = config["project"]["optional-dependencies"]["dev"]
-          requirement = next(value for value in requirements if value.startswith("import-linter"))
-          subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
+          assert any(value.startswith("import-linter") for value in requirements)
+          packages = tomllib.loads(pathlib.Path("uv.lock").read_text())["package"]
+          pinned = [
+              f"{name}=={next(p['version'] for p in packages if p['name'] == name)}"
+              for name in ("import-linter", "grimp")
+          ]
+          subprocess.check_call([sys.executable, "-m", "pip", "install", *pinned])
           PYTHON
 
-      - name: Check sync data-access import contracts
+      - name: Check architecture import contracts
         run: lint-imports --config pyproject.toml --no-cache
 
       - name: Require traceable oversized-source growth review requests

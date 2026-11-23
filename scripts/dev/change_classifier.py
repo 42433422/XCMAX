@@ -145,8 +145,8 @@ RELEVANT = {
             "FHD/app/application/employee_runtime/__init__.py",
             "FHD/app/application/employee_runtime/handoff_identity.py",
             "FHD/app/application/employee_runtime/workspace_io.py",
-            "FHD/app/application/shipment_excel_etl_security.py",
-            "FHD/app/application/shipment_etl/directory_listing.py",
+            "FHD/app/application/shipment_excel_elt_security.py",
+            "FHD/app/application/shipment_elt/directory_listing.py",
             "FHD/uv.lock",
             "FHD/pyproject.toml",
         ],
@@ -170,17 +170,45 @@ RELEVANT = {
         "prefixes": [
             "FHD/scripts/autonomy/runtime_tools/",
             "FHD/app/infrastructure/codex/",
-            "FHD/app/application/shipment_excel_etl_security.py",
-            "FHD/tests/test_application/test_shipment_excel_etl_production_ready.py",
+            # Native workers consume shared receipts, lazy tool dispatch,
+            # persisted approvals and leases, not only the executor facade.
+            "FHD/app/domain/task_lifecycle/",
+            "FHD/app/application/agent_orchestrator/",
+            "FHD/app/application/agent_runtime/",
+            "FHD/app/application/employee_runtime/",
+            "FHD/app/application/approval_workspace/",
+            "FHD/app/application/tools/",
+            "FHD/app/application/shipment_elt/",
         ],
         "suffixes": [],
+        "exclude_suffixes": [".md", ".mdx", ".rst"],
+        "regexes": [
+            r"FHD/tests/(?:test_application|test_domain|test_infrastructure)/test_"
+            r"(?:agent_(?:runtime|tool|result)|approval|business_write|catalog_product|"
+            r"codex|task_(?:lifecycle|execution|dispatcher)|tool|unified_tool|worker)"
+            r"(?:_[^/]+)?\.py",
+        ],
         "exact": [
             # The four native runners exercise this process/authority boundary
             # against these installed runtime dependencies.
-            "FHD/app/application/agent_orchestrator/tool_process.py",
-            "FHD/app/application/agent_orchestrator/tool_executor.py",
-            "FHD/app/application/agent_orchestrator/tool_permission.py",
-            "FHD/tests/test_application/test_tool_process.py",
+            "FHD/app/application/agent_task_context.py",
+            "FHD/app/application/tool_execution_deadline.py",
+            "FHD/app/application/facades/tools_facade.py",
+            "FHD/app/domain/shared_services/tools_execution_service.py",
+            "FHD/app/domain/shared_services/tools_workflow_common.py",
+            "FHD/app/infrastructure/chat_stream_lifetime.py",
+            "FHD/app/infrastructure/llm/client.py",
+            "FHD/app/infrastructure/llm/retry_policy.py",
+            "FHD/app/infrastructure/llm/model_admission.py",
+            "FHD/app/infrastructure/tenant_scope.py",
+            "FHD/app/infrastructure/auth/agent_mod_scope.py",
+            "FHD/app/infrastructure/auth/business_scope_gate.py",
+            "FHD/app/application/shipment_excel_elt_security.py",
+            "FHD/tests/test_application/test_shipment_excel_etl_production_ready.py",
+            "FHD/tests/test_application/test_shipment_etl_component_boundaries.py",
+            "FHD/config/risk_actions.registry.json",
+            "scripts/dev/change_classifier.py",
+            "scripts/dev/test_change_classifier.py",
             "FHD/pyproject.toml",
             "FHD/requirements-server-api.txt",
             "FHD/ops/deploy/requirements-server-api.lock.txt",
@@ -271,9 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--category", choices=sorted(CATEGORY_MODE))
-    scope.add_argument(
-        "--all", action="store_true", help="一次读取 diff 并输出全部分类"
-    )
+    scope.add_argument("--all", action="store_true", help="一次读取 diff 并输出全部分类")
     parser.add_argument("--base", default="", help="base SHA/ref（PR 用 base.sha）")
     parser.add_argument("--head", default="", help="head SHA/ref（PR 用 head.sha）")
     parser.add_argument("--json", action="store_true", help="打印机器可读结果")
@@ -303,9 +329,7 @@ def main(argv: list[str] | None = None) -> int:
             "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
             "changed_count": len(changed),
             "decisions": decisions,
-            "reason": "changed_paths"
-            if changed
-            else "empty_or_unavailable_diff_run_all",
+            "reason": "changed_paths" if changed else "empty_or_unavailable_diff_run_all",
         }
         outputs = {"valid": "true", "source_sha": source}
         for category, run in decisions.items():

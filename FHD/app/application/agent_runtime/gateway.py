@@ -571,11 +571,11 @@ async def run_runtime_task_async(
                 from app.infrastructure.codex.queued_runtime import stage_queued_request
 
             if parent.status == "blocked":
-                from app.application.agent_runtime.codex_runtime import _resume_error
+                from app.infrastructure.codex.receipts import resume_error
 
                 rows = store.receipt_snapshot(resolved_id)
                 binding = store.get(resolved_id)
-                if error := _resume_error(store, binding, rows):
+                if error := resume_error(store, binding, rows):
                     raise CodexBindingError("reconciliation_required", error)
                 parent = binding.run
 
