@@ -331,3 +331,99 @@ def test_failed_step_only_discards_prior_effect_when_proven_read_only(read_only)
         assert result["execution_state"] == "partial"
         assert result["reconciliation_required"] is True
         assert result["retryable"] is False
+
+@pytest.mark.parametrize("proven_no_effect", [True, False])
+def test_recovered_write_no_effect_receipt_requires_verified_goal(proven_no_effect):
+    """A superseded failed call must not hold a fully verified goal hostage."""
+    from app.domain.task_lifecycle.agent_runtime_contract import (
+        GOAL_PROTOCOL,
+        build_goal_contract,
+        canonical_digest,
+        goal_evidence_snapshot,
+        goal_report_coverage,
+    )
+    from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
+
+    original = SimpleNamespace(
+        run_id="original-goal",
+        user_id=7,
+        message="创建材料记录",
+        metadata={"runtime_context": {}, "runtime_allowed_actions": []},
+    )
+    contract = build_goal_contract(original)
+    rows = [
+        {
+            "state": "failed",
+            "read_only": False,
+            "tool_id": "materials",
+            "action": "create",
+            "params": {"name": "invalid"},
+            "child_run_id": "failed-call",
+            "child_task_id": "failed-task",
+            "receipt": {
+                "status": "failed",
+                "success": False,
+                **(
+                    {"execution": {"outcome": "not_executed", "committed": False}}
+                    if proven_no_effect
+                    else {}
+                ),
+            },
+        },
+        {
+            "state": "completed",
+            "read_only": False,
+            "tool_id": "materials",
+            "action": "create",
+            "params": {"name": "valid"},
+            "child_run_id": "verified-call",
+            "child_task_id": "verified-task",
+            "receipt": {"status": "completed", "success": True, "verified": True},
+        },
+    ]
+    output = "已完成原材料记录并核验"
+    snapshot = goal_evidence_snapshot(contract, rows, output)
+    report = {
+        "protocol": GOAL_PROTOCOL,
+        "goal_digest": contract["digest"],
+        "evidence_digest": snapshot["digest"],
+        "response_digest": canonical_digest(output),
+        "status": "verified",
+        "accepted": True,
+        "review": {
+            "goals": [
+                {
+                    "goal_id": "materials-goal",
+                    "source_id": "request",
+                    "source": original.message,
+                    "kind": "write",
+                    "status": "satisfied",
+                    "evidence_ids": ["verified-call"],
+                    "reason": "独立核验最终写入",
+                }
+            ],
+            "violations": [],
+            "uncovered_sources": [],
+            "feedback": "",
+        },
+    }
+    report["report_digest"] = canonical_digest(report)
+    assert goal_report_coverage(contract, rows, output, None, report)["completed"] is True
+
+    result = {"run_id": original.run_id, "output": output}
+    state = classify_runtime_result(
+        result,
+        rows,
+        {"goal_contract": contract, "goal_verification": report},
+        "business",
+        "completed",
+    )
+    if proven_no_effect:
+        assert state == "completed"
+        assert result["ok"] is True and result["business_completed"] is True
+        assert result.get("reconciliation_required") is not True
+    else:
+        assert state == "blocked"
+        assert result["execution_state"] == "partial"
+        assert result["reconciliation_required"] is True
+        assert result["retryable"] is False
