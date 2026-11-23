@@ -16,6 +16,8 @@ from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.customer import Customer
 from app.db.models.finance import FinancialTransaction
+from app.db.models.inventory import InventoryTransaction
+from app.db.models.mrp import ManufacturingOrder, ManufacturingOrderLine
 from app.db.models.sales import SalesOrder, SalesOrderItem
 from app.db.models.user import User
 from app.request_active_mod_ctx import get_request_active_mod_id, normalize_active_mod_id
@@ -30,6 +32,9 @@ _MODELS = {
     AiEmployeeProfile: ("employee", "employee_id", "ai_employee_profiles"),
     AgentTaskRecord: ("task", "task_id", "agent_tasks"),
     FinancialTransaction: ("fund", "id", "financial_transactions"),
+    InventoryTransaction: ("inventory", "id", "inventory_transactions"),
+    ManufacturingOrder: ("production", "id", "manufacturing_orders"),
+    ManufacturingOrderLine: ("production", "order_id", "manufacturing_orders"),
 }
 
 
