@@ -127,6 +127,9 @@ test('fixed native replay policy denies network and preserves the namespace/writ
   assert.ok(policy.filesystem.denyRead.includes('/'));
   assert.ok(policy.filesystem.allowRead.includes(wrapper));
   assert.ok(policy.filesystem.allowRead.includes(join(dirname(wrapper), 'opencode_agent.mjs')));
+  const databaseSource = join(hostApp, 'infrastructure/database/database_manager.py');
+  assert.ok(policy.filesystem.allowRead.includes(databaseSource));
+  assert.ok(policy.filesystem.denyRead.includes(dirname(databaseSource)));
   assert.ok(!policy.filesystem.allowRead.includes(dirname(hostApp)));
   assert.ok(!policy.filesystem.allowRead.includes(spec.project));
   assert.ok(!policy.filesystem.allowRead.includes(resolve(dirname(wrapper), '../../../packages')));

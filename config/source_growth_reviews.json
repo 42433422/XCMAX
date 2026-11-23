@@ -483,14 +483,14 @@
     },
     "FHD/frontend/src/views/ChatView.vue": {
       "base_file": "FHD/frontend/src/views/ChatView.vue",
-      "base_blob": "a40988dab3daffb819bdf2c9c3bdf7799d7dd90b",
-      "head_blob": "6f4c6461ec3b24f9df424949ca2f29015d009ec0",
-      "before_lines": 1021,
-      "after_lines": 1036,
-      "reason": "管理端手机聊天接通原任务与历史抽屉的窄屏入口，在停用时关闭；页面增量为模板与显示状态。",
-      "boundary": "复用 ChatSidePanel、原会话和任务事件。抽屉内部留在现有组件，样式留在 chat.css；不增加数据访问或权限。",
-      "validation": "锁定 npm 依赖；Vitest 三文件 70 项通过。两项 Chromium E2E 因容器拒绝 Unix socket 未进入断言，需精确远端 CI 和真机软键盘确认。",
-      "follow_up": "由仓库维护者核对页面职责和实测手机回归。本条仅申请架构审查，不代表获批。",
+      "base_blob": "6f4c6461ec3b24f9df424949ca2f29015d009ec0",
+      "head_blob": "d830d261e3442ec8b327d461b4a3c09de63fea4d",
+      "before_lines": 1036,
+      "after_lines": 1040,
+      "reason": "相对当前main1a5的ChatView原文件净增4行：复用既有startupReadyKey，避免可选会话恢复与必需启动读取并行而改变同一会话。只调整原restoreOwnedConversation和原watch时序，不新增恢复器或启动框架。",
+      "boundary": "可选恢复等待同一启动状态；状态退回未就绪时推进原generation，使旧恢复失效，成功后沿原入口恢复。原required、账号owner、消息revision和实际E2E断言均保持；显式workspace的可选同步遵循相同时序。",
+      "validation": "新增3个实际挂载ChatView的确定性竞态回归，使用原Host、PageReady、StartupSplash与syncFromServer：原代码3例失败（空/非空出现当前会话已改变，换账号提前恢复），修复后3例通过。四个原相关模块168通过0跳过，目标ESLint通过。原完整Chromium E2E因本地socket EPERM未进入页面，必须由精确新head正式CI验证；不以本地单元回归冒充浏览器验收。",
+      "follow_up": "由@42433422按main1a5及本记录精确base/head/blob核对页面职责和原浏览器验收。本条仅请求架构评审，不代表人工批准；正式CI与受保护合入仍待验证。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/views/PersyKnowledgeView.vue": {

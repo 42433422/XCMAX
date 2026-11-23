@@ -6,11 +6,14 @@ import { defineComponent, h, nextTick, ref } from 'vue'
 import { writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+import { resetChatMessageStores, useChatMessages } from '@/composables/useChatMessages'
+import { startupPageReadyKey, startupReadyKey, useStartupSplash } from '@/composables/useStartupSplash'
 
-const { getActiveConversation } = vi.hoisted(() => ({
+const { getActiveConversation, getConversation } = vi.hoisted(() => ({
   getActiveConversation: vi.fn(async () => {
     throw new Error('offline')
   }),
+  getConversation: vi.fn<(id: string) => Promise<unknown>>(),
 }))
 
 // ===== Mock pinia 的 storeToRefs，使其直接返回 store 对象 =====
@@ -18,7 +21,7 @@ vi.mock('pinia', async () => {
   const actual = await vi.importActual<typeof import('pinia')>('pinia')
   return {
     ...actual,
-    storeToRefs: (store: any) => store,
+    storeToRefs: (store: any) => store === mockModsStore ? { ...store, activeModId: activeModIdRef } : store,
   }
 })
 
@@ -30,6 +33,13 @@ const isLoadingRef = ref(false)
 const messagesRef = ref<any[]>([])
 const currentTaskRef = ref<any>(null)
 const showHistoryRef = ref(false)
+const activeModIdRef = ref('')
+const mockModsStore = {
+  get activeModId() { return activeModIdRef.value },
+  mods: ref([]), isLoaded: true, initialize: vi.fn().mockResolvedValue(undefined),
+  clientModsUiOff: false, modsForWorkflowUi: [],
+}
+let realStartup = false
 
 function resetMockRefs() {
   isLoadingRef.value = false
@@ -113,12 +123,20 @@ const mockChatViewApi = {
 }
 
 vi.mock('@/composables/useChatView', () => ({
-  useChatView: () => mockChatViewApi,
+  useChatView: (options: { sessionId: ReturnType<typeof ref<string>> }) => {
+    if (!realStartup) return mockChatViewApi
+    const chat = useChatMessages(options.sessionId)
+    return { ...mockChatViewApi, messages: chat.messages,
+      syncSessionMessages: async (syncOptions: Parameters<typeof chat.syncFromServer>[0]) => { await chat.syncFromServer(syncOptions) },
+    }
+  },
 }))
 
 vi.mock('@/api/chat', () => ({
   default: {
     getActiveConversation,
+    getConversation,
+    saveMessage: vi.fn().mockResolvedValue(undefined),
   },
 }))
 
@@ -151,11 +169,11 @@ vi.mock('@/composables/useChatMessageUi', () => ({
   }),
 }))
 
-vi.mock('@/composables/useChatViewHost', () => ({
-  useChatViewHost: () => ({
-    onAutoRefreshToolbarChange: vi.fn(),
-  }),
-}))
+vi.mock('@/composables/useChatViewHost', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/composables/useChatViewHost')>()
+  return { useChatViewHost: (deps: Parameters<typeof actual.useChatViewHost>[0]) => realStartup
+    ? actual.useChatViewHost(deps) : { onAutoRefreshToolbarChange: vi.fn() } }
+})
 
 vi.mock('@/composables/useResizablePane', () => ({
   useResizablePane: () => ({
@@ -173,14 +191,11 @@ vi.mock('@/stores/industry', () => ({
 }))
 
 vi.mock('@/stores/mods', () => ({
-  useModsStore: () => ({
-    mods: { value: [] },
-    clientModsUiOff: false,
-    modsForWorkflowUi: [],
-  }),
+  useModsStore: () => mockModsStore,
 }))
 
 vi.mock('@/constants/industryPresets', () => ({
+  getIndustryWelcomeMarkdown: () => '您好！我是您的智能助手',
   getIndustryPreset: () => ({
     placeholderNormal: '请输入消息',
   }),
@@ -198,6 +213,7 @@ vi.mock('@/workflow/coreWorkflowTaskUi', () => ({
 vi.mock('@/utils/chatTaskLabels', () => ({
   formatTaskTime: () => '',
   formatTaskSourceLabel: () => '',
+  formatChatMessageTime: () => '12:00',
 }))
 
 vi.mock('@/utils/chatStorageKeys', async importOriginal => ({
@@ -240,7 +256,7 @@ vi.mock('@/components/chat/ChatHistoryModal.vue', () => ({
 
 // ===== 测试辅助 =====
 
-async function mountChatView(props: { workspaceConversationId?: string } = {}) {
+async function mountChatView(props: { workspaceConversationId?: string } = {}, provide: Record<symbol, unknown> = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -256,6 +272,7 @@ async function mountChatView(props: { workspaceConversationId?: string } = {}) {
     props,
     global: {
       plugins: [router],
+      provide,
     },
   })
   await flushPromises()
@@ -706,5 +723,73 @@ describe('ChatView functions – currentSessionId', () => {
     isLoadingRef.value = true
     expect(canApply()).toBe(false)
     wrapper.unmount()
+  })
+
+  it.each([false, true])('mounted startup keeps its required conversation current until an empty=%s response', async empty => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    resetChatMessageStores()
+    realStartup = true
+    const splash = useStartupSplash()
+    let prepare!: (signal: AbortSignal) => Promise<void>
+    let finishActive: ((value: unknown) => void) | undefined
+    const reads: Array<{ id: string; finish: (value: unknown) => void }> = []
+    getActiveConversation.mockImplementation(() => new Promise(resolve => { finishActive = resolve }))
+    getConversation.mockImplementation(id => new Promise(resolve => { reads.push({ id, finish: resolve }) }))
+    const response = (id: string) => ({ success: true, id,
+      messages: empty ? [] : [{ role: 'user', content: 'verified current conversation', time: '12:00' }],
+    })
+    const { wrapper } = await mountChatView({}, {
+      [startupReadyKey as symbol]: splash.appReady,
+      [startupPageReadyKey as symbol]: (load: typeof prepare) => { prepare = load; return () => {} },
+    })
+    try {
+      const startup = splash.runStartup(async (_current, _stage, signal) => { await prepare(signal) })
+      await flushPromises()
+      expect(reads).toHaveLength(1)
+      expect(splash.appReady.value).toBe(false)
+      // If restoration started in parallel, let its real session change win first.
+      finishActive?.({ conversation_id: 'owned-active-session' })
+      await flushPromises()
+      for (const read of reads.splice(1)) read.finish(response(read.id))
+      await flushPromises()
+      reads[0].finish(response(reads[0].id))
+      await startup
+      expect(splash.startupError.value).toBe('')
+      expect(splash.appReady.value).toBe(true)
+      expect((wrapper.vm as any).messages.some((row: { role: string }) => row.role === 'user')).toBe(!empty)
+      // The same owned restoration remains available after the required read succeeds.
+      finishActive?.({ conversation_id: 'owned-active-session' })
+      await flushPromises()
+      for (const read of reads.splice(1)) read.finish(response(read.id))
+      await flushPromises()
+      expect((wrapper.vm as any).currentSessionId).toBe('owned-active-session')
+    } finally {
+      wrapper.unmount(); splash.teardownOnUnmount(); realStartup = false
+      resetChatMessageStores()
+    }
+  })
+
+  it('keeps a new account masked and retires the old pointer across startup cancellation', async () => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    const ready = ref(true)
+    const pointers: Array<(value: unknown) => void> = []
+    getActiveConversation.mockImplementation(() => new Promise(resolve => { pointers.push(resolve) }))
+    const { wrapper } = await mountChatView({}, { [startupReadyKey as symbol]: ready })
+    try {
+      expect(pointers).toHaveLength(1)
+      ready.value = false
+      setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 2 })
+      await flushPromises()
+      expect(pointers).toHaveLength(1)
+      pointers[0]({ conversation_id: 'old-account-private-session' })
+      await flushPromises()
+      expect(writeAiSessionIdToStorage).not.toHaveBeenCalledWith('old-account-private-session')
+      ready.value = true
+      await flushPromises()
+      expect(pointers).toHaveLength(2)
+      pointers[1]({ conversation_id: 'new-account-session' })
+      await flushPromises()
+      expect((wrapper.vm as any).currentSessionId).toBe('new-account-session')
+    } finally { wrapper.unmount() }
   })
 })
