@@ -237,7 +237,87 @@ def test_owned_import_rechecks_authority_before_first_write(tmp_path, monkeypatc
             )
         assert _product_models(env) == []
         assert _business_lifecycle(env) == ([], 0)
-        assert env["queue"].get(run.run_id).state == "failed"
+        finished = env["queue"].get(run.run_id)
+        assert finished.state == "failed"
+        assert finished.last_error_code == "invalid_approved_input"
+        assert finished.execution_count == 1
+        assert env["queue"].claim("another-worker", lease_seconds=60, run_id=run.run_id) is None
+
+
+@pytest.mark.parametrize("after_commit", [False, True])
+def test_unclassified_import_error_preserves_the_claim(tmp_path, monkeypatch, after_commit):
+    from app.application.agent_orchestrator import cross_module_chain as chain
+    from app.application.agent_orchestrator import cross_module_execution as execution
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
+        created = _post_task(env, "unclassified-import", _models("UNKNOWN"))
+        run = _queue_for_execution(env, created)
+        assert env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+        error = RuntimeError("unclassified execution failure")
+
+        def fail(*_args, **_kwargs):
+            raise error
+
+        if after_commit:
+            monkeypatch.setattr(chain, "_run_employee", fail)
+        else:
+            monkeypatch.setattr(execution, "_execute_elt_import", fail)
+        with pytest.raises(RuntimeError) as raised:
+            execution.execute_claimed_cross_module(
+                AgentOrchestrator(),
+                run,
+                owner="worker",
+                queue=env["queue"],
+                request_id=str(run.metadata["approval_request_id"]),
+                finish=True,
+            )
+        assert raised.value is error
+        pending = env["queue"].get(run.run_id)
+        assert pending.state == "running"
+        assert pending.lease_owner == "worker"
+        assert pending.execution_count == 1
+        assert env["queue"].claim("another-worker", lease_seconds=60, run_id=run.run_id) is None
+        assert _product_models(env) == (["UNKNOWN-1", "UNKNOWN-2"] if after_commit else [])
+        assert _business_lifecycle(env) == (
+            (["cross_module_http_response", "cross_module_import"], 1) if after_commit else ([], 0)
+        )
+
+
+def test_known_import_error_keeps_open_effect_unresolved(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator import cross_module_execution as execution
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.elt.errors import EltConflict
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
+        run = _queue_for_execution(env, _post_task(env, "unresolved-import"))
+        assert env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+        assert env["queue"].mark_open_effect(run.run_id, "original-write", owner_id="worker")
+        error = EltConflict("ELT_PREVIEW_CHANGED", "changed preview")
+
+        def fail(*_args, **_kwargs):
+            raise error
+
+        monkeypatch.setattr(execution, "_execute_elt_import", fail)
+        with pytest.raises(EltConflict) as raised:
+            execution.execute_claimed_cross_module(
+                AgentOrchestrator(),
+                run,
+                owner="worker",
+                queue=env["queue"],
+                request_id=str(run.metadata["approval_request_id"]),
+                finish=True,
+            )
+        assert raised.value is error
+        pending = env["queue"].get(run.run_id)
+        assert pending.state == "unknown"
+        assert pending.last_error_code == "needs_verification"
+        assert pending.execution_count == 1
+        assert not pending.finished_at
+        assert env["queue"].lifecycle(run.run_id)["effects"] == ["original-write"]
+        assert env["queue"].claim("another-worker", lease_seconds=60, run_id=run.run_id) is None
+        assert _product_models(env) == []
+        assert _business_lifecycle(env) == ([], 0)
 
 
 @pytest.mark.parametrize("scenario", ["execute", "revoked", "approval_projection"])

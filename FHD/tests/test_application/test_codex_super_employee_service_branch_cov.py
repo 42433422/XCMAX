@@ -1445,17 +1445,24 @@ class TestDispatchToParaExceptions:
         assert result is None
         assert "unreachable" in reason
 
-    @pytest.mark.parametrize("error_type", [httpx.RemoteProtocolError, ParaRemoteError])
+    @pytest.mark.parametrize("error_type", [OSError, httpx.RemoteProtocolError, ParaRemoteError])
     def test_generic_exception(self, tmp_path, monkeypatch, error_type):
-        """已分类的 HTTP 协议故障写入 outbox（返回 dict 而非 None）。"""
+        """可恢复的外部调用故障写入 outbox（返回 dict 而非 None）。"""
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")
         svc = _make_svc(tmp_path, http_client_factory=_fake_http_factory(exc=error_type("boom")))
         result, reason = svc._dispatch_to_para({"request_id": "r1", "created_at": "t"})
-        # 协议故障走 _write_outbox 分支，返回 dict（accepted=False, status=dispatch_error）。
         assert result is not None
         assert result["accepted"] is False
         assert result["status"] == "dispatch_error"
         assert "boom" in reason
+
+    def test_programming_exception_propagates_unchanged(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")
+        error = RuntimeError("boom")
+        svc = _make_svc(tmp_path, http_client_factory=_fake_http_factory(exc=error))
+        with pytest.raises(RuntimeError) as raised:
+            svc._dispatch_to_para({"request_id": "r1", "created_at": "t"})
+        assert raised.value is error
 
     @pytest.mark.parametrize("failure_type", [RuntimeError, TypeError])
     def test_programming_failure_propagates_without_dispatch_receipt(

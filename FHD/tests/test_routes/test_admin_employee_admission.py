@@ -51,7 +51,7 @@ def admin_employee(monkeypatch, trusted_actor):
         "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
         lambda: SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False),
     )
-    state = SimpleNamespace(output={"success": True, "summary": "stored effect"}, error=False)
+    state = SimpleNamespace(output={"success": True, "summary": "stored effect"}, error=None)
 
     def execute(employee_id, task, payload, **kwargs):
         context = kwargs["runtime_context"]
@@ -62,7 +62,7 @@ def admin_employee(monkeypatch, trusted_actor):
                 "INSERT INTO admin_employee_effects VALUES (?, ?)",
                 (employee_id, context["run_id"]),
             )
-        if state.error:
+        if state.error is not None:
             raise state.error
         return state.output
 
@@ -683,7 +683,7 @@ def test_admin_safe_retry_still_dispatches_one_effect(admin_employee, monkeypatc
         )
 
 
-@pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
+@pytest.mark.parametrize("error_type", [OSError, RuntimeError, TypeError])
 def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_employee, error_type):
     entry = admin_employee
     entry.state.error = error_type("receipt unavailable")
@@ -695,6 +695,36 @@ def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_emplo
     assert first["execution_state"] == repeated["execution_state"] == "unknown"
     assert first["run_id"] == repeated["run_id"]
     assert entry.invocation.call_count == 1
+    with entry.factory() as db:
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
+
+
+def test_admin_programming_error_is_logged_without_replaying_original_effect(
+    admin_employee, caplog
+):
+    entry = admin_employee
+    entry.state.error = RuntimeError("synthetic employee contract failure")
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        read = client.get(
+            "/employees/clerk/runs", params={"idempotency_key": "stable-request"}
+        ).json()
+        repeated = client.post("/employees/clerk/execute", json=entry.body).json()
+    assert any(
+        record.exc_info and record.exc_info[1] is entry.state.error for record in caplog.records
+    )
+    assert first["run_id"] == read["run_id"] == repeated["run_id"]
+    assert (
+        first["execution_state"]
+        == read["execution_state"]
+        == repeated["execution_state"]
+        == "unknown"
+    )
+    assert read["retryable"] is repeated["retryable"] is False
+    entry.invocation.assert_called_once()
     with entry.factory() as db:
         assert (
             db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()

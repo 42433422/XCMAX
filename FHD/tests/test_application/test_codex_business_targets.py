@@ -809,6 +809,22 @@ def test_elt_stopped_original_receipt_reopens_sql_and_reverifies_without_dispatc
         assert db.query(ShipmentRecord).count() == 1
 
 
+def test_elt_finalize_claim_programming_error_propagates_unchanged(elt_runtime, monkeypatch):
+    from app.domain.shared_services.tools_workflow_elt import _finalize_import
+
+    state = elt_runtime
+    preview = _elt_preview(state.elt)
+    current = _execute_elt_business(state, preview)
+    error = RuntimeError("injected finalizer claim programming failure")
+    claim = Mock(side_effect=error)
+    monkeypatch.setattr("app.application.elt.operation_owner.claim_operation", claim)
+    with tenant_scope(state.actor.tenant_id), pytest.raises(RuntimeError) as raised:
+        _finalize_import(current, state.actor.user_id)
+    assert raised.value is error
+    claim.assert_called_once()
+    assert _elt_auxiliary(state, preview) is None
+
+
 def test_elt_concurrent_finalizers_claim_once_and_exclude_rollback(elt_runtime, monkeypatch):
     from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
     from threading import Barrier, Event

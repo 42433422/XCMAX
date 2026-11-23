@@ -603,6 +603,56 @@ def test_startup_failure_has_durable_blocked_parent_and_no_replay(setup_gateway,
     assert duplicate["deduplicated"] is True and state.calls == []
 
 
+def test_startup_programming_error_propagates_unchanged(setup_gateway, monkeypatch):
+    state = setup_gateway
+    error = RuntimeError("synthetic startup programming failure")
+
+    def fail(_app):
+        raise error
+
+    monkeypatch.setattr(gateway, "LocalRuntimeServer", fail)
+    with pytest.raises(RuntimeError) as raised:
+        asyncio.run(state.invoke())
+    assert raised.value is error
+    assert state.calls == []
+
+
+@pytest.mark.parametrize("thread_alive", [False, True])
+def test_unready_local_server_persists_blocked_parent_without_replay(
+    setup_gateway, monkeypatch, thread_alive
+):
+    import uvicorn
+
+    from app.infrastructure.codex import local_server
+
+    state = setup_gateway
+    thread = Mock()
+    thread.is_alive.return_value = thread_alive
+    server = SimpleNamespace(started=False, should_exit=False, run=Mock())
+    monkeypatch.setattr(uvicorn, "Server", lambda _config: server)
+    monkeypatch.setattr(local_server, "threading", SimpleNamespace(Thread=lambda **_: thread))
+    monkeypatch.setattr(
+        local_server, "time", SimpleNamespace(monotonic=Mock(side_effect=[0.0, 11.0]))
+    )
+    endpoints = []
+
+    def start(app):
+        endpoint = local_server.LocalRuntimeServer(app)
+        endpoints.append(endpoint)
+        return endpoint
+
+    monkeypatch.setattr(gateway, "LocalRuntimeServer", start)
+    result = asyncio.run(state.invoke())
+    assert result["error_code"] == "runtime_unavailable"
+    assert state.repository.get(result["run_id"]).status == "blocked"
+    assert server.should_exit is True
+    assert endpoints[0]._socket.fileno() == -1
+    thread.join.assert_called_once_with(5)
+    duplicate = asyncio.run(state.invoke())
+    assert duplicate["deduplicated"] is True and len(endpoints) == 1
+    assert state.calls == []
+
+
 def test_private_endpoint_startup_failure_is_operational_and_closes_resources(monkeypatch):
     import uvicorn
 

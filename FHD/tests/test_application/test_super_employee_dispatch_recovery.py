@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.super_employee.para import ParaRemoteError
 
 
 def _ack(request, *, task_id="task-original", subtask_id="sub-1"):
@@ -147,6 +148,109 @@ def test_lost_ack_is_durable_and_never_falls_through(tmp_path, monkeypatch, erro
     # A message-list backfill must not turn an unresolved remote action into CLI work.
     monkeypatch.setattr(second_service, "_should_reply_with_cli", lambda *args: True)
     second_service.list_messages(user_id=7)
+
+
+@pytest.mark.parametrize("status_code", [400, 503])
+def test_remote_http_failure_after_send_keeps_original_plan_unknown(
+    tmp_path, monkeypatch, status_code
+):
+    effects = []
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        return httpx.Response(status_code, json={"error": "task outcome not confirmed"})
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    context = {"request_id": "http-response-loss", "mode": "code"}
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    receipt = first["dispatch"]
+    assert receipt["status"] == "dispatch_unknown"
+    assert receipt["accepted"] is receipt["queued"] is receipt["safe_to_fallback"] is False
+    assert receipt["reason"] == "task outcome not confirmed"
+    assert receipt["pending_request_id"] == effects[0]["client_request_id"]
+    before = json.loads(Path(receipt["outbox_path"]).read_text())["dispatch_receipt"]
+    second = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert second["dispatch"]["status"] == "dispatch_unknown"
+    after = json.loads(Path(receipt["outbox_path"]).read_text())["dispatch_receipt"]
+    for key in (
+        "request_id",
+        "pending_request_id",
+        "pending_payload_sha256",
+        "plan",
+        "plan_sha256",
+    ):
+        assert after[key] == before[key]
+    assert len(effects) == 1
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+@pytest.mark.parametrize("entry", ["invoke", "readback"])
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError, AttributeError, KeyError])
+def test_programming_failure_during_original_lookup_propagates_without_replay(
+    tmp_path, monkeypatch, entry, error_type
+):
+    effects = []
+    armed = False
+    error = error_type("synthetic lookup defect")
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        raise httpx.ReadTimeout("ack lost", request=request)
+
+    def lookup(request):
+        if armed:
+            raise error
+        return httpx.Response(200, json={})
+
+    create, requests = _service(tmp_path, monkeypatch, submit, receipt_handler=lookup)
+    context = {"request_id": "lookup-defect", "mode": "code"}
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert first["dispatch"]["status"] == "dispatch_unknown"
+    path = Path(first["dispatch"]["outbox_path"])
+    original = path.read_bytes()
+    previous_reads = len(requests)
+    armed = True
+    service = create()
+    with pytest.raises(error_type) as caught:
+        if entry == "invoke":
+            service.invoke(user_id=7, message="修复登录问题", context=context)
+        else:
+            service.read_dispatch_receipt(user_id=7, request_id=context["request_id"], task_id="")
+    assert caught.value is error
+    assert path.read_bytes() == original
+    assert len(effects) == 1
+    observed = requests[previous_reads:]
+    assert len(observed) == 1
+    assert observed[0][:2] == ("GET", "para.test")
+    assert observed[0][2].startswith("/api/tasks/by-request/")
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+@pytest.mark.parametrize(
+    ("operation", "status", "body", "message"),
+    [
+        ("request", 403, {"error": "request rejected"}, "request rejected"),
+        ("guest", 401, {"error": "guest rejected"}, "guest rejected"),
+        ("guest", 200, {}, "Para guest 登录未返回 token"),
+    ],
+)
+def test_known_para_response_failure_preserves_runtimeerror_contract(
+    tmp_path, monkeypatch, operation, status, body, message
+):
+    for name in ("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", "MODSTORE_PARA_TOKEN", "DEVFLEET_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    service = CodexSuperEmployeeService(storage_root=tmp_path)
+    service._para._token_cache = {}
+    transport = httpx.MockTransport(lambda request: httpx.Response(status, json=body))
+    with httpx.Client(transport=transport) as client, pytest.raises(RuntimeError) as caught:
+        if operation == "guest":
+            service._para_token(client, "https://para.test")
+        else:
+            service._para_request(client, "https://para.test", "test-token", "GET", "/api/devices")
+    assert isinstance(caught.value, ParaRemoteError)
+    assert str(caught.value) == message
+    assert service._para._token_cache == {}
 
 
 def test_process_exit_after_send_recovers_the_pre_send_receipt(tmp_path, monkeypatch):

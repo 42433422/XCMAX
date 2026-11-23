@@ -48,6 +48,119 @@ def pending(tmp_path, monkeypatch):
     return Request({"type": "http", "headers": []}), tmp_path
 
 
+def _mock_remote_http(monkeypatch, handler):
+    client_type = httpx.AsyncClient
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(
+        "app.fastapi_routes.market_account._market_api_base_url",
+        lambda: "https://market.test",
+    )
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: client_type(transport=transport, trust_env=False, **kwargs),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["installed", "running"])
+@pytest.mark.parametrize("response_error", ["http_status", "invalid_body"])
+async def test_unknown_remote_response_preserves_receipt_for_same_identity_retry(
+    pending, monkeypatch, stage, response_error
+):
+    request, root = pending
+    path = next(root.glob("mod-delivery-receipts/*/*.json"))
+    original = json.loads(path.read_text())
+    sent, accepted = [], {}
+    failed = False
+
+    def respond(remote_request):
+        nonlocal failed
+        payload = json.loads(remote_request.content)
+        assert remote_request.method == "POST"
+        assert remote_request.url.path == "/api/customer-service/custom-deliveries/9/installed"
+        assert remote_request.headers["Authorization"] == "Bearer current-token"
+        sent.append(payload)
+        receipt_id = payload["receipt_id"]
+        # The server committed this receipt even if the caller cannot read its response.
+        assert accepted.setdefault(receipt_id, payload) == payload
+        if payload["stage"] == stage and not failed:
+            failed = True
+            if response_error == "http_status":
+                return httpx.Response(503, json={"detail": "response lost after commit"})
+            return httpx.Response(200, json=[])
+        return httpx.Response(
+            200,
+            json={"receipt": {"record": {"verified": payload["stage"] == "running"}}},
+        )
+
+    async def runtime(request, row):
+        return row.get("runtime_payload") or dict(
+            row["payload"],
+            stage="running",
+            receipt_id="fixture-runtime-receipt",
+            observed_at="2026-11-24T00:00:00Z",
+        )
+
+    _mock_remote_http(monkeypatch, respond)
+    monkeypatch.setattr(outbox, "_runtime_payload", runtime)
+    assert await outbox.retry_delivery_receipts(request, "current-token") == {
+        "installed_reported": int(stage == "running"),
+        "runtime_reported": 0,
+        "pending": 1,
+    }
+    unknown = json.loads(path.read_text())
+    assert unknown["payload"] == original["payload"]
+    assert unknown["owner"] == original["owner"] == "tenant:1"
+    assert unknown["ticket_id"] == original["ticket_id"] == 9
+    assert unknown["installed_reported"] is (stage == "running")
+    assert unknown["runtime_reported"] is False
+    assert unknown["last_error"] == "DeliveryRemoteError"
+    if stage == "running":
+        assert unknown["runtime_payload"] == sent[-1]
+
+    assert await outbox.retry_delivery_receipts(request, "current-token") == {
+        "installed_reported": int(stage == "installed"),
+        "runtime_reported": 1,
+        "pending": 0,
+    }
+    retried = [payload for payload in sent if payload["stage"] == stage]
+    assert len(retried) == 2 and retried[0] == retried[1]
+    assert len(sent) == 3 and len(accepted) == 2
+    complete = json.loads(path.read_text())
+    assert complete["payload"] == original["payload"]
+    assert complete["runtime_payload"] == accepted["fixture-runtime-receipt"]
+    assert complete["installed_reported"] is True
+    assert complete["runtime_reported"] is True
+    assert "last_error" not in complete
+    assert await outbox.retry_delivery_receipts(request, "current-token") == {
+        "installed_reported": 0,
+        "runtime_reported": 0,
+        "pending": 0,
+    }
+    assert len(sent) == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError, AttributeError, KeyError])
+async def test_unclassified_programming_error_is_not_saved_as_retryable_receipt(
+    pending, monkeypatch, error_type
+):
+    request, root = pending
+    path = next(root.glob("mod-delivery-receipts/*/*.json"))
+    before = path.read_bytes()
+    error = error_type("synthetic programming failure")
+
+    def fail(remote_request):
+        raise error
+
+    _mock_remote_http(monkeypatch, fail)
+    with pytest.raises(error_type) as raised:
+        await outbox.retry_delivery_receipts(request, "current-token")
+    assert raised.value is error
+    assert path.read_bytes() == before
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", [ConnectionError, DeliveryRemoteError])
 async def test_response_loss_retries_same_install_id_and_body(pending, monkeypatch, failure):

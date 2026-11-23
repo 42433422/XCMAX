@@ -94,19 +94,29 @@ def test_queue_admission_needs_no_qualification_but_worker_still_requires_it(
         assert state.repository.get(run_id).final_output["codex_result"]["run_id"] == run_id
 
 
-def test_failed_queue_insert_rolls_back_the_parent_admission(runtime_entry, monkeypatch):
+@pytest.mark.parametrize("programming_error", [False, True])
+def test_failed_queue_insert_rolls_back_the_parent_admission(
+    runtime_entry, monkeypatch, programming_error
+):
     state = runtime_entry
+    error = (
+        RuntimeError("synthetic queue write failure")
+        if programming_error
+        else OperationalError("INSERT INTO agent_task_executions", {}, OSError("queue unavailable"))
+    )
 
     def fail(*_args, **_kwargs):
-        raise OperationalError(
-            "INSERT INTO agent_task_executions", {}, OSError("queue unavailable")
-        )
+        raise error
 
     monkeypatch.setattr(state.queue, "enqueue_in_session", fail)
-    response = state.client.post(
-        "/api/agent/runs", json={"message": "解释库存含义", "request_id": "failed-insert"}
-    )
-    assert response.status_code == 409
+    payload = {"message": "解释库存含义", "request_id": "failed-insert"}
+    if programming_error:
+        with pytest.raises(RuntimeError) as raised:
+            state.client.post("/api/agent/runs", json=payload)
+        assert raised.value is error
+    else:
+        response = state.client.post("/api/agent/runs", json=payload)
+        assert response.status_code == 409
     assert state.repository.list_recent() == []
     assert state.calls == state.servers == []
 

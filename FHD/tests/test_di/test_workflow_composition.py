@@ -2,6 +2,7 @@
 
 import asyncio
 import sqlite3
+from asyncio import CancelledError
 from contextlib import closing
 from unittest.mock import Mock
 
@@ -35,18 +36,24 @@ def test_each_graph_uses_its_own_dispatcher():
     assert first.call_count == second.call_count == 1
 
 
-@pytest.mark.parametrize("failure", [RuntimeError, KeyError, TypeError, AssertionError, OSError])
-def test_run_repository_closes_and_rolls_back_failed_session(failure):
+@pytest.mark.parametrize(
+    "failure", [OSError, RuntimeError, KeyError, TypeError, AssertionError, CancelledError]
+)
+@pytest.mark.parametrize("during_commit", [False, True])
+def test_run_repository_closes_and_rolls_back_failed_session(failure, during_commit):
     session = Mock()
-    repo = SQLAlchemyAgentRunRepository(session_factory=lambda: session, auto_create=False)
     error = failure("injected storage failure")
+    if during_commit:
+        session.commit.side_effect = error
+    repo = SQLAlchemyAgentRunRepository(session_factory=lambda: session, auto_create=False)
     with pytest.raises(failure) as caught:
         with repo._session_scope():
-            raise error
+            if not during_commit:
+                raise error
     assert caught.value is error
     session.rollback.assert_called_once_with()
     session.close.assert_called_once_with()
-    session.commit.assert_not_called()
+    assert session.commit.call_count == int(during_commit)
 
 
 @pytest.fixture
