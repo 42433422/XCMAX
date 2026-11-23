@@ -376,9 +376,7 @@ jobs:
 
       - name: Run Ruff format check
         if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
-        run: |
-          ruff format --diff tests/scripts/test_dora_metrics_pipeline.py || true
-          ruff format --check app/ tests/
+        run: ruff format --check app/ tests/
 
       - name: Run mypy type checking
         if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
