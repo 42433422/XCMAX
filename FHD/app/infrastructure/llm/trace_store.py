@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+from opentelemetry.attributes import BoundedAttributes
 from opentelemetry.sdk._logs import LoggerProvider, ReadableLogRecord
 from opentelemetry.sdk._logs.export import (
     BatchLogRecordProcessor,
@@ -402,15 +403,17 @@ class TraceStore:
         return OTLPSpanExporter(endpoint=url, timeout=5)
 
 
-def _otel_attributes(attributes: dict[str, Any]) -> dict[str, Any]:
-    """OTel scalar/array attributes cannot encode the local content descriptor dict."""
-    return {
-        key: json.dumps(value, ensure_ascii=False, default=str)
-        if isinstance(value, dict)
-        else value
-        for key, value in attributes.items()
-        if value is not None
-    }
+def _otel_attributes(attributes: dict[str, Any]) -> BoundedAttributes:
+    """Freeze queued values with the SDK, keeping existing descriptor encoding."""
+    return BoundedAttributes(
+        attributes={
+            key: json.dumps(value, ensure_ascii=False, default=str)
+            if isinstance(value, dict)
+            else value
+            for key, value in attributes.items()
+            if value is not None
+        }
+    )
 
 
 _store: TraceStore | None = None

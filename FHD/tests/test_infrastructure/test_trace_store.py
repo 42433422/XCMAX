@@ -236,6 +236,42 @@ def test_queue_freezes_nested_payload_before_caller_reuses_it(tmp_path):
     assert store.query()[0]["attributes"]["gen_ai.request.model"] == "original"
 
 
+@pytest.mark.parametrize("shape", ["array", "tuple", "nested_mapping"])
+def test_otlp_queue_freezes_span_and_event_arrays(tmp_path, monkeypatch, shape):
+    from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
+    from opentelemetry.sdk.trace import Event, ReadableSpan
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    monkeypatch.setenv("XCAGI_OTLP_ENDPOINT", "http://collector.invalid")
+    store = TraceStore(base_dir=tmp_path)
+    exporter = InMemorySpanExporter()
+    monkeypatch.setattr(store, "_get_otlp_exporter", lambda endpoint: exporter)
+    original = ["original"]
+    value = {"array": original, "tuple": (original,), "nested_mapping": [{"inner": original}]}[
+        shape
+    ]
+    expected = json.loads(json.dumps(value))
+    item = _span("b" * 16, trace_id="a" * 32, values=value)
+    item["events"] = [
+        {"name": "response", "timestamp": time.time(), "attributes": {"values": value}}
+    ]
+
+    # Exercise the real batch processor before reusing the caller's nested input.
+    store.record(item)
+    original[0] = "changed"
+    store.stop()
+
+    (exported,) = exporter.get_finished_spans()
+    assert isinstance(exported, ReadableSpan) and isinstance(exported.events[0], Event)
+    assert json.loads(json.dumps(exported.attributes["values"])) == expected
+    assert json.loads(json.dumps(exported.events[0].attributes["values"])) == expected
+    (local,) = store.query()
+    assert local["attributes"]["values"] == local["events"][0]["attributes"]["values"] == expected
+    # The locked OTLP encoder supports sequences and nested mappings, too.
+    encoded = encode_spans((exported,)).SerializeToString()
+    assert encoded.count(b"original") == 2 and b"changed" not in encoded
+
+
 def test_long_running_queries_bound_memory_and_skip_corrupt_records(tmp_path):
     import tracemalloc
 
