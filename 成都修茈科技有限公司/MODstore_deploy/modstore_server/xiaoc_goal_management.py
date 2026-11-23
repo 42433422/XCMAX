@@ -9,7 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from modstore_server.xiaoc_life_policy import LifePolicyError, parse_time
 
@@ -25,6 +27,7 @@ STAGES = (
     "enterprise_subject",
 )
 LABELS = dict(zip(STAGES, ("付款", "安装", "首次使用", "产出", "验收", "复用", "顺序", "企业主体")))
+EXECUTION_STEPS = ("inspect", "plan")
 
 
 def _digest(value: Any) -> str:
@@ -152,7 +155,7 @@ def check_candidate_promotion(
         raise LifePolicyError("经营候选或原提案期限无效") from exc
     if not now < expiry <= deadline:
         raise LifePolicyError("经营候选已过期或提案期限超出候选复核期限")
-    if goal.get("issue_key") not in _gaps(context, now):
+    if candidate_gate(goal, owner, context, now=now)["status"] != "eligible":
         raise LifePolicyError("原经营缺口已消失或证据不可用，请重新观察")
 
 
@@ -167,3 +170,144 @@ def portfolio_goal_closed(record: dict[str, Any], *, now: datetime) -> bool:
         return parse_time(expiry) <= now
     except (TypeError, ValueError, AttributeError):
         return True
+
+
+def candidate_gate(
+    goal: dict[str, Any], owner: int, value: dict[str, Any], *, now: datetime
+) -> dict[str, Any]:
+    """Read-only eligibility. A rolling aggregate is never a fixed-cohort outcome."""
+    stage = goal.get("issue_key")
+    status = "awaiting_evidence"
+    count = None
+    source = goal.get("observation") or {}
+    try:
+        deadline = parse_time(goal["review_deadline"])
+        original_at = parse_time(source["observed_at"])
+        observed = parse_time(value["observed_at"])
+        if goal.get("candidate_owner_user_id") != owner:
+            status = "owner_mismatch"
+        elif now >= deadline:
+            status = "expired"
+        elif (
+            stage in STAGES
+            and source.get("stage") == stage
+            and value.get("status") == "ok"
+            and value.get("value_ledger_ready") is True
+            and value.get("source_owner") == source.get("source_owner")
+            and value.get("source_owner") in {
+                "python_payment_orders", "java_postgresql_internal_api"
+            }
+            and value.get("window_days") == source.get("window_days") == 90
+            and max(original_at, now - timedelta(days=1)) <= observed <= now
+        ):
+            gaps = value.get("lifecycle_gaps")
+            if isinstance(gaps, dict) and type(gaps.get(stage)) is int and gaps[stage] >= 0:
+                count = gaps[stage]
+                status = "eligible" if count > 0 else "no_current_gap"
+    except (KeyError, TypeError, ValueError, AttributeError):
+        pass
+    result = {
+        "goal_id": goal["id"],
+        "owner_user_id": owner,
+        "status": status,
+        "as_of": now.isoformat(),
+        "observed_at": value.get("observed_at") if isinstance(value, dict) else None,
+        "source_owner": source.get("source_owner"),
+        "gap_count": count,
+        "scope": "current_rolling_observation_not_outcome_verification",
+    }
+    result["evidence_ref"] = "operating-gate:" + _digest(result)
+    return result
+
+
+class GoalStepAllocation(BaseModel):
+    """Explicit allocations supplied by the current human owner, not model text."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    step_id: Literal["inspect", "plan"]
+    employee_id: str = Field(min_length=1, max_length=128)
+    input_data: dict[str, Any] = Field(default_factory=dict)
+    cost_cents: int = Field(ge=0, le=100_000_000)
+    tokens: int = Field(ge=0, le=1_000_000_000)
+    compute_seconds: int = Field(ge=1, le=240)
+
+
+def build_goal_opportunities(
+    goal: dict[str, Any], allocations: list[GoalStepAllocation], limits: dict[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Compile the fixed review DAG to the existing CP-SAT opportunity contract."""
+    from modstore_server.strategic_portfolio import Opportunity, RESOURCES
+
+    if goal.get("candidate_origin") != ORIGIN:
+        raise LifePolicyError("仅原经营候选支持此依赖分解")
+    by_step = {row.step_id: row for row in allocations}
+    if len(allocations) != 2 or set(by_step) != set(EXECUTION_STEPS):
+        raise LifePolicyError("须逐项分配核对与建议两个原子目标")
+    if any(sum(getattr(row, key) for row in allocations) > limits[key] for key in RESOURCES):
+        raise LifePolicyError("子目标总资源超过原提案预算")
+    ids = {
+        step: "life-step-" + _digest([goal["id"], step])[:32] for step in EXECUTION_STEPS
+    }
+    descriptions = {
+        "inspect": "核对原客户价值链缺口及同口径原记录；提交来源与缺失证据。",
+        "plan": "依据原核对任务结果提交处理建议及成本风险；不执行业务变更。",
+    }
+    rows = []
+    for step in EXECUTION_STEPS:
+        allocation = by_step[step]
+        rows.append(
+            Opportunity(
+                opportunity_id=ids[step],
+                title=f"{goal['title']}：{step}"[:200],
+                task=descriptions[step],
+                employee_id=allocation.employee_id,
+                input_data=allocation.input_data,
+                value_score=100,
+                confidence_bps=5000,
+                cost_cents=allocation.cost_cents,
+                tokens=allocation.tokens,
+                compute_seconds=allocation.compute_seconds,
+                risk="medium",
+                depends_on=[] if step == "inspect" else [ids["inspect"]],
+                source_refs=list(dict.fromkeys(goal["evidence_refs"])),
+            ).model_dump()
+        )
+    return rows, ids
+
+
+def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    """Read back exact original opportunities/tasks; do not equate review with success."""
+    bindings = goal.get("step_bindings")
+    if not isinstance(bindings, dict) or set(bindings) != set(EXECUTION_STEPS):
+        return {}
+    if (
+        goal.get("decision_id") != record.get("decision_id")
+        or goal.get("candidate_owner_user_id") != record.get("owner_user_id")
+        or len(set(bindings.values())) != len(EXECUTION_STEPS)
+    ):
+        return {"status": "binding_mismatch"}
+    opportunities = {
+        row["opportunity_id"]: row for row in record.get("opportunities", [])
+    }
+    if (
+        set(opportunities) != set(bindings.values())
+        or opportunities[bindings["inspect"]].get("depends_on") != []
+        or opportunities[bindings["plan"]].get("depends_on") != [bindings["inspect"]]
+    ):
+        return {"status": "binding_mismatch"}
+    steps = []
+    for step in EXECUTION_STEPS:
+        opportunity_id = bindings[step]
+        task = (record.get("tasks") or {}).get(opportunity_id) or {}
+        steps.append({
+            "step_id": step,
+            "opportunity_id": opportunity_id,
+            "task_status": task.get("status", "pending"),
+            "result_sha256": task.get("result_sha256"),
+        })
+    return {
+        "status": "original_task_projection",
+        "decision_id": record["decision_id"],
+        "steps": steps,
+        "independent_acceptance": "pending_fixed_cohort_verification",
+    }

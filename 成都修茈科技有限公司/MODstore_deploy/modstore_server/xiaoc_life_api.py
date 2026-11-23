@@ -19,7 +19,12 @@ from modstore_server.strategic_portfolio import (
     create_portfolio_proposal,
     digest,
 )
-from modstore_server.xiaoc_goal_management import ORIGIN, check_candidate_promotion
+from modstore_server.xiaoc_goal_management import (
+    ORIGIN,
+    GoalStepAllocation,
+    build_goal_opportunities,
+    check_candidate_promotion,
+)
 from modstore_server.xiaoc_life_policy import IDENTITY_ID, LifePolicyError, LifeUpdate, utcnow
 from modstore_server.xiaoc_life_store import (
     _event,
@@ -42,6 +47,7 @@ class PromoteGoal(RevisionBody):
     employee_id: str = Field(min_length=1, max_length=128)
     limits: PortfolioLimits
     input_data: dict[str, Any] = Field(default_factory=dict)
+    step_allocations: list[GoalStepAllocation] = Field(default_factory=list, max_length=2)
 
     @field_validator("input_data")
     @classmethod
@@ -173,13 +179,22 @@ def promote_goal(
         risk="medium",
         source_refs=goal["evidence_refs"][:32],
     )
+    step_bindings = {}
+    opportunities = [opportunity.model_dump()]
+    if body.step_allocations:
+        profiles = {item.get("id") for item in _load_all_employee_profiles()}
+        if any(row.employee_id not in profiles for row in body.step_allocations):
+            raise HTTPException(422, "请选择现有可执行员工")
+        opportunities, step_bindings = _call(
+            build_goal_opportunities, goal, body.step_allocations, limits
+        )
     proposal = _call(
         create_portfolio_proposal,
         owner_user_id=int(admin.id),
         goal=goal["title"],
         period="xiaoc-life:" + goal_id[:45],
         limits=limits,
-        opportunities=[opportunity.model_dump()],
+        opportunities=opportunities,
         idempotency_key="xiaoc-life:"
         + digest(
             [goal_id, ORIGIN]
@@ -203,7 +218,14 @@ def promote_goal(
             raise LifePolicyError("原经营候选已改变，提案未绑定")
         if target.get("decision_id") not in (None, "", decision_id):
             raise LifePolicyError("目标已绑定另一个提案")
+        if target.get("decision_id") == decision_id:
+            return  # A repeated promotion cannot reset an approved or terminal goal.
         target.update(decision_id=decision_id, status="awaiting_approval")
+        if step_bindings:
+            target.update(
+                step_bindings=step_bindings,
+                subgoals_status="bound_to_original_portfolio",
+            )
         event_id = "portfolio:" + digest([goal_id, decision_id])[:64]
         if session.get(XiaoCLifeEvent, event_id) is None:
             _event(

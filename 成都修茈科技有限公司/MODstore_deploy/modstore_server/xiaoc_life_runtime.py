@@ -15,7 +15,12 @@ from typing import Any, TypedDict
 from urllib.parse import urlsplit
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
-from modstore_server.xiaoc_goal_management import discover_goal_candidate, portfolio_goal_closed
+from modstore_server.xiaoc_goal_management import (
+    candidate_gate,
+    discover_goal_candidate,
+    portfolio_goal_closed,
+    project_goal_steps,
+)
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
     cognition_messages,
@@ -287,6 +292,9 @@ class CyclePorts:
                 return {"facts": [fact], "discovered_goals": [goal]}
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
         facts.extend(cognitive_review_facts(self.state))
+        from modstore_server.xiaoc_life_reflection import experience_candidate_facts
+
+        facts.extend(experience_candidate_facts(self.state))
         facts.extend(reflection_facts(self.state))
         facts.extend(goal_review_facts(self.state))
         if self.domain == "reflection" and self.state["level"] >= 6:
@@ -364,10 +372,15 @@ class CyclePorts:
                     }
                 facts.append(_fact("company:" + key, value))
         for event in self.state.get("events", [])[:4]:
-            if isinstance(event, dict) and event.get("summary"):
+            if (
+                isinstance(event, dict)
+                and event.get("summary")
+                and event.get("kind") != "experience_candidate"
+                and (event.get("details") or {}).get("owner_user_id") == self.state.get("owner_user_id")
+            ):
                 facts.append(
                     _fact(
-                        "experience",
+                        "historical_life_event",
                         {k: event.get(k) for k in ("id", "cycle_id", "status", "summary")},
                     )
                 )
@@ -679,6 +692,31 @@ class CyclePorts:
         before = binding["snapshot"]
         decision_id = before["decision_id"]
         owner = self.claim["owner_user_id"]
+        from modstore_server.strategy_business_context import customer_value_context
+        from modstore_server.xiaoc_goal_management import ORIGIN
+
+        gate = None
+        if binding["goal"].get("candidate_origin") == ORIGIN:
+            observation = await asyncio.to_thread(customer_value_context)
+            self.active()
+            gate = candidate_gate(binding["goal"], owner, observation, now=datetime.now(UTC))
+            self.details["operating_gate"] = gate
+            self.evidence = [*binding["goal"]["evidence_refs"], gate["evidence_ref"]]
+            if gate["status"] != "eligible":
+                return {
+                    "goals": [{
+                        "id": binding["goal"]["id"],
+                        "evidence_refs": binding["goal"]["evidence_refs"],
+                        "operating_gate": gate,
+                    }],
+                    "status": "blocked",
+                    "summary": "原经营候选等待有效缺口证据；未派发新任务，保留原回执。",
+                }
+            self.claim["operating_goal_admission"] = {
+                "decision_id": decision_id,
+                "goal_id": binding["goal"]["id"],
+                "gate": gate,
+            }
         plan_portfolio(decision_id, owner_user_id=owner)
         current = portfolio_status(decision_id, owner_user_id=owner)
         pending = _ready_portfolio_tasks(current)
@@ -735,7 +773,10 @@ class CyclePorts:
             old, new = usage(before), usage(after)
             if old is not None and new is not None:
                 self.actual_tokens = max(0, new - old)
+        from modstore_server.xiaoc_life_reflection import review_experiences
+
         feedback = portfolio_feedback(after)
+        self.details["business_reflection"], _ = review_experiences(after)
         self.details["outcome_feedback"] = feedback
         self.evidence = [f"strategic_portfolio:{decision_id}", feedback["evidence_ref"]]
         self.details["portfolio_receipt"] = {
@@ -779,6 +820,9 @@ class CyclePorts:
                 dict.fromkeys([*binding["goal"].get("evidence_refs", []), *self.evidence])
             ),
         }
+        if gate is not None:
+            goal["operating_gate"] = gate
+            goal["step_projection"] = project_goal_steps(goal, after)
         if goal_status == "execution_verified":
             goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
         elif remaining_ready:

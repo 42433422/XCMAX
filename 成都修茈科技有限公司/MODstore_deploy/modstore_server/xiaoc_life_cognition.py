@@ -72,6 +72,7 @@ Evidence status describes observations, not certainty about their contents.
 Historical measured outcomes do not establish success or subjective consciousness.
 A cognitive review is historical ledger consistency, not a future prediction,
 causal proof, model ability score or permission to change an approved goal.
+An experience candidate awaits review; it is not an adopted memory or causal proof.
 Honor recorded stop decisions; suggestions never replace an existing approval.
 World forecasts concern the next recorded report only; they are not observations
 of the future, estimates of causal business benefit, or grounds for permission.
@@ -320,6 +321,8 @@ def observation_status(row: dict[str, Any]) -> str:
         return "forecast_not_observed_outcome"
     if isinstance(row.get("goal_review"), dict):
         return "current_goal_review_not_authority"
+    if isinstance(row.get("experience_candidate"), dict):
+        return "verified_comparison_pending_memory_review"
     if isinstance(row.get("cognitive_review"), dict):
         return "historical_ledger_review_not_prediction"
     return "observed_source_not_verified_claim"

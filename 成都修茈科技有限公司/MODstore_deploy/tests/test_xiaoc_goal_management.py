@@ -5,7 +5,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from modstore_server.xiaoc_goal_management import (
+    candidate_gate,
     check_candidate_promotion,
+    project_goal_steps,
     discover_goal_candidate,
     portfolio_goal_closed,
 )
@@ -89,3 +91,62 @@ def test_closed_portfolio_is_not_dispatchable(observation):
         {"status": "approved", "limits": {"expires_at": (now + timedelta(days=1)).isoformat()}},
         now=now,
     )
+
+
+def test_current_gap_gate_rechecks_source_owner_and_deadline(observation):
+    now, value, state = observation
+    goal, _ = discover_goal_candidate({"customer_value": value}, state, 17, now=now)
+    assert candidate_gate(goal, 17, value, now=now)["status"] == "eligible"
+    assert candidate_gate(goal, 18, value, now=now)["status"] == "owner_mismatch"
+    assert candidate_gate(
+        goal, 17, {**value, "lifecycle_gaps": {"acceptance": 0}}, now=now
+    )["status"] == "no_current_gap"
+    assert candidate_gate(
+        goal, 17, {**value, "lifecycle_gaps": {}}, now=now
+    )["status"] == "awaiting_evidence"
+    assert candidate_gate(
+        goal, 17, {**value, "source_owner": "java_postgresql_internal_api"}, now=now
+    )["status"] == "awaiting_evidence"
+    assert candidate_gate(goal, 17, value, now=now + timedelta(days=8))["status"] == "expired"
+
+
+def test_projection_uses_original_dependency_and_receipts_only(observation):
+    now, value, state = observation
+    goal, _ = discover_goal_candidate({"customer_value": value}, state, 17, now=now)
+    goal.update(decision_id="d1", step_bindings={"inspect": "i", "plan": "p"})
+    record = {
+        "decision_id": "d1",
+        "owner_user_id": 17,
+        "opportunities": [
+            {"opportunity_id": "i", "depends_on": []},
+            {"opportunity_id": "p", "depends_on": ["i"]},
+        ],
+        "tasks": {"i": {"status": "completed", "result_sha256": "a" * 64}},
+    }
+    projected = project_goal_steps(goal, record)
+    assert [row["task_status"] for row in projected["steps"]] == ["completed", "pending"]
+    assert projected["independent_acceptance"] == "pending_fixed_cohort_verification"
+    assert project_goal_steps(goal, {**record, "owner_user_id": 18})["status"] == "binding_mismatch"
+    record["opportunities"][1]["depends_on"] = []
+    assert project_goal_steps(goal, record)["status"] == "binding_mismatch"
+
+
+def test_allocations_use_existing_opportunity_contract_and_stable_dependencies(observation):
+    from modstore_server.xiaoc_goal_management import GoalStepAllocation, build_goal_opportunities
+
+    now, value, state = observation
+    goal, _ = discover_goal_candidate({"customer_value": value}, state, 17, now=now)
+    caps = {"cost_cents": 20, "tokens": 200, "compute_seconds": 60}
+    allocations = [
+        GoalStepAllocation(step_id=step, employee_id="employee", cost_cents=10,
+                           tokens=100, compute_seconds=30)
+        for step in ("inspect", "plan")
+    ]
+    rows, bindings = build_goal_opportunities(goal, allocations, caps)
+    assert rows[0]["opportunity_id"] == bindings["inspect"]
+    assert rows[1]["depends_on"] == [bindings["inspect"]]
+    assert build_goal_opportunities(goal, list(reversed(allocations)), caps) == (rows, bindings)
+    with pytest.raises(LifePolicyError):
+        build_goal_opportunities(goal, allocations, {**caps, "tokens": 199})
+    with pytest.raises(LifePolicyError):
+        build_goal_opportunities(goal, allocations[:1], caps)
