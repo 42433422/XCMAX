@@ -7,9 +7,22 @@ import argparse
 import hashlib
 import json
 import sys
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from collect_slo_metrics import (
+    QUERIES,
+    SAMPLE_MINIMUMS,
+    SAMPLE_QUERIES,
+    SCRAPE_TARGETS,
+    TARGETS,
+    _numeric,
+    meets_target,
+    scrape_errors,
+    telemetry_admissible,
+)
 
 
 def _canonical(value: Any) -> str:
@@ -27,19 +40,16 @@ def _record_hash_is_valid(payload: dict[str, Any]) -> bool:
 
 def _day(payload: dict[str, Any]) -> date | None:
     try:
-        return datetime.fromisoformat(str(payload["generated_at"]).replace("Z", "+00:00")).date()
+        stamp = datetime.fromisoformat(str(payload["generated_at"]).replace("Z", "+00:00"))
+        return stamp.astimezone(UTC).date() if stamp.tzinfo is not None else None
     except (KeyError, TypeError, ValueError):
         return None
 
 
-def verify_window(
-    evidence_dir: Path,
-    *,
-    release_id: str,
-    required_days: int = 90,
-) -> dict[str, Any]:
+def _load_records(evidence_dir: Path) -> tuple[list[dict[str, Any]], list[str], str]:
     blockers: list[str] = []
     records: list[dict[str, Any]] = []
+    pending: list[tuple[Path, dict[str, Any]]] = []
     previous_hash = "0" * 64
     for path in sorted(evidence_dir.glob("*.json")):
         try:
@@ -50,8 +60,24 @@ def verify_window(
         if not isinstance(payload, dict) or not _record_hash_is_valid(payload):
             blockers.append(f"{path.name}:invalid_evidence_hash")
             continue
-        if payload.get("previous_chain_hash") != previous_hash:
-            blockers.append(f"{path.name}:broken_hash_chain")
+        if (
+            payload.get("schema") != "xcagi.production_slo_evidence/v1"
+            or payload.get("environment") != "production"
+            or _day(payload) is None
+        ):
+            blockers.append(f"{path.name}:invalid_production_record")
+        pending.append((path, payload))
+    # Concurrent/backfilled collections may publish in a different order from
+    # their filenames. Follow the committed hash links, rejecting forks/gaps.
+    while pending:
+        successors = [
+            item for item in pending if item[1].get("previous_chain_hash") == previous_hash
+        ]
+        if len(successors) != 1:
+            blockers.append("forked_hash_chain" if successors else "broken_hash_chain")
+            break
+        path, payload = successors[0]
+        pending.remove(successors[0])
         expected_chain = hashlib.sha256(
             f"{previous_hash}:{payload['evidence_hash']}".encode()
         ).hexdigest()
@@ -59,6 +85,41 @@ def verify_window(
             blockers.append(f"{path.name}:invalid_chain_hash")
         previous_hash = str(payload.get("chain_hash") or "")
         records.append(payload)
+    return records, blockers, previous_hash
+
+
+def _metric_errors(payload: dict[str, Any]) -> list[str]:
+    """Re-evaluate measurements with the collector SSOT, not stored pass flags."""
+    errors: list[str] = []
+    readings = payload.get("readings")
+    readings = readings if isinstance(readings, dict) else {}
+    if set(readings) != set(TARGETS):
+        errors.append("slo_metric_inventory_mismatch")
+    for slo_id in TARGETS:
+        item = readings.get(slo_id)
+        if not isinstance(item, dict):
+            continue
+        value = _numeric(item.get("reading_numeric"))
+        if (
+            item.get("promql") != QUERIES[slo_id].format(w="90d")
+            or item.get("sample_promql") != SAMPLE_QUERIES[slo_id].format(w="90d")
+            or _numeric(item.get("reading")) != value
+            or meets_target(slo_id, value) is not True
+            or (_numeric(item.get("sample_count")) or 0) < SAMPLE_MINIMUMS[slo_id]
+        ):
+            errors.append(f"{slo_id}:target_or_sample_failed")
+    return errors
+
+
+def verify_window(
+    evidence_dir: Path,
+    *,
+    release_id: str,
+    required_days: int = 90,
+) -> dict[str, Any]:
+    if required_days <= 0 or not release_id:
+        raise ValueError("a release identity and positive observation length are required")
+    records, blockers, previous_hash = _load_records(evidence_dir)
 
     formal_by_day: dict[date, dict[str, Any]] = {}
     for payload in records:
@@ -67,9 +128,7 @@ def verify_window(
             day is not None
             and payload.get("mode") == "formal"
             and payload.get("release_id") == release_id
-            and payload.get("source_status") == "available"
-            and float(payload.get("coverage") or 0) >= 0.99
-            and float(payload.get("scrape_coverage") or 0) >= 0.99
+            and telemetry_admissible(payload)
             and payload.get("day0_eligible") is True
         ):
             formal_by_day[day] = payload
@@ -92,12 +151,7 @@ def verify_window(
     if final is None or final.get("window") != "90d":
         blockers.append("final_90d_sample_evidence_missing")
     else:
-        readings = final.get("readings") if isinstance(final.get("readings"), dict) else {}
-        for slo_id, reading in readings.items():
-            if not isinstance(reading, dict) or reading.get("passes") is not True:
-                blockers.append(f"{slo_id}:target_or_sample_failed")
-        if len(readings) != 10:
-            blockers.append(f"slo_metric_count:{len(readings)}/10")
+        blockers.extend(_metric_errors(final))
     return {
         "schema": "xcagi.production_slo_window_verification/v1",
         "passed": not blockers,
@@ -110,42 +164,51 @@ def verify_window(
     }
 
 
-def observation_ledger(evidence_dir: Path, *, days: int = 7) -> dict[str, Any]:
+def observation_ledger(
+    evidence_dir: Path, *, days: int = 7, now: datetime | None = None
+) -> dict[str, Any]:
     """Day-by-day collection/scrape ledger: every gap or fault stays on record."""
-    by_day: dict[date, dict[str, Any]] = {}
-    for path in sorted(evidence_dir.glob("*.json")):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, TypeError, ValueError):
-            continue
-        day = _day(payload) if isinstance(payload, dict) else None
+    if days <= 0:
+        raise ValueError("observation length must be positive")
+    observed_at = now or datetime.now(UTC)
+    if observed_at.tzinfo is None:
+        raise ValueError("observation time must include a timezone")
+    end = observed_at.astimezone(UTC).date()
+    records, gaps, _chain_tip = _load_records(evidence_dir)
+    by_day: dict[date, list[dict[str, Any]]] = {}
+    for payload in records:
+        day = _day(payload)
         if day is not None:
-            by_day[day] = payload
+            if day > end:
+                gaps.append(f"{day}:future_collection_record")
+                continue
+            by_day.setdefault(day, []).append(payload)
     if not by_day:
-        return {"passed": False, "days": [], "gaps": ["no_evidence"], "retention": None}
-    end = max(by_day)
+        return {"passed": False, "days": [], "gaps": gaps + ["no_evidence"], "retention": None}
     entries: list[dict[str, Any]] = []
-    gaps: list[str] = []
     for offset in range(days - 1, -1, -1):
         day = end - timedelta(days=offset)
-        payload = by_day.get(day)
-        if payload is None:
+        daily = by_day.get(day)
+        if daily is None:
             gaps.append(f"{day}:no_collection_record")
             entries.append({"day": day.isoformat(), "recorded": False})
             continue
+        payload = daily[-1]
+        for record in daily:
+            if record.get("source_status") != "available":
+                gaps.append(f"{day}:source_unavailable")
+            gaps.extend(f"{day}:{error}" for error in scrape_errors(record))
+        evidence = payload.get("scrape_evidence")
+        evidence = evidence if isinstance(evidence, dict) else {}
         targets = {
-            job: item.get("coverage")
-            for job, item in (payload.get("scrape_evidence") or {}).items()
-            if isinstance(item, dict)
+            job: evidence[job].get("coverage") if isinstance(evidence.get(job), dict) else None
+            for job in SCRAPE_TARGETS
         }
         faults = sorted(
-            e for e in payload.get("errors") or [] if "scrape" in e or "source_unavailable" in e
+            e
+            for e in payload.get("errors") or []
+            if isinstance(e, str) and ("scrape" in e or "source_unavailable" in e)
         )
-        if payload.get("source_status") != "available":
-            gaps.append(f"{day}:source_unavailable")
-        for job, coverage in targets.items():
-            if coverage is None or float(coverage) < 0.99:
-                gaps.append(f"{day}:{job}:scrape_coverage:{coverage}")
         entries.append(
             {
                 "day": day.isoformat(),
@@ -155,19 +218,19 @@ def observation_ledger(evidence_dir: Path, *, days: int = 7) -> dict[str, Any]:
                 "faults": faults,
             }
         )
-    latest = by_day[end]
+    latest = by_day[max(by_day)][-1]
     retention = {
         "days": latest.get("raw_metric_retention_days"),
         "source": latest.get("raw_metric_retention_source", "declared"),
     }
-    if retention["source"] != "prometheus_flags" or float(retention["days"] or 0) < 120:
+    if retention["source"] != "prometheus_flags" or (_numeric(retention["days"]) or 0) < 120:
         gaps.append(f"retention_not_measured_or_below_120d:{retention}")
     return {
         "schema": "xcagi.production_observation_ledger/v1",
         "passed": not gaps,
         "window": f"{(end - timedelta(days=days - 1)).isoformat()}..{end.isoformat()}",
         "days": entries,
-        "gaps": gaps,
+        "gaps": sorted(set(gaps)),
         "retention": retention,
     }
 

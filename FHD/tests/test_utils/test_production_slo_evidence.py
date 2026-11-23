@@ -18,7 +18,7 @@ def _module(*, live_retention: bool = False):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     if not live_retention:
-        module.measure_retention_days = lambda *_a, **_k: None
+        module.measure_retention_days = lambda *_a, **_k: 120.0
     return module
 
 
@@ -536,9 +536,195 @@ def test_seven_day_observation_ledger_records_every_gap(tmp_path: Path, monkeypa
             out_path=tmp_path / f"{offset:03d}.json",
             now=start + timedelta(days=offset),
         )
-    ledger = verifier.observation_ledger(tmp_path, days=7)
+    ledger = verifier.observation_ledger(tmp_path, days=7, now=start + timedelta(days=6))
     assert ledger["passed"] is False
     assert len(ledger["days"]) == 7
     assert "2026-11-04:no_collection_record" in ledger["gaps"]
     assert any(g.startswith("2026-11-06:fhd-api-stable:scrape_coverage") for g in ledger["gaps"])
     assert ledger["retention"] == {"days": 120.0, "source": "prometheus_flags"}
+
+
+def _complete_observation(tmp_path, monkeypatch, *, count=1):
+    collector = _module(live_retention=True)
+    monkeypatch.setattr(collector, "measure_retention_days", lambda *_a, **_k: 120.0)
+    values = dict.fromkeys(collector.TARGETS, 1.0)
+    values.update({"SLO-API-03": 0.0, "SLO-BIZ-02": 0.0})
+
+    def query(_url, expr, **_kwargs):
+        if expr in collector.SCRAPE_QUERIES.values():
+            return "5760"
+        for slo_id, template in collector.SAMPLE_QUERIES.items():
+            if expr == template.format(w="90d"):
+                return str(collector.SAMPLE_MINIMUMS[slo_id])
+        return str(
+            next(values[k] for k, v in collector.QUERIES.items() if v.format(w="90d") == expr)
+        )
+
+    monkeypatch.setattr(collector, "prom_query", query)
+    for offset in range(count):
+        collector.collect(
+            prom_url="https://prometheus.example.invalid",
+            prom_token="prod-token",
+            window="90d",
+            mode="formal",
+            release_id="release-a",
+            raw_retention_days=0,
+            out_path=tmp_path / f"{offset:03d}.json",
+            now=datetime(2026, 11, 1, 12, tzinfo=UTC) + timedelta(days=offset),
+        )
+    return collector
+
+
+def _rewrite_record(path, collector, mutate, *, rehash=True):
+    import hashlib
+
+    payload = json.loads(path.read_text())
+    mutate(payload)
+    if rehash:
+        unhashed = {
+            k: v for k, v in payload.items() if k not in {"evidence_hash", "chain_hash", "all_pass"}
+        }
+        payload["evidence_hash"] = hashlib.sha256(
+            collector._canonical_json(unhashed).encode()
+        ).hexdigest()
+        payload["chain_hash"] = hashlib.sha256(
+            f"{payload['previous_chain_hash']}:{payload['evidence_hash']}".encode()
+        ).hexdigest()
+    path.write_text(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing_target", "missing_hash", "wrong_count", "wrong_environment"]
+)
+def test_observation_rejects_unproven_scrape_coverage(tmp_path, monkeypatch, mutation):
+    collector = _complete_observation(tmp_path, monkeypatch)
+    mutations = {
+        "missing_target": lambda p: p["scrape_evidence"].pop("modstore-api-production"),
+        "missing_hash": lambda p: p.pop("evidence_hash"),
+        "wrong_count": lambda p: p["scrape_evidence"]["fhd-api-stable"].update(
+            successful_scrapes=0
+        ),
+        "wrong_environment": lambda p: p.update(environment="staging"),
+    }
+    _rewrite_record(
+        tmp_path / "000.json", collector, mutations[mutation], rehash=mutation != "missing_hash"
+    )
+    result = _verifier_module().observation_ledger(
+        tmp_path, days=1, now=datetime(2026, 11, 1, 12, tzinfo=UTC)
+    )
+    assert result["passed"] is False
+    assert result["gaps"]
+
+
+@pytest.mark.parametrize(
+    "mutation", ["unknown_metric", "sample_count", "reading", "declared_retention"]
+)
+def test_formal_window_recomputes_actual_slo_results(tmp_path, monkeypatch, mutation):
+    collector = _complete_observation(tmp_path, monkeypatch)
+    mutations = {
+        "unknown_metric": lambda p: p["readings"].update(
+            {"wrong": p["readings"].pop("SLO-BIZ-05")}
+        ),
+        "sample_count": lambda p: p["readings"]["SLO-BIZ-05"].update(sample_count=0),
+        "reading": lambda p: p["readings"]["SLO-API-01"].update(reading_numeric=0.5, reading="0.5"),
+        "declared_retention": lambda p: p.update(raw_metric_retention_source="declared"),
+    }
+    _rewrite_record(tmp_path / "000.json", collector, mutations[mutation])
+    result = _verifier_module().verify_window(tmp_path, release_id="release-a", required_days=1)
+    assert result["passed"] is False
+    assert result["blockers"]
+
+
+def test_concurrent_collections_keep_one_chain_independent_of_filenames(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    collector = _complete_observation(tmp_path, monkeypatch)
+
+    def append(filename):
+        return collector.collect(
+            prom_url="https://prometheus.example.invalid",
+            prom_token="prod-token",
+            window="90d",
+            mode="formal",
+            release_id="release-a",
+            raw_retention_days=0,
+            out_path=tmp_path / filename,
+            now=datetime(2026, 11, 1, 12, tzinfo=UTC),
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(append, ["z.json", "b.json", "q.json", "c.json"]))
+    assert all(passed for _record, passed in results)
+    assert len({record["chain_hash"] for record, _passed in results}) == 4
+    verifier = _verifier_module()
+    assert (
+        verifier.observation_ledger(tmp_path, days=1, now=datetime(2026, 11, 1, 12, tzinfo=UTC))[
+            "passed"
+        ]
+        is True
+    )
+    assert (
+        verifier.verify_window(tmp_path, release_id="release-a", required_days=1)["passed"] is True
+    )
+
+
+def test_observation_stops_passing_when_daily_collection_stops(tmp_path, monkeypatch):
+    _complete_observation(tmp_path, monkeypatch, count=7)
+    verifier = _verifier_module()
+    final_day = datetime(2026, 11, 7, 12, tzinfo=UTC)
+    assert verifier.observation_ledger(tmp_path, days=7, now=final_day)["passed"] is True
+    stale = verifier.observation_ledger(tmp_path, days=7, now=final_day + timedelta(days=1))
+    assert stale["passed"] is False
+    assert stale["window"] == "2026-11-02..2026-11-08"
+    assert "2026-11-08:no_collection_record" in stale["gaps"]
+
+
+def test_declared_retention_does_not_replace_prometheus_flag_readback(tmp_path, monkeypatch):
+    collector = _complete_observation(tmp_path, monkeypatch)
+    monkeypatch.setattr(collector, "measure_retention_days", lambda *_a, **_k: None)
+    payload, passed = collector.collect(
+        prom_url="https://prometheus.example.invalid",
+        prom_token="prod-token",
+        window="90d",
+        mode="formal",
+        release_id="release-a",
+        raw_retention_days=120,
+        out_path=tmp_path / "declared.json",
+    )
+    assert passed is False
+    assert payload["day0_eligible"] is False
+    assert collector.telemetry_admissible(payload) is False
+    assert "raw_metric_retention_not_measured" in payload["errors"]
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "malformed"])
+def test_invalid_live_measurements_produce_blocked_evidence(tmp_path, monkeypatch, value):
+    collector = _module()
+    monkeypatch.setattr(collector, "prom_query", lambda *_a, **_k: value)
+    payload, passed = collector.collect(
+        prom_url="https://prometheus.example.invalid",
+        prom_token="prod-token",
+        window="90d",
+        mode="formal",
+        release_id="release-a",
+        raw_retention_days=120,
+        out_path=tmp_path / "invalid.json",
+    )
+    assert passed is False
+    assert collector.telemetry_admissible(payload) is False
+    assert all(item["reading_numeric"] is None for item in payload["readings"].values())
+    assert json.loads((tmp_path / "invalid.json").read_text())["all_pass"] is False
+
+
+def test_prometheus_ambiguous_result_is_not_silently_truncated(monkeypatch):
+    collector = _module()
+    monkeypatch.setattr(
+        collector,
+        "_prom_get",
+        lambda *_a: {
+            "status": "success",
+            "data": {"result": [{"value": [0, "1"]}, {"value": [0, "0"]}]},
+        },
+    )
+    with pytest.raises(RuntimeError, match="ambiguous"):
+        collector.prom_query("http://127.0.0.1:9090", "sum(up)")

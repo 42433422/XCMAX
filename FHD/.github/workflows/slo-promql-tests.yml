@@ -6,6 +6,8 @@ on:
     paths:
       - "FHD/scripts/observability/collect_slo_metrics.py"
       - "FHD/scripts/observability/build_slo_promql_tests.py"
+      - "FHD/ops/monitoring/production-alerts.yml"
+      - "FHD/ops/monitoring/prometheus.production.yml"
       - ".github/workflows/slo-promql-tests.yml"
       - "FHD/.github/workflows/slo-promql-tests.yml"
       - "scripts/dev/publish_ci_workflows_to_root.py"
@@ -14,6 +16,8 @@ on:
     paths:
       - "FHD/scripts/observability/collect_slo_metrics.py"
       - "FHD/scripts/observability/build_slo_promql_tests.py"
+      - "FHD/ops/monitoring/production-alerts.yml"
+      - "FHD/ops/monitoring/prometheus.production.yml"
       - ".github/workflows/slo-promql-tests.yml"
       - "FHD/.github/workflows/slo-promql-tests.yml"
       - "scripts/dev/publish_ci_workflows_to_root.py"
@@ -38,10 +42,12 @@ jobs:
       - name: Build synthetic tests from actual production expressions
         run: |
           python scripts/observability/build_slo_promql_tests.py \
+            --rules-file /production-alerts.yml \
             --output "${RUNNER_TEMP}/slo-promql-tests.json"
       - name: Evaluate expressions with Prometheus (no production network)
         run: |
           docker run --rm --network none \
             -v "${RUNNER_TEMP}/slo-promql-tests.json:/tests.json:ro" \
+            -v "${GITHUB_WORKSPACE}/FHD/ops/monitoring/production-alerts.yml:/production-alerts.yml:ro" \
             --entrypoint /bin/promtool prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0 \
             test rules /tests.json

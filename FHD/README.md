@@ -84,7 +84,7 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | SSE 解析 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
 | 员工办公室 | [Pixel Agents v1.6.0](https://github.com/pixel-agents-hq/pixel-agents/tree/4dd14d612fd37d89ffbbc977959f572395c4eec8)，MIT | 固定提交 `4dd14d612fd37d89ffbbc977959f572395c4eec8` 的 Canvas 2D 渲染、工位、精灵与动画核心；仅加 Vue/部门/任务胶水，异步加载，无新增运行时依赖。角色来源为 MetroCity CC0，原许可、源文件校验和可复现导入脚本见 [third_party/pixel-agents](third_party/pixel-agents/README.md)。 |
 | 员工任务与图谱 | [Vue Flow 1.48.2](https://github.com/bcakmakoglu/vue-flow) / [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)，MIT，已有 lockfile 固定 | 复用现有流程图、表单、对话框、执行记录与产物面板；空间、工作台和图谱共同读取原任务账本及认证事件流，不引入上游独立执行器。 |
-| 执行链观测 | [OpenTelemetry Python v1.45.2](https://github.com/open-telemetry/opentelemetry-python/tree/v1.45.2)，Apache-2.0，现有 `uv.lock` 固定 | 复用 W3C Trace Context、SDK span 和 OTLP exporter；产品薄适配绑定原任务账本、工具尝试和既有执行卡片，无新增采集服务。 |
+| 执行链观测 | [OpenTelemetry Python v1.45.2](https://github.com/open-telemetry/opentelemetry-python/tree/v1.45.2)，Apache-2.0；SDK/API 1.45.2、OTLP exporter 1.45.1 由现有 `uv.lock` 固定 | W3C 身份、工具/NeuroBus span、批处理队列和关闭复用 SDK；既有 GenAI JSONL 只保留属性适配与文件 sink，共用同一 provider 生命周期。 |
 | 子进程观测 | Python 标准库 `multiprocessing.Pipe` | 只增加隔离工具与现有 StreamLifetime 的 JSON 进度适配，保留业务回执、绝对截止、进程回收、租户和审批控制。 |
 | ELT 预演续租 | [CPython 3.12.13 threading](https://github.com/python/cpython/blob/v3.12.13/Lib/threading.py)，PSF-2.0 | 阻塞解析和字段映射期间使用线程及 Event，在独立短事务校验原租户和租约令牌。 |
 | ELT 台账证据 | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)，MIT | 复用只读行列坐标。现有结构化模型只判断客户归属，入库校验逐行核对原件。 |
@@ -96,6 +96,16 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 ELT 仍沿原 `EltRun` / `EltRunRow` 与 Codex、LangGraph 的批准任务执行，不新增调度器或状态账本。重复表头和天然后缀碰撞由现有表头生成器消歧，原标签、列坐标和表头行保存在来源信息中，字段含义继续由模型判断。SQL 保存点、加密、文件锁、表格解析和重试均来自上述固定组件；保留的产品适配只负责原租户/账号、审批版本、行数守恒和业务回执，通用库不能替代这些产品事实。
 
 Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回执，原样携带 `run_id`、`chunk_index`、`idempotency_key`，并返回 `executed_rows` 与该分片行数相同、`committed: true`。202、204、明确失败、无回执或身份/行数不符进入待核对，不根据响应猜测完成或再次发送。回执的 `business_verified: false` 明确表示接收方自报提交尚不等于其业务数据库已独立对账；空分片连接测试只证明连通性。文件回读亦只证明产物字节与批准内容一致，`formulas_recalculated: false` 不冒充公式重算，客户原件 B31 对账与实际部署验收仍需另取证据。
+
+生产稳定性继续使用既有 Prometheus / Grafana 与原发布流程，组件固定如下：
+
+| 路径 | 固定来源与许可 | 产品适配与验收边界 |
+|---|---|---|
+| SLO 采集与告警 | [Prometheus 3.14.0](https://github.com/prometheus/prometheus/tree/v3.14.0)（Apache-2.0）；现有锁中的 [Tenacity 9.1.4](https://github.com/jd/tenacity/tree/9.1.4)（Apache-2.0）、[filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT） | promtool 执行真实规则；安全 GET 有界重试、证据跨进程互斥追加。按固定目标、实际采样数、完整指标和摘要核对；正式 90 天 / 99% 覆盖与近期 7 天观察保持原要求。 |
+| 压力与网络故障验收 | [k6 0.54.0](https://github.com/grafana/k6/tree/v0.54.0)（AGPL-3.0，沿用现有性能流水线版本）、[Toxiproxy 2.12.0](https://github.com/Shopify/toxiproxy/tree/v2.12.0)（MIT） | CI 校验官方二进制摘要；真实 TCP 故障接入原执行器和 SQLite 幂等账本，k6 独立回读同一持久轮次。缺工具、版本不符、未知结果和未完成时长均不能通过。 |
+| 在线备份与发布恢复 | [SQLite 在线备份 API](https://www.sqlite.org/backup.html)（Public Domain），经现有 Python 标准库 `sqlite3` 调用；原生 systemd / 原子文件替换沿用部署宿主版本 | 备份包含已提交 WAL 并检查完整性。候选发布核对原归档摘要、运行 SHA 和发布身份，失败恢复旧指针及服务；产品版本、授权和数据库模式边界由既有发布清单决定。 |
+
+遥测队列有界，退出时由 SDK 排空并关闭 exporter；短暂导出失败不永久关闭后续批次。本地查询逐行读取并只保留所需最新记录，持续运行时按日清理过期数据。遥测仍是观察数据，不能替代业务账本；强制结束进程、磁盘故障或队列溢出不承诺零丢失。网络故障与备份回归证明限定代码路径；真实生产 90 天、7 天 staging 压测及 Windows/macOS 安装恢复须提供对应原始证据，短时本地回归不能代替。
 
 对话执行卡复用同一套 Trace 组件展示规划、附件读取、工具节点、确认和回执。规划占用状态栏，步骤数来自真实工具事件或运行回执。ELT 进度直接读取已持久化的阶段数据；流结束且缺少工具回执时显示“待核对”。正文和执行进度独立更新。
 

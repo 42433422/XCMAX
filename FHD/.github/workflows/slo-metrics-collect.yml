@@ -62,6 +62,26 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install collector components from the existing lock
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import tomllib
+
+          wanted = {"filelock", "tenacity"}
+          packages = [p for p in tomllib.loads(Path("uv.lock").read_text())["package"] if p["name"] in wanted]
+          assert {p["name"] for p in packages} == wanted
+          requirements = Path(os.environ["RUNNER_TEMP"]) / "slo-collector-requirements.txt"
+          requirements.write_text("".join(
+              f"{p['name']}=={p['version']} " + " ".join(f"--hash={w['hash']}" for w in p["wheels"]) + "\n"
+              for p in packages
+          ))
+          subprocess.run([sys.executable, "-m", "pip", "install", "--require-hashes", "--only-binary=:all:", "--no-deps", "-r", str(requirements)], check=True)
+          PY
+
       - name: Authorize formal Day 0 from live release convergence
         if: ${{ env.SLO_MODE == 'formal' }}
         env:

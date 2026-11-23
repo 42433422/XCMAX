@@ -16,7 +16,7 @@ from collect_slo_metrics import QUERIES, SCRAPE_QUERIES, SCRAPE_SERVICES, SCRAPE
 RATIOS = ("SLO-API-01", "SLO-API-03", "SLO-BUS-01", "SLO-BIZ-02", "SLO-BIZ-05")
 
 
-def fixture() -> dict:
+def fixture(rules_file: str) -> dict:
     def series(metric: str, values: str, labels: str = "") -> dict:
         extra = f",{labels}" if labels else ""
         return {"series": f'{metric}{{environment="production"{extra}}}', "values": values}
@@ -93,9 +93,54 @@ def fixture() -> dict:
                 }
             ],
         },
+        {
+            "name": "complete scrape history resolves the coverage alert",
+            "interval": "15s",
+            "input_series": scrapes,
+            "alert_rule_test": [
+                {
+                    "eval_time": "1d",
+                    "alertname": "XcmaxProductionScrapeCoverageBelow99",
+                    "exp_alerts": [],
+                }
+            ],
+        },
+        {
+            "name": "missing samples still alert after scrape recovery",
+            "interval": "15s",
+            "input_series": [
+                series(
+                    "up",
+                    "1+0x2879 _x2879 1+0x60",
+                    'job="fhd-api-stable",instance="127.0.0.1:5100",service="fhd"',
+                ),
+            ],
+            "alert_rule_test": [
+                {
+                    "eval_time": "24h15m",
+                    "alertname": "XcmaxProductionScrapeCoverageBelow99",
+                    "exp_alerts": [
+                        {
+                            "exp_labels": {
+                                "job": "fhd-api-stable",
+                                "instance": "127.0.0.1:5100",
+                                "service": "fhd",
+                                "environment": "production",
+                                "severity": "warning",
+                            },
+                            "exp_annotations": {
+                                "summary": "fhd 近 24h 抓取覆盖率 50% < 99%",
+                                "description": "L4-18 门槛被击穿，SLO 证据将判定为不可采信。",
+                            },
+                        }
+                    ],
+                }
+            ],
+        },
     ]
     return {
         "evaluation_interval": "1m",
+        "rule_files": [rules_file],
         "tests": [
             case("sparse traffic retains true failure ratio", sparse, [0.5, 0.5, 0.8, 0.2, 0.9]),
             case("counter reset does not erase failures", resets, [0.5, 0.5, 0.8, 0.2, 0.9]),
@@ -110,9 +155,13 @@ def fixture() -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--rules-file",
+        default=str(Path(__file__).resolve().parents[2] / "ops/monitoring/production-alerts.yml"),
+    )
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(fixture(), indent=2) + "\n", encoding="utf-8")
+    args.output.write_text(json.dumps(fixture(args.rules_file), indent=2) + "\n", encoding="utf-8")
     return 0
 
 
