@@ -256,8 +256,9 @@ def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outc
         assert result["requires_reconciliation"] is True
         assert result["retryable"] is False
 
-def test_shared_chat_current_runtime_partial_write_requires_reconciliation():
-    """The current Codex runtime must retain a completed write and unresolved next effect."""
+@pytest.mark.parametrize("next_state", ["unknown", "failed", "cancelled"])
+def test_shared_chat_current_runtime_partial_write_requires_reconciliation(next_state):
+    """The current Codex runtime retains confirmed writes after later failures."""
     from app.application.agent_runtime.chat import runtime_chat_payload
     from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
     from app.fastapi_routes.ai_intent import _public_unified_chat_payload
@@ -265,23 +266,25 @@ def test_shared_chat_current_runtime_partial_write_requires_reconciliation():
     rows = [
         {
             "state": "completed",
+            "read_only": False,
             "tool_id": "materials",
             "action": "create",
             "call_id": "original-material-write",
             "receipt": {"status": "completed", "success": True, "verified": True},
         },
         {
-            "state": "unknown",
+            "state": next_state,
+            "read_only": False,
             "tool_id": "shipment_records",
             "action": "create",
             "call_id": "original-shipment-write",
-            "receipt": {"status": "unknown", "success": False, "error": PRIVATE},
+            "receipt": {"status": next_state, "success": False, "error": PRIVATE},
         },
     ]
     runtime = {"run_id": "original-run", "output": PRIVATE}
     assert classify_runtime_result(runtime, rows, {}, "business", "failed") == "blocked"
     assert runtime["business_receipts"][0]["receipt"]["verified"] is True
-    assert runtime["execution_state"] == "unknown"
+    assert runtime["execution_state"] == ("unknown" if next_state == "unknown" else "partial")
 
     transport = runtime_chat_payload(runtime, conversation_id="original-session")
     assert transport["runtime_context_update"]["agent_runtime_run_id"] == "original-run"
@@ -294,3 +297,30 @@ def test_shared_chat_current_runtime_partial_write_requires_reconciliation():
     assert public["_http_status"] == 409
     assert "勿重复提交" in public["message"]
     assert PRIVATE not in json.dumps(public, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("read_only", [True, None])
+def test_failed_step_only_discards_prior_effect_when_proven_read_only(read_only):
+    """Unknown effect kind is not an authorization to restart completed work."""
+    from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
+
+    prior = {
+        "state": "completed",
+        "receipt": {"status": "completed", "success": True, "verified": True},
+    }
+    if read_only is not None:
+        prior["read_only"] = read_only
+    rows = [
+        prior,
+        {"state": "failed", "receipt": {"status": "failed", "success": False}},
+    ]
+    result = {"run_id": "original-run"}
+    classified = classify_runtime_result(result, rows, {}, "business", "failed")
+    if read_only is True:
+        assert classified == "failed"
+        assert result.get("reconciliation_required") is not True
+    else:
+        assert classified == "blocked"
+        assert result["execution_state"] == "partial"
+        assert result["reconciliation_required"] is True
+        assert result["retryable"] is False
