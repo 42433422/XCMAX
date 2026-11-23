@@ -206,9 +206,13 @@ def test_business_bundle_freezes_partitions_and_evaluator_inputs(tmp_path, monke
     assert bundle["measurement_scope"] == datasets.BUSINESS_SCOPE
     assert bundle["holdout_verified"] is False
     assert bundle["case_partitions"] == ["development", "holdout"]
-    assert {"workflow_training_replay.py", "workflow_training_dataset.py"}.issubset(
-        bundle["validation_sha256"]
-    )
+    assert {
+        "workflow_training_replay.py",
+        "workflow_training_dataset.py",
+        "workflow_training_artifact_verification.py",
+    }.issubset(bundle["validation_sha256"])
+    verifier = Path(trainer.__file__).with_name("workflow_training_artifact_verification.py")
+    assert bundle["validation_sha256"][verifier.name] == trainer._file_hash(verifier)
     assert datasets.verify_partitions(bundle, [test["vars"] for test in tests]) == [
         "development",
         "holdout",
@@ -268,6 +272,33 @@ def _defer_business_result(result):
             failureReason=1,
             gradingResult={**assertion, "componentResults": [dict(assertion)]},
         )
+
+
+@pytest.mark.parametrize("deferred", [False, True])
+def test_artifact_verifier_drift_blocks_sealing_before_native_execution(
+    monkeypatch, business_report, deferred
+):
+    from modstore_server import workflow_nl_training, workflow_training_replay
+
+    bundle, output, result = business_report
+    if deferred:
+        _defer_business_result(result)
+    output.write_text(json.dumps(result))
+    original_hash = trainer._file_hash
+
+    def changed_verifier_hash(path):
+        if path.name == "workflow_training_artifact_verification.py":
+            return "0" * 64
+        return original_hash(path)
+
+    def unexpected_execution(*_args, **_kwargs):
+        pytest.fail("changed artifact verifier started native replay")
+
+    monkeypatch.setattr(trainer, "_file_hash", changed_verifier_hash)
+    monkeypatch.setattr(workflow_nl_training, "get_assert", unexpected_execution)
+    monkeypatch.setattr(workflow_training_replay, "evaluate_business_replay", unexpected_execution)
+    with pytest.raises(ValueError, match="^training_workflow_validation_unbound$"):
+        trainer.seal_evaluation(bundle, output)
 
 
 @pytest.mark.parametrize("measurement", ["verified", "holdout_failure", "unavailable"])
