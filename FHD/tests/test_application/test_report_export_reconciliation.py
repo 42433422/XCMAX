@@ -18,7 +18,7 @@ from app.application.agent_orchestrator.result_verification import (
     verify_step_result,
 )
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
-from app.db.models import SalesOrderItem
+from app.db.models import SalesOrderItem, ShipmentRecord
 from app.domain.shared_services.report_export import export_report_to_excel
 from app.domain.shared_services.tools_workflow_erp import _registered_router_reports
 from app.infrastructure.tenant_scope import tenant_scope
@@ -310,3 +310,31 @@ def test_explicit_zero_scope_cannot_expand_report_to_all_business_records(report
         # An explicit, nonexistent identity must remain a filter. Treating it
         # as an omitted value makes exporter and readback agree on the wrong scope.
         assert service.query_report(kind, {scope: 0})["data"] == []
+
+
+@pytest.mark.parametrize("group_by", ["product", "customer", "date"])
+def test_legacy_shipment_report_preserves_explicit_customer_scope(report_case, group_by):
+    from app.domain.shared_services.report_service import ReportService
+
+    actor, _ = report_case
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        for customer_id, amount in [(17, 1000), (18, 9000)]:
+            db.add(
+                ShipmentRecord(
+                    unit_id=customer_id,
+                    purchase_unit=f"历史客户{customer_id}",
+                    product_name=f"历史产品{customer_id}",
+                    quantity_kg=10,
+                    quantity_tins=1,
+                    amount=amount,
+                )
+            )
+    with tenant_scope(actor.tenant_id):
+        service = ReportService()
+        for customer_id, total in [(None, 10000), (17, 1000), (0, 0)]:
+            result = service.get_sales_report(
+                source="shipment", group_by=group_by, customer_id=customer_id
+            )
+            assert result["success"] is True
+            assert result["summary"]["total_amount"] == total
+            assert bool(result["data"]) is (customer_id != 0)

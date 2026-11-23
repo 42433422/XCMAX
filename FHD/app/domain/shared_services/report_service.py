@@ -211,7 +211,7 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(ShipmentRecord.created_at >= start_date)
             if end_date:
                 query = query.filter(ShipmentRecord.created_at <= end_date)
-            if customer_id:
+            if customer_id is not None:
                 query = query.filter(ShipmentRecord.unit_id == customer_id)
 
             records = query.group_by(ShipmentRecord.id).all()
