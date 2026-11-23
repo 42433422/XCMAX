@@ -88,7 +88,7 @@ def test_higher_evidence_layers_are_never_promoted(monkeypatch, tmp_path):
     monkeypatch.setattr(evaluator, "run_node", lambda *_: {"status": "PASS"})
     report = evaluator.evaluate(
         tmp_path / "candidate", "candidate", tmp_path / "report",
-        evaluator.digest(raw), True,
+        evaluator.digest(raw), True, auditor_sha="approved-auditor",
     )
     assert report["score"] is None
     assert report["domain_status"] == "UNRATED"
@@ -101,3 +101,18 @@ def test_higher_evidence_layers_are_never_promoted(monkeypatch, tmp_path):
     )
     with pytest.raises(ValueError, match="approved standard"):
         evaluator.evaluate(tmp_path / "candidate", "candidate", tmp_path / "other", "wrong", False)
+
+
+def test_auditor_checkout_is_mandatory_for_execution(monkeypatch, tmp_path):
+    raw = standard.CATALOG.read_bytes()
+    monkeypatch.setattr(evaluator, "identity", lambda *_: None)
+    with pytest.raises(ValueError, match="separate approved auditor"):
+        evaluator.evaluate(
+            tmp_path / "candidate", "candidate", tmp_path / "output",
+            evaluator.digest(raw), True,
+        )
+
+
+def test_generated_ssot_view_is_current():
+    data = json.loads(standard.CATALOG.read_text(encoding="utf-8"))
+    assert standard.DOCUMENT.read_text(encoding="utf-8") == standard.render(data)

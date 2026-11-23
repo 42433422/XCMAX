@@ -11,6 +11,7 @@ import os
 import platform
 import subprocess
 import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from xml.etree import ElementTree
@@ -36,7 +37,7 @@ def git(root: Path, *args: str) -> str:
 def identity(root: Path, expected: str) -> None:
     if git(root, "rev-parse", "HEAD") != expected:
         raise ValueError("candidate source identity differs")
-    if git(root, "status", "--porcelain", "--untracked-files=no"):
+    if git(root, "status", "--porcelain", "--untracked-files=all"):
         raise ValueError("candidate tracked source is dirty")
 
 
@@ -102,22 +103,23 @@ def run_node(workspace: Path, node: str, seed: int, output: Path) -> dict:
     env.update(
         PYTHONHASHSEED=str(seed),
         PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
-        HOME=str(output.parent),
-        USERPROFILE=str(output.parent),
     )
     command = [
         sys.executable, "-c",
         "import random,sys; random.seed(int(sys.argv[1])); "
         "import pytest; sys.exit(pytest.main(sys.argv[2:]))",
-        str(seed), node, "-q", "--junitxml", str(output),
+        str(seed), node, "-q", "-p", "pytest_asyncio.plugin",
+        "-o", "xfail_strict=true", "--junitxml", str(output),
     ]
     # Explicitly avoid inheriting model keys, database URLs, or pytest option overrides.
     try:
-        result = subprocess.run(
-            command, cwd=workspace, env=env, timeout=180,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-        )
-        returncode = result.returncode
+        with tempfile.TemporaryDirectory(prefix="xiaoc-fixture-home-") as home:
+            env.update(HOME=home, USERPROFILE=home)
+            result = subprocess.run(
+                command, cwd=workspace, env=env, timeout=180,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+            )
+            returncode = result.returncode
     except (OSError, subprocess.TimeoutExpired):
         returncode = -1
     raw = output.read_bytes() if output.is_file() else b""
@@ -133,7 +135,7 @@ def run_node(workspace: Path, node: str, seed: int, output: Path) -> dict:
 
 def freeze_dataset(candidate: Path, protocol: dict) -> str:
     """An independently selected test cannot silently be replaced by the candidate."""
-    entries = []
+    entries: list[tuple[str, ...]] = []
     for scenario in protocol["scenarios"]:
         for kind in ("positive", "negative"):
             node = scenario[kind]
@@ -142,6 +144,14 @@ def freeze_dataset(candidate: Path, protocol: dict) -> str:
             if (candidate / relative).read_bytes() != trusted:
                 raise ValueError(f"candidate changed frozen test: {relative}")
             entries.append((scenario["id"], kind, node, digest(trusted)))
+    # Freeze tracked fixture helpers, conftest and pytest configuration too.
+    for workspace in sorted({scenario["workspace"] for scenario in protocol["scenarios"]}):
+        paths = [f"{workspace}/tests", f"{workspace}/pyproject.toml"]
+        trusted_tree = git(ROOT, "ls-tree", "-r", "HEAD", "--", *paths)
+        candidate_tree = git(candidate, "ls-tree", "-r", "HEAD", "--", *paths)
+        if not trusted_tree or trusted_tree != candidate_tree:
+            raise ValueError(f"candidate changed frozen test inventory: {workspace}")
+        entries.append((workspace, digest(trusted_tree.encode())))
     return digest(json.dumps(entries, ensure_ascii=False).encode())
 
 
@@ -156,7 +166,15 @@ def environment() -> dict:
     }
 
 
-def evaluate(candidate: Path, expected: str, out: Path, approved_standard: str, run: bool) -> dict:
+def evaluate(
+    candidate: Path,
+    expected: str,
+    out: Path,
+    approved_standard: str,
+    run: bool,
+    *,
+    auditor_sha: str | None = None,
+) -> dict:
     raw = standard.CATALOG.read_bytes()
     if digest(raw) != approved_standard:
         raise ValueError("independently approved standard digest differs")
@@ -165,6 +183,10 @@ def evaluate(candidate: Path, expected: str, out: Path, approved_standard: str, 
     if errors:
         raise ValueError("; ".join(errors))
     protocol = data["digital_life_evaluation"]
+    if run:
+        if not auditor_sha or candidate == ROOT:
+            raise ValueError("running fixtures requires a separate approved auditor checkout")
+        identity(ROOT, auditor_sha)
     identity(candidate, expected)
     dataset_sha = freeze_dataset(candidate, protocol)
     env = environment()
@@ -196,6 +218,12 @@ def evaluate(candidate: Path, expected: str, out: Path, approved_standard: str, 
             "anchor": scenario["anchor"],
             "layers": dict.fromkeys(protocol["layers"], "NOT RUN"),
             "trials": [],
+            "not_run_reasons": {
+                "unit": "no independent capability unit adapter",
+                "real_model": "requires XiaoC-bound live model evidence",
+                "real_business": "requires authorized original and independent reconciliation",
+                "production": "requires release-bound continuous production evidence",
+            },
         }
         if run:
             for seed in protocol["seeds"]:
@@ -208,6 +236,8 @@ def evaluate(candidate: Path, expected: str, out: Path, approved_standard: str, 
             )
         report["scenarios"].append(row)
     identity(candidate, expected)
+    if run and auditor_sha is not None:
+        identity(ROOT, auditor_sha)
     return report
 
 
@@ -216,6 +246,7 @@ def main() -> int:
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--standard-sha256", required=True)
+    parser.add_argument("--auditor-source-sha", help="owner-approved independent checkout SHA")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--run-isolated-fixtures", action="store_true")
     parser.add_argument("--baseline", type=Path, help="prior independently retained report; advisory")
@@ -223,13 +254,16 @@ def main() -> int:
     report = evaluate(
         args.candidate.resolve(), args.source_sha, args.output.resolve(),
         args.standard_sha256, args.run_isolated_fixtures,
+        auditor_sha=args.auditor_source_sha,
     )
     if args.baseline:
         report["trend"] = compare(json.loads(args.baseline.read_text()), report)
     path = args.output / "report.json"
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(path)
-    return int(any(row["layers"]["integration"] in {"FAIL", "BLOCKED"} for row in report["scenarios"]))
+    if not args.run_isolated_fixtures:
+        return 2  # inventory only, not a passing evaluation
+    return int(any(row["layers"]["integration"] != "PASS" for row in report["scenarios"]))
 
 
 if __name__ == "__main__":
