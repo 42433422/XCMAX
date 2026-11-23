@@ -15,6 +15,10 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class CognitionContextError(ValueError):
+    """Observed evidence cannot form a usable context within the prompt bound."""
+
+
 class CitedSuggestion(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     title: str = Field(min_length=1, max_length=120)
@@ -273,12 +277,21 @@ def cognition_messages(
     state: dict[str, Any], domain: str, facts: list[dict[str, Any]]
 ) -> tuple[list[dict[str, str]], set[str]]:
     """Keep the actual prompt below the existing conservative planning bound."""
+    unique_observations: dict[str, dict[str, Any]] = {}
+    for row in facts:
+        ref = row.get("ref")
+        if isinstance(ref, str) and ref.strip() and ref not in unique_observations:
+            unique_observations[ref] = dict(row)
+            if len(unique_observations) == 12:
+                break
+    if not unique_observations:
+        raise CognitionContextError("no_observed_context")
     payload: dict[str, Any] = {
         "identity": state["identity_id"],
         "level": state["level"],
         "domain": domain,
         "mission": str(state.get("mission") or "")[:250],
-        "observations": [dict(row) for row in facts[:12]],
+        "observations": list(unique_observations.values()),
         "interests": [
             {
                 "topic": str(row.get("topic") or "")[:80],
@@ -324,10 +337,13 @@ def cognition_messages(
         else:
             payload["mission"] = payload["mission"][:50]
             break
+    content = json.dumps(payload, ensure_ascii=False)
+    if len(content.encode()) > 4200:
+        raise CognitionContextError("life_cycle_prompt_budget_exhausted")
     refs = {row["ref"] for row in payload["observations"]}
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        {"role": "user", "content": content},
     ], refs
 
 

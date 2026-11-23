@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_life_cognition import (
+    CognitionContextError,
     cognition_messages,
     feedback_facts,
     parse_decision,
@@ -328,7 +329,7 @@ class CyclePorts:
                     )
                 )
         if self.domain == "exploration":
-            facts.extend(await self.research())
+            facts = (await self.research()) + facts
         if not facts:
             raise LifeBlocked("no_observed_context")
         self.evidence = [row["ref"] for row in facts]
@@ -412,7 +413,10 @@ class CyclePorts:
         admission["max_total_tokens"] = min(
             admission["max_total_tokens"], self.claim["reserved_tokens"]
         )
-        messages, refs = cognition_messages(self.state, self.domain, state["facts"])
+        try:
+            messages, refs = cognition_messages(self.state, self.domain, state["facts"])
+        except CognitionContextError as exc:
+            raise LifeBlocked(str(exc)) from exc
         prompt_bound = (
             len(
                 json.dumps(

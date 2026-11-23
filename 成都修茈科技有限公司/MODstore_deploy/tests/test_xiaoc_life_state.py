@@ -162,6 +162,74 @@ def test_downgrade_cancels_new_actions_but_settles_real_cost_and_keeps_identity(
     assert result["events"][0]["status"] == "policy_changed"
 
 
+@pytest.mark.parametrize(
+    "authority", ["active", "revoked_admin", "expired_lease", "expired_authorization"]
+)
+@pytest.mark.parametrize("actual_tokens", [50, None])
+def test_late_receipts_settle_once_without_learning_or_advancing_goals(
+    database, monkeypatch, authority, actual_tokens
+):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    expiry = now + (
+        timedelta(minutes=1) if authority == "expired_authorization" else timedelta(days=1)
+    )
+    configure(authorization_expires_at=expiry.isoformat())
+    original_goal = {"id": "original-goal", "decision_id": "original-decision"}
+    store._mutate(lambda data, session: data["goals"].append(original_goal))
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert store.cycle_active(claim)
+    before = store.read_state()
+    if authority == "revoked_admin":
+        with database() as session:
+            session.get(User, 7).is_admin = False
+            session.commit()
+    elif authority.startswith("expired_"):
+        later = now + timedelta(minutes=6 if authority == "expired_lease" else 2)
+        monkeypatch.setattr(store, "utcnow", lambda: later)
+    fresh = authority == "active"
+    assert store.cycle_active(claim) is fresh
+    goal = {
+        "id": "learned-goal",
+        "title": "New learning",
+        "evidence_refs": ["receipt:one"],
+    }
+    interest = {"topic": "Learning", "evidence_refs": ["receipt:one"]}
+    self_model = {"assessment": "Learning", "evidence_refs": ["receipt:one"]}
+    selection = {
+        "goal_id": original_goal["id"],
+        "decision_id": original_goal["decision_id"],
+    }
+    for _ in range(2):
+        state = finish(
+            claim,
+            actual_tokens=actual_tokens,
+            goals=[goal],
+            interests=[interest],
+            self_model=self_model,
+            details={"portfolio_selection": selection},
+        )
+        learned = fresh and actual_tokens is not None
+        assert state["budget"]["used_tokens"] == (actual_tokens or 0)
+        assert state["budget"]["reserved_tokens"] == (200 if actual_tokens is None else 0)
+        assert state["unknown_usage"] is (actual_tokens is None)
+        assert state["goals"] == ([original_goal, goal] if learned else before["goals"])
+        assert state["interests"] == ([interest] if learned else before["interests"])
+        assert state["self_model"] == (
+            {**self_model, "status": "hypothesis"} if learned else before["self_model"]
+        )
+        assert state.get("goal_cursors", {}) == ({"enterprise": "original-goal"} if fresh else {})
+        events = [event for event in state["events"] if event["id"] == "cycle:" + claim["cycle_id"]]
+        assert len(events) == 1
+        assert events[0]["actual_tokens"] == actual_tokens
+        assert events[0]["evidence_refs"] == ["receipt:one"]
+        assert events[0]["details"]["learning_applied"] is learned
+        assert events[0]["details"]["portfolio_selection"] == selection
+        assert events[0]["status"] == (
+            "unknown" if actual_tokens is None else "completed" if fresh else "policy_changed"
+        )
+
+
 def test_pausing_background_does_not_block_explicit_manual_tools(database):
     configure()
     state = store.read_state()

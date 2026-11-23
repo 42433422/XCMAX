@@ -186,6 +186,43 @@ def test_business_and_stop_feedback_survives_prompt_bound_and_enters_next_model(
     assert "not incremental" in SYSTEM_PROMPT and "model-weight training" in SYSTEM_PROMPT
 
 
+def test_prompt_deduplicates_sources_before_limit_without_rewriting_receipts():
+    facts = (
+        [{"ref": "receipt:old", "text": "首份原回执"}]
+        + [{"ref": "receipt:old", "text": "同一来源的重复记录"} for _ in range(11)]
+        + [{"ref": "receipt:new", "text": "新业务事实", "business_feedback": {"decision": "stop"}}]
+    )
+    original = copy.deepcopy(facts)
+    messages, refs = cognition_messages({"identity_id": "xiaoc", "level": 5}, "enterprise", facts)
+    assert json.loads(messages[1]["content"])["observations"] == [facts[0], facts[-1]]
+    assert refs == {"receipt:old", "receipt:new"}
+    assert facts == original
+
+
+@pytest.mark.parametrize(
+    "facts,reason",
+    [
+        ([], "no_observed_context"),
+        ([{"text": "无来源"}], "no_observed_context"),
+        ([{"ref": "", "text": "无来源"}], "no_observed_context"),
+        ([{"ref": " \t", "text": "无来源"}], "no_observed_context"),
+        ([{"ref": 3, "text": "无来源"}], "no_observed_context"),
+        (
+            [{"ref": "receipt:large", "business_feedback": {"measurement": "测" * 1500}}],
+            "life_cycle_prompt_budget_exhausted",
+        ),
+    ],
+)
+def test_prompt_rejects_unusable_context_without_altering_structured_evidence(facts, reason):
+    from modstore_server import xiaoc_life_cognition as cognition
+
+    original = copy.deepcopy(facts)
+    with pytest.raises(ValueError, match=f"^{reason}$") as raised:
+        cognition_messages({"identity_id": "xiaoc", "level": 5}, "enterprise", facts)
+    assert type(raised.value) is cognition.CognitionContextError
+    assert facts == original
+
+
 @pytest.mark.parametrize(
     "attribution,recognized",
     [
