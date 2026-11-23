@@ -14,9 +14,9 @@ class EmptyInput(BaseModel):
 
 
 class StateQuery(EmptyInput):
-    entity_type: Literal["order", "customer", "employee", "task", "fund", "inventory", "production"] = (
-        "order"
-    )
+    entity_type: Literal[
+        "order", "customer", "employee", "task", "fund", "inventory", "production"
+    ] = "order"
     entity_id: str | None = Field(default=None, min_length=1, max_length=160)
     limit: int = Field(default=10, ge=1, le=20, strict=True)
     force_refresh: bool = False
@@ -28,7 +28,9 @@ class StateQuery(EmptyInput):
     @model_validator(mode="after")
     def validate_world_query(self) -> StateQuery:
         if self.as_of is not None and (
-            self.entity_id is None or self.force_refresh or self.scenario_delivery_quantity is not None
+            self.entity_id is None
+            or self.force_refresh
+            or self.scenario_delivery_quantity is not None
         ):
             raise ValueError("historical_query_requires_single_entity_without_refresh_or_scenario")
         if self.scenario_delivery_quantity is not None and (

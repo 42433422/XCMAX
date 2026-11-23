@@ -16,9 +16,7 @@ _MAX_OBSERVATIONS = 32
 def public_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     result = {key: value for key, value in snapshot.items() if not key.startswith("_")}
     result["knowledge_kind"] = (
-        "fact"
-        if result.get("freshness") == "fresh" and result.get("evidence")
-        else "unknown"
+        "fact" if result.get("freshness") == "fresh" and result.get("evidence") else "unknown"
     )
     return result
 
@@ -61,25 +59,29 @@ def read_observations(
     return history, decoded.get(_TRUNCATED_KEY) is True
 
 
-def record_observation(
-    raw: str | None, snapshot: dict[str, Any]
-) -> tuple[dict[str, Any], bool]:
+def record_observation(raw: str | None, snapshot: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     """Retain conflicting observations; do not convert ambiguous ordering to a fact."""
     scope = {
         key: snapshot[key]
-        for key in ("tenant_id", "actor_id", "mod_id", "entity_type", "entity_id", "source", "read_only")
+        for key in (
+            "tenant_id",
+            "actor_id",
+            "mod_id",
+            "entity_type",
+            "entity_id",
+            "source",
+            "read_only",
+        )
     }
     history, truncated = read_observations(raw, scope) if raw else ([], False)
     entry = public_snapshot(snapshot)
     instant = observation_time(entry)
     conflict = any(
-        observation_time(item) >= instant
-        and item["source_version"] != entry["source_version"]
+        observation_time(item) >= instant and item["source_version"] != entry["source_version"]
         for item in history
     )
     if not any(
-        observation_time(item) == instant
-        and item["source_version"] == entry["source_version"]
+        observation_time(item) == instant and item["source_version"] == entry["source_version"]
         for item in history
     ):
         history.append(entry)
@@ -94,9 +96,7 @@ def record_observation(
     }, conflict
 
 
-def historical_observation(
-    raw: str, as_of: str, expected_scope: dict[str, Any]
-) -> dict[str, Any]:
+def historical_observation(raw: str, as_of: str, expected_scope: dict[str, Any]) -> dict[str, Any]:
     """Return last recorded observation, never claim continuous business validity."""
     at = datetime.fromisoformat(as_of)
     if at.tzinfo is None:
@@ -142,7 +142,9 @@ def relationship_references(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             ("return_of_id", "order", "return_of"),
         ):
             if state.get(field) is not None:
-                refs.append({"relation": relation, "entity_type": kind, "entity_id": str(state[field])})
+                refs.append(
+                    {"relation": relation, "entity_type": kind, "entity_id": str(state[field])}
+                )
     elif snapshot.get("entity_type") in {"inventory", "production"}:
         for field, kind in (
             ("product_id", "product"),
@@ -151,7 +153,9 @@ def relationship_references(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             ("bom_id", "bom"),
         ):
             if state.get(field) is not None:
-                refs.append({"relation": field, "entity_type": kind, "entity_id": str(state[field])})
+                refs.append(
+                    {"relation": field, "entity_type": kind, "entity_id": str(state[field])}
+                )
     return [
         {
             **ref,

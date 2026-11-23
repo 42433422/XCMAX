@@ -28,9 +28,7 @@ class ExternalObservation(BaseModel):
     probability: None = None
 
 
-def public_source_observation(
-    row: dict[str, Any], collected_at: datetime
-) -> dict[str, Any] | None:
+def public_source_observation(row: dict[str, Any], collected_at: datetime) -> dict[str, Any] | None:
     """Preserve reported provenance without promoting a search snippet to a fact."""
     url = str(row.get("url") or "")
     if not url or len(url) > 1000:
@@ -54,9 +52,7 @@ def public_source_observation(
             except (ValueError, TypeError, OverflowError):
                 published = None
         # Date-only, unspecified timezones and future dates are not verified instants.
-        if published is not None and (
-            published.tzinfo is None or published > collected_at
-        ):
+        if published is not None and (published.tzinfo is None or published > collected_at):
             published = None
     return ExternalObservation(
         url=url,

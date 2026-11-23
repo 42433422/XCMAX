@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 
 from modstore_server.xiaoc_world_evidence import public_source_observation
 
-
 NOW = datetime(2026, 11, 24, 0, 0, tzinfo=UTC)
 
 

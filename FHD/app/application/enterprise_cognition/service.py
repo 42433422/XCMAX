@@ -7,7 +7,10 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.domain.enterprise_cognition.contracts import INPUT_MODELS
-from app.domain.enterprise_cognition.world_observation import delivery_scenario, relationship_references
+from app.domain.enterprise_cognition.world_observation import (
+    delivery_scenario,
+    relationship_references,
+)
 
 
 def _order_observation(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -94,7 +97,9 @@ class EnterpriseCognitionService:
     def query(self, params: dict, **scope) -> dict[str, Any]:
         entity_type, entity_id = params["entity_type"], params.get("entity_id")
         if params.get("as_of") is not None:
-            observation = self.projections.get(entity_type, entity_id, as_of=params["as_of"], **scope)
+            observation = self.projections.get(
+                entity_type, entity_id, as_of=params["as_of"], **scope
+            )
             return {
                 "history": observation,
                 "historical_observation_verified": observation.get("knowledge_kind") == "fact",

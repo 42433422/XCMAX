@@ -132,7 +132,15 @@ def get(service, kind="order", entity_id="101", **kwargs):
 
 def test_catalog_names_existing_authorities():
     catalog = {row["entity_type"]: row for row in entity_catalog()}
-    assert set(catalog) == {"order", "customer", "employee", "task", "fund", "inventory", "production"}
+    assert set(catalog) == {
+        "order",
+        "customer",
+        "employee",
+        "task",
+        "fund",
+        "inventory",
+        "production",
+    }
     assert catalog["task"]["id_field"] == "task_id"
     assert all(row["read_only"] for row in catalog.values())
 
@@ -522,30 +530,53 @@ def test_world_reads_inventory_movements_and_manufacturing_rows(world, observer)
 
     service, sessions, clock, permissions = world
     with sessions.begin() as db:
-        db.add_all([
-            Product(id=501, tenant_id=11, name="Finished product"),
-            Warehouse(id=502, tenant_id=11, code="WORLD-W", name="Warehouse"),
-        ])
+        db.add_all(
+            [
+                Product(id=501, tenant_id=11, name="Finished product"),
+                Warehouse(id=502, tenant_id=11, code="WORLD-W", name="Warehouse"),
+            ]
+        )
         db.flush()
         db.add(Bom(id=503, tenant_id=11, code="WORLD-B", product_id=501, product_name="Finished"))
         db.flush()
-        db.add_all([
-            InventoryTransaction(
-                id=504, tenant_id=11, transaction_type="in", product_id=501,
-                warehouse_id=502, quantity=Decimal(3), before_quantity=Decimal(1),
-                after_quantity=Decimal(4), transaction_date=datetime.now(UTC),
-            ),
-            ManufacturingOrder(
-                id=505, tenant_id=11, order_no="WORLD-M", bom_id=503,
-                product_id=501, product_name="Finished", warehouse_id=502,
-                quantity=2, status="confirmed",
-            ),
-        ])
+        db.add_all(
+            [
+                InventoryTransaction(
+                    id=504,
+                    tenant_id=11,
+                    transaction_type="in",
+                    product_id=501,
+                    warehouse_id=502,
+                    quantity=Decimal(3),
+                    before_quantity=Decimal(1),
+                    after_quantity=Decimal(4),
+                    transaction_date=datetime.now(UTC),
+                ),
+                ManufacturingOrder(
+                    id=505,
+                    tenant_id=11,
+                    order_no="WORLD-M",
+                    bom_id=503,
+                    product_id=501,
+                    product_name="Finished",
+                    warehouse_id=502,
+                    quantity=2,
+                    status="confirmed",
+                ),
+            ]
+        )
         db.flush()
-        db.add(ManufacturingOrderLine(
-            id=506, tenant_id=11, order_id=505, product_id=501,
-            product_name="Finished", quantity=Decimal(2), consumed_quantity=Decimal(0),
-        ))
+        db.add(
+            ManufacturingOrderLine(
+                id=506,
+                tenant_id=11,
+                order_id=505,
+                product_id=501,
+                product_name="Finished",
+                quantity=Decimal(2),
+                consumed_quantity=Decimal(0),
+            )
+        )
     with pytest.raises(PermissionError):
         get(service, "inventory", "504")
     with pytest.raises(PermissionError):
