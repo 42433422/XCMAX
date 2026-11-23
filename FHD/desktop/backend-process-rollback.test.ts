@@ -13,6 +13,7 @@ const ports = vi.hoisted(() => ({
   pending: vi.fn(),
   rollback: vi.fn(),
   restore: vi.fn(),
+  attachBackup: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -41,7 +42,7 @@ vi.mock('./model-usage-rollback', async importOriginal => ({
 vi.mock('./rollback', () => ({
   checkPendingRollback: ports.pending, triggerRollback: ports.rollback,
   prepareRollback: vi.fn(), cancelPreparedRollback: vi.fn(),
-  attachDatabaseBackupToRollback: vi.fn(), clearPreparedRollbackRecoveryRequired: vi.fn(),
+  attachDatabaseBackupToRollback: ports.attachBackup, clearPreparedRollbackRecoveryRequired: vi.fn(),
   markPreparedRollbackRecoveryRequired: vi.fn(),
 }))
 vi.mock('./desktop-resilience', () => ({ createForceUpgradeHandler: vi.fn() }))
@@ -69,7 +70,13 @@ describe('backend stop and rollback writer exclusion', () => {
       ports.restore()
       return { mode: 'windows-full', scheduled: true }
     })
-    child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter() })
+    ports.attachBackup.mockReset()
+    const rollback = await import('./rollback.js')
+    for (const method of [rollback.markPreparedRollbackRecoveryRequired, rollback.clearPreparedRollbackRecoveryRequired, rollback.cancelPreparedRollback]) vi.mocked(method).mockReset()
+    child = Object.assign(new EventEmitter(), {
+      stdout: new EventEmitter(), stderr: new EventEmitter(),
+      exitCode: null, signalCode: null, kill: vi.fn(),
+    })
     ports.spawn.mockReset().mockReturnValue(child)
     backend = await import('./backend-process.js')
   })
@@ -158,6 +165,141 @@ describe('backend stop and rollback writer exclusion', () => {
     expect(ports.restore).not.toHaveBeenCalled()
     const { desktopRuntime } = await import('./runtime-state.js')
     expect(desktopRuntime.backendProcess).toBe(child)
+  })
+
+  it('still stops the migration owner when a legacy backend owner cannot exit', async () => {
+    await backend.startBackend()
+    const { desktopRuntime } = await import('./runtime-state.js')
+    const migration = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null })
+    desktopRuntime.backendMigrationProcess = migration as never
+    ports.terminate.mockResolvedValueOnce('kill-timeout').mockResolvedValueOnce('terminated')
+    await expect(backend.stopBackend()).rejects.toThrow('后端仍未退出')
+    expect(ports.terminate.mock.calls.map(call => call[0])).toEqual([child, migration])
+    expect(desktopRuntime.backendProcess).toBe(child)
+    expect(desktopRuntime.backendMigrationProcess).toBeNull()
+  })
+
+  it.each(['/user-data/data/backup.db', '/user-data/data/备份.db'])('waits for the complete UTF-8 migration backup record %s', async backupPath => {
+    const migrating = backend.runBackendMigrationWithRollback('1.0.0.2')
+    await vi.waitFor(() => expect(ports.spawn).toHaveBeenCalledOnce())
+    const spawned = ports.spawn.mock.results[0].value
+    const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    try {
+      const record = Buffer.from(`XCAGI_MIGRATION_BACKUP=${backupPath}\n`)
+      const split = Buffer.byteLength('XCAGI_MIGRATION_BACKUP=/user-data/data/') + 1
+      spawned.stdout.emit('data', record.subarray(0, split))
+      expect(ports.attachBackup).not.toHaveBeenCalled()
+      spawned.stdout.emit('data', record.subarray(split))
+      expect(ports.attachBackup).toHaveBeenCalledExactlyOnceWith(backupPath)
+      spawned.exitCode = 0
+      spawned.emit('exit', 0)
+      spawned.emit('close', 0)
+      await migrating
+    } finally { output.mockRestore() }
+  })
+
+  it('bounds migration diagnostics while retaining the final database error', async () => {
+    const migrating = backend.runBackendMigrationWithRollback('1.0.0.2').catch(error => error as Error)
+    await vi.waitFor(() => expect(ports.spawn).toHaveBeenCalledOnce())
+    const spawned = ports.spawn.mock.results[0].value
+    const output = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      spawned.stderr.emit('data', Buffer.from(`old diagnostic\n${'中'.repeat(32 * 1024)}\nfinal database error`))
+      spawned.exitCode = 1
+      spawned.emit('exit', 1)
+      spawned.emit('close', 1)
+      const failure = await migrating
+      expect(failure).toBeInstanceOf(Error)
+      expect((failure as Error).message).toContain('final database error')
+      expect(Buffer.byteLength((failure as Error).message, 'utf8')).toBeLessThan(66_000)
+      expect((failure as Error).message).not.toContain('old diagnostic')
+    } finally { output.mockRestore() }
+  })
+
+  it('times out a stuck migration only after owned termination finishes', async () => {
+    let settled = false
+    const migrating = backend.runBackendMigrationWithRollback('1.0.0.2').catch(error => {
+      settled = true
+      return error as Error
+    })
+    await vi.waitFor(() => expect(ports.spawn).toHaveBeenCalledOnce())
+    const exit = deferred<string>()
+    ports.terminate.mockReturnValue(exit.promise)
+    await vi.advanceTimersByTimeAsync(180_000)
+    expect(ports.terminate).toHaveBeenCalledExactlyOnceWith(child)
+    expect(settled).toBe(false)
+    await backend.startBackend()
+    expect(ports.spawn).toHaveBeenCalledOnce()
+    Object.assign(child, { signalCode: 'SIGKILL' })
+    child.emit('exit', null, 'SIGKILL')
+    child.emit('close', null, 'SIGKILL')
+    exit.resolve('killed')
+    expect(await migrating).toBeInstanceOf(Error)
+    expect(settled).toBe(true)
+    const { desktopRuntime } = await import('./runtime-state.js')
+    expect(desktopRuntime.backendMigrationProcess).toBeNull()
+  })
+
+  it('retains a migration writer after kill timeout and stops it on a later retry', async () => {
+    ports.terminate.mockResolvedValue('kill-timeout')
+    const migrating = backend.runBackendMigrationWithRollback('1.0.0.2').catch(error => error as Error)
+    await vi.waitFor(() => expect(ports.spawn).toHaveBeenCalledOnce())
+    await vi.advanceTimersByTimeAsync(180_000)
+    const failure = await migrating
+    expect(failure).toBeInstanceOf(Error)
+    expect((failure as Error).message).toContain('后端仍未退出')
+    const { desktopRuntime } = await import('./runtime-state.js')
+    expect(desktopRuntime.backendMigrationProcess).toBe(child)
+    await backend.startBackend()
+    expect(ports.spawn).toHaveBeenCalledOnce()
+    Object.assign(child, { exitCode: 1 })
+    ports.terminate.mockResolvedValue('already-exited')
+    await backend.stopBackend()
+    expect(desktopRuntime.backendMigrationProcess).toBeNull()
+  })
+
+  it.each(['darwin', 'win32'])('preserves durable %s recovery after an unconfirmed migration timeout', async platformName => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+    const rollback = await vi.importActual<typeof import('./rollback')>('./rollback')
+    const markerPath = path.join(ports.userData, 'rollback-marker.json')
+    const backup = path.join(ports.userData, 'database-before-upgrade.db')
+    fs.writeFileSync(backup, 'original customer data')
+    fs.writeFileSync(markerPath, JSON.stringify({
+      mode: platformName === 'win32' ? 'windows-full' : 'macos-full',
+      fromVersion: 'old', toVersion: 'new', backendPath: 'backend', databaseBackupPath: backup,
+    }))
+    const portsRollback = await import('./rollback.js')
+    vi.mocked(portsRollback.markPreparedRollbackRecoveryRequired).mockImplementation(rollback.markPreparedRollbackRecoveryRequired)
+    vi.mocked(portsRollback.clearPreparedRollbackRecoveryRequired).mockImplementation(rollback.clearPreparedRollbackRecoveryRequired)
+    try {
+      Object.defineProperty(process, 'platform', { ...originalPlatform, value: platformName })
+      ports.terminate.mockResolvedValue('kill-timeout')
+      const migrating = backend.runBackendMigrationWithRollback('1.0.0.2').catch(error => error as Error)
+      await vi.waitFor(() => expect(ports.spawn).toHaveBeenCalledOnce())
+      expect(rollback.checkPendingRollback()?.recoveryRequired).toBe(true)
+      await vi.advanceTimersByTimeAsync(180_000)
+      expect(await migrating).toBeInstanceOf(Error)
+      rollback.cancelPreparedRollback()
+      expect(rollback.checkPendingRollback()?.recoveryRequired).toBe(true)
+      expect(fs.readFileSync(backup, 'utf8')).toBe('original customer data')
+      const { desktopRuntime } = await import('./runtime-state.js')
+      expect(desktopRuntime.backendMigrationProcess).toBe(child)
+      await backend.startBackend()
+      expect(ports.spawn).toHaveBeenCalledOnce()
+    } finally { Object.defineProperty(process, 'platform', originalPlatform) }
+  })
+
+  it.each(['', '\n'])('aborts an oversized UTF-8 migration record with terminator %j', async terminator => {
+    const migrating = backend.runBackendMigrationWithRollback('1.0.0.2').catch(error => error as Error)
+    await vi.waitFor(() => expect(ports.spawn).toHaveBeenCalledOnce())
+    const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    try {
+      ports.spawn.mock.results[0].value.stdout.emit('data', Buffer.from(`XCAGI_MIGRATION_BACKUP=${'中'.repeat(23000)}${terminator}`))
+      const failure = await migrating
+      expect((failure as Error).message).toContain('64 KiB')
+      expect(ports.attachBackup).not.toHaveBeenCalled()
+      expect(ports.terminate).toHaveBeenCalledExactlyOnceWith(child)
+    } finally { output.mockRestore() }
   })
 
   it('leaves real rollback files and the marker intact when ledger handoff fails', async () => {

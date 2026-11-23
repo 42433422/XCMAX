@@ -22,6 +22,7 @@ export const desktopRuntime = {
   auxiliaryWindows: new Set<BrowserWindow>(),
   splashUrl: '',
   backendProcess: null as ChildProcessWithoutNullStreams | null,
+  backendMigrationProcess: null as ChildProcessWithoutNullStreams | null,
   verifiedBackendProcess: null as ChildProcessWithoutNullStreams | null,
   tray: null as Tray | null,
   restartCount: 0,

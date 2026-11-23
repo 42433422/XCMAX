@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import threading
 from dataclasses import asdict
 
 import pytest
@@ -22,6 +23,192 @@ class ShutdownTransport(Transport):
         # A storage outage can prevent durable revocation. Process shutdown must
         # still happen; the unknown ledger is recovered independently afterwards.
         self.store.log.append("interrupt")
+
+
+@pytest.mark.parametrize(
+    "failure_stage,uncertain", [("callback", False), ("callback", True), ("verification", False)]
+)
+def test_unexpected_task_error_finalizes_original_run_before_propagating(
+    setup_runtime, monkeypatch, uncertain, failure_stage
+):
+    invoke, _ = setup_runtime
+    store = Store(
+        rows=[receipt(status="unknown", verified=False, success=False)] if uncertain else []
+    )
+    transport = Transport(store)
+    failure = TypeError("injected private callback bug")
+    released = []
+    monkeypatch.setattr(
+        "app.application.tools.mcp.registry.release_run_browser_sessions", released.append
+    )
+
+    def broken_callback(*_args, **_kwargs):
+        raise failure
+
+    if failure_stage == "verification":
+        # The verifier runs after the model's successful terminal event. That
+        # transport event must not skip failure finalization either.
+        monkeypatch.setattr(
+            "app.application.agent_runtime.goal_verifier.verify_runtime_goal", broken_callback
+        )
+
+    with pytest.raises(TypeError) as raised:
+        asyncio.run(
+            invoke(
+                store,
+                transport,
+                on_event=broken_callback if failure_stage == "callback" else None,
+            )
+        )
+
+    assert raised.value is failure
+    metadata = store.run.metadata["codex_runtime"]
+    assert metadata["coordinator_active"] is False
+    assert metadata["revoked"] is True
+    assert "active_started_at" not in metadata
+    assert store.run.status == ("blocked" if uncertain else "failed")
+    result = store.run.final_output["codex_result"]
+    assert result["ok"] is False and result["runtime_completed"] is False
+    assert result.get("reconciliation_required", False) is uncertain
+    assert "private callback bug" not in json.dumps(result)
+    if uncertain:
+        assert store.run.metadata["non_retryable"] is True
+        assert released == []
+    else:
+        assert len(released) == 1 and released[0]["run_id"] == store.run.run_id
+    assert store.log.index("revoke") < store.log.index("interrupt") < store.log.index("exit")
+
+
+@pytest.mark.parametrize("failure_stage", ["revocation", "snapshot", "terminal_write"])
+def test_finalization_storage_failure_still_releases_owned_coordinator(
+    setup_runtime, monkeypatch, failure_stage
+):
+    invoke, _ = setup_runtime
+    store = Store()
+    transport = Transport(store)
+    failure = RuntimeError("injected finalization storage outage")
+    close, snapshot, update = store.close, store.receipt_snapshot, store.update
+    releases = []
+    browsers = []
+    monkeypatch.setattr(
+        "app.application.tools.mcp.registry.release_run_browser_sessions", browsers.append
+    )
+
+    def close_with_failure(run_id, reason, *, generation, release_coordinator):
+        releases.append(release_coordinator)
+        if failure_stage == "revocation" and not release_coordinator:
+            raise failure
+        return close(run_id, reason, generation=generation, release_coordinator=release_coordinator)
+
+    def snapshot_with_failure(run_id):
+        if failure_stage == "snapshot" and store.run.metadata["codex_runtime"].get("revoked"):
+            raise failure
+        return snapshot(run_id)
+
+    def update_with_failure(run_id, mutation):
+        candidate = copy.deepcopy(store.run)
+        mutation(candidate, candidate.metadata["codex_runtime"])
+        if failure_stage == "terminal_write" and "codex_result" in candidate.final_output:
+            raise failure
+        return update(run_id, mutation)
+
+    monkeypatch.setattr(store, "close", close_with_failure)
+    monkeypatch.setattr(store, "receipt_snapshot", snapshot_with_failure)
+    monkeypatch.setattr(store, "update", update_with_failure)
+    with pytest.raises(RuntimeError) as raised:
+        asyncio.run(invoke(store, transport, completion_mode="reply"))
+
+    assert raised.value is failure
+    assert releases[-1] is True
+    metadata = store.run.metadata["codex_runtime"]
+    assert metadata["coordinator_active"] is False and metadata["revoked"] is True
+    assert "exit" in store.log
+    if failure_stage != "revocation":
+        assert "codex_result" not in store.run.final_output
+        assert browsers == []  # No terminal receipt to authorize browser disposal.
+    else:
+        assert len(browsers) == 1 and browsers[0]["run_id"] == store.run.run_id
+
+
+@pytest.mark.parametrize("failure_stage", ["revocation", "snapshot", "terminal_write"])
+def test_original_callback_error_survives_finalization_storage_failure(
+    setup_runtime, monkeypatch, failure_stage
+):
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt(status="unknown", verified=False, success=False)])
+    failure = TypeError("original callback failure")
+    transport = ShutdownTransport(store)
+
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError("secondary finalization storage failure")
+
+    if failure_stage == "revocation":
+        monkeypatch.setattr(store, "close", unavailable)
+    elif failure_stage == "snapshot":
+        monkeypatch.setattr(store, "receipt_snapshot", unavailable)
+    else:
+        update = store.update
+
+        def terminal_unavailable(run_id, mutation):
+            candidate = copy.deepcopy(store.run)
+            mutation(candidate, candidate.metadata["codex_runtime"])
+            if "codex_result" in candidate.final_output:
+                unavailable()
+            return update(run_id, mutation)
+
+        monkeypatch.setattr(store, "update", terminal_unavailable)
+
+    def broken_callback(_event):
+        raise failure
+
+    with pytest.raises(TypeError) as raised:
+        asyncio.run(invoke(store, transport, on_event=broken_callback))
+    assert raised.value is failure
+    assert "interrupt" in store.log and "exit" in store.log
+    if failure_stage == "revocation":
+        assert store.run.final_output["codex_result"]["reconciliation_required"] is True
+        assert store.run.metadata["non_retryable"] is True
+    else:
+        assert store.run.metadata["codex_runtime"]["coordinator_active"] is False
+
+
+@pytest.mark.parametrize("fail_lease_write", [False, True])
+def test_late_cancellation_during_browser_release_keeps_original_cancellation(
+    setup_runtime, monkeypatch, fail_lease_write
+):
+    invoke, _ = setup_runtime
+    store = Store()
+    started, finish = threading.Event(), threading.Event()
+    close = store.close
+
+    def release_browser(_scope):
+        started.set()
+        assert finish.wait(5)
+
+    def close_with_failure(run_id, reason, *, generation, release_coordinator):
+        if fail_lease_write and release_coordinator:
+            raise RuntimeError("injected final lease-write outage")
+        return close(run_id, reason, generation=generation, release_coordinator=release_coordinator)
+
+    monkeypatch.setattr(store, "close", close_with_failure)
+    monkeypatch.setattr(
+        "app.application.tools.mcp.registry.release_run_browser_sessions", release_browser
+    )
+
+    async def scenario():
+        task = asyncio.create_task(invoke(store, Transport(store), completion_mode="reply"))
+        try:
+            assert await asyncio.to_thread(started.wait, 5)
+            task.cancel("request disconnected during browser release")
+            with pytest.raises(asyncio.CancelledError, match="request disconnected"):
+                await task
+        finally:
+            finish.set()
+
+    asyncio.run(scenario())
+    assert store.run.status == "completed"
+    assert store.run.final_output["codex_result"]["reply_completed"] is True
+    assert store.run.metadata["codex_runtime"]["coordinator_active"] is fail_lease_write
 
 
 def test_failed_revocation_still_interrupts_the_runtime(setup_runtime, monkeypatch):
@@ -82,10 +269,14 @@ def test_cancellation_survives_revocation_and_terminal_write_failure(
         assert store.run.final_output["codex_result"]["reconciliation_required"] is True
 
 
-def test_stale_coordinator_cleanup_cannot_revoke_a_new_generation(setup_runtime):
+def test_stale_coordinator_cleanup_cannot_revoke_a_new_generation(setup_runtime, monkeypatch):
     invoke, _ = setup_runtime
     store = Store()
     transport = ShutdownTransport(store)
+    released = []
+    monkeypatch.setattr(
+        "app.application.tools.mcp.registry.release_run_browser_sessions", released.append
+    )
 
     def replace_generation(event):
         if event["method"] == "turn/started":
@@ -101,6 +292,7 @@ def test_stale_coordinator_cleanup_cannot_revoke_a_new_generation(setup_runtime)
     metadata = store.run.metadata["codex_runtime"]
     assert metadata["generation"] == 2 and metadata["coordinator_active"] is True
     assert metadata["revoked"] is False and metadata["token_hashes"] == {"model": "new-owner-grant"}
+    assert released == []
 
 
 @pytest.mark.parametrize("commit_before_loss", [False, True])

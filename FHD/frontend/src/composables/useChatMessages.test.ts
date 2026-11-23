@@ -122,6 +122,47 @@ describe('useChatMessages', () => {
     expect(chat.earlierMessagesError.value).toBe('')
   })
 
+  it.each([false, true])('retains older pages and their cursor on refresh (client message identity: %s)', async clientBound => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('refresh-loaded-history'))
+    const row = (id: number) => ({ id, role: 'ai', content: `message ${id}`,
+      ...(clientBound ? { client_message_id: `client-${id}` } : {}) })
+    const latest = { success: true, id: 'refresh-loaded-history', revision: 0, has_more: true,
+      next_before_id: 160, messages: [row(160)] }
+    vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never)
+    await chat.syncFromServer()
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0,
+      has_more: true, next_before_id: 80, messages: [row(80)] } as never)
+    await chat.loadEarlierMessages()
+    vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never)
+    await chat.syncFromServer()
+    expect(chat.messages.value.map(message => message.content)).toEqual(['message 80', 'message 160'])
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0,
+      has_more: false, messages: [row(1)] } as never)
+    await chat.loadEarlierMessages()
+    expect(api.getConversation).toHaveBeenLastCalledWith('refresh-loaded-history', { before_id: 80, limit: 80 })
+    expect(chat.messages.value.map(message => message.content)).toEqual(['message 1', 'message 80', 'message 160'])
+    vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never)
+    await chat.syncFromServer()
+    expect(chat.messagesHaveEarlier.value).toBe(false)
+    expect(chat.messages.value.map(message => message.content)).toEqual(['message 1', 'message 80', 'message 160'])
+    const calls = vi.mocked(api.getConversation).mock.calls.length
+    await chat.loadEarlierMessages()
+    expect(api.getConversation).toHaveBeenCalledTimes(calls)
+  })
+
+  it('discards loaded older pages after a destructive history revision', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('recalled-loaded-history'))
+    chat.loadMessages([{ role: 'ai', content: 'recalled message', time: '', serverMessageId: 1,
+      persistence: { id: 'client-old', status: 'saved' } }], { revision: 0, has_more: false })
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, id: 'recalled-loaded-history', revision: 1,
+      has_more: true, next_before_id: 160, messages: [{ id: 160, role: 'ai', content: 'current message' }] } as never)
+    await chat.syncFromServer()
+    expect(chat.messages.value.map(message => message.content)).toEqual(['current message'])
+    expect(chat.messagesHaveEarlier.value).toBe(true)
+  })
+
   it('initializes with welcome message', () => {
     expect(messages.messages.value.length).toBe(1)
     expect(messages.messages.value[0].role).toBe('ai')
@@ -759,6 +800,85 @@ describe('required initial conversation readiness', () => {
 describe('message persistence failure UX', () => {
   beforeEach(() => { localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks() })
 
+  it('bounds confirmed local copies while retaining pending messages and authoritative history metadata', async () => {
+    const api = useChatMessages(ref('bounded-cache'))
+    const serverRow = (id: number) => ({ id, role: id === 1 ? 'user' : 'ai', content: `original ${id}` })
+    const durable = Array.from({ length: 160 }, (_, index) => ({
+      role: index === 0 ? 'user' as const : 'ai' as const, content: `original ${index + 1}`, time: '12:00',
+      serverMessageId: index + 1, persistence: { id: `server:${index + 1}`, status: 'saved' as const, durable: true },
+    }))
+    const protectedRows = [
+      { role: 'user' as const, content: 'unsaved', time: '12:01', persistence: { id: 'local', status: 'local' as const } },
+      { role: 'user' as const, content: 'saving', time: '12:01', persistence: { id: 'saving', status: 'saving' as const } },
+      { role: 'user' as const, content: 'failed', time: '12:01', persistence: { id: 'failed', status: 'failed' as const,
+        request: { role: 'user' as const, content: 'failed', expected_revision: 0 } } },
+      { ...durable[0], content: 'legacy saved without durable evidence', persistence: { id: 'legacy', status: 'saved' as const } },
+      { ...durable[0], content: 'saved with a pending request', persistence: { id: 'pending', status: 'saved' as const,
+        durable: true, request: { role: 'user' as const, content: 'pending', expected_revision: 0 } } },
+      { ...durable[0], content: 'active stream', streamingShell: true, persistence: { id: 'stream', status: 'saved' as const, durable: true } },
+    ]
+    api.loadMessages([...protectedRows, ...durable], { revision: 0, title: 'Original conversation', message_count: 160, has_more: false })
+    expect(api.messages.value).toHaveLength(166)
+    const cache = JSON.parse(localStorage.getItem('chat_bounded-cache_') || '[]')
+    expect(cache).toHaveLength(86)
+    for (const row of protectedRows) expect(cache.some((item: any) => item.persistence.id === row.persistence.id)).toBe(true)
+    expect(cache.some((item: any) => item.content === 'original 1')).toBe(false)
+    expect(JSON.parse(localStorage.getItem('chat_meta_bounded-cache_') || '{}'))
+      .toMatchObject({ title: 'Original conversation', message_count: 160 })
+
+    resetChatMessageStores()
+    const reopened = useChatMessages(ref('bounded-cache'))
+    reopened.addMessage('New local question', 'user')
+    expect(JSON.parse(localStorage.getItem('chat_meta_bounded-cache_') || '{}'))
+      .toMatchObject({ title: 'Original conversation', message_count: 160 })
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, id: 'bounded-cache', durable: true,
+      revision: 0, title: 'Original conversation', message_count: 160, has_more: true, next_before_id: 81,
+      messages: Array.from({ length: 80 }, (_, index) => serverRow(index + 81)) } as never)
+    await reopened.syncFromServer()
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, durable: true, revision: 0,
+      title: 'Original conversation', message_count: 160, has_more: false,
+      messages: Array.from({ length: 80 }, (_, index) => serverRow(index + 1)) } as never)
+    await reopened.loadEarlierMessages()
+    expect(reopened.messages.value.some(row => row.content === 'original 1')).toBe(true)
+    expect(reopened.messages.value.some(row => row.content === 'New local question')).toBe(true)
+    expect(reopened.messagesHaveEarlier.value).toBe(false)
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, id: 'bounded-cache', durable: true,
+      revision: 1, title: 'Recalled conversation', message_count: 1, has_more: false,
+      messages: [serverRow(1)] } as never)
+    await reopened.syncFromServer()
+    expect(JSON.parse(localStorage.getItem('chat_meta_bounded-cache_') || '{}'))
+      .toMatchObject({ title: 'Recalled conversation', message_count: 1 })
+  })
+
+  it('limits confirmed serialized size without trimming an oversized unsaved message', () => {
+    const api = useChatMessages(ref('byte-budget'))
+    const pending = { role: 'user' as const, content: 'pending '.repeat(40_000), time: '',
+      persistence: { id: 'unsaved-large', status: 'failed' as const } }
+    const confirmed = Array.from({ length: 6 }, (_, index) => ({ role: 'ai' as const,
+      content: String(index).repeat(100_000), time: '', serverMessageId: index + 1,
+      persistence: { id: `server:${index + 1}`, status: 'saved' as const, durable: true } }))
+    api.loadMessages([pending, ...confirmed])
+    const cache = JSON.parse(localStorage.getItem('chat_byte-budget_') || '[]')
+    expect(cache).toHaveLength(3)
+    expect(cache[0].content).toBe(pending.content)
+    expect(cache.slice(1).map((row: any) => row.serverMessageId)).toEqual([5, 6])
+    expect(api.messages.value).toHaveLength(7)
+  })
+
+  it('keeps the previous unconfirmed cache and every live message when a bounded write hits quota', () => {
+    const api = useChatMessages(ref('quota-old-copy'))
+    api.addMessage('previous unconfirmed copy', 'user')
+    const previous = localStorage.getItem('chat_quota-old-copy_')
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+    api.addMessage('new unconfirmed copy', 'user')
+    expect(localStorage.getItem('chat_quota-old-copy_')).toBe(previous)
+    expect(api.messages.value.map(row => row.content)).toContain('previous unconfirmed copy')
+    expect(api.messages.value.map(row => row.content)).toContain('new unconfirmed copy')
+    expect(api.cacheError.value).toContain('本机保存失败')
+    write.mockRestore()
+  })
+
   it('retains a retryable bubble when both the server and local storage fail, then recovers its local copy', async () => {
     const api = useChatMessages(ref('cache-failure'))
     const chatApi = (await import('@/api/chat')).default
@@ -945,12 +1065,15 @@ it.each([undefined, 'explicit-turn'])('preserves the user turn through the save 
   api.addMessage('本轮原文', 'user', { turnId: 'local-turn' })
   await api.saveMessage('user', '本轮原文', undefined, override ? { turnId: override } : undefined)
   expect(api.messages.value.at(-1)?.serverMessageId).toBe(41)
+  expect(api.messages.value.at(-1)?.persistence?.durable).toBe(true)
   const payload = vi.mocked(chatApi.saveMessage).mock.calls[0]![0] as { metadata: string; client_message_id: string }
   const storedMetadata = { ...JSON.parse(payload.metadata), client_message_id: payload.client_message_id }
   const restored = chatMessageExtrasFromServerRow({ id: 41, role: 'user', metadata: JSON.stringify(storedMetadata) })
   expect(restored.turnId).toBe(override || 'local-turn')
   expect(restored.serverMessageId).toBe(41)
   expect(restored.persistence).toEqual({ id: payload.client_message_id, status: 'saved' })
+  expect(chatMessageExtrasFromServerRow({ id: 41, durable: true, role: 'user', metadata: JSON.stringify(storedMetadata) })
+    .persistence?.durable).toBe(true)
 })
 
 

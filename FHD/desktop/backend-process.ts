@@ -2,6 +2,7 @@ import { BrowserWindow, app, dialog } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { StringDecoder } from 'node:string_decoder'
 import backendLog from 'electron-log/node'
 import {
   APP_NAME,
@@ -410,7 +411,7 @@ async function waitForPortAvailable(port: number, timeoutMs = 5_000): Promise<bo
 }
 
 export async function startBackend(): Promise<void> {
-  if (migrationStopInProgress || backendStopAttempt || app.isQuitting) return
+  if (migrationStopInProgress || backendStopAttempt || desktopRuntime.backendMigrationProcess || app.isQuitting) return
   if (desktopRuntime.backendProcess) {
     return
   }
@@ -431,7 +432,7 @@ export async function startBackend(): Promise<void> {
   // 启动后立即退出再触发无意义的自动重启。先等待数秒，给上一实例的收尾让路。
   const portFree = await waitForPortAvailable(DEFAULT_PORT)
   // The port probe yields; rollback/quit or another start may have won meanwhile.
-  if (migrationStopInProgress || backendStopAttempt || app.isQuitting || desktopRuntime.backendProcess) return
+  if (migrationStopInProgress || backendStopAttempt || desktopRuntime.backendMigrationProcess || app.isQuitting || desktopRuntime.backendProcess) return
   if (!portFree) {
     const hint = portOccupiedHint(DEFAULT_PORT)
     writeBackendLog(`[error] port ${DEFAULT_PORT} occupied after retry, abort backend spawn\n`)
@@ -529,9 +530,12 @@ export async function startBackend(): Promise<void> {
 }
 
 export async function runBackendMigrationWithRollback(toVersion: string): Promise<void> {
-  const resumeBackendAfterPrepareFailure = process.platform === 'win32' && (desktopRuntime.backendProcess !== null || backendRestartTimer !== null)
+  if (migrationStopInProgress || desktopRuntime.backendMigrationProcess) throw new Error('数据库迁移仍在进行，不能再次启动迁移。')
+  const fullRollback = process.platform === 'win32' || process.platform === 'darwin'
+  const platformName = process.platform === 'win32' ? 'Windows' : 'macOS'
+  const resumeBackendAfterPrepareFailure = desktopRuntime.backendProcess !== null || backendRestartTimer !== null
+  migrationStopInProgress = true
   if (resumeBackendAfterPrepareFailure) {
-    migrationStopInProgress = true
     if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
     try { await stopBackend() } catch (error) { migrationStopInProgress = false; throw error }
   }
@@ -540,31 +544,28 @@ export async function runBackendMigrationWithRollback(toVersion: string): Promis
   try {
     await prepareRollback(toVersion)
     prepared = true
-    if (process.platform === 'win32') markPreparedRollbackRecoveryRequired()
+    if (fullRollback) markPreparedRollbackRecoveryRequired()
     migrationStarted = true
     await runBackendMigration()
-    if (process.platform === 'win32') clearPreparedRollbackRecoveryRequired()
+    if (fullRollback) clearPreparedRollbackRecoveryRequired()
   } catch (error) {
-    if (process.platform === 'win32' && prepared) {
+    if (fullRollback && prepared) {
       if (!migrationStarted) {
-        writeBackendLog(`[rollback] Windows 数据迁移尚未启动：无法持久化恢复意图，因此未启动迁移子进程。恢复快照保留。\n`)
+        writeBackendLog(`[rollback] ${platformName} 数据迁移尚未启动：无法持久化恢复意图，因此未启动迁移子进程。恢复快照保留。\n`)
       } else {
-        writeBackendLog('[rollback] Windows 数据迁移失败，迁移前持久化的恢复意图仍有效；保留完整恢复记录。\n')
+        writeBackendLog(`[rollback] ${platformName} 数据迁移失败，迁移前持久化的恢复意图仍有效；保留完整恢复记录。\n`)
       }
       app.quit()
       migrationStopInProgress = false
       throw new Error(migrationStarted
-        ? `Windows 后端迁移失败，已保留迁移前持久化的恢复记录并安排下次启动恢复：${error instanceof Error ? error.message : String(error)}`
-        : `Windows 后端迁移未启动，恢复意图无法持久化；未启动迁移子进程。恢复快照已保留：${error instanceof Error ? error.message : String(error)}`)
+        ? `${platformName} 后端迁移失败，已保留迁移前持久化的恢复记录并安排下次启动恢复：${error instanceof Error ? error.message : String(error)}`
+        : `${platformName} 后端迁移未启动，恢复意图无法持久化；未启动迁移子进程。恢复快照已保留：${error instanceof Error ? error.message : String(error)}`)
     }
-    if (process.platform === 'win32') {
-      migrationStopInProgress = false
-      if (resumeBackendAfterPrepareFailure) {
-        try { await startBackend() } catch (restartError) { writeBackendLog(`[rollback] 快照准备失败后恢复后端失败：${restartError instanceof Error ? restartError.message : restartError}\n`) }
-      }
-      throw error
+    migrationStopInProgress = false
+    if (!prepared && resumeBackendAfterPrepareFailure) {
+      try { await startBackend() } catch (restartError) { writeBackendLog(`[rollback] 快照准备失败后恢复后端失败：${restartError instanceof Error ? restartError.message : restartError}\n`) }
     }
-    cancelPreparedRollback()
+    if (!migrationStarted) cancelPreparedRollback()
     throw error
   } finally {
     migrationStopInProgress = false
@@ -613,48 +614,88 @@ function runBackendMigration(): Promise<string> {
         XCAGI_DATA_DIR: app.getPath('userData'),
         XCAGI_UVICORN_RELOAD: '0',
         XCAGI_GLOBAL_RATE_LIMIT: '0',
+        XCAGI_PARENT_PID: String(process.pid),
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
       }, isDesktopPackaged() ? undefined : repoRoot(), isDesktopPackaged() ? process.resourcesPath : undefined),
       windowsHide: true
     })
-    let stderr = ''
+    desktopRuntime.backendMigrationProcess = child
+    const outputLimit = 64 * 1024
+    const decoder = new StringDecoder('utf8')
+    let stderr = Buffer.alloc(0)
     let stdout = ''
     let databaseBackupPath = ''
-    let backupAttachError: unknown
-    child.stderr.on('data', data => {
-      stderr += String(data)
+    let failure: Error | null = null
+    let settled = false
+    let exited = false
+    const deadline = setTimeout(() => fail(new Error(`数据库迁移在 180000ms 内未完成：${stderr}`)), 180_000)
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(deadline)
+      child.stdout.removeListener('data', onStdout)
+      child.stderr.removeListener('data', onStderr)
+      child.removeListener('error', onError)
+      child.removeListener('exit', onExit)
+      child.removeListener('close', onClose)
+      if (desktopRuntime.backendMigrationProcess === child && exited) desktopRuntime.backendMigrationProcess = null
+      if (error) reject(error)
+      else resolve(databaseBackupPath)
+    }
+    const fail = (error: unknown) => {
+      if (settled || failure) return
+      failure = error instanceof Error ? error : new Error(String(error))
+      // Use the same owned process/tree shutdown as quit and rollback. A kill
+      // timeout retains the child reference, preventing another writer or update.
+      void stopBackend().then(() => finish(failure!), stopError => finish(new Error(
+        `${failure!.message}；迁移进程清理失败：${stopError instanceof Error ? stopError.message : String(stopError)}`,
+      )))
+    }
+    const consumeLine = (line: string) => {
+      if (Buffer.byteLength(line, 'utf8') > outputLimit) throw new Error('数据库迁移输出行超过 64 KiB 安全边界。')
+      const prefix = 'XCAGI_MIGRATION_BACKUP='
+      if (databaseBackupPath || !line.startsWith(prefix)) return
+      const candidate = line.slice(prefix.length).replace(/\r$/, '')
+      if (candidate) {
+        attachDatabaseBackupToRollback(candidate)
+        databaseBackupPath = candidate
+      }
+    }
+    const onStderr = (data: Buffer) => {
+      stderr = data.length >= outputLimit
+        ? Buffer.from(data.subarray(-outputLimit))
+        : Buffer.concat([stderr.subarray(Math.max(0, stderr.length + data.length - outputLimit)), data])
       relayBackendOutput('stderr', data, isDesktopPackaged(), writeBackendLog, 'migrate')
-    })
-    child.stdout.on('data', data => {
-      stdout += String(data)
+    }
+    const onStdout = (data: Buffer) => {
       relayBackendOutput('stdout', data, isDesktopPackaged(), writeBackendLog, 'migrate')
-      if (!databaseBackupPath) {
-        const match = stdout.match(/^XCAGI_MIGRATION_BACKUP=(.+)$/m)
-        const candidate = match?.[1]?.trim() || ''
-        if (candidate) {
-          try {
-            attachDatabaseBackupToRollback(candidate)
-            databaseBackupPath = candidate
-          } catch (error) {
-            backupAttachError = error
-            child.kill()
-          }
+      if (failure || databaseBackupPath) return
+      try {
+        stdout += decoder.write(data)
+        let end: number
+        while ((end = stdout.indexOf('\n')) !== -1) {
+          consumeLine(stdout.slice(0, end))
+          stdout = stdout.slice(end + 1)
         }
-      }
-    })
-    child.on('error', reject)
-    child.on('exit', code => {
-      if (backupAttachError) {
-        reject(backupAttachError)
-        return
-      }
-      if (code === 0) {
-        resolve(databaseBackupPath)
-      } else {
-        reject(new Error(`数据库迁移失败（code=${code}）: ${stderr}`))
-      }
-    })
+        if (Buffer.byteLength(stdout, 'utf8') > outputLimit) throw new Error('数据库迁移输出行超过 64 KiB 安全边界。')
+      } catch (error) { fail(error) }
+    }
+    const onExit = () => { exited = true }
+    const onError = (error: Error) => { if (!child.pid) { exited = true; finish(error) } else fail(error) }
+    const onClose = (code: number | null) => {
+      exited = true
+      if (failure) return
+      try {
+        if (!databaseBackupPath) consumeLine(stdout + decoder.end())
+      } catch (error) { fail(error); return }
+      finish(code === 0 ? undefined : new Error(`数据库迁移失败（code=${code}）: ${stderr}`))
+    }
+    child.stderr.on('data', onStderr)
+    child.stdout.on('data', onStdout)
+    child.on('error', onError)
+    child.on('exit', onExit)
+    child.on('close', onClose)
   })
 }
 
@@ -666,38 +707,39 @@ export function stopBackend(): Promise<void> {
 
 async function stopBackendProcess(): Promise<void> {
   desktopRuntime.verifiedBackendProcess = null
-  const child = desktopRuntime.backendProcess
-  desktopRuntime.backendProcess = null
   if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
-  if (!child) {
-    return
-  }
-  markBackendStopRequested(child)
-  writeBackendLog(`[${new Date().toISOString()}] backend stop requested\n`)
-  const observedExit = () => typeof child.exitCode === 'number' || typeof child.signalCode === 'string'
-  let result = 'already-exited'
-  if (process.platform === 'win32' && child.pid) {
-    const exited = waitForChildExit(child, 2500)
-    await new Promise<void>(resolve => {
-      execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 2500 }, () => resolve())
-    })
-    const hasExited = await exited || observedExit()
-    result = hasExited ? 'killed' : 'kill-timeout'
-    if (!hasExited) {
+  let failure: Error | null = null
+  for (const key of ['backendProcess', 'backendMigrationProcess'] as const) {
+    const child = desktopRuntime[key]
+    if (!child) continue
+    desktopRuntime[key] = null
+    markBackendStopRequested(child)
+    writeBackendLog(`[${new Date().toISOString()}] ${key === 'backendProcess' ? 'backend' : 'migration'} stop requested\n`)
+    const observedExit = () => typeof child.exitCode === 'number' || typeof child.signalCode === 'string'
+    let result = 'already-exited'
+    try {
+      if (!observedExit() && process.platform === 'win32' && child.pid) {
+        const exited = waitForChildExit(child, 2500)
+        await new Promise<void>(resolve => {
+          execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 2500 }, () => resolve())
+        })
+        if (!await exited && !observedExit()) throw new Error('Windows 后端未能在 2.5 秒内退出，已中止更新快照和数据库迁移。')
+        result = 'killed'
+      } else {
+        result = await terminateChildProcess(child)
+        if (result === 'kill-timeout' && !observedExit()) throw new Error('后端仍未退出，已中止账本交接和回滚。')
+        if (result === 'kill-timeout') result = 'already-exited'
+      }
+    } catch (error) {
       clearBackendStopRequest(child)
-      if (desktopRuntime.backendProcess === null) desktopRuntime.backendProcess = child
-      throw new Error('Windows 后端未能在 2.5 秒内退出，已中止更新快照和数据库迁移。')
+      if (desktopRuntime[key] === null) desktopRuntime[key] = child
+      const reason = error instanceof Error ? error : new Error(String(error))
+      failure = failure ? new Error(`${failure.message}；${key}: ${reason.message}`) : reason
+      continue
     }
-  } else {
-    result = await terminateChildProcess(child)
-    if (result === 'kill-timeout' && !observedExit()) {
-      clearBackendStopRequest(child)
-      if (desktopRuntime.backendProcess === null) desktopRuntime.backendProcess = child
-      throw new Error('后端仍未退出，已中止账本交接和回滚。')
-    }
-    if (result === 'kill-timeout') result = 'already-exited'
+    writeBackendLog(`[${new Date().toISOString()}] backend log closed result=${result}\n`)
   }
-  writeBackendLog(`[${new Date().toISOString()}] backend log closed result=${result}\n`)
+  if (failure) throw failure
 }
 
 /**

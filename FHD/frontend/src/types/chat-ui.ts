@@ -57,6 +57,8 @@ export interface UiChatMessage {
   persistence?: {
     id: string
     status: 'local' | 'saving' | 'saved' | 'failed'
+    /** Explicit durable server receipt; legacy saved markers alone are not eviction evidence. */
+    durable?: boolean
     localSaved?: boolean
     error?: string
     request?: { role: 'user' | 'ai' | 'task'; content: string; metadata?: string; expected_revision?: number; turn_id?: string }
