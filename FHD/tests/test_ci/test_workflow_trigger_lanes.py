@@ -1,5 +1,6 @@
 """Protect PR deduplication without dropping main, tag, or scheduled evidence."""
 
+import ast
 import os
 import subprocess
 import sys
@@ -207,6 +208,29 @@ def test_native_business_replay_requires_executed_original_scenarios(tmp_path, f
         "real promptfoo uses the approved model through the official SRT proxy",
         "real promptfoo uses the approved model inside native SRT",
     ]
+    # Parse the original test without importing or executing its native fixtures.
+    source = ROOT / (
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_replay_capture.py"
+    )
+    parameters = {
+        "test_production_freezes_original_source_and_oracle_before_delivery": "reference_change",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input": "capture_state",
+    }
+    for test_name, parameter in parameters.items():
+        original = next(
+            node
+            for node in ast.parse(source.read_text()).body
+            if isinstance(node, ast.FunctionDef) and node.name == test_name
+        )
+        marker = next(
+            node
+            for node in original.decorator_list
+            if isinstance(node, ast.Call) and ast.unparse(node.func) == "pytest.mark.parametrize"
+        )
+        assert ast.literal_eval(marker.args[0]) == parameter
+        assert {f"{test_name}[{state}]" for state in ast.literal_eval(marker.args[1])} == {
+            name for name in required if name.startswith(test_name + "[")
+        }
     suites = {
         name: ET.Element("testsuite")
         for name in ("native-business-replay.xml", "native-trainer.xml")

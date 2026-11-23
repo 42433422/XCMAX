@@ -892,12 +892,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_runtime.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_runtime.py",
       "base_blob": "aa809eaf8d732bf2e26ecdfac844a8592994d0e7",
-      "head_blob": "ce62efb8f89ecf06726910d7af4e65f1f1c630bf",
+      "head_blob": "d355e7791a5fbfcd5c6aa90a80ed98edb6629891",
       "before_lines": 882,
-      "after_lines": 888,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。自治规划从原owner账号解析平台默认模型，接入既有预算准入，避免使用脱离账号的bench默认模型。",
-      "boundary": "只允许平台模型配置并保持原生命周期授权与预算；未配置模型保持阻断。",
-      "validation": "小C运行、平台路由、owner handoff和预算用量专项通过；最终平台CI验证。",
+      "after_lines": 892,
+      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。自治规划从原owner账号解析平台默认模型，接入既有预算准入，避免使用脱离账号的bench默认模型。 本轮复用原模型前置边界：探索的本轮来源优先进入观察，专用上下文错误映射既有阻断原因。",
+      "boundary": "只允许平台模型配置并保持原生命周期授权与预算；未配置模型保持阻断。 研究仍仅调用一次，原组合业务反馈与原回执保留；只捕获专用CognitionContextError，不扩大恢复异常集合、不截断结构化回执。",
+      "validation": "当前树原生命周期SQL、LangGraph运行与业务反馈三模块105项通过且零跳过；新增边界先复现10项认知失败及6项迟到授权失败。最终提交的正式平台CI仍须复验，此请求不是人工批准或生产验收。",
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },

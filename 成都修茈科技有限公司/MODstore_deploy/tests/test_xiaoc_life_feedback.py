@@ -22,6 +22,8 @@ from modstore_server.xiaoc_life_cognition import (
     cognition_messages,
     cognitive_review_facts,
     feedback_facts,
+    goal_review_facts,
+    goal_review_projection,
     parse_decision,
     portfolio_feedback,
     prior_self_assessment,
@@ -190,6 +192,48 @@ def test_business_and_stop_feedback_survives_prompt_bound_and_enters_next_model(
     assert len(messages[1]["content"].encode()) <= 4200
     assert feedback["evidence_ref"] in refs
     assert "not incremental" in SYSTEM_PROMPT and "model-weight training" in SYSTEM_PROMPT
+
+
+def test_prompt_deduplicates_sources_before_limit_without_rewriting_receipts():
+    facts = (
+        [{"ref": "receipt:old", "text": "首份原回执"}]
+        + [{"ref": "receipt:old", "text": "同一来源的重复记录"} for _ in range(11)]
+        + [{"ref": "receipt:new", "text": "新业务事实", "business_feedback": {"decision": "stop"}}]
+    )
+    original = copy.deepcopy(facts)
+    messages, refs = cognition_messages({"identity_id": "xiaoc", "level": 5}, "enterprise", facts)
+    observed = json.loads(messages[1]["content"])["observations"]
+    assert [{k: v for k, v in row.items() if k != "evidence_status"} for row in observed] == [
+        facts[0], facts[-1]
+    ]
+    assert observed[0]["evidence_status"] == "observed_source_not_verified_claim"
+    assert observed[1]["evidence_status"] == "measurement_pending"
+    assert refs == {"receipt:old", "receipt:new"}
+    assert facts == original
+
+
+@pytest.mark.parametrize(
+    "facts,reason",
+    [
+        ([], "no_observed_context"),
+        ([{"text": "无来源"}], "no_observed_context"),
+        ([{"ref": "", "text": "无来源"}], "no_observed_context"),
+        ([{"ref": " \t", "text": "无来源"}], "no_observed_context"),
+        ([{"ref": 3, "text": "无来源"}], "no_observed_context"),
+        (
+            [{"ref": "receipt:large", "business_feedback": {"measurement": "测" * 1500}}],
+            "life_cycle_prompt_budget_exhausted",
+        ),
+    ],
+)
+def test_prompt_rejects_unusable_context_without_altering_structured_evidence(facts, reason):
+    from modstore_server import xiaoc_life_cognition as cognition
+
+    original = copy.deepcopy(facts)
+    with pytest.raises(ValueError, match=f"^{reason}$") as raised:
+        cognition_messages({"identity_id": "xiaoc", "level": 5}, "enterprise", facts)
+    assert type(raised.value) is cognition.CognitionContextError
+    assert facts == original
 
 
 @pytest.mark.parametrize(
@@ -392,6 +436,10 @@ def test_original_business_review_updates_goal_during_pause_without_replaying(
         stale["goals"][0]["execution_receipt"] = "newer-receipt"
         assert not reflection_facts(stale)
         assert life.read_state()["budget"] == after["budget"]
+        advisory = goal_review_facts(after)
+        assert advisory[0]["goal_review"]["recommendation"] == "respect_recorded_stop"
+        assert not goal_review_facts({**after, "owner_user_id": 8})
+        assert goal["status"] == "stopped"
     else:
         assert not reflected and not reviewed
 
@@ -781,6 +829,44 @@ def test_real_cognition_graph_reads_historical_review_without_new_execution_auth
     assert review["verdict_counts"]["miss"] == 1
     assert result["goals"][0]["status"] == "proposed"
     assert "decision_id" not in result["goals"][0]
+
+
+def test_goal_review_evolves_with_original_receipts_without_changing_approval():
+    record = _measured_review_record()
+    record["halted"] = False
+    record["reviews"][0]["decision"] = "reallocate_within_approval"
+    record["reviews"][0]["stop_reason"] = ""
+    decision_id = record["decision_id"]
+
+    def project(original, status="execution_verified"):
+        return goal_review_projection(
+            owner=7, goal_id="g1", decision_id=decision_id,
+            status=status, feedback=portfolio_feedback(original),
+        )
+
+    pending = copy.deepcopy(record)
+    pending["reviews"][0]["observation_complete"] = False
+    assert project(pending)["recommendation"] == "await_original_evidence"
+    assert project(record)["recommendation"] == "consider_revision_in_separate_approval"
+    stopped = copy.deepcopy(record)
+    stopped["halted"] = True
+    assert project(stopped)["recommendation"] == "respect_recorded_stop"
+    feedback = portfolio_feedback(record)
+    goal = {
+        "id": "g1",
+        "status": "execution_verified",
+        "decision_id": decision_id,
+        "outcome_ref": feedback["evidence_ref"],
+        "outcome_feedback": feedback["metrics"],
+        "outcome_status": feedback["outcome_status"],
+        "goal_review": project(record),
+    }
+    state = {"owner_user_id": 7, "goals": [goal]}
+    before = copy.deepcopy(state)
+    assert len(goal_review_facts(state)) == 1
+    assert state == before
+    goal["outcome_ref"] = "forged"
+    assert not goal_review_facts(state)
 
 
 @pytest.mark.parametrize("status", ["unavailable", "unknown"])
