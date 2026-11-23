@@ -156,7 +156,7 @@ async def resolve_default_llm_route(
                     break
             else:
                 m = next(
-                    (str(mid).strip() for mid in mids if classify_model(p, str(mid)) in {"llm", "vlm"}),
+                    (str(i).strip() for i in mids if classify_model(p, str(i)) in {"llm", "vlm"}),
                     "",
                 )
             if not m:
