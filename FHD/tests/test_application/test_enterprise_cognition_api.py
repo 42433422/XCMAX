@@ -244,3 +244,41 @@ def test_model_and_http_share_strict_catalog_contract(enterprise_http):
         "plan",
         {"goal_id": "g", "request_id": "r", "message": "plan", "approved": True},
     ).ok
+
+
+def test_world_history_and_scenario_share_http_and_model_status(enterprise_http):
+    actor, client, order_id, *_ = enterprise_http
+    params = {"entity_id": order_id}
+    first = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": params},
+        headers=actor.headers,
+    ).json()["data"]["snapshots"][0]
+    history_params = {**params, "as_of": first["observed_at"]}
+    response = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": history_params},
+        headers=actor.headers,
+    ).json()
+    assert response["success"] is True
+    assert response["data"]["current_state_verified"] is False
+    assert response["data"]["history"]["observation"]["source_version"] == first["source_version"]
+    result = execute_registered_workflow_tool(
+        "enterprise_cognition", "query", {**history_params, "_runtime_context": actor.context}
+    )
+    assert result["success"] is True
+    prediction = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": {**params, "scenario_delivery_quantity": "2"}},
+        headers=actor.headers,
+    ).json()
+    assert prediction["success"] is True
+    assert prediction["data"]["scenario"]["knowledge_kind"] == "prediction"
+    assert Decimal(prediction["data"]["scenario"]["value"]) == 4
+    unknown = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": {**params, "scenario_delivery_quantity": "100"}},
+        headers=actor.headers,
+    ).json()
+    assert unknown["success"] is False
+    assert unknown["data"]["scenario"]["knowledge_kind"] == "unknown"
