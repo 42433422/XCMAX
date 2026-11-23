@@ -27,11 +27,18 @@ QUALIFICATION_CHECKS = (
     # One real run on this exact route/version must force local compaction,
     # restart the runtime, resume the same task and prove no effect was replayed.
     "forced_compaction_restart_same_task_no_replay",
+    # A completed first step must be read back before the dependent second step
+    # is executed in the resumed process, then independently verified again.
+    "multi_step_restart_continuation",
 )
 
 
 class RuntimePolicyError(ValueError):
     """A configured runtime is unavailable or has not been qualified."""
+
+
+class QualificationUpgradeRequired(RuntimePolicyError):
+    """The exact route passed older checks but needs the new real probe once."""
 
 
 class _DefaultResponseModel(str):
@@ -230,8 +237,14 @@ class RuntimeSettings:
             or not receipt["evidence_refs"]
             or any(not isinstance(ref, str) or not ref.strip() for ref in receipt["evidence_refs"])
             or not isinstance(receipt.get("checks"), dict)
-            or any(receipt["checks"].get(key) != "PASS" for key in QUALIFICATION_CHECKS)
+            or any(receipt["checks"].get(key) != "PASS" for key in QUALIFICATION_CHECKS[:-1])
         ):
+            raise RuntimePolicyError("Exact route has not passed independent runtime qualification")
+        if QUALIFICATION_CHECKS[-1] not in receipt["checks"]:
+            raise QualificationUpgradeRequired(
+                "Exact route requires multi-step runtime qualification"
+            )
+        if receipt["checks"][QUALIFICATION_CHECKS[-1]] != "PASS":
             raise RuntimePolicyError("Exact route has not passed independent runtime qualification")
         return self.route
 

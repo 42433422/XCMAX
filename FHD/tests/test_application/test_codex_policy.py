@@ -135,18 +135,7 @@ def test_gateway_protocol_cannot_be_guessed(value):
         _route(gateway_kind=value)
 
 
-@pytest.mark.parametrize(
-    "check",
-    [
-        "responses_stream",
-        "multi_turn_tools",
-        "openai_network_denied",
-        "business_receipt_verified",
-        "upstream_failover_disabled",
-        "response_model_identity",
-        "forced_compaction_restart_same_task_no_replay",
-    ],
-)
+@pytest.mark.parametrize("check", QUALIFICATION_CHECKS)
 @pytest.mark.parametrize("value", [None, "FAIL", "PENDING", True, "pass", {"status": "PASS"}])
 def test_qualification_requires_each_gate_check(tmp_path, check, value):
     route = _route(response_model="model-snapshot")

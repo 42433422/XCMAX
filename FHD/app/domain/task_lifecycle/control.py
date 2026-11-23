@@ -147,23 +147,27 @@ class SessionBook:
         )
 
     def claim_key(self, module: str, tenant: str, key: str, fingerprint: str, task_id: str) -> str:
+        # The unique key arbitrates concurrent processes. Keep this insert in
+        # the caller's task transaction so losing admissions read a committed
+        # original task, and a rolled-back admission does not consume the key.
+        inserted = self._db.execute(
+            text(
+                "INSERT INTO task_lifecycle_idempotency"
+                "(module, tenant_id, idem_key, fingerprint, task_id) "
+                "VALUES (:m, :t, :k, :f, :id) "
+                "ON CONFLICT(module, tenant_id, idem_key) DO NOTHING RETURNING task_id"
+            ),
+            {"m": module, "t": tenant, "k": key, "f": fingerprint, "id": task_id},
+        ).first()
+        if inserted is not None:
+            return ""
         row = self._db.execute(
             text(
                 "SELECT fingerprint, task_id FROM task_lifecycle_idempotency "
                 "WHERE module=:m AND tenant_id=:t AND idem_key=:k"
             ),
             {"m": module, "t": tenant, "k": key},
-        ).first()
-        if row is None:
-            self._db.execute(
-                text(
-                    "INSERT INTO task_lifecycle_idempotency"
-                    "(module, tenant_id, idem_key, fingerprint, task_id) "
-                    "VALUES (:m, :t, :k, :f, :id)"
-                ),
-                {"m": module, "t": tenant, "k": key, "f": fingerprint, "id": task_id},
-            )
-            return ""
+        ).one()
         if str(row[0]) != fingerprint:
             raise TaskLifecycleError("幂等键与已有任务内容冲突")
         return str(row[1])

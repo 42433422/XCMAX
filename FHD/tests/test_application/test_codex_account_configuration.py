@@ -134,6 +134,50 @@ def test_failed_setup_is_not_rebilled_on_each_chat_and_explicit_retry_is_bounded
     assert len(account.attempts) == 2
 
 
+@pytest.mark.parametrize("succeeds", [True, False])
+def test_previous_single_step_qualification_gets_one_bounded_automatic_upgrade(account, succeeds):
+    previous = configuration.get_account_runtime_settings("41")
+    certificate = previous.qualification_file
+    receipt = json.loads(certificate.read_text())
+    receipt["checks"].pop("multi_step_restart_continuation")
+    certificate.write_text(json.dumps(receipt))
+    original_evidence = certificate.parent / "attempt-previous" / "evidence.json"
+    original_evidence.parent.mkdir()
+    original_evidence.write_text("immutable original single-step evidence")
+    account.succeeds = succeeds
+    if succeeds:
+        upgraded = configuration.get_account_runtime_settings("41")
+        assert upgraded.require_qualified() == upgraded.route
+        assert len(account.attempts) == 2
+        configuration.get_account_runtime_settings("41")
+    else:
+        for _ in range(2):
+            with pytest.raises(configuration.RuntimeSetupError):
+                configuration.get_account_runtime_settings("41")
+        assert json.loads(certificate.read_text()) == receipt
+    assert len(account.attempts) == 2  # No repeated billing on subsequent chats.
+    assert original_evidence.read_text() == "immutable original single-step evidence"
+    if not succeeds:
+        account.succeeds = True
+        retried = configuration.get_account_runtime_settings("41", retry=True)
+        assert retried.require_qualified() == retried.route
+        assert len(account.attempts) == 3
+
+
+def test_interrupted_upgrade_does_not_start_another_paid_probe(account):
+    previous = configuration.get_account_runtime_settings("41")
+    certificate = previous.qualification_file
+    receipt = json.loads(certificate.read_text())
+    receipt["checks"].pop("multi_step_restart_continuation")
+    certificate.write_text(json.dumps(receipt))
+    certificate.with_name("setup-attempt.json").write_text(
+        json.dumps({"state": "started", "route_identity": previous.route.identity})
+    )
+    with pytest.raises(configuration.RuntimeSetupError):
+        configuration.get_account_runtime_settings("41")
+    assert len(account.attempts) == 1
+
+
 def test_staging_only_prepares_a_pinned_route_and_qualifies_on_execution(account):
     staged = configuration.get_account_runtime_settings("41", qualify=False)
     assert account.attempts == []

@@ -21,6 +21,7 @@ from app.infrastructure.codex.policy import (
     CODEX_VERSION,
     QUALIFICATION_CHECKS,
     ModelRoute,
+    QualificationUpgradeRequired,
     RuntimePolicyError,
     RuntimeSettings,
 )
@@ -192,9 +193,12 @@ def _qualified_settings(
         raise RuntimeSetupError("runtime_storage_invalid", "运行验收目录无效，请检查本机数据目录。")
     try:
         with FileLock(lock, timeout=0, mode=0o600):
+            upgrade = False
             try:
                 settings.require_qualified()
                 return settings, False
+            except QualificationUpgradeRequired:
+                upgrade = True
             except RuntimePolicyError:
                 pass  # Only the real runner may produce the missing qualification.
             if attempt.exists() and not retry:
@@ -202,7 +206,13 @@ def _qualified_settings(
                     previous = json.loads(attempt.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     previous = {}
-                raise _qualification_failure(previous if isinstance(previous, dict) else {})
+                if not (
+                    upgrade
+                    and isinstance(previous, dict)
+                    and previous.get("state") == "passed"
+                    and previous.get("route_identity") == route.identity
+                ):
+                    raise _qualification_failure(previous if isinstance(previous, dict) else {})
             # Write before any model call, including process interruption or crash.
             attempt.write_text(
                 json.dumps({"state": "started", "route_identity": route.identity}),

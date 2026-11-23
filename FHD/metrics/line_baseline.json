@@ -1,5 +1,5 @@
 {
-  "lines": 2679939,
+  "lines": 2680749,
   "updated": "2026-11-23",
-  "note": "按用户修复配置并提PR合入的授权，修复最终CI原设置页E2E暴露的历史导航竞态。实际生产同步器与vue-router createWebHistory诊断确认：前进已换entry、异步guard未完成时，旧40ms定时器以旧route覆盖新entry。仅让成功导航持有position/fullPath/generation一致的同步权，新导航/reset撤销旧timer，保留同entry地址纠正。生产净增16行、4项真实webHistory回归新增148行；旧3失败1正控通过，新4全过，相关48项及类型/ESLint通过。原Playwright断言未改，固定浏览器仍由最终CI验收；未删除无关功能或降低门禁。"
+  "note": "用户2026-11-23要求Agent长期可靠性代码闭环。本轮生产净增185行，故障注入与协议回归净增621行，现有文档净增4行：修复原回执恢复、原子幂等准入、取消和流式资源回收、两步模型资格。复用现有Codex/SQLAlchemy/AnyIO，不增加第二执行器，不删除无关代码凑数；精确增长已登记供评审，不表示人工批准或真实模型运行验收通过。"
 }
