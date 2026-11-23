@@ -23,8 +23,8 @@ streams:
   agent_run:
     description: |
       Events appended via run.add_event(); exposed at GET /api/agent/runs/{id}/events.
-      Producers: app/application/agent_orchestrator/orchestrator.py + chat_trace.py +
-      artifact_ingestion.py. Frontend consumer: composables/useAgentRunEvents.ts.
+      Producers: app/application/agent_orchestrator/*.py + enterprise_cognition/outcomes.py
+      + chat_trace.py + artifact_ingestion.py. Frontend: composables/useAgentRunEvents.ts.
     categories:
       run:
         - { type: "run.created",           const: RUN_CREATED,           sla_tier: conscious }
@@ -33,9 +33,22 @@ streams:
         - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
         - { type: "approval.authorization_mismatch", const: APPROVAL_AUTHORIZATION_MISMATCH }
         - { type: "run.observation_interrupted", const: RUN_OBSERVATION_INTERRUPTED, payload_fields: [reason, worker_pending, business_outcome, replay_allowed] }
+        - { type: "run.observed", const: RUN_OBSERVED, payload_fields: [phase, status, duration_ms, duration_scope, parent_span_id] }
+        - { type: "run.ambiguous_target_paused", const: RUN_AMBIGUOUS_TARGET_PAUSED }
+        - { type: "run.resumed", const: RUN_RESUMED }
+        - { type: "run.continuation_queued", const: RUN_CONTINUATION_QUEUED }
+        - { type: "run.paused", const: RUN_PAUSED }
+        - { type: "run.cancelled", const: RUN_CANCELLED }
       task:
         - { type: "task.approval_required", const: TASK_APPROVAL_REQUIRED }
+        - { type: "task.session_renewed", const: TASK_SESSION_RENEWED }
+        - { type: "task.queued", const: TASK_QUEUED }
+        - { type: "task.dispatched", const: TASK_DISPATCHED }
+        - { type: "task.worker_failed", const: TASK_WORKER_FAILED }
+        - { type: "task.worker_recovered", const: TASK_WORKER_RECOVERED }
+        - { type: "task.recovery_blocked", const: TASK_RECOVERY_BLOCKED }
       orchestration:
+        - { type: "approval.scope_changed", const: APPROVAL_SCOPE_CHANGED, payload_fields: [step_id] }
         - { type: "approval.resume_plan_rejected", const: APPROVAL_RESUME_PLAN_REJECTED }
         - { type: "approval.resume_proof_missing", const: APPROVAL_RESUME_PROOF_MISSING }
         - { type: "run.clarification_resumed", const: RUN_CLARIFICATION_RESUMED }
@@ -67,6 +80,21 @@ streams:
         - { type: "step.llm_repair_requested", const: STEP_LLM_REPAIR_REQUESTED }
         - { type: "step.llm_repair_failed",    const: STEP_LLM_REPAIR_FAILED }
         - { type: "step.repair_rejected",  const: STEP_REPAIR_REJECTED }
+        - { type: "step.plan_confirmation_answered", const: STEP_PLAN_CONFIRMATION_ANSWERED }
+        - { type: "step.clarification_answered", const: STEP_CLARIFICATION_ANSWERED }
+      browser:
+        - { type: "browser.blocked", const: BROWSER_BLOCKED }
+        - { type: "browser.node_appended", const: BROWSER_NODE_APPENDED }
+        - { type: "browser.text_verified", const: BROWSER_TEXT_VERIFIED }
+        - { type: "browser.decision_recorded", const: BROWSER_DECISION_RECORDED }
+      verification:
+        - { type: "verification.recovery_parked", const: VERIFICATION_RECOVERY_PARKED }
+        - { type: "verification.rechecked", const: VERIFICATION_RECHECKED }
+      enterprise:
+        - { type: "enterprise.outcome_observed", const: ENTERPRISE_OUTCOME_OBSERVED }
+        - { type: "enterprise.outcome_recorded", const: ENTERPRISE_OUTCOME_RECORDED }
+      audit:
+        - { type: "audit.note", const: AUDIT_NOTE }
       tool:
         - { type: "tool.started",          const: TOOL_STARTED }
         - { type: "tool.completed",        const: TOOL_COMPLETED }
@@ -221,6 +249,18 @@ streams:
       will scan route registry and add to SSOT). MOD bridge mods/bridge/xcagi-neuro-bus-bridge/
       passes through arbitrary event_type from MOD authors — also NOT enumerated.
     events:
+      - { type: "enterprise.entity_changed", const: ENTERPRISE_ENTITY_CHANGED, payload_fields: [tenant_id, mod_id, entity_type, entity_id, source_table] }
       - { type: "http.request.started",    const: HTTP_REQUEST_STARTED }
       - { type: "http.request.completed",  const: HTTP_REQUEST_COMPLETED }
       - { type: "http.request.failed",     const: HTTP_REQUEST_FAILED }
+
+# Only identity invalidation is consumed; payload business values are never applied.
+enterprise_subscriptions:
+  mode: read_only_invalidation
+  missing_scope: ignore_and_use_authoritative_ttl
+  subscriptions:
+    - {event_type: enterprise.entity_changed, id_field: entity_id, require_source: true}
+    - {event_type: order.status_changed, entity_type: order, id_field: order_id}
+    - {event_type: order.item_updated, entity_type: order, id_field: order_id}
+    - {event_type: customer.updated, entity_type: customer, id_field: customer_id}
+    - {event_type: customer.deactivated, entity_type: customer, id_field: customer_id}

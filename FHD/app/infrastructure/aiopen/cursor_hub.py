@@ -114,6 +114,7 @@ class AiOpenCursorHub:
             "id": req_id,
             "action": action,
             "params": params or {},
+            "timeout_ms": max(0, int(timeout * 1000)),
         }
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
@@ -126,33 +127,50 @@ class AiOpenCursorHub:
                 "principal_id": principal.principal_id,
                 "tenant_id": principal.tenant_id,
                 "action": action,
-                "params": params or {},
+                # The hub cannot know whether an input is a password field.
+                "params": {
+                    key: "[REDACTED]" if key in {"text", "value", "values", "files"} else value
+                    for key, value in (params or {}).items()
+                },
                 "ts": time.time(),
             }
         )
         try:
-            await ws.send_text(json.dumps(payload, ensure_ascii=False))
-        except RECOVERABLE_ERRORS as err:
-            self._pending.pop(req_id, None)
-            self._pending_sessions.pop(req_id, None)
-            await self.disconnect(target)
-            return {"success": False, "message": f"指令下发失败：{err}"}
-        try:
-            result = await asyncio.wait_for(fut, timeout=timeout)
+            async with asyncio.timeout(timeout):
+                await ws.send_text(json.dumps(payload, ensure_ascii=False))
+                result = await fut
         except TimeoutError:
+            await self._cancel_command(ws, req_id)
             return {
                 "success": False,
-                "message": f"虚拟光标回执超时（{timeout:.0f}s）",
+                "code": "SCREEN_COMMAND_TIMEOUT",
+                "message": f"虚拟光标回执超时（{timeout:.0f}s），请先读取页面状态确认结果，勿重复写入",
                 "action": action,
+                "request_id": req_id,
+                "outcome": "unknown",
+                "retryable": False,
             }
+        except asyncio.CancelledError:
+            await self._cancel_command(ws, req_id)
+            raise
+        except RECOVERABLE_ERRORS as err:
+            await self.disconnect(target)
+            return {"success": False, "message": f"指令下发失败：{err}", "outcome": "unknown"}
         finally:
             self._pending.pop(req_id, None)
             self._pending_sessions.pop(req_id, None)
-        if isinstance(result, dict):
-            result.setdefault("success", True)
-            result.setdefault("session_id", target)
-            return result
-        return {"success": True, "session_id": target, "result": result}
+        if not isinstance(result, dict) or type(result.get("success")) is not bool:
+            result = {"success": False, "code": "INVALID_SCREEN_RECEIPT", "outcome": "unknown"}
+        return {**result, "session_id": target, "request_id": req_id}
+
+    @staticmethod
+    async def _cancel_command(ws: WebSocket, req_id: str) -> None:
+        """Best effort stop; an already dispatched write still requires readback."""
+        try:
+            async with asyncio.timeout(1):
+                await ws.send_text(json.dumps({"type": "cancel", "id": req_id}))
+        except RECOVERABLE_ERRORS:
+            logger.debug("aiopen command cancellation could not be delivered id=%s", req_id)
 
     def handle_client_message(self, raw: str, *, session_id: str) -> bool:
         """Only the originating screen may acknowledge its own pending command."""
@@ -166,7 +184,7 @@ class AiOpenCursorHub:
         fut = self._pending.get(req_id)
         if self._pending_sessions.get(req_id) != session_id or fut is None or fut.done():
             return False
-        fut.set_result(msg.get("result") if isinstance(msg.get("result"), dict) else msg)
+        fut.set_result(msg.get("result"))
         return True
 
     # ---- 指令日志 -------------------------------------------------

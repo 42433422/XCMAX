@@ -8,6 +8,11 @@ STATES = frozenset(
         "queued",
         "running",
         "waiting_approval",
+        "waiting_input",
+        "waiting_auth",
+        "paused",
+        "blocked",
+        "unknown",
         "succeeded",
         "failed",
         "timed_out",
@@ -23,9 +28,42 @@ _ALLOWED: dict[str, frozenset[str]] = {
     "created": frozenset({"queued"}),
     # High-risk work is queued before any worker runs, then parks for a person.
     # Rejection is also legal from the queue so a refused task cannot be claimed.
-    "queued": frozenset({"running", "waiting_approval", "cancelled", "rejected"}),
-    "running": frozenset({"waiting_approval", "succeeded", "failed", "timed_out", "cancelled"}),
-    "waiting_approval": frozenset({"queued", "rejected", "cancelled"}),
+    "queued": frozenset(
+        {
+            "running",
+            "waiting_approval",
+            "waiting_input",
+            "waiting_auth",
+            "paused",
+            "blocked",
+            "cancelled",
+            "rejected",
+        }
+    ),
+    "running": frozenset(
+        {
+            "waiting_approval",
+            "waiting_input",
+            "waiting_auth",
+            "paused",
+            "blocked",
+            "unknown",
+            "succeeded",
+            "failed",
+            "timed_out",
+            "cancelled",
+        }
+    ),
+    "waiting_approval": frozenset({"queued", "paused", "rejected", "cancelled"}),
+    "waiting_input": frozenset({"queued", "paused", "cancelled"}),
+    "waiting_auth": frozenset({"queued", "paused", "cancelled"}),
+    "paused": frozenset(
+        {"queued", "waiting_approval", "waiting_input", "waiting_auth", "blocked", "cancelled"}
+    ),
+    "blocked": frozenset({"queued", "cancelled"}),
+    # An unresolved effect is neither failure nor approval. Only the existing
+    # receipt reconciliation path may settle it; generic retry cannot reopen it.
+    "unknown": frozenset(),
     "succeeded": frozenset(),
     "failed": frozenset({"queued"}),
     "timed_out": frozenset({"queued"}),

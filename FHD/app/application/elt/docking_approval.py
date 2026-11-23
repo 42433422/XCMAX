@@ -25,6 +25,7 @@ def submit_docking_write(
     labels: list[str] | None = None,
     prepared_plan: dict[str, Any] | None = None,
     owned_upload_user_id: int | None = None,
+    submission_origin: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Queue the prepared write and create the approval-center request. Do not write yet."""
     service = get_auto_ingest_service()
@@ -59,7 +60,10 @@ def submit_docking_write(
             )
         ],
         risk_level="high",
-        metadata={"source": "data_docking_auto_ingest"},
+        metadata={
+            "source": "data_docking_auto_ingest",
+            **({"office_stage_origin": dict(submission_origin)} if submission_origin else {}),
+        },
     )
     context = {
         "local_user_id": int(owner_user_id),
@@ -86,3 +90,78 @@ def submit_docking_write(
     queued["status"] = "awaiting_approval"
     queued["success"] = True
     return queued
+
+
+def verify_office_stage_submission(
+    run: Any, output: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator.verification_readback import _report
+    from app.application.office_parse_app_service import office_submission_origin
+    from app.application.workflow.approval_persistence import load_durable_workflow_snapshot
+    from app.db.models.approval import ApprovalRequest
+    from app.db.session import get_db
+    from app.infrastructure.auth.agent_mod_scope import agent_mod_execution_scope
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+
+    data = output.get("data") or {}
+    origin = office_submission_origin(context, run.message)
+    if not isinstance(data, dict) or data.get("status") != "awaiting_approval" or not origin:
+        return _report("inconclusive", "result_receipt_missing", "docking_approval")
+    request_id, batch_id = data.get("approval_request_id"), data.get("batch_id")
+    if (
+        not isinstance(request_id, str)
+        or not request_id
+        or not isinstance(batch_id, str)
+        or not batch_id
+    ):
+        return _report("inconclusive", "result_receipt_missing", "docking_approval")
+    tenant, owner = int(context["tenant_id"]), int(context["user_id"])
+    token = set_request_active_mod_id("")
+    try:
+        with agent_mod_execution_scope(context.get("_mod_authorization")), tenant_scope(tenant):
+            with get_db() as db:
+                approval = (
+                    db.query(ApprovalRequest)
+                    .filter(
+                        ApprovalRequest.request_no == request_id,
+                        ApprovalRequest.tenant_id == tenant,
+                        ApprovalRequest.applicant_id == owner,
+                        ApprovalRequest.status == "pending",
+                    )
+                    .first()
+                )
+                snapshot = load_durable_workflow_snapshot(request_id) if approval else None
+            batch = get_auto_ingest_service().get_batch(tenant_id=tenant, batch_id=batch_id)
+    finally:
+        reset_request_active_mod_id(token)
+    plan = snapshot.get("plan") if snapshot else None
+    saved_context = snapshot.get("runtime_context") if snapshot else {}
+    if (
+        not plan
+        or len(plan.nodes) != 1
+        or not isinstance(plan.metadata, dict)
+        or plan.metadata.get("office_stage_origin") != origin
+        or plan.nodes[0].tool_id != "data_docking"
+        or plan.nodes[0].action != "auto_ingest"
+        or plan.nodes[0].params != {"batch_id": batch_id}
+        or not isinstance(saved_context, dict)
+        or str(saved_context.get("local_user_id")) != str(owner)
+        or str(saved_context.get("tenant_id")) != str(tenant)
+        or not batch
+        or batch.get("owner_user_id") != owner
+        or batch.get("tenant_id") != tenant
+        or batch.get("status") != "awaiting_approval"
+    ):
+        return _report("inconclusive", "result_receipt_unavailable", "docking_approval")
+    return _report(
+        "verified",
+        "result_verified",
+        "docking_approval",
+        approval_request_id=request_id,
+        batch_id=batch_id,
+        tenant_id=str(tenant),
+        submission_verified=True,
+        admission_verified=True,
+        business_execution_verified=False,
+    )

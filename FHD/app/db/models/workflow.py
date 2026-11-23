@@ -1,6 +1,6 @@
 """工作流定义与运行持久化模型。
 
-提供 ``LLMWorkflowPlanner`` 生成的 ``PlanGraph`` 的可持久化载体，以及运行实例
+提供 宿主验证过的 ``PlanGraph`` 的可持久化载体，以及运行实例
 （``WorkflowRun`` + ``WorkflowRunStep``）的状态跟踪。继承 ``TenantScopedMixin``
 以纳入全局多租户隔离。
 """

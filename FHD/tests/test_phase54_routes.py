@@ -143,10 +143,26 @@ def mock_material_svc() -> MagicMock:
 
 
 @pytest.fixture
-def inventory_client(mock_inventory_svc: MagicMock) -> TestClient:
+def inventory_client(mock_inventory_svc: MagicMock, trusted_actor, local_tools) -> TestClient:
     app = FastAPI()
     app.include_router(inventory_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    actor = trusted_actor(
+        permissions=[
+            f"tool.inventory.{action}"
+            for action in (
+                "create_storage_location",
+                "update_storage_location",
+                "create_warehouse",
+                "update_warehouse",
+                "delete_warehouse",
+                "stock_in",
+                "stock_out",
+                "transfer",
+                "query_transactions",
+            )
+        ]
+    )
+    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
 
 
 @pytest.fixture
@@ -201,7 +217,7 @@ def ops_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 @pytest.fixture
 def customer_client(monkeypatch: pytest.MonkeyPatch, request) -> TestClient:
     actor = None
-    if "delete" in request.node.name:
+    if any(action in request.node.name for action in ("create", "update", "delete")):
         actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
         monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setattr(
@@ -392,7 +408,10 @@ def test_materials_create_maps_min_quantity(
         "/api/materials",
         json={"name": "树脂", "min_quantity": 12, "material_code": "R-54"},
     )
-    assert r.status_code == 200
+    assert r.status_code == 400
+    assert r.json()["error_code"] == "result_verification_inconclusive"
+    assert r.json()["retryable"] is False
+    mock_material_svc.create_material.assert_called_once()
     payload = mock_material_svc.create_material.call_args[0][0]
     assert payload["min_stock"] == 12
 
@@ -528,6 +547,8 @@ def test_customers_create_empty_name_400(customer_client: TestClient) -> None:
 
 
 def test_customers_update_default_path(customer_client: TestClient, local_tools) -> None:
+    service = MagicMock()
+    service.update.return_value = {"success": True, "data": {"id": 1, "unit_name": "新名称"}}
     with (
         patch(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
@@ -539,15 +560,22 @@ def test_customers_update_default_path(customer_client: TestClient, local_tools)
             "_customer_body_name_contact",
             return_value=("新名称", "张三", "13900000000", "上海"),
         ),
-        patch.object(
-            customer_routes,
-            "_customer_pg_update",
-            return_value={"id": 1, "unit_name": "新名称"},
-        ),
+        patch("app.application.get_customer_app_service", return_value=service),
     ):
         r = customer_client.put("/customers/1", json={"unit_name": "新名称"})
     assert r.status_code == 200
     assert r.json()["data"]["unit_name"] == "新名称"
+    assert r.json()["success"] is False
+    assert r.json()["error_code"] == "result_verification_inconclusive"
+    service.update.assert_called_once_with(
+        1,
+        {
+            "customer_name": "新名称",
+            "contact_person": "张三",
+            "contact_phone": "13900000000",
+            "contact_address": "上海",
+        },
+    )
 
 
 def test_customers_delete_default_path(
@@ -567,7 +595,12 @@ def test_customers_delete_default_path(
     ):
         r = customer_client.delete("/customers/2")
     assert r.status_code == 200
-    assert r.json()["message"] == "已删除"
+    assert r.json()["success"] is False
+    assert r.json()["error_code"] == "result_verification_inconclusive"
+    assert r.json()["retryable"] is False
+    assert r.json()["deleted_count"] == 1
+    service.batch_delete.assert_called_once()
+    assert service.batch_delete.call_args.args[0] == [2]
 
 
 def test_customers_batch_delete_rejects_invalid_atomically(
@@ -651,13 +684,17 @@ def test_purchase_inbounds_order_filter(
 
 
 def test_purchase_approve_custom_approver(
-    purchase_client: TestClient, mock_purchase_svc: MagicMock, local_tools
+    purchase_client: TestClient, mock_purchase_svc: MagicMock, local_tools, trusted_actor
 ) -> None:
+    actor = trusted_actor(role="admin")
+    purchase_client.headers.update(actor.headers)
     r = purchase_client.post(
         "/api/purchase/orders/5/approve",
         params={"approver": "manager-p54"},
     )
     assert r.status_code == 200
+    assert r.json()["success"] is False
+    assert r.json()["error_code"] == "result_verification_inconclusive"
     mock_purchase_svc.approve_purchase_order.assert_called_once_with(5, "manager-p54")
 
 

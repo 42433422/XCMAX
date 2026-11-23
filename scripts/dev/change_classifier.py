@@ -169,11 +169,22 @@ RELEVANT = {
     "runtime_contract": {
         "prefixes": [
             "FHD/scripts/autonomy/runtime_tools/",
+            "FHD/app/infrastructure/codex/",
             "FHD/app/application/shipment_excel_etl_security.py",
             "FHD/tests/test_application/test_shipment_excel_etl_production_ready.py",
         ],
         "suffixes": [],
         "exact": [
+            # The four native runners exercise this process/authority boundary
+            # against these installed runtime dependencies.
+            "FHD/app/application/agent_orchestrator/tool_process.py",
+            "FHD/app/application/agent_orchestrator/tool_executor.py",
+            "FHD/app/application/agent_orchestrator/tool_permission.py",
+            "FHD/tests/test_application/test_tool_process.py",
+            "FHD/pyproject.toml",
+            "FHD/requirements-server-api.txt",
+            "FHD/ops/deploy/requirements-server-api.lock.txt",
+            "FHD/uv.lock",
             ".github/workflows/fhd-mac-control-contract.yml",
             "FHD/.github/workflows/mac-control-contract.yml",
             "FHD/scripts/dev/e2e-full.sh",
@@ -202,7 +213,16 @@ def _changed_files(base: str, head: str) -> list[str]:
     """返回 base..head 间改动文件（仓库根相对路径）。取不到则返回 []。"""
     # 保留重命名的旧路径删除，避免业务文件移入快照白名单后漏跑原所属检查。
     proc = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "diff", "--no-renames", "--name-only", base, head],
+        [
+            "git",
+            "-C",
+            str(REPO_ROOT),
+            "diff",
+            "--no-renames",
+            "--name-only",
+            base,
+            head,
+        ],
         capture_output=True,
         text=True,
         check=False,

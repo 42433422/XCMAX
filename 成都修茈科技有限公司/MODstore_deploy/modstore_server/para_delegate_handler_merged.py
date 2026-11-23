@@ -1642,6 +1642,11 @@ def dispatch_para_delegate(
     input_data: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
     employee_id: str,
 ) -> _facade().Dict[str, _facade().Any]:
+    from modstore_server.strategic_portfolio_usage import unmetered_delegate_block
+
+    blocked = unmetered_delegate_block("para_delegate", input_data)
+    if blocked is not None:
+        return blocked
     if (input_data or {}).get("github_workspace"):
         from modstore_server.para_github_runner import authorized_dispatch
 

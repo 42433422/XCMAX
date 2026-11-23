@@ -397,8 +397,8 @@ def should_run_self_maintenance_loop(
 
 
 def cron_trigger_for_self_maintenance() -> CronTrigger:
-    hour = config._env_int("MODSTORE_SELF_MAINTENANCE_HOUR", 3)
-    minute = config._env_int("MODSTORE_SELF_MAINTENANCE_MINUTE", 0)
+    hour = config._env_int("MODSTORE_SELF_MAINTENANCE_HOUR", 5)
+    minute = config._env_int("MODSTORE_SELF_MAINTENANCE_MINUTE", 15)
     timezone_name = os.environ.get("MODSTORE_SELF_MAINTENANCE_TZ", "Asia/Shanghai")
     return CronTrigger(hour=hour, minute=minute, timezone=timezone_name)
 

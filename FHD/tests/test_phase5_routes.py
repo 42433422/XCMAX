@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -11,6 +12,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import debug_client_log as debug_routes
 from app.fastapi_routes import fhd_meta as fhd_meta_routes
 from app.fastapi_routes import health_k8s as health_routes
@@ -19,6 +21,7 @@ from app.fastapi_routes import print_routes, spa_fallback
 from app.fastapi_routes import state as state_routes
 from app.fastapi_routes import xcmax_admin as xcmax_routes
 from app.fastapi_routes.domains.misc import helpers as legacy_helpers
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -51,14 +54,38 @@ def mock_printer_service() -> MagicMock:
 @pytest.fixture
 def print_client(mock_printer_service: MagicMock, monkeypatch: pytest.MonkeyPatch):
     print_routes._print_confirm_cache.clear()
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
 
     def _svc():
         return mock_printer_service
 
     monkeypatch.setattr(print_routes, "_svc", _svc)
     app = FastAPI()
+    app.state.agent_runs = repo
     app.include_router(print_routes.router)
     return TestClient(app, raise_server_exceptions=False)
+
+
+def _assert_print_unverified(client, response, action):
+    assert response.status_code == 400, response.text
+    payload = response.json()
+    assert payload["success"] is False and payload["outcome"] == "unknown"
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["verification_code"] == "result_verifier_unavailable"
+    assert payload["retryable"] is False and payload["reconciliation_required"] is True
+    run = client.app.state.agent_runs.get(payload["run_id"])
+    assert run is not None and run.status == "blocked"
+    assert len(run.tool_calls) == 1 and run.steps[0].attempt_count == 1
+    call = run.tool_calls[0]
+    assert (call.tool_id, call.action) == ("print", action)
+    assert call.output["success"] is True
+    report = call.metadata["verification"]
+    assert report["accepted"] is False and report["code"] == "result_verifier_unavailable"
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+    return run
 
 
 @pytest.fixture
@@ -133,7 +160,10 @@ def test_print_printer_selection_get_put(
         "/api/print/printer-selection",
         json={"document_printer": "DocPrinter", "label_printer": "LabelPrinter"},
     )
-    assert r2.status_code == 200
+    _assert_print_unverified(print_client, r2, "save_printer_selection")
+    mock_printer_service.save_printer_selection.assert_called_once_with(
+        document_printer="DocPrinter", label_printer="LabelPrinter"
+    )
 
 
 def test_print_printer_selection_invalid_name(print_client) -> None:
@@ -152,7 +182,9 @@ def test_print_default_and_test_endpoints(print_client) -> None:
     assert print_client.get("/api/print/label-printer").status_code == 200
 
 
-def test_print_document_validation(print_client, tmp_path, local_tools) -> None:
+def test_print_document_validation(
+    print_client, mock_printer_service, tmp_path, local_tools
+) -> None:
     r = print_client.post("/api/print/document", json={})
     assert r.status_code == 400
     missing = print_client.post(
@@ -162,7 +194,8 @@ def test_print_document_validation(print_client, tmp_path, local_tools) -> None:
     doc = tmp_path / "doc.pdf"
     doc.write_bytes(b"%PDF")
     ok = print_client.post("/api/print/document", json={"file_path": str(doc)})
-    assert ok.status_code == 200
+    _assert_print_unverified(print_client, ok, "print_document")
+    mock_printer_service.print_document.assert_called_once_with(str(doc), None, False)
 
 
 def test_print_document_rejects_existing_path_outside_allowed_roots(
@@ -190,7 +223,9 @@ def test_print_document_rejects_existing_path_outside_allowed_roots(
     assert response.json()["message"] == "文件不存在"
 
 
-def test_print_label_confirm_flow(print_client, tmp_path, local_tools) -> None:
+def test_print_label_confirm_flow(
+    print_client, mock_printer_service, tmp_path, local_tools
+) -> None:
     label = tmp_path / "label.png"
     label.write_bytes(b"\x89PNG\r\n")
     path = str(label)
@@ -201,12 +236,21 @@ def test_print_label_confirm_flow(print_client, tmp_path, local_tools) -> None:
     assert step1.status_code == 200
     body = step1.json()
     assert body.get("status") == "print_confirm_required"
+    mock_printer_service.print_label.assert_not_called()
     token = body["confirm_token"]
     step2 = print_client.post(
         "/api/print/label",
         json={"file_path": path, "confirm_token": token, "require_confirm": True},
     )
-    assert step2.status_code == 200
+    _assert_print_unverified(print_client, step2, "print_label")
+    mock_printer_service.print_label.assert_called_once_with(path, "LabelPrinter", 2)
+    repeated = print_client.post(
+        "/api/print/label",
+        json={"file_path": path, "confirm_token": token, "require_confirm": True},
+    )
+    assert repeated.status_code == 400
+    assert repeated.json()["error_code"] == "print_confirm_required"
+    assert mock_printer_service.print_label.call_count == 1
 
 
 def test_print_label_cancel_and_bad_copies(print_client, tmp_path) -> None:
@@ -227,16 +271,15 @@ def test_print_label_cancel_and_bad_copies(print_client, tmp_path) -> None:
     assert bad.status_code == 400
 
 
-def test_print_test_printer_post(print_client, local_tools) -> None:
+def test_print_test_printer_post(print_client, mock_printer_service, local_tools) -> None:
     assert print_client.post("/api/print/test", json={}).status_code == 400
-    assert (
-        print_client.post("/api/print/test", json={"printer_name": "DocPrinter"}).status_code == 200
-    )
+    response = print_client.post("/api/print/test", json={"printer_name": "DocPrinter"})
+    _assert_print_unverified(print_client, response, "test")
+    mock_printer_service.test_printer.assert_called_once_with("DocPrinter")
 
 
-def test_print_workflow_dispatch(
-    print_client, monkeypatch: pytest.MonkeyPatch, tmp_path, local_tools
-) -> None:
+@pytest.fixture
+def workflow_print_service(monkeypatch):
     fake_print_app = MagicMock()
     fake_print_app.print_single_label.return_value = {"success": True}
     monkeypatch.setattr(
@@ -247,17 +290,141 @@ def test_print_workflow_dispatch(
         "app.application.get_product_app_service",
         lambda: MagicMock(search_products=MagicMock(return_value=[])),
     )
-    r = print_client.post(
-        "/api/print/workflow/label-print/dispatch",
-        json={"model_number": "M-1", "quantity": 2, "idempotency_key": "idem-1"},
+    return fake_print_app
+
+
+@pytest.mark.parametrize(
+    "identity_transport", ["session_header", "admin_cookie", "enterprise_cookie"]
+)
+def test_print_workflow_dispatch(
+    print_client,
+    workflow_print_service,
+    monkeypatch,
+    tmp_path,
+    local_tools,
+    trusted_actor,
+    identity_transport,
+) -> None:
+    from app.application.agent_orchestrator import tool_permission
+    from app.db.models.user import User
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    ledger = tmp_path / "print-claims.sqlite"
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(ledger))
+    owner = trusted_actor(role="admin", tier="admin", tenant_id=None)
+    headers = {**owner.headers, "X-User-ID": "untrusted-display-name"}
+    if identity_transport == "admin_cookie":
+        headers.pop("X-Session-ID")
+        headers.update(
+            {"X-XCMAX-Client-Shell": "admin", "Cookie": f"admin_session_id={owner.session_id}"}
+        )
+    elif identity_transport == "enterprise_cookie":
+        headers.pop("X-Session-ID")
+        headers.update(
+            {"X-XCMAX-Client-Shell": "enterprise", "Cookie": f"session_id={owner.session_id}"}
+        )
+    path = "/api/print/workflow/label-print/dispatch"
+    body = {"model_number": "M-1", "quantity": 2, "idempotency_key": "idem-1"}
+    first = print_client.post(path, json=body, headers=headers)
+    original = _assert_print_unverified(print_client, first, "workflow_label_dispatch")
+    assert original.user_id == str(owner.user_id)
+    context = original.metadata["runtime_context"]
+    assert context["_actor_authorization"]["user_id"] == str(owner.user_id)
+
+    def original_claim():
+        with sqlite3.connect(ledger) as db:
+            return db.execute(
+                "SELECT scope_key, fingerprint, owner, inflight, output_json FROM tool_idempotency "
+                "WHERE scope_key = ?",
+                ("::print:workflow_label_dispatch:idem-1",),
+            ).fetchone()
+
+    claim = original_claim()
+    assert claim is not None and claim[3] == 0
+    assert claim[1] == tool_permission._fingerprint(original.steps[0].params, context)
+    assert json.loads(claim[4]) == original.tool_calls[0].output
+    # Retain the SQL receipt while discarding all process-local replay/cache state.
+    tool_permission._IDEMPOTENCY.clear()
+    print_routes._print_confirm_cache["wf_lp:idem-1"] = {"expires_at": time.time() - 1}
+    again = print_client.post(path, json=body, headers=headers)
+    repeated = _assert_print_unverified(print_client, again, "workflow_label_dispatch")
+    assert repeated.tool_calls[0].output == original.tool_calls[0].output
+    assert original_claim() == claim
+    workflow_print_service.print_single_label.assert_called_once_with(
+        product_name="M-1", model_number="M-1", specification=None, unit="个", quantity=2
     )
-    assert r.status_code == 200
-    r2 = print_client.post(
+
+    other = trusted_actor(role="admin", tier="admin", tenant_id=None)
+    for changed, caller in (({**body, "quantity": 1}, headers), (body, other.headers)):
+        conflict = print_client.post(path, json=changed, headers=caller)
+        assert conflict.status_code == 400, conflict.text
+        assert conflict.json()["success"] is False
+        assert conflict.json()["error_code"] == "idempotency_conflict"
+        assert workflow_print_service.print_single_label.call_count == 1
+        assert original_claim() == claim
+    with owner.factory.begin() as db:
+        db.get(User, owner.user_id).role = "user"
+    revoked = print_client.post(path, json=body, headers=headers)
+    assert revoked.status_code == 403, revoked.text
+    assert workflow_print_service.print_single_label.call_count == 1
+    assert original_claim() == claim
+
+
+def test_print_workflow_without_key_keeps_requests_independent(
+    print_client, workflow_print_service, local_tools
+):
+    path = "/api/print/workflow/label-print/dispatch"
+    ids = []
+    for _ in range(2):
+        response = print_client.post(path, json={"model_number": "M-1", "quantity": 2})
+        run = _assert_print_unverified(print_client, response, "workflow_label_dispatch")
+        ids.append(run.run_id)
+    assert len(set(ids)) == 2
+    assert workflow_print_service.print_single_label.call_count == 2
+    assert print_client.post(path, json={}).status_code == 400
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"X-Session-ID": "invalid", "X-User-ID": "1"},
+        {"X-Session-ID": "", "X-User-ID": "1"},
+        {"Authorization": "Basic invalid", "X-User-ID": "1"},
+        {"Cookie": "session_id=invalid", "X-User-ID": "1"},
+        {"X-XCMAX-Client-Shell": "admin", "Cookie": "admin_session_id=", "X-User-ID": "1"},
+    ],
+)
+def test_print_workflow_invalid_identity_never_becomes_anonymous(
+    print_client, workflow_print_service, local_tools, headers
+):
+    response = print_client.post(
         "/api/print/workflow/label-print/dispatch",
-        json={"model_number": "M-1", "idempotency_key": "idem-1"},
+        json={"model_number": "M-1", "idempotency_key": "identity-refused"},
+        headers=headers,
     )
-    assert r2.json().get("skipped") is True
-    assert print_client.post("/api/print/workflow/label-print/dispatch", json={}).status_code == 400
+    assert response.status_code == 401, response.text
+    workflow_print_service.print_single_label.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "shell,cookie", [("enterprise", "admin_session_id"), ("admin", "session_id")]
+)
+def test_print_wrong_shell_cookie_never_becomes_anonymous(
+    print_client, workflow_print_service, local_tools, trusted_actor, monkeypatch, shell, cookie
+):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "generic")
+    actor = trusted_actor(role="admin", tenant_id=None)
+    response = print_client.post(
+        "/api/print/workflow/label-print/dispatch",
+        json={"model_number": "M-1", "idempotency_key": "wrong-shell"},
+        headers={
+            "X-XCMAX-Client-Shell": shell,
+            "Cookie": f"{cookie}={actor.session_id}",
+            "X-User-ID": str(actor.user_id),
+        },
+    )
+    assert response.status_code == 401, response.text
+    workflow_print_service.print_single_label.assert_not_called()
 
 
 def test_print_list_labels_and_serve(

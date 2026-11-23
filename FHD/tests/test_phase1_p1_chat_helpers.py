@@ -10,7 +10,6 @@ from starlette.requests import Request
 
 from app.fastapi_routes.domains.conversation.helpers import (
     _ensure_chat_db_read_authorized,
-    _ensure_vector_index_if_needed,
     _message_requires_db_read_token,
     _xcagi_chat_http_exc,
 )
@@ -89,8 +88,3 @@ def test_xcagi_chat_http_exc_value_error_balance() -> None:
 def test_xcagi_chat_http_exc_runtime() -> None:
     exc = _xcagi_chat_http_exc(RuntimeError("svc down"))
     assert exc.status_code == 503
-
-
-def test_ensure_vector_index_no_file() -> None:
-    hint = _ensure_vector_index_if_needed("向量检索", {})
-    assert hint is None or isinstance(hint, str)

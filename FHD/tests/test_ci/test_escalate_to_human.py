@@ -41,6 +41,43 @@ def test_script_help_imports_app_from_fhd_working_directory() -> None:
     assert completed.returncode == 0, completed.stderr
 
 
+@pytest.mark.parametrize("existing_path", ["absent", "existing"])
+def test_import_preserves_package_paths_and_delayed_ledger(tmp_path, existing_path):
+    code = """
+import os, runpy, sys
+from importlib.machinery import PathFinder
+from pathlib import Path
+root = Path.cwd()
+ci = str(root / 'scripts/ci')
+modstore = str(root.parent / '成都修茈科技有限公司/MODstore_deploy')
+sys.path.insert(0, str(root))
+if sys.argv[2] == 'existing':
+    sys.path.extend([modstore, modstore])
+before = list(sys.path)
+namespace = runpy.run_path('scripts/dev/escalate_to_human.py')
+assert [p for p in sys.path if p != ci] == [p for p in before if p != ci]
+assert Path(PathFinder.find_spec('tests', sys.path).origin) == root / 'tests/__init__.py'
+from modstore_server import daily_digest, evolution_ledger
+from modstore_server.integrations import ops_action_handlers
+for module in (daily_digest, evolution_ledger, ops_action_handlers):
+    assert Path(module.__file__).resolve().is_relative_to(Path(modstore).resolve())
+os.environ.pop('MODSTORE_EVOLUTION_LEDGER_PATH', None)
+default_dir = Path(daily_digest._repo_root()) / '成都修茈科技有限公司/MODstore_deploy/modstore_server/data'
+assert evolution_ledger._ledger_path() == default_dir / evolution_ledger.LEDGER_FILENAME
+os.environ['MODSTORE_EVOLUTION_LEDGER_PATH'] = sys.argv[1]
+record = namespace['append_event']({'event_type': 'import-scope-test'})
+assert evolution_ledger.list_events() == [record]
+"""
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", code, str(tmp_path / "ledger.jsonl"), existing_path],
+        cwd=FHD_ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
 # =====================================================================
 # fixtures
 # =====================================================================

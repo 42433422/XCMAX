@@ -28,6 +28,8 @@ from app.application.dataset_rag.models import (
     DatasetDocument,
     _clean_key,
     _DatasetState,
+    _dict_to_retrieved_chunk,
+    _document_from_dict,
     _document_text_locked,
     _resolve_document_for_version,
     _resolve_document_version,
@@ -41,6 +43,265 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import UnsafeDownloadPathError
 
 _DATASET_DOWNLOAD_ERRORS = RECOVERABLE_ERRORS + (UnsafeDownloadPathError,)
+
+
+def agent_ingest_read_repository() -> DatasetRepository:
+    """Resolve the existing store without starting its writer or recovery workers."""
+    from app.application import dataset_rag_app_service as service_module
+
+    service = service_module._dataset_rag_app_service
+    return (
+        service._repository
+        if service is not None
+        else DatasetRepository(
+            service_module._default_storage_path(), prepare_loaded_state=lambda state: None
+        )
+    )
+
+
+def _snapshot_document(snapshot: dict[str, Any], document_id: str) -> tuple[dict, list[dict]]:
+    document = snapshot.get("documents", {}).get(document_id)
+    chunks = snapshot.get("chunks")
+    if (
+        not isinstance(document, dict)
+        or document.get("document_id") != document_id
+        or type(document.get("version")) is not int
+        or document["version"] < 1
+        or not isinstance(chunks, list)
+        or any(
+            not isinstance(chunk, dict) or not isinstance(chunk.get("metadata"), dict)
+            for chunk in chunks
+        )
+    ):
+        raise ValueError("document snapshot unavailable")
+    return document, [
+        chunk for chunk in chunks if chunk["metadata"].get("document_id") == document_id
+    ]
+
+
+def capture_agent_rollback(step, context: dict[str, Any]) -> dict[str, Any]:
+    """Freeze the existing target version before the rollback can create a new one."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.infrastructure.auth.agent_mod_scope import agent_dataset_access_context
+
+    try:
+        access = agent_dataset_access_context(context)
+        dataset_id = _clean_key(str(step.params.get("dataset_id") or ""), default="default")
+        if _ensure_dataset_permission(access, DATASET_READ_PERMISSION, dataset_id=dataset_id):
+            return {}
+        snapshot = agent_ingest_read_repository().read_committed_dataset(dataset_id)
+        if snapshot is None:
+            return {}
+        state = _DatasetState(
+            dataset_id,
+            documents={
+                key: _document_from_dict(value)
+                for key, value in snapshot["documents"].items()
+                if isinstance(value, dict)
+                and value.get("tenant_id") == access.tenant_id
+                and value.get("source") == str(step.params.get("source") or "").strip()
+            },
+        )
+        target = _resolve_document_for_version(
+            state,
+            source=str(step.params.get("source") or "").strip(),
+            tenant_id=access.tenant_id,
+            version=step.params.get("target_version"),
+        )
+        if target is None or not document_visible_to(target.metadata, access):
+            return {}
+        document, chunks = _snapshot_document(snapshot, target.document_id)
+        if len(chunks) != target.chunk_count or any(
+            chunk["metadata"].get("tenant_id") != access.tenant_id
+            or type(chunk["metadata"].get("document_version")) is not int
+            or chunk["metadata"].get("document_version") != target.version
+            or not document_visible_to(chunk["metadata"], access)
+            for chunk in chunks
+        ):
+            return {}
+        return {
+            "document_id": target.document_id,
+            "version": target.version,
+            "document_sha256": canonical_hash(document),
+            "chunks_sha256": canonical_hash(chunks),
+        }
+    except RECOVERABLE_ERRORS:
+        return {}
+
+
+def verify_agent_document(
+    step, call, output: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    """Read the approved inline document and chunks, never rerun ingestion or indexing."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.tool_permission import (
+        _fingerprint,
+        _reread_claim,
+        idempotency_scope_key,
+    )
+    from app.application.agent_orchestrator.verification_readback import _report
+    from app.infrastructure.auth.agent_mod_scope import agent_dataset_access_context
+
+    source = "dataset_document_store"
+    access = agent_dataset_access_context(context)
+    dataset_id = _clean_key(str(step.params.get("dataset_id") or ""), default="default")
+    if _ensure_dataset_permission(access, DATASET_READ_PERMISSION, dataset_id=dataset_id):
+        return _report("inconclusive", "result_read_permission_unavailable", source)
+    rollback = step.action == "rollback_version"
+    text = str(step.params.get("text") or "").strip()
+    if (not rollback and not text) or step.params.get("file_path"):
+        return _report("inconclusive", "result_source_verification_unavailable", source)
+    key = idempotency_scope_key(context, step.tool_id, step.action, step.params)
+    receipt = _reread_claim(key, durable_read_only=True)
+    if receipt is None or receipt.get("inflight") or not isinstance(receipt.get("output"), dict):
+        return _report("inconclusive", "result_receipt_unavailable", source)
+    if receipt.get("fingerprint") != _fingerprint(step.params, context) or canonical_hash(
+        receipt["output"]
+    ) != canonical_hash(output):
+        return _report("failed", "result_receipt_mismatch", source)
+    repository = agent_ingest_read_repository()
+    if canonical_hash(str(repository.storage_path)) != (
+        call.metadata.get("verification_contract") or {}
+    ).get("dataset_store_sha256"):
+        return _report("failed", "result_scope_mismatch", source)
+    snapshot = repository.read_committed_dataset(dataset_id)
+    returned = output.get("document")
+    if (
+        snapshot is None
+        or not isinstance(snapshot.get("documents"), dict)
+        or not isinstance(snapshot.get("chunks"), list)
+        or not isinstance(returned, dict)
+        or not isinstance(returned.get("document_id"), str)
+    ):
+        return _report("inconclusive", "result_document_unavailable", source)
+    target_evidence = {}
+    if rollback:
+        baseline = (call.metadata.get("verification_contract") or {}).get("rollback_target") or {}
+        target_id = str(baseline.get("document_id") or "")
+        if not target_id:
+            return _report("inconclusive", "result_document_baseline_unavailable", source)
+        target, target_chunks = _snapshot_document(snapshot, target_id)
+        if (
+            canonical_hash(target) != baseline.get("document_sha256")
+            or canonical_hash(target_chunks) != baseline.get("chunks_sha256")
+            or output.get("rolled_back_from") != target
+            or target.get("tenant_id") != access.tenant_id
+            or target.get("version") != baseline.get("version")
+            or not document_visible_to(target.get("metadata"), access)
+        ):
+            return _report("failed", "result_rollback_target_changed", source)
+        state = _DatasetState(
+            dataset_id, chunks=[_dict_to_retrieved_chunk(chunk) for chunk in target_chunks]
+        )
+        text = _document_text_locked(state, target_id).strip()
+        target_evidence = {
+            "target_document_id": target_id,
+            "target_version": baseline["version"],
+            "target_document_sha256": baseline["document_sha256"],
+        }
+    document_id = returned["document_id"]
+    document = snapshot["documents"].get(document_id)
+    if not isinstance(document, dict) or canonical_hash(document) != canonical_hash(returned):
+        return _report("failed", "result_document_changed", source)
+    metadata = document.get("metadata")
+    if rollback and (
+        not isinstance(metadata, dict)
+        or metadata.get("rollback") is not True
+        or metadata.get("rollback_from_document_id") != target_evidence["target_document_id"]
+        or metadata.get("rollback_from_version") != target_evidence["target_version"]
+        or document_id == target_evidence["target_document_id"]
+        or type(document.get("version")) is not int
+        or document["version"] <= target_evidence["target_version"]
+    ):
+        return _report("failed", "result_rollback_mismatch", source)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    tenant = str(context.get("tenant_id") or "")
+    if (
+        not tenant
+        or document.get("tenant_id") != tenant
+        or output.get("dataset_id") != dataset_id
+        or document.get("document_id") != document_id
+        or not isinstance(metadata, dict)
+        or metadata.get("tenant_id") != tenant
+        or metadata.get("document_content_hash") != digest
+        or document.get("parser") != "inline_text"
+        or document.get("text_length") != len(text)
+        or type(document.get("version")) is not int
+        or document["version"] < 1
+        or type(metadata.get("document_version")) is not int
+        or metadata.get("document_version") != document["version"]
+        or type(document.get("chunk_count")) is not int
+        or document["chunk_count"] < 1
+        or output.get("chunk_count") != document["chunk_count"]
+        or not document_visible_to(metadata, access)
+        or (step.params.get("document_id") and step.params["document_id"] != document_id)
+    ):
+        return _report("failed", "result_document_mismatch", source)
+    if (
+        step.params.get("version")
+        and document["version"]
+        != _resolve_document_version(
+            _DatasetState(dataset_id),
+            source=document["source"],
+            tenant_id=tenant,
+            requested=step.params["version"],
+        )
+    ) or (
+        not output.get("duplicate")
+        and document.get("source") != (str(step.params.get("source") or "").strip() or "inline")
+    ):
+        return _report("failed", "result_document_mismatch", source)
+    chunks = snapshot["chunks"]
+    if any(
+        not isinstance(chunk, dict) or not isinstance(chunk.get("metadata"), dict)
+        for chunk in chunks
+    ):
+        return _report("inconclusive", "result_document_unavailable", source)
+    chunks = [chunk for chunk in chunks if chunk["metadata"].get("document_id") == document_id]
+    if len(chunks) != document["chunk_count"]:
+        return _report("failed", "result_document_chunks_changed", source)
+    coverage = 0
+    for chunk in sorted(chunks, key=lambda chunk: chunk.get("char_start", -1)):
+        start, end, chunk_meta = chunk.get("char_start"), chunk.get("char_end"), chunk["metadata"]
+        if (
+            type(start) is not int
+            or type(end) is not int
+            or not (0 <= start < end <= len(text))
+            or (start > coverage and text[coverage:start].strip())
+            or str(chunk.get("text") or "").strip() != text[start:end].strip()
+            or chunk.get("source") != document.get("source")
+            or chunk.get("source_url") != document.get("source")
+            or chunk_meta.get("dataset_id") != dataset_id
+            or chunk_meta.get("tenant_id") != tenant
+            or type(chunk_meta.get("document_version")) is not int
+            or chunk_meta.get("document_version") != document["version"]
+            or chunk_meta.get("version_label") != document.get("version_label")
+            or chunk_meta.get("document_content_hash") != digest
+            or not document_visible_to(chunk_meta, access)
+        ):
+            return _report("failed", "result_document_chunks_changed", source)
+        coverage = max(coverage, end)
+    if text[coverage:].strip():
+        return _report("failed", "result_document_chunks_changed", source)
+    return _report(
+        "verified",
+        "result_document_verified",
+        source,
+        dataset_id=dataset_id,
+        document_id=document_id,
+        tenant_id=tenant,
+        actor_id=access.actor_id,
+        document_version=document["version"],
+        text_sha256=digest,
+        chunk_count=len(chunks),
+        chunks_sha256=canonical_hash(chunks),
+        receipt_sha256=canonical_hash(receipt["output"]),
+        scope="current_rollback_document_storage"
+        if rollback
+        else "current_inline_document_storage",
+        vector_index_verified=False,
+        **target_evidence,
+    )
 
 
 class DocumentLifecycle:
@@ -80,7 +341,18 @@ class DocumentLifecycle:
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         dataset_key = _clean_key(dataset_id, default="default")
+
+        def document_output(document: DatasetDocument, **extra: Any) -> dict[str, Any]:
+            return {
+                "success": True,
+                "dataset_id": dataset_key,
+                "document": document.to_dict(),
+                "chunk_count": document.chunk_count,
+                **extra,
+            }
+
         requested_document_id = document_id.strip()
+        auto_version = version is None or str(version).strip() == ""
         source_label = source.strip() or file_path.strip() or "inline"
         base_metadata = dict(metadata or {})
         try:
@@ -218,7 +490,7 @@ class DocumentLifecycle:
                 state = self._repository.datasets.setdefault(
                     dataset_key, _DatasetState(dataset_key)
                 )
-                if not document_id.strip() and (version is None or str(version).strip() == ""):
+                if not document_id.strip() and auto_version:
                     committed_version = _resolve_document_version(
                         state, source=source_label, tenant_id=tenant_key, requested=None
                     )
@@ -241,12 +513,7 @@ class DocumentLifecycle:
                             previous.metadata.get("ingest_idempotency_key") == idempotency_key
                             and previous.metadata.get("ingest_fingerprint") == fingerprint
                         ):
-                            return {
-                                "success": True,
-                                "dataset_id": dataset_key,
-                                "document": previous.to_dict(),
-                                "chunk_count": previous.chunk_count,
-                            }
+                            return document_output(previous)
                         return {"success": False, "error_code": "dataset_document_conflict"}
                 # 内容级去重（护栏）：同一租户下不同来源若是完全相同的正文，
                 # 成熟知识库会复用已有文档而不是再存一份，避免重复片段挤占召回。
@@ -256,7 +523,7 @@ class DocumentLifecycle:
                     not allow_duplicate
                     and not requested_document_id
                     and not file_path.strip()
-                    and (version is None or str(version).strip() == "")
+                    and auto_version
                 ):
                     existing = next(
                         (
@@ -271,14 +538,9 @@ class DocumentLifecycle:
                         None,
                     )
                     if existing is not None:
-                        return {
-                            "success": True,
-                            "dataset_id": dataset_key,
-                            "document": existing.to_dict(),
-                            "chunk_count": existing.chunk_count,
-                            "duplicate": True,
-                            "duplicate_of": existing.document_id,
-                        }
+                        return document_output(
+                            existing, duplicate=True, duplicate_of=existing.document_id
+                        )
                 latest_version = (
                     _resolve_document_version(
                         state, source=source_label, tenant_id=tenant_key, requested=None
@@ -296,7 +558,7 @@ class DocumentLifecycle:
                     file_path.strip()
                     and not text.strip()
                     and not document_id.strip()
-                    and (version is None or str(version).strip() == "")
+                    and auto_version
                 ):
                     duplicate = next(
                         (
@@ -311,14 +573,8 @@ class DocumentLifecycle:
                         None,
                     )
                     if duplicate is not None:
-                        return {
-                            "success": True,
-                            "dataset_id": dataset_key,
-                            "document": duplicate.to_dict(),
-                            "chunk_count": duplicate.chunk_count,
-                            "duplicate": True,
-                        }
-                if version is None or str(version).strip() == "":
+                        return document_output(duplicate, duplicate=True)
+                if auto_version:
                     document.version = latest_version + 1
                     document.version_label = version_label.strip() or f"v{document.version}"
                     document.metadata["document_version"] = document.version
@@ -340,12 +596,7 @@ class DocumentLifecycle:
                 self._vector._sync_vector_index_locked(state)
                 self._vector._refresh_index_metadata(state)
                 self._repository._persist_locked()
-            return {
-                "success": True,
-                "dataset_id": dataset_key,
-                "document": document.to_dict(),
-                "chunk_count": len(chunks),
-            }
+            return document_output(document)
         except _DATASET_DOWNLOAD_ERRORS as exc:
             return {
                 "success": False,
@@ -375,23 +626,10 @@ class DocumentLifecycle:
             state = self._repository.datasets.get(dataset_key)
             if state is None or doc_key not in state.documents:
                 # Cache absence is not durable evidence after a failed write/load.
-                path = self._repository.storage_path
-                if path.exists():
-                    raw = json.loads(path.read_text(encoding="utf-8"))
-                    if (
-                        not isinstance(raw, dict)
-                        or type(raw.get("version")) is not int
-                        or raw.get("version") != 1
-                        or not isinstance(raw.get("datasets"), dict)
-                    ):
-                        raise ValueError("invalid durable dataset snapshot")
-                    payload = raw["datasets"].get(dataset_key)
-                    if dataset_key in raw["datasets"]:
-                        if (
-                            not isinstance(payload, dict)
-                            or payload.get("dataset_id") != dataset_key
-                            or not isinstance(payload.get("documents"), dict)
-                        ):
+                if self._repository.storage_path.exists():
+                    payload = self._repository.read_committed_dataset(dataset_key)
+                    if payload is not None:
+                        if not isinstance(payload.get("documents"), dict):
                             raise ValueError("invalid durable dataset documents")
                         if doc_key in payload["documents"]:
                             self._repository.lock.revision = None

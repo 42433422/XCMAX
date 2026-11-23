@@ -103,7 +103,6 @@ async def test_confirm_reports_progress_before_slow_knowledge_init(monkeypatch):
         patch.object(ch, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(ch, "_message_requires_db_read_token", return_value=False),
         patch.object(ch, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(ch, "_ensure_vector_index_if_needed", return_value=None),
     ):
         chunks = [
             chunk

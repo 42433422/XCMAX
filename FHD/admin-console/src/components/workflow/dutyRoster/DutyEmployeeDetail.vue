@@ -16,6 +16,7 @@ import type { DutyPanels } from './useDutyPanels'
 import type { DutyRun } from './useDutyRun'
 import type { DutySelection } from './useDutySelection'
 import type { DutyRosterState } from './useDutyRosterState'
+import type { WorkflowEmployeeSpaceSnapshot } from '@host/stores/workflowEmployeeSpace'
 
 const emit = defineEmits<{
   (e: 'update:viewMode', v: Deref<DutyRosterState['viewMode']>): void
@@ -52,6 +53,7 @@ const props = defineProps<{
   selectedLlm: Deref<DutySelection['selectedLlm']>
   selectedCapability: Deref<DutySelection['selectedCapability']>
   selectedRunNode: Deref<DutySelection['selectedRunNode']>
+  taskSnapshot?: WorkflowEmployeeSpaceSnapshot
   fetchExecMetrics: Deref<DutyExec['fetchExecMetrics']>
   dispatchTask: Deref<DutyRun['dispatchTask']>
   publishTaskToButler: Deref<DutyRun['publishTaskToButler']>
@@ -111,6 +113,16 @@ const selectedEmp = computed({
                   <p class="dg-detail-badge" :class="selectedEmp.source === 'v1_catalog' ? 'dg-badge--warn' : 'dg-badge--ok'">
                     {{ selectedEmp.source === 'v1_catalog' ? '⚠ 仅目录' : '✓ 已登记' }}
                   </p>
+
+                  <div v-if="taskSnapshot" class="dg-detail-loop-context">
+                    <span>当前任务</span>
+                    <strong>{{ taskSnapshot.stage }}</strong>
+                    <p>{{ taskSnapshot.hintLine || '当前没有关联任务' }}</p>
+                    <div class="dg-detail-loop-context-actions">
+                      <router-link :to="{ name: 'employee-workbench', query: { employee: selectedEmp.id, task: taskSnapshot.taskId } }">查看任务与操作</router-link>
+                      <router-link :to="employeeSpaceLocation(selectedEmp.id)">员工空间</router-link>
+                    </div>
+                  </div>
 
                   <div v-if="selectedLoopContext" class="dg-detail-loop-context" :class="`dg-detail-loop-context--${selectedLoopContext.tone}`">
                     <span>Loop 状态</span>

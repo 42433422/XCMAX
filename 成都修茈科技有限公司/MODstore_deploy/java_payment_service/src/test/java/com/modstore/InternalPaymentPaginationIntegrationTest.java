@@ -1,9 +1,14 @@
 package com.modstore;
 
 import com.modstore.controller.InternalPaymentController;
+import com.modstore.controller.InternalRefundEvidenceController;
+import com.modstore.model.Order;
+import com.modstore.model.Refund;
 import com.modstore.model.Transaction;
 import com.modstore.model.User;
 import com.modstore.model.Wallet;
+import com.modstore.repository.OrderRepository;
+import com.modstore.repository.RefundRepository;
 import com.modstore.repository.TransactionRepository;
 import com.modstore.repository.UserRepository;
 import com.modstore.repository.WalletRepository;
@@ -22,6 +27,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -29,7 +35,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=create-drop", "spring.flyway.enabled=false"})
+@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=create-drop", "spring.flyway.enabled=false",
+        "modstore.deploy-tier=production", "alipay.debug=false"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
 class InternalPaymentPaginationIntegrationTest {
@@ -48,6 +55,9 @@ class InternalPaymentPaginationIntegrationTest {
     }
 
     @Autowired InternalPaymentController controller;
+    @Autowired InternalRefundEvidenceController refundEvidence;
+    @Autowired OrderRepository orders;
+    @Autowired RefundRepository refunds;
     @Autowired UserRepository users;
     @Autowired WalletRepository wallets;
     @Autowired TransactionRepository transactions;
@@ -102,6 +112,84 @@ class InternalPaymentPaginationIntegrationTest {
         assertPage(controller.transactions(secret, 2, 8), "id", 5);
         assertPage(controller.transactions(secret, 0, -1), "id", 5, ids.get(0));
         assertPage(controller.transactions(secret, 501, 3), "id", 5, ids.get(3), ids.get(4));
+    }
+
+    @Test void approvedRefundWithoutReviewTimeRemainsUnknownInPinnedEvidencePages() {
+        LocalDateTime now = LocalDateTime.now();
+        Refund known = persistRefund("approved", now.minusMinutes(2));
+        Refund missingTime = persistRefund("approved", null);
+        persistRefund("approved", now.minusDays(91));
+        persistRefund("approved", now.plusDays(1));
+        persistRefund("pending", null);
+        entityManager.clear();
+
+        Map<String, Object> first = refundEvidence.evidence(secret, 90, 1, 0, 0, "");
+        assertThat(first).containsEntry("total", 2L).containsEntry("through_id", missingTime.getId())
+                .containsEntry("next_after", known.getId());
+        assertThat(refundRows(first)).hasSize(1);
+        assertThat(refundRows(first).get(0)).containsEntry("refund_id", known.getId())
+                .containsEntry("verified", true).containsEntry("amount_cents", 100L);
+
+        // A newly observed incomplete refund belongs to the next snapshot, not this page chain.
+        persistRefund("approved", null);
+        entityManager.clear();
+        Map<String, Object> second = refundEvidence.evidence(secret, 90, 1, known.getId(),
+                missingTime.getId(), (String) first.get("as_of"));
+        assertThat(second).containsEntry("total", 2L).containsEntry("through_id", missingTime.getId())
+                .containsEntry("as_of", first.get("as_of")).containsEntry("next_after", null);
+        assertThat(refundRows(second)).containsExactly(Map.of("refund_id", missingTime.getId(),
+                "verified", false, "reason", "wallet_refund_evidence_incomplete"));
+    }
+
+    private Refund persistRefund(String status, LocalDateTime reviewedAt) {
+        String identity = UUID.randomUUID().toString();
+        User user = users.findById(1L).orElseThrow();
+        LocalDateTime at = reviewedAt == null ? LocalDateTime.now().minusMinutes(2) : reviewedAt;
+        Order order = new Order();
+        order.setUser(user);
+        order.setOutTradeNo("customer-order-" + identity);
+        order.setTradeNo("native-trade-" + identity);
+        order.setSubject("Purchased file service");
+        order.setOrderKind("item");
+        order.setTotalAmount(BigDecimal.ONE);
+        order.setRefundedAmount(BigDecimal.ONE);
+        order.setStatus("refunded");
+        order.setRefundStatus("refunded");
+        order.setFulfilled(true);
+        order.setPaidAt(at.minusDays(1));
+        order.setRefundedAt(at);
+        order.setPayType("page");
+        orders.saveAndFlush(order);
+        Transaction credit = new Transaction();
+        credit.setUser(user);
+        credit.setAmount(BigDecimal.ONE);
+        credit.setBalanceBefore(BigDecimal.ZERO);
+        credit.setBalanceAfter(BigDecimal.ONE);
+        credit.setTransactionType("wallet_refund");
+        credit.setStatus("completed");
+        credit.setOrderNo(order.getOutTradeNo());
+        credit.setReferenceNo(order.getOutTradeNo());
+        credit.setRefundNo("customer-refund-" + identity);
+        credit.setIdempotencyKey("refund:wallet-credit:" + credit.getRefundNo());
+        transactions.saveAndFlush(credit);
+        credit.setCreatedAt(at.minusSeconds(1));
+        transactions.saveAndFlush(credit);
+        Refund refund = new Refund();
+        refund.setRefundNo(credit.getRefundNo());
+        refund.setOrder(order);
+        refund.setUser(user);
+        refund.setAmount(BigDecimal.ONE);
+        refund.setReason("Original wallet refund evidence");
+        refund.setStatus(status);
+        refund.setReviewedBy(users.findById(2L).orElseThrow());
+        refund.setWalletTransactionId(credit.getId());
+        refund.setReviewedAt(reviewedAt);
+        return refunds.saveAndFlush(refund);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> refundRows(Map<String, Object> page) {
+        return (List<Map<String, Object>>) page.get("refunds");
     }
 
     @SuppressWarnings("unchecked")

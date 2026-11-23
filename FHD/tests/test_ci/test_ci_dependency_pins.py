@@ -79,6 +79,7 @@ _INSTALL_WORKFLOWS = [
         "成都修茈科技有限公司/MODstore_deploy",
     ),
     (".github/workflows/customer-delivery-e2e.yml", "."),
+    (".github/workflows/e2e-playwright-reusable.yml", "FHD"),
 ]
 _LOCK_CASES = {
     "valid": '[[package]]\nname = "pytest"\nversion = "9.1.1"\n',
@@ -188,11 +189,35 @@ if "--format=json" in sys.argv:
             assert not calls, "A bad or missing lock must stop before any installer runs"
 
 
-def test_uv_installer_preserves_dependency_inputs_and_checks_the_target_interpreter() -> None:
-    jobs = yaml.safe_load((_REPO_ROOT / "FHD/.github/workflows/ci-cd.yml").read_text())["jobs"]
-    for name in ("backend-quality", "backend-test-shard", "release-verify"):
+@pytest.mark.parametrize(
+    "workflow,names,target",
+    [
+        (
+            "FHD/.github/workflows/ci-cd.yml",
+            ("backend-quality", "backend-test-shard", "release-verify"),
+            '--system --python "$(command -v python)"',
+        ),
+        (
+            "FHD/.github/workflows/test.yml",
+            ("backend-smoke",),
+            '--system --python "$(command -v python)"',
+        ),
+        (
+            ".github/workflows/e2e-playwright-reusable.yml",
+            ("playwright",),
+            "--python .venv/bin/python",
+        ),
+    ],
+)
+def test_uv_installer_preserves_dependency_inputs_and_checks_the_target_interpreter(
+    workflow, names, target
+) -> None:
+    jobs = yaml.safe_load((_REPO_ROOT / workflow).read_text())["jobs"]
+    for name in names:
         steps = jobs[name]["steps"]
-        setup = next(step for step in steps if step.get("uses") == "astral-sh/setup-uv@v6")
+        setup = next(
+            step for step in steps if step.get("uses", "").startswith("astral-sh/setup-uv@")
+        )
         assert setup["with"]["enable-cache"] is True
         assert set(setup["with"]["cache-dependency-glob"].splitlines()) == {
             "FHD/requirements-server-api.txt",
@@ -204,8 +229,8 @@ def test_uv_installer_preserves_dependency_inputs_and_checks_the_target_interpre
         python = next(step for step in steps if step.get("uses") == "actions/setup-python@v7")
         assert "cache" not in python["with"]
         command = next(step["run"] for step in steps if "--pytest-pin" in step.get("run", ""))
-        install = 'uv pip install --system --python "$(command -v python)"'
-        check = 'uv pip check --system --python "$(command -v python)"'
+        install = f"uv pip install {target}"
+        check = f"uv pip check {target}"
         assert (
             install
             + ' -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"'
@@ -226,12 +251,18 @@ def test_pip_runtime_install_supplies_all_vendored_sources() -> None:
         assert f"{name}=={package['version']}" in project["project"]["dependencies"]
     for name in ("build-backend.sh", "build-backend.ps1"):
         script = (fhd / "scripts/package" / name).read_text()
-        install = next(
-            line
-            for line in script.splitlines()
-            if "pip install" in line and ".[server-api]" in line
-        )
-        assert "-r requirements-server-api.txt" in install
+        installs = [
+            line for line in script.splitlines() if "pip install" in line and ' -e ".[' in line
+        ]
+        assert installs, name
+        assert all("-r requirements-server-api.txt" in line for line in installs)
+        if name.endswith(".sh"):
+            assert 'BACKEND_EXTRAS="server-api"' in script
+            assert 'BACKEND_EXTRAS="server-api,computer-use"' in script
+            assert all('".[${BACKEND_EXTRAS}]"' in line for line in installs)
+        else:
+            assert any('".[server-api]"' in line for line in installs)
+            assert any('".[server-api,computer-use]"' in line for line in installs)
     jobs = yaml.safe_load((_REPO_ROOT / ".github/workflows/fhd-alembic-ssot.yml").read_text())[
         "jobs"
     ]

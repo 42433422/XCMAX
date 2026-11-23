@@ -22,7 +22,6 @@ from app.db.models import PurchaseUnit, ShipmentRecord
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.tenant_scope import tenant_scope
-from app.utils.path_io import path_utils
 from tests.test_application.test_etl_auto_ingest_service import rag_service as rag_service
 from tests.test_application.test_etl_preview_task_boundaries import ObservedExecutor
 from tests.test_application.test_reviewed_excel_template import (
@@ -70,8 +69,8 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
         raise AssertionError("旧解析器不能参与所选候选的入库")
 
     monkeypatch.setattr("app.application.elt.service_preview.parse_file", old_parser_must_not_run)
-    monkeypatch.setattr(ais, "get_app_data_dir", lambda: str(store.root))
-    monkeypatch.setattr(path_utils, "get_app_data_dir", lambda **_: str(store.root))
+    # Preserve the canonical getter: lazy imports must not retain this test's root.
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(store.root))
     monkeypatch.setattr(ais, "get_auto_ingest_service", lambda: store.intake)
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: store.service)
     monkeypatch.setattr(

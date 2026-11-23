@@ -1,8 +1,6 @@
 """Tests for app.fastapi_routes.xcagi_compat_chat_helpers — extended coverage.
 
 Focus: _xcagi_chat_http_exc, _xcagi_compat_reply_payload, _extract_excel_paths_*,
-_merge_runtime_context_with_message_paths, _looks_like_vector_request,
-_ensure_vector_index_if_needed, _xcagi_chat_timeout_seconds, _xcagi_stream_*,
 _xcagi_chat_timeout_error_payload, _thinking_steps_from_planner_stream_text,
 _sse_event_line, _xcagi_planner_stream_bytes, _ensure_chat_db_read_authorized.
 """
@@ -258,77 +256,6 @@ class TestMergeRuntimeContextWithMessagePathsExtended:
         )
         assert len(paths) == 1
         assert len(ctx["excel_file_paths"]) == 2
-
-
-# ---------------------------------------------------------------------------
-# _looks_like_vector_request — extended
-# ---------------------------------------------------------------------------
-
-
-class TestLooksLikeVectorRequestExtended:
-    def test_vector_keyword(self):
-        assert ch._looks_like_vector_request("请建立向量索引") is True
-
-    def test_index_keyword(self):
-        assert ch._looks_like_vector_request("建立索引") is True
-
-    def test_semantic_search_keyword(self):
-        assert ch._looks_like_vector_request("semantic search") is True
-
-    def test_embedding_keyword(self):
-        assert ch._looks_like_vector_request("embedding") is True
-
-    def test_no_keyword(self):
-        assert ch._looks_like_vector_request("普通查询") is False
-
-    def test_empty(self):
-        assert ch._looks_like_vector_request("") is False
-
-
-# ---------------------------------------------------------------------------
-# _ensure_vector_index_if_needed — extended
-# ---------------------------------------------------------------------------
-
-
-class TestEnsureVectorIndexIfNeededExtended:
-    def test_not_vector_request_returns_none(self):
-        result = ch._ensure_vector_index_if_needed("普通查询", {})
-        assert result is None
-
-    def test_vector_request_no_file_path(self):
-        result = ch._ensure_vector_index_if_needed("建立向量索引", {})
-        assert result is not None
-        assert "Excel 路径" in result
-
-    def test_vector_request_with_file_path_success(self):
-        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolver:
-            mock_executor = Mock(return_value='{"status": "ok"}')
-            mock_resolver.return_value = mock_executor
-            result = ch._ensure_vector_index_if_needed(
-                "建立向量索引", {"excel_file_path": "/test.xlsx"}
-            )
-        assert result is None
-
-    def test_vector_request_with_error_response(self):
-        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolver:
-            mock_executor = Mock(return_value='{"error": "failed", "message": "no sheet"}')
-            mock_resolver.return_value = mock_executor
-            result = ch._ensure_vector_index_if_needed(
-                "建立向量索引", {"excel_file_path": "/test.xlsx"}
-            )
-        assert result is not None
-        assert "no sheet" in result
-
-    def test_vector_request_with_exception(self):
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            side_effect=RuntimeError("executor failed"),
-        ):
-            result = ch._ensure_vector_index_if_needed(
-                "建立向量索引", {"excel_file_path": "/test.xlsx"}
-            )
-        assert result is not None
-        assert "executor failed" in result
 
 
 # ---------------------------------------------------------------------------

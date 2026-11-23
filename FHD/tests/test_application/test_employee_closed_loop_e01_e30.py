@@ -345,6 +345,7 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     )
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
+    paused_run.plan_id = paused_run.run_id
     paused_run.metadata["plan"] = plan_to_dict(
         PlanGraph(
             plan_id=paused_run.run_id,
@@ -363,9 +364,8 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     )
     paused_run.metadata["runtime_context"] = loop.context(paused_run.run_id)
     before_approval = len(_units(engine))
-    gate = AgentOrchestrator(
-        repository=InMemoryAgentRunRepository(), dependencies=_runtime_dependencies()
-    )
+    approval_repository = InMemoryAgentRunRepository()
+    gate = AgentOrchestrator(repository=approval_repository, dependencies=_runtime_dependencies())
     gate._execute_ready_steps(paused_run, runtime_context=paused_run.metadata["runtime_context"])
     canonical = canonicalize("agent", paused_run.status)
     e09_ok = (
@@ -381,16 +381,20 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     )
 
     approved_before = len(_units(engine))
-    gate._execute_ready_steps(
-        paused_run,
-        runtime_context=paused_run.metadata["runtime_context"],
+    approval_repository.save(paused_run)
+    approved = gate.continue_run(
+        paused_run.run_id,
+        approved_by="11",
         approved_step_id=paused_run.steps[0].step_id,
     )
+    assert approved is not None
+    paused_run = approved
     approved_row = next(
         (row for row in _units(engine) if row["customer_name"] == "闭环待审批客户丁"), None
     )
     e10_ok = (
-        paused_run.run_id
+        paused_run.status == "completed"
+        and paused_run.tool_calls[-1].metadata["verification"]["accepted"] is True
         and approved_row is not None
         and len(_units(engine)) == approved_before + 1
         and paused_run.steps[0].params.get("unit_name") == "闭环待审批客户丁"

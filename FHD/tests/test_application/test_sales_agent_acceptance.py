@@ -26,16 +26,18 @@ from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-@pytest.mark.parametrize("approved_receipt", [0, 375])
-def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(
-    trusted_actor, monkeypatch, approved_receipt
-):
-    actor = trusted_actor(role="admin")
+def _seed_closed_loop_sale(trusted_actor, monkeypatch, tmp_path, approved_receipt):
+    from app.db.models.permission import DEFAULT_ROLES
+
+    permissions = next(row["permissions"] for row in DEFAULT_ROLES if row["name"] == "admin")
+    actor = trusted_actor(role="admin", permissions=[*permissions, "tool.finance.ledger_query"])
     monkeypatch.setattr(
         "app.infrastructure.auth.business_scope_gate.resolve_product_sku", lambda: "enterprise"
     )
     factory = actor.factory
+    monkeypatch.setattr("app.db.SessionLocal", factory)
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "sales-tool-claims.sqlite"))
     monkeypatch.setattr("app.application.customer_app_service.get_customers_session", factory)
     now = datetime.now()
     with tenant_scope(actor.tenant_id), factory.begin() as db:
@@ -113,6 +115,17 @@ def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(
             "receipt_voucher": None,
         },
     }
+    return actor, payload, other_tenant
+
+
+@pytest.mark.parametrize("approved_receipt", [0, 375])
+def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(
+    trusted_actor, monkeypatch, tmp_path, approved_receipt
+):
+    actor, payload, other_tenant = _seed_closed_loop_sale(
+        trusted_actor, monkeypatch, tmp_path, approved_receipt
+    )
+    factory = actor.factory
     plan = PlanGraph(
         plan_id="sales-agent-acceptance",
         intent="sales_write",
@@ -322,3 +335,156 @@ def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(
                 Decimal(str(db.execute(text("SELECT paid_amount FROM sales_orders")).scalar_one()))
                 == 625
             )
+
+
+@pytest.fixture
+def verified_closed_loop(trusted_actor, monkeypatch, tmp_path):
+    actor, payload, _ = _seed_closed_loop_sale(trusted_actor, monkeypatch, tmp_path, 375)
+    orchestrator = AgentOrchestrator(
+        repository=SQLAlchemyAgentRunRepository(session_factory=actor.factory),
+        tool_executor=SimpleNamespace(execute=AgentToolExecutor().execute),
+    )
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="Approve the original sale with its actual partial receipt",
+        runtime_context=actor.context,
+        plan=PlanGraph(
+            plan_id="sales-independent-proof",
+            intent="sales_write",
+            nodes=[
+                WorkflowNode(
+                    node_id="sale",
+                    tool_id="sales",
+                    action="execute_closed_loop",
+                    params={"payload": payload},
+                    risk="high",
+                    idempotent=True,
+                )
+            ],
+        ),
+    )
+    assert run.status == "waiting_user" and not run.tool_calls
+    run = orchestrator.continue_run(run.run_id, approved_by=str(actor.user_id))
+    assert run.status == "completed", run.error
+    monkeypatch.setattr(
+        SalesAppService,
+        "execute_closed_loop",
+        lambda *_args, **_kwargs: pytest.fail("Verification must not replay the sale"),
+    )
+    return actor, run
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        None,
+        "receipt",
+        "fingerprint",
+        "tenant",
+        "stock",
+        "amount",
+        "payment",
+        "customer",
+        "permission",
+    ],
+)
+def test_closed_loop_verification_reads_original_receipt_and_current_ledger_without_writes(
+    verified_closed_loop, monkeypatch, change
+):
+    import sqlite3
+
+    from sqlalchemy import event
+
+    from app.application.agent_orchestrator.result_verification import verify_step_result
+    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.application.agent_orchestrator.tool_permission import _idempotency_path
+    from app.db.models import InventoryTransaction, ReceivableAllocation, SalesOrder
+    from app.db.models.permission import Role
+
+    actor, run = verified_closed_loop
+    step, call = run.steps[0], run.tool_calls[0]
+    original = deepcopy(call.output)
+    if change == "receipt":
+        with sqlite3.connect(_idempotency_path(create_parent=False)) as db:
+            db.execute("DELETE FROM tool_idempotency")
+    elif change is not None:
+        with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+            order = db.get(SalesOrder, original["data"]["order_id"])
+            if change == "fingerprint":
+                order.remark = "changed transaction identity"
+            elif change == "tenant":
+                order.tenant_id = actor.tenant_id + 1
+            elif change == "stock":
+                db.query(InventoryTransaction).filter_by(
+                    sales_order_id=order.id
+                ).one().quantity = -9
+            elif change == "amount":
+                order.total_amount = 1001
+            elif change == "payment":
+                db.get(
+                    ReceivableAllocation, original["data"]["payment_allocation_id"]
+                ).status = "refunded"
+            elif change == "customer":
+                db.get(Customer, order.customer_id).customer_name = "Changed customer"
+            elif change == "permission":
+                role = db.query(Role).filter_by(name="admin").one()
+                role.permissions = [
+                    p for p in role.permissions if p.code != "tool.finance.ledger_query"
+                ]
+    writes = []
+
+    def observe(_connection, _cursor, statement, _params, _context, _many):
+        if statement.split()[0].upper() in {"INSERT", "UPDATE", "DELETE"}:
+            writes.append(statement)
+
+    engine = actor.factory.kw["bind"]
+    event.listen(engine, "before_cursor_execute", observe)
+    try:
+        for _ in range(2):
+            report = verify_step_result(
+                run=run,
+                step=step,
+                call=call,
+                context={
+                    **run.metadata["runtime_context"],
+                    "run_id": run.run_id,
+                    "step_id": step.step_id,
+                    **task_execution_context(run, step),
+                },
+            )
+            assert report["accepted"] is (change is None), report
+            assert report["code"] != "verification_binding_invalid"
+            if change is None:
+                evidence = report["checks"][0]["evidence"]
+                assert evidence["scope"] == "current_sales_closed_loop_state"
+                assert evidence["attribution"] == "not_inferred"
+        assert writes == []
+        assert call.output == original and len(run.tool_calls) == 1
+    finally:
+        event.remove(engine, "before_cursor_execute", observe)
+
+
+def test_forged_closed_loop_success_cannot_borrow_an_existing_sale(verified_closed_loop):
+    from app.application.agent_orchestrator.result_verification import freeze_verification_contract
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from tests.test_application.test_sales_verification_readback import verify
+    from tests.test_application.test_verification_readback import invocation
+
+    actor, original = verified_closed_loop
+    case = invocation(
+        actor,
+        tool="sales",
+        action="execute_closed_loop",
+        params=deepcopy(original.steps[0].params),
+    )
+    freeze_verification_contract(
+        case.run,
+        case.step,
+        case.call,
+        get_tool_action_spec("sales", "execute_closed_loop"),
+        case.context,
+    )
+    output = {**deepcopy(original.tool_calls[0].output), "verified": True}
+    report = verify(case, output)
+    assert report["accepted"] is False
+    assert report["code"] == "result_receipt_unavailable"

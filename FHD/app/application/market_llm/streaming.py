@@ -4,17 +4,25 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator, Iterator
+from dataclasses import replace
 from itertools import chain
 
 import httpx
 
+from app.application.tool_execution_deadline import (
+    check_invocation_deadline,
+    remaining_invocation_seconds,
+)
 from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
 
 from .completions import (
-    _audit_allows_failover,
+    _allows_failover,
     _buffer_audited_async_body,
     _buffer_audited_sync_body,
+    _can_failover,
     _capture_reviewed_response,
+    _failover_extra,
+    _status_error,
 )
 
 
@@ -60,13 +68,6 @@ async def _acompletion_payloads(response, sse_payloads):
 
 
 from .protocols import ChatInput, Connection, Route, StreamPorts
-from .responses import market_response_error
-
-
-def _own_attempt_key(payload: dict, index: int) -> None:
-    """A failover candidate is a different call; it must not reuse the first key."""
-    if index and isinstance(payload.get("client_request_id"), str):
-        payload["client_request_id"] = f"{payload['client_request_id']}-f{index}"
 
 
 def stream_sync(
@@ -74,22 +75,28 @@ def stream_sync(
 ) -> Iterator[str]:
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置")
-    allow_failover = request.extra.get("allow_failover") is not False
+    allow_failover = _allows_failover(request)
     candidates = ports.candidates(*route) if allow_failover else [route]
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         check_stream_active()
+        check_invocation_deadline()
         messages = (
             request.messages
             if request.native_vision
             else ports.prepare_sync(request.messages, *candidate)
         )
-        payload = request.payload(
-            connection, candidate, messages, stream=True, allow_failover=index == 0
+        attempt = replace(request, extra=_failover_extra(request.extra, index=index))
+        payload = attempt.payload(
+            connection,
+            candidate,
+            messages,
+            stream=True,
+            allow_failover=allow_failover and index == 0,
         )
-        _own_attempt_key(payload, index)
+        timeout = remaining_invocation_seconds(connection.timeout)
         with ports.sync_client(
-            timeout=httpx.Timeout(connection.timeout, connect=ports.connect_timeout()),
+            timeout=httpx.Timeout(timeout, connect=min(timeout, ports.connect_timeout())),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
             headers=connection.headers(),
         ) as client:
@@ -108,22 +115,18 @@ def stream_sync(
                         # could duplicate visible output or an upstream billed call.
                         _buffer_audited_sync_body(request, response)
                         for data in _completion_payloads(response, ports.sync_payloads):
+                            check_invocation_deadline()
                             emitted = True
                             yield data
                         _capture_reviewed_response(request, connection, response)
                         return
                     response.read()
-                    will_failover = (
-                        index + 1 < len(candidates)
-                        and ports.failoverable(status, response.text[:500])
-                        and _audit_allows_failover(request.extra)
+                    will_failover = index + 1 < len(candidates) and _can_failover(
+                        ports, status, response.text[:500]
                     )
                     if not will_failover:
                         _capture_reviewed_response(request, connection, response)
-                    if request.extra.get("key_source") or request.extra.get("route_token"):
-                        raise market_response_error(response, status)
-                    text = response.text[:500]
-                    error = ValueError(f"平台错误({status}): {text}")
+                    error = _status_error(attempt, response, status)
                     if not will_failover:
                         raise error
                     last_error = error
@@ -131,12 +134,11 @@ def stream_sync(
                         "[Modstream] 流式换模 %s/%s -> %s", *candidate, candidates[index + 1]
                     )
             except httpx.HTTPError as exc:
-                # 连接/读超时等传输故障：未输出首包时才允许换模。
+                # No HTTP refusal means the inference outcome is unconfirmed.
                 if (
                     emitted
                     or index + 1 >= len(candidates)
-                    or not ports.failoverable(None, str(exc))
-                    or not _audit_allows_failover(request.extra)
+                    or not _can_failover(ports, None, str(exc))
                 ):
                     raise
                 last_error = exc
@@ -155,42 +157,45 @@ async def stream_async(
 ) -> AsyncGenerator[str, None]:
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置")
-    allow_failover = request.extra.get("allow_failover") is not False
+    allow_failover = _allows_failover(request)
     candidates = await asyncio.to_thread(ports.candidates, *route) if allow_failover else [route]
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
+        check_stream_active()
+        check_invocation_deadline()
         messages = (
             request.messages
             if request.native_vision
             else await ports.prepare_async(request.messages, *candidate)
         )
-        payload = request.payload(
-            connection, candidate, messages, stream=True, allow_failover=index == 0
+        attempt = replace(request, extra=_failover_extra(request.extra, index=index))
+        payload = attempt.payload(
+            connection,
+            candidate,
+            messages,
+            stream=True,
+            allow_failover=allow_failover and index == 0,
         )
-        _own_attempt_key(payload, index)
         client = await ports.async_client()
         emitted = False
         try:
+            timeout = remaining_invocation_seconds(connection.timeout)
             async with client.stream(
                 "POST",
                 f"{connection.platform_url}/api/llm/chat/stream",
                 json=payload,
                 headers=connection.headers(),
+                timeout=httpx.Timeout(timeout, connect=min(timeout, ports.connect_timeout())),
             ) as response:
                 status = ports.status_code(response, 200)
                 if status >= 400:
                     await response.aread()
-                    will_failover = (
-                        index + 1 < len(candidates)
-                        and ports.failoverable(status, response.text[:500])
-                        and _audit_allows_failover(request.extra)
+                    will_failover = index + 1 < len(candidates) and _can_failover(
+                        ports, status, response.text[:500]
                     )
                     if not will_failover:
                         _capture_reviewed_response(request, connection, response)
-                    if request.extra.get("key_source") or request.extra.get("route_token"):
-                        raise market_response_error(response, status)
-                    text = response.text[:500]
-                    error = ValueError(f"平台错误({status}): {text}")
+                    error = _status_error(attempt, response, status)
                     if not will_failover:
                         raise error
                     last_error = error
@@ -200,18 +205,14 @@ async def stream_async(
                     continue
                 await _buffer_audited_async_body(request, response)
                 async for data in _acompletion_payloads(response, ports.async_payloads):
+                    check_invocation_deadline()
                     emitted = True
                     yield data
                 _capture_reviewed_response(request, connection, response)
                 return
         except httpx.HTTPError as exc:
-            # 传输故障只在未输出首包时换模，避免重复内容或重复计费。
-            if (
-                emitted
-                or index + 1 >= len(candidates)
-                or not ports.failoverable(None, str(exc))
-                or not _audit_allows_failover(request.extra)
-            ):
+            # No HTTP refusal means the inference outcome is unconfirmed.
+            if emitted or index + 1 >= len(candidates) or not _can_failover(ports, None, str(exc)):
                 raise
             last_error = exc
             ports.logger.warning(

@@ -11,19 +11,21 @@ from typing import Literal, cast
 
 from fastapi import Request
 from fastapi.responses import Response
+from starlette.requests import HTTPConnection
 
 CLIENT_SHELL_HEADER = "X-XCMAX-Client-Shell"
 ADMIN_SHELL = "admin"
 ENTERPRISE_SHELL = "enterprise"
 
 
-def client_shell_from_request(request: Request) -> str:
-    raw = str(request.headers.get(CLIENT_SHELL_HEADER) or "").strip().lower()
+def client_shell_from_request(request: HTTPConnection) -> str:
+    headers = getattr(request, "headers", {}) or {}
+    raw = str(headers.get(CLIENT_SHELL_HEADER) or "").strip().lower()
     if raw == ADMIN_SHELL:
         return ADMIN_SHELL
     if raw in (ENTERPRISE_SHELL, "enterprise", "desktop", "web"):
         return ENTERPRISE_SHELL
-    referer = str(request.headers.get("referer") or "").lower()
+    referer = str(headers.get("referer") or "").lower()
     if ":5011/admin" in referer or referer.rstrip("/").endswith(":5011/admin"):
         return ADMIN_SHELL
     return ENTERPRISE_SHELL
@@ -35,7 +37,7 @@ def session_cookie_name_for_shell(shell: str) -> str:
     return (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
 
 
-def session_cookie_name_for_request(request: Request) -> str:
+def session_cookie_name_for_request(request: HTTPConnection) -> str:
     return session_cookie_name_for_shell(client_shell_from_request(request))
 
 

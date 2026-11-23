@@ -330,8 +330,14 @@ def test_memory_v2_routes_govern_blocked_source(
             f"/memory/v2/{candidate['memory_id']}/confirm",
             json={"user_id": "7"},
         )
-        assert confirm.status_code == 404
-        assert confirm.json()["success"] is False
+        assert confirm.status_code == 202, confirm.text
+        confirmation = confirm.json()
+        assert confirmation["success"] is False
+        assert confirmation["agent_status"] == "blocked"
+        assert confirmation["message"] == "记忆已拒绝，不能确认"
+        assert confirmation["outcome"] == "unknown"
+        assert confirmation["retryable"] is False
+        assert confirmation["reconciliation_required"] is True
 
         summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
         assert summary["summary"]["by_status"]["rejected"] == 1
@@ -416,28 +422,61 @@ def test_customers_get_by_id(
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-def test_customers_post_missing_name(_mock_erp: MagicMock, customer_client: TestClient) -> None:
-    with patch("app.fastapi_routes.domains.customer.customer_routes._customers_write_raise"):
-        r = customer_client.post("/customers", json={})
+def test_customers_post_missing_name(
+    _mock_erp: MagicMock, customer_client: TestClient, trusted_actor, monkeypatch
+) -> None:
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    customer_client.headers.update(trusted_actor(role="admin").headers)
+    r = customer_client.post("/customers", json={})
     assert r.status_code == 400
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-@patch("app.fastapi_routes.domains.customer.customer_routes._customer_pg_insert")
 def test_customers_post_ok(
-    mock_insert: MagicMock,
     _mock_erp: MagicMock,
     customer_client: TestClient,
     local_tools,
+    trusted_actor,
+    monkeypatch,
+    tmp_path,
 ) -> None:
-    mock_insert.return_value = {"id": 5, "name": "丙公司"}
-    with patch("app.fastapi_routes.domains.customer.customer_routes._customers_write_raise"):
-        r = customer_client.post(
-            "/customers",
-            json={"name": "丙公司", "contact_person": "李"},
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.application.customer_app_service import CustomerApplicationService
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+    actor = trusted_actor(role="admin")
+    customer_client.headers.update(actor.headers)
+    monkeypatch.setattr("app.db.SessionLocal", actor.factory)
+    monkeypatch.setattr("app.db.session.SessionLocal", actor.factory)
+    monkeypatch.setattr("app.application.customer_app_service.get_customers_session", actor.factory)
+    monkeypatch.setattr("app.application.get_customer_app_service", CustomerApplicationService)
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
+    r = customer_client.post("/customers", json={"name": "丙公司", "contact_person": "李"})
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["success"] is True, payload
+    assert payload["data"]["customer_name"] == "丙公司"
+    assert payload["data"]["contact_person"] == "李"
+    run = repo.get(payload["run_id"])
+    assert run is not None and run.status == "completed"
+    assert len(run.tool_calls) == 1
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is True
+    with actor.factory() as db:
+        rows = (
+            db.connection()
+            .exec_driver_sql(
+                "SELECT id, tenant_id, unit_name, contact_person FROM purchase_units LIMIT 2"
+            )
+            .fetchmany(2)
         )
-    assert r.status_code == 200
-    assert r.json()["data"]["id"] == 5
+    assert rows == [(payload["data"]["id"], actor.tenant_id, "丙公司", "李")]
 
 
 # ---------------------------------------------------------------------------
@@ -465,13 +504,34 @@ def test_system_health_and_version(mock_get: MagicMock, system_client: TestClien
 
 
 @patch("app.application.facades.session_facade.get_database_service")
-def test_database_backup_create(mock_get: MagicMock, system_client: TestClient) -> None:
+def test_database_backup_create(
+    mock_get: MagicMock, system_client: TestClient, local_tools, monkeypatch, tmp_path
+) -> None:
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
     mock_get.return_value.backup_database.return_value = {
         "success": True,
         "data": {"path": "/tmp/bak"},
     }
     r = system_client.post("/api/database/backup")
-    # debt19: route goes through system maintenance agent (may return 202 while queued/blocked)
-    assert r.status_code in (200, 202), r.text
-    if r.status_code == 200:
-        assert r.json()["success"] is True
+    # A mock dispatch receipt cannot prove that a backup file exists.
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["success"] is False
+    assert payload["verification_code"] == "result_verifier_unavailable"
+    assert payload["reconciliation_required"] is True and payload["retryable"] is False
+    assert payload["data"]["path"] == "/tmp/bak"
+    mock_get.return_value.backup_database.assert_called_once()
+    run = repo.get(payload["run_id"])
+    assert run is not None and run.status == "blocked"
+    assert len(run.tool_calls) == 1 and run.steps[0].attempt_count == 1
+    assert run.tool_calls[0].output["success"] is True
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is False
+    assert not {"tool.completed", "run.completed"} & {e.event_type for e in run.events}

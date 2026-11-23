@@ -28,15 +28,18 @@ def _assert_product_run(
     run = repo.get(run_id)
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == (intent or f"products_{action}")
     assert run.tool_calls[0].tool_id == "products"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.products.{action}"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-        event.event_type for event in run.events
-    }
+    assert run.tool_calls[0].output["success"] is True
+    report = run.tool_calls[0].metadata["verification"]
+    assert report["accepted"] is False and report["code"] == "result_verifier_unavailable"
+    events = {event.event_type for event in run.events}
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
 
 
 def test_product_mutation_routes_execute_through_agent_orchestrator(
@@ -78,9 +81,15 @@ def test_product_mutation_routes_execute_through_agent_orchestrator(
         )
 
     assert batch_create.status_code == 200
-    assert update_put.status_code == 200
-    assert update_patch.status_code == 200
+    assert update_put.status_code == 400
+    assert update_patch.status_code == 400
     assert delete_product.status_code == 200
+    for response in (batch_create, update_put, update_patch, delete_product):
+        payload = response.json()
+        assert payload["success"] is False
+        assert payload["error_code"] == "result_verification_inconclusive"
+        assert payload["verification_code"] == "result_verifier_unavailable"
+        assert payload["retryable"] is False and payload["reconciliation_required"] is True
 
     svc.batch_add_products.assert_called_once_with([{"name": "5003", "unit_price": 12.5}])
     assert svc.update_product.call_args_list[0].args == (7, {"name": "5003 v2"})
@@ -163,6 +172,11 @@ def test_product_compat_mutation_routes_execute_through_agent_orchestrator(
     assert update_product.status_code == 200
     assert delete_product.status_code == 200
     assert batch_delete.status_code == 200
+    for response in (add_product, update_product, delete_product, batch_delete):
+        payload = response.json()
+        assert payload["success"] is False
+        assert payload["error_code"] == "result_verification_inconclusive"
+        assert payload["retryable"] is False and payload["reconciliation_required"] is True
     assert add_product.json()["data"]["id"] == 11
     assert batch_delete.json()["deleted"] == 2
 

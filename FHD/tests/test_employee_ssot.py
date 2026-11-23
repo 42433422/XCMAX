@@ -104,13 +104,22 @@ def test_frontend_emp_id_layer_no_overlap_with_ssot():
 
 
 # ── 消费层：API 端点派生自同一 SSOT ──────────────────────────────────────
-def test_platform_shell_employee_ssot_endpoint():
+def test_platform_shell_employee_ssot_endpoint(monkeypatch):
     """GET /api/platform-shell/employee-ssot（桌面/网页）派生自 SSOT。"""
     import asyncio
+    from types import SimpleNamespace
+
+    from fastapi import Request, Response
 
     from app.fastapi_routes.platform_shell_routes import platform_shell_employee_ssot
 
-    resp = asyncio.run(platform_shell_employee_ssot())
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda request: SimpleNamespace(id=1, tier="admin", role="admin", tenant_id=None),
+    )
+    resp = asyncio.run(
+        platform_shell_employee_ssot(Request({"type": "http", "headers": []}), Response())
+    )
     assert resp["success"] is True
     assert len(resp["data"]["admin"]["departments"]) == 6
     assert len(resp["data"]["enterprise"]["layers"]) == 4
@@ -170,11 +179,10 @@ def test_employee_contacts_installed_planned_and_super():
     )
 
 
-def test_digest_dispatch_derives_from_roster_ssot():
+def test_digest_dispatch_derives_from_roster_ssot(monkeypatch):
     """MODstore digest 产线路由派生自 roster SSOT（生成的 duty_roster），覆盖全编制。"""
     modstore_dir = REPO / "成都修茈科技有限公司" / "MODstore_deploy"
-    if str(modstore_dir) not in sys.path:
-        sys.path.insert(0, str(modstore_dir))
+    monkeypatch.syspath_prepend(str(modstore_dir))
     from modstore_server.digest_vibe_line_dispatch import build_employee_dispatch_map
 
     from app.mod_sdk.duty_roster import all_planned_duty_employee_ids

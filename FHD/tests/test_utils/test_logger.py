@@ -38,6 +38,24 @@ def _setup_shared_0():
 
 
 class TestStructuredLogFormatter:
+    def test_shared_trace_and_canonical_zero_duration(self):
+        from app.neuro_bus.tracer import TraceContext
+
+        formatter, record = _setup_shared_0()
+        record.duration_ms = 0
+        record.run_id = "run-1"
+        record.error_code = "tool_timeout"
+        record.error_type = "TimeoutError"
+        with TraceContext("a" * 32, "b" * 16, request_id="request-1"):
+            data = json.loads(formatter.format(record))
+        assert data["trace_id"] == "a" * 32
+        assert data["span_id"] == "b" * 16
+        assert data["request_id"] == "request-1"
+        assert data["duration_ms"] == 0
+        assert data["run_id"] == "run-1"
+        assert data["error_type"] == "TimeoutError"
+        assert data["error_code"] == "tool_timeout"
+
     def test_format_basic_record(self):
         formatter = StructuredLogFormatter(
             service_name="test_svc", environment="dev", version="2.0.0"

@@ -1,4 +1,6 @@
 name: AI Issue Implement
+run-name: >-
+  AI Issue Implement #${{ github.event.issue.number || inputs.issue_number }}${{ inputs.dispatch_request_id && format(' [dispatch:{0}]', inputs.dispatch_request_id) || '' }}
 
 # 决策矩阵承诺兑现：
 #   - issue 打 `ai-implement` 标签时触发
@@ -13,12 +15,17 @@ name: AI Issue Implement
 #   1. issues 事件（labeled: ai-implement）
 #   2. issue_comment 事件（owner 精确评论「确认实现」或 /approve-implementation）
 #   3. workflow_dispatch（手动）
+#   4. 原 Para worker 完成后，只读核验原公司预算与任务并恢复同一 producer
 
 on:
   issues:
     types: [labeled]
   issue_comment:
     types: [created]
+  workflow_run:
+    workflows: ["Para GitHub Worker"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -32,18 +39,26 @@ on:
         description: "修复 PR 的目标分支（自愈事件传入原失败分支）"
         required: false
         default: "main"
+      dispatch_request_id:
+        description: "Original self-heal dispatch identity for lost-response readback"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   actions: read
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: read
+  pull-requests: read
+  issues: read
 
 jobs:
-  implement:
+  resolve:
     # 标签事件只处理开放 issue；评论事件必须是开放 issue 的 owner 明确确认。
     if: |
       github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.run_attempt == 1) ||
       (github.event_name == 'issues' &&
        github.event.issue.state == 'open' &&
        github.event.label.name == 'ai-implement') ||
@@ -55,8 +70,44 @@ jobs:
        contains(github.event.issue.labels.*.name, 'ai-implement'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      issue_number: ${{ steps.identity.outputs.issue_number }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Read the original issue identity
+        id: identity
+        working-directory: FHD
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --resolve-only)
+          if [[ "$GITHUB_EVENT_NAME" == workflow_run ]]; then
+            args+=(--resume-worker-event)
+          else
+            args+=(--issue-number "$ISSUE_NUMBER")
+          fi
+          python scripts/dev/para_issue_dispatch.py "${args[@]}"
+
+  implement:
+    needs: resolve
+    if: needs.resolve.outputs.issue_number != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+      issues: write
     concurrency:
-      group: ai-issue-implement-${{ github.event.issue.number || github.event.inputs.issue_number }}
+      group: ai-issue-implement-${{ needs.resolve.outputs.issue_number }}
       cancel-in-progress: false
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -66,7 +117,10 @@ jobs:
       PR_CREATE_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -79,35 +133,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
 
-      - name: Resolve issue number
-        id: resolve
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "issue_number=${{ github.event.inputs.issue_number }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
-            echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
-          else
-            echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Validate & hand issue to Para
         working-directory: FHD
         env:
-          ISSUE_NUMBER: ${{ steps.resolve.outputs.issue_number }}
+          ISSUE_NUMBER: ${{ needs.resolve.outputs.issue_number }}
           BASE_BRANCH: ${{ github.event.inputs.target_branch || 'main' }}
           CONTROL_TASK_ID: ${{ github.event.inputs.control_task_id || '' }}
         run: |
-          python scripts/dev/para_issue_dispatch.py \
-            --issue-number "$ISSUE_NUMBER" \
-            --repo "$GITHUB_REPOSITORY" \
-            --base-branch "$BASE_BRANCH" \
-            --control-task-id "$CONTROL_TASK_ID" \
-            --tool cursor
+          args=(--repo "$GITHUB_REPOSITORY" --tool cursor)
+          if [[ "$GITHUB_EVENT_NAME" == workflow_run ]]; then
+            args+=(--resume-worker-event)
+          else
+            args+=(--issue-number "$ISSUE_NUMBER" --base-branch "$BASE_BRANCH" --control-task-id "$CONTROL_TASK_ID")
+          fi
+          python scripts/dev/para_issue_dispatch.py "${args[@]}"
 
       - name: Upload implementation log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ai-issue-implement-log-${{ steps.resolve.outputs.issue_number }}
-          path: FHD/test_reports/para_issue_dispatch_${{ steps.resolve.outputs.issue_number }}.json
+          name: ai-issue-implement-log-${{ needs.resolve.outputs.issue_number }}
+          path: FHD/test_reports/para_issue_dispatch_${{ needs.resolve.outputs.issue_number }}.json
           if-no-files-found: ignore

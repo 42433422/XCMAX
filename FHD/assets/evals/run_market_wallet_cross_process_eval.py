@@ -9,6 +9,7 @@ import tempfile
 import time
 from contextlib import ExitStack
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -121,7 +122,9 @@ def _start_market_server(env: dict[str, str], port: int) -> subprocess.Popen[str
 
 
 def _wait_for_market(base_url: str, proc: subprocess.Popen[str]) -> None:
-    deadline = time.monotonic() + 20
+    # A cold factory import already takes ~17s before the socket opens. Allow
+    # startup headroom on loaded CI workers; an early exit still fails at once.
+    deadline = time.monotonic() + 60
     last_error = ""
     while time.monotonic() < deadline:
         if proc.poll() is not None:
@@ -164,9 +167,29 @@ def _event_types(run: Any) -> list[str]:
 
 
 def run_cross_process_eval() -> dict[str, Any]:
+    """Verify real market HTTP debit/refund with a local injected tool failure.
+
+    The market server, wallet database and transactions are a separate process.
+    The business tool is deliberately a parent-process fixture; this is not a
+    tool-worker isolation test and its real host session must stay in that scope.
+    """
+    from starlette.requests import Request
+
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.run_repository import (
+        InMemoryAgentRunRepository,
+    )
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.fastapi_routes.domains.agent.route_support import (
+        authenticated_runtime_context,
+    )
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+    from evals.run_agent_eval import _authenticated_route_fixture
+
+    class WalletFailureFixtureExecutor(AgentToolExecutor):
+        def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
+            return self.execute(step, runtime_context=runtime_context)
 
     with tempfile.TemporaryDirectory(prefix="xcmax_market_wallet_cross_process_") as tmp:
         tmp_path = Path(tmp)
@@ -195,6 +218,8 @@ def run_cross_process_eval() -> dict[str, Any]:
                 ],
             )
             env_patch = {
+                "XCAGI_PRODUCT_SKU": "enterprise",
+                "XCAGI_TOOL_IDEMPOTENCY_PATH": str(tmp_path / "tool-claims.sqlite"),
                 "MODEL_USAGE_LEDGER_PATH": str(ledger_path),
                 "MODEL_USAGE_WALLET_BACKEND": "market",
                 "MODEL_USAGE_MARKET_BASE_URL": base_url,
@@ -206,17 +231,42 @@ def run_cross_process_eval() -> dict[str, Any]:
                 stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
                 stack.enter_context(
                     patch(
+                        "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
+                        WalletFailureFixtureExecutor,
+                    )
+                )
+                fixture_client = SimpleNamespace(headers={})
+                stack.enter_context(_authenticated_route_fixture(fixture_client, role_name="admin"))
+                request = Request(
+                    {
+                        "type": "http",
+                        "headers": [
+                            (
+                                b"x-session-id",
+                                fixture_client.headers["X-Session-ID"].encode(),
+                            )
+                        ],
+                    }
+                )
+                principal = require_agent_principal(request, x_user_id=None)
+                dispatch = stack.enter_context(
+                    patch(
                         "app.application.facades.tools_facade.execute_registered_workflow_tool",
-                        return_value={"success": False, "message": "temporary database error"},
+                        return_value={
+                            "success": False,
+                            "message": "temporary database error",
+                        },
                     )
                 )
                 run = AgentOrchestrator(
                     repository=InMemoryAgentRunRepository()
                 ).start_run_from_plan(
-                    user_id=str(user["user_id"]),
+                    user_id=principal.user_id,
                     message="cross process market wallet refund",
                     plan=plan,
-                    runtime_context={"source": "cross_process_market_wallet_eval"},
+                    runtime_context=authenticated_runtime_context(
+                        {"source": "cross_process_market_wallet_eval"}, principal
+                    ),
                 )
 
             headers = {"Authorization": f"Bearer {user['token']}"}
@@ -236,6 +286,7 @@ def run_cross_process_eval() -> dict[str, Any]:
             txn_types = [str(item.get("type") or "") for item in transactions]
             wallet_refund = run.tool_calls[0].metadata.get("wallet_refund", {})
             checks = {
+                "authenticated_tool_dispatched_once": dispatch.call_count == 1,
                 "run_failed_after_tool_error": run.status == "failed"
                 and run.error == "temporary database error",
                 "billing_debited_event": "billing.debited" in _event_types(run),
@@ -253,11 +304,13 @@ def run_cross_process_eval() -> dict[str, Any]:
             }
             return {
                 "suite": "market_wallet_cross_process",
+                "execution_mode": "real_market_http_with_local_tool_failure_fixture",
                 "passed": all(checks.values()),
                 "base_url": base_url,
                 "user_id": user["user_id"],
                 "run_id": run.run_id,
                 "run_status": run.status,
+                "run_error": run.error,
                 "checks": checks,
                 "events": _event_types(run),
                 "wallet_refund": wallet_refund,

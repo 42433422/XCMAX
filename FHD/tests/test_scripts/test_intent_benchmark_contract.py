@@ -4,11 +4,26 @@ from __future__ import annotations
 
 import json
 import os
+from types import SimpleNamespace
 
 import pytest
 
 from scripts.dev import intent_benchmark as runner
 from scripts.dev import intent_benchmark_llm as model
+
+
+@pytest.fixture(autouse=True)
+def classification_client(monkeypatch):
+    state = SimpleNamespace(call=None)
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=lambda **kwargs: state.call(**kwargs))
+        )
+    )
+    monkeypatch.setattr(model, "require_api_key", lambda: None)
+    monkeypatch.setattr(model, "get_llm_client", lambda: client)
+    monkeypatch.setattr(model, "resolve_chat_model", lambda: "test-provider-model")
+    return state
 
 
 def completion(intent="customers", slots=None):
@@ -51,14 +66,14 @@ def test_confusion_predictions_are_independent_of_expected_labels(monkeypatch):
     assert not any(row["correct"] for row in rows)
 
 
-def test_model_samples_call_the_gateway_independently(monkeypatch):
+def test_model_samples_call_the_gateway_independently(monkeypatch, classification_client):
     calls = []
 
     def gateway(**kwargs):
         calls.append(kwargs)
         return completion(slots={"unit_name": "客户甲"})
 
-    monkeypatch.setattr(model, "request_planner_completion", gateway)
+    monkeypatch.setattr(classification_client, "call", gateway)
     with model.observe_model_calls() as evidence:
         assert model.predict("客户甲") == model.predict("客户甲")
     assert len(calls) == evidence["attempted"] == evidence["completed"] == 2
@@ -77,8 +92,10 @@ def test_model_samples_call_the_gateway_independently(monkeypatch):
         completion(slots={}) | {"choices": [{"message": {"tool_calls": [{}]}}]},
     ],
 )
-def test_unavailable_or_malformed_model_result_is_never_completed(monkeypatch, payload):
-    monkeypatch.setattr(model, "request_planner_completion", lambda **kwargs: payload)
+def test_unavailable_or_malformed_model_result_is_never_completed(
+    monkeypatch, payload, classification_client
+):
+    monkeypatch.setattr(classification_client, "call", lambda **kwargs: payload)
     with model.observe_model_calls() as evidence, pytest.raises((ValueError, RuntimeError)):
         model.predict("查询客户")
     assert evidence["attempted"] == 1
@@ -111,8 +128,10 @@ def one_case(monkeypatch, tmp_path):
 @pytest.mark.parametrize(
     "flags", [["--holdout", "--check"], ["--holdout", "--record"], ["--check"]]
 )
-def test_incomplete_model_cannot_be_hidden_by_ratchet_or_record(monkeypatch, one_case, flags):
-    monkeypatch.setattr(model, "request_planner_completion", lambda **kwargs: None)
+def test_incomplete_model_cannot_be_hidden_by_ratchet_or_record(
+    monkeypatch, one_case, flags, classification_client
+):
+    monkeypatch.setattr(classification_client, "call", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_check_holdout_ratchet", lambda result: 0)
     monkeypatch.setattr(runner, "_check_ratchet", lambda result: 0)
     assert runner.main([*flags, "--llm", "--output", str(one_case)]) == 2
@@ -121,9 +140,11 @@ def test_incomplete_model_cannot_be_hidden_by_ratchet_or_record(monkeypatch, one
     assert report["llm"]["measurement_status"] == "unavailable_or_partial"
 
 
-def test_holdout_threshold_applies_to_every_model_repetition(monkeypatch, one_case):
+def test_holdout_threshold_applies_to_every_model_repetition(
+    monkeypatch, one_case, classification_client
+):
     answers = iter([completion("customers"), completion("products")])
-    monkeypatch.setattr(model, "request_planner_completion", lambda **kwargs: next(answers))
+    monkeypatch.setattr(classification_client, "call", lambda **kwargs: next(answers))
     assert (
         runner.main(
             [

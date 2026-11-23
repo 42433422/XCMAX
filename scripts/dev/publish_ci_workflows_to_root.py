@@ -50,7 +50,6 @@ WORKFLOW_RENAMES = {
     "release-android.yml": "fhd-release-android.yml",
     "release-orchestrator.yml": "fhd-release-orchestrator.yml",
     "performance-smoke.yml": "fhd-performance-smoke.yml",
-    "neuro_migration_check.yml": "fhd-neuro-migration-check.yml",
     "modstore-tests.yml": "fhd-modstore-tests.yml",
     "intent-benchmark.yml": "fhd-intent-benchmark.yml",
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
@@ -64,6 +63,10 @@ FHD_NO_DEFAULTS = {
     # This release scan intentionally covers the monorepo and already uses
     # explicit FHD/ paths where component-local access is required.
     "security-full-scan.yml",
+    # These two address files through repo-root-relative paths (FHD/VERSION.md,
+    # gh api, git).  Injecting FHD/ as the working directory would break them.
+    "pr-hygiene.yml",
+    "version-ssot-sync.yml",
 }
 MOD_NO_DEFAULTS = {"prod-deploy-receipt.yml", "prod-deploy.yml"}
 
@@ -94,12 +97,17 @@ def _insert_defaults(content: str, defaults: str) -> str:
     return content[: m.start()] + "\n\n" + defaults + "\n" + content[m.start() :]
 
 
-def _prefix_fhd_paths(content: str, out_name: str) -> str:
-    source_workflow = out_name.removeprefix("fhd-")
-    content = content.replace(
-        f".github/workflows/{source_workflow}",
-        f".github/workflows/{out_name}",
+def _rewrite_root_workflow(content: str, source_name: str, out_name: str) -> str:
+    # A component source path is a separate trigger input. Replacing a substring
+    # inside FHD/.github/... or MODstore_deploy/.github/... makes it nonexistent.
+    return re.sub(
+        rf"(?<![\w./-])\.github/workflows/{re.escape(source_name)}(?![\w./-])",
+        lambda _: f".github/workflows/{out_name}",
+        content,
     )
+
+
+def _prefix_fhd_paths(content: str, out_name: str) -> str:
     for wf in (
         "release-desktop.yml",
         "release-web.yml",
@@ -196,7 +204,7 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
     return content
 
 
-def _prefix_mod_paths(content: str, out_name: str) -> str:
+def _prefix_mod_paths(content: str) -> str:
     mod_root = "成都修茈科技有限公司/MODstore_deploy"
 
     def repl_path(m: re.Match[str]) -> str:
@@ -209,10 +217,6 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
         return f'{indent}- "{mod_root}/{raw}"'
 
     content = re.sub(r'(?m)^([ \t]*)-\s+"([^"]+)"', repl_path, content)
-    content = content.replace(
-        ".github/workflows/ci-backend-python.yml",
-        f".github/workflows/{out_name}",
-    )
     # GitHub resolves action inputs and job-level working directories from the
     # repository root, not from workflow-level defaults.run.working-directory.
     content = content.replace(
@@ -234,10 +238,6 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
     content = content.replace(
         "path: market/playwright-report/",
         f"path: {mod_root}/market/playwright-report/",
-    )
-    content = content.replace(
-        ".github/workflows/market-e2e.yml",
-        f".github/workflows/{out_name}",
     )
     content = content.replace(
         "working-directory: market",
@@ -271,6 +271,7 @@ def _render_fhd(src: Path) -> tuple[str, str] | None:
     out_name = WORKFLOW_RENAMES.get(src.name, f"fhd-{src.name}")
     if src.name not in FHD_NO_DEFAULTS:
         body = _insert_defaults(body, DEFAULTS_FHD)
+    body = _rewrite_root_workflow(body, src.name, out_name)
     body = _prefix_fhd_paths(body, out_name)
     header = (
         f"# CI SSOT: generated from FHD/.github/workflows/{src.name} — DO NOT edit here.\n"
@@ -287,7 +288,8 @@ def _render_mod(src: Path) -> tuple[str, str] | None:
     out_name = MOD_RENAMES.get(src.name, f"modstore-{src.name}")
     if src.name not in MOD_NO_DEFAULTS:
         body = _insert_defaults(body, DEFAULTS_MOD)
-    body = _prefix_mod_paths(body, out_name)
+    body = _rewrite_root_workflow(body, src.name, out_name)
+    body = _prefix_mod_paths(body)
     header = (
         f"# CI SSOT: generated from MODstore_deploy/.github/workflows/{src.name} "
         "— DO NOT edit here.\n"

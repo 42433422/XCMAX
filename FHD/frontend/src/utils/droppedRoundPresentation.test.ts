@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { droppedRoundFromHistory, droppedRoundPresentation } from './droppedRoundPresentation'
 
 describe('droppedRoundPresentation', () => {
+  it('accepts an exact durable text turn and rejects an unproven missing run', () => {
+    const turn_receipt = { turn_id: 'turn-text', status: 'completed', message: '持久文本回复' }
+    expect(droppedRoundFromHistory({ turn_receipt }, 'turn-text').status).toBe('unknown')
+    expect(droppedRoundFromHistory({ turn_receipt: { ...turn_receipt, receipt_kind: 'turn', durable: true } }, 'turn-text'))
+      .toMatchObject({ status: 'completed', text: '持久文本回复' })
+  })
   it('uses the original task receipt before a saved queued acknowledgement', () => {
     const conversation = { success: true, turn_receipt: {
       turn_id: 'turn-1', run_id: 'run-1', status: 'failed', message: '原导入任务未完成。',
@@ -10,6 +16,11 @@ describe('droppedRoundPresentation', () => {
     } }] }
     expect(droppedRoundFromHistory(conversation, 'turn-1')).toMatchObject({ status: 'failed' })
     expect(droppedRoundFromHistory(conversation, 'turn-2').status).toBe('unknown')
+  })
+  it('does not turn a contradictory persisted completion into success', () => {
+    expect(droppedRoundFromHistory({ turn_receipt: {
+      turn_id: 'turn-1', run_id: 'run-1', status: 'completed', message: '成功', requires_reconciliation: true,
+    } }, 'turn-1').status).toBe('unknown')
   })
   it('shows a completed server reply and nothing else as success', () => {
     expect(droppedRoundPresentation({ reachable: true, serverStatus: 'completed', serverText: '已经写入。' })).toMatchObject({

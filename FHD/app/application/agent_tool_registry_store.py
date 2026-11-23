@@ -36,7 +36,7 @@ _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _LOCK = threading.Lock()
 
 
-_SCHEMA_READY = False
+_SCHEMA_READY: tuple[str, int, int] | None = None
 
 
 _DB_OVERRIDE: str | None = None
@@ -134,7 +134,7 @@ def reset_for_tests(path: str | None = None) -> None:
     global _SCHEMA_READY, _DB_OVERRIDE, _GENERATION
     with _LOCK:
         _DB_OVERRIDE = path
-        _SCHEMA_READY = False
+        _SCHEMA_READY = None
         _GENERATION += 1
         _CACHE.clear()
 
@@ -158,16 +158,17 @@ def _now() -> tuple[str, str]:
 
 def _connect() -> sqlite3.Connection:
     global _SCHEMA_READY
-    path = db_path()
+    path = db_path().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=30, isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=5000")
     with _LOCK:
-        if not _SCHEMA_READY:
+        identity = (str(path), path.stat().st_dev, path.stat().st_ino)
+        if identity != _SCHEMA_READY:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_DDL)
-            _SCHEMA_READY = True
+            _SCHEMA_READY = identity
     return conn
 
 
@@ -179,7 +180,14 @@ def _bump() -> None:
 
 
 def _cached(key: tuple[Any, ...], builder: Callable[[], T]) -> T:
-    full = (_GENERATION, key)
+    path = db_path().resolve()
+    identity: tuple[str, int | None, int | None]
+    try:
+        stat = path.stat()
+        identity = (str(path), stat.st_dev, stat.st_ino)
+    except FileNotFoundError:
+        identity = (str(path), None, None)
+    full = (_GENERATION, identity, key)
     with _LOCK:
         hit = _CACHE.get(full)
     if hit is not None:

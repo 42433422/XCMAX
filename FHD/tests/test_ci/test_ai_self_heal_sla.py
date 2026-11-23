@@ -31,6 +31,7 @@ def _shared_setup_case_0(case_value_1, case_value_2):
     resp.json.return_value = {
         "workflow_runs": [
             {
+                "id": 1,
                 "name": case_value_1,
                 "head_sha": "d" * 40,
                 "event": "pull_request",
@@ -40,6 +41,7 @@ def _shared_setup_case_0(case_value_1, case_value_2):
                 "created_at": "2026-07-20T09:00:00Z",
             },
             {
+                "id": 2,
                 "name": "AI Review",
                 "head_sha": "d" * 40,
                 "event": "pull_request",
@@ -716,6 +718,7 @@ class TestGetWorkflowRunConclusion:
         resp.json.return_value = {
             "workflow_runs": [
                 {
+                    "id": 1,
                     "name": "AI Review",
                     "head_sha": "d" * 40,
                     "event": "pull_request",
@@ -741,6 +744,7 @@ class TestGetWorkflowRunConclusion:
         resp.json.return_value = {
             "workflow_runs": [
                 {
+                    "id": 1,
                     "name": "AI Review",
                     "head_sha": "d" * 40,
                     "event": "pull_request",

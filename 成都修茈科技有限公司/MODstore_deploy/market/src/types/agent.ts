@@ -66,6 +66,8 @@ export interface AgentMessage {
   actionPreview?: ActionPreviewPayload
   timestamp: number
   isLoading?: boolean
+  /** 失败或停止接收的提示不能当作模型的历史答复。 */
+  isError?: boolean
 }
 
 // ─── 技能 ─────────────────────────────────────────────────────────────
@@ -136,6 +138,8 @@ export interface LLMToolCall {
 
 export interface LLMResponse {
   text: string
+  success?: boolean
+  message?: string
   tool_calls?: LLMToolCall[]
   conversation_id?: number
   charge_amount?: number

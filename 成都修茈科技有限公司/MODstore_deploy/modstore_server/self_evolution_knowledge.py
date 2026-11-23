@@ -11,6 +11,7 @@ from __future__ import annotations
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import json
+import hashlib
 import os
 import re
 import sys
@@ -104,6 +105,40 @@ def _json_default(value: Any) -> str:
 def _write_kb_doc(kind: str, prefix: str, payload: Dict[str, Any]) -> Path:
     validate_kb_payload(kind, payload)
     directory = _kb_dir(kind)
+    projection_id = (payload.get("metadata") or {}).get("outcome_projection_id")
+    if projection_id:
+        if not re.fullmatch(r"[0-9a-f]{64}", str(projection_id)):
+            raise ValueError("invalid outcome projection identity")
+        from filelock import FileLock
+
+        # One original outcome produces one fix and one pattern. The loop's
+        # durable identity survives a crash after either file was committed.
+        identity = hashlib.sha256(f"{kind}:{projection_id}".encode()).hexdigest()
+        path = directory / f"{prefix}-loop-{identity}.json"
+        with FileLock(str(path) + ".lock", timeout=10):
+            if path.exists():
+                original = json.loads(path.read_text(encoding="utf-8"))
+                if {key: value for key, value in original.items() if key != "created_at"} != {
+                    key: value for key, value in payload.items() if key != "created_at"
+                }:
+                    raise ValueError("original outcome knowledge conflict")
+                return path
+            temporary = path.with_suffix(".tmp")
+            with temporary.open("w", encoding="utf-8") as fh:
+                json.dump(
+                    payload, fh, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default
+                )
+                fh.write("\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            temporary.replace(path)
+            if hasattr(os, "O_DIRECTORY"):
+                directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+        return path
     stamp = _utc_now().strftime("%Y%m%dT%H%M%SZ")
     slug_source = (
         payload.get("symptom")

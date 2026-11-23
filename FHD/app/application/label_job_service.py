@@ -17,6 +17,7 @@ from sqlalchemy import text
 
 from app.db.session import get_db
 from app.domain.shared_services.document_templates.crud import _build_template_payload_from_row
+from app.domain.task_lifecycle.results import execution_result_requires_reconciliation
 from app.infrastructure.printing.label_dispatch_guard import (
     authorized_label_dispatch,
     label_job_lock,
@@ -287,9 +288,10 @@ class LabelJobService:
                 result = dispatch(
                     {"file_path": str(path), "printer_name": job["printer"], "copies": 1}
                 )
-            if result.get("submission_state") == "submitted":
+            unresolved = execution_result_requires_reconciliation(result)
+            if result.get("submission_state") == "submitted" and not unresolved:
                 job.update(status="submitted", message="已提交打印队列；物理出纸仍需现场核对")
-            elif result.get("submission_state") == "rejected":
+            elif result.get("submission_state") == "rejected" and not unresolved:
                 job.update(
                     status="failed", message=result.get("message") or "打印服务拒绝任务，可重新确认"
                 )

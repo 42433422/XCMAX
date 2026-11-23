@@ -7,17 +7,18 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 @pytest.mark.parametrize("revision", [0, 7])
 def test_tool_runtime_preserves_authenticated_conversation_revision(trusted_actor, revision):
-    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.agent_runtime.gateway import _trusted_context
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 
     actor = trusted_actor()
     context = {
         **actor.context,
         "conversation_id": "original-chat",
         "_conversation_revision": revision,
+        "turn_id": "host-original-turn",
     }
-    runtime = AIChatApplicationService._merge_tool_runtime_context(
-        str(actor.user_id), "continue", context
-    )
+    runtime, owner = _trusted_context(context)
+    assert owner == str(actor.user_id)
     assert type(runtime["_conversation_revision"]) is int
     assert runtime["_conversation_revision"] == revision
     assert runtime["_actor_authorization"] == context["_actor_authorization"]
@@ -25,24 +26,24 @@ def test_tool_runtime_preserves_authenticated_conversation_revision(trusted_acto
 
 
 def test_unbound_tool_context_cannot_supply_conversation_revision():
-    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.agent_runtime.gateway import _trusted_context
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 
-    runtime = AIChatApplicationService._merge_tool_runtime_context(
-        "1", "continue", {"conversation_id": "claimed-chat", "_conversation_revision": 7}
-    )
-    assert "_conversation_revision" not in runtime
+    with pytest.raises(AgentModAuthorizationError):
+        _trusted_context({"conversation_id": "claimed-chat", "_conversation_revision": 7})
 
 
 def test_revoked_actor_cannot_forward_conversation_revision(trusted_actor):
-    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.agent_runtime.gateway import _trusted_context
     from app.db.models.user import User
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 
     actor = trusted_actor()
     with actor.factory.begin() as db:
         db.get(User, actor.user_id).is_active = False
-    with pytest.raises(ValueError, match="原登录身份已失效"):
-        AIChatApplicationService._merge_tool_runtime_context(
-            str(actor.user_id), "continue", {**actor.context, "_conversation_revision": 0}
+    with pytest.raises(AgentModAuthorizationError):
+        _trusted_context(
+            {**actor.context, "_conversation_revision": 0, "turn_id": "host-original-turn"}
         )
 
 
@@ -133,7 +134,8 @@ def test_internal_retry_cannot_replay_unreconciled_work(monkeypatch, metadata):
     before = repository.get(run.run_id).to_dict()
     orchestrator = AgentOrchestrator(repository=repository)
     start = Mock(return_value=AgentRun(user_id="owner", message="duplicate", status="running"))
-    monkeypatch.setattr(orchestrator, "start_run", start)
+    assert not hasattr(orchestrator, "start_run")
+    monkeypatch.setattr(orchestrator, "start_run_from_plan", start)
     with pytest.raises(ValueError, match="核对"):
         orchestrator.retry_run(run.run_id, requested_by="owner", auto_execute=False)
     start.assert_not_called()

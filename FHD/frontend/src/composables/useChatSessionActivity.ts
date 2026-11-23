@@ -2,6 +2,9 @@ import type { ChatStatus } from 'ai'
 import { computed, reactive, type Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import type { ChatPlannerPayload } from '@/types/chat'
+import type { UiChatMessageExtras } from '@/types/chat-ui'
+import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
+import { isRuntimeWaiting, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
 
 export type ChatConversationStatus = ChatStatus | 'waiting' | 'review' | 'stopped'
 
@@ -79,11 +82,19 @@ export function useChatSessionActivity(activeSessionId: Ref<string>, getIdentity
 export async function persistDetachedPlannerResult(
   data: ChatPlannerPayload,
   sessionId: string,
-  save: (role: 'ai', content: string, sessionId: string) => Promise<void>,
+  save: (role: 'ai', content: string, sessionId: string, extras?: UiChatMessageExtras) => Promise<void>,
 ): Promise<void> {
   const parts = data.batch && Array.isArray(data.results) ? data.results.map((item) => item as ChatPlannerPayload) : [data]
   for (const part of parts) {
-    await save('ai', part.success ? String(part.response || '') : `处理失败: ${part.message || '未知错误'}`, sessionId)
+    const text = part.success || isRuntimeWaiting(part) ? String(part.response || part.message || '') : `处理失败: ${part.message || '未知错误'}`
+    const continuation = runtimeContinuationFromPayload(part)
+    const approvalCard = continuation ? parseApprovalCardFromPayload(part) : null
+    const extras: UiChatMessageExtras = {
+      ...(continuation?.sessionId === sessionId ? { runtimeContinuation: continuation, workflowAction: runtimeExecutionState(part) } : {}),
+      ...(approvalCard ? { approvalCard } : {}),
+    }
+    if (Object.keys(extras).length) await save('ai', text, sessionId, extras)
+    else await save('ai', text, sessionId)
   }
 }
 

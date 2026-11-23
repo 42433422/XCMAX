@@ -4,12 +4,21 @@ import importlib.util
 import json
 import os
 import runpy
+from importlib.metadata import version
+import sys
 from pathlib import Path
 
 import setuptools
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+from codex_cli_bin import bundled_codex_path
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_dynamic_libs,
+    collect_submodules,
+    copy_metadata,
+)
 
 ROOT = Path.cwd().resolve()
+BUNDLE_COMPUTER_USE = os.environ.get("XCAGI_BUNDLE_COMPUTER_USE") == "1"
 
 
 def add_data(relative_path: str):
@@ -111,6 +120,20 @@ except Exception:
     pass
 
 hiddenimports = []
+# The standard executor must survive freezing with the upstream package layout.
+# bundled_codex_path() requires codex-package.json beside bin/codex[.exe]; keep
+# its helpers/resources too, and fail the build for missing or mismatched wheels.
+bundled_codex_path()
+for module, distribution in (
+    ("openai_codex", "openai-codex"),
+    ("codex_cli_bin", "openai-codex-cli-bin"),
+):
+    if version(distribution) != "0.171.0":
+        raise RuntimeError(f"Required Codex runtime version mismatch: {distribution}")
+    hiddenimports.extend(collect_submodules(module, on_error="raise"))
+    datas.extend(collect_data_files(module, include_py_files=False))
+    datas.extend(copy_metadata(distribution))
+
 for module in [
     "appdirs",
     "app.desktop_runtime",
@@ -275,6 +298,26 @@ if importlib.util.find_spec("apprise") is not None:
     hiddenimports.extend(collect_submodules("apprise", on_error="raise"))
     datas.extend(collect_data_files("apprise", include_py_files=False))
 
+# Optional Computer Use build: collect upstream drivers without opening a GUI
+# while analyzing. Browser executables are provisioned by the operator separately.
+if BUNDLE_COMPUTER_USE:
+    computer_modules = [
+        "playwright", "pyautogui", "pyperclip", "pyscreeze", "pytweening",
+        "pygetwindow", "pymsgbox", "mouseinfo", "pyrect", "PIL.ImageGrab",
+    ]
+    for module in computer_modules:
+        if importlib.util.find_spec(module) is None:
+            raise ModuleNotFoundError(f"Computer Use build dependency missing: {module}")
+    hiddenimports.extend(computer_modules)
+    hiddenimports.extend(collect_submodules("playwright", on_error="raise"))
+    # Same collection used by Playwright's official PyInstaller hook: includes
+    # the Node driver and JS protocol package, not a downloaded Chromium profile.
+    datas.extend(collect_data_files("playwright", include_py_files=False))
+    hiddenimports.extend({
+        "win32": ["pyautogui._pyautogui_win", "pygetwindow._pygetwindow_win", "pymsgbox._native_win"],
+        "darwin": ["pyautogui._pyautogui_osx", "pygetwindow._pygetwindow_macos", "Quartz", "AppKit", "rubicon.objc"],
+    }.get(sys.platform, ["pyautogui._pyautogui_x11", "Xlib"]))
+
 # de-dupe while preserving order
 _seen = set()
 _deduped = []
@@ -333,6 +376,8 @@ desktop_excludes = [
     "transformers",
     "yapf",
 ]
+if BUNDLE_COMPUTER_USE:
+    desktop_excludes.remove("playwright")
 
 a = Analysis(
     [str(ROOT / "XCAGI" / "run_fastapi.py")],

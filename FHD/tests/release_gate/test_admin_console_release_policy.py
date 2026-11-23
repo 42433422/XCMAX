@@ -87,7 +87,7 @@ def test_fhd_release_chain_carries_and_verifies_admin_identity() -> None:
 
     parsed = yaml.safe_load(workflow)
     jobs = parsed["jobs"]
-    assert set(jobs["pack-verify"]["needs"]) == {"guard-temp-scripts", "classify"}
+    assert set(jobs["pack-verify"]["needs"]) == {"guard-temp-scripts"}
     for gate in ("backend-test", "frontend-test"):
         assert "ssot-drift-gate" in jobs[gate]["needs"]
     assert "pack-verify" in jobs["container-scan"]["needs"]
@@ -95,11 +95,14 @@ def test_fhd_release_chain_carries_and_verifies_admin_identity() -> None:
         "backend-test",
         "frontend-test",
         "frontend-e2e",
+        "browser-agent-integration",
         "security-scan",
         "container-scan",
         "pack-verify",
         "arch-fitness",
     }
+    for gate in ("docker-build-fhd-api-pr", "release-verify"):
+        assert "browser-agent-integration" in jobs[gate]["needs"]
     scan_rendered = str(jobs["container-scan"])
     assert "ops/docker/Dockerfile.fhd-api" in scan_rendered
     assert "Restore CI-built admin console into scan context" in scan_rendered

@@ -16,6 +16,23 @@ def _client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+def _assert_publication_not_business_completion(run, payload) -> None:
+    # emit=True is a publication receipt, not OCR/printer/ERP readback.
+    assert payload["agent_status"] == run.status == "blocked"
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["verification_code"] == "result_verifier_unavailable"
+    assert payload["outcome"] == "unknown"
+    assert payload["reconciliation_required"] is True
+    assert payload["retryable"] is False
+    assert len(run.tool_calls) == 1 and run.tool_calls[0].output["success"] is True
+    receipt = run.tool_calls[0].metadata["verification"]
+    assert receipt["status"] == "inconclusive" and receipt["accepted"] is False
+    assert receipt["code"] == "result_verifier_unavailable"
+    assert run.final_output.get("business_result", {}).get("success") is not True
+    events = {event.event_type for event in run.events}
+    assert "verification.inconclusive" in events and "tool.completed" not in events
+
+
 def test_business_ocr_route_publishes_event_through_agent_orchestrator(
     tmp_path, monkeypatch, local_tools
 ) -> None:
@@ -46,7 +63,7 @@ def test_business_ocr_route_publishes_event_through_agent_orchestrator(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["request_id"] == "ocr-req-1"
     assert payload["event"] == "ocr.requested"
     assert payload["published"] is True
@@ -61,7 +78,7 @@ def test_business_ocr_route_publishes_event_through_agent_orchestrator(
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    _assert_publication_not_business_completion(run, payload)
     assert run.intent == "business_ocr_request"
     assert run.tool_calls[0].tool_id == "ocr"
     assert run.tool_calls[0].action == "request"
@@ -100,7 +117,7 @@ def test_business_print_label_route_runs_through_agent_orchestrator(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["job_id"] == "print-job-1"
     assert payload["event"] == "print.job.submitted"
     assert payload["agent_run_id"] == payload["run_id"]
@@ -114,16 +131,14 @@ def test_business_print_label_route_runs_through_agent_orchestrator(
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    _assert_publication_not_business_completion(run, payload)
     assert run.intent == "business_event_print_label"
     assert run.steps[0].risk == "high"
     assert run.tool_calls[0].tool_id == "business_event"
     assert run.tool_calls[0].action == "print_label"
     assert run.tool_calls[0].permission == "tool.business_event.print_label"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed"} <= {
-        event.event_type for event in run.events
-    }
+    assert {"step.waiting_user", "step.approved"} <= {event.event_type for event in run.events}
 
 
 def test_business_inventory_update_route_runs_through_agent_orchestrator(
@@ -161,7 +176,7 @@ def test_business_inventory_update_route_runs_through_agent_orchestrator(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["event"] == "inventory.changed"
     inventory_domain.emit_stock_changed.assert_called_once_with(
         product_id="sku-1",
@@ -173,6 +188,7 @@ def test_business_inventory_update_route_runs_through_agent_orchestrator(
 
     run = repo.get(payload["run_id"])
     assert run is not None
+    _assert_publication_not_business_completion(run, payload)
     assert run.intent == "business_event_inventory_update"
     assert run.steps[0].risk == "high"
     assert run.tool_calls[0].tool_id == "business_event"
@@ -212,7 +228,7 @@ def test_business_shipment_create_route_runs_through_agent_orchestrator(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
     assert payload["event"] == "shipment.created"
     assert payload["published"] is True
     publish.assert_called_once_with(
@@ -228,6 +244,7 @@ def test_business_shipment_create_route_runs_through_agent_orchestrator(
 
     run = repo.get(payload["run_id"])
     assert run is not None
+    _assert_publication_not_business_completion(run, payload)
     assert run.intent == "business_event_shipment_create"
     assert run.steps[0].risk == "high"
     assert run.tool_calls[0].tool_id == "business_event"

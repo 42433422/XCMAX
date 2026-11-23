@@ -652,12 +652,17 @@ class TestCreateRemediationIssue:
         )
 
         assert ok is True
+        intent_body = client.post.call_args_list[0].kwargs["json"]["body"]
+        request_id = next(heal.recovery._identities(intent_body, heal.recovery.DISPATCH_MARKER))[
+            "dispatch_request_id"
+        ]
         assert client.post.call_args.kwargs["json"] == {
             "ref": "main",
             "return_run_details": True,
             "inputs": {
                 "issue_number": "505",
                 "target_branch": "feature/failing-ci",
+                "dispatch_request_id": request_id,
             },
         }
         assert '"dispatch_run_id": 404' in client.patch.call_args.kwargs["json"]["body"]

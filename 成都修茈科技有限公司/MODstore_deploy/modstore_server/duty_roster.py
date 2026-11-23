@@ -110,7 +110,7 @@ YUANGON_AREAS: Dict[str, Dict[str, object]] = {
 # 六线部门（与 FHD config/duty_roster.json departments 块一致）
 SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
     "ops_acquisition": {
-        "label": "O-A 获客部",
+        "label": "市场营销部",
         "five_line_id": "ops_acquisition",
         "subzones": {
             "public-acquisition": {
@@ -148,7 +148,7 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
         },
     },
     "ops_partner": {
-        "label": "O-B 伙伴部",
+        "label": "商务合作部",
         "five_line_id": "ops_partner",
         "subzones": {
             "partner-onboard": {
@@ -184,7 +184,7 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
         },
     },
     "prod_web": {
-        "label": "P-W 网站部",
+        "label": "数字平台部",
         "five_line_id": "prod_web",
         "subzones": {
             "static-site": {
@@ -236,7 +236,7 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
         },
     },
     "prod_mod": {
-        "label": "P-M Mod 部",
+        "label": "智能应用研发部",
         "five_line_id": "prod_mod",
         "subzones": {
             "craft-pipeline": {
@@ -284,7 +284,7 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
         },
     },
     "prod_software": {
-        "label": "P-S 软件部",
+        "label": "软件研发部",
         "five_line_id": "prod_software",
         "subzones": {
             "core-coding": {
@@ -337,7 +337,7 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
         },
     },
     "shared_retention": {
-        "label": "S-R 归档部",
+        "label": "安全治理部",
         "five_line_id": "shared_retention",
         "subzones": {
             "ttl-janitor": {

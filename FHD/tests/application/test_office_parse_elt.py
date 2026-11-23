@@ -306,15 +306,24 @@ def test_office_tool_submits_for_authenticated_owner(monkeypatch):
     assert submitted["tenant_id"] == 1 and submitted["owner_user_id"] == 2
 
 
-@pytest.mark.parametrize("launch_failure", [False, True])
+@pytest.mark.parametrize("decision", ["approve", "lost_receipt", "reject"])
 def test_office_tool_runs_through_agent_after_confirmation(
-    trusted_actor, monkeypatch, tmp_path, launch_failure
+    trusted_actor, monkeypatch, tmp_path, decision
 ):
+    from copy import deepcopy
+
     from sqlalchemy import text
 
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.business_harness import (
+        BUSINESS_HARNESS_PROTOCOL,
+        ensure_terminal_business_result,
+    )
+    from app.application.agent_orchestrator.result_verification import verify_step_result
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.application.elt.auto_ingest_service import AutoIngestService
+    from app.application.elt.docking_approval import verify_office_stage_submission
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.infrastructure.tenant_scope import tenant_scope
 
@@ -344,12 +353,20 @@ def test_office_tool_runs_through_agent_after_confirmation(
         ],
     )
     context = {**actor.context, "message": message}
+    monkeypatch.setattr(
+        AutoIngestService,
+        "_launch_worker",
+        lambda *args: pytest.fail("business ingestion must wait for docking approval"),
+    )
     with tenant_scope(actor.tenant_id):
-        orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+        repository = InMemoryAgentRunRepository()
+        orchestrator = AgentOrchestrator(repository=repository)
         waiting = orchestrator.start_run_from_plan(
             user_id=str(actor.user_id), message=message, plan=plan, runtime_context=context
         )
         assert waiting.status == "waiting_user" and not waiting.tool_calls
+        with actor.factory() as db:
+            assert db.execute(text("SELECT COUNT(*) FROM approval_requests")).scalar_one() == 0
         completed = orchestrator.continue_run(
             waiting.run_id, approved_by=str(actor.user_id), approved_step_id="stage"
         )
@@ -358,6 +375,72 @@ def test_office_tool_runs_through_agent_after_confirmation(
         [(step.status, step.error, step.output) for step in completed.steps] if completed else None,
     )
     assert "已提交审批" in str(completed.steps[0].output)
+    call = completed.tool_calls[0]
+    verified = call.metadata["verification"]
+    assert verified["status"] == "verified" and verified["accepted"] is True
+    evidence = verified["checks"][0]["evidence"]
+    assert evidence["submission_verified"] is True
+    assert evidence["business_execution_verified"] is False
+    business = completed.final_output["business_result"]
+    assert business["success"] is False and business["status"] == "pending_approval"
+    assert business["pending_approval"] is True
+    assert business["evidence"]["approval_request_ids"] == [evidence["approval_request_id"]]
+    assert completed.steps[0].output["data"] == {
+        "approval_request_id": evidence["approval_request_id"],
+        "batch_id": evidence["batch_id"],
+        "status": "awaiting_approval",
+    }
+    read_context = {
+        **context,
+        "run_id": completed.run_id,
+        "step_id": completed.steps[0].step_id,
+        "idempotency_key": call.metadata["idempotency_key"],
+    }
+    # A plausible executor reply cannot substitute another approval, batch or
+    # execution identity, even when the tool itself claims success.
+    for field, value in (
+        ("approval_request_id", "0" * 32),
+        ("batch_id", "aib-" + "0" * 16),
+        ("status", "applied"),
+    ):
+        forged = deepcopy(call.output)
+        forged["data"][field] = value
+        assert (
+            verify_office_stage_submission(completed, forged, read_context)["status"] != "verified"
+        ), field
+    for field in ("user_id", "tenant_id", "run_id", "step_id", "idempotency_key"):
+        foreign = {**read_context, field: str(read_context[field]) + "1"}
+        assert (
+            verify_office_stage_submission(completed, call.output, foreign)["status"] != "verified"
+        ), field
+    assert (
+        verify_office_stage_submission(completed, call.output, read_context)["status"] == "verified"
+    )
+    restored = repository.get(completed.run_id)
+    assert restored is not None
+    raw_receipt = deepcopy(restored.tool_calls[0].output)
+    with monkeypatch.context() as observing:
+        observing.setattr(
+            "app.application.elt.docking_approval.submit_docking_write",
+            lambda **kwargs: pytest.fail("receipt recovery must not create another approval"),
+        )
+        assert (
+            verify_step_result(
+                run=restored,
+                step=restored.steps[0],
+                call=restored.tool_calls[0],
+                context=read_context,
+            )["accepted"]
+            is True
+        )
+        restored.final_output["business_result"] = {
+            "protocol": BUSINESS_HARNESS_PROTOCOL,
+            "status": "completed",
+            "success": True,
+        }
+        recovered = ensure_terminal_business_result(restored)
+        assert recovered["status"] == "pending_approval" and recovered["success"] is False
+        assert restored.tool_calls[0].output == raw_receipt
     with actor.factory() as db:
         requests = db.execute(
             text("SELECT id, applicant_id, tenant_id, status FROM approval_requests")
@@ -365,14 +448,37 @@ def test_office_tool_runs_through_agent_after_confirmation(
         assert len(requests) == 1
         request_id, applicant_id, tenant_id, status = requests[0]
         assert (applicant_id, tenant_id, status) == (actor.user_id, actor.tenant_id, "pending")
-    from app.application.approval_workspace_app_service import approve_request
-    from app.application.elt.auto_ingest_service import AutoIngestService
+    from app.application.approval_workspace_app_service import approve_request, reject_request
+
+    if decision == "reject":
+        with tenant_scope(actor.tenant_id):
+            rejected = reject_request(
+                request_id, actor.request, body={"reason": "Do not import"}, x_user_id=None
+            )
+            forbidden = approve_request(request_id, actor.request, body={}, x_user_id=None)
+        assert rejected["success"] is True
+        assert forbidden.status_code == 400
+        assert (
+            verify_office_stage_submission(completed, call.output, read_context)["status"]
+            != "verified"
+        )
+        with actor.factory() as db:
+            assert (
+                db.execute(text("SELECT status FROM approval_requests")).scalar_one() == "rejected"
+            )
+        assert (
+            AutoIngestService().get_batch(tenant_id=actor.tenant_id, batch_id=evidence["batch_id"])[
+                "status"
+            ]
+            == "rejected"
+        )
+        return
 
     launched = []
 
     def launch(self, batch):
         launched.append(batch)
-        if launch_failure:
+        if decision == "lost_receipt":
             raise RuntimeError("synthetic lost launch receipt")
 
     monkeypatch.setattr(AutoIngestService, "_launch_worker", launch)
@@ -383,7 +489,7 @@ def test_office_tool_runs_through_agent_after_confirmation(
 
         receipt = json.loads(receipt.body)
     assert receipt["success"] is False, receipt
-    if launch_failure:
+    if decision == "lost_receipt":
         assert receipt["data"]["workflow_execution"]["code"] == "outcome_unknown"
     else:
         assert receipt["accepted"] is True
@@ -401,6 +507,9 @@ def test_office_tool_runs_through_agent_after_confirmation(
         repeated = approve_request(request_id, actor.request, body={}, x_user_id=None)
     assert repeated.status_code == 400
     assert len(launched) == 1
+    assert (
+        verify_office_stage_submission(completed, call.output, read_context)["status"] != "verified"
+    )
 
 
 def test_chat_save_picks_named_sheet_like_a_capsule(monkeypatch):

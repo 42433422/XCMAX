@@ -4,8 +4,9 @@
 // 首次调用触发 API 请求, 后续共享同一响应 (模块级单例 cache)
 // 宿主编制属于平台内部数据：接口只对平台管理员返回内容，未返回时一律视为空，
 // 客户端不再内置宿主编制常量（避免企业构建把宿主部门/员工名单打进产物）。
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
+import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { systemApi, type DutyRosterData } from '@/api/system'
+import { productReadScopeKey } from '@/utils/productReadAccountScope'
 
 const EMPTY_AREAS: Record<string, { label: string; ids: string[] }> = {}
 const EMPTY_IDS: ReadonlySet<string> = new Set()
@@ -19,8 +20,22 @@ const reactiveState = {
 }
 
 let fetchPromise: Promise<DutyRosterData | null> | null = null
+let currentScope = ''
+let requestGeneration = 0
+
+function resetChangedScope() {
+  const scope = productReadScopeKey('duty-roster')
+  if (scope === currentScope) return
+  currentScope = scope
+  requestGeneration++
+  fetchPromise = null
+  reactiveState.data.value = null
+  reactiveState.error.value = null
+  reactiveState.loading.value = false
+}
 
 async function fetchDutyRoster(force = false): Promise<DutyRosterData | null> {
+  resetChangedScope()
   // 已有数据且非强制刷新: 直接返回
   if (reactiveState.data.value && !force) {
     return reactiveState.data.value
@@ -32,21 +47,27 @@ async function fetchDutyRoster(force = false): Promise<DutyRosterData | null> {
 
   reactiveState.loading.value = true
   reactiveState.error.value = null
+  const scope = currentScope
+  const generation = ++requestGeneration
+  const isCurrent = () => scope === productReadScopeKey('duty-roster') && generation === requestGeneration
 
   fetchPromise = (async () => {
     try {
       const resp = await systemApi.getDutyRoster()
       const data = (resp as { data?: DutyRosterData }).data ?? null
+      if (!isCurrent()) return null
       reactiveState.data.value = data
       return data
     } catch (err) {
+      if (!isCurrent()) return null
       const error = err instanceof Error ? err : new Error(String(err))
       reactiveState.error.value = error
-      // API 失败时回退到构建时硬编码常量
       return null
     } finally {
-      reactiveState.loading.value = false
-      fetchPromise = null
+      if (isCurrent()) {
+        reactiveState.loading.value = false
+        fetchPromise = null
+      }
     }
   })()
 
@@ -54,6 +75,12 @@ async function fetchDutyRoster(force = false): Promise<DutyRosterData | null> {
 }
 
 export function useDutyRoster() {
+  resetChangedScope()
+  // Retire a previous account's roster before the next render, then restore only API-authorized rows.
+  watch(() => productReadScopeKey('duty-roster'), () => {
+    resetChangedScope()
+    void fetchDutyRoster()
+  }, { flush: 'sync' })
   const areas: ComputedRef<Record<string, { label: string; ids: string[] }>> = computed(() => {
     return reactiveState.data.value?.areas ?? EMPTY_AREAS
   })

@@ -803,8 +803,6 @@ def test_build_agent_gate_all_imports_fail_denies() -> None:
     "target",
     [
         "workspace_guard.build_employee_gate",
-        "write_approval.build_write_approval_gate",
-        "write_approval.compose_gates",
     ],
 )
 @pytest.mark.parametrize("error", [ImportError("unavailable"), RuntimeError("failed")])
@@ -814,21 +812,19 @@ def test_build_agent_gate_partial_failure_denies(target, error):
     assert gate("t", {})["ok"] is False
 
 
-def test_build_agent_gate_compose_success() -> None:
+def test_build_agent_gate_leaves_business_approval_to_durable_child() -> None:
     agent = EmployeeAgent("emp-1")
     mock_ws_gate = MagicMock(name="ws_gate")
-    mock_write_gate = MagicMock(name="write_gate")
-    composed = MagicMock(name="composed")
     import app.application.employee_runtime.workspace_guard as ws_mod
     import app.application.employee_runtime.write_approval as wa_mod
 
     with (
         patch.object(ws_mod, "build_employee_gate", return_value=mock_ws_gate),
-        patch.object(wa_mod, "build_write_approval_gate", return_value=mock_write_gate),
-        patch.object(wa_mod, "compose_gates", return_value=composed),
+        patch.object(wa_mod, "build_write_approval_gate") as old_approval,
     ):
         out = agent._build_agent_gate({}, {}, "/ws", {"input": 1})
-    assert out is composed
+    assert out is mock_ws_gate
+    old_approval.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1107,7 +1103,7 @@ def test_run_direct_python_fast_path_success() -> None:
     assert out["memory_used"] is False
     # summary 由 _summarize(result) 生成：[handler] output
     mock_record.assert_called_once_with(
-        "emp-1", success=True, task="task", summary="[direct_python] done"
+        "emp-1", success=True, task="task", summary="[direct_python] done", execution_state=""
     )
     # 验证 direct_only 路径：reasoning 应包含 skipped_cognition
     actions_call = mock_actions.call_args
@@ -1527,7 +1523,7 @@ def test_run_full_success_with_agent_handler() -> None:
     mock_build_tools.assert_called_once()
     mock_build_gate.assert_called_once()
     mock_record.assert_called_once_with(
-        "emp-1", success=True, task="task", summary="[agent] agent done"
+        "emp-1", success=True, task="task", summary="[agent] agent done", execution_state=""
     )
 
 
@@ -1600,7 +1596,9 @@ def test_run_handler_fails_publishes_trigger() -> None:
 
         out = agent.run("task", input_data={}, session_id="s1")
     assert out["success"] is False
-    mock_record.assert_called_once_with("emp-1", success=False, task="task", summary="[echo] boom")
+    mock_record.assert_called_once_with(
+        "emp-1", success=False, task="task", summary="[echo] boom", execution_state=""
+    )
     mock_publish.assert_called_once()
     call_args = mock_publish.call_args.args
     call_kwargs = mock_publish.call_args.kwargs

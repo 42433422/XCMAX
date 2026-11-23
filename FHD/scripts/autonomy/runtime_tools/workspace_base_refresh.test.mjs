@@ -28,7 +28,10 @@ async function git(cwd, args) {
 }
 
 function loadBaseRefresh(sourcePath) {
-  const source = readFileSync(sourcePath, 'utf8');
+  let source = readFileSync(sourcePath, 'utf8');
+  if (source.includes("import { startParaAgent } from './para_e2e_agent.mjs'")) {
+    source = readFileSync(path.join(path.dirname(sourcePath), 'para_e2e_agent.mjs'), 'utf8');
+  }
   const start = source.indexOf('async function refreshBaseBranchFromOrigin');
   const end = source.indexOf('\nasync function cloneSourceWorkspace', start);
   assert.ok(start >= 0 && end > start, `base refresh helper not found in ${sourcePath}`);

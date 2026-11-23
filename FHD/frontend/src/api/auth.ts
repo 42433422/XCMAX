@@ -116,7 +116,7 @@ function authOperationOwner(signal: AbortSignal) {
   return { current, assertCurrent }
 }
 
-function loginRequest(payload: LoginRequest, options: AuthOperationOptions) {
+function loginRequest(payload: LoginRequest, options: AuthOperationOptions, path = '/api/auth/login') {
   return withAuthDeadline(async (signal) => {
     invalidateEnterpriseSessionCache()
     clearMarketCredentials()
@@ -124,7 +124,7 @@ function loginRequest(payload: LoginRequest, options: AuthOperationOptions) {
     await primeCsrfCookie({ signal })
     const request = () => {
       assertCurrent()
-      return api.post<ApiResponse<LoginResponse>>('/api/auth/login', payload, { timeoutMs: 30_000, signal })
+      return api.post<ApiResponse<LoginResponse>>(path, payload, { timeoutMs: 30_000, signal })
     }
     const res = await withTransientLoginRetry(request, signal)
     assertCurrent()
@@ -141,6 +141,10 @@ export const authApi = {
       username, password, account_kind: accountKind,
       ...(invitationCode.trim() ? { invitation_code: invitationCode.trim() } : {}),
     }, options)
+  },
+
+  async offlineLogin(username: string, password: string, options: AuthOperationOptions = {}): Promise<ApiResponse<LoginResponse>> {
+    return loginRequest({ username, password, account_kind: 'enterprise' }, options, '/api/auth/offline-login')
   },
 
   async getOidcStatus(): Promise<ApiResponse<{ enabled?: boolean }>> {

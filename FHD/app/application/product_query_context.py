@@ -24,11 +24,26 @@ def is_full_product_list_phrase(value: str) -> bool:
 
 def inject_product_query_fallback(params: dict[str, Any], user_message: str) -> str:
     """Inject a real search token, while preserving an explicit full-list request."""
-    from app.application.ai_chat.workflow_response_builder import normalize_product_float_query
-
     keyword = normalize_product_float_query(user_message)
     if keyword:
         params["keyword"] = keyword
     else:
         params.pop("keyword", None)
     return keyword
+
+
+def normalize_product_float_query(raw: str) -> str:
+    """Keep specific product terms while preserving an empty full-list query."""
+    text = str(raw or "").strip()
+    candidate = text.rstrip("。！？…").strip()
+    for prefix in ("查询", "查一下", "查下", "查看", "看看", "看下", "查"):
+        if candidate.startswith(prefix):
+            candidate = candidate[len(prefix) :].strip()
+            break
+    for scope in ("当前", "现有", "全部", "所有"):
+        if candidate.startswith(scope):
+            candidate = candidate[len(scope) :].strip()
+            break
+    if candidate in {"产品", "产品列表", "产品库"}:
+        return ""
+    return text

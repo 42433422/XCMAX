@@ -221,7 +221,7 @@ async def ai_file_analyze(
 
 
 @router.post("/api/ai/sqlite/import_unit_products")
-def ai_sqlite_import_unit_products(body: dict = Body(default_factory=dict)):
+def ai_sqlite_import_unit_products(request: Request, body: dict = Body(default_factory=dict)):
     try:
         from app.application.agent_orchestrator import AgentOrchestrator
         from app.application.agent_orchestrator.tool_spec import validate_tool_call
@@ -247,6 +247,20 @@ def ai_sqlite_import_unit_products(body: dict = Body(default_factory=dict)):
                 status_code=400,
             )
 
+        from app.fastapi_routes.domains.agent.route_support import (
+            public_run_dict,
+            request_runtime_context,
+        )
+
+        context = request_runtime_context(
+            request,
+            {
+                "route": "/api/ai/sqlite/import_unit_products",
+                "source": "legacy_excel_route",
+                "saved_name": saved_name,
+                "unit_name": unit_name,
+            },
+        )
         plan = PlanGraph(
             plan_id=f"plan_route_unit_products_import_{uuid.uuid4().hex[:12]}",
             intent="import_unit_products_db",
@@ -285,27 +299,22 @@ def ai_sqlite_import_unit_products(body: dict = Body(default_factory=dict)):
             },
         )
         run = AgentOrchestrator().start_run_from_plan(
-            user_id=str(data.get("user_id") or data.get("userId") or "legacy-excel-route"),
+            user_id=str(context["user_id"]),
             message=str(data.get("message") or f"导入 {saved_name} 到 {unit_name}"),
             plan=plan,
-            runtime_context={
-                "route": "/api/ai/sqlite/import_unit_products",
-                "source": "legacy_excel_route",
-                "saved_name": saved_name,
-                "unit_name": unit_name,
-            },
+            runtime_context=context,
             auto_execute=True,
         )
+        from app.domain.task_lifecycle.results import agent_node_output
+
+        payload = agent_node_output(run, "import_unit_products")
+        payload.setdefault(
+            "message",
+            "已创建导入任务，等待用户确认" if run.status == "waiting_user" else "导入任务已处理",
+        )
+        payload["data"] = public_run_dict(run)
         return JSONResponse(
-            {
-                "success": True,
-                "message": "已创建导入任务，等待用户确认"
-                if run.status == "waiting_user"
-                else "导入任务已处理",
-                "run_id": run.run_id,
-                "agent_run_id": run.run_id,
-                "data": run.to_dict(),
-            },
+            payload,
             status_code=202 if run.status in {"waiting_user", "blocked"} else 200,
         )
     except RECOVERABLE_ERRORS:

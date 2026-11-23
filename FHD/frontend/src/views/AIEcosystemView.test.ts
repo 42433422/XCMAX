@@ -15,6 +15,7 @@ function makeRouter(includeDeliveryCenter = true) {
     { path: '/mod-store', name: 'mod-store', component: { template: '<div />' } },
     { path: '/mod/store', name: 'mod-store-planner', component: { template: '<div />' } },
     { path: '/market-overview', name: 'market-overview', component: { template: '<div />' } },
+    { path: '/kellai', name: 'data-sources', component: { template: '<div />' } },
     { path: '/ecosystem', name: 'ecosystem', component: AIEcosystemView },
   ]
   if (includeDeliveryCenter) {
@@ -71,28 +72,37 @@ describe('AIEcosystemView.vue', () => {
     expect(wrapper.find('.ecosystem-home').exists()).toBe(true)
     expect(wrapper.find('.ecosystem-home-title').text()).toBe('AI生态应用')
     const launchers = wrapper.findAll('.app-launcher')
-    expect(launchers).toHaveLength(4)
+    expect(launchers).toHaveLength(5)
     expect(wrapper.find('.app-launcher--kitten').exists()).toBe(true)
     expect(wrapper.find('.app-launcher--aiopen').exists()).toBe(true)
     expect(wrapper.find('.app-launcher--production').exists()).toBe(true)
     expect(wrapper.find('.app-launcher--modstore').exists()).toBe(true)
     const descs = wrapper.findAll('.app-launcher-desc')
-    expect(descs).toHaveLength(4)
-    expect(descs[0].text()).toContain('可视化 AI 员工')
-    expect(descs[1].text()).toContain('MCP/API')
-    expect(descs[2].text()).toContain('客户交付中心')
-    expect(descs[3].text()).toContain('MOD 扩展')
+    expect(descs).toHaveLength(5)
+    expect(descs[0].text()).toContain('渠道连接')
+    expect(descs[1].text()).toContain('可视化 AI 员工')
+    expect(descs[2].text()).toContain('MCP/API')
+    expect(descs[3].text()).toContain('客户交付中心')
+    expect(descs[4].text()).toContain('业务模块与 AI 员工')
     const names = wrapper.findAll('.app-launcher-name')
-    expect(names.map((n) => n.text())).toEqual(['智慧分析', 'AIOPEN 开放智控', '私有交付', '员工商店'])
+    expect(names.map((n) => n.text())).toEqual(['客来来', '智慧分析', 'AIOPEN 开放智控', '私有交付', 'AI 市场'])
     const modstore = wrapper.find('[data-tour="ecosystem-launcher-modstore"]')
     expect(modstore.exists()).toBe(true)
   })
+  it('opens the existing data-sources route from the Kellai launcher', async () => {
+    const { wrapper, router } = await mountView()
+    await wrapper.get('[data-tour="ecosystem-launcher-kellai"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('data-sources')
+  })
+
   it('shows market overview launcher instead of modstore in the admin console', async () => {
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     expect(wrapper.findAll('.app-launcher')).toHaveLength(4)
     expect(wrapper.find('[data-tour="ecosystem-launcher-modstore"]').exists()).toBe(false)
+    expect(wrapper.find('[data-tour="ecosystem-launcher-kellai"]').exists()).toBe(false)
     const market = wrapper.find('[data-tour="ecosystem-launcher-market-overview"]')
     expect(market.exists()).toBe(true)
     expect(market.text()).toContain('市场总览')

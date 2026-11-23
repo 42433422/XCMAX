@@ -15,6 +15,10 @@ Schema = Callable[[Session], None]
 Projection = Callable[[Payload], Payload]
 
 
+class RelayTaskConflict(ValueError):
+    """A stable request identity is already bound to a different relay task."""
+
+
 class DesktopAuthentication(Protocol):
     def __call__(self, db: Session, *, relay_id: str, desktop_token: str) -> Payload | None: ...
 

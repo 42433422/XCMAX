@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.domain.task_lifecycle.machine import transition_allowed
+from app.domain.task_lifecycle.machine import STATES, transition_allowed
 
 # Values are canonical states. Unknown legacy tokens are rejected.
 _LEGACY: dict[str, dict[str, str]] = {
@@ -21,7 +21,7 @@ _LEGACY: dict[str, dict[str, str]] = {
         "timed_out": "timed_out",
         "cancelled": "cancelled",
         "rejected": "rejected",
-        "blocked": "waiting_approval",
+        "blocked": "blocked",
     },
     "workflow": {
         "pending": "queued",
@@ -46,7 +46,7 @@ _LEGACY: dict[str, dict[str, str]] = {
         "succeeded": "succeeded",
         "completed": "succeeded",
         # Unverified employee results stay non-success. They are not a retry.
-        "unknown": "failed",
+        "unknown": "unknown",
         "failed": "failed",
         "timed_out": "timed_out",
         "cancelled": "cancelled",
@@ -76,7 +76,8 @@ def canonicalize(module: str, status: str) -> str:
     table = _LEGACY.get(module)
     if table is None:
         raise LegacyTransitionError(f"未知任务模块: {module}")
-    canonical = table.get(str(status or "").strip().lower())
+    token = str(status or "").strip().lower()
+    canonical = table.get(token, token if token in STATES else None)
     if canonical is None:
         raise LegacyTransitionError(f"{module} 状态未纳入统一状态机: {status}")
     return canonical
@@ -97,28 +98,22 @@ def legacy_transition_allowed(
 
 
 LEASED_STATES = frozenset({"running", "claimed"})
-WAITING_STATES = frozenset({"waiting_approval", "paused", "blocked"})
+APPROVAL_STATES = frozenset({"waiting_approval"})
+WAITING_STATES = APPROVAL_STATES | {"waiting_input", "waiting_auth", "paused", "blocked"}
 SUCCEEDED_STATES = frozenset({"succeeded", "completed"})
 
 
 def canonical_execution_state(state: str) -> str:
-    """Map a scheduler word onto the nine-state machine."""
+    """Map transport aliases without erasing pause, input or uncertain effects."""
     return _EXECUTION.get(str(state or "").strip().lower(), str(state or "").strip().lower())
 
 
 _EXECUTION = {
-    "queued": "queued",
+    **{state: state for state in STATES},
     "claimed": "running",
     "running": "running",
-    "paused": "waiting_approval",
-    "blocked": "waiting_approval",
-    "waiting_approval": "waiting_approval",
+    "outcome_unknown": "unknown",
     "completed": "succeeded",
-    "succeeded": "succeeded",
-    "failed": "failed",
-    "timed_out": "timed_out",
-    "cancelled": "cancelled",
-    "rejected": "rejected",
 }
 
 
@@ -129,10 +124,8 @@ def execution_transition_allowed(
     retryable: bool = False,
 ) -> bool:
     """Scheduler queue words mapped onto the canonical machine before a write."""
-    if current == target:
-        return True
-    current_state = _EXECUTION.get(str(current or ""))
-    target_state = _EXECUTION.get(str(target or ""))
+    current_state = _EXECUTION.get(str(current or "").strip().lower())
+    target_state = _EXECUTION.get(str(target or "").strip().lower())
     if current_state is None or target_state is None:
         return False
     if current_state == target_state:

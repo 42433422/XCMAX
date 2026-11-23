@@ -4,10 +4,15 @@
 提供供应商、采购订单、采购入库等业务逻辑。
 """
 
+import hashlib
+import json
 import logging
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models import (
     Product,
@@ -30,6 +35,39 @@ from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _write_lock(db):
+    if db.get_bind().dialect.name == "sqlite" and not db.in_transaction():
+        db.execute(text("BEGIN IMMEDIATE"))
+
+
+def _line_values(item):
+    try:
+        quantity = Decimal(str(item.get("quantity", 0)))
+        price = Decimal(str(item.get("unit_price", 0)))
+        if (
+            not quantity.is_finite()
+            or not price.is_finite()
+            or quantity <= 0
+            or price < 0
+            or quantity != quantity.quantize(Decimal("0.0001"))
+            or price != price.quantize(Decimal("0.0001"))
+        ):
+            raise ValueError("采购数量或单价无效")
+        return quantity, price
+    except InvalidOperation as exc:
+        raise ValueError("采购数量或单价无效") from exc
+
+
+def purchase_execution_number(action: str, run_id: str, step_id: str, tenant_id: str) -> str:
+    """Use original AgentRun identity in the existing unique business document number."""
+    if not all((run_id, step_id, tenant_id)):
+        raise ValueError("采购执行缺少原任务身份")
+    digest = hashlib.sha256(
+        json.dumps([action, run_id, step_id, str(tenant_id)], separators=(",", ":")).encode()
+    ).hexdigest()[:36]
+    return ("AGPI-" if action == "create_inbound" else "AGPO-") + digest
 
 
 class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
@@ -98,7 +136,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
         with get_db() as db:
             try:
                 order_no = data.get("order_no") or self._generate_order_no()
-                total_amount = 0.0
+                total_amount = Decimal(0)
 
                 order = PurchaseOrder(
                     order_no=order_no,
@@ -120,8 +158,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     product = (
                         db.query(Product).filter(Product.id == item_data.get("product_id")).first()
                     )
-                    quantity = float(item_data.get("quantity", 0))
-                    unit_price = float(item_data.get("unit_price", 0))
+                    quantity, unit_price = _line_values(item_data)
                     amount = quantity * unit_price
                     total_amount += amount
 
@@ -164,17 +201,35 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     "data": self._model_to_dict(order),
                     "message": "采购订单创建成功",
                 }
+            except IntegrityError:
+                db.rollback()
+                return {"success": False, "message": "采购订单身份冲突，未重复创建"}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("创建采购订单失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def update_purchase_order(self, order_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        if set(data) - {
+            "supplier_id",
+            "warehouse_id",
+            "order_date",
+            "delivery_date",
+            "remark",
+            "items",
+        }:
+            return {"success": False, "message": "订单身份、审批状态及金额只能由原业务动作变更"}
         if invalid := items_without_product(data.get("items") or []):
             return invalid
         with get_db() as db:
             try:
-                order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
+                _write_lock(db)
+                order = (
+                    db.query(PurchaseOrder)
+                    .filter(PurchaseOrder.id == order_id)
+                    .with_for_update()
+                    .first()
+                )
                 if not order:
                     return {"success": False, "message": "采购订单不存在"}
 
@@ -194,7 +249,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     db.query(PurchaseOrderItem).filter(
                         PurchaseOrderItem.order_id == order_id
                     ).delete()
-                    total_amount = 0.0
+                    total_amount = Decimal(0)
 
                     for item_data in data["items"]:
                         product = (
@@ -202,8 +257,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                             .filter(Product.id == item_data.get("product_id"))
                             .first()
                         )
-                        quantity = float(item_data.get("quantity", 0))
-                        unit_price = float(item_data.get("unit_price", 0))
+                        quantity, unit_price = _line_values(item_data)
                         amount = quantity * unit_price
                         total_amount += amount
 
@@ -239,12 +293,58 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
     def approve_purchase_order(self, order_id: int, approver: str) -> dict[str, Any]:
         with get_db() as db:
             try:
-                order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
+                _write_lock(db)
+                order = (
+                    db.query(PurchaseOrder)
+                    .filter(PurchaseOrder.id == order_id)
+                    .with_for_update()
+                    .first()
+                )
                 if not order:
                     return {"success": False, "message": "采购订单不存在"}
 
                 if order.status != "draft":
                     return {"success": False, "message": "只有草稿状态的订单可以审核"}
+                expected = sum(
+                    (
+                        quantity * price
+                        for quantity, price in (
+                            _line_values({"quantity": item.quantity, "unit_price": item.unit_price})
+                            for item in order.items
+                        )
+                    ),
+                    Decimal(0),
+                ).quantize(Decimal("0.01"))
+                if not order.items or expected != Decimal(str(order.total_amount)):
+                    raise ValueError("采购审批需要有效的原订单明细")
+                supplier = (
+                    db.query(Supplier)
+                    .filter(
+                        Supplier.id == order.supplier_id,
+                        Supplier.tenant_id == order.tenant_id,
+                    )
+                    .with_for_update()
+                    .first()
+                )
+                if supplier is None or supplier.status != "active":
+                    raise ValueError("采购供应商不存在或未启用")
+                credit = Decimal(str(supplier.credit_limit or 0))
+                if credit > 0:
+                    outstanding = sum(
+                        (
+                            Decimal(str(row.total_amount or 0)) - Decimal(str(row.paid_amount or 0))
+                            for row in db.query(PurchaseOrder)
+                            .filter(
+                                PurchaseOrder.supplier_id == supplier.id,
+                                PurchaseOrder.tenant_id == order.tenant_id,
+                                PurchaseOrder.status.in_(("approved", "partial", "completed")),
+                            )
+                            .all()
+                        ),
+                        Decimal(0),
+                    )
+                    if outstanding + Decimal(str(order.total_amount or 0)) > credit:
+                        raise ValueError("采购订单超出原供应商已配置的信用额度")
 
                 order.status = "approved"
                 order.approver = approver
@@ -255,7 +355,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     item.status = "approved"
 
                 db.commit()
-                return {"success": True, "message": "审核成功"}
+                return {"success": True, "message": "审核成功", "data": self._model_to_dict(order)}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("审核采购订单失败: %s", e)
@@ -264,7 +364,13 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
     def cancel_purchase_order(self, order_id: int) -> dict[str, Any]:
         with get_db() as db:
             try:
-                order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
+                _write_lock(db)
+                order = (
+                    db.query(PurchaseOrder)
+                    .filter(PurchaseOrder.id == order_id)
+                    .with_for_update()
+                    .first()
+                )
                 if not order:
                     return {"success": False, "message": "采购订单不存在"}
 
@@ -278,7 +384,11 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     item.status = "cancelled"
 
                 db.commit()
-                return {"success": True, "message": "订单已取消"}
+                return {
+                    "success": True,
+                    "message": "订单已取消",
+                    "data": self._model_to_dict(order),
+                }
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("取消采购订单失败: %s", e)
@@ -289,8 +399,10 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
             return invalid
         with get_db() as db:
             try:
+                _write_lock(db)
+                self._validate_receiving_order(db, data)
                 inbound_no = data.get("inbound_no") or self._generate_inbound_no()
-                total_amount = 0.0
+                total_amount = Decimal(0)
                 inventory_service = InventoryService()
 
                 inbound = PurchaseInbound(
@@ -314,8 +426,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     product = (
                         db.query(Product).filter(Product.id == item_data.get("product_id")).first()
                     )
-                    quantity = float(item_data.get("quantity", 0))
-                    unit_price = float(item_data.get("unit_price", 0))
+                    quantity, unit_price = _line_values(item_data)
                     amount = quantity * unit_price
                     total_amount += amount
 
@@ -341,10 +452,10 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     result = inventory_service.inventory_in(
                         product_id=item_data.get("product_id"),
                         warehouse_id=int(warehouse_id),
-                        quantity=quantity,
+                        quantity=float(quantity),
                         batch_no=item_data.get("batch_no"),
                         location_id=item_data.get("location_id"),
-                        unit_price=unit_price,
+                        unit_price=float(unit_price),
                         reference_type="purchase_inbound",
                         reference_id=inbound.id,
                         operator=data.get("handler"),
@@ -360,42 +471,36 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 if order_id is not None:
                     self._update_order_received_quantity(db, int(order_id))
 
+                # Inventory, receipt, order progress and payable share one transaction.
+                journal_id = None
+                if total_amount > 0:
+                    from app.domain.shared_services.accounting_services import create_journal_entry
+
+                    journal = create_journal_entry(
+                        {
+                            "description": f"采购入库: {inbound_no}",
+                            "reference_type": "purchase_inbound",
+                            "reference_id": inbound.id,
+                            "lines": [
+                                {"account_code": "1401", "debit": total_amount, "credit": 0},
+                                {
+                                    "account_code": "2201",
+                                    "debit": 0,
+                                    "credit": total_amount,
+                                    "partner_id": inbound.supplier_id,
+                                    "partner_name": inbound.supplier.name
+                                    if inbound.supplier
+                                    else None,
+                                },
+                            ],
+                        },
+                        db=db,
+                    )
+                    if journal.get("success") is not True:
+                        raise ValueError(journal.get("message") or "采购应付记账失败")
+                    journal_id = journal["data"]["id"]
                 db.commit()
                 db.refresh(inbound)
-
-                # 采购入库 → 应付账款闭环：借：库存商品 / 贷：应付账款（复式记账）
-                if total_amount > 0:
-                    try:
-                        from app.domain.shared_services.accounting_services import (
-                            create_journal_entry,
-                        )
-
-                        supplier = getattr(inbound, "supplier", None)
-                        journal_result = create_journal_entry(
-                            {
-                                "description": f"采购入库: {inbound_no}",
-                                "reference_type": "purchase_inbound",
-                                "reference_id": inbound.id,
-                                "lines": [
-                                    {
-                                        "account_code": "1401",  # 库存商品
-                                        "debit": total_amount,
-                                        "credit": 0,
-                                    },
-                                    {
-                                        "account_code": "2201",  # 应付账款
-                                        "debit": 0,
-                                        "credit": total_amount,
-                                        "partner_id": inbound.supplier_id,
-                                        "partner_name": (supplier.name if supplier else None),
-                                    },
-                                ],
-                            }
-                        )
-                        if not journal_result.get("success"):
-                            logger.warning("应付账款记账失败: %s", journal_result.get("message"))
-                    except RECOVERABLE_ERRORS:
-                        logger.warning("应付账款记账失败", exc_info=True)
 
                 self._publish_event(
                     "inventory.inbound_created",
@@ -410,13 +515,54 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 )
                 return {
                     "success": True,
-                    "data": self._model_to_dict(inbound),
+                    "data": {**self._model_to_dict(inbound), "journal_entry_id": journal_id},
                     "message": "入库成功",
                 }
+            except IntegrityError:
+                db.rollback()
+                return {"success": False, "message": "采购入库身份冲突，未重复入库"}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("创建采购入库单失败: %s", e)
                 return {"success": False, "message": str(e)}
+
+    def _validate_receiving_order(self, db, data):
+        if data.get("order_id") is None:
+            return  # Standalone manual receipts keep their existing separate authority.
+        order = (
+            db.query(PurchaseOrder)
+            .filter(PurchaseOrder.id == int(data["order_id"]))
+            .with_for_update()
+            .first()
+        )
+        if order is None or order.status not in {"approved", "partial"}:
+            raise ValueError("采购入库需要原已审批且未完成的采购订单")
+        if (
+            data.get("supplier_id") != order.supplier_id
+            or data.get("warehouse_id") != order.warehouse_id
+        ):
+            raise ValueError("采购入库供应商或仓库与原订单不一致")
+        original = {row.id: row for row in order.items}
+        received = {}
+        if not data.get("items"):
+            raise ValueError("采购入库缺少订单明细")
+        for item in data["items"]:
+            row = original.get(item.get("order_item_id"))
+            quantity, price = _line_values(item)
+            if (
+                row is None
+                or row.product_id != item.get("product_id")
+                or not quantity.is_finite()
+                or quantity <= 0
+                or not price.is_finite()
+                or price != Decimal(str(row.unit_price or 0))
+            ):
+                raise ValueError("采购入库明细或单价不符合原审批订单")
+            received[row.id] = received.get(row.id, Decimal(0)) + quantity
+            if Decimal(str(row.received_quantity or 0)) + received[row.id] > Decimal(
+                str(row.quantity)
+            ):
+                raise ValueError("采购入库数量超出原审批订单剩余额度")
 
     def _update_order_received_quantity(self, db, order_id: int):
         order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()

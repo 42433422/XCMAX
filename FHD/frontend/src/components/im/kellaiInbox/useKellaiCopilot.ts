@@ -4,6 +4,7 @@
  */
 import { computed, ref } from 'vue'
 import type { Ref } from 'vue'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import kellaiBindingApi, {
   type KellaiConversationMessage,
   type KellaiCopilotDraft,
@@ -24,6 +25,13 @@ export function useKellaiCopilot({ activeCustomerId, messages, error }: UseKella
   const copilotBusy = ref(false)
   const taskBusy = ref(false)
   const copiedDraft = ref(false)
+  let revision = 0
+  function captureScope(): () => boolean {
+    const account = productReadAccountEpoch.value
+    const customerId = activeCustomerId.value
+    const captured = revision
+    return () => captured === revision && account === productReadAccountEpoch.value && customerId === activeCustomerId.value
+  }
 
   const currentDraftTask = computed(() => {
     const draftId = copilotDraft.value?.draft_id
@@ -39,8 +47,12 @@ export function useKellaiCopilot({ activeCustomerId, messages, error }: UseKella
     copiedDraft.value = false
   }
 
-  /** 会话清空时的重置（不触碰 copiedDraft，与拆分前行为一致）。 */
+  /** Retire in-flight draft/task responses when the account or customer changes. */
   function resetConversationState(): void {
+    revision++
+    copiedDraft.value = false
+    copilotBusy.value = false
+    taskBusy.value = false
     copilotDraft.value = null
     followUpTasks.value = []
     followUpMetrics.value = null
@@ -71,15 +83,16 @@ export function useKellaiCopilot({ activeCustomerId, messages, error }: UseKella
 
   async function createFollowUpTask(): Promise<void> {
     if (!copilotDraft.value?.draft_id || currentDraftTask.value) return
+    const valid = captureScope()
     taskBusy.value = true
     error.value = ''
     try {
       const task = await kellaiBindingApi.createFollowUpTask(copilotDraft.value.draft_id)
-      upsertFollowUpTask(task)
+      if (valid()) upsertFollowUpTask(task)
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : '跟进任务创建失败'
+      if (valid()) error.value = cause instanceof Error ? cause.message : '跟进任务创建失败'
     } finally {
-      taskBusy.value = false
+      if (valid()) taskBusy.value = false
     }
   }
 
@@ -88,6 +101,7 @@ export function useKellaiCopilot({ activeCustomerId, messages, error }: UseKella
     decision: 'complete' | 'cancel',
     outcomeResult: 'success' | 'no_result' | 'failed' | '',
   ): Promise<void> {
+    const valid = captureScope()
     taskBusy.value = true
     error.value = ''
     try {
@@ -96,48 +110,53 @@ export function useKellaiCopilot({ activeCustomerId, messages, error }: UseKella
         decision,
         outcomeResult,
       )
-      upsertFollowUpTask(updated)
+      if (valid()) upsertFollowUpTask(updated)
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : '跟进任务更新失败'
+      if (valid()) error.value = cause instanceof Error ? cause.message : '跟进任务更新失败'
     } finally {
-      taskBusy.value = false
+      if (valid()) taskBusy.value = false
     }
   }
 
   async function generateCopilotDraft(): Promise<void> {
     if (!activeCustomerId.value || !messages.value.length) return
+    const valid = captureScope()
     copilotBusy.value = true
     copiedDraft.value = false
     error.value = ''
     try {
-      copilotDraft.value = await kellaiBindingApi.generateDraft(activeCustomerId.value)
+      const result = await kellaiBindingApi.generateDraft(activeCustomerId.value)
+      if (valid()) copilotDraft.value = result
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : 'AI 摘要与回复草稿生成失败'
+      if (valid()) error.value = cause instanceof Error ? cause.message : 'AI 摘要与回复草稿生成失败'
     } finally {
-      copilotBusy.value = false
+      if (valid()) copilotBusy.value = false
     }
   }
 
   async function decideCopilotDraft(decision: 'approve' | 'reject'): Promise<void> {
     if (!copilotDraft.value?.draft_id) return
+    const valid = captureScope()
     copilotBusy.value = true
     error.value = ''
     try {
-      copilotDraft.value = await kellaiBindingApi.decideDraft(copilotDraft.value.draft_id, decision)
+      const result = await kellaiBindingApi.decideDraft(copilotDraft.value.draft_id, decision)
+      if (valid()) copilotDraft.value = result
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : '草稿审批失败'
+      if (valid()) error.value = cause instanceof Error ? cause.message : '草稿审批失败'
     } finally {
-      copilotBusy.value = false
+      if (valid()) copilotBusy.value = false
     }
   }
 
   async function copyApprovedDraft(): Promise<void> {
     if (!copilotDraft.value?.reply_draft || copilotDraft.value.status !== 'approved_for_manual_send') return
+    const valid = captureScope()
     try {
       await navigator.clipboard.writeText(copilotDraft.value.reply_draft)
-      copiedDraft.value = true
+      if (valid()) copiedDraft.value = true
     } catch {
-      error.value = '无法复制草稿，请手动选择文本复制'
+      if (valid()) error.value = '无法复制草稿，请手动选择文本复制'
     }
   }
 

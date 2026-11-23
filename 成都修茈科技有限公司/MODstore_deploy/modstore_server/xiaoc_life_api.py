@@ -1,0 +1,192 @@
+"""Management controls for one enterprise identity, never a browser-local agent."""
+
+from __future__ import annotations
+
+from typing import Any, Callable
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from sqlalchemy import and_, or_, select
+
+from modstore_server.api.deps import require_admin
+from modstore_server.db.db_base import get_session_factory
+from modstore_server.db.xiaoc_life import XiaoCLifeEvent
+from modstore_server.models import User
+from modstore_server.strategic_portfolio import (
+    Opportunity,
+    PortfolioError,
+    PortfolioLimits,
+    create_portfolio_proposal,
+    digest,
+)
+from modstore_server.xiaoc_life_policy import IDENTITY_ID, LifePolicyError, LifeUpdate
+from modstore_server.xiaoc_life_store import (
+    _event,
+    _event_dict,
+    _mutate,
+    read_state,
+    update_settings,
+    wake,
+)
+
+router = APIRouter(prefix="/life", tags=["xiaoc-life"])
+
+
+class RevisionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expected_revision: int = Field(ge=1)
+
+
+class PromoteGoal(RevisionBody):
+    employee_id: str = Field(min_length=1, max_length=128)
+    limits: PortfolioLimits
+    input_data: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("input_data")
+    @classmethod
+    def valid_input(cls, value: dict[str, Any]) -> dict[str, Any]:
+        from modstore_server.strategic_execution_contract import validate_input
+
+        return validate_input(value)
+
+
+def _call(function: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    try:
+        return function(*args, **kwargs)
+    except ValidationError as exc:
+        raise HTTPException(422, "自主预算配置无效，请检查数值与授权到期时间") from exc
+    except (LifePolicyError, PortfolioError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("")
+def get_life(_admin: User = Depends(require_admin)) -> dict[str, Any]:
+    return read_state()
+
+
+@router.put("")
+def put_life(body: LifeUpdate, admin: User = Depends(require_admin)) -> dict[str, Any]:
+    return cast_state(_call(update_settings, body, actor_user_id=int(admin.id)))
+
+
+def cast_state(value: Any) -> dict[str, Any]:
+    return dict(value)
+
+
+@router.post("/wake")
+def wake_life(body: RevisionBody, admin: User = Depends(require_admin)) -> dict[str, Any]:
+    # Only changes the persistent due time. The existing scheduler claims work.
+    return cast_state(
+        _call(wake, actor_user_id=int(admin.id), expected_revision=body.expected_revision)
+    )
+
+
+@router.get("/experiences")
+def experiences(
+    query: str = Query("", max_length=200),
+    limit: int = Query(30, ge=1, le=100),
+    before: str | None = Query(None, max_length=96),
+    _admin: User = Depends(require_admin),
+) -> dict[str, Any]:
+    with get_session_factory()() as session:
+        statement = select(XiaoCLifeEvent).where(XiaoCLifeEvent.identity_id == IDENTITY_ID)
+        if query.strip():
+            statement = statement.where(
+                XiaoCLifeEvent.summary.icontains(query.strip(), autoescape=True)
+            )
+        if before:
+            cursor = session.get(XiaoCLifeEvent, before)
+            if cursor is None or cursor.identity_id != IDENTITY_ID:
+                raise HTTPException(404, "经历游标不存在")
+            statement = statement.where(
+                or_(
+                    XiaoCLifeEvent.created_at < cursor.created_at,
+                    and_(
+                        XiaoCLifeEvent.created_at == cursor.created_at,
+                        XiaoCLifeEvent.id < cursor.id,
+                    ),
+                )
+            )
+        rows = session.scalars(
+            statement.order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc()).limit(
+                limit
+            )
+        ).all()
+        return {
+            "items": [_event_dict(row) for row in rows],
+            "next_cursor": rows[-1].id if len(rows) == limit else None,
+        }
+
+
+@router.post("/goals/{goal_id}/portfolio")
+def promote_goal(
+    goal_id: str, body: PromoteGoal, admin: User = Depends(require_admin)
+) -> dict[str, Any]:
+    """Turn a sourced finding into the existing reviewable strategic proposal."""
+    from modstore_server.task_router import _load_all_employee_profiles
+
+    state = read_state()
+    if state["revision"] != body.expected_revision or state.get("owner_user_id") != int(admin.id):
+        raise HTTPException(409, "请由当前自主预算授权人读取最新设置后转为企业提案")
+    goal = next((item for item in state["goals"] if item["id"] == goal_id), None)
+    if goal is None:
+        raise HTTPException(404, "目标不存在")
+    if goal.get("retort_request_id") and not goal.get("decision_id"):
+        raise HTTPException(
+            409, "原改进目标须先完成原派工审批，由 L6 循环生成绑定原任务的工程预算提案"
+        )
+    if goal.get("decision_id"):
+        return {"decision_id": goal["decision_id"], "life": state}
+    if body.employee_id not in {item.get("id") for item in _load_all_employee_profiles()}:
+        raise HTTPException(422, "请选择现有可执行员工")
+    if not goal.get("evidence_refs"):
+        raise HTTPException(409, "没有实际来源的想法不能转为执行提案")
+    limits = body.limits.model_dump()
+    opportunity = Opportunity(
+        opportunity_id="life-" + digest(goal_id)[:24],
+        title=goal["title"][:200],
+        task=str(goal.get("description") or goal["title"])[:4000],
+        employee_id=body.employee_id,
+        input_data=body.input_data,
+        value_score=100,
+        confidence_bps=5000,
+        cost_cents=limits["cost_cents"],
+        tokens=limits["tokens"],
+        compute_seconds=min(limits["compute_seconds"], 240),
+        risk="medium",
+        source_refs=goal["evidence_refs"][:32],
+    )
+    proposal = _call(
+        create_portfolio_proposal,
+        owner_user_id=int(admin.id),
+        goal=goal["title"],
+        period="xiaoc-life:" + goal_id[:45],
+        limits=limits,
+        opportunities=[opportunity.model_dump()],
+        idempotency_key="xiaoc-life:"
+        + digest([goal_id, limits, body.employee_id, body.input_data]),
+    )
+    decision_id = proposal["decision"]["decision_id"]
+
+    def bind(current: dict[str, Any], session: Any) -> None:
+        if current["revision"] != body.expected_revision or current["owner_user_id"] != int(
+            admin.id
+        ):
+            raise LifePolicyError("设置已变化，提案保留待审核，未启动任何任务")
+        target = next(item for item in current["goals"] if item["id"] == goal_id)
+        if target.get("decision_id") not in (None, "", decision_id):
+            raise LifePolicyError("目标已绑定另一个提案")
+        target.update(decision_id=decision_id, status="awaiting_approval")
+        event_id = "portfolio:" + digest([goal_id, decision_id])[:64]
+        if session.get(XiaoCLifeEvent, event_id) is None:
+            _event(
+                session,
+                event_id,
+                kind="enterprise",
+                status="awaiting_approval",
+                summary=f"研究目标已转为待批准的企业提案：{target['title']}",
+                evidence_refs=[*target["evidence_refs"][:30], f"portfolio:{decision_id}"],
+            )
+
+    _call(_mutate, bind)
+    return {**proposal, "decision_id": decision_id, "life": read_state()}

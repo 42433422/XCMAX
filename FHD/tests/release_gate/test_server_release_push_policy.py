@@ -1,9 +1,12 @@
 import hashlib
 import json
 import os
+import runpy
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 import yaml
@@ -63,11 +66,15 @@ def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
     assert "requirements-langgraph-runtime.txt" in apply
     assert "xcagi_vendored_langgraph.pth" in apply and "_xcagi_root=next" in apply
     assert "assert_vendored_sources" in apply
+    assert "from app.infrastructure.codex.launcher import verify_installation" in apply
+    assert "assert_vendored_sources()\nverify_installation()" in apply
     assert "FHD_SERVICE_PYTHON" in apply
 
 
-@pytest.mark.parametrize("name", ["jsonschema", "referencing"])
-def test_tarball_forced_runtime_pins_workflow_schema_dependencies(name: str) -> None:
+@pytest.mark.parametrize(
+    "name", ["jsonschema", "referencing", "openai-codex", "openai-codex-cli-bin"]
+)
+def test_tarball_forced_runtime_pins_required_dependencies(name: str) -> None:
     requirements = {
         item.name: item
         for line in (FHD_ROOT / "ops/deploy/requirements-langgraph-runtime.txt")
@@ -80,6 +87,55 @@ def test_tarball_forced_runtime_pins_workflow_schema_dependencies(name: str) -> 
     locked_versions = {item["version"] for item in lock["package"] if item["name"] == name}
     assert len(locked_versions) == 1
     assert str(requirements[name].specifier) == f"=={locked_versions.pop()}"
+
+
+@pytest.mark.parametrize("name", ["openai-codex", "openai-codex-cli-bin"])
+def test_codex_executor_is_required_by_standard_installers(name: str) -> None:
+    project = tomllib.loads((FHD_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    base = {item.name: item for item in map(Requirement, project["dependencies"])}
+    assert str(base[name].specifier) == "==0.171.0"
+    for manifest in ("requirements-server-api.txt", "ops/deploy/requirements-server-api.lock.txt"):
+        pins = {
+            item.name: item
+            for line in (FHD_ROOT / manifest).read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith(("#", "-"))
+            for item in [Requirement(line)]
+        }
+        assert pins[name].specifier == base[name].specifier
+
+
+@pytest.mark.parametrize("mode", ["installed", "sdk", "cli_package", "executable", "missing"])
+def test_tarball_codex_probe_rejects_unusable_runtime(monkeypatch, tmp_path, mode: str) -> None:
+    import importlib.metadata
+
+    import codex_cli_bin
+    import openai_codex
+
+    source = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(encoding="utf-8")
+    probe = source.split('PYTHONPATH="$DEPLOY_ROOT" "$service_python" - <<\'PY\'\n', 1)[1]
+    probe = probe.split("\nPY", 1)[0]
+    # LangGraph provenance has its own suite; execute the exact deployment
+    # Codex check against real installed metadata and the packaged executable.
+    provenance = ModuleType("app.infrastructure.workflow.langgraph_assert")
+    provenance.assert_vendored_sources = lambda: None
+    monkeypatch.setitem(sys.modules, provenance.__name__, provenance)
+    if mode == "sdk":
+        monkeypatch.setattr(openai_codex, "__version__", "0.170.0")
+    elif mode == "cli_package":
+        monkeypatch.setattr(importlib.metadata, "version", lambda name: "0.170.0")
+    elif mode in {"executable", "missing"}:
+        binary = Path(sys.executable) if mode == "executable" else tmp_path / "missing-codex"
+        monkeypatch.setattr(codex_cli_bin, "bundled_codex_path", lambda: binary)
+
+    # Run the extracted release probe as a real Python file in this process, so
+    # patched SDK metadata and executable paths match the deployment check.
+    probe_path = tmp_path / "fhd-apply-release-codex-probe.py"
+    probe_path.write_text(probe + "\n", encoding="utf-8")
+    if mode == "installed":
+        runpy.run_path(str(probe_path))
+    else:
+        with pytest.raises(FileNotFoundError if mode == "missing" else RuntimeError):
+            runpy.run_path(str(probe_path))
 
 
 def test_server_release_archive_strips_macos_extended_attributes() -> None:
@@ -323,9 +379,7 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
         assert "previous_security_scan_run_id:" in workflow
         assert "verify_security_scan_pair.py" in workflow
         assert "inputs.release_channel == 'stable'" in workflow
-        cvm_job = workflow.split("  cvm-push-release:", 1)[1].split(
-            "  dispatch-evolution-after-cvm:", 1
-        )[0]
+        cvm_job = str(yaml.safe_load(workflow)["jobs"]["cvm-push-release"])
         assert "startsWith(github.ref, 'refs/tags/FHD/v')" not in cvm_job
 
 
@@ -385,7 +439,7 @@ def test_cvm_inputs_fail_before_checkout_and_expensive_jobs(tmp_path, overrides,
             assert "::error::" in result.stdout
 
 
-def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
+def test_cvm_release_does_not_dispatch_the_retired_evolution_orchestrator() -> None:
     source = yaml.safe_load((FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8"))
     published = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
@@ -393,20 +447,11 @@ def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
 
     for workflow in (source, published):
         events = workflow.get("on", workflow.get(True))
-        dispatch_input = events["workflow_dispatch"]["inputs"]["dispatch_evolution"]
-        assert dispatch_input["type"] == "boolean"
-        assert dispatch_input["default"] is True
-        job = workflow["jobs"]["dispatch-evolution-after-cvm"]
-        assert job["needs"] == ["cvm-push-release"]
-        assert job["if"].split(" && ") == [
-            "github.event_name == 'workflow_dispatch'",
-            "github.ref == 'refs/heads/main'",
-            "inputs.push_to_cvm == true",
-            "inputs.dispatch_evolution == true",
-            "needs.cvm-push-release.result == 'success'",
-        ]
-        assert job["steps"][0]["working-directory"] == "."
-        assert "actions/checkout" not in str(job["steps"])
+        assert "dispatch_evolution" not in events["workflow_dispatch"]["inputs"]
+        assert "dispatch-evolution-after-cvm" not in workflow["jobs"]
+        assert "evolution-orchestrator" not in str(workflow["jobs"])
+    assert not (FHD_ROOT / ".github/workflows/evolution-orchestrator.yml").exists()
+    assert not (REPO_ROOT / ".github/workflows/fhd-evolution-orchestrator.yml").exists()
 
 
 def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
@@ -531,8 +576,11 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
     )
 
     inprocess_call = script.index("if run_inprocess_with_live_env; then")
-    http_call = script.index("if choose_base_via_http; then")
-    assert inprocess_call < http_call
+    preflight = script.index("if choose_base_via_http; then")
+    identity_gate = script.index('if ! DEPLOYED_SHA="$(verify_runtime_identity')
+    provenance_gate = script.index('if ! GATE_SUMMARY="$(verify_provenance_gate')
+    http_call = script.index('if post_run_http "$PREFLIGHT_BASE"; then')
+    assert preflight < identity_gate < provenance_gate < inprocess_call < http_call
     assert 'REASON_FILE="${2:?reason_file}"' in script
     assert 'TOKEN_FILE="${3:-}"' in script
     assert 'rm -f -- "$REASON_FILE"' in script

@@ -19,6 +19,11 @@ export function asNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback
 }
 
+/** A measured zero is valid; missing, coercible and invalid values are not measurements. */
+export function asNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
 export function asBoolean(value: unknown, fallback = false): boolean {
   if (typeof value === 'boolean') return value
   if (value === 'true' || value === 1) return true

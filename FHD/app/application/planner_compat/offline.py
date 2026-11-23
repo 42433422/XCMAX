@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import replace
 
 from fastapi import Request
 
@@ -27,8 +26,7 @@ def offline_turn(
     business: Callable[..., Payload | None],
 ) -> Payload:
     """Never invoke a model; execute only the existing protected local business handlers."""
-    # Vector pre-indexing may use an online embedding provider.
-    admitted = replace(admission, vector_guard=lambda _message, _context: None).check(request, turn)
+    admitted = admission.check(request, turn)
     if admitted.payload is not None:
         return admitted.payload
     result = business(

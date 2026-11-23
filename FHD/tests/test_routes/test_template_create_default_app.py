@@ -22,6 +22,7 @@ def template_app(tmp_path, monkeypatch):
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.config import TestingConfig
     from app.db.db_base import Base
+    from app.db.models.permission import DEFAULT_ROLES, Permission, Role
     from app.db.models.user import Session, User
     from app.infrastructure.tenant_scope import tenant_scope
 
@@ -35,6 +36,7 @@ def template_app(tmp_path, monkeypatch):
         "XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE": "0",
         "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "usage.json"),
         "MODEL_USAGE_WALLET_BACKEND": "audit",
+        "XCAGI_TOOL_IDEMPOTENCY_PATH": str(tmp_path / "tool-claims.sqlite"),
     }.items():
         monkeypatch.setenv(key, value)
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -48,6 +50,10 @@ def template_app(tmp_path, monkeypatch):
     monkeypatch.setattr(db_session, "SessionLocal", sessions)
     init_db.init_template_tables(str(db_path))
     with sessions.begin() as db:
+        role = Role(name="user")
+        for code in next(item["permissions"] for item in DEFAULT_ROLES if item["name"] == "user"):
+            role.permissions.append(Permission(code=code, name=code))
+        db.add(role)
         for uid, tid in ((7, 11), (8, 22), (9, None)):
             db.add(User(id=uid, username=f"label-user-{uid}", password="unused", tenant_id=tid))
             db.add(

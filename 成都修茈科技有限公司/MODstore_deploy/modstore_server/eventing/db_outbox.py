@@ -38,6 +38,54 @@ logger = logging.getLogger(__name__)
 DispatcherFn = Callable[[dict[str, Any]], dict[str, Any]]
 
 
+def public_payload(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Internal workflow contracts stay in SQL; neither bus nor webhook receives input/files."""
+    if event_name in {"rag.cognition.started", "rag.cognition.completed"}:
+        return {
+            key: payload[key]
+            for key in (
+                "observation_id",
+                "user_id",
+                "resource_id",
+                "measurement_scope",
+                "context_sha256",
+                "prompt_sha256",
+                "output_sha256",
+                "success",
+                "reason",
+                "business_verified",
+                "metric_admitted",
+            )
+            if key in payload and type(payload[key]) in (str, int, bool)
+        }
+    if event_name not in {
+        "workflow.execution.feedback_started",
+        "workflow.customer.delivery_started",
+        "workflow.customer.delivery_produced",
+        "workflow.customer.graph_returned",
+    }:
+        return payload
+    fields = (
+        "execution_id",
+        "workflow_id",
+        "user_id",
+        "node_id",
+        "generation_run_id",
+        "graph_fingerprint",
+        "input_sha256",
+        "contract_sha256",
+        "started_at",
+        "completed_at",
+        "execution_allowed",
+        "metric_admitted",
+    )
+    return {
+        key: payload[key]
+        for key in fields
+        if key in payload and type(payload[key]) in (str, int, bool)
+    }
+
+
 @dataclass(frozen=True)
 class OutboxRecord:
     id: int
@@ -61,7 +109,7 @@ class OutboxRecord:
             "source": self.producer,
             "aggregate_id": self.aggregate_id,
             "created_at": int(time.time()),
-            "data": self.payload,
+            "data": public_payload(self.event_name, self.payload),
         }
 
     def to_domain_event(self) -> DomainEvent:
@@ -69,7 +117,7 @@ class OutboxRecord:
             self.event_name,
             producer=self.producer,
             subject_id=self.aggregate_id,
-            payload=self.payload,
+            payload=public_payload(self.event_name, self.payload),
             event_version=self.event_version,
             idempotency_key=self.idempotency_key or None,
         )

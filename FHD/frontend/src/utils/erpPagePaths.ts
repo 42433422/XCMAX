@@ -13,8 +13,7 @@ const HOST_PATH_TO_MOD: Record<string, string> = {
   '/materials': '/materials',
   '/materials-list': '/materials',
   '/traditional-mode': '/traditional-mode',
-  // 数据对接中心 = 宿主 EltCenter（/api/elt）；勿再映射到已退役的业务对接/模板库
-  '/data-sources': '/data-sources',
+  // 数据对接中心保留宿主路由；旧数据来源由 /kellai 接管，不进入 ERP 门面。
   '/print': '/print',
   '/printer-list': '/printer-list',
   '/template-preview': '/template-preview',
@@ -33,7 +32,6 @@ const HOST_ROUTE_NAME_TO_MOD: Record<string, string> = {
   materials: '/materials',
   'materials-list': '/materials',
   'traditional-mode': '/traditional-mode',
-  'data-sources': '/data-sources',
   print: '/print',
   'printer-list': '/printer-list',
   'template-preview': '/template-preview',

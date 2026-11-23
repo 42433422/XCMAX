@@ -48,8 +48,6 @@ def required_scheduler_job_ids() -> tuple[str, ...]:
         required.add("boss_daily_im_report")
     if _facade()._env_bool("MODSTORE_LLM_AUTOPILOT_ENABLED", False):
         required.add("llm_route_autopilot")
-    if _facade()._env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
-        required.update({"daily_release_train_orchestrator_job", "daily_vibe_line_execute_job"})
     if _facade()._env_bool("MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED", False):
         required.add("post_deploy_smoke_interval")
     return tuple(sorted(required))

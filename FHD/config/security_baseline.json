@@ -1,0 +1,5 @@
+{
+  "schema": "security-baseline/v1",
+  "note": "历史存量风险冻结清单。每条必须包含 scanner/id/reason/owner/expires(ISO8601)；到期后自动重新阻断。密钥泄漏类 finding 不允许豁免。",
+  "entries": []
+}

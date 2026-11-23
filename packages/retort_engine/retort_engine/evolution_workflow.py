@@ -22,6 +22,7 @@ class EvolutionState(TypedDict, total=False):
     knowledge: dict[str, Any]
     has_customer_feedback: bool
     impact: dict[str, Any]
+    recovery: dict[str, Any]
     status: str
 
 
@@ -37,6 +38,7 @@ class EvolutionPorts(Protocol):
     def verify(self, state: EvolutionState) -> dict[str, Any]: ...
     def delivery(self, state: EvolutionState) -> dict[str, Any]: ...
     def impact(self, state: EvolutionState) -> dict[str, Any]: ...
+    def recover(self, state: EvolutionState) -> dict[str, Any]: ...
     def remember(self, state: EvolutionState) -> dict[str, Any]: ...
 
 
@@ -71,9 +73,11 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         result = ports.dispatch(state)
         return {
             "dispatch": result,
-            "status": "waiting_credential_isolation"
-            if result.get("status") == "blocked"
-            else "waiting_execution",
+            "status": (
+                "waiting_credential_isolation"
+                if result.get("status") == "blocked"
+                else "waiting_execution"
+            ),
         }
 
     def collect(state: EvolutionState):
@@ -84,13 +88,19 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         status = str(result.get("status") or "unknown")
         return {
             "execution": result,
-            "status": "verifying"
-            if status == "completed"
-            else "failed"
-            if status in {"failed", "cancelled"}
-            else "waiting_credential_isolation"
-            if status == "blocked"
-            else "waiting_execution",
+            "status": (
+                "verifying"
+                if status == "completed"
+                else (
+                    "failed"
+                    if status in {"failed", "cancelled"}
+                    else (
+                        "waiting_credential_isolation"
+                        if status == "blocked"
+                        else "waiting_execution"
+                    )
+                )
+            ),
         }
 
     def verify(state: EvolutionState):
@@ -128,11 +138,13 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         status = result.get("status")
         return {
             "delivery": result,
-            "status": "delivered"
-            if status == "deployment_verified"
-            else "failed"
-            if status == "failed"
-            else "waiting_delivery",
+            "status": (
+                "delivered"
+                if status == "deployment_verified"
+                else "failed"
+                if status == "failed"
+                else "waiting_delivery"
+            ),
         }
 
     def impact(state: EvolutionState):
@@ -142,7 +154,29 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         result = ports.impact(state)
         return {
             "impact": result,
-            "status": result["status"],
+            "status": (
+                "waiting_recovery"
+                if result["status"] == "customer_impact_rejected"
+                else result["status"]
+            ),
+        }
+
+    def recover(state: EvolutionState):
+        # A rejection is retained before compensation. An ambiguous command is
+        # reconciled by the adapter's durable claim and exact release readback.
+        result = ports.recover(state)
+        if result.get("status") != "rollback_verified":
+            interrupt(
+                {"kind": "recovery", "request_id": state["protocol"]["request_id"]}
+            )
+            result = ports.recover(state)
+        return {
+            "recovery": result,
+            "status": (
+                "customer_impact_rejected"
+                if result.get("status") == "rollback_verified"
+                else "waiting_recovery"
+            ),
         }
 
     graph = StateGraph(EvolutionState)
@@ -156,6 +190,7 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         ("accept", accept),
         ("delivery", delivery),
         ("impact", impact),
+        ("recover", recover),
         ("remember", remember),
     ):
         graph.add_node(name, fn)
@@ -192,7 +227,11 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         lambda s: {
             "customer_impact_verified": "remember",
             "waiting_customer_impact": "impact",
+            "waiting_recovery": "recover",
         }.get(s["status"], END),
+    )
+    graph.add_conditional_edges(
+        "recover", lambda s: "recover" if s["status"] == "waiting_recovery" else END
     )
     graph.add_edge("remember", END)
     return graph.compile(checkpointer=checkpointer)

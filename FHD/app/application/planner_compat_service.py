@@ -63,7 +63,6 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
     _ensure_chat_db_read_authorized,
-    _ensure_vector_index_if_needed,
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
     _runtime_context_with_authenticated_actor,
@@ -205,7 +204,6 @@ def _admission() -> ChatAdmission:
         requires_read=_message_requires_db_read_token,
         interrupt=planner_workflow_interrupt_reply,
         after_interrupt=runtime_context_after_workflow_interrupt,
-        vector_guard=_ensure_vector_index_if_needed,
         reply=_xcagi_compat_reply_payload,
     )
 

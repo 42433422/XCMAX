@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import os
 from collections.abc import Callable, Iterator
@@ -18,6 +19,7 @@ from app.application.agent_orchestrator.artifact_files import (
     artifact_path,
     read_verified_run_file,
     store_run_file,
+    store_scoped_run_file,
     store_spreadsheet,
 )
 from app.application.elt.service import get_elt_service
@@ -147,6 +149,10 @@ def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
 def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[Path]:
     actor = _bound_actor(context)
     prior = _run_file(file_path, context)
+    if prior is None:
+        from app.infrastructure.codex.receipts import read_action_artifact
+
+        prior = read_action_artifact(file_path, context)
     if prior is not None:
         content, suffix = prior
     else:
@@ -198,6 +204,73 @@ def office_reader_input(
         yield {**options, "file_path": str(snapshot), "workspace_root": workspace}
 
 
+@contextmanager
+def workbook_writer_input(payload: dict[str, Any], context: dict[str, Any]) -> Iterator[dict]:
+    """A signed worker only sees an owned template and a private output directory."""
+    from jsonschema import Draft202012Validator
+
+    from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT
+
+    original = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"source", "user_message", "task"}
+    }
+    if not Draft202012Validator(WORKBOOK_WRITE_INPUT).is_valid(original):
+        raise PermissionError("模板写入需要明确 template_path 与 plan；不接受工作区或输出路径覆盖")
+    with workflow_file_snapshot(original["template_path"], context) as template:
+        if template.suffix.lower() not in {".xlsx", ".xlsm"}:
+            raise PermissionError("模板必须是当前账号的 xlsx/xlsm 工作簿")
+        with TemporaryDirectory(prefix="workbook-write-", dir=_staging_root()) as directory:
+            yield {
+                **copy.deepcopy(original),
+                "template_path": str(template),
+                "workspace_root": directory,
+                "output_relpath": "filled" + template.suffix.lower(),
+                "strict_protected": True,
+            }
+
+
+def publish_written_workbook(result: dict, context: dict, workspace: str) -> dict:
+    """Publish the real worker output before the private workspace is removed."""
+    from app.domain.workbook_write_contract import WORKBOOK_WRITER
+    from app.mod_sdk.employee_tool_registry import office_output_paths
+
+    paths = office_output_paths(WORKBOOK_WRITER, result)
+    if len(paths) != 1:
+        raise PermissionError("模板写入没有唯一实际工作簿产物")
+    path = resolve_elt_path(paths[0], workspace_root=workspace)
+    if path.suffix.lower() not in {".xlsx", ".xlsm"}:
+        raise PermissionError("模板写入产物类型无效")
+    with open_elt_input_file(path, workspace_root=workspace) as source:
+        receipt = store_scoped_run_file(source.read(), name=path.name, context=context)
+    # Do not expose the private staging paths or claim formula recalculation.
+    return {
+        **{
+            key: result[key]
+            for key in ("employee_id", "pack", "duration_ms", "executed_at", "source")
+            if key in result
+        },
+        "success": True,
+        "file_path": receipt["uri"],
+        "artifacts": [receipt],
+        "result": {
+            "handlers": ["direct_python"],
+            "outputs": [
+                {
+                    "handler": "direct_python",
+                    "ok": True,
+                    "output": {
+                        "ok": True,
+                        "items": [{"output_path": receipt["uri"]}],
+                        "summary": "工作簿已写出，等待独立 QC；公式按文本保存，未进行数值重算。",
+                    },
+                }
+            ],
+        },
+    }
+
+
 def export_workflow_spreadsheet(
     payload: dict[str, Any],
     context: dict[str, Any],
@@ -240,6 +313,32 @@ def employee_output_receipts(
 ) -> list[dict[str, Any]]:
     """Publish the same verified handoff for both employee dispatch paths."""
     from app.mod_sdk.employee_tool_registry import office_output_paths
+
+    published = result.get("artifacts")
+    if isinstance(published, list) and published:
+        for receipt in published:
+            if not isinstance(receipt, dict) or receipt.get("artifact_type") != "file":
+                raise PermissionError("员工产物缺少原文件回执")
+            metadata = receipt.get("metadata") or {}
+            if not isinstance(metadata, dict) or receipt.get("uri") != (
+                f"/api/agent/runs/{context.get('run_id')}/artifacts/{receipt.get('artifact_id')}"
+            ):
+                raise PermissionError("员工产物引用不属于当前原调用")
+            if any(
+                str(metadata.get(key)) != str(value)
+                for key, value in {
+                    "run_id": context.get("run_id"),
+                    "owner_user_id": str(_bound_actor(context).id),
+                    "tenant_id": context.get("tenant_id"),
+                    "step_id": context.get("step_id"),
+                    "call_id": context.get("call_id"),
+                    "node_id": context.get("node_id"),
+                    "params_sha256": context.get("input_sha256"),
+                }.items()
+            ):
+                raise PermissionError("员工产物不属于当前原调用")
+            read_verified_run_file(str(context["run_id"]), receipt)
+        return copy.deepcopy(published)
 
     paths = {
         resolve_elt_path(raw, workspace_root=workspace_root)

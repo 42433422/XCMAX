@@ -143,9 +143,6 @@ class SessionPaths implements MethodCallHandler {
       case 'sessionFilePath':
         result.success(this.context.filesDir + '/xcagi_session.json');
         break;
-      case 'localWorkspaceDirectory':
-        result.success(this.context.databaseDir);
-        break;
       default:
         result.notImplemented();
     }

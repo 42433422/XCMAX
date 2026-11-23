@@ -4,7 +4,7 @@ const scopeState = vi.hoisted(() => ({ mod: 'mod-a', user: 'u1' }))
 vi.mock('@/utils/apiBase', () => ({ getActiveExtensionModHeaders: () => ({ 'X-XCAGI-Active-Mod-Id': scopeState.mod }) }))
 vi.mock('@/utils/tenantStorageScopeRuntime', () => ({ getRuntimeTenantStorageScopeInput: () => ({ localUserId: scopeState.user }) }))
 vi.mock('@/utils/clientShell', () => ({ clientShellRequestHeaders: () => ({ 'X-XCMAX-Client-Shell': 'enterprise' }) }))
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); scopeState.mod = 'mod-a'; scopeState.user = 'u1' })
 it('carries scope and decodes fragmented UTF-8 and CRLF', async () => {
   const bytes = new TextEncoder().encode('event: task.snapshot\r\ndata: ["任务"]\r\n\r\n')
   const fetchMock = vi.fn().mockResolvedValue(new Response(new ReadableStream({ start(controller) {
@@ -36,6 +36,38 @@ it('shares one physical connection between subscribers of the same URL', async (
   expect(fetchMock).toHaveBeenCalledTimes(1)
   a.close()
   b.close()
+})
+
+it('uses the SSE grammar for bare CR, multiline data, event IDs and heartbeats', async () => {
+  const bytes = new TextEncoder().encode('\ufeff: keepalive\rid: task-7\revent: task.snapshot\rdata: [\rdata: "任务"]\r\r')
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream({ start(controller) {
+    for (const byte of bytes) controller.enqueue(new Uint8Array([byte]))
+    controller.close()
+  } }))))
+  const stream = new AuthenticatedEventStream('/api/agent/tasks/events/stream')
+  const snapshot = vi.fn()
+  const heartbeat = vi.fn()
+  stream.addEventListener('task.snapshot', snapshot)
+  stream.addEventListener('stream.heartbeat', heartbeat)
+  await vi.waitFor(() => expect(snapshot).toHaveBeenCalledOnce())
+  expect(snapshot.mock.calls[0][0]).toMatchObject({ data: '[\n"任务"]', lastEventId: 'task-7' })
+  expect(heartbeat).toHaveBeenCalledOnce()
+  stream.close()
+})
+
+it('does not log out a new identity when an earlier request returns unauthorized', async () => {
+  let resolve!: (response: Response) => void
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(r => { resolve = r })))
+  const stream = new AuthenticatedEventStream('/api/agent/tasks/events/stream')
+  const unauthorized = vi.fn()
+  const reconnect = vi.fn()
+  stream.addEventListener('stream.unauthorized', unauthorized)
+  stream.onerror = reconnect
+  scopeState.user = 'another-user'
+  resolve(new Response(null, { status: 401 }))
+  await vi.waitFor(() => expect(reconnect).toHaveBeenCalledOnce())
+  expect(unauthorized).not.toHaveBeenCalled()
+  stream.close()
 })
 
 it('stops when the task stream is unauthorized', async () => {

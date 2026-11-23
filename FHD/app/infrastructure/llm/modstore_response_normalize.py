@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-from app.infrastructure.modstore_transport import safe_route_metadata
+from app.infrastructure.modstore_transport import MarketModelError, safe_route_metadata
 
 
 def normalize_market_chat_response(
@@ -42,7 +42,7 @@ def normalize_market_chat_response(
                 {
                     "message": normalized_message,
                     "index": choice_dict.get("index", idx),
-                    "finish_reason": choice_dict.get("finish_reason", "stop"),
+                    "finish_reason": choice_dict.get("finish_reason"),
                 }
             )
     else:
@@ -55,7 +55,7 @@ def normalize_market_chat_response(
                     **({"tool_calls": tool_calls} if tool_calls else {}),
                 },
                 "index": 0,
-                "finish_reason": "stop",
+                "finish_reason": raw_response.get("finish_reason"),
             }
         ]
     billing = {
@@ -165,6 +165,12 @@ def absorb_stream_payload(
         status_cb()
     if not isinstance(payload, dict):
         return
+    if (
+        payload.get("type") == "error"
+        or payload.get("ok") is False
+        or payload.get("success") is False
+    ):
+        raise MarketModelError(payload)
     if reasoning is not None:
         reasoning_delta = _reasoning_delta(payload)
         if reasoning_delta:

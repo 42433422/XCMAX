@@ -417,18 +417,21 @@ def format_retrieved_block(chunks: Iterable[RetrievedChunk]) -> str:
     return "\n\n".join(parts)
 
 
+RAG_SYSTEM_PROMPT = (
+    "以下是知识库检索到的相关资料（带编号 [1][2]…）。"
+    "请在回答时：\n"
+    "1. 优先使用这些资料中的信息；\n"
+    "2. 在使用某条资料时，在对应内容后标注引用编号，如「…[1]」；\n"
+    "3. 如果资料不足以回答问题，请明确指出并给出你的判断；\n"
+    "4. 不要编造资料中不存在的信息。\n\n"
+)
+
+
 def inject_rag_into_messages(
     messages: List[Dict[str, str]],
     chunks: Iterable[RetrievedChunk],
     *,
-    intro: str = (
-        "以下是知识库检索到的相关资料（带编号 [1][2]…）。"
-        "请在回答时：\n"
-        "1. 优先使用这些资料中的信息；\n"
-        "2. 在使用某条资料时，在对应内容后标注引用编号，如「…[1]」；\n"
-        "3. 如果资料不足以回答问题，请明确指出并给出你的判断；\n"
-        "4. 不要编造资料中不存在的信息。\n\n"
-    ),
+    intro: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     """在 messages 头部追加/合并一段 system 上下文。
 
@@ -441,7 +444,7 @@ def inject_rag_into_messages(
     block = format_retrieved_block(chunks_list)
     if not block:
         return list(messages)
-    suffix = f"{intro}\n\n{block}"
+    suffix = f"{RAG_SYSTEM_PROMPT if intro is None else intro}\n\n{block}"
 
     out = [dict(m) for m in messages]
     sys_idx = next(

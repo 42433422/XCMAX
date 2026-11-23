@@ -5,11 +5,30 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.infrastructure.auth.dependencies import session_id_from_request
 
 
 def _req(*, headers: dict | None = None, cookies: dict | None = None):
     return SimpleNamespace(headers=headers or {}, cookies=cookies or {})
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [None, SimpleNamespace(), SimpleNamespace(headers=None, cookies=None)],
+    ids=["none", "missing-fields", "none-fields"],
+)
+def test_lightweight_request_without_credentials_has_no_identity(candidate):
+    assert session_id_from_request(candidate) == ""
+
+
+@pytest.mark.parametrize("attributes", [{}, {"headers": None}, {"headers": {}}])
+def test_headerless_request_cannot_borrow_admin_cookie(attributes):
+    request = SimpleNamespace(**attributes, cookies={"admin_session_id": "admin-sid"})
+    assert session_id_from_request(request) == ""
+    request.cookies["session_id"] = "enterprise-sid"
+    assert session_id_from_request(request) == "enterprise-sid"
 
 
 class TestSessionIdPrefersCookieOverBearer:
