@@ -50,6 +50,10 @@ class Observation(Contract):
     task: str
     arm: Arm
     seed: int
+    strategy_revision: Digest
+    model_revision: str
+    model_settings_sha256: Digest
+    output_sha256: Digest
     action: Action
     confidence: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
     evidence: tuple[str, ...]
@@ -79,6 +83,10 @@ def _validate(protocol: Protocol) -> dict[str, Case]:
         raise ValueError("invalid_or_nonindependent_revision")
     if len(set(protocol.seeds)) != len(protocol.seeds):
         raise ValueError("duplicate_seed")
+    if len(protocol.source_revision) not in (40, 64) or any(
+        c not in "0123456789abcdef" for c in protocol.source_revision
+    ):
+        raise ValueError("invalid_source_revision")
     cases = {}
     partitions: dict[str, str] = {}
     for case in protocol.cases:
@@ -108,6 +116,10 @@ def _metrics(rows: list[tuple[Case, Observation, Receipt]]) -> dict:
         "unknown_outcomes": len(rows) - len(known),
         "accuracy_verified_only": sum(r.correct is True for _, r in known) / len(known) if known else None,
         "calibrated_trials": len(measured),
+        "missing_confidence": sum(obs.confidence is None for _, obs, _ in rows),
+        "verified_missing_confidence": len(known) - len(measured),
+        "mean_confidence": sum(probabilities) / len(probabilities) if measured else None,
+        "calibration_correct_rate": sum(labels) / len(labels) if measured else None,
         "brier_score": float(brier_score_loss(labels, probabilities)) if measured else None,
         "reliability_bins": bins,
         "high_confidence_errors": sum(o.confidence is not None and o.confidence >= 0.8 and r.correct is False for o, r in known),
@@ -152,6 +164,14 @@ def evaluate(protocol: Protocol, *, frozen_sha256: str, observations: tuple[Obse
         if key not in expected or key in rows:
             raise ValueError("unexpected_or_duplicate_trial")
         case = cases[obs.task]
+        strategy = protocol.baseline_revision if obs.arm == "baseline" else protocol.candidate_revision
+        if (
+            obs.strategy_revision != strategy
+            or obs.model_revision != protocol.model_revision
+            or obs.model_settings_sha256 != protocol.model_settings_sha256
+            or not _digest(obs.output_sha256)
+        ):
+            raise ValueError("trial_revision_or_output_mismatch")
         if not set(obs.evidence) <= set(case.evidence):
             raise ValueError("invalid_evidence_reference")
         receipt = outcomes.pop(fingerprint(obs), None)
@@ -168,24 +188,62 @@ def evaluate(protocol: Protocol, *, frozen_sha256: str, observations: tuple[Obse
             for condition in sorted({case.condition for case in cases.values()})
         }}
     pairs = Counter()
-    for task in cases:
+    paired_conditions: dict[str, Counter] = {}
+    calibration_pairs: list[tuple[float, float, int, int]] = []
+    for task, case in cases.items():
         for seed in protocol.seeds:
-            a = rows[(task, "baseline", seed)][2].correct
-            b = rows[(task, "candidate", seed)][2].correct
+            _, base_obs, base_receipt = rows[(task, "baseline", seed)]
+            _, candidate_obs, candidate_receipt = rows[(task, "candidate", seed)]
+            a, b = base_receipt.correct, candidate_receipt.correct
             label = "unknown" if a is None or b is None else "same" if a == b else "regression" if a else "improvement"
             pairs[label] += 1
+            paired_conditions.setdefault(case.condition, Counter())[label] += 1
+            if (
+                a is not None and b is not None
+                and base_obs.confidence is not None and candidate_obs.confidence is not None
+            ):
+                calibration_pairs.append((base_obs.confidence, candidate_obs.confidence, int(a), int(b)))
     groups = len({case.group for case in cases.values()})
-    sample_floor = len(cases) >= 100 and groups >= 100 and len(protocol.seeds) >= 3
+    sources = len({case.source for case in cases.values()})
+    condition_groups = {
+        condition: len({case.group for case in cases.values() if case.condition == condition})
+        for condition in ("sufficient", "missing", "ambiguous", "outside_capability")
+    }
+    sample_floor = len(cases) >= 100 and min(groups, sources) >= 100 and len(protocol.seeds) >= 3
+    coverage_complete = all(n >= 10 for n in condition_groups.values())
+    all_pairs = len(cases) * len(protocol.seeds)
+    paired_brier_delta = None
+    if calibration_pairs:
+        p_base, p_candidate, y_base, y_candidate = map(list, zip(*calibration_pairs))
+        paired_brier_delta = float(
+            brier_score_loss(y_candidate, p_candidate) - brier_score_loss(y_base, p_base)
+        )
+    ready_for_review = sample_floor and coverage_complete and len(calibration_pairs) == all_pairs
     return {
         "scope": "offline_research_not_capability_score_or_authority",
-        "status": "pending_human_review" if sample_floor and not pairs["unknown"] else "insufficient_evidence",
+        "status": "pending_human_review" if ready_for_review else "insufficient_evidence",
         "protocol_sha256": frozen_sha256,
         "sklearn_version": sklearn_version,
         "holdout_tasks": len(cases),
         "independent_source_groups": groups,
+        "distinct_source_digests": sources,
         "sample_floor_met": sample_floor,
+        "condition_group_counts": condition_groups,
+        "condition_coverage_met": coverage_complete,
+        "matched_calibration_pairs": len(calibration_pairs),
+        "total_pairs": all_pairs,
+        "paired_brier_delta_candidate_minus_baseline": paired_brier_delta,
         "arms": report,
         "paired_outcomes": dict(pairs),
+        "paired_by_condition": {key: dict(value) for key, value in sorted(paired_conditions.items())},
+        "audit_trials": [
+            {
+                "task": task, "arm": arm, "seed": seed,
+                "observation_sha256": fingerprint(rows[(task, arm, seed)][1]),
+                "receipt_sha256": rows[(task, arm, seed)][2].receipt_sha256,
+            }
+            for task, arm, seed in sorted(rows)
+        ],
         "receipt_sha256s": sorted(seen_receipts),
         "review_required": True,
         "review_findings": {
