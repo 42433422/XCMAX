@@ -442,3 +442,106 @@ def test_graph_recall_and_historical_review_use_existing_authority() -> None:
     assert not service.query(
         access_context=access, query="Acme Corp", as_of="2026-01-01T12:00:00",
     )["success"]
+
+
+def test_shared_memory_lifecycle_is_governed_across_actors_and_mods(monkeypatch) -> None:
+    service = _service()
+    backend = MagicMock()
+    backend.extract_candidates.return_value = None
+    monkeypatch.setattr(
+        "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
+    )
+
+    def access(actor, tenant="2", mod="sales", write=True):
+        return DatasetAccessContext(
+            actor_id=actor,
+            tenant_id=tenant,
+            mod_id=mod,
+            permissions=frozenset(
+                {"dataset.read", "dataset.write"} if write else {"dataset.read"}
+            ),
+        )
+
+    alice = access("alice")
+    bob = access("bob")
+    reader = access("reader", write=False)
+    foreign = access("carol", tenant="3")
+    other_mod = access("alice", mod="finance")
+    statement = "客户北辰科技的负责人是李明"
+
+    def capture(actor, text=statement, scope="tenant"):
+        return service.capture_conversation_turn(
+            access_context=actor, user_message=text, scope=scope
+        )
+
+    def recall(actor):
+        return service.query(
+            access_context=actor, query="北辰科技负责人", reinforce=False, max_hops=0
+        )["memories"]
+
+    private = capture(alice, "客户北辰科技的沟通时间是周二下午", "user")
+    private_id = private["candidates"][0]["memory_id"]
+    assert service.mutate(
+        access_context=alice, memory_id=private_id, action="confirm"
+    )["success"]
+    created = capture(alice)
+    mid = created["candidates"][0]["memory_id"]
+    assert not recall(bob)
+    assert not service.mutate(
+        access_context=reader, memory_id=mid, action="confirm"
+    )["success"]
+    assert service.mutate(access_context=alice, memory_id=mid, action="confirm")["success"]
+    assert {row["memory_id"] for row in recall(bob)} == {mid}
+    assert {row["memory_id"] for row in recall(reader)} == {mid}
+    assert not recall(foreign)
+    assert not recall(other_mod)
+    assert not service.mutate(access_context=foreign, memory_id=mid, action="delete")[
+        "success"
+    ]
+
+    replacement = extract_explicit_memories("客户北辰科技的负责人是王明")[0]
+    assert service.mutate(
+        access_context=alice, memory_id=mid, action="correct",
+        patch={"key": replacement["key"], "value": replacement["value"]},
+    )["success"]
+    assert recall(bob)[0]["value"]["object"] == "王明"
+    assert capture(bob)["created_count"] == 0
+    assert service.mutate(access_context=alice, memory_id=mid, action="delete")["success"]
+    assert not recall(bob)
+    assert capture(bob, "客户北辰科技的负责人是王明")["created_count"] == 0
+    assert not recall(reader)
+
+
+def test_lexical_recall_revalidates_revision_without_graph_path(monkeypatch) -> None:
+    service = _service()
+    access = _access()
+    backend = MagicMock()
+    backend.extract_candidates.return_value = None
+    monkeypatch.setattr(
+        "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
+    )
+    created = service.capture_conversation_turn(
+        access_context=access, user_message="客户北辰科技的负责人是李明"
+    )
+    mid = created["candidates"][0]["memory_id"]
+    assert service.mutate(access_context=access, memory_id=mid, action="confirm")["success"]
+    original = service.list_memories
+    reads = 0
+
+    def revoke_between_reads(**kwargs):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            assert service.mutate(
+                access_context=access, memory_id=mid, action="delete"
+            )["success"]
+        return original(**kwargs)
+
+    monkeypatch.setattr(service, "list_memories", revoke_between_reads)
+    result = service.query(
+        access_context=access, query="北辰科技负责人", max_hops=0, reinforce=False
+    )
+    assert result["memories"] == []
+    assert result["chunks"] == []
+    assert result["revalidation_dropped"] == 1
+    assert result["coverage_complete"] is False

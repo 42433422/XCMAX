@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from app.application.user_memory.policy import is_scoped_memory_owner
 from app.application.user_memory.preferences import sync_preference_projection
 from app.application.user_memory.projections import project_after_commit
 from app.application.user_memory.relation_retrieval import validate_relation_value
@@ -89,12 +90,15 @@ class CandidateMemory:
                 "rejected",
             }:
                 return {"success": True, "created": False, "candidate": dict(record)}
-            if personal_capture and (
+            # A scoped owner includes enterprise and global preference memory.
+            # Repeated observations cannot silently restore a revoked or superseded fact.
+            if is_scoped_memory_owner(user_id) and (
                 (record.get("fingerprint") == fingerprint and record.get("status") == "deleted")
                 or any(
                     (revision.get("previous") or {}).get("fingerprint") == fingerprint
                     for revision in record.get("history") or []
-                    if revision.get("action") == "correct"
+                    if revision.get("action") in {"correct", "confirm"}
+                    and record.get("fingerprint") != fingerprint
                 )
             ):
                 return {"success": True, "created": False}
