@@ -19,8 +19,13 @@ def _pack():
 
 def test_chat_model_outage_is_failure_not_success():
     result = build_interactive_chat_fallback_result(
-        "fixture", _pack(), {}, "question", ["llm_md"],
-        {"error": "model unavailable", "error_code": "model_unavailable"}, 0.0
+        "fixture",
+        _pack(),
+        {},
+        "question",
+        ["llm_md"],
+        {"error": "model unavailable", "error_code": "model_unavailable"},
+        0.0,
     )
     assert result["success"] is False
     assert result["error_code"] == "model_unavailable"
@@ -30,15 +35,27 @@ def test_chat_model_outage_is_failure_not_success():
 
 def test_collaboration_degradation_is_not_successful_execution():
     failed = build_collaboration_context_result(
-        "fixture", _pack(), {}, "question", ["llm_md"],
-        {"error": "model unavailable"}, 0.0, SimpleNamespace(has_content=False),
+        "fixture",
+        _pack(),
+        {},
+        "question",
+        ["llm_md"],
+        {"error": "model unavailable"},
+        0.0,
+        SimpleNamespace(has_content=False),
         degraded=True,
     )
     assert failed["success"] is False
     assert failed["result"]["outputs"][0]["ok"] is False
     healthy = build_collaboration_context_result(
-        "fixture", _pack(), {}, "question", ["llm_md"],
-        {"reasoning": "ready"}, 0.0, SimpleNamespace(has_content=False),
+        "fixture",
+        _pack(),
+        {},
+        "question",
+        ["llm_md"],
+        {"reasoning": "ready"},
+        0.0,
+        SimpleNamespace(has_content=False),
     )
     assert healthy["success"] is True
     assert healthy["result"]["outputs"][0]["ok"] is True

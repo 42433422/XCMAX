@@ -173,6 +173,8 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
         pytest.fail("context-only must not execute the file worker")
 
     monkeypatch.setattr(executor, "_action_direct_python_module", no_file_worker)
+    cognition = {"reasoning": "受控模型返回协作上下文", "input": {}}
+    monkeypatch.setattr(executor, "_cognition_fhd", lambda *args, **kwargs: dict(cognition))
     context_params = {"employee_id": "csv_full_read", "task": "提供上游上下文"}
 
     def call(action, context, **inputs):
@@ -180,7 +182,19 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatc
             action, {**context_params, "input": inputs}, context, "normal", ""
         )
 
-    assert call("context", owner.context)["success"]
+    context_result = call("context", owner.context)
+    assert context_result["success"]
+    assert context_result["data"]["degraded"] is False
+    assert context_result["data"]["result"]["outputs"][0]["ok"] is True
+    assert context_result["data"]["result"]["outputs"][0]["output"] == cognition["reasoning"]
+    cognition.update(reasoning="", error="model unavailable")
+    failed_context = call("context", owner.context)
+    assert failed_context["success"] is False
+    assert failed_context["data"]["degraded"] is True
+    assert failed_context["data"]["result"]["outputs"][0]["ok"] is False
+    assert failed_context["data"]["result"]["cognition_error"] == "model unavailable"
+    assert failed_context["artifacts"] == []
+    assert not target.exists()
     viewer = trusted_actor(user_id=9, role="viewer", permissions=["customer.view"])
     for context in (viewer.context, {**owner.context, "tenant_id": "999"}):
         assert call("context", context)["data"]["error_code"] in {
