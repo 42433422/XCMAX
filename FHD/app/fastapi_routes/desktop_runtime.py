@@ -71,6 +71,7 @@ async def account_runtime_qualification_status(request: Request, user=Depends(ge
     """Read the current account/route receipt without starting a model attempt."""
     from app.application.agent_runtime.configuration import (
         get_account_runtime_status,
+        public_runtime_failure,
         runtime_qualification_status,
     )
     from app.application.modstore_conversation_app import request_model_scope
@@ -94,9 +95,7 @@ async def account_runtime_qualification_status(request: Request, user=Depends(ge
                 "success": False,
                 "qualification": "blocked",
                 "managed_by": managed_by,
-                "error_code": getattr(exc, "code", "runtime_not_qualified"),
-                "message": exc.public_message,
-                "checks": getattr(exc, "checks", {}),
+                **public_runtime_failure(exc),
             },
             status_code=409,
             headers={"Cache-Control": "no-store"},
@@ -108,7 +107,10 @@ async def qualify_account_runtime(
     body: RuntimeQualificationRequest, request: Request, user=Depends(get_logged_in_user)
 ):
     """Run or explicitly retry only this authenticated account's exact model route."""
-    from app.application.agent_runtime.configuration import get_account_runtime_settings
+    from app.application.agent_runtime.configuration import (
+        get_account_runtime_settings,
+        public_runtime_failure,
+    )
     from app.application.modstore_conversation_app import request_model_scope
     from app.infrastructure.codex.policy import CODEX_VERSION, RuntimePolicyError, runtime_settings
 
@@ -136,9 +138,7 @@ async def qualify_account_runtime(
         return JSONResponse(
             {
                 "success": False,
-                "error_code": getattr(exc, "code", "runtime_not_qualified"),
-                "message": exc.public_message,
-                "checks": getattr(exc, "checks", {}),
+                **public_runtime_failure(exc),
             },
             status_code=409,
         )

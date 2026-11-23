@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
@@ -112,18 +112,36 @@ test('fixed native replay policy denies network and preserves the namespace/writ
   const helper = join(runtimeRoot, 'vendor', 'seccomp', process.arch, 'apply-seccomp');
   mkdirSync(dirname(helper), { recursive: true });
   writeFileSync(helper, '', { mode: 0o700 });
-  const spec = replaySpec({ directory: work, python: process.execPath }, { PROMPTFOO_SANDBOX_ENTRY: runtimePath });
+  const pythonIdentity = spawnSync(python || (process.platform === 'win32' ? 'python' : 'python3'),
+    ['-I', '-c', 'import sys; print(sys.executable)'], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(pythonIdentity.status, 0, pythonIdentity.stderr);
+  const spec = replaySpec({ directory: work, python: pythonIdentity.stdout.trim() },
+    { PROMPTFOO_SANDBOX_ENTRY: runtimePath });
   const policy = replayPolicy(spec);
-  assert.deepEqual(policy.network, { allowedDomains: [], deniedDomains: [], strictAllowlist: true,
-    allowAllUnixSockets: false, allowLocalBinding: false });
+  assert.deepEqual(policy.network, { allowedDomains: [], deniedDomains: ['*'], strictAllowlist: true,
+    allowUnixSockets: [], allowAllUnixSockets: false, allowLocalBinding: false });
   assert.equal(policy.allowNestedUserNamespaces, false);
   assert.equal(policy.enableWeakerNestedSandbox, false);
+  assert.equal(policy.enableWeakerNetworkIsolation, false);
   assert.deepEqual(policy.filesystem.allowWrite, [realpathSync(work)]);
   assert.ok(policy.filesystem.denyRead.includes('/'));
   assert.ok(policy.filesystem.allowRead.includes(wrapper));
   assert.ok(policy.filesystem.allowRead.includes(join(dirname(wrapper), 'opencode_agent.mjs')));
   assert.ok(!policy.filesystem.allowRead.includes(dirname(hostApp)));
   assert.ok(!policy.filesystem.allowRead.includes(spec.project));
+  assert.ok(!policy.filesystem.allowRead.includes(resolve(dirname(wrapper), '../../../packages')));
+  assert.ok(!policy.filesystem.allowRead.includes(resolve(dirname(wrapper), '../../../../packages')));
+  for (const [name, namespaces] of [
+    ['xcagi_langgraph_checkpoint', ['cache', 'checkpoint', 'store']],
+    ['xcagi_langgraph_checkpoint_backends/checkpoint-sqlite', ['cache', 'checkpoint', 'store']],
+    ['xcagi_langgraph_checkpoint_backends/checkpoint-postgres', ['checkpoint', 'store']],
+  ]) {
+    const source = resolve(dirname(wrapper), '../../../packages', name, 'langgraph');
+    assert.ok(policy.filesystem.allowRead.includes(source));
+    for (const namespace of namespaces) assert.ok(
+      !policy.filesystem.denyRead.includes(join(source, namespace)),
+      'declared Python namespace source must remain available: ' + namespace);
+  }
   assert.ok(policy.filesystem.allowRead.includes(join(spec.project, 'modstore_server')));
   assert.ok(!policy.filesystem.allowRead.some(path => path.endsWith('/modstore.db')
     || path.includes('/catalog_data')));
