@@ -7,6 +7,9 @@ import pytest
 
 from modstore_server.strategic_customer_outcomes import VERIFIED_DELIVERY_ATTRIBUTION
 from modstore_server.strategic_portfolio import digest
+from tests.test_xiaoc_life_feedback import approved_life_portfolio as approved_life_portfolio  # noqa: PLC0414
+from tests.test_strategic_portfolio import database as database  # noqa: PLC0414
+
 from modstore_server.xiaoc_life_reflection import (
     candidate_id, candidate_refs, experience_candidate_facts, review_experiences,
 )
@@ -123,3 +126,44 @@ def test_pending_candidate_identity_and_readback():
     assert not experience_candidate_facts({**state, "goals": []})
     event["details"]["candidate"]["actual"] = 1000
     assert not experience_candidate_facts(state)
+
+
+def test_late_receipt_registers_one_pending_candidate_in_original_sql_ledger(
+    approved_life_portfolio, monkeypatch
+):
+    from modstore_server import xiaoc_life_reconciliation as reconciliation
+    from modstore_server import xiaoc_life_store as life
+    from modstore_server.xiaoc_life_policy import LifeUpdate
+
+    decision_id = approved_life_portfolio
+    row = record()
+    row.update(decision_id=decision_id, status="executing")
+    row["reviews"][0]["observation_complete"] = False
+    monkeypatch.setattr(reconciliation, "portfolio_status", lambda *_args, **_kwargs: row)
+    life.update_settings(
+        LifeUpdate(expected_revision=life.read_state()["revision"], paused=True),
+        actor_user_id=7,
+    )
+    before = life.read_state()
+    reconciliation.reconcile_goals()
+    assert not experience_candidate_facts(life.read_state())
+    row["reviews"][0]["observation_complete"] = True
+    reconciliation.reconcile_goals()
+    saved = life.read_state()
+    candidates = [
+        event for event in saved["events"] if event["kind"] == "experience_candidate"
+    ]
+    assert len(candidates) == 1 and candidates[0]["status"] == "pending_review"
+    assert saved["paused"] and saved["budget"] == before["budget"]
+    assert experience_candidate_facts(saved)[0]["ref"] == candidates[0]["id"]
+
+    # Fresh SQL sessions and duplicate/late reviews must not append another
+    # candidate or apply changes to policy, budget or the original execution.
+    assert reconciliation.reconcile_goals() == {"observed": 0}
+    row["reviews"][0]["business"]["order_refs_sha256"] = "e" * 64
+    reconciliation.reconcile_goals()
+    again = life.read_state()
+    assert [
+        event["id"] for event in again["events"] if event["kind"] == "experience_candidate"
+    ] == [candidates[0]["id"]]
+    assert again["budget"] == before["budget"]

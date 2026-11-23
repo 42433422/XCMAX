@@ -100,6 +100,8 @@ def _task_candidate(
     start, end = (_time(snapshot.get(k)) for k in ("window_start", "window_end"))
     reviewed, report_at = _time(snapshot.get("reviewed_at")), _time(review.get("at"))
     days = target.get("window_days")
+    business_start = _time(review["business"].get("window_start"))
+    business_end = _time(review["business"].get("window_end"))
     if (
         metric is None
         or started is None or finished is None
@@ -109,6 +111,8 @@ def _task_candidate(
         or started != start
         or end != start + timedelta(days=days)
         or not started <= finished <= end <= reviewed <= report_at
+        or business_start is None or business_end is None
+        or not business_start <= start <= end <= business_end
         or not _sha(evidence.get("evidence_sha256"))
         or not isinstance(evidence.get("source"), str)
         or not evidence["source"].strip()
@@ -185,6 +189,7 @@ def review_experiences(record: dict[str, Any]) -> tuple[dict[str, Any], list[dic
         type(owner) is not int or owner <= 0
         or not isinstance(decision, str) or not decision
         or not _sha(proposal)
+        or type(authorization.get("user_id")) is not int
         or authorization.get("user_id") != owner
         or authorization.get("proposal_sha256") != proposal
         or not authorization.get("actor")

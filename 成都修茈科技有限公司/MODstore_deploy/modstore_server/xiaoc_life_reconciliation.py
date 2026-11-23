@@ -237,6 +237,7 @@ def reconcile_goals() -> dict[str, Any]:
         if data.get("owner_user_id") != snapshot.get("owner_user_id"):
             return 0
         changed = 0
+        registered: set[str] = set()
         for (
             goal_id, decision_id, status, label, receipt, feedback, previous, review,
             reflection, candidates,
@@ -260,6 +261,9 @@ def reconcile_goals() -> dict[str, Any]:
                 continue  # A newer reconciliation or live cycle already changed this goal.
             for candidate in candidates:
                 experience_id = candidate_id(candidate)
+                if experience_id in registered:
+                    continue
+                registered.add(experience_id)
                 if session.get(XiaoCLifeEvent, experience_id) is None:
                     _event(
                         session,
@@ -271,6 +275,8 @@ def reconcile_goals() -> dict[str, Any]:
                         details={
                             "owner_user_id": snapshot["owner_user_id"],
                             "goal_id": goal_id,
+                            "source_execution_event_id": "execution:" + receipt,
+                            "outcome_ref": feedback["evidence_ref"],
                             "candidate": candidate,
                             "candidate_sha256": digest(candidate),
                         },

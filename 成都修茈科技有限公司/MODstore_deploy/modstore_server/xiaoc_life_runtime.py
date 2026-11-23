@@ -352,10 +352,15 @@ class CyclePorts:
                     }
                 facts.append(_fact("company:" + key, value))
         for event in self.state.get("events", [])[:4]:
-            if isinstance(event, dict) and event.get("summary"):
+            if (
+                isinstance(event, dict)
+                and event.get("summary")
+                and event.get("kind") != "experience_candidate"
+                and (event.get("details") or {}).get("owner_user_id") == self.state.get("owner_user_id")
+            ):
                 facts.append(
                     _fact(
-                        "experience",
+                        "historical_life_event",
                         {k: event.get(k) for k in ("id", "cycle_id", "status", "summary")},
                     )
                 )
