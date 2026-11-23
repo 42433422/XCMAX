@@ -7,9 +7,11 @@ products below authorize an XCAGI desktop account.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 PERSONAL_PLAN_ID = "saas-personal-free"
+STANDARD_PLAN_ID = "saas-permanent-standard"
 
 
 ACCOUNT_LICENSE_PLANS: tuple[dict[str, Any], ...] = (
@@ -41,6 +43,22 @@ ACCOUNT_LICENSE_PLANS: tuple[dict[str, Any], ...] = (
         "badge": "体验",
         "features": ["XCAGI 桌面端完整功能", "30 天使用期", "100 元 AI 使用额度"],
     },
+    {
+        "id": STANDARD_PLAN_ID,
+        "title": "XCAGI 软件买断",
+        "description": "6,800 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
+        "amount_cents": 680000,
+        "quota_cents": 0,
+        "license_type": "permanent",
+        "account_tier": "normal",
+        "badge": "一次购买",
+        "features": ["软件永久使用", "无软件续租费", "定制另行报价", "AI 调用按量付费"],
+    },
+)
+
+# Keep the original metadata for existing grants and in-flight paid orders.
+# These products are no longer offered for new checkout.
+LEGACY_ACCOUNT_LICENSE_PLANS: tuple[dict[str, Any], ...] = (
     {
         "id": "saas-permanent-starter",
         "title": "企业启航版",
@@ -94,7 +112,8 @@ ACCOUNT_LICENSE_PLANS: tuple[dict[str, Any], ...] = (
     },
 )
 
-_BY_ID = {str(plan["id"]): plan for plan in ACCOUNT_LICENSE_PLANS}
+_BY_ID = {str(plan["id"]): plan for plan in (*ACCOUNT_LICENSE_PLANS, *LEGACY_ACCOUNT_LICENSE_PLANS)}
+_LEGACY_IDS = frozenset(str(plan["id"]) for plan in LEGACY_ACCOUNT_LICENSE_PLANS)
 
 
 def account_license_plan(plan_id: str | None) -> dict[str, Any] | None:
@@ -106,8 +125,22 @@ def is_account_license_plan_id(plan_id: str | None) -> bool:
     return (plan_id or "").strip() in _BY_ID
 
 
+def is_legacy_account_license_plan_id(plan_id: str | None) -> bool:
+    return (plan_id or "").strip() in _LEGACY_IDS
+
+
+def account_license_priority(plan_id: str | None) -> tuple[int, int, int]:
+    """Select durable purchased access before a newer trial or lower tier."""
+    plan = account_license_plan(plan_id) or {}
+    return (
+        {"free": 0, "trial": 1, "permanent": 2}.get(str(plan.get("license_type")), -1),
+        {"normal": 0, "pro": 1, "max": 2, "ultra": 3}.get(str(plan.get("account_tier")), 0),
+        int(is_legacy_account_license_plan_id(plan_id)),
+    )
+
+
 def account_license_plan_rows() -> list[dict[str, Any]]:
-    """Return rows compatible with the existing ``plan_templates`` table."""
+    """Seed current and historical rows without rewriting order snapshots."""
 
     return [
         {
@@ -118,7 +151,7 @@ def account_license_plan_rows() -> list[dict[str, Any]]:
             "features_json": json.dumps(plan.get("features") or [], ensure_ascii=False),
             "quotas_json": "{}",
         }
-        for plan in ACCOUNT_LICENSE_PLANS
+        for plan in (*ACCOUNT_LICENSE_PLANS, *LEGACY_ACCOUNT_LICENSE_PLANS)
     ]
 
 
@@ -134,10 +167,25 @@ def public_account_license_plans() -> list[dict[str, Any]]:
     ]
 
 
+def public_commercial_terms() -> dict[str, Any]:
+    """Read the packaged projection of FHD/config/saas_plans.json."""
+    path = Path(__file__).with_name("data") / "commerce_terms.generated.json"
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Invalid packaged commercial terms")
+    return dict(data)
+
+
 __all__ = [
     "ACCOUNT_LICENSE_PLANS",
+    "LEGACY_ACCOUNT_LICENSE_PLANS",
     "account_license_plan",
+    "account_license_priority",
     "account_license_plan_rows",
     "is_account_license_plan_id",
+    "is_legacy_account_license_plan_id",
     "public_account_license_plans",
+    "public_commercial_terms",
 ]

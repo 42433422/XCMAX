@@ -8,26 +8,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
-from modstore_server.customer_delivery_failure import start_failure_message
+from modstore_server.customer_delivery_workbench_start import persist_delivery_update
 from modstore_server.customer_service_api import _visible_ticket_or_404
 from modstore_server.customer_service_delivery_api import (
     _custom_delivery_evidence,
     _custom_delivery_payload,
-    _start_custom_delivery_run,
-)
-from modstore_server.customer_service_delivery_completion import (
-    complete_delivery_if_ready,
 )
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryCrmUpdateBody,
-    custom_delivery_commerce_blockers,
     custom_delivery_crm,
     custom_delivery_pricing_mode,
 )
-from modstore_server.customer_service_orchestrator import audit
-from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import User
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.payment_cs_internal import find_matching_paid_order
 
 router = APIRouter()
@@ -126,33 +118,16 @@ async def update_custom_delivery_crm(
         }
     evidence["crm"] = crm
     evidence["schema_version"] = max(int(evidence.get("schema_version") or 1), 3)
-    if (
-        custom_delivery_pricing_mode(evidence) == "post_delivery_addon"
-        and not custom_delivery_commerce_blockers(evidence)
-        and not [row for row in evidence.get("runs", []) if isinstance(row, dict)]
-    ):
-        try:
-            evidence["runs"] = [
-                await _start_custom_delivery_run(
-                    ticket_id=int(ticket.id),
-                    user_id=int(ticket.user_id),
-                    evidence=evidence,
-                    attempt=1,
-                )
-            ]
-            evidence.pop("start_error", None)
-        except RECOVERABLE_ERRORS as exc:
-            evidence["start_error"] = start_failure_message("crm", type(exc).__name__)
     payload = await _custom_delivery_payload(ticket)
     artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
     if artifacts:
         evidence["delivery_artifacts"] = artifacts
-    complete_delivery_if_ready(ticket, evidence)
-    audit(
+    changed = await persist_delivery_update(
         db,
+        ticket,
+        evidence,
+        operation="crm",
         event_type=f"custom_delivery_crm_{body.section}_updated",
-        session_id=int(ticket.session_id),
-        ticket_id=int(ticket.id),
         actor=user,
         actor_type="admin",
         detail={
@@ -161,8 +136,8 @@ async def update_custom_delivery_crm(
             "source": "admin_delivery_center",
         },
     )
-    setattr(ticket, "evidence_json", json_dumps(evidence))
-    setattr(ticket, "updated_at", datetime.now(UTC))
+    if not changed:
+        raise HTTPException(409, "工单已变化或原生产结果尚待回读，请刷新后重试")
     db.commit()
     db.refresh(ticket)
     return await _custom_delivery_payload(ticket)

@@ -6,7 +6,7 @@ import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -240,8 +240,18 @@ def test_approved_long_task_survives_queue_and_renews_only_the_original_native_p
     finish_original(state)
     assert short.saved_task(state)["status"] == "completed"
     assert reconciliation.reconcile_usage()["resolved"] == 1
-    assert life.read_state()["budget"]["used_tokens"] == 26
-    assert life.read_state()["budget"]["reserved_tokens"] == 0
+    # The immutable original ledger settles even if this test crosses Shanghai midnight.
+    with state.factory() as session:
+        persisted = json.loads(session.get(XiaoCLifeState, life.IDENTITY_ID).state_json)
+    assert persisted["budget"]["used_tokens"] == 26
+    original_day = date.fromisoformat(persisted["budget"]["date"])
+    for offset, used in ((0, 26), (1, 0)):
+        day = (original_day + timedelta(days=offset)).isoformat()
+        monkeypatch.setattr(life, "_day", lambda: day)
+        budget = life.read_state()["budget"]
+        assert budget["date"] == day
+        assert budget["used_tokens"] == used
+        assert budget["reserved_tokens"] == 0
 
 
 @pytest.mark.parametrize(

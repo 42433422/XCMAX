@@ -8,10 +8,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from modstore_server import models, payment_orders
+from modstore_server.account_license_plans import account_license_plan_rows
+from modstore_server.account_lifecycle import lifecycle_for_user
+from modstore_server.payment_common import SignCheckoutBody, _resolve_checkout_fields
 from modstore_server.payment_fulfilment import fulfill_order_atomic
 
 
@@ -221,3 +225,86 @@ def test_invalid_or_missing_business_input_never_leaves_a_receipt(database, chan
     with pytest.raises(ValueError):
         fulfill_order_atomic("AUDIT-ATOMIC", paid_order(**change), database[2])
     assert values(database[2]) == (Decimal("8.00"), 0, 0)
+
+
+def seed_account_plans(factory):
+    with factory.begin() as session:
+        session.add_all(models.PlanTemplate(**row) for row in account_license_plan_rows())
+
+
+@pytest.mark.parametrize(
+    "plan_id,amount,allowance",
+    [
+        ("saas-permanent-standard", "6800.00", 0),
+        # A previously authorized test/adjusted order keeps its recorded price.
+        ("saas-permanent-growth", "0.01", 0),
+        ("saas-trial-30", "99.00", 100),
+    ],
+)
+def test_license_snapshot_replays_once_without_crediting_software_price(
+    database, plan_id, amount, allowance
+):
+    factory = database[2]
+    seed_account_plans(factory)
+    order = paid_order(order_kind="plan", plan_id=plan_id, total_amount=amount)
+    for _ in range(3):
+        fulfill_order_atomic("AUDIT-ATOMIC", order, factory)
+    with factory() as session:
+        assert session.query(models.PaymentFulfilmentReceipt).count() == 1
+        assert session.query(models.Entitlement).count() == 1
+        grant = session.query(models.UserPlan).one()
+        assert grant.plan_id == plan_id
+        assert (grant.expires_at is not None) == (plan_id == "saas-trial-30")
+        access = lifecycle_for_user(session, session.get(models.User, 991))
+        assert access.active_plan_id == plan_id
+        assert (access.active_plan_expires_at is not None) == (plan_id == "saas-trial-30")
+        assert session.query(models.Wallet).one().balance == Decimal(8 + allowance)
+        assert session.query(models.UserMod).count() == 0
+    changed = dict(order, total_amount=str(Decimal(amount) + 1))
+    with pytest.raises(ValueError, match="different payload"):
+        fulfill_order_atomic("AUDIT-ATOMIC", changed, factory)
+
+
+@pytest.mark.parametrize("incoming", ["saas-trial-30", "saas-permanent-standard"])
+@pytest.mark.parametrize(
+    "previous,tier", [("saas-permanent-starter", "normal"), ("saas-permanent-ultra", "ultra")]
+)
+def test_inflight_lower_license_preserves_permanent_high_tier(database, incoming, previous, tier):
+    factory = database[2]
+    seed_account_plans(factory)
+    with factory.begin() as session:
+        session.add(models.UserPlan(user_id=991, plan_id=previous, is_active=True))
+    fulfill_order_atomic(
+        "AUDIT-ATOMIC",
+        paid_order(order_kind="plan", plan_id=incoming, total_amount="99.00"),
+        factory,
+    )
+    with factory() as session:
+        access = lifecycle_for_user(session, session.get(models.User, 991))
+        assert (access.active_plan_id, access.account_tier) == (previous, tier)
+        assert access.active_plan_expires_at is None
+        assert session.query(models.UserPlan).filter_by(plan_id=previous).one().is_active
+        with pytest.raises(HTTPException, match="无需重复"):
+            _resolve_checkout_fields(session, SignCheckoutBody(plan_id=incoming), user_id=991)
+
+
+@pytest.mark.parametrize("suffix", ["starter", "growth", "max", "ultra"])
+def test_retired_license_rejected_for_new_checkout(database, suffix):
+    seed_account_plans(database[2])
+    with database[2]() as session, pytest.raises(HTTPException, match="历史套餐不再新售"):
+        _resolve_checkout_fields(
+            session, SignCheckoutBody(plan_id=f"saas-permanent-{suffix}"), user_id=991
+        )
+
+
+@pytest.mark.parametrize(
+    "plan_id,price", [("saas-permanent-standard", 6800), ("saas-trial-30", 99)]
+)
+def test_checkout_uses_server_catalog_price_not_client_test_amount(database, plan_id, price):
+    seed_account_plans(database[2])
+    with database[2]() as session:
+        fields = _resolve_checkout_fields(
+            session, SignCheckoutBody(plan_id=plan_id, total_amount=0.01), user_id=991
+        )
+    assert fields[1] == price
+    assert fields[3:5] == (plan_id, "plan")

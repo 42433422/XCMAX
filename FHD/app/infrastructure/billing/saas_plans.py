@@ -1,4 +1,4 @@
-"""SaaS 阶梯定价 SSOT（config/saas_plans.json）。"""
+"""公开软件价格与历史授权目录（config/saas_plans.json）。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 PERSONAL_PLAN_ID = "saas-personal-free"
+PERMANENT_PLAN_ID = "saas-permanent-standard"
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -42,11 +43,14 @@ def trial_days() -> int:
         return 14
 
 
-def list_saas_plans() -> list[dict[str, Any]]:
+def list_saas_plans(*, include_legacy: bool = False) -> list[dict[str, Any]]:
     cfg = load_saas_plans_config()
     currency = str(cfg.get("currency") or "CNY")
     plans: list[dict[str, Any]] = []
-    for raw in cfg.get("plans") or []:
+    rows = list(cfg.get("plans") or [])
+    if include_legacy:
+        rows += list(cfg.get("legacy_plans") or [])
+    for raw in rows:
         if not isinstance(raw, dict) or not raw.get("id"):
             continue
         plan: dict[str, Any] = {
@@ -63,6 +67,7 @@ def list_saas_plans() -> list[dict[str, Any]]:
             "license_type",
             "expires_behavior",
             "account_tier",
+            "features",
         ):
             if key in raw:
                 plan[key] = raw[key]
@@ -74,7 +79,7 @@ def plan_by_id(
     plan_id: str, *, extra_plans: list[dict[str, Any]] | None = None
 ) -> dict[str, Any] | None:
     pid = (plan_id or "").strip()
-    for p in list(extra_plans or []) + list_saas_plans():
+    for p in list(extra_plans or []) + list_saas_plans(include_legacy=True):
         if p.get("id") == pid:
             return p
     return None
@@ -85,61 +90,21 @@ def _demo_payment_enabled() -> bool:
 
 
 def is_saas_plan_id(plan_id: str) -> bool:
-    pid = (plan_id or "").strip()
-    return any(p.get("id") == pid for p in list_saas_plans())
-
-
-_BUDGET_ALIASES: dict[str, str] = {
-    "1–5 万": "1–5 万",
-    "1-5 万": "1–5 万",
-    "1-5万": "1–5 万",
-    "5 万以内": "1–5 万",
-    "5万以内": "1–5 万",
-    "under-50k": "1–5 万",
-    "5–10 万": "5–10 万",
-    "5-10 万": "5–10 万",
-    "5-10万": "5–10 万",
-    "5–20 万": "5–10 万",
-    "5-20 万": "5–10 万",
-    "5-20万": "5–10 万",
-    "50k-200k": "5–10 万",
-    "10–50 万": "10–50 万",
-    "10-50 万": "10–50 万",
-    "10-50万": "10–50 万",
-    "20–50 万": "10–50 万",
-    "20-50 万": "10–50 万",
-    "20-50万": "10–50 万",
-    "200k-500k": "10–50 万",
-    "50–100 万": "50–100 万",
-    "50-100 万": "50–100 万",
-    "50-100万": "50–100 万",
-    "50 万以上": "50–100 万",
-    "50万以上": "50–100 万",
-    "500k-plus": "50–100 万",
-}
+    return plan_by_id(plan_id) is not None
 
 
 def normalize_budget_range(raw: str | None) -> str:
-    s = (raw or "").strip()
-    if not s:
-        return ""
-    return _BUDGET_ALIASES.get(s, s)
+    """预算只保留为销售线索，不归并为授权等级。"""
+    return (raw or "").strip()
 
 
 def budget_permanent_map() -> dict[str, str]:
-    cfg = load_saas_plans_config()
-    raw = cfg.get("budget_permanent_map") or {}
-    if not isinstance(raw, dict):
-        return {}
-    return {str(k): str(v) for k, v in raw.items() if k and v}
+    return {}
 
 
 def permanent_plan_id_for_budget(budget_range: str | None) -> str:
-    mapping = budget_permanent_map()
-    normalized = normalize_budget_range(budget_range)
-    if normalized and normalized in mapping:
-        return mapping[normalized]
-    return mapping.get("1–5 万") or mapping.get("5 万以内") or "saas-permanent-starter"
+    """兼容旧调用方；所有预算使用同一公开永久授权。"""
+    return PERMANENT_PLAN_ID
 
 
 def permanent_plan_for_budget(budget_range: str | None) -> dict[str, Any] | None:
@@ -147,20 +112,9 @@ def permanent_plan_for_budget(budget_range: str | None) -> dict[str, Any] | None
 
 
 def pricing_plans_for_budget(budget_range: str | None = None) -> list[dict[str, Any]]:
-    """定价页展示：30 天试用 + 全部永久档位；预算对应档标记 recommended。"""
-    all_plans = list_saas_plans()
-    trial = [p for p in all_plans if p.get("id") == "saas-trial-30"]
-    perm_id = permanent_plan_id_for_budget(budget_range)
-    permanent: list[dict[str, Any]] = []
-    for p in all_plans:
-        if not is_permanent_saas_plan_id(str(p.get("id") or "")):
-            continue
-        item = dict(p)
-        if item.get("id") == perm_id:
-            item["recommended"] = True
-        permanent.append(item)
-    return trial + permanent
+    """免费个人、原体验与唯一永久授权；不按预算改变报价或权益。"""
+    return list_saas_plans()
 
 
 def is_permanent_saas_plan_id(plan_id: str) -> bool:
-    return (plan_id or "").strip().startswith("saas-permanent-")
+    return (plan_by_id(plan_id) or {}).get("license_type") == "permanent"

@@ -36,35 +36,47 @@ SAAS_PLANS = ROOT / "config" / "saas_plans.json"
 INDUSTRY_PRESETS = ROOT / "config" / "industry_presets.json"
 INDUSTRY_BASELINE = ROOT / "config" / "industry_baseline.json"
 INDUSTRY_ALIASES = ROOT / "config" / "industry_mod_aliases.json"
-LOGIN_ACTIONS = ROOT / "frontend" / "src" / "components" / "login" / "LoginAccountActions.vue"
+LOGIN_ACTIONS = (
+    ROOT / "frontend" / "src" / "components" / "login" / "LoginAccountActions.vue"
+)
 ADMIN_VIEW = ROOT / "frontend" / "src" / "views" / "AdminEntitlementsView.vue"
 AUTH_API = ROOT / "frontend" / "src" / "api" / "auth.ts"
 MARKET_ROOT = ROOT.parent / "成都修茈科技有限公司" / "MODstore_deploy"
+COMMERCE_TERMS_MIRRORS = (
+    MARKET_ROOT / "modstore_server" / "data" / "commerce_terms.generated.json",
+    MARKET_ROOT
+    / "java_payment_service"
+    / "src"
+    / "main"
+    / "resources"
+    / "commerce_terms.generated.json",
+)
 OFFICIAL_SITE = ROOT.parent / "成都修茈科技有限公司" / "index.html"
 OFFICIAL_SITE_PRICING = ROOT.parent / "成都修茈科技有限公司" / "pricing.html"
 ACCOUNT_LICENSE_VIEW = (
     MARKET_ROOT / "market" / "src" / "views" / "public" / "AccountLicensePlansView.vue"
 )
-MARKET_REGISTER_VIEW = MARKET_ROOT / "market" / "src" / "views" / "public" / "RegisterView.vue"
-PAYMENT_CHECKOUT_VIEW = MARKET_ROOT / "market" / "src" / "views" / "PaymentCheckoutView.vue"
+MARKET_REGISTER_VIEW = (
+    MARKET_ROOT / "market" / "src" / "views" / "public" / "RegisterView.vue"
+)
+PAYMENT_CHECKOUT_VIEW = (
+    MARKET_ROOT / "market" / "src" / "views" / "PaymentCheckoutView.vue"
+)
 ACCOUNT_LICENSE_CATALOG = MARKET_ROOT / "modstore_server" / "account_license_plans.py"
 BUDGET_FRONT_FILES = (ADMIN_VIEW, AUTH_API)
 
 EXPECTED_BUDGETS = ("1–5 万", "5–10 万", "10–50 万", "50–100 万")
-EXPECTED_BUDGET_TO_TIER = {
-    "1–5 万": "normal",
-    "5–10 万": "pro",
-    "10–50 万": "max",
-    "50–100 万": "ultra",
-}
 LEGACY_BUDGETS = ("5 万以内", "5–20 万", "20–50 万", "50 万以上")
 EXPECTED_PUBLIC_PLAN_TITLES = {
     "saas-personal-free": "个人使用版",
     "saas-trial-30": "30 天全功能体验",
-    "saas-permanent-starter": "企业启航版",
-    "saas-permanent-growth": "企业成长版",
-    "saas-permanent-max": "集团协同版",
-    "saas-permanent-ultra": "企业旗舰版",
+    "saas-permanent-standard": "XCAGI 软件买断",
+}
+EXPECTED_LEGACY_PLANS = {
+    "saas-permanent-starter": (4999900, "normal"),
+    "saas-permanent-growth": (9999900, "pro"),
+    "saas-permanent-max": (49999900, "max"),
+    "saas-permanent-ultra": (99999900, "ultra"),
 }
 PROHIBITED_PUBLIC_COPY = (
     "VIP / SVIP",
@@ -161,31 +173,29 @@ def _check_doc(errors: list[str]) -> None:
 def _check_budgets(errors: list[str]) -> None:
     if tuple(BUDGET_RANGES) != EXPECTED_BUDGETS:
         errors.append(f"BUDGET_RANGES={BUDGET_RANGES!r}，应为 {EXPECTED_BUDGETS!r}")
-    for budget, tier in EXPECTED_BUDGET_TO_TIER.items():
+    for budget in (*EXPECTED_BUDGETS, *LEGACY_BUDGETS, "", "未知预算"):
         got = derive_account_tier(budget)
-        if got != tier:
-            errors.append(f"derive_account_tier({budget!r})={got!r}，应为 {tier!r}")
+        if got != "normal":
+            errors.append(
+                f"derive_account_tier({budget!r})={got!r}，预算不能授予高级授权"
+            )
 
     cfg = _load_json(SAAS_PLANS, errors)
-    mapping = cfg.get("budget_permanent_map")
-    if not isinstance(mapping, dict):
-        errors.append("saas_plans.json 缺少 budget_permanent_map")
-        mapping = {}
-    for budget in EXPECTED_BUDGETS:
-        if budget not in mapping:
-            errors.append(f"budget_permanent_map 缺少新档位 {budget}")
-    for budget in LEGACY_BUDGETS:
-        if budget not in mapping:
-            errors.append(f"budget_permanent_map 缺少旧档位兼容 {budget}")
+    if cfg.get("budget_permanent_map"):
+        errors.append("新售软件不得按预算推荐旧四档")
 
     plans_raw = cfg.get("plans") or []
     plans = [p for p in plans_raw if isinstance(p, dict)]
+    if {p.get("id") for p in plans} != set(EXPECTED_PUBLIC_PLAN_TITLES):
+        errors.append("公开软件目录只允许免费个人、99 元体验和 6800 元买断")
     for plan_id, expected_title in EXPECTED_PUBLIC_PLAN_TITLES.items():
         plan = _plan_by_id(plans, plan_id)
         if not plan:
             errors.append(f"saas_plans.json 缺少 {plan_id}")
         elif plan.get("title") != expected_title:
-            errors.append(f"{plan_id}.title={plan.get('title')!r}，应为 {expected_title!r}")
+            errors.append(
+                f"{plan_id}.title={plan.get('title')!r}，应为 {expected_title!r}"
+            )
     trial = _plan_by_id(plans, "saas-trial-30")
     if not trial:
         errors.append("saas_plans.json 缺少 saas-trial-30")
@@ -200,7 +210,38 @@ def _check_budgets(errors: list[str]) -> None:
         }
         for key, expected in expected_trial.items():
             if trial.get(key) != expected:
-                errors.append(f"saas-trial-30.{key}={trial.get(key)!r}，应为 {expected!r}")
+                errors.append(
+                    f"saas-trial-30.{key}={trial.get(key)!r}，应为 {expected!r}"
+                )
+
+    standard = _plan_by_id(plans, "saas-permanent-standard") or {}
+    for key, expected in {
+        "amount_cents": 680000,
+        "quota_cents": 0,
+        "license_type": "permanent",
+        "account_tier": "normal",
+    }.items():
+        if standard.get(key) != expected:
+            errors.append(f"saas-permanent-standard.{key} 应为 {expected!r}")
+    legacy = [p for p in cfg.get("legacy_plans", []) if isinstance(p, dict)]
+    for plan_id, (amount, tier) in EXPECTED_LEGACY_PLANS.items():
+        plan = _plan_by_id(legacy, plan_id) or {}
+        if (plan.get("amount_cents"), plan.get("account_tier")) != (amount, tier):
+            errors.append(f"历史 SKU {plan_id} 的金额/授权元数据必须保留供旧单履约")
+    terms = cfg.get("commercial_terms")
+    if not isinstance(terms, dict) or terms.get("customization_from_cents") != 298000:
+        errors.append("commercial_terms.customization_from_cents 应为 298000")
+    if not isinstance(terms, dict) or terms.get("ai_billing") != "usage":
+        errors.append("commercial_terms.ai_billing 必须保持按量收费")
+    for mirror in COMMERCE_TERMS_MIRRORS:
+        text = _read_text(mirror, errors)
+        try:
+            if text and json.loads(text) != terms:
+                errors.append(
+                    f"{_display_path(mirror)} 与 commercial_terms 不一致，请运行 sync"
+                )
+        except json.JSONDecodeError:
+            errors.append(f"{_display_path(mirror)} JSON 无效")
 
     budget_pattern = re.compile("|".join(re.escape(b) for b in EXPECTED_BUDGETS))
     admin_split_dir = ADMIN_VIEW.parent / "admin-entitlements"
@@ -209,7 +250,9 @@ def _check_budgets(errors: list[str]) -> None:
         if path == ADMIN_VIEW:
             # AdminEntitlementsView.vue 已按源码棘轮拆分，BUDGET_RANGE_OPTIONS 移入
             # admin-entitlements/types.ts；档位检查需覆盖视图 + 拆分目录全部 .ts/.vue。
-            split_paths = sorted(admin_split_dir.glob("*.ts")) + sorted(admin_split_dir.glob("*.vue"))
+            split_paths = sorted(admin_split_dir.glob("*.ts")) + sorted(
+                admin_split_dir.glob("*.vue")
+            )
             texts.extend(_read_text(extra, errors) for extra in split_paths)
         if any(not t for t in texts):
             continue
@@ -229,11 +272,13 @@ def _check_budgets(errors: list[str]) -> None:
     license_view_text = _read_text(ACCOUNT_LICENSE_VIEW, errors)
     for snippet in (
         "paymentAccountPlans",
-        "选择适合你的方案",
-        "完成支付后即可在 XCAGI 登录使用",
+        "saas-permanent-standard",
+        "commercial_terms",
     ):
         if snippet not in license_view_text:
-            errors.append(f"{_display_path(ACCOUNT_LICENSE_VIEW)} 缺少购买流程契约: {snippet}")
+            errors.append(
+                f"{_display_path(ACCOUNT_LICENSE_VIEW)} 缺少购买流程契约: {snippet}"
+            )
 
     public_texts = {
         ACCOUNT_LICENSE_VIEW: license_view_text,
@@ -247,42 +292,42 @@ def _check_budgets(errors: list[str]) -> None:
                 errors.append(f"{_display_path(path)} 包含内部解释词: {prohibited}")
 
     market_registration_text = public_texts[MARKET_REGISTER_VIEW]
-    for snippet in ("创建 XCAGI 账号", "选择适合的 XCAGI 方案"):
+    for snippet in ("创建 XCAGI 账号",):
         if snippet not in market_registration_text:
-            errors.append(f"{_display_path(MARKET_REGISTER_VIEW)} 缺少注册流程文案: {snippet}")
+            errors.append(
+                f"{_display_path(MARKET_REGISTER_VIEW)} 缺少注册流程文案: {snippet}"
+            )
 
     checkout_text = public_texts[PAYMENT_CHECKOUT_VIEW]
     for snippet in ("完成支付", "更新支付结果", "你的 XCAGI 方案已生效"):
         if snippet not in checkout_text:
-            errors.append(f"{_display_path(PAYMENT_CHECKOUT_VIEW)} 缺少支付流程文案: {snippet}")
+            errors.append(
+                f"{_display_path(PAYMENT_CHECKOUT_VIEW)} 缺少支付流程文案: {snippet}"
+            )
 
     catalog_text = public_texts[ACCOUNT_LICENSE_CATALOG]
     for title in EXPECTED_PUBLIC_PLAN_TITLES.values():
         if title not in catalog_text:
-            errors.append(f"{_display_path(ACCOUNT_LICENSE_CATALOG)} 缺少方案名称: {title}")
+            errors.append(
+                f"{_display_path(ACCOUNT_LICENSE_CATALOG)} 缺少方案名称: {title}"
+            )
 
-    official_site_text = _read_text(OFFICIAL_SITE, errors)
-    for snippet in (
-        'data-ssot-price="saas-trial-30"',  # 试用价由价格 SSOT 注入（2026-09 官网改版后价格不再手写）
-        "体验 30 天",
-        "查看企业启航方案",
-        "查看企业成长方案",
-        "集团及源码授权方案",
-        "/market/account-plans?plan=saas-permanent-starter",
-    ):
-        if snippet not in official_site_text:
-            errors.append(f"{_display_path(OFFICIAL_SITE)} 缺少统一方案文案: {snippet}")
-
-    # 官网价格页（集团协同/企业旗舰档自首页下沉至此，2026-09 官网 SSOT 改版）
-    official_pricing_text = _read_text(OFFICIAL_SITE_PRICING, errors)
-    for snippet in (
-        "查看集团协同方案",
-        "查看企业旗舰方案",
-        "/market/account-plans?plan=saas-permanent-max",
-        "/market/account-plans?plan=saas-permanent-ultra",
-    ):
-        if snippet not in official_pricing_text:
-            errors.append(f"{_display_path(OFFICIAL_SITE_PRICING)} 缺少统一方案文案: {snippet}")
+    for path in (OFFICIAL_SITE, OFFICIAL_SITE_PRICING):
+        text = _read_text(path, errors)
+        for snippet in (
+            'data-ssot-price="saas-permanent-standard"',
+            'data-ssot-price="saas-trial-30"',
+            'data-ssot="customization-from"',
+            "XCAGI 软件买断",
+            "业务定制",
+            "AI 使用费",
+            "/market/account-plans?plan=saas-permanent-standard",
+        ):
+            if snippet not in text:
+                errors.append(f"{_display_path(path)} 缺少统一购买契约: {snippet}")
+        for plan_id in EXPECTED_LEGACY_PLANS:
+            if f"/market/account-plans?plan={plan_id}" in text:
+                errors.append(f"{_display_path(path)} 仍在出售退役 SKU {plan_id}")
 
 
 def _check_industries(errors: list[str]) -> None:
@@ -292,7 +337,9 @@ def _check_industries(errors: list[str]) -> None:
 
     preset_ids = tuple(presets.get("preset_ids") or ())
     if preset_ids != EXPECTED_PRESET_IDS:
-        errors.append(f"industry_presets.preset_ids={preset_ids!r}，应为 {EXPECTED_PRESET_IDS!r}")
+        errors.append(
+            f"industry_presets.preset_ids={preset_ids!r}，应为 {EXPECTED_PRESET_IDS!r}"
+        )
 
     preset_map = presets.get("presets") or {}
     if not isinstance(preset_map, dict):
@@ -303,7 +350,14 @@ def _check_industries(errors: list[str]) -> None:
         if not isinstance(item, dict):
             errors.append(f"industry_presets.presets 缺少 {industry_id}")
             continue
-        for key in ("id", "name", "scenario", "welcomeIntro", "quickButtons", "uiLabels"):
+        for key in (
+            "id",
+            "name",
+            "scenario",
+            "welcomeIntro",
+            "quickButtons",
+            "uiLabels",
+        ):
             if key not in item:
                 errors.append(f"industry_presets.{industry_id} 缺少 {key}")
 
@@ -322,7 +376,9 @@ def _check_industries(errors: list[str]) -> None:
     for industry_id in open_ids:
         item = packages.get(industry_id)
         if not isinstance(item, dict) or not item.get("mod_id"):
-            errors.append(f"开放行业 {industry_id} 缺少 industry_packages.{industry_id}.mod_id")
+            errors.append(
+                f"开放行业 {industry_id} 缺少 industry_packages.{industry_id}.mod_id"
+            )
 
     industries = baseline.get("industries") or {}
     if not isinstance(industries, dict):
@@ -355,11 +411,24 @@ def run(action: str, domain: dict[str, Any], *, dry_run: bool = True) -> int:
     if action == "check":
         return check_drift()
     if action == "sync":
-        print("account-system: lint 模式无 sync", flush=True)
+        terms = json.loads(SAAS_PLANS.read_text(encoding="utf-8"))["commercial_terms"]
+        if not isinstance(terms, dict):
+            raise ValueError("commercial_terms 必须为 object")
+        for path in COMMERCE_TERMS_MIRRORS:
+            if not dry_run:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    json.dumps(terms, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+            print(
+                f"account-system: {'将同步' if dry_run else '已同步'} {_display_path(path)}",
+                flush=True,
+            )
         return 0
     return 2
 
 
 if __name__ == "__main__":
     action = sys.argv[1] if len(sys.argv) > 1 else "check"
-    raise SystemExit(run(action, {}, dry_run=True))
+    raise SystemExit(run(action, {}, dry_run="--apply" not in sys.argv))
