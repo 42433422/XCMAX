@@ -215,6 +215,19 @@ def read_state() -> dict[str, Any]:
         data = json.loads(row.state_json)
         blockers = _blockers(data, session)
         active = data.pop("active_cycle", None)
+        data["self_authority_active"] = _active_principal(session, data.get("owner_user_id"))
+        data["self_promptfoo_checks"] = [
+            _event_dict(event)
+            for event in session.scalars(
+                select(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind == "self_promptfoo_check",
+                )
+                .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                .limit(20)
+            )
+        ]
         data["self_identity_checks"] = [
             _event_dict(event)
             for event in session.scalars(
@@ -454,7 +467,7 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         from modstore_server.xiaoc_self_model import execution_scope
 
         cycle = {
-            "execution_scope": execution_scope(data, now=now),
+            "execution_scope": execution_scope(data, now=now, owner_active=True),
             "cycle_id": uuid.uuid4().hex,
             "lease_token": uuid.uuid4().hex,
             "policy_revision": data["revision"],
@@ -476,7 +489,7 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         data["next_wake_at"] = (
             now + timedelta(seconds=policy["wake_interval_seconds"])
         ).isoformat()
-        return {**cycle, "state": copy.deepcopy(data)}
+        return {**cycle, "state": {**copy.deepcopy(data), "self_authority_active": True}}
 
     return _mutate(claim)
 
