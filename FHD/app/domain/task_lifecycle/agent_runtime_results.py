@@ -137,8 +137,12 @@ def classify_runtime_result(
     # An already verified write followed by a definite failure is a partial
     # business effect, not a fresh safe-to-retry task. The durable call must
     # positively prove read_only=True before its effect can be disregarded.
-    if states & {"failed", "cancelled", "rejected"} and any(
-        row.get("read_only") is not True for row in verified_rows
+    # A failed read-only lookup can be explored again without replaying the
+    # verified write. Cancelled/rejected steps and failed writes remain unsafe.
+    if any(row.get("read_only") is not True for row in verified_rows) and any(
+        receipt_state(row) in {"cancelled", "rejected"}
+        or (receipt_state(row) == "failed" and row.get("read_only") is not True)
+        for row in rows
     ):
         result.update(
             exit_status="partial",
