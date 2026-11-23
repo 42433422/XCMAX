@@ -109,7 +109,9 @@ def test_registered_capability_atomically_binds_one_run_before_execution(
         "mutation_policy",
     ],
 )
-def test_registered_identity_conflict_cannot_dispatch_different_content(capability_runner, change):
+def test_registered_identity_conflict_cannot_dispatch_different_content(
+    capability_runner, batch_approval_context, change
+):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
     runner, execute = capability_runner
@@ -127,6 +129,8 @@ def test_registered_identity_conflict_cannot_dispatch_different_content(capabili
         args["tool_id"] = "shipment_records"
     elif change == "action":
         args["action"] = "query"
+    elif change == "mod":
+        context["mod_id"] = "changed"
     else:
         context[change] = ["print"] if change == "employee_tool_allowlist" else "changed"
     response = json.loads(execute_registered_capability(args, runtime_context=context))
@@ -135,7 +139,7 @@ def test_registered_identity_conflict_cannot_dispatch_different_content(capabili
         "tool_identity_required" if change == "mod" else "task_idempotency_conflict"
     )
     assert runner.get_run(original["agent_run_id"]).steps[0].params == {}
-    assert len(runner.list_runs(user_id="owner")) == 1
+    assert len(runner.list_runs(user_id=context["user_id"])) == 1
     execute.assert_called_once()
 
 
@@ -388,23 +392,50 @@ def test_registered_uncertain_wait_cannot_create_another_approval(
     approvals.create_approval_request.assert_not_called()
 
 
+@pytest.mark.parametrize("error_type", [ConnectionError, RuntimeError, TypeError])
 def test_registered_executor_exception_keeps_original_unknown_without_redispatch(
-    capability_runner, batch_approval_context, monkeypatch
+    capability_runner, batch_approval_context, monkeypatch, error_type
 ):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
     runner, _ = capability_runner
-    execute = Mock(side_effect=RuntimeError("worker lost receipt"))
+    error = error_type("worker lost receipt")
+    execute = Mock(side_effect=error)
     monkeypatch.setattr(runner, "execute_dispatched_run", execute)
-    replies = [
-        json.loads(
+
+    def call():
+        return json.loads(
             execute_registered_capability(
                 {"tool_id": "print", "action": "list", "params": {}},
                 runtime_context={**batch_approval_context, "turn_id": "turn"},
             )
         )
-        for _ in range(2)
-    ]
+
+    if error_type is not ConnectionError:
+        with pytest.raises(error_type) as caught:
+            call()
+        assert caught.value is error
+        runs = runner.list_runs(user_id=batch_approval_context["user_id"])
+        tasks = runner.list_tasks(user_id=batch_approval_context["user_id"])
+        assert len(runs) == len(tasks) == 1
+        original_run, original_task = runs[0].to_dict(), tasks[0].to_dict()
+        repeated = call()
+        assert repeated["run_id"] == original_run["run_id"]
+        assert repeated["task_id"] == original_task["task_id"]
+        assert repeated["deduplicated"] is True
+        assert repeated["success"] is repeated["retryable"] is False
+        assert repeated["execution_state"] != "completed"
+        assert runner.get_run(repeated["run_id"]).to_dict() == original_run
+        assert (
+            runner.get_task(
+                user_id=batch_approval_context["user_id"], task_id=repeated["task_id"]
+            ).to_dict()
+            == original_task
+        )
+        execute.assert_called_once()
+        return
+
+    replies = [call() for _ in range(2)]
     assert replies[0]["run_id"] == replies[1]["run_id"]
     assert all(item["execution_state"] == "unknown" for item in replies)
     assert all(item["retryable"] is False for item in replies)
@@ -684,6 +715,67 @@ def test_legacy_batch_approval_is_read_only_and_bound_to_original_execution(
         rows = session.query(ApprovalRequest).all()
         assert len(rows) == 1 and rows[0].request_no == legacy_id
         assert rows[0].business_data == before_approval
+
+
+@pytest.mark.parametrize(
+    "damage", ["step", "request", "attachment", "storage-failure", "runtime", "type"]
+)
+def test_lost_approval_binding_keeps_original_task_without_recreating_approval(
+    db, batch_approval_context, monkeypatch, damage
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.application.workflow.approval_service import ApprovalService
+
+    original_execute = AgentOrchestrator.execute_dispatched_run
+    dispatched = []
+    forbidden = Mock(side_effect=AssertionError("unconfirmed approval cannot execute or replay"))
+    monkeypatch.setattr(AgentToolExecutor, "execute", forbidden)
+
+    def pause(self, run_id):
+        dispatched.append(run_id)
+        run = original_execute(self, run_id)
+        assert run is not None and run.status == "waiting_user"
+        if damage == "step":
+            run.steps[0].params = {"ids": [2]}
+        elif damage == "request":
+            run.metadata.pop("approval_request_id")
+        return self.save_run(run) if damage in {"step", "request"} else run
+
+    monkeypatch.setattr(AgentOrchestrator, "execute_dispatched_run", pause)
+    error_type = {"runtime": RuntimeError, "type": TypeError}.get(damage)
+    error = error_type("approval adapter programming failure") if error_type else None
+    if damage == "storage-failure":
+        monkeypatch.setattr(ApprovalService, "_persist_request_to_db", Mock(return_value=None))
+    if damage == "attachment" or error is not None:
+        monkeypatch.setattr(
+            ApprovalService, "attach_pending_agent_run", Mock(return_value=False, side_effect=error)
+        )
+    if error is not None:
+        with pytest.raises(type(error)) as caught:
+            _batch_call(batch_approval_context)
+        assert caught.value is error
+        forbidden.assert_not_called()
+        return
+
+    first = _batch_call(batch_approval_context)
+    monkeypatch.setattr(ApprovalService, "create_approval_request", forbidden)
+    monkeypatch.setattr(ApprovalService, "attach_pending_agent_run", forbidden)
+    repeated = _batch_call(batch_approval_context)
+    assert repeated["agent_run_id"] == first["agent_run_id"]
+    assert repeated["task_id"] == first["task_id"]
+    assert repeated["deduplicated"] is True
+    assert dispatched == [first["agent_run_id"]]
+    for response in (first, repeated):
+        assert response["execution_state"] == "unknown"
+        assert response["requires_reconciliation"] is True
+        assert response["success"] is response["retryable"] is False
+        assert not response.get("pending_approval")
+    assert len(get_agent_run_repository().list_recent(user_id="1")) == 1
+    with db() as session:
+        assert session.query(ApprovalRequest).count() == int(damage == "attachment")
+    forbidden.assert_not_called()
 
 
 def test_persisted_approval_pointer_cannot_read_another_call_approval(

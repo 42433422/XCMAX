@@ -376,7 +376,7 @@ def ensure_within_workspace(
             relative = candidate.relative_to(boundary)
         except ValueError:
             relative = candidate.relative_to(configured)
-        target = resolve_safe_workspace_relpath(relative.as_posix(), base=boundary)
+        target: Path = resolve_safe_workspace_relpath(relative.as_posix(), base=boundary)
         if within is None:
             boundary.mkdir(parents=True, exist_ok=True)
         if must_exist and not target.exists():

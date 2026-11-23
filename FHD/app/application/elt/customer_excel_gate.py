@@ -13,7 +13,7 @@ import os
 import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile, ZipFile
 
@@ -196,7 +196,14 @@ def _tenant_isolated(db_path: Path) -> bool | None:
     return None if {"tenant_id", "customer_id"} <= columns else False
 
 
-def _slice_matches_source(row: ParsedRow, sheets: dict[str, dict]) -> bool:
+class _SourceSheet(TypedDict):
+    name: str
+    state: str
+    max_row: int
+    max_column: int
+
+
+def _slice_matches_source(row: ParsedRow, sheets: dict[str, _SourceSheet]) -> bool:
     source = sheets.get(row.sheet)
     item = row.provenance.get("slice") or {}
     try:
@@ -205,7 +212,7 @@ def _slice_matches_source(row: ParsedRow, sheets: dict[str, dict]) -> bool:
         return False
     if not source or not all(isinstance(value, int) for value in bounds):
         return False
-    left, top, right, bottom = bounds
+    left, top, right, bottom = cast(tuple[int, int, int, int], bounds)
     columns = row.provenance.get("columns") or {}
     return (
         item.get("sheet") == row.sheet
@@ -342,7 +349,7 @@ def evaluate_workbook(
     try:
         book = load_workbook(path, read_only=False, data_only=False)
         try:
-            actual_sheets = [
+            actual_sheets: list[_SourceSheet] = [
                 {
                     "name": sheet.title,
                     "state": sheet.sheet_state,

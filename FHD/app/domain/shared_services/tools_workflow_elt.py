@@ -1118,7 +1118,7 @@ def _finalize_import(
             finish_operation(db, operation)
             db.commit()
         return knowledge, template, _receipt_notes(knowledge, template)
-    except (EltConflict, *RECOVERABLE_ERRORS) as exc:
+    except (EltConflict,) + RECOVERABLE_ERRORS as exc:
         return _unknown_auxiliary(str(exc)[:200])
 
 

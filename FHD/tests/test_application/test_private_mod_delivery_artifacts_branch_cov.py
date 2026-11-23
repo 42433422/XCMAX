@@ -14,7 +14,7 @@ import zipfile
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import DEFAULT, AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -840,12 +840,21 @@ class TestUpdatePrivateModFromLibrary:
 
     async def test_install_fail(self, delivery, library):
         delivery.install.return_value = (False, "boom", None)
-        with pytest.raises(RuntimeError, match="boom"):
+        with pytest.raises(RuntimeError, match="boom") as raised:
             await mod.update_private_mod_from_library("fixture-mod", "tok", owner_scope="tenant:1")
+        assert isinstance(raised.value, mod.DeliveryInstallError)
         rows = delivery.outbox_rows()
         assert len(rows) == 1
         assert rows[0]["installed_reported"] is False
         assert rows[0]["runtime_reported"] is False
+        delivery.install.return_value = DEFAULT
+        result = await mod.update_private_mod_from_library(
+            "fixture-mod", "tok", owner_scope="tenant:1"
+        )
+        assert result["updated"] is True
+        assert result["receipt_id"] + ":installed" == rows[0]["payload"]["receipt_id"]
+        assert delivery.outbox_rows() == rows
+        assert delivery.install.call_count == 2
 
     @pytest.mark.parametrize("error_type", [OSError, RuntimeError])
     async def test_api_ready_failure_preserves_error_class(self, delivery, library, error_type):

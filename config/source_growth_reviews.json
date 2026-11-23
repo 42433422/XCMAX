@@ -1000,10 +1000,10 @@
     "FHD/app/domain/shared_services/tools_workflow_elt.py": {
       "base_file": "FHD/app/domain/shared_services/tools_workflow_elt.py",
       "base_blob": "243f7d384f14c665b901478807c9a176ee683177",
-      "head_blob": "895631aef36d8303f15c5d2a1f97393beae35018",
+      "head_blob": "52ced26bb85639773c46fb82246e5dcab84bf680",
       "before_lines": 2193,
       "after_lines": 2194,
-      "reason": "原后端烟测的并发导入终结场景暴露：EltConflict 为既有业务冲突类型，但异常集合收紧后未在原终结边界接住。本次仅显式纳入该类型，复用原事务收尾路径，生产代码净增1行。",
+      "reason": "原后端烟测的并发导入终结场景暴露：EltConflict 为既有业务冲突类型，但异常集合收紧后未在原终结边界接住。本次仅显式纳入该类型，复用原事务收尾路径，生产代码净增1行。 后续同一公开head的mypy拒绝异常tuple星号展开，等价改为tuple相加，捕获类型与生产行数均不变。",
       "boundary": "保持现役SQLAlchemy事务、原任务和执行证据归属；不恢复通用RuntimeError捕获，不重放未知或已部分写入的业务，不增加执行入口。",
       "validation": "原真实SQL并发终结回归未改断言，修前失败；修后五个相关原完整模块共454项通过、零跳过。正式公开集成head仍须通过原后端、覆盖率与mutation门禁，历史运行不替代最终CI。",
       "follow_up": "由 @42433422 结合本次精确base/head/blob和最终CI评审；此记录只登记实际增长的架构评审请求，不代表人工批准。",

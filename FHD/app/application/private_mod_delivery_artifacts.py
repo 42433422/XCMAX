@@ -23,6 +23,10 @@ class DeliveryRemoteError(RuntimeError):
     """The delivery control plane returned an unsuccessful or invalid response."""
 
 
+class DeliveryInstallError(RuntimeError):
+    """The package installer explicitly rejected a private delivery."""
+
+
 def version_key(value: str) -> tuple[tuple[int, int | str], ...]:
     """比较常见的 semver/内部版本，不依赖额外包。"""
     raw = str(value or "").strip().lstrip("vV")
@@ -364,7 +368,7 @@ async def update_private_mod_from_library(
             str(tmp_path), verify_signature=True, activate=True, owner_scope=owner_scope
         )
         if not ok:
-            raise RuntimeError(message)
+            raise DeliveryInstallError(message)
         from app.infrastructure.mods.install_receipts import read_verified_install
 
         receipt = read_verified_install(mid, mods_root=manager.mods_root)

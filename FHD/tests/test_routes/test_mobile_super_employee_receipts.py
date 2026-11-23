@@ -214,12 +214,13 @@ async def test_stream_disconnect_drains_original_iterator_and_persists_result(
 
 
 @pytest.mark.asyncio
-async def test_stream_exception_stays_unknown_and_is_never_redispatched(bound_super):
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
+async def test_stream_exception_stays_unknown_and_is_never_redispatched(bound_super, error_type):
     component, actor, service = bound_super
 
     async def source(**kwargs):
         yield {"type": "token", "text": "partial"}
-        raise RuntimeError("lost execution acknowledgement")
+        raise error_type("lost execution acknowledgement")
 
     service.invoke_stream.side_effect = source
     response = await component._stream_super_employee_invoke(actor.request, "codex", _body(), None)

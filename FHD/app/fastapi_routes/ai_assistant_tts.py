@@ -81,7 +81,7 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
                 body=payload,
             )
         )
-    except (*RECOVERABLE_ERRORS, TtsUpstreamResponseError) as error:
+    except RECOVERABLE_ERRORS + (TtsUpstreamResponseError,) as error:
         logger.warning("TTS translate unavailable: %s", error)
         return JSONResponse(
             {"success": False, "message": "翻译暂不可用", "data": {}}, status_code=503

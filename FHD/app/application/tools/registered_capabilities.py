@@ -10,6 +10,7 @@ from collections.abc import Collection
 from copy import deepcopy
 from typing import Any
 
+from app.application.workflow.approval_service import ApprovalPersistenceError
 from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -476,6 +477,7 @@ def _execute_registered_capability(
     context.setdefault("message", str(params.get("user_request") or params.get("message") or ""))
     from app.application.agent_orchestrator.unified_task import (
         UnifiedTaskConflictError,
+        UnifiedTaskError,
         UnifiedTaskResult,
         owned_task_receipt_ids,
         publish_task_run,
@@ -662,7 +664,7 @@ def _execute_registered_capability(
                     waiting.action,
                     waiting.params,
                 ):
-                    raise RuntimeError("审批节点与完整计划不一致")
+                    raise UnifiedTaskError("审批节点与完整计划不一致")
                 if publication.deduplicated:
                     from app.application.workflow.approval_persistence import (
                         find_pending_approval_for_run,
@@ -674,11 +676,11 @@ def _execute_registered_capability(
                         request_ids=(approval_request_id, legacy_approval_request_id),
                     )
                     if not request_id:
-                        raise RuntimeError("原审批回执尚未确认")
+                        raise UnifiedTaskError("原审批回执尚未确认")
                 else:
                     request_id = str(agent_run.metadata.get("approval_request_id") or "")
                     if not request_id:
-                        raise RuntimeError("原任务未绑定审批请求标识")
+                        raise UnifiedTaskError("原任务未绑定审批请求标识")
                     request = approvals.create_approval_request(
                         plan_id=plan.plan_id,
                         node=node,
@@ -691,8 +693,8 @@ def _execute_registered_capability(
                     if not request_id or not approvals.attach_pending_agent_run(
                         request_id, agent_run_id=agent_run.run_id, approved_step_id=waiting.node_id
                     ):
-                        raise RuntimeError("AgentRun 未关联到审批请求")
-            except RECOVERABLE_ERRORS:
+                        raise UnifiedTaskError("AgentRun 未关联到审批请求")
+            except (ApprovalPersistenceError,) + RECOVERABLE_ERRORS:
                 response.update(
                     message="ERP 操作已暂停，但审批请求未能安全保存；未执行等待审批的步骤。",
                     run_status=agent_run.status,
