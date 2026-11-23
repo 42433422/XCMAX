@@ -364,10 +364,88 @@ def _historical_rejection(
     return None
 
 
+def _archive_sha256(verification: dict[str, Any]) -> str:
+    archive = verification.get("evidence_archive")
+    artifact_digest = verification.get("artifact_digest", "")
+    if isinstance(archive, str) and archive:
+        # The encrypted archive port returns a relative storage reference.
+        # Its content identity is the verified GitHub artifact digest.
+        value = (
+            artifact_digest.removeprefix("sha256:")
+            if isinstance(artifact_digest, str) and artifact_digest.startswith("sha256:")
+            else ""
+        )
+    elif isinstance(archive, dict):
+        value = archive.get("sha256", "")
+    else:
+        value = ""
+    return (
+        value
+        if isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+        else ""
+    )
+
+
+def _comparison_receipt(
+    request_id: str, protocol: dict[str, Any], evidence: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Read the existing independent verifier's paired-check report, never re-score it."""
+    verification = evidence["snapshot"].get("verification") or {}
+    comparison = verification.get("comparison")
+    if (
+        not isinstance(comparison, dict)
+        or verification != evidence["effects"].get("verification")
+        or verification.get("status") != "checks_passed"
+        or verification.get("request_id") != request_id
+        or verification.get("protocol_digest") != protocol["protocol_digest"]
+        or verification.get("run_id") != str(evidence["effects"].get("run_id"))
+        or not _archive_sha256(verification)
+        or comparison.get("schema") != "retort.paired-checks/v1"
+        or comparison.get("scope") != "independent_check_exit_codes_not_capability_score"
+        or comparison.get("baseline_sha") != protocol.get("source_sha")
+        or comparison.get("candidate_sha") != verification.get("target_sha")
+        or comparison.get("protocol_digest") != protocol["protocol_digest"]
+        or not comparison.get("bundle_digest")
+        or comparison.get("bundle_digest") != verification.get("evidence_digest")
+        or comparison.get("run_id") != verification.get("run_id")
+    ):
+        return None
+    rows = comparison.get("checks")
+    if (
+        not isinstance(rows, list)
+        or not rows
+        or any(
+            not isinstance(row, dict)
+            or type(row.get("baseline_returncode")) is not int
+            or type(row.get("candidate_returncode")) is not int
+            for row in rows
+        )
+    ):
+        return None
+    baseline_passed = sum(row["baseline_returncode"] == 0 for row in rows)
+    candidate_passed = sum(row["candidate_returncode"] == 0 for row in rows)
+    if (
+        comparison.get("total") != len(rows)
+        or comparison.get("baseline_passed") != baseline_passed
+        or comparison.get("candidate_passed") != candidate_passed
+        or candidate_passed != len(rows)
+    ):
+        return None
+    return {
+        "baseline_passed": baseline_passed,
+        "candidate_passed": candidate_passed,
+        "total": len(rows),
+        "scope": comparison["scope"],
+        "receipt_sha256": digest(comparison),
+    }
+
+
 def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     from modstore_server.strategic_workspace_receipts import _evidence, _terminal
 
-    row, _ = _original(session, goal, owner)
+    row, source = _original(session, goal, owner)
     protocol = json_loads(str(row.protocol_json), {})
     evidence = _evidence(row)
     state = evidence["snapshot"]
@@ -441,22 +519,26 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         and impact.get("verified_at")
     ):
         effect_verdict = "impact_receipt_verified"
+    comparison = _comparison_receipt(row.id, protocol, evidence)
     audit = {
+        "proposal_sha256": digest(source),
         "baseline_sha": protocol.get("source_sha", ""),
         "candidate_sha": candidate_sha,
         "candidate_identity": candidate_identity,
         "protocol_digest": protocol["protocol_digest"],
-        "verification_archive_sha256": (verification.get("evidence_archive") or {}).get(
-            "sha256", ""
-        ),
+        "verification_archive_sha256": _archive_sha256(verification),
         "dispatch_approval_digest": (evidence["effects"].get("authorization") or {}).get(
             "digest", ""
         ),
         "acceptance_approval_digest": (state.get("approval") or {}).get("digest", ""),
         "impact_receipt_sha256": digest(impact) if impact else "",
         "recovery_receipt_sha256": digest(state["recovery"]) if state.get("recovery") else "",
-        # Code-level CI checks are not a paired baseline/candidate measurement.
-        "comparison_status": "paired_measurement_not_established",
+        # Preserve the measured comparison separately from verified delivery
+        # and actual impact. Historical reports may not include paired results.
+        "comparison_status": (
+            "paired_exit_codes_verified" if comparison else "paired_measurement_not_established"
+        ),
+        "comparison": comparison,
         "historical_rejection_ref": historical_rejection,
     }
     metrics = {
