@@ -511,3 +511,58 @@ def test_conditional_delivery_scenario_does_not_modify_authority(world):
     assert delivery_scenario({"freshness": "unknown"}, "3")["knowledge_kind"] == "unknown"
     with sessions() as db:
         assert db.get(SalesOrderItem, 401).delivered_quantity == 2
+
+
+def test_world_reads_inventory_movements_and_manufacturing_rows(world, observer):
+    from datetime import UTC, datetime
+
+    from app.db.models.inventory import InventoryTransaction, Warehouse
+    from app.db.models.mrp import Bom, ManufacturingOrder, ManufacturingOrderLine
+    from app.db.models.product import Product
+
+    service, sessions, clock, permissions = world
+    with sessions.begin() as db:
+        db.add_all([
+            Product(id=501, tenant_id=11, name="Finished product"),
+            Warehouse(id=502, tenant_id=11, code="WORLD-W", name="Warehouse"),
+        ])
+        db.flush()
+        db.add(Bom(id=503, tenant_id=11, code="WORLD-B", product_id=501, product_name="Finished"))
+        db.flush()
+        db.add_all([
+            InventoryTransaction(
+                id=504, tenant_id=11, transaction_type="in", product_id=501,
+                warehouse_id=502, quantity=Decimal(3), before_quantity=Decimal(1),
+                after_quantity=Decimal(4), transaction_date=datetime.now(UTC),
+            ),
+            ManufacturingOrder(
+                id=505, tenant_id=11, order_no="WORLD-M", bom_id=503,
+                product_id=501, product_name="Finished", warehouse_id=502,
+                quantity=2, status="confirmed",
+            ),
+        ])
+        db.flush()
+        db.add(ManufacturingOrderLine(
+            id=506, tenant_id=11, order_id=505, product_id=501,
+            product_name="Finished", quantity=Decimal(2), consumed_quantity=Decimal(0),
+        ))
+    with pytest.raises(PermissionError):
+        get(service, "inventory", "504")
+    with pytest.raises(PermissionError):
+        get(service, "production", "505")
+    permissions.update({"tool.inventory.query_transactions", "tool.mrp.query_orders"})
+    movement = get(service, "inventory", "504")
+    assert movement["knowledge_kind"] == "fact"
+    assert Decimal(movement["state"]["after_quantity"]) == 4
+    assert movement["source_last_changed"] is None
+    assert get(service, "production", "505")["state"]["status"] == "confirmed"
+    with sessions.begin() as db:
+        db.get(ManufacturingOrderLine, 506).consumed_quantity = Decimal(1)
+    assert any(
+        payload["entity_type"] == "production" and payload["entity_id"] == "505"
+        for _, payload in observer
+    )
+    clock[0] += 31
+    updated = get(service, "production", "505")
+    assert Decimal(updated["state"]["lines"][0]["consumed_quantity"]) == 1
+    assert get(service, "inventory", "999")["knowledge_kind"] == "unknown"
