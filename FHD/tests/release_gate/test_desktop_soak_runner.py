@@ -136,9 +136,12 @@ def spawn_owned():
 
     def spawn(code):
         child = subprocess.Popen(
-            [sys.executable, "-u", "-c", code], stdout=subprocess.PIPE, text=True
+            [sys.executable, "-u", "-c", "print('owned-fixture-ready', flush=True)\n" + code],
+            stdout=subprocess.PIPE,
+            text=True,
         )
         children.append(child)
+        assert child.stdout.readline() == "owned-fixture-ready\n"
         return child
 
     yield spawn
@@ -167,7 +170,12 @@ def spawn_owned():
 
 PARENT = """
 import signal, subprocess, sys, time
-child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])
+child = subprocess.Popen(
+    [sys.executable, '-c', 'import time; print("ready", flush=True); time.sleep(120)'],
+    stdout=subprocess.PIPE, text=True,
+)
+assert child.stdout.readline() == 'ready\\n'
+child.stdout.close()
 def stop(*_args):
     child.terminate()
     child.wait(timeout=5)
@@ -183,8 +191,11 @@ def test_real_process_tree_metrics_and_cleanup_preserve_unrelated_process(runner
     parent = spawn_owned(PARENT)
     backend_pid = int(parent.stdout.readline())
     unrelated = spawn_owned("import time; time.sleep(120)")
-    executable = Path(sys.executable).resolve()
-    tree = runner.ProcessTree(parent.pid, executable, executable)
+    # Framework Python on macOS re-execs a different image from sys.executable.
+    # Both ready handshakes precede observing these owned processes' actual images.
+    executable = Path(psutil.Process(parent.pid).exe())
+    backend = Path(psutil.Process(backend_pid).exe())
+    tree = runner.ProcessTree(parent.pid, executable, backend)
     sample = tree.sample()
     assert sample["root_pid"] == parent.pid and sample["backend_pid"] == backend_pid
     assert sample["process_count"] >= 2 and sample["rss_bytes"] > 0
@@ -199,7 +210,7 @@ def test_wrong_executable_or_missing_owned_backend_cannot_be_measured(
     runner, spawn_owned, tmp_path
 ):
     parent = spawn_owned("import time; time.sleep(120)")
-    executable = Path(sys.executable).resolve()
+    executable = Path(psutil.Process(parent.pid).exe())
     tree = runner.ProcessTree(parent.pid, executable, executable)
     with pytest.raises(ValueError, match="owned_backend_missing_or_ambiguous"):
         tree.sample()
@@ -216,8 +227,9 @@ def test_child_disappearing_during_observation_does_not_abort_cleanup(
 ):
     parent = spawn_owned(PARENT)
     backend_pid = int(parent.stdout.readline())
-    executable = Path(sys.executable).resolve()
-    tree = runner.ProcessTree(parent.pid, executable, executable)
+    executable = Path(psutil.Process(parent.pid).exe())
+    backend = Path(psutil.Process(backend_pid).exe())
+    tree = runner.ProcessTree(parent.pid, executable, backend)
     observed = next(p for p in tree.living() if p.pid == backend_pid)
     monkeypatch.setattr(tree.root, "children", lambda recursive: [])
 
@@ -352,7 +364,8 @@ def test_cancellation_cleans_owned_process_and_commits_failure_receipt(
         async def interrupted_launch(desktop):
             desktop.child = spawn_owned("import time; time.sleep(120)")
             spawned.append(desktop.child)
-            desktop.tree = runner.ProcessTree(desktop.child.pid, args.binary, args.binary)
+            executable = Path(psutil.Process(desktop.child.pid).exe())
+            desktop.tree = runner.ProcessTree(desktop.child.pid, executable, executable)
             started.set()
             await asyncio.Event().wait()
 
