@@ -39,6 +39,20 @@ _DEFINITIONS = (
         "当前主体的统一任务；执行尝试由active_run_id关联",
     ),
     EntityDefinition(
+        "inventory",
+        "inventory_transactions",
+        "id",
+        "tool.inventory.query_transactions",
+        "库存流水；仅证明该次变动和前后数量，不等同当前库存余额",
+    ),
+    EntityDefinition(
+        "production",
+        "manufacturing_orders",
+        "id",
+        "tool.mrp.query_orders",
+        "生产工单及领料记录；不推断产能或完工率",
+    ),
+    EntityDefinition(
         "fund",
         "financial_transactions",
         "id",
