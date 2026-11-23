@@ -38,6 +38,7 @@ class Store:
         self.claimed = False
         self.finished = []
         self.phases = []
+        self.graph_started = False
 
     def read_state(self):
         return copy.deepcopy(self.state)
@@ -59,8 +60,15 @@ class Store:
         self.finished.append(result)
         return {"cycle_id": claim["cycle_id"], **result}
 
+    def begin_cycle_graph(self, claim):
+        if not self.cycle_active(claim) or self.graph_started:
+            return False
+        self.graph_started = True
+        return True
+
     def record_cycle_phase(self, claim, phase):
-        assert self.cycle_active(claim)
+        if phase != "reflect":
+            assert self.cycle_active(claim)
         self.phases.append(phase)
 
     def record_cycle_step(self, claim, **details):

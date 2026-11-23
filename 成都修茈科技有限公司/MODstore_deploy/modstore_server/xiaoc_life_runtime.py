@@ -861,9 +861,11 @@ def build_life_graph(ports: CyclePorts):
     from langgraph.graph import END, START, StateGraph
 
     graph = StateGraph(LifeCycle)
+
     def durable_node(name: str):
         async def invoke(state: LifeCycle) -> LifeCycle:
-            ports.active()
+            if name != "reflect":
+                ports.active()
             _store().record_cycle_phase(ports.claim, name)
             return await getattr(ports, name)(state)
 
@@ -880,6 +882,9 @@ def build_life_graph(ports: CyclePorts):
 
 
 async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
+    if not _store().begin_cycle_graph(claim):
+        # Never finish or release the reservation of a competing invocation.
+        return dict(_store().read_state())
     ports = CyclePorts(claim)
     try:
         with _store().life_execution_scope(claim):

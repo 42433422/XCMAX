@@ -18,46 +18,66 @@ from modstore_server.xiaoc_life_store import _event, _mutate, get_session_factor
 def _verified_usage(steps: list[dict[str, Any]], owner: int) -> int | None:
     if not steps:
         return None
-    portfolios = [step for step in steps if step["kind"] == "portfolio"]
-    if portfolios:
-        total = 0
-        for step in portfolios:
-            try:
-                record = portfolio_status(step["decision_id"], owner_user_id=owner)
-            except PortfolioError:
-                return None
-            tasks = [
-                task
-                for key, task in record.get("tasks", {}).items()
-                if key not in step.get("before_task_ids", [])
-            ]
-            if any(task.get("status") not in {"completed", "failed"} for task in tasks):
-                return None
-            calls = [call for task in tasks for call in task.get("calls", {}).values()]
-            if any(
-                call.get("status") != "settled" or type(call.get("actual_tokens")) is not int
-                for call in calls
-            ):
-                return None
-            total += sum(call["actual_tokens"] for call in calls)
-        return total
     total = 0
+    portfolios: set[str] = set()
+    verified_calls: set[tuple[str, str, str]] = set()
+    for step in steps:
+        if step["kind"] != "portfolio":
+            continue
+        decision_id = step["decision_id"]
+        if decision_id in portfolios or "before_call_ids" not in step:
+            return None
+        portfolios.add(decision_id)
+        try:
+            record = portfolio_status(decision_id, owner_user_id=owner)
+        except PortfolioError:
+            return None
+        tasks = record.get("tasks", {})
+        before_calls = set(step["before_call_ids"])
+        # An existing task can receive additional calls when resumed; task IDs
+        # alone are not sufficient to identify the current cycle's consumption.
+        if any(task.get("status") not in {"completed", "failed"} for task in tasks.values()):
+            return None
+        for task_id, task in tasks.items():
+            for call_id, call in task.get("calls", {}).items():
+                if call_id in before_calls:
+                    continue
+                actual = call.get("actual_tokens")
+                if call.get("status") != "settled" or type(actual) is not int or actual < 0:
+                    return None
+                verified_calls.add((decision_id, task_id, call_id))
+                total += actual
+
+    direct_calls: set[str] = set()
     with get_session_factory()() as session:
         for step in steps:
-            if step["kind"] != "model" or step.get("decision_id"):
+            if step["kind"] == "portfolio":
+                continue
+            if step["kind"] != "model":
                 return None
+            request_id = step["request_id"]
+            if step.get("decision_id"):
+                # Every journaled portfolio call must have an original settled
+                # ledger entry, including calls on an already-known task.
+                if (step["decision_id"], step.get("opportunity_id"), request_id) not in verified_calls:
+                    return None
+                continue
+            if request_id in direct_calls:
+                continue
+            direct_calls.add(request_id)
             row = session.scalar(
                 select(LlmClientRequest).where(
                     LlmClientRequest.user_id == owner,
-                    LlmClientRequest.client_request_id == step["request_id"],
+                    LlmClientRequest.client_request_id == request_id,
                 )
             )
             if row is None or row.state != "completed":
                 return None
             receipt = json.loads(row.done_json or "{}")
-            if receipt.get("status") != "settled" or type(receipt.get("actual_tokens")) is not int:
+            actual = receipt.get("actual_tokens")
+            if receipt.get("status") != "settled" or type(actual) is not int or actual < 0:
                 return None
-            total += receipt["actual_tokens"]
+            total += actual
     return total
 
 

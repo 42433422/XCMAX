@@ -765,6 +765,20 @@ def defer_cycle(
     return read_state()
 
 
+def begin_cycle_graph(claim: dict[str, Any]) -> bool:
+    """Only one graph invocation may consume a claimed cognition lease."""
+    def begin(data: dict[str, Any], session: Session) -> bool:
+        if not _claim_active(data, session, claim):
+            return False
+        active = data["active_cycle"]
+        if active.get("graph_started"):
+            return False
+        active["graph_started"] = True
+        return True
+
+    return _mutate(begin)
+
+
 def record_cycle_phase(claim: dict[str, Any], phase: str) -> None:
     """Persist node progress in the original CAS row, not a second task engine."""
     phases = ("claimed", "observe", "decide", "act", "reflect")
@@ -772,9 +786,20 @@ def record_cycle_phase(claim: dict[str, Any], phase: str) -> None:
         raise LifePolicyError("invalid lifecycle graph phase")
 
     def record(data: dict[str, Any], session: Session) -> None:
-        if not _claim_active(data, session, claim):
+        active = data.get("active_cycle") or {}
+        if phase == "reflect":
+            # Receipt-only reflection may finish after stop/expiry. It grants no
+            # new operation; finish_cycle independently fences learning adoption.
+            if not _matches_claim(active, claim):
+                event_id = "cycle:" + claim["cycle_id"]
+                if (
+                    session.get(XiaoCLifeEvent, event_id) is not None
+                    or session.get(XiaoCLifeEvent, "reconciled:" + event_id) is not None
+                ):
+                    return
+                raise LifePolicyError("反思回执不属于当前运行")
+        elif not _claim_active(data, session, claim):
             raise LifePolicyError("运行授权已改变，不能进入下一节点")
-        active = data["active_cycle"]
         previous = active.get("phase", "claimed")
         if previous == phase:
             return

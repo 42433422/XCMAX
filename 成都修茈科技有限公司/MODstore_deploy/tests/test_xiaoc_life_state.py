@@ -632,7 +632,6 @@ def test_usage_scan_excludes_settled_history_and_rotates_unresolved_batches(
         assert store.read_state()["budget"]["reserved_tokens"] == 990
 
 
-
 def test_explicit_stop_survives_new_sessions_and_requires_explicit_start(database):
     initial = configure()
     claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
@@ -738,3 +737,106 @@ def test_late_original_finish_after_recovery_is_idempotent(database, monkeypatch
     assert state["budget"]["reserved_tokens"] == 0
     assert state["goals"] == [] and state["activity"] is None
     assert reconcile.reconcile_usage()["resolved"] == 0
+
+
+def test_same_cycle_graph_admission_is_single_flight(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        started = list(pool.map(lambda _: store.begin_cycle_graph(claim), range(2)))
+    assert sorted(started) == [False, True]
+    assert store.read_state()["budget"]["reserved_tokens"] == 200
+    assert store.cycle_active(claim)
+
+
+def test_revoked_cycle_can_record_receipt_only_reflection(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    for phase in ("observe", "decide", "act"):
+        store.record_cycle_phase(claim, phase)
+    store.update_settings(
+        LifeUpdate(expected_revision=store.read_state()["revision"], stopped=True), actor_user_id=7
+    )
+    store.record_cycle_phase(claim, "reflect")
+    with pytest.raises(LifePolicyError):
+        store.record_cycle_step(claim, kind="model", details={"request_id": "new-call"})
+    state = finish(claim, goals=[{"id": "stale-learning"}])
+    assert state["goals"] == []
+    assert state["events"][0]["status"] == "policy_changed"
+
+
+def test_recovery_counts_new_calls_on_existing_task_and_requires_journal_receipt(database, monkeypatch):
+    calls = {
+        "before": {"status": "settled", "actual_tokens": 10},
+        "new": {"status": "settled", "actual_tokens": 25},
+    }
+    tasks = {"original-task": {"status": "completed", "calls": calls}}
+    monkeypatch.setattr(reconcile, "portfolio_status", lambda *args, **kwargs: {"tasks": tasks})
+    steps = [
+        {
+            "kind": "portfolio",
+            "decision_id": "decision",
+            "before_task_ids": ["original-task"],
+            "before_call_ids": ["before"],
+        },
+        {
+            "kind": "model",
+            "decision_id": "decision",
+            "opportunity_id": "original-task",
+            "request_id": "new",
+        },
+    ]
+    assert reconcile._verified_usage(steps, 7) == 25
+    tasks["original-task"]["status"] = "waiting"
+    assert reconcile._verified_usage(steps, 7) is None
+    tasks["original-task"]["status"] = "completed"
+    calls.pop("new")
+    assert reconcile._verified_usage(steps, 7) is None
+
+
+def _process_claim_life(db_url, start, output):
+    engine = create_engine(db_url, connect_args={"timeout": 10})
+    factory = sessionmaker(bind=engine)
+    store.get_session_factory = lambda: factory
+    try:
+        if not start.wait(30):
+            raise RuntimeError("test worker start timeout")
+        claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+        output.put((store.read_state()["identity_id"], claim))
+    finally:
+        engine.dispose()
+
+
+def test_spawned_processes_share_persistent_identity_and_one_claim(database):
+    import multiprocessing
+
+    state = configure()
+    ctx = multiprocessing.get_context("spawn")
+    start = ctx.Event()
+    output = ctx.Queue()
+    url = str(database.kw["bind"].url)
+    workers = [
+        ctx.Process(target=_process_claim_life, args=(url, start, output)) for _ in range(2)
+    ]
+    try:
+        for worker in workers:
+            worker.start()
+        start.set()
+        results = [output.get(timeout=45) for _ in workers]
+        for worker in workers:
+            worker.join(10)
+            assert worker.exitcode == 0
+        assert {identity for identity, _ in results} == {state["identity_id"]}
+        claims = [claim for _, claim in results if claim is not None]
+        assert len(claims) == 1
+        assert store.read_state()["activity"]["id"] == claims[0]["cycle_id"]
+        assert finish(claims[0])["budget"]["used_tokens"] == 50
+    finally:
+        for worker in workers:
+            if worker.pid is not None:
+                if worker.is_alive():
+                    worker.terminate()
+                worker.join(10)
+                worker.close()
+        output.close()
+        output.join_thread()
