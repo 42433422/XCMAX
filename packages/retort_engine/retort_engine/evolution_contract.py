@@ -156,7 +156,7 @@ def freeze_request(request: dict[str, Any], catalog: dict[str, Any]) -> dict[str
     return frozen
 
 
-def verify_bundle(
+def inspect_bundle(
     protocol: dict[str, Any],
     bundle: dict[str, Any],
     root: Path,
@@ -165,7 +165,11 @@ def verify_bundle(
     target_sha: str,
     isolation: str = "docker",
 ) -> dict[str, Any]:
-    """Verify downloaded Actions artifacts against server-owned execution identities."""
+    """Validate paired evidence for audit, including unsuccessful check results.
+
+    This is a read-only diagnostic contract, not an acceptance decision.
+    Callers granting acceptance must use verify_bundle instead.
+    """
     if (
         digest({k: v for k, v in protocol.items() if k != "protocol_digest"})
         != protocol["protocol_digest"]
@@ -223,8 +227,6 @@ def verify_bundle(
                 or record.get("timed_out") is not False
             ):
                 raise ValueError("incomplete execution result")
-        if row["after"]["returncode"] != 0:
-            raise ValueError(f"independent check failed: {row['id']}")
         pairs.append(
             {
                 "id": row["id"],
@@ -252,7 +254,10 @@ def verify_bundle(
         "total": len(pairs),
     }
     return {
-        "status": "checks_passed",
+        "status": (
+            "checks_passed" if comparison["candidate_passed"] == comparison["total"]
+            else "checks_failed"
+        ),
         "request_id": protocol["request_id"],
         "protocol_digest": protocol["protocol_digest"],
         "target_sha": target_sha,
@@ -264,3 +269,22 @@ def verify_bundle(
         "domain_status": "UNRATED",
         "score": None,
     }
+
+
+def verify_bundle(
+    protocol: dict[str, Any],
+    bundle: dict[str, Any],
+    root: Path,
+    *,
+    run_id: str,
+    target_sha: str,
+    isolation: str = "docker",
+) -> dict[str, Any]:
+    """Strict acceptance verifier: every candidate check must still succeed."""
+    result = inspect_bundle(
+        protocol, bundle, root, run_id=run_id, target_sha=target_sha, isolation=isolation
+    )
+    for row in result["comparison"]["checks"]:
+        if row["candidate_returncode"] != 0:
+            raise ValueError(f"independent check failed: {row['id']}")
+    return result
