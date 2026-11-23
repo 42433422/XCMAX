@@ -20,6 +20,11 @@ from app.db.models.enterprise_cognition import (
     EnterpriseStateProjection,
 )
 from app.domain.enterprise_cognition.catalog import definition_for
+from app.domain.enterprise_cognition.world_observation import (
+    historical_observation,
+    public_snapshot,
+    record_observation,
+)
 from app.http.request_context import (
     reset_current_http_request,
     set_current_http_request,
@@ -99,6 +104,7 @@ class ProjectionService:
         actor_id: str,
         force_refresh: bool = False,
         mod_id: str | None = None,
+        as_of: str | None = None,
     ) -> dict[str, Any]:
         definition = definition_for(entity_type)
         if isinstance(tenant_id, bool):
@@ -131,7 +137,7 @@ class ProjectionService:
             with owned_tenant_scope(scope.tenant_id), self.session_factory() as db:
                 if not self.reader.visible(db, definition, scope, entity_id):
                     return self._unknown(base, "source_not_visible_or_missing")
-                cursor = self._cursor(db, scope, entity_type, entity_id)
+                cursor = self._cursor(db, scope, entity_type, entity_id) if as_of is None else None
                 row = db.scalar(
                     select(EnterpriseStateProjection)
                     .where(
@@ -140,6 +146,14 @@ class ProjectionService:
                     )
                     .with_for_update()
                 )
+                if as_of is not None:
+                    if row is None:
+                        return self._unknown(base, "no_observation_at_cutoff")
+                    try:
+                        return {**base, **historical_observation(row.snapshot_json, as_of, base)}
+                    except (ValueError, KeyError, TypeError):
+                        return self._unknown(base, "observation_history_unavailable")
+                assert cursor is not None
                 started = self.clock()
                 if (
                     not force_refresh
@@ -153,7 +167,7 @@ class ProjectionService:
                         if isinstance(cached, dict) and all(
                             cached.get(key) == value for key, value in base.items()
                         ):
-                            return {**cached, "retrieved_from": "projection"}
+                            return {**public_snapshot(cached), "retrieved_from": "projection"}
                     except ValueError:
                         logger.warning("enterprise derived snapshot invalid; querying authority")
                 authority = self.reader.read(db, definition, scope, entity_id)
@@ -193,6 +207,12 @@ class ProjectionService:
                         }
                     ],
                 }
+                try:
+                    stored, conflict = record_observation(
+                        row.snapshot_json if row is not None else None, result
+                    )
+                except (ValueError, KeyError, TypeError):
+                    return self._unknown(base, "observation_history_unavailable")
                 if row is None:
                     row = EnterpriseStateProjection(
                         tenant_id=scope.tenant_id,
@@ -202,12 +222,14 @@ class ProjectionService:
                         entity_id=entity_id,
                     )
                     db.add(row)
-                row.snapshot_json = json.dumps(result, ensure_ascii=False, allow_nan=False)
+                row.snapshot_json = json.dumps(stored, ensure_ascii=False, allow_nan=False)
                 row.observed_at = observed
-                row.expires_at = expires
+                row.expires_at = 0 if conflict else expires
                 row.generation = cursor.generation
                 db.commit()
-                return result
+                if conflict:
+                    return self._unknown(base, "conflicting_observation_order")
+                return public_snapshot(result)
         except SQLAlchemyError:
             logger.warning("enterprise projection authority or storage unavailable", exc_info=True)
             return self._unknown(base, "authority_or_projection_unavailable")
@@ -217,6 +239,7 @@ class ProjectionService:
         return {
             **base,
             "freshness": "unknown",
+            "knowledge_kind": "unknown",
             "state": {},
             "source_version": None,
             "source_last_changed": None,
