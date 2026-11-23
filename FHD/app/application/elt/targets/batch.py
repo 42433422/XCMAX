@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 import itertools
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from threading import Event
 from typing import Any, cast
 
 from app.application.elt.errors import EltError
@@ -18,7 +16,6 @@ from app.application.elt.targets.targets_base import (
     TargetField,
     json_safe,
 )
-from app.application.elt.transforms import neutralize_spreadsheet_formula
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
@@ -363,19 +360,16 @@ class ExportAdapter(TargetAdapter):
         headers = list(context.get("output_headers") or (list(first) if first else []))
         stream = itertools.chain((first,), iterator) if first is not None else iter(())
         total = int(context.get("row_count") or 0)
-        executed = 0
         if self.type == "export_csv":
-            with path.open("w", encoding="utf-8-sig", newline="") as handle:
-                writer = csv.DictWriter(handle, fieldnames=headers)
-                writer.writeheader()
-                for executed, row in enumerate(stream, start=1):
-                    writer.writerow(
-                        {key: neutralize_spreadsheet_formula(row.get(key, "")) for key in headers}
-                    )
-                    if executed % 500 == 0:
-                        callback = context.get("progress_callback")
-                        if callable(callback):
-                            callback(executed, total)
+            from app.application.elt.result_export import write_csv_result
+
+            written = write_csv_result(
+                path,
+                headers=headers,
+                rows=stream,
+                progress=context.get("progress_callback"),
+                total=total,
+            )
         else:
             from app.application.elt.result_export import columns_for_export, write_xlsx_result
 
@@ -390,21 +384,8 @@ class ExportAdapter(TargetAdapter):
                 progress=context.get("progress_callback"),
                 total=total,
             )
-            executed = int(written["data_rows"])
-            written["download_url"] = f"/api/elt/runs/{context['run_id']}/download"
-            callback = context.get("progress_callback")
-            return {"receipt": written, "executed": executed}
-        callback = context.get("progress_callback")
-        if callable(callback):
-            callback(executed, total)
-        return {
-            "receipt": {
-                "file_name": path.name,
-                "download_url": f"/api/elt/runs/{context['run_id']}/download",
-                "reversible": False,
-            },
-            "executed": executed,
-        }
+        written["download_url"] = f"/api/elt/runs/{context['run_id']}/download"
+        return {"receipt": written, "executed": int(written["data_rows"])}
 
 
 class ExportCsvAdapter(ExportAdapter):
@@ -428,6 +409,8 @@ class WebhookAdapter(TargetAdapter):
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
         import httpx
+        from jsonschema import Draft202012Validator, ValidationError
+        from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
         config = context.get("target_config") or {}
         endpoint = str(config.get("endpoint_url") or "")
@@ -456,29 +439,72 @@ class WebhookAdapter(TargetAdapter):
                     "idempotency_key": idempotency_key,
                     "rows": json_safe(chunk),
                 }
-                response = None
-                for attempt in range(3):
-                    try:
-                        response = client.post(
-                            endpoint,
-                            json=payload,
-                            headers={**headers, "Idempotency-Key": idempotency_key},
-                        )
-                        if response.status_code < 500:
-                            break
-                    except httpx.HTTPError:
-                        response = None
-                    if attempt < 2:
-                        # A bounded interruptible wait keeps retries deterministic
-                        # without a hot-path sleep loop.
-                        Event().wait(2**attempt)
-                if response is None or response.status_code >= 300:
+                # An idempotency header is not evidence that the receiver honors
+                # it. Retry only failures that precede sending the request body.
+                retry = Retrying(
+                    retry=retry_if_exception_type(
+                        (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+                    ),
+                    stop=stop_after_attempt(3),
+                    wait=wait_exponential(multiplier=1, max=2),
+                    reraise=True,
+                )
+                try:
+                    response = retry(
+                        client.post,
+                        endpoint,
+                        json=payload,
+                        headers={**headers, "Idempotency-Key": idempotency_key},
+                    )
+                except httpx.HTTPError as exc:
                     raise EltError(
                         "ELT_WEBHOOK_DELIVERY_FAILED",
-                        f"Webhook 第 {index + 1} 个分片发送失败",
+                        f"Webhook 第 {index + 1} 个分片未取得可靠回执，请核对接收方结果",
+                        status_code=502,
+                    ) from exc
+                if not 200 <= response.status_code < 300:
+                    raise EltError(
+                        "ELT_WEBHOOK_DELIVERY_FAILED",
+                        f"Webhook 第 {index + 1} 个分片未取得可靠回执，请核对接收方结果",
                         status_code=502,
                     )
-                receipts.append({"chunk_index": index, "status_code": response.status_code})
+                receipt: dict[str, Any] = {
+                    "chunk_index": index,
+                    "status_code": response.status_code,
+                }
+                if not context.get("connectivity_test"):
+                    expected = {
+                        "run_id": ("string", str(context["run_id"])),
+                        "chunk_index": ("integer", index),
+                        "idempotency_key": ("string", idempotency_key),
+                        "executed_rows": ("integer", len(chunk)),
+                        "committed": ("boolean", True),
+                    }
+                    try:
+                        if response.status_code not in {200, 201}:
+                            raise ValueError("response is acceptance only")
+                        proof = response.json()
+                        Draft202012Validator(
+                            {
+                                "type": "object",
+                                "required": list(expected),
+                                "properties": {
+                                    **{
+                                        key: {"type": kind, "const": value}
+                                        for key, (kind, value) in expected.items()
+                                    },
+                                    "success": {"const": True},
+                                },
+                            }
+                        ).validate(proof)
+                    except (ValueError, ValidationError) as exc:
+                        raise EltError(
+                            "ELT_WEBHOOK_RECEIPT_UNVERIFIED",
+                            f"Webhook 第 {index + 1} 个分片缺少匹配的提交回执，请核对接收方结果",
+                            status_code=502,
+                        ) from exc
+                    receipt["receipt"] = {key: proof[key] for key in expected}
+                receipts.append(receipt)
                 executed += len(chunk)
                 callback = context.get("progress_callback")
                 if callable(callback):
@@ -488,6 +514,8 @@ class WebhookAdapter(TargetAdapter):
                 "chunks": receipts,
                 "reversible": False,
                 "executed_rows": executed,
+                # This is the receiver's bounded claim, not independent readback.
+                "business_verified": False,
             },
             "executed": executed,
         }

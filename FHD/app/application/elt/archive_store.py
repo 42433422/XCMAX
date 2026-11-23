@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import cast
 
 from cryptography.fernet import Fernet, InvalidToken
+from filelock import FileLock
 from sqlalchemy import func, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -284,8 +285,14 @@ def _read_verified(version: EltArchiveVersion, *, tenant: int, owner: int, root:
     path = raw.resolve()
     if raw.is_symlink() or path.parent != directory or not path.is_file():
         raise ArchivePolicyError("归档原件不可用")
-    disk = path.read_bytes()
-    if len(disk) > MAX_FILE_BYTES + 4096:
+    if not 0 < version.size_bytes <= MAX_FILE_BYTES:
+        raise ArchivePolicyError("归档原件大小已改变")
+    # Fernet adds authentication/padding and base64 expansion. Bound the read
+    # before allocation, then verify the exact plaintext size and digest below.
+    envelope_limit = (version.size_bytes + 128) * 4 // 3 + len(_ENVELOPE_MAGIC)
+    with path.open("rb") as handle:
+        disk = handle.read(envelope_limit + 1)
+    if len(disk) > envelope_limit:
         raise ArchivePolicyError("归档原件大小已改变")
     body = _decrypt_or_migrate(disk, path=path, archive_root=root, version=version)
     if len(body) != version.size_bytes or version.size_bytes > MAX_FILE_BYTES:
@@ -348,18 +355,25 @@ def _archive_cipher(archive_root: Path) -> Fernet:
 def _load_or_create_key_file(archive_root: Path) -> str:
     key_path = archive_root.expanduser().resolve() / _KEY_FILE_NAME
     try:
-        if key_path.is_file():
-            existing = key_path.read_text(encoding="utf-8").strip()
-            if existing:
-                return existing
         key_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        generated = secrets.token_urlsafe(32)
-        # Write then tighten perms (Windows may ignore chmod; still best-effort).
-        key_path.write_text(generated + "\n", encoding="utf-8")
-        with contextlib.suppress(OSError):
-            os.chmod(key_path, 0o600)
-        return generated
-    except OSError as exc:
+        with FileLock(str(key_path) + ".lock", timeout=5, mode=0o600):
+            if key_path.is_symlink():
+                raise ArchivePolicyError("归档密钥不可用")
+            if key_path.exists():
+                existing = key_path.read_text(encoding="utf-8").strip()
+                if not existing:
+                    raise ArchivePolicyError("归档密钥不可用")
+                return existing
+            generated = secrets.token_urlsafe(32)
+            # One exclusive creator, private from creation, durable before any
+            # ciphertext is written. Never overwrite even an incomplete key.
+            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(generated + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            return generated
+    except (OSError, UnicodeError) as exc:
         raise ArchivePolicyError("归档密钥不可用") from exc
 
 

@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import re
 from pathlib import Path
-from typing import Any
+from tempfile import SpooledTemporaryFile
+from typing import IO, Any
 
 from sqlalchemy.orm import Session
 
-from app.application.elt.errors import EltError, EltNotFound
+from app.application.elt.errors import EltConflict, EltError, EltNotFound
 from app.application.elt.secrets import delete_webhook_secret, store_webhook_secret
 from app.application.elt.service_support import (
+    MAX_FILE_BYTES,
     dump_json,
     load_json,
     new_id,
@@ -148,7 +152,9 @@ class TargetConfigServiceMixin:
         )
         return {"success": True, "receipt": result.get("receipt", {})}
 
-    def download_path(self, db: Session, *, run_id: str, owner_user_id: int) -> Path:
+    def download_content(
+        self, db: Session, *, run_id: str, owner_user_id: int
+    ) -> tuple[IO[bytes], str]:
         run = self._owned_run(db, run_id, owner_user_id)
         if run.target_type not in {
             "export_xlsx",
@@ -172,6 +178,10 @@ class TargetConfigServiceMixin:
             produced = write_committed_shipment_workbook(db, run)
             if not produced:
                 raise EltNotFound("导出文件")
+            if receipt.get("sha256") and receipt["sha256"] != produced.get("sha256"):
+                raise EltConflict(
+                    "ELT_EXPORT_UNVERIFIED", "恢复的导出文件与原回执不一致，请核对原记录"
+                )
             receipt.update(produced)
             run.receipt_json = dump_json(receipt)
             db.commit()
@@ -179,7 +189,30 @@ class TargetConfigServiceMixin:
             path = (root / file_name).resolve()
         if not file_name or root not in path.parents or not path.is_file():
             raise EltNotFound("导出文件")
-        return path
+        expected = str(receipt.get("sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise EltConflict("ELT_EXPORT_UNVERIFIED", "导出文件缺少可核验的原回执，请核对原记录")
+        content = SpooledTemporaryFile(max_size=4 * 1024 * 1024, mode="w+b")
+        verified = False
+        try:
+            digest, size = hashlib.sha256(), 0
+            with path.open("rb") as handle:
+                while chunk := handle.read(64 * 1024):
+                    size += len(chunk)
+                    if size > MAX_FILE_BYTES:
+                        raise EltConflict(
+                            "ELT_EXPORT_TOO_LARGE", "导出文件超过大小限制，请缩小导出范围"
+                        )
+                    digest.update(chunk)
+                    content.write(chunk)
+            if digest.hexdigest() != expected:
+                raise EltConflict("ELT_EXPORT_UNVERIFIED", "导出文件与原回执不一致，请核对原记录")
+            content.seek(0)
+            verified = True
+            return content, path.name
+        finally:
+            if not verified:
+                content.close()
 
     def export_error_rows(self, db: Session, *, run_id: str, owner_user_id: int) -> Path:
         run = self._owned_run(db, run_id, owner_user_id)

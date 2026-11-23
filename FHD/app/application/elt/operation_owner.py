@@ -20,11 +20,12 @@ from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import Table, and_, case, event, func, or_, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.application.elt.errors import EltConflict
+from app.application.elt.errors import EltConflict, EltError
 from app.application.elt.service_support import utcnow
-from app.db.models.elt import EltRun
+from app.db.models.elt import EltRun, EltRunRow
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -33,7 +34,16 @@ LEASE_SECONDS = 300
 _SESSION_KEY = "elt_operation_owner"
 _SKIP_FENCE = "elt_internal_owner_dml"
 BATCH_KINDS = frozenset({"batch_execute", "batch_rollback"})
+TRANSACTION_ERRORS: tuple[type[Exception], ...] = (SQLAlchemyError, *RECOVERABLE_ERRORS)
 _RUN_TABLE = cast("Table", EltRun.__table__)
+_ROW_RECEIPT_FIELDS = (
+    "id",
+    "execution_status",
+    "match_ref",
+    "after_json",
+    "execution_error_code",
+    "execution_error_message",
+)
 
 
 @dataclass(frozen=True)
@@ -43,6 +53,84 @@ class OperationOwner:
     tenant_id: int
     kind: str
     token: str
+
+
+def row_receipts(rows: list[EltRunRow]) -> list[tuple[Any, ...]]:
+    return [tuple(getattr(row, field) for field in _ROW_RECEIPT_FIELDS) for row in rows]
+
+
+def release_transaction(db: Session) -> bool:
+    """End a failed SQLAlchemy transaction without detaching the worker's rows."""
+    try:
+        db.rollback()
+    except TRANSACTION_ERRORS:
+        # An after_commit observer may raise while the transaction is COMMITTED;
+        # rollback is then illegal. Closing that transaction preserves the
+        # Session identity map so independently confirmed rows can be refreshed.
+        try:
+            for transaction in (db.get_nested_transaction(), db.get_transaction()):
+                if transaction is not None:
+                    transaction.close()
+        except TRANSACTION_ERRORS:
+            return False
+    return not db.in_transaction() and not db.in_nested_transaction()
+
+
+def commit_rows(
+    db: Session,
+    run: EltRun,
+    owner: OperationOwner,
+    before: tuple[int, list[tuple[Any, ...]]],
+    rows: list[EltRunRow],
+    *,
+    session_factory: Callable[[], Session],
+) -> None:
+    """Recover a lost SQL commit ACK by reading the atomic ledger, never by writing again."""
+    expected = (run.executed_rows, row_receipts(rows))
+    bind = db.get_bind()
+    try:
+        db.commit()
+    except TRANSACTION_ERRORS as exc:
+        released = release_transaction(db)
+        try:
+            with session_factory() as check:
+                if check is db or check.get_bind() is not bind:
+                    raise EltError("ELT_OUTCOME_UNKNOWN", "无法独立核对原写入数据库")
+                current = (
+                    check.query(EltRun)
+                    .filter_by(
+                        id=owner.run_id,
+                        tenant_id=owner.tenant_id,
+                        owner_user_id=owner.owner_user_id,
+                        operation_token=owner.token,
+                        operation_kind=owner.kind,
+                    )
+                    .one_or_none()
+                )
+                saved = (
+                    check.query(EltRunRow)
+                    .filter(
+                        EltRunRow.run_id == owner.run_id,
+                        EltRunRow.tenant_id == owner.tenant_id,
+                        EltRunRow.owner_user_id == owner.owner_user_id,
+                        EltRunRow.id.in_([item[0] for item in expected[1]]),
+                    )
+                    .order_by(EltRunRow.id)
+                    .all()
+                )
+                observed = (current.executed_rows, row_receipts(saved)) if current else None
+        except TRANSACTION_ERRORS as read_error:
+            raise EltError(
+                "ELT_OUTCOME_UNKNOWN", "提交回执丢失且无法独立核对，已停止重复执行"
+            ) from read_error
+        if not released:
+            raise EltError("ELT_OUTCOME_UNKNOWN", "原事务连接无法安全恢复，已停止重复执行") from exc
+        db.expire_all()
+        if observed == expected:
+            return
+        if observed == before:
+            raise exc
+        raise EltError("ELT_OUTCOME_UNKNOWN", "提交回执与原事务不一致，已停止重复执行") from exc
 
 
 def _clock(db: Session):
@@ -88,7 +176,12 @@ def claim_operation(
             columns.operation_kind.not_in(BATCH_KINDS),
         ),
     )
-    conditions = [*_scope(owner), available, columns.status.in_(allowed_statuses)]
+    conditions = [
+        *_scope(owner),
+        available,
+        columns.status.in_(allowed_statuses),
+        columns.status != "outcome_unknown",
+    ]
     if require_unrolled_back:
         conditions.append(columns.rollback_status.is_(None))
     elif kind in {"rollback", "batch_rollback"}:
@@ -214,6 +307,7 @@ def fail_operation(
     code: str,
     message: str,
     outcome_unknown: bool = False,
+    receipt_json: str | None = None,
 ) -> bool:
     """A stale worker may never overwrite a replacement owner's status or token."""
     db.rollback()
@@ -221,11 +315,13 @@ def fail_operation(
     values: dict[str, Any] = {
         "error_code": "ELT_OUTCOME_UNKNOWN" if outcome_unknown else code,
         "error_message": (
-            "外部批处理结果无法确认，已停止自动重试，请核对实际结果后人工处理"
+            "执行结果无法确认，已停止自动重试，请核对实际结果后人工处理"
             if outcome_unknown
             else message[:500]
         ),
     }
+    if receipt_json is not None:
+        values["receipt_json"] = receipt_json
     if owner.kind in {"rollback", "batch_rollback"}:
         values["rollback_status"] = "outcome_unknown" if outcome_unknown else "failed"
     if outcome_unknown or owner.kind not in {"rollback", "batch_rollback"}:
@@ -266,6 +362,8 @@ def has_active_owner(run: EltRun) -> bool:
 def recover_stale_owner(db: Session, run: EltRun) -> bool:
     if (
         not run.operation_token
+        or run.status == "outcome_unknown"
+        or run.rollback_status == "outcome_unknown"
         or run.tenant_id is None
         or run.operation_kind is None
         or has_active_owner(run)
@@ -277,9 +375,11 @@ def recover_stale_owner(db: Session, run: EltRun) -> bool:
     unknown = owner.kind in BATCH_KINDS
     values: dict[str, Any] = {
         "error_code": "ELT_OUTCOME_UNKNOWN" if unknown else "ELT_EXECUTION_INTERRUPTED",
-        "error_message": "外部批处理结果无法确认，请核对实际结果后人工处理"
-        if unknown
-        else "任务执行权已过期，可刷新后重试未完成的步骤",
+        "error_message": (
+            "外部批处理结果无法确认，请核对实际结果后人工处理"
+            if unknown
+            else "任务执行权已过期，可刷新后重试未完成的步骤"
+        ),
     }
     if owner.kind in {"rollback", "batch_rollback"}:
         values["rollback_status"] = "outcome_unknown" if unknown else "failed"
@@ -340,9 +440,11 @@ def _audit_terminal_failure(db: Session, owner: OperationOwner, *, outcome: str,
             "error_code": code,
             "operation_kind": owner.kind,
             "executed_rows": int(row.executed_rows or 0),
-            "executed_at": row.executed_at
-            if isinstance(row.executed_at, str) or row.executed_at is None
-            else row.executed_at.isoformat(),
+            "executed_at": (
+                row.executed_at
+                if isinstance(row.executed_at, str) or row.executed_at is None
+                else row.executed_at.isoformat()
+            ),
         },
     )
 

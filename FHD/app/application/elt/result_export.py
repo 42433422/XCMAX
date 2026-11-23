@@ -2,19 +2,119 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import math
+import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
+from zipfile import BadZipFile
+
+from app.application.elt.errors import EltError
 
 _DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
 _NUMERIC_TYPES = {"money", "number", "integer"}
+
+
+@contextmanager
+def staged_export(path: Path) -> Iterator[Path]:
+    """Publish a complete, verified export without exposing partial writes."""
+    from app.application.elt.service_support import MAX_FILE_BYTES
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(
+        dir=path.parent, prefix=".elt-export-", suffix=path.suffix, delete=False
+    ) as f:
+        staged = Path(f.name)
+    try:
+        yield staged
+        if staged.stat().st_size > MAX_FILE_BYTES:
+            raise EltError("ELT_EXPORT_TOO_LARGE", "导出文件超过大小限制，请缩小导出范围")
+        os.replace(staged, path)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def file_sha256(path: Path) -> str:
+    with path.open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def write_csv_result(
+    path: Path,
+    *,
+    headers: list[str],
+    rows: Iterable[dict[str, Any]],
+    progress: Any = None,
+    total: int = 0,
+) -> dict[str, Any]:
+    from app.application.elt.transforms import neutralize_spreadsheet_formula
+
+    expected, observed = hashlib.sha256(), hashlib.sha256()
+    executed = 0
+    with staged_export(path) as staged:
+        with staged.open("w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.writer(handle)
+
+            def write_row(values: Iterable[Any]) -> None:
+                values = [
+                    str(neutralize_spreadsheet_formula(value)) if value is not None else ""
+                    for value in values
+                ]
+                writer.writerow(values)
+                expected.update(json.dumps(values, ensure_ascii=False).encode() + b"\n")
+
+            write_row(headers)
+            for executed, row in enumerate(rows, start=1):
+                write_row(row.get(key, "") for key in headers)
+                if executed % 500 == 0 and callable(progress):
+                    progress(executed, total)
+        with staged.open(encoding="utf-8-sig", newline="") as handle:
+            for values in csv.reader(handle):
+                observed.update(json.dumps(values, ensure_ascii=False).encode() + b"\n")
+        if observed.digest() != expected.digest():
+            raise EltError("ELT_EXPORT_UNVERIFIED", "导出文件读回与确认内容不一致，未发布文件")
+        digest = file_sha256(staged)
+        if callable(progress):
+            progress(executed, total)
+    return {
+        "file_name": path.name,
+        "sha256": digest,
+        "headers": headers,
+        "data_rows": executed,
+        "readback_verified": True,
+        "reversible": False,
+    }
+
+
+def _worksheet_fingerprint(worksheet: Any) -> str:
+    """Compare saved cell values, types and formats, including notes and formulas."""
+    digest = hashlib.sha256()
+    for row in worksheet.iter_rows():
+        values = []
+        for cell in row:
+            value = cell.value
+            kind = cell.data_type
+            if value is None or value == "":
+                value, kind = None, "empty"
+            elif isinstance(value, datetime):
+                value = value.isoformat()
+            elif isinstance(value, date):
+                value = datetime.combine(value, datetime.min.time()).isoformat()
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                value = format(value, ".16g")
+            values.append((value, kind, cell.number_format or "General"))
+        digest.update(json.dumps(values, ensure_ascii=False).encode())
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
 def infer_column_type(label: str) -> str:
@@ -135,6 +235,8 @@ def _put_text(cell: Any, value: Any) -> None:
     text = "" if value is None else str(value)
     if text[:1] in _FORMULA_PREFIXES:
         text = "'" + text
+    if len(text) > 32767:
+        raise EltError("ELT_EXPORT_VALUE_TOO_LONG", "单元格内容超过 Excel 限制，未截断或发布文件")
     cell.value = text
     if text[:1] in {"'", *_FORMULA_PREFIXES}:
         cell.data_type = "s"
@@ -180,7 +282,8 @@ def write_xlsx_result(
     assert worksheet is not None  # A new Workbook always creates its default sheet.
     worksheet.title = _sheet_title(sheet_name)
     for index, column in enumerate(columns, start=1):
-        cell = worksheet.cell(1, index, column["label"])
+        cell = worksheet.cell(1, index)
+        _put_text(cell, column["label"])
         cell.font = Font(bold=True)
     for executed, row in enumerate(rows, start=1):
         for index, column in enumerate(columns, start=1):
@@ -205,15 +308,34 @@ def write_xlsx_result(
                 labeled = True
         note_row = total_row + 2
     for note in notes:
-        cell = worksheet.cell(note_row, 1, note)
-        cell.data_type = "s"
+        _put_text(worksheet.cell(note_row, 1), note)
         note_row += 1
     title = worksheet.title
-    workbook.save(path)
-    workbook.close()
-    if callable(progress):
-        progress(executed, total)
-    file_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    expected = _worksheet_fingerprint(worksheet)
+    try:
+        with staged_export(path) as staged:
+            workbook.save(staged)
+            from openpyxl import load_workbook
+
+            try:
+                readback = load_workbook(staged, read_only=True, data_only=False)
+                try:
+                    if (
+                        readback.sheetnames != [title]
+                        or _worksheet_fingerprint(readback[title]) != expected
+                    ):
+                        raise EltError(
+                            "ELT_EXPORT_UNVERIFIED", "导出文件读回与确认内容不一致，未发布文件"
+                        )
+                finally:
+                    readback.close()
+            except (BadZipFile, OSError, ValueError, KeyError) as exc:
+                raise EltError("ELT_EXPORT_UNVERIFIED", "导出文件无法读回核验，未发布文件") from exc
+            file_hash = file_sha256(staged)
+            if callable(progress):
+                progress(executed, total)
+    finally:
+        workbook.close()
     return {
         "file_name": path.name,
         "download_url": "",
@@ -222,5 +344,7 @@ def write_xlsx_result(
         "sheet_name": title,
         "headers": [column["label"] for column in columns],
         "data_rows": executed,
+        "readback_verified": True,
+        "formulas_recalculated": False,
         "reversible": False,
     }

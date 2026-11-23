@@ -11,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application.elt import archive_store
+from app.application.elt.archive_policy import ArchivePolicyError
 from app.application.elt.archive_store import (
     _ENVELOPE_MAGIC,
     _KEY_FILE_NAME,
@@ -127,3 +128,126 @@ def test_get_business_archive_dir_uses_desktop_state(tmp_path, monkeypatch):
     root = Path(path_utils.get_business_archive_dir())
     assert root == tmp_path / "AppDataXCAGI" / "business-archive"
     assert root.is_dir()
+
+
+def test_maximum_plaintext_remains_readable_after_encryption_and_recovery(archive_db, monkeypatch):
+    factory, archive_root = archive_db
+    monkeypatch.setattr(archive_store, "MAX_FILE_BYTES", 16_384)
+    body = b"x" * archive_store.MAX_FILE_BYTES
+    with tenant_scope(1), factory() as db:
+        version = create_original(
+            db, owner=7, name="large.csv", body=body, root=archive_root, request_key="large"
+        )
+        assert read_original(db, owner=7, version_id=version.id, root=archive_root) == body
+        assert (
+            create_original(
+                db, owner=7, name="large.csv", body=body, root=archive_root, request_key="large"
+            ).id
+            == version.id
+        )
+        version.status = "pending"
+        db.commit()
+        archive_store.recover_complete_pending(
+            db, owner=7, version_id=version.id, root=archive_root
+        )
+        assert version.status == "ready"
+        assert read_original(db, owner=7, version_id=version.id, root=archive_root) == body
+        with pytest.raises(ArchivePolicyError, match="大小限制"):
+            create_original(
+                db,
+                owner=7,
+                name="oversize.csv",
+                body=body + b"x",
+                root=archive_root,
+                request_key="oversize",
+            )
+
+
+def test_concurrent_first_archive_encryptions_keep_one_durable_key(archive_db, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier, Event, Lock
+
+    _factory, archive_root = archive_db
+    barrier, generated_twice, guard = Barrier(2), Event(), Lock()
+    original_generate = archive_store.secrets.token_urlsafe
+    calls = []
+
+    def stalled_generate(size):
+        result = original_generate(size)
+        with guard:
+            calls.append(result)
+            if len(calls) == 2:
+                generated_twice.set()
+        # Expose a competing first writer; a correctly serialized caller waits
+        # outside key creation and reads the first complete key afterwards.
+        generated_twice.wait(timeout=0.5)
+        return result
+
+    monkeypatch.setattr(archive_store.secrets, "token_urlsafe", stalled_generate)
+
+    def encrypt(body):
+        barrier.wait(timeout=5)
+        return archive_store._encrypt_body(body, archive_root=archive_root)
+
+    bodies = [b"first customer original", b"second customer original"]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        payloads = list(pool.map(encrypt, bodies))
+    cipher = archive_store._archive_cipher(archive_root)
+    assert [cipher.decrypt(payload[len(_ENVELOPE_MAGIC) :]) for payload in payloads] == bodies
+    assert len(calls) == 1
+
+
+def test_existing_empty_archive_key_is_not_replaced(archive_db):
+    factory, archive_root = archive_db
+    archive_root.mkdir(parents=True)
+    key_path = archive_root / _KEY_FILE_NAME
+    key_path.write_text("", encoding="utf-8")
+    with tenant_scope(1), factory() as db:
+        with pytest.raises(ArchivePolicyError, match="密钥"):
+            create_original(
+                db,
+                owner=7,
+                name="original.csv",
+                body=b"original",
+                root=archive_root,
+                request_key="empty-key",
+            )
+    assert key_path.read_bytes() == b""
+
+
+def _archive_encrypt_process(root, body, start, results):
+    start.wait(timeout=15)
+    results.put((body, archive_store._encrypt_body(body, archive_root=Path(root))))
+
+
+def test_separate_processes_share_the_durable_archive_key(archive_db):
+    import multiprocessing
+    import os
+
+    _factory, root = archive_db
+    context = multiprocessing.get_context("spawn")
+    start, results = context.Barrier(3), context.Queue()
+    processes = [
+        context.Process(target=_archive_encrypt_process, args=(str(root), body, start, results))
+        for body in (b"process-one-original", b"process-two-original")
+    ]
+    try:
+        for process in processes:
+            process.start()
+        start.wait(timeout=15)
+        payloads = [results.get(timeout=15) for _ in processes]
+        for process in processes:
+            process.join(timeout=15)
+            assert process.exitcode == 0
+        cipher = archive_store._archive_cipher(root)
+        assert all(
+            cipher.decrypt(payload[len(_ENVELOPE_MAGIC) :]) == body for body, payload in payloads
+        )
+        if os.name == "posix":
+            assert (root / _KEY_FILE_NAME).stat().st_mode & 0o077 == 0
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+        results.close()

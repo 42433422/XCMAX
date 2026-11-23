@@ -5,22 +5,29 @@ from __future__ import annotations
 import logging
 import math
 import time
+from contextlib import nullcontext
 from contextvars import copy_context
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from jsonschema import Draft202012Validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.application.elt.chat_recall import record_import_origin
 from app.application.elt.errors import EltConflict, EltError
 from app.application.elt.operation_owner import (
+    TRANSACTION_ERRORS,
     OperationOwner,
     activate_operation,
     bind_owner,
     claim_operation,
+    commit_rows,
     fail_operation,
+    fence_operation,
     finish_operation,
+    release_transaction,
+    row_receipts,
     unbind_owner,
 )
 from app.application.elt.parsers import MAX_ROWS
@@ -48,6 +55,44 @@ from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+_BATCH_RESULT = Draft202012Validator(
+    {
+        "type": "object",
+        "required": ["executed", "receipt"],
+        "properties": {
+            "executed": {"type": "integer", "minimum": 0},
+            "receipt": {"type": "object"},
+            "success": {"const": True},
+        },
+    }
+)
+
+
+def _batch_executed(target: str, result: Any, eligible: int) -> int:
+    """A batch must account for every approved row before acknowledging the lot."""
+    if not _BATCH_RESULT.is_valid(result):
+        raise EltError("ELT_BATCH_RECEIPT_INVALID", "批量执行未返回完整回执，请核对实际结果")
+    executed = result["executed"]
+    receipt = result["receipt"]
+    skipped = (
+        receipt.get("duplicates", 0)
+        if target == "dynamic_table"
+        else (receipt.get("skipped", 0) if target == "attendance" else 0)
+    )
+    if (
+        type(executed) is not int
+        or type(skipped) is not int
+        or skipped < 0
+        or executed + skipped != eligible
+        or (
+            target == "dynamic_table"
+            and (type(receipt.get("inserted")) is not int or receipt["inserted"] != executed)
+        )
+        or (target == "attendance" and receipt.get("error_rows", 0) != 0)
+    ):
+        raise EltError("ELT_BATCH_RECEIPT_INVALID", "批量回执行数与确认范围不符，请核对实际结果")
+    return cast(int, executed)
 
 
 def _unconfirmed_mappings(mappings: Any) -> list[dict[str, Any]]:
@@ -235,6 +280,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         started_at = time.monotonic()
         operation: OperationOwner | None = None
         external_started = False
+        pending_batch_receipt: str | None = None
         try:
             run = self._owned_run(db, run_id, owner_user_id)
             adapter = get_adapter(run.target_type)
@@ -246,7 +292,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 and getattr(batch_executor, "__func__", batch_executor)
                 is not TargetAdapter.execute_batch
             )
-            kind = "batch_execute" if uses_batch else "execute"
+            kind = "batch_execute" if uses_batch or run.target_type == "knowledge" else "execute"
             operation = (
                 activate_operation(db, run, kind, operation_token)
                 if operation_token
@@ -371,6 +417,12 @@ class ExecutionServiceMixin(RollbackServiceMixin):
 
                 external_started = True
                 result = adapter.execute_batch(normalized_rows(), context)
+                # Preserve the original acknowledgement even when it fails validation.
+                pending_batch_receipt = dump_json({"batch_result": result})
+                run.receipt_json = pending_batch_receipt
+                db.commit()
+                pending_batch_receipt = None
+                executed = _batch_executed(run.target_type, result, eligible_count)
                 db.query(EltRunRow).filter(*eligible_filters).update(
                     {
                         EltRunRow.execution_status: "success",
@@ -379,14 +431,14 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     },
                     synchronize_session=False,
                 )
-                executed = result.get("executed")
-                run.executed_rows = previous + int(eligible_count if executed is None else executed)
+                run.executed_rows = previous + executed
                 run.receipt_json = dump_json(result.get("receipt") or {})
                 db.commit()
             else:
                 eligible = (
                     db.query(EltRunRow).filter(*eligible_filters).order_by(EltRunRow.id).all()
                 )
+                external_started = run.target_type == "knowledge" and bool(eligible)
                 self._execute_rows(
                     db,
                     run,
@@ -395,11 +447,10 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     eligible,
                     set(draft.get("allowed_update_fields") or []),
                     context,
+                    operation,
                 )
             run = self._owned_run(db, run_id, owner_user_id)
-            rows_written = (
-                int(run.executed_rows or 0) + int(run.new_rows or 0) + int(run.update_rows or 0)
-            )
+            rows_written = int(run.executed_rows or 0)
             if run.target_type == "attendance":
                 receipt_now = load_json(run.receipt_json, {})
                 output_path = Path(str(receipt_now.get("output_path") or ""))
@@ -506,20 +557,36 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             db.commit()
             self._record_execution_metrics(run, started_at, "success")
         except BOUNDARY_ERRORS as exc:  # Task boundary; external effects retain unknown status.
-            db.rollback()
+            released = release_transaction(db)
             code, message = safe_error(exc)
             try:
-                if operation is not None and fail_operation(
-                    db, operation, code=code, message=message, outcome_unknown=external_started
-                ):
-                    run = self._owned_run(db, run_id, owner_user_id)
-                    self._record_execution_metrics(run, started_at, "failed")
-            except RECOVERABLE_ERRORS:
-                db.rollback()
+                if operation is not None:
+                    with nullcontext(db) if released else new_session() as failure_db:
+                        if failure_db.get_bind() is not db.get_bind() or (
+                            not released and failure_db is db
+                        ):
+                            raise EltError("ELT_OUTCOME_UNKNOWN", "无法核对原执行数据库")
+                        if fail_operation(
+                            failure_db,
+                            operation,
+                            code=code,
+                            message=message,
+                            outcome_unknown=(
+                                not released or external_started or code == "ELT_OUTCOME_UNKNOWN"
+                            ),
+                            receipt_json=pending_batch_receipt,
+                        ):
+                            run = self._owned_run(failure_db, run_id, owner_user_id)
+                            self._record_execution_metrics(run, started_at, "failed")
+            except TRANSACTION_ERRORS:
+                release_transaction(db)
                 logger.exception("Unable to persist ETL execution failure for %s", run_id)
         finally:
             unbind_owner(db)
-            db.close()
+            try:
+                db.close()
+            except TRANSACTION_ERRORS:
+                logger.exception("Unable to close ETL execution session for %s", run_id)
 
     @staticmethod
     def _record_execution_metrics(run: EltRun, started_at: float, status: str) -> None:
@@ -542,12 +609,24 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         rows: list[EltRunRow],
         allowed_updates: set[str],
         base_context: dict[str, Any],
+        operation: OperationOwner,
     ) -> None:
         executed = run.executed_rows
         total = len(rows)
-        for chunk_start in range(0, total, 500):
-            chunk = rows[chunk_start : chunk_start + 500]
+        external_rows = run.target_type == "knowledge"
+        chunk_size = 1 if external_rows else 500
+        for chunk_start in range(0, total, chunk_size):
+            chunk = rows[chunk_start : chunk_start + chunk_size]
+            before = (executed, row_receipts(chunk))
             completed_in_chunk = 0
+            # Start the outer SQL transaction before SAVEPOINT, including on
+            # SQLite legacy drivers where SAVEPOINT alone does not issue BEGIN.
+            fence_operation(db, operation)
+            if external_rows:
+                # Knowledge owns its own store/transaction. Persist its existing
+                # non-reclaimable lease, then release our SQL write lock before
+                # calling it. Each acknowledged external row is recorded once.
+                db.commit()
             try:
                 for row in chunk:
                     context = {
@@ -555,69 +634,34 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                         "source_row": row.source_row,
                         "preview_before": load_json(row.before_json, {}),
                     }
-                    result = adapter.execute_row(
-                        db,
-                        load_json(row.normalized_json, {}),
-                        action=row.final_action,
-                        match_ref=str(row.match_ref or ""),
-                        allowed_update_fields=allowed_updates,
-                        context=context,
-                    )
-                    row.match_ref = str(result.get("match_ref") or row.match_ref or "")
-                    row.after_json = dump_json(result.get("after") or load_json(row.after_json, {}))
-                    row.execution_status = "success"
-                    row.execution_error_code = None
-                    row.execution_error_message = None
+                    with nullcontext() if external_rows else db.begin_nested():
+                        result = adapter.execute_row(
+                            db,
+                            load_json(row.normalized_json, {}),
+                            action=row.final_action,
+                            match_ref=str(row.match_ref or ""),
+                            allowed_update_fields=allowed_updates,
+                            context=context,
+                        )
+                        row.match_ref = str(result.get("match_ref") or row.match_ref or "")
+                        row.after_json = dump_json(
+                            result.get("after") or load_json(row.after_json, {})
+                        )
+                        row.execution_status = "success"
+                        row.execution_error_code = None
+                        row.execution_error_message = None
                     completed_in_chunk += 1
-                executed += completed_in_chunk
-                run.executed_rows = executed
-                run.progress = min(99, int((chunk_start + len(chunk)) / max(1, total) * 100))
-                db.commit()
-            except RECOVERABLE_ERRORS as exc:
+            except TRANSACTION_ERRORS as exc:
+                if external_rows:
+                    raise  # The worker preserves outcome_unknown; no row replay.
                 if isinstance(exc, EltError) and exc.code == "ELT_OPERATION_LEASE_LOST":
                     db.rollback()
                     raise
-                failed_row_id = row.id
-                completed_row_ids = [item.id for item in chunk[:completed_in_chunk]]
-                db.rollback()
                 code, message = safe_error(exc)
-                for completed_row_id in completed_row_ids:
-                    completed_row = db.get(EltRunRow, completed_row_id)
-                    if completed_row is None:
-                        continue
-                    context = {
-                        **base_context,
-                        "source_row": completed_row.source_row,
-                        "preview_before": load_json(completed_row.before_json, {}),
-                    }
-                    result = adapter.execute_row(
-                        db,
-                        load_json(completed_row.normalized_json, {}),
-                        action=completed_row.final_action,
-                        match_ref=str(completed_row.match_ref or ""),
-                        allowed_update_fields=allowed_updates,
-                        context=context,
-                    )
-                    completed_row.match_ref = str(
-                        result.get("match_ref") or completed_row.match_ref or ""
-                    )
-                    completed_row.after_json = dump_json(
-                        result.get("after") or load_json(completed_row.after_json, {})
-                    )
-                    completed_row.execution_status = "success"
-                    completed_row.execution_error_code = None
-                    completed_row.execution_error_message = None
-                if completed_row_ids:
-                    executed += len(completed_row_ids)
-                    replay_run = self._owned_run(db, run.id, run.owner_user_id)
-                    replay_run.executed_rows = executed
-                    db.commit()
-                failed_row = db.get(EltRunRow, failed_row_id)
-                if failed_row:
-                    failed_row.execution_status = "failed"
-                    failed_row.execution_error_code = code
-                    failed_row.execution_error_message = message[:500]
-                run = self._owned_run(db, run.id, run.owner_user_id)
+                row.execution_status = "failed"
+                row.execution_error_code = code
+                row.execution_error_message = message[:500]
+                executed += completed_in_chunk
                 run.executed_rows = executed
                 if executed:
                     if run.executed_at is None:
@@ -637,11 +681,15 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                             "executed_rows": executed,
                             "executed_at": run.executed_at.isoformat(),
                             "error_code": code,
-                            "failed_source_row": failed_row.source_row if failed_row else None,
+                            "failed_source_row": row.source_row,
                         },
                     )
-                db.commit()
+                commit_rows(db, run, operation, before, chunk, session_factory=new_session)
                 raise
+            executed += completed_in_chunk
+            run.executed_rows = executed
+            run.progress = min(99, int((chunk_start + len(chunk)) / max(1, total) * 100))
+            commit_rows(db, run, operation, before, chunk, session_factory=new_session)
 
     def retry(self, db: Session, *, run_id: str, owner_user_id: int) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)

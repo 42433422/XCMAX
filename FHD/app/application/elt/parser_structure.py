@@ -211,12 +211,20 @@ def _compose_headers(
         )
         raw_headers.append("/".join(dict.fromkeys(parts)) if needs_context else parts[-1])
 
+    bases = [
+        clean_cell_text(raw)[:160] or f"未命名列{index}"
+        for index, raw in enumerate(raw_headers, start=1)
+    ]
+    reserved, used = set(bases), set()
     seen: dict[str, int] = {}
     headers: list[str] = []
-    for index, raw in enumerate(raw_headers, start=1):
-        base = clean_cell_text(raw)[:160] or f"未命名列{index}"
-        seen[base] = seen.get(base, 0) + 1
-        headers.append(base if seen[base] == 1 else f"{base}_{seen[base]}")
+    for base in bases:
+        name = base
+        while name in used or (name != base and name in reserved):
+            seen[base] = seen.get(base, 1) + 1
+            name = f"{base}_{seen[base]}"
+        used.add(name)
+        headers.append(name)
     return headers
 
 
