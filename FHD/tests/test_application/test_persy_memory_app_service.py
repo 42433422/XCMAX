@@ -400,22 +400,30 @@ def test_graph_recall_and_historical_review_use_existing_authority() -> None:
     def add(value, *, scope="user", confirm=True):
         target = owner if scope == "user" else _memory_owner_id(access, scope)
         proposed = service.memory_service.propose_memory_candidate(
-            target, "entity", value["statement"], value,
-            source="chat_trace", evidence=[{"kind": "conversation_turn"}],
+            target,
+            "entity",
+            value["statement"],
+            value,
+            source="chat_trace",
+            evidence=[{"kind": "conversation_turn"}],
         )
         memory_id = proposed["candidate"]["memory_id"]
         if confirm:
             assert service.mutate(
-                access_context=access, memory_id=memory_id, action="confirm",
+                access_context=access,
+                memory_id=memory_id,
+                action="confirm",
             )["success"]
         return memory_id
 
     first = add(fact("Acme Corp", "Alice Example", "organization", "person", "employs"))
     second = add(fact("Alice Example", "Phoenix Project", "person", "project", "leads"))
-    pending = add(fact("Alice Example", "Hidden Project", "person", "project", "reviews"),
-                  confirm=False)
-    other_scope = add(fact("Alice Example", "Tenant Project", "person", "project", "reviews"),
-                      scope="tenant")
+    pending = add(
+        fact("Alice Example", "Hidden Project", "person", "project", "reviews"), confirm=False
+    )
+    other_scope = add(
+        fact("Alice Example", "Tenant Project", "person", "project", "reviews"), scope="tenant"
+    )
     one = service.query(access_context=access, query="Acme Corp", max_hops=1, reinforce=False)
     two = service.query(access_context=access, query="Acme Corp", max_hops=2, reinforce=False)
     assert second not in {row["memory_id"] for row in one["memories"]}
@@ -427,7 +435,9 @@ def test_graph_recall_and_historical_review_use_existing_authority() -> None:
     active = next(row for row in two["memories"] if row["memory_id"] == first)
     instant = active["recorded_at_utc"]
     changed = service.mutate(
-        access_context=access, memory_id=first, action="correct",
+        access_context=access,
+        memory_id=first,
+        action="correct",
         patch={"value": fact("Acme Corp", "Bob Example", "organization", "person", "employs")},
     )
     assert changed["success"]
@@ -440,5 +450,7 @@ def test_graph_recall_and_historical_review_use_existing_authority() -> None:
     after_delete = service.query(access_context=access, query="Acme Corp", as_of=instant)
     assert first not in {row["memory_id"] for row in after_delete["memories"]}
     assert not service.query(
-        access_context=access, query="Acme Corp", as_of="2026-01-01T12:00:00",
+        access_context=access,
+        query="Acme Corp",
+        as_of="2026-01-01T12:00:00",
     )["success"]

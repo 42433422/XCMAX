@@ -478,8 +478,9 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             lexical_rank = 0.0
             if lexical > 0:
                 lexical_rank = (
-                    lexical if review_only else
-                    lexical * 0.72 + float(row.get("strength") or 0.0) * 0.28
+                    lexical
+                    if review_only
+                    else lexical * 0.72 + float(row.get("strength") or 0.0) * 0.28
                 )
             relation_rank = 0.68 / len(path) ** 0.5 if path else 0.0
             score = min(1.0, max(lexical_rank, relation_rank))
@@ -505,7 +506,9 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                     (str(step["scope"]), str(step["memory_id"]))
                     for step in paths.get(record_key(row), [])
                 )
-                return all(key in latest and latest[key] == original_revisions.get(key) for key in keys)
+                return all(
+                    key in latest and latest[key] == original_revisions.get(key) for key in keys
+                )
 
             checked = [(score, row) for score, row in selected if unchanged(row)]
             dropped = len(selected) - len(checked)
@@ -561,7 +564,9 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             "query": query_text,
             "memories": memories,
             "chunks": chunks,
-            "retriever": "persy_memory_relation_v2" if max_hops > 0 else "persy_memory_lexical_strength_v1",
+            "retriever": "persy_memory_relation_v2"
+            if max_hops > 0
+            else "persy_memory_lexical_strength_v1",
             "as_of": instant.isoformat() if instant is not None else None,
             "historical_review_only": review_only,
             "effective_at": business_time.isoformat() if business_time is not None else None,

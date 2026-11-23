@@ -69,9 +69,7 @@ def relation_paths(
         return {}, False
     depth_limit = min(3, max_hops)
     by_key = {
-        record_key(row): row
-        for row in rows
-        if is_recallable_memory(row) and all(record_key(row))
+        record_key(row): row for row in rows if is_recallable_memory(row) and all(record_key(row))
     }
     links: dict[EntityKey, list[RecordKey]] = defaultdict(list)
     entities_by_record: dict[RecordKey, dict[EntityKey, str]] = {}
@@ -145,9 +143,7 @@ def _revision_time(record: dict[str, Any]) -> datetime | None:
         return None
 
 
-def snapshot_at(
-    record: dict[str, Any], as_of: datetime
-) -> tuple[dict[str, Any] | None, bool]:
+def snapshot_at(record: dict[str, Any], as_of: datetime) -> tuple[dict[str, Any] | None, bool]:
     """Read an earlier recorded revision, not historical real-world validity.
 
     Revoked/rejected current records never reappear through time travel.
@@ -238,8 +234,11 @@ def _relation_key(row: dict[str, Any]) -> tuple[tuple[str, str, str, str], str] 
     if not predicate.strip() or not object_text.strip() or not isinstance(entities, list):
         return None
     subject = next(
-        (entity for entity in entities[:6] if isinstance(entity, dict)
-         and entity.get("role") == "subject"),
+        (
+            entity
+            for entity in entities[:6]
+            if isinstance(entity, dict) and entity.get("role") == "subject"
+        ),
         None,
     )
     if subject is None:
@@ -250,8 +249,11 @@ def _relation_key(row: dict[str, Any]) -> tuple[tuple[str, str, str, str], str] 
         return None
     subject_key = _entity_identity(subject.get("entity_id"), name)
     obj = next(
-        (entity for entity in entities[:6] if isinstance(entity, dict)
-         and entity.get("role") == "object"),
+        (
+            entity
+            for entity in entities[:6]
+            if isinstance(entity, dict) and entity.get("role") == "object"
+        ),
         None,
     )
     object_key = _entity_identity(
@@ -299,15 +301,15 @@ def select_effective_records(
     for key, candidates in sorted(groups.items()):
         if len({obj for _, obj in candidates}) <= 1:
             continue
-        if not any(
-            row["value"].get("relation_cardinality") == "one" for row, _ in candidates
-        ):
+        if not any(row["value"].get("relation_cardinality") == "one" for row, _ in candidates):
             continue
         withheld.update(record_key(row) for row, _ in candidates)
-        conflicts.append({
-            "scope": key[0],
-            "predicate": key[3],
-            "memory_ids": sorted(str(row.get("memory_id") or "") for row, _ in candidates),
-            "resolution": "review_required",
-        })
+        conflicts.append(
+            {
+                "scope": key[0],
+                "predicate": key[3],
+                "memory_ids": sorted(str(row.get("memory_id") or "") for row, _ in candidates),
+                "resolution": "review_required",
+            }
+        )
     return [row for row in eligible if record_key(row) not in withheld], conflicts, unavailable

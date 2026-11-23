@@ -124,8 +124,11 @@ def filter_recalled_memories(
                     break
                 step_id = str(step.get("memory_id") or "")
                 previous = current.get(step_id)
-                if (previous is None or step.get("scope") != "owner"
-                        or step.get("revision") != previous.get("revision")):
+                if (
+                    previous is None
+                    or step.get("scope") != "owner"
+                    or step.get("revision") != previous.get("revision")
+                ):
                     break
                 checked_path.append({**step, "statement": memory_statement(previous)})
             if len(checked_path) != len(path) or checked_path[-1]["memory_id"] != source_id:
@@ -198,10 +201,7 @@ def relation_recall_hits(
     if not isinstance(raw, list):
         return []
     eligible, _, _ = select_effective_records(raw)
-    rows = [
-        {**row, "scope": "owner", "statement": memory_statement(row)}
-        for row in eligible
-    ]
+    rows = [{**row, "scope": "owner", "statement": memory_statement(row)} for row in eligible]
     paths, _ = relation_paths(query, rows, max_hops=2)
     hits = []
     for row in rows:
@@ -209,20 +209,22 @@ def relation_recall_hits(
         path = paths.get(("owner", source_id), [])
         if len(path) < 2:
             continue
-        hits.append({
-            "content": row["statement"],
-            "memory": row["statement"],
-            "score": round(0.68 / len(path) ** 0.5, 6),
-            "chunk_id": source_id,
-            "metadata": {
-                "source": "memory_v2_relation",
-                "source_memory_id": source_id,
-                "source_revision": int(row.get("revision") or 1),
-                "source_owner_id": user_id,
-                "relation_path": path,
-                "retrieval_mode": "relation",
-            },
-        })
+        hits.append(
+            {
+                "content": row["statement"],
+                "memory": row["statement"],
+                "score": round(0.68 / len(path) ** 0.5, 6),
+                "chunk_id": source_id,
+                "metadata": {
+                    "source": "memory_v2_relation",
+                    "source_memory_id": source_id,
+                    "source_revision": int(row.get("revision") or 1),
+                    "source_owner_id": user_id,
+                    "relation_path": path,
+                    "retrieval_mode": "relation",
+                },
+            }
+        )
     return filter_recalled_memories(user_id, hits, memory_service=memory_service)
 
 
@@ -235,7 +237,8 @@ def merge_relation_hits(
         for hit in direct
     }
     extra = [
-        hit for hit in sorted(related, key=lambda item: -float(item.get("score") or 0.0))
+        hit
+        for hit in sorted(related, key=lambda item: -float(item.get("score") or 0.0))
         if str(hit["metadata"]["source_memory_id"]) not in seen
     ]
     if not extra or bounded == 1:
@@ -252,6 +255,7 @@ def format_relation_evidence(hit: dict[str, Any]) -> str:
         return ""
     evidence = "；".join(
         str(step.get("statement") or "").replace("\\n", " ")[:120]
-        for step in path[:3] if isinstance(step, dict)
+        for step in path[:3]
+        if isinstance(step, dict)
     )
     return f"（关联记录，仅供参考，不能证明身份或传递关系：{evidence}）" if evidence else ""
