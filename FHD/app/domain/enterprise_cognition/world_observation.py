@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -29,7 +30,9 @@ def observation_time(snapshot: dict[str, Any]) -> datetime:
     return value.astimezone(UTC)
 
 
-def read_observations(raw: str) -> tuple[list[dict[str, Any]], bool]:
+def read_observations(
+    raw: str, expected_scope: dict[str, Any]
+) -> tuple[list[dict[str, Any]], bool]:
     """Legacy current projections are observations, never reconstructed history."""
     decoded = json.loads(raw)
     if not isinstance(decoded, dict):
@@ -42,6 +45,18 @@ def read_observations(raw: str) -> tuple[list[dict[str, Any]], bool]:
     for item in history:
         if not isinstance(item, dict) or not item.get("evidence") or not item.get("source_version"):
             raise ValueError("invalid_observation_evidence")
+        if any(item.get(key) != value for key, value in expected_scope.items()):
+            raise ValueError("observation_scope_mismatch")
+        authority = {
+            "state": item["state"],
+            "source_last_changed": item["source_last_changed"],
+        }
+        canonical = json.dumps(
+            authority, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        digest = hashlib.sha256(canonical.encode()).hexdigest()
+        if item["source_version"] != "sha256:" + digest:
+            raise ValueError("observation_digest_mismatch")
         observation_time(item)
     return history, decoded.get(_TRUNCATED_KEY) is True
 
@@ -50,7 +65,11 @@ def record_observation(
     raw: str | None, snapshot: dict[str, Any]
 ) -> tuple[dict[str, Any], bool]:
     """Retain conflicting observations; do not convert ambiguous ordering to a fact."""
-    history, truncated = read_observations(raw) if raw else ([], False)
+    scope = {
+        key: snapshot[key]
+        for key in ("tenant_id", "actor_id", "mod_id", "entity_type", "entity_id", "source", "read_only")
+    }
+    history, truncated = read_observations(raw, scope) if raw else ([], False)
     entry = public_snapshot(snapshot)
     instant = observation_time(entry)
     conflict = any(
@@ -75,12 +94,14 @@ def record_observation(
     }, conflict
 
 
-def historical_observation(raw: str, as_of: str) -> dict[str, Any]:
+def historical_observation(
+    raw: str, as_of: str, expected_scope: dict[str, Any]
+) -> dict[str, Any]:
     """Return last recorded observation, never claim continuous business validity."""
     at = datetime.fromisoformat(as_of)
     if at.tzinfo is None:
         raise ValueError("as_of_requires_timezone")
-    history, truncated = read_observations(raw)
+    history, truncated = read_observations(raw, expected_scope)
     candidates = [item for item in history if observation_time(item) <= at]
     base = {
         "as_of": at.astimezone(UTC).isoformat(),
