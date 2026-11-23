@@ -34,11 +34,20 @@ def safe_route_metadata(payload: Any) -> dict[str, str | int]:
 class MarketModelError(ValueError):
     """An explicit gateway failure, distinct from a successful empty completion."""
 
-    code: str | None = None
     recovery: str | None = None
     response: Any | None = None
 
-    def __init__(self, payload: dict[str, Any]):
+    _LOCAL_FAILURES = {
+        "model_not_configured": "尚未配置可用模型，请在模型设置中检查连接与授权。",
+        "model_connection_failed": "模型服务连接失败，请检查连接后重试。",
+        "model_response_invalid": "模型服务返回的内容不符合响应协议，请重试或检查模型状态。",
+        "model_output_budget_exceeded": "请求的输出预算超过当前模型限制，请调整模型配置后重试。",
+        "model_output_truncated": "模型输出达到长度上限，本次未获得完整结果，请调整模型输出预算后重试。",
+        "model_response_blocked": "模型服务未返回可用内容，请查看模型状态。",
+        "model_deadline_exceeded": "本轮模型处理已达到时间预算，请稍后重试。",
+    }
+
+    def __init__(self, payload: dict[str, Any], *, code: str | None = None):
         # Gateway/provider error text may contain credentials, URLs or request data.
         # Only status and public route identity are suitable for chat history.
         try:
@@ -46,13 +55,42 @@ class MarketModelError(ValueError):
         except (TypeError, ValueError):
             status = 502
         self.status_code = status if 400 <= status <= 599 else 502
+        self.code = (
+            code
+            if code in self._LOCAL_FAILURES
+            else {
+                400: "model_request_invalid",
+                401: "model_authentication_failed",
+                402: "model_balance_insufficient",
+                403: "model_access_denied",
+                404: "model_not_found",
+                408: "model_timeout",
+                409: "model_configuration_changed",
+                422: "model_request_invalid",
+                429: "model_rate_limited",
+                503: "model_unavailable",
+                504: "model_timeout",
+            }.get(
+                self.status_code,
+                "model_request_invalid" if self.status_code < 500 else "model_provider_error",
+            )
+        )
+        self.retryable = self.code in {
+            "model_connection_failed",
+            "model_deadline_exceeded",
+            "model_timeout",
+            "model_rate_limited",
+            "model_unavailable",
+            "model_provider_error",
+        }
         self.route_metadata = safe_route_metadata(payload) or safe_route_metadata(
             payload.get("detail")
         )
         if self.route_metadata:
             self.route_metadata["route_state"] = "failed"
         super().__init__(
-            {
+            self._LOCAL_FAILURES.get(self.code)
+            or {
                 400: "模型服务未接受请求，请查看模型状态；平台模型配置请联系管理员核对。",
                 401: "模型服务鉴权失败，请查看模型状态；平台模型授权请联系管理员核对。",
                 402: "修茈市场模型余额不足，请在「模型支付」充值后重试。",

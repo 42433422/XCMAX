@@ -1,0 +1,227 @@
+{
+  "provenance": {
+    "commit": "4b55ade7e56106d12dd472ed9e9f9dd889799976",
+    "sources_sha256": {
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_customer_delivery.py": "739703aaaa108f8dfedf33f7c6b6cbdcaab5c44c8c35072937ca17b56763148e",
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_customer_finalization.py": "7f2e4bcc4ec17cc5cb546775bc3aef315ddeb5a7368638c3982ed362b434c2b3"
+    },
+    "native_calls": 1
+  },
+  "workspace": "/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11",
+  "order": {
+    "status": "paid",
+    "out_trade_no": "customer-workflow-order-11",
+    "user_id": 11,
+    "amount_cents": 10000,
+    "currency": "CNY",
+    "paid_at": "2026-11-21T16:19:05.597976+00:00",
+    "payment_provider": "alipay",
+    "provider_trade_no": "alipay-workflow-11",
+    "provider_verification": "alipay_signed_callback",
+    "environment": "production"
+  },
+  "user": {
+    "id": 11,
+    "username": "be38a3a3ad134342b141aa9bf0a4f7a4",
+    "password_hash": "test-only",
+    "is_admin": false,
+    "is_enterprise": true,
+    "account_state": "pending_plan",
+    "created_at": "2026-11-21T17:19:05.614463",
+    "default_llm_json": "",
+    "experience": 0
+  },
+  "workflow": {
+    "id": 11,
+    "user_id": 11,
+    "name": "Paid CSV customer workflow",
+    "description": "",
+    "is_active": true,
+    "created_at": "2026-11-21T17:19:05.597976",
+    "updated_at": "2026-11-21T17:19:05.597976",
+    "migration_status": "",
+    "kind": ""
+  },
+  "nodes": [
+    {
+      "id": 1,
+      "workflow_id": 11,
+      "node_type": "start",
+      "name": "start",
+      "config": "{}",
+      "position_x": 0.0,
+      "position_y": 0.0,
+      "created_at": "2026-11-21T17:19:05.597976"
+    },
+    {
+      "id": 2,
+      "workflow_id": 11,
+      "node_type": "employee",
+      "name": "employee",
+      "config": "{\"employee_id\": \"csv-generate-0e991728b27b\", \"task\": \"Generate the customer's ordered CSV file\", \"input_mapping\": {\"file_path\": \"{{global.file_path}}\"}}",
+      "position_x": 0.0,
+      "position_y": 0.0,
+      "created_at": "2026-11-21T17:19:05.597976"
+    },
+    {
+      "id": 3,
+      "workflow_id": 11,
+      "node_type": "end",
+      "name": "end",
+      "config": "{}",
+      "position_x": 0.0,
+      "position_y": 0.0,
+      "created_at": "2026-11-21T17:19:05.597976"
+    }
+  ],
+  "edges": [
+    {
+      "id": 1,
+      "workflow_id": 11,
+      "source_node_id": 1,
+      "target_node_id": 2,
+      "condition": "",
+      "created_at": "2026-11-21T17:19:05.597976"
+    },
+    {
+      "id": 2,
+      "workflow_id": 11,
+      "source_node_id": 2,
+      "target_node_id": 3,
+      "condition": "",
+      "created_at": "2026-11-21T17:19:05.597976"
+    }
+  ],
+  "execution": {
+    "id": 1,
+    "workflow_id": 11,
+    "user_id": 11,
+    "status": "completed",
+    "input_data": "{\"file_path\": \"inputs/orders.json\", \"customer_delivery\": {\"order_no\": \"customer-workflow-order-11\", \"customer_goal_id\": \"customer-workflow-csv-11\"}}",
+    "output_data": "{\"file_path\": \"inputs/orders.json\", \"customer_delivery\": {\"order_no\": \"customer-workflow-order-11\", \"customer_goal_id\": \"customer-workflow-csv-11\"}, \"nodes\": {\"1\": {\"id\": 1, \"name\": \"start\", \"type\": \"start\", \"output\": {}}, \"start\": {\"id\": 1, \"name\": \"start\", \"type\": \"start\", \"output\": {}}, \"prev\": {\"id\": 3, \"name\": \"end\", \"type\": \"end\", \"output\": {}}, \"2\": {\"id\": 2, \"name\": \"employee\", \"type\": \"employee\", \"output\": {\"employee_result\": {\"employee_id\": \"csv-generate-0e991728b27b\", \"pack\": {\"id\": \"csv-generate-0e991728b27b\", \"version\": \"1.0.0\"}, \"duration_ms\": 2065.451, \"result\": {\"task\": \"Generate the customer's ordered CSV file\", \"handlers\": [\"direct_python\"], \"outputs\": [{\"handler\": \"direct_python\", \"ok\": true, \"output\": {\"ok\": true, \"summary\": \"{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/outputs/output.csv\\\", \\\"row_count\\\": 1, \\\"column_count\\\": 2, \\\"delimiter\\\": \\\",\\\", \\\"encoding\\\": \\\"utf-8-sig\\\", \\\"output_schema\\\": [\\\"columns\\\", \\\"rows\\\", \\\"row_count\\\", \\\"delimiter\\\", \\\"encoding\\\"], \\\"template_path\\\": \\\"\\\"}\", \"items\": [{\"output_path\": \"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/outputs/output.csv\", \"row_count\": 1, \"column_count\": 2, \"delimiter\": \",\", \"encoding\": \"utf-8-sig\", \"output_schema\": [\"columns\", \"rows\", \"row_count\", \"delimiter\", \"encoding\"], \"template_path\": \"\"}], \"warnings\": [], \"error\": \"\", \"meta\": {\"handler\": \"direct_python\", \"action\": \"convert\", \"runtime\": \"generated_python\"}, \"status\": \"completed\", \"files_changed\": [\"outputs/output.csv\"], \"artifacts\": [{\"artifact_id\": \"outputs/output.csv\", \"artifact_sha256\": \"d2abc629d412a4c2efc75ec8746a02e0242a20a42754c52e8df32b16b8b6459f\", \"size_bytes\": 27, \"path\": \"outputs/output.csv\"}]}, \"files_changed\": [\"outputs/output.csv\"]}], \"summary\": \"executed 1 handlers\", \"path_guard\": {\"ok\": true, \"checked\": true, \"scope_globs\": [\"inputs/**\", \"outputs/**\"], \"forbidden_globs\": [\"**/.env\"], \"violations\": [], \"all_changed_files\": [\"outputs/output.csv\"]}, \"verification\": {\"checks\": [{\"name\": \"files_changed_exist\", \"ok\": true, \"evidence\": \"声明改的 1 个文件都存在：outputs/output.csv (27B)\"}, {\"name\": \"tests_reported\", \"ok\": true, \"evidence\": \"任务不涉及测试，跳过\", \"skipped\": true}, {\"name\": \"status_honest\", \"ok\": true, \"evidence\": \"native direct_python ok/error results checked; cognition was not invoked\"}, {\"name\": \"summary_provided\", \"ok\": true, \"evidence\": \"summary 长度 272 字：{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/out...\"}, {\"name\": \"handler_outputs_nonempty\", \"ok\": true, \"evidence\": \"1/1 个 handler 有 output（0 个空）\"}], \"ok_count\": 4, \"total_count\": 4, \"passed\": true, \"failed_count\": 0, \"summary\": \"全部 4 项验证通过\", \"files_declared\": [\"outputs/output.csv\"]}, \"evolution_signal\": {\"needed\": false, \"fail_count\": 0, \"min_failures\": 3, \"lookback_hours\": 24, \"suggestion\": \"该员工最近 24 小时失败 0 次（< 阈值 3），暂不需要 prompt evolution。\", \"recent_failures\": [], \"evolution_api\": \"POST /api/admin/employee-autonomy/evolution/scan\"}, \"human_report\": \"## 我做了什么\\n- 员工：`csv-generate-0e991728b27b`\\n- 任务：Generate the customer's ordered CSV file\\n- 耗时：2065ms，消耗 0 tokens\\n- 状态：success\\n\\n## 发现什么\\n- 输入类型：json\\n- 🏷️ 任务分类：unknown（置信度 0.1）— 未命中任何分类关键词，可能是泛化任务或纯决策\\n- 长期记忆：检索到 0 条相关项\\n- 短期记忆：最近 0 条任务记录\\n\\n## 修了什么\\n  - direct_python: ✅ 成功\\n\\n路径边界检查：\\n检测到 1 个文件改动，全部在 scope_globs 范围内 ✅\\n\\n程序化验证：\\n程序化验证（4/4 通过，0 失败）：全部 4 项验证通过\\n  - ✅ files_changed_exist：声明改的 1 个文件都存在：outputs/output.csv (27B)\\n  - ⏭️ tests_reported：任务不涉及测试，跳过\\n  - ✅ status_honest：native direct_python ok/error results checked; cognition was not invoked\\n  - ✅ summary_provided：summary 长度 272 字：{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/out...\\n  - ✅ handler_outputs_nonempty：1/1 个 handler 有 output（0 个空）\\n\\n学习信号：\\n学习信号：最近 24h 失败 0 次（< 阈值 3），暂不需要进化\\n  - 该员工最近 24 小时失败 0 次（< 阈值 3），暂不需要 prompt evolution。\\n\\n## 还剩什么\\n- ✅ 全部 handler 成功执行，无遗留事项\\n\\n## 你要不要确认\\n- 如无异议，本次任务到此结束；如有补充请告诉我\", \"change_request_bridge\": {\"ok\": true, \"existing_change_request_ids\": [], \"created_change_request_ids\": [], \"change_request_ids\": [], \"processed_file_candidates\": 1, \"skipped\": [{\"path\": \"outputs/output.csv\", \"reason\": \"missing_content\"}]}}, \"executed_at\": \"2026-11-21T17:19:08.211754+00:00\", \"llm_tokens\": 0, \"runtime_policy\": null, \"cognition_error\": null, \"cognition_help\": null, \"reasoning_excerpt\": null, \"change_request_ids\": []}, \"employee_id\": \"csv-generate-0e991728b27b\", \"task\": \"Generate the customer's ordered CSV file\", \"execution_time\": \"2026-11-21T17:19:08.220884+00:00\"}}, \"employee\": {\"id\": 2, \"name\": \"employee\", \"type\": \"employee\", \"output\": {\"employee_result\": {\"employee_id\": \"csv-generate-0e991728b27b\", \"pack\": {\"id\": \"csv-generate-0e991728b27b\", \"version\": \"1.0.0\"}, \"duration_ms\": 2065.451, \"result\": {\"task\": \"Generate the customer's ordered CSV file\", \"handlers\": [\"direct_python\"], \"outputs\": [{\"handler\": \"direct_python\", \"ok\": true, \"output\": {\"ok\": true, \"summary\": \"{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/outputs/output.csv\\\", \\\"row_count\\\": 1, \\\"column_count\\\": 2, \\\"delimiter\\\": \\\",\\\", \\\"encoding\\\": \\\"utf-8-sig\\\", \\\"output_schema\\\": [\\\"columns\\\", \\\"rows\\\", \\\"row_count\\\", \\\"delimiter\\\", \\\"encoding\\\"], \\\"template_path\\\": \\\"\\\"}\", \"items\": [{\"output_path\": \"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/outputs/output.csv\", \"row_count\": 1, \"column_count\": 2, \"delimiter\": \",\", \"encoding\": \"utf-8-sig\", \"output_schema\": [\"columns\", \"rows\", \"row_count\", \"delimiter\", \"encoding\"], \"template_path\": \"\"}], \"warnings\": [], \"error\": \"\", \"meta\": {\"handler\": \"direct_python\", \"action\": \"convert\", \"runtime\": \"generated_python\"}, \"status\": \"completed\", \"files_changed\": [\"outputs/output.csv\"], \"artifacts\": [{\"artifact_id\": \"outputs/output.csv\", \"artifact_sha256\": \"d2abc629d412a4c2efc75ec8746a02e0242a20a42754c52e8df32b16b8b6459f\", \"size_bytes\": 27, \"path\": \"outputs/output.csv\"}]}, \"files_changed\": [\"outputs/output.csv\"]}], \"summary\": \"executed 1 handlers\", \"path_guard\": {\"ok\": true, \"checked\": true, \"scope_globs\": [\"inputs/**\", \"outputs/**\"], \"forbidden_globs\": [\"**/.env\"], \"violations\": [], \"all_changed_files\": [\"outputs/output.csv\"]}, \"verification\": {\"checks\": [{\"name\": \"files_changed_exist\", \"ok\": true, \"evidence\": \"声明改的 1 个文件都存在：outputs/output.csv (27B)\"}, {\"name\": \"tests_reported\", \"ok\": true, \"evidence\": \"任务不涉及测试，跳过\", \"skipped\": true}, {\"name\": \"status_honest\", \"ok\": true, \"evidence\": \"native direct_python ok/error results checked; cognition was not invoked\"}, {\"name\": \"summary_provided\", \"ok\": true, \"evidence\": \"summary 长度 272 字：{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/out...\"}, {\"name\": \"handler_outputs_nonempty\", \"ok\": true, \"evidence\": \"1/1 个 handler 有 output（0 个空）\"}], \"ok_count\": 4, \"total_count\": 4, \"passed\": true, \"failed_count\": 0, \"summary\": \"全部 4 项验证通过\", \"files_declared\": [\"outputs/output.csv\"]}, \"evolution_signal\": {\"needed\": false, \"fail_count\": 0, \"min_failures\": 3, \"lookback_hours\": 24, \"suggestion\": \"该员工最近 24 小时失败 0 次（< 阈值 3），暂不需要 prompt evolution。\", \"recent_failures\": [], \"evolution_api\": \"POST /api/admin/employee-autonomy/evolution/scan\"}, \"human_report\": \"## 我做了什么\\n- 员工：`csv-generate-0e991728b27b`\\n- 任务：Generate the customer's ordered CSV file\\n- 耗时：2065ms，消耗 0 tokens\\n- 状态：success\\n\\n## 发现什么\\n- 输入类型：json\\n- 🏷️ 任务分类：unknown（置信度 0.1）— 未命中任何分类关键词，可能是泛化任务或纯决策\\n- 长期记忆：检索到 0 条相关项\\n- 短期记忆：最近 0 条任务记录\\n\\n## 修了什么\\n  - direct_python: ✅ 成功\\n\\n路径边界检查：\\n检测到 1 个文件改动，全部在 scope_globs 范围内 ✅\\n\\n程序化验证：\\n程序化验证（4/4 通过，0 失败）：全部 4 项验证通过\\n  - ✅ files_changed_exist：声明改的 1 个文件都存在：outputs/output.csv (27B)\\n  - ⏭️ tests_reported：任务不涉及测试，跳过\\n  - ✅ status_honest：native direct_python ok/error results checked; cognition was not invoked\\n  - ✅ summary_provided：summary 长度 272 字：{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/out...\\n  - ✅ handler_outputs_nonempty：1/1 个 handler 有 output（0 个空）\\n\\n学习信号：\\n学习信号：最近 24h 失败 0 次（< 阈值 3），暂不需要进化\\n  - 该员工最近 24 小时失败 0 次（< 阈值 3），暂不需要 prompt evolution。\\n\\n## 还剩什么\\n- ✅ 全部 handler 成功执行，无遗留事项\\n\\n## 你要不要确认\\n- 如无异议，本次任务到此结束；如有补充请告诉我\", \"change_request_bridge\": {\"ok\": true, \"existing_change_request_ids\": [], \"created_change_request_ids\": [], \"change_request_ids\": [], \"processed_file_candidates\": 1, \"skipped\": [{\"path\": \"outputs/output.csv\", \"reason\": \"missing_content\"}]}}, \"executed_at\": \"2026-11-21T17:19:08.211754+00:00\", \"llm_tokens\": 0, \"runtime_policy\": null, \"cognition_error\": null, \"cognition_help\": null, \"reasoning_excerpt\": null, \"change_request_ids\": []}, \"employee_id\": \"csv-generate-0e991728b27b\", \"task\": \"Generate the customer's ordered CSV file\", \"execution_time\": \"2026-11-21T17:19:08.220884+00:00\"}}, \"3\": {\"id\": 3, \"name\": \"end\", \"type\": \"end\", \"output\": {}}, \"end\": {\"id\": 3, \"name\": \"end\", \"type\": \"end\", \"output\": {}}}, \"employee_result\": {\"employee_id\": \"csv-generate-0e991728b27b\", \"pack\": {\"id\": \"csv-generate-0e991728b27b\", \"version\": \"1.0.0\"}, \"duration_ms\": 2065.451, \"result\": {\"task\": \"Generate the customer's ordered CSV file\", \"handlers\": [\"direct_python\"], \"outputs\": [{\"handler\": \"direct_python\", \"ok\": true, \"output\": {\"ok\": true, \"summary\": \"{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/outputs/output.csv\\\", \\\"row_count\\\": 1, \\\"column_count\\\": 2, \\\"delimiter\\\": \\\",\\\", \\\"encoding\\\": \\\"utf-8-sig\\\", \\\"output_schema\\\": [\\\"columns\\\", \\\"rows\\\", \\\"row_count\\\", \\\"delimiter\\\", \\\"encoding\\\"], \\\"template_path\\\": \\\"\\\"}\", \"items\": [{\"output_path\": \"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/outputs/output.csv\", \"row_count\": 1, \"column_count\": 2, \"delimiter\": \",\", \"encoding\": \"utf-8-sig\", \"output_schema\": [\"columns\", \"rows\", \"row_count\", \"delimiter\", \"encoding\"], \"template_path\": \"\"}], \"warnings\": [], \"error\": \"\", \"meta\": {\"handler\": \"direct_python\", \"action\": \"convert\", \"runtime\": \"generated_python\"}, \"status\": \"completed\", \"files_changed\": [\"outputs/output.csv\"], \"artifacts\": [{\"artifact_id\": \"outputs/output.csv\", \"artifact_sha256\": \"d2abc629d412a4c2efc75ec8746a02e0242a20a42754c52e8df32b16b8b6459f\", \"size_bytes\": 27, \"path\": \"outputs/output.csv\"}]}, \"files_changed\": [\"outputs/output.csv\"]}], \"summary\": \"executed 1 handlers\", \"path_guard\": {\"ok\": true, \"checked\": true, \"scope_globs\": [\"inputs/**\", \"outputs/**\"], \"forbidden_globs\": [\"**/.env\"], \"violations\": [], \"all_changed_files\": [\"outputs/output.csv\"]}, \"verification\": {\"checks\": [{\"name\": \"files_changed_exist\", \"ok\": true, \"evidence\": \"声明改的 1 个文件都存在：outputs/output.csv (27B)\"}, {\"name\": \"tests_reported\", \"ok\": true, \"evidence\": \"任务不涉及测试，跳过\", \"skipped\": true}, {\"name\": \"status_honest\", \"ok\": true, \"evidence\": \"native direct_python ok/error results checked; cognition was not invoked\"}, {\"name\": \"summary_provided\", \"ok\": true, \"evidence\": \"summary 长度 272 字：{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/out...\"}, {\"name\": \"handler_outputs_nonempty\", \"ok\": true, \"evidence\": \"1/1 个 handler 有 output（0 个空）\"}], \"ok_count\": 4, \"total_count\": 4, \"passed\": true, \"failed_count\": 0, \"summary\": \"全部 4 项验证通过\", \"files_declared\": [\"outputs/output.csv\"]}, \"evolution_signal\": {\"needed\": false, \"fail_count\": 0, \"min_failures\": 3, \"lookback_hours\": 24, \"suggestion\": \"该员工最近 24 小时失败 0 次（< 阈值 3），暂不需要 prompt evolution。\", \"recent_failures\": [], \"evolution_api\": \"POST /api/admin/employee-autonomy/evolution/scan\"}, \"human_report\": \"## 我做了什么\\n- 员工：`csv-generate-0e991728b27b`\\n- 任务：Generate the customer's ordered CSV file\\n- 耗时：2065ms，消耗 0 tokens\\n- 状态：success\\n\\n## 发现什么\\n- 输入类型：json\\n- 🏷️ 任务分类：unknown（置信度 0.1）— 未命中任何分类关键词，可能是泛化任务或纯决策\\n- 长期记忆：检索到 0 条相关项\\n- 短期记忆：最近 0 条任务记录\\n\\n## 修了什么\\n  - direct_python: ✅ 成功\\n\\n路径边界检查：\\n检测到 1 个文件改动，全部在 scope_globs 范围内 ✅\\n\\n程序化验证：\\n程序化验证（4/4 通过，0 失败）：全部 4 项验证通过\\n  - ✅ files_changed_exist：声明改的 1 个文件都存在：outputs/output.csv (27B)\\n  - ⏭️ tests_reported：任务不涉及测试，跳过\\n  - ✅ status_honest：native direct_python ok/error results checked; cognition was not invoked\\n  - ✅ summary_provided：summary 长度 272 字：{\\\"output_path\\\": \\\"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11/out...\\n  - ✅ handler_outputs_nonempty：1/1 个 handler 有 output（0 个空）\\n\\n学习信号：\\n学习信号：最近 24h 失败 0 次（< 阈值 3），暂不需要进化\\n  - 该员工最近 24 小时失败 0 次（< 阈值 3），暂不需要 prompt evolution。\\n\\n## 还剩什么\\n- ✅ 全部 handler 成功执行，无遗留事项\\n\\n## 你要不要确认\\n- 如无异议，本次任务到此结束；如有补充请告诉我\", \"change_request_bridge\": {\"ok\": true, \"existing_change_request_ids\": [], \"created_change_request_ids\": [], \"change_request_ids\": [], \"processed_file_candidates\": 1, \"skipped\": [{\"path\": \"outputs/output.csv\", \"reason\": \"missing_content\"}]}}, \"executed_at\": \"2026-11-21T17:19:08.211754+00:00\", \"llm_tokens\": 0, \"runtime_policy\": null, \"cognition_error\": null, \"cognition_help\": null, \"reasoning_excerpt\": null, \"change_request_ids\": []}, \"employee_id\": \"csv-generate-0e991728b27b\", \"task\": \"Generate the customer's ordered CSV file\", \"execution_time\": \"2026-11-21T17:19:08.220884+00:00\"}",
+    "started_at": "2026-11-21T17:19:05.597976",
+    "completed_at": "2026-11-21T17:19:08.221553"
+  },
+  "events": [
+    {
+      "id": 5,
+      "event_id": "workflow.execution.feedback_started:1",
+      "event_name": "workflow.execution.feedback_started",
+      "event_version": 1,
+      "aggregate_id": "1",
+      "idempotency_key": "workflow.execution.feedback_started:1",
+      "producer": "modstore-python",
+      "payload_json": "{\"execution_id\": 1, \"workflow_id\": 11, \"user_id\": 11, \"generation_run_id\": 1, \"graph_fingerprint\": \"b85acb9df9aa2590d3887efdd5049d5a60f81079bf5085ba8bef21d9b0124a31\", \"input_sha256\": \"a9f355b236b5d6b1b122eca73c66e1e0a1e68356582af5ccebb46154fe6c60af\", \"started_at\": \"2026-11-21T17:19:05.597976+00:00\", \"assignment\": {\"request_id\": \"935e8b19-6c33-4547-9520-45e2ceda6786\", \"experiment_id\": \"exp\", \"tracking_key\": \"xcagi-retort-935e8b19-6c33-4547-9520-45e2ceda6786\", \"variation_id\": \"1\", \"subject_id\": \"11\", \"user_id\": 11, \"surface\": \"workflow_nl_prompt\", \"resource_id\": \"workflow_nl_generator\", \"release_sha\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"policy_digest\": \"599c5afcfa67588e4b43aab51bef2d52d7a9f594492d32bdf4b849432e19bc30\", \"value_sha256\": \"027e11fe74242cb36f0d6c082d9fb62b60a81e64ef7190c3dbd51565e3096de6\", \"assigned_at\": \"2026-11-21T17:19:05.597976+00:00\", \"observation_id\": \"7280e563-c78b-436f-b24f-3736f9c42c93\", \"workflow_id\": 11, \"measurement_scope\": \"workflow_customer_accepted_outcome\"}, \"metric_admitted\": true, \"customer_delivery\": {\"execution_id\": 1, \"workflow_id\": 11, \"user_id\": 11, \"node_id\": 2, \"employee_id\": \"csv-generate-0e991728b27b\", \"task\": \"Generate the customer's ordered CSV file\", \"node_input\": {\"file_path\": \"inputs/orders.json\"}, \"input_data\": {\"file_path\": \"inputs/orders.json\", \"project_root\": \"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11\", \"workspace_root\": \"/tmp/pytest-of-agent/pytest-650/test_capture0/workspaces/11\"}, \"execution_binding\": {\"pack_id\": \"csv-generate-0e991728b27b\", \"version\": \"1.0.0\", \"manifest_sha256\": \"6c3bb913cd7c29bce3857ebde508d1e7f3d9e0e0df659ae8083e1893f27efe5c\", \"archive_sha256\": \"432e931936b99012fde1d4210e7705b7240995aadad9d0477eb1240a3ab7b100\", \"config_sha256\": \"5ed2df13ab3dc11492115f19e486534b2399a40aa2c2528698d187e0725ac75e\", \"input_sha256\": \"680254f74d1b211540d749f0c9a349ab46b5b51edf94710c5b0ee14675984ae7\"}, \"node_config_sha256\": \"c8e7c7d57b21ab1f1aca7c3c04e511e46e14be8fc4f0003b9abc210d1425010b\", \"graph_fingerprint\": \"b85acb9df9aa2590d3887efdd5049d5a60f81079bf5085ba8bef21d9b0124a31\", \"execution_input_sha256\": \"a9f355b236b5d6b1b122eca73c66e1e0a1e68356582af5ccebb46154fe6c60af\", \"goal\": {\"customer_goal_id\": \"customer-workflow-csv-11\", \"customer_ref\": \"paid-user:11\", \"order_no\": \"customer-workflow-order-11\", \"receipt_id\": \"cvr_cd3eb97150a6a772504981b7511388c681e0ec13dd98da53\", \"goal_evidence_sha256\": \"1b2ea0da0f2a6002c1e442b7ae5af8487dd2b53d1c2fbc5276267e6fd592873f\"}, \"policy\": {\"source\": \"modstore_customer_workflow_postgres_v1\", \"employee_id\": \"csv-generate-0e991728b27b\", \"observation_hours\": 1, \"success_metric_id\": \"success\", \"failure_metric_id\": \"failure\", \"maximum_treatment_failures\": 2}, \"contract_sha256\": \"65261acc2204e2b3fa408b010f6b2951e1ba44811f84625a88c844f98fdda93b\"}, \"customer_outcome_due_at\": \"2026-11-21T18:19:05.597976+00:00\", \"execution_allowed\": true}",
+      "status": "pending",
+      "attempts": 0,
+      "last_error": "",
+      "created_at": "2026-11-21T17:19:05.913787",
+      "claim_token": ""
+    },
+    {
+      "id": 7,
+      "event_id": "workflow.customer.delivery_started:1:2",
+      "event_name": "workflow.customer.delivery_started",
+      "event_version": 1,
+      "aggregate_id": "1",
+      "idempotency_key": "workflow.customer.delivery_started:1",
+      "producer": "modstore-python",
+      "payload_json": "{\"execution_id\": 1, \"node_id\": 2, \"contract_sha256\": \"65261acc2204e2b3fa408b010f6b2951e1ba44811f84625a88c844f98fdda93b\"}",
+      "status": "pending",
+      "attempts": 0,
+      "last_error": "",
+      "created_at": "2026-11-21T17:19:06.008292",
+      "claim_token": ""
+    },
+    {
+      "id": 8,
+      "event_id": "workflow.customer.delivery_produced:1:2",
+      "event_name": "workflow.customer.delivery_produced",
+      "event_version": 1,
+      "aggregate_id": "1",
+      "idempotency_key": "workflow.customer.delivery_produced:1",
+      "producer": "modstore-python",
+      "payload_json": "{\"execution_id\": 1, \"workflow_id\": 11, \"user_id\": 11, \"node_id\": 2, \"contract_sha256\": \"65261acc2204e2b3fa408b010f6b2951e1ba44811f84625a88c844f98fdda93b\", \"artifacts\": [{\"artifact_id\": \"workflow-file-1-2-424e36504e7d6f88e27a1fe7\", \"artifact_sha256\": \"d2abc629d412a4c2efc75ec8746a02e0242a20a42754c52e8df32b16b8b6459f\", \"output_path\": \"outputs/output.csv\", \"size_bytes\": 27, \"source\": \"native_direct_python_workflow_output\"}], \"completed_at\": \"2026-11-21T17:19:08.215934+00:00\"}",
+      "status": "pending",
+      "attempts": 0,
+      "last_error": "",
+      "created_at": "2026-11-21T17:19:08.217745",
+      "claim_token": ""
+    }
+  ],
+  "customer_receipts": [
+    {
+      "id": 1,
+      "receipt_id": "cvr_cd3eb97150a6a772504981b7511388c681e0ec13dd98da53",
+      "receipt_kind": "goal",
+      "verification_status": "verified",
+      "customer_ref": "paid-user:11",
+      "customer_goal_id": "customer-workflow-csv-11",
+      "order_no": "customer-workflow-order-11",
+      "artifact_id": "",
+      "acceptance_id": "",
+      "amount_cents": 0,
+      "currency": "CNY",
+      "payment_provider": "",
+      "provider_trade_no": "",
+      "provider_verification": "",
+      "environment": "production",
+      "source_event_id": "customer-goal:11:original-workflow-customer-goal-11",
+      "source_employee_id": "",
+      "supersedes_receipt_id": "",
+      "evidence_json": "{\"actor_role\":\"customer\",\"agreement_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"baseline\":0.0,\"comparison\":\"ge\",\"customer_confirmed\":true,\"measurement_window\":\"approved-workflow-customer-window\",\"target\":1.0,\"unit\":\"valid_csv_file\"}",
+      "evidence_digest": "1b2ea0da0f2a6002c1e442b7ae5af8487dd2b53d1c2fbc5276267e6fd592873f",
+      "occurred_at": "2026-11-21T17:19:05.597976",
+      "recorded_at": "2026-11-21T17:19:05.628935"
+    },
+    {
+      "id": 3,
+      "receipt_id": "cvr_6a069a87b366f6c2957ec91727f68474b216b2b0b173dea2",
+      "receipt_kind": "outcome",
+      "verification_status": "verified",
+      "customer_ref": "paid-user:11",
+      "customer_goal_id": "customer-workflow-csv-11",
+      "order_no": "customer-workflow-order-11",
+      "artifact_id": "workflow-file-1-2-424e36504e7d6f88e27a1fe7",
+      "acceptance_id": "",
+      "amount_cents": 0,
+      "currency": "CNY",
+      "payment_provider": "",
+      "provider_trade_no": "",
+      "provider_verification": "",
+      "environment": "production",
+      "source_event_id": "admin-outcome:workflow-outcome-642ef80fbff3440db8808f7a914e6117",
+      "source_employee_id": "",
+      "supersedes_receipt_id": "",
+      "evidence_json": "{\"actor_role\":\"admin_measurement\",\"artifact_sha256\":\"d2abc629d412a4c2efc75ec8746a02e0242a20a42754c52e8df32b16b8b6459f\",\"baseline\":0.0,\"comparison\":\"ge\",\"measured_value\":1.0,\"measurement_window\":\"approved-workflow-customer-window\",\"source_material_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"source_material_summary\":\"Measured the original CSV against the agreed customer target\",\"target\":1.0,\"unit\":\"valid_csv_file\"}",
+      "evidence_digest": "2752fe3d2103d3bc21af5d47caaa05da59ec4d0f20e7883a7dd1a9952945ec43",
+      "occurred_at": "2026-11-21T17:19:09.305196",
+      "recorded_at": "2026-11-21T17:19:08.346963"
+    },
+    {
+      "id": 4,
+      "receipt_id": "cvr_9980687a3da168e283055ea3084a4f550232daba55f12cd6",
+      "receipt_kind": "acceptance",
+      "verification_status": "verified",
+      "customer_ref": "paid-user:11",
+      "customer_goal_id": "customer-workflow-csv-11",
+      "order_no": "customer-workflow-order-11",
+      "artifact_id": "workflow-file-1-2-424e36504e7d6f88e27a1fe7",
+      "acceptance_id": "accepted-native-csv-file",
+      "amount_cents": 0,
+      "currency": "CNY",
+      "payment_provider": "",
+      "provider_trade_no": "",
+      "provider_verification": "",
+      "environment": "production",
+      "source_event_id": "customer:11:workflow-accepted-002825416df848fa93481e5888f11b36",
+      "source_employee_id": "",
+      "supersedes_receipt_id": "",
+      "evidence_json": "{\"actor_role\":\"customer\",\"artifact_sha256\":\"d2abc629d412a4c2efc75ec8746a02e0242a20a42754c52e8df32b16b8b6459f\",\"customer_confirmed\":true,\"signed_document_sha256\":\"\"}",
+      "evidence_digest": "d6aadf70a78a1aa70164b47deb81f7467351bbcc6aa6dfb788264b0901d1eb44",
+      "occurred_at": "2026-11-21T17:19:09.305196",
+      "recorded_at": "2026-11-21T17:19:08.371014"
+    }
+  ],
+  "artifact_base64": "77u/b3JkZXIscXVhbnRpdHkNCkEtMTEsMw0K"
+}

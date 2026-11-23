@@ -675,7 +675,7 @@ def _business_outcome(
     )
     from modstore_server.customer_value_payment_source import load_authoritative_payment_orders
     from modstore_server.strategic_customer_outcomes import (
-        BUSINESS_OUTCOME_ATTRIBUTION,
+        VERIFIED_DELIVERY_ATTRIBUTION,
         customer_delivery_evidence,
     )
 
@@ -715,7 +715,7 @@ def _business_outcome(
         ),
         "window_start": start.isoformat(),
         "window_end": now.isoformat(),
-        "attribution": BUSINESS_OUTCOME_ATTRIBUTION,
+        "attribution": VERIFIED_DELIVERY_ATTRIBUTION,
     }
 
 
@@ -861,8 +861,10 @@ def reallocate_portfolio(decision_id: str, *, owner_user_id: int | None = None) 
                     // (len(history) + 1),
                 }
             )
-        # Exclude descendants whose prerequisites were eliminated by outcomes.
-        while True:
+        # Pruning is monotone: each non-stable pass removes at least one
+        # candidate. Bound passes to the original candidate count so malformed
+        # prerequisite graphs can never hold the execution worker indefinitely.
+        for _ in range(len(candidates)):
             identifiers = {item["opportunity_id"] for item in candidates}
             valid = [item for item in candidates if set(item["depends_on"]).issubset(identifiers)]
             if len(valid) == len(candidates):

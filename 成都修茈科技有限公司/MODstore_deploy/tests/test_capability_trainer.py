@@ -1,12 +1,20 @@
 import json
 import os
+import sys
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from cryptography.fernet import Fernet
 
 from modstore_server import capability_trainer as trainer
+
+
+@pytest.fixture
+def corpus_key(monkeypatch):
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
 
 
 def _rec(employee="daily-orchestrator", reason="marker_missing", status="failed", ts=None):
@@ -35,26 +43,183 @@ def test_cluster_ignores_old_and_successful_records():
     assert trainer.cluster_failures(records, min_count=1) == []
 
 
-def test_append_cases_is_idempotent(tmp_path):
+def test_append_cases_is_idempotent(tmp_path, corpus_key):
     clusters = trainer.cluster_failures([_rec(), _rec()], min_count=1)
     first = trainer.append_cases(tmp_path, clusters)
     second = trainer.append_cases(tmp_path, clusters)
     assert len(first) == 1
     assert second == []
-    rows = (tmp_path / "daily-orchestrator.jsonl").read_text(encoding="utf-8").splitlines()
-    assert len(rows) == 1
-    persisted = json.loads(rows[0])
-    assert "employee_id" not in persisted
-    assert persisted["surface"] == "employee_prompt"
-    assert "resource_id" not in persisted
-    assert persisted["task"] == "任务正文"
-    assert persisted["case_id"] == first[0]["case_id"]
-    # Existing corpora keep their original identity/hash and are not rewritten.
-    legacy = {**persisted, "employee_id": "daily-orchestrator"}
     path = tmp_path / "daily-orchestrator.jsonl"
+    encrypted = path.read_text(encoding="utf-8")
+    assert set(json.loads(encrypted)) == {"schema", "ciphertext"}
+    assert "daily-orchestrator" not in encrypted and "任务正文" not in encrypted
+    assert path.stat().st_mode & 0o777 == 0o600
+    persisted = trainer.load_cases(path)[0]
+    assert "employee_id" not in persisted
+    assert persisted["resource_id"] == "daily-orchestrator"
+    assert persisted["surface"] == "employee_prompt"
+    assert persisted["task"] == "任务正文"
+    assert persisted["case_id"] == first[0]["case_id"] == "292ff0293853d560"
+    assert trainer.load_cases(path) == first
+    assert path.read_text(encoding="utf-8") == encrypted
+    # Legacy records are encrypted without changing their identity, input or hash.
+    legacy = {**persisted, "employee_id": "daily-orchestrator"}
+    legacy.pop("surface")
     path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
     assert trainer.append_cases(tmp_path, clusters) == []
-    assert json.loads(path.read_text(encoding="utf-8")) == legacy
+    assert trainer.load_cases(path) == [legacy]
+    assert "daily-orchestrator" not in path.read_text(encoding="utf-8")
+
+
+def test_workflow_corpus_preserves_private_reproduction_input(tmp_path, corpus_key):
+    cluster = {
+        "surface": "workflow_nl_prompt",
+        "resource_id": "workflow_nl_generator",
+        "failure_reason": "private-reason-sentinel",
+        "samples": [
+            {
+                "task": "private-task-sentinel\r\n原输入\n",
+                "run_id": "private-run-sentinel",
+                "generation_context": {
+                    "user_id": 7,
+                    "input": "private-context-sentinel",
+                    "target_employee_pack_id": "worker@1.0",
+                    "execution_feedback": {"status": "failed"},
+                },
+            }
+        ],
+    }
+    original = deepcopy(cluster)
+    written = trainer.append_cases(tmp_path, [cluster])
+    path = tmp_path / "workflow_nl_prompt-workflow_nl_generator.jsonl"
+    assert "private-" not in path.read_text(encoding="utf-8")
+    assert trainer.load_cases(path) == written
+    assert written[0]["case_id"] == trainer._case_id(cluster, cluster["samples"][0])
+    assert written[0]["surface"] == "workflow_nl_prompt"
+    assert written[0]["resource_id"] == "workflow_nl_generator"
+    assert "employee_id" not in written[0]
+    assert written[0]["source_run"] == "private-run-sentinel"
+    assert written[0]["task"] == cluster["samples"][0]["task"]
+    assert written[0]["generation_context"] == cluster["samples"][0]["generation_context"]
+    assert cluster == original
+    assert trainer.training_identity(cluster) == ("workflow_nl_prompt", "workflow_nl_generator")
+    assert trainer.append_cases(tmp_path, [cluster]) == []
+    changed = deepcopy(cluster)
+    changed["samples"][0]["generation_context"]["target_employee_pack_id"] = "other-worker@1.0"
+    added = trainer.append_cases(tmp_path, [changed])
+    assert added[0]["case_id"] != written[0]["case_id"]
+    assert trainer.load_cases(path) == written + added
+    assert "private-" not in path.read_text(encoding="utf-8")
+
+
+def test_corpus_missing_key_preserves_legacy_input_and_refuses_new_plaintext(tmp_path, monkeypatch):
+    monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    path = tmp_path / "daily-orchestrator.jsonl"
+    with pytest.raises(RuntimeError, match="MODSTORE_LLM_MASTER_KEY not configured"):
+        trainer.append_cases(tmp_path, clusters)
+    assert not path.exists()
+    legacy = json.dumps({"case_id": "original-id", "task": "private-task-sentinel"}) + "\n"
+    path.write_text(legacy, encoding="utf-8")
+    with pytest.raises(RuntimeError, match="MODSTORE_LLM_MASTER_KEY not configured"):
+        trainer.load_cases(path)
+    assert path.read_text(encoding="utf-8") == legacy
+    assert not list(tmp_path.glob(".training-corpus-*"))
+
+
+@pytest.mark.parametrize("damage", ["wrong_key", "ciphertext", "schema", "invalid_record"])
+def test_corpus_cannot_discard_unreadable_existing_samples(
+    tmp_path, monkeypatch, corpus_key, damage
+):
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    trainer.append_cases(tmp_path, clusters)
+    path = tmp_path / "daily-orchestrator.jsonl"
+    if damage == "wrong_key":
+        monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
+    else:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if damage == "invalid_record":
+            path.write_text(path.read_text(encoding="utf-8") + "not-json\n", encoding="utf-8")
+        else:
+            record[damage] = "damaged"
+            path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    original = path.read_bytes()
+    clusters[0]["samples"][0]["task"] = "another-private-task"
+    with pytest.raises(ValueError):
+        trainer.append_cases(tmp_path, clusters)
+    assert path.read_bytes() == original
+    assert not list(tmp_path.glob(".training-corpus-*"))
+
+
+def test_corpus_atomic_replace_failure_preserves_old_samples(tmp_path, monkeypatch, corpus_key):
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    trainer.append_cases(tmp_path, clusters)
+    path = tmp_path / "daily-orchestrator.jsonl"
+    original = path.read_bytes()
+
+    def unavailable(*_args):
+        raise OSError("fixture write failure")
+
+    monkeypatch.setattr(trainer.os, "replace", unavailable)
+    clusters[0]["samples"][0]["task"] = "new-private-task"
+    with pytest.raises(OSError, match="fixture write failure"):
+        trainer.append_cases(tmp_path, clusters)
+    assert path.read_bytes() == original
+    assert not list(tmp_path.glob(".training-corpus-*"))
+
+
+@pytest.mark.parametrize("filename", ["daily-orchestrator.jsonl", ".capability-corpus.lock"])
+def test_corpus_rejects_symbolic_links_without_touching_target(tmp_path, corpus_key, filename):
+    outside = tmp_path / "outside"
+    outside.write_text("private external file", encoding="utf-8")
+    outside.chmod(0o644)
+    (tmp_path / filename).symlink_to(outside)
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    with pytest.raises(ValueError, match="cannot be a symbolic link"):
+        trainer.append_cases(tmp_path, clusters)
+    assert outside.read_text(encoding="utf-8") == "private external file"
+    assert outside.stat().st_mode & 0o777 == 0o644
+
+
+@pytest.mark.skipif(not hasattr(os, "O_NOFOLLOW"), reason="requires no-follow file descriptors")
+@pytest.mark.parametrize("filename", ["daily-orchestrator.jsonl", ".capability-corpus.lock"])
+def test_corpus_rejects_symbolic_link_swap_before_open(tmp_path, monkeypatch, corpus_key, filename):
+    outside = tmp_path / "outside"
+    outside.write_text("private external file", encoding="utf-8")
+    outside.chmod(0o644)
+    target = tmp_path / filename
+    original_open = os.open
+
+    def swapped_open(path, flags, *args, **kwargs):
+        if Path(path) == target:
+            target.symlink_to(outside)
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(trainer.os, "open", swapped_open)
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    with pytest.raises(OSError):
+        trainer.append_cases(tmp_path, clusters)
+    assert outside.read_text(encoding="utf-8") == "private external file"
+    assert outside.stat().st_mode & 0o777 == 0o644
+
+
+def test_windows_corpus_uses_native_lock_before_encrypting(tmp_path, monkeypatch, corpus_key):
+    locked = []
+
+    def lock(descriptor, mode, length):
+        assert os.fstat(descriptor).st_size >= 1
+        assert os.lseek(descriptor, 0, os.SEEK_CUR) == 0
+        assert mode == 1 and length == 1
+        locked.append(descriptor)
+
+    monkeypatch.setitem(sys.modules, "msvcrt", SimpleNamespace(LK_LOCK=1, locking=lock))
+    monkeypatch.setattr(trainer, "os", SimpleNamespace(**{**vars(os), "name": "nt"}))
+    clusters = trainer.cluster_failures([_rec()], min_count=1)
+    written = trainer.append_cases(tmp_path, clusters)
+    path = tmp_path / "daily-orchestrator.jsonl"
+    assert "任务正文" not in path.read_text(encoding="utf-8")
+    assert trainer.load_cases(path) == written
+    assert len(locked) == 2
 
 
 def test_mine_cli_reports_counts_without_private_samples(tmp_path, monkeypatch, capsys):
@@ -123,11 +288,14 @@ def paired_result():
 
 
 def test_decide_requires_paired_provider_case_and_frozen_bundle():
-    result, bundle = paired_result(), {
-        "provider_id": "model",
-        "case_ids": ["case"],
-        "case_sha256": [trainer._hash("actual case")],
-    }
+    result, bundle = (
+        paired_result(),
+        {
+            "provider_id": "model",
+            "case_ids": ["case"],
+            "case_sha256": [trainer._hash("actual case")],
+        },
+    )
     assert trainer.decide(result)["verdict"] == "keep_baseline"
     assert trainer.decide(result, bundle=bundle)["verdict"] == "candidate_for_approval"
     unavailable = deepcopy(result)
@@ -220,7 +388,11 @@ def test_case_binding_preserves_exact_json_decoded_text_including_newlines():
     task = "真实案例\r\n第二行\n"
     for row in result["results"]["results"]:
         row["vars"]["task"] = task
-    bundle = {"provider_id": "model", "case_ids": ["case"], "case_sha256": [trainer._hash(task)]}
+    bundle = {
+        "provider_id": "model",
+        "case_ids": ["case"],
+        "case_sha256": [trainer._hash(task)],
+    }
     transported = json.loads(json.dumps(result, ensure_ascii=True))
     assert trainer.decide(transported, bundle=bundle)["verdict"] == "candidate_for_approval"
     for row in transported["results"]["results"]:
@@ -237,7 +409,10 @@ def test_training_cost_bounds_and_unconfigured_model_fail_closed(tmp_path, monke
     monkeypatch.delenv("XCAGI_LLM_MODEL", raising=False)
     with pytest.raises(ValueError, match="not_configured"):
         trainer.build_config(
-            out_dir=tmp_path, baseline_prompt="b", candidate_prompt="c", cases=[{"task": "case"}]
+            out_dir=tmp_path,
+            baseline_prompt="b",
+            candidate_prompt="c",
+            cases=[{"task": "case"}],
         )
     monkeypatch.setenv("XCAGI_LLM_MODEL", "model")
     monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")
@@ -258,7 +433,7 @@ def test_corpus_rejects_non_pack_paths(tmp_path, employee):
     assert not list(tmp_path.iterdir())
 
 
-def test_corpus_redacts_credentials_and_tightens_existing_permissions(tmp_path):
+def test_corpus_redacts_credentials_and_tightens_existing_permissions(tmp_path, corpus_key):
     path = tmp_path / "daily-orchestrator.jsonl"
     path.write_text("", encoding="utf-8")
     path.chmod(0o644)
@@ -268,6 +443,8 @@ def test_corpus_redacts_credentials_and_tightens_existing_permissions(tmp_path):
     trainer.append_cases(tmp_path, clusters)
     content = path.read_text(encoding="utf-8")
     assert "private-credential" not in content and "private-password" not in content
-    assert "[redacted]" in content
+    decrypted = json.dumps(trainer.load_cases(path), ensure_ascii=False)
+    assert "private-credential" not in decrypted and "private-password" not in decrypted
+    assert "[redacted]" in decrypted
     if os.name != "nt":
         assert path.stat().st_mode & 0o777 == 0o600

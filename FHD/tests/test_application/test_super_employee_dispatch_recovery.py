@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -285,23 +286,23 @@ def test_readback_can_observe_send_intent_while_dispatch_lock_is_held(tmp_path, 
     request = {
         "request_id": "inflight-readback",
         "user_id": 7,
+        "employee_id": service._p.employee_id,
         "created_at": "2026-11-21T00:00:00Z",
     }
-    with service._messages.dispatch_lock(7, "inflight-readback"):
-        service._dispatching._persist_receipt(
-            request,
-            {"status": "dispatching", "dispatcher": "para_api", "api_url": "https://para.test"},
-        )
-        # Lock acquisition is exclusively a sender operation. A reader must not
-        # block on the live sender before it can observe the already durable intent.
-        monkeypatch.setattr(
-            service._messages,
-            "dispatch_lock",
-            lambda *args: pytest.fail("readback waited on the live sender"),
-        )
-        receipt = service.read_dispatch_receipt(
-            user_id=7, request_id="inflight-readback", task_id=""
-        )
+    with ThreadPoolExecutor(max_workers=1) as observer:
+        with service._messages.dispatch_lock(7, "inflight-readback"):
+            service._dispatching._persist_receipt(
+                request,
+                {"status": "dispatching", "dispatcher": "para_api", "api_url": "https://para.test"},
+            )
+            # A different thread cannot reenter the sender's lock. Its read
+            # must return the durable snapshot while the sender still holds it.
+            receipt = observer.submit(
+                service.read_dispatch_receipt,
+                user_id=7,
+                request_id="inflight-readback",
+                task_id="",
+            ).result(timeout=5)
     assert receipt["dispatch"]["status"] == "dispatch_unknown"
     assert receipt["dispatch"]["reconciliation_required"] is True
     assert requests == []
@@ -405,6 +406,8 @@ def test_safe_local_fallback_is_saved_before_replay(tmp_path, monkeypatch):
     assert first["dispatch"]["status"] == second["dispatch"]["status"] == "completed"
     assert first["dispatch"]["accepted"] is True
     assert first["dispatch"]["queued"] is False
+    stored = json.loads(Path(first["dispatch"]["outbox_path"]).read_text())["dispatch_receipt"]
+    assert stored["safe_to_fallback"] is False and stored["queued"] is False
     assert second["assistant_message"]["body"] == "本地任务已完成。"
     assert cli_calls == ["ran"]
     assert requests.count(("POST", "para.test", "/api/tasks")) == 1
@@ -530,3 +533,24 @@ def test_two_processes_replay_accepted_code_request_without_cli_backfill(tmp_pat
                 worker.kill()
             worker.communicate(timeout=5)
     assert (tmp_path / "effects").read_text().splitlines() == ["created"]
+
+
+def test_readback_without_ack_only_queries_the_original_request(tmp_path, monkeypatch):
+    def submit(request):
+        raise httpx.ReadTimeout("first acknowledgement lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    create().invoke(
+        user_id=7,
+        message="修复登录问题",
+        context={"request_id": "lost-readback", "mode": "code"},
+    )
+    before = len(requests)
+    service = create()
+    receipt = service.read_dispatch_receipt(user_id=7, request_id="lost-readback", task_id="")
+    assert receipt["dispatch"]["reconciliation_required"] is True
+    assert receipt["dispatch"]["status"] == "dispatch_unknown"
+    assert not receipt["dispatch"].get("task_id")
+    assert len(requests) == before + 1
+    assert requests[-1][0:2] == ("GET", "para.test")
+    assert requests[-1][2].startswith("/api/tasks/by-request/")

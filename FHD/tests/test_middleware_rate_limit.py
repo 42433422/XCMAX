@@ -38,6 +38,7 @@ def rate_limit_app():
         return {"success": True}
 
     @app.post("/api/auth/login")
+    @app.post("/api/auth/offline-login")
     def login():
         return {"success": True}
 
@@ -54,7 +55,8 @@ def rate_limit_app():
     return app
 
 
-def test_auth_rate_limit_returns_429(monkeypatch, rate_limit_app):
+@pytest.mark.parametrize("path", ["/api/auth/login", "/api/auth/offline-login"])
+def test_auth_rate_limit_returns_429(monkeypatch, rate_limit_app, path):
     monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT", "1")
     monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT_MAX", "2")
     monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT_WINDOW", "60")
@@ -62,9 +64,9 @@ def test_auth_rate_limit_returns_429(monkeypatch, rate_limit_app):
     monkeypatch.setenv("CACHE_REDIS_URL", "")
     client = TestClient(rate_limit_app)
     for _ in range(2):
-        r = client.post("/api/auth/login", json={"username": "a", "password": "b"})
+        r = client.post(path, json={"username": "a", "password": "b"})
         assert r.status_code == 200
-    r3 = client.post("/api/auth/login", json={"username": "a", "password": "b"})
+    r3 = client.post(path, json={"username": "a", "password": "b"})
     assert r3.status_code == 429
     assert r3.headers.get("Retry-After")
     body = r3.json()

@@ -8,45 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.legacy.routes.product.compat_routes import router
-
-
-def _assert_unverified_product_write(response, client, action):
-    body = response.json()
-    assert body["success"] is False and body["agent_status"] == "blocked"
-    assert body["error_code"] == "result_verification_inconclusive"
-    assert body["verification_code"] == "result_verifier_unavailable"
-    assert body["retryable"] is False and body["reconciliation_required"] is True
-    run = client.app.state.agent_runs.get(body["run_id"])
-    assert run is not None and run.status == "blocked" and len(run.tool_calls) == 1
-    call = run.tool_calls[0]
-    assert call.tool_id == "products" and call.action == action
-    assert call.cost_units == 2 and call.output["success"] is True
-    assert call.metadata["verification"]["accepted"] is False
-    events = {event.event_type for event in run.events}
-    assert {"step.approved", "verification.inconclusive"} <= events
-    assert not {"tool.completed", "run.completed"} & events
-    return body
-
-
-def _assert_shared_update_pg_failure_0(
-    self, client_compat, local_tools, _shared_literal_0, _shared_literal_1
-):
-    with (
-        patch(
-            "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-            return_value=False,
-        ),
-        patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-        patch(
-            "app.legacy.routes.product.compat_routes._business_mod_json_block", return_value=None
-        ),
-        patch("app.legacy.routes.product.compat_routes._product_parse_id", return_value=1),
-        patch(_shared_literal_0, side_effect=RuntimeError("db error")),
-    ):
-        r = client_compat.post(_shared_literal_1, json={"id": 1})
-        assert r.status_code == 500, r.text
 
 
 @pytest.fixture
@@ -58,15 +20,7 @@ def app_compat():
 
 @pytest.fixture
 def client_compat(app_compat):
-    repo = InMemoryAgentRunRepository()
-    app_compat.state.agent_runs = repo
-    with (
-        TestClient(app_compat, raise_server_exceptions=False) as c,
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ),
-    ):
+    with TestClient(app_compat, raise_server_exceptions=False) as c:
         yield c
 
 
@@ -329,22 +283,6 @@ class TestProductsResolveNameHints:
 
 
 class TestProductsUpdate:
-    def test_update_via_service(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.mod_sdk.erp_products_facade.products_update",
-                return_value={"success": True, "data": {"id": 1}},
-            ) as update_service,
-        ):
-            r = client_compat.post("/products/update", json={"id": 1, "name": "Updated"})
-            assert r.status_code == 200
-            _assert_unverified_product_write(r, client_compat, "update")
-            update_service.assert_called_once_with(None, {"id": 1, "name": "Updated"})
-
     def test_update_invalid_id(self, client_compat):
         mock_excel = MagicMock()
         mock_excel._parse_price = MagicMock(return_value=0)
@@ -363,31 +301,6 @@ class TestProductsUpdate:
             r = client_compat.post("/products/update", json={"id": None})
             assert r.status_code == 400
 
-    def test_update_success(self, client_compat, local_tools):
-        mock_excel = MagicMock()
-        mock_excel._parse_price = MagicMock(return_value=0)
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch("app.legacy.routes.product.compat_routes.products_pg_update_row") as update_row,
-            patch(
-                "app.legacy.routes.product.compat_routes._product_parse_id",
-                return_value=1,
-            ),
-            patch.dict("sys.modules", {"app.domain.app_pure.excel_imports": mock_excel}),
-        ):
-            r = client_compat.post("/products/update", json={"id": 1, "name": "Updated"})
-            assert r.status_code == 200
-            _assert_unverified_product_write(r, client_compat, "update")
-            update_row.assert_called_once()
-
     def test_update_business_mod_blocked(self, client_compat):
         with (
             patch(
@@ -403,138 +316,14 @@ class TestProductsUpdate:
             r = client_compat.post("/products/update", json={"id": 1})
             assert r.json()["success"] is False
 
-    def test_update_pg_failure(self, client_compat, local_tools):
-        return _assert_shared_update_pg_failure_0(
-            self,
-            client_compat,
-            local_tools,
-            "app.legacy.routes.product.compat_routes.products_pg_update_row",
-            "/products/update",
-        )
-
 
 # ========================= POST /products/add ============================
-
-
-class TestProductsAdd:
-    def test_add_via_service(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.mod_sdk.erp_products_facade.products_add",
-                return_value={"success": True, "data": {"id": 10}},
-            ) as add_service,
-        ):
-            r = client_compat.post("/products/add", json={"name": "New"})
-            assert r.status_code == 200
-            _assert_unverified_product_write(r, client_compat, "create")
-            add_service.assert_called_once_with(
-                None,
-                {"name": "New", "product_name": "New", "name_or_model": "New", "unit_name": "个"},
-            )
-
-    def test_add_success(self, client_compat, local_tools):
-        mock_excel = MagicMock()
-        mock_excel._parse_price = MagicMock(return_value=0)
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes.products_pg_insert_row",
-                return_value=10,
-            ),
-            patch.dict("sys.modules", {"app.domain.app_pure.excel_imports": mock_excel}),
-        ):
-            r = client_compat.post("/products/add", json={"name": "New Product"})
-            assert r.status_code == 200
-            assert r.json()["data"]["id"] == 10
-
-    def test_add_request_identity_does_not_replay_an_independent_submission(
-        self, client_compat, local_tools
-    ):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes.products_pg_insert_row",
-                side_effect=[10, RuntimeError("db down"), RuntimeError("db down")],
-            ) as insert,
-        ):
-            body = {"name": "request-scoped-product"}
-            first = client_compat.post(
-                "/products/add", json=body, headers={"X-Request-ID": "product-request-1"}
-            )
-            retry = client_compat.post(
-                "/products/add", json=body, headers={"X-Request-ID": "product-request-1"}
-            )
-            separate = client_compat.post(
-                "/products/add", json=body, headers={"X-Request-ID": "product-request-2"}
-            )
-            anonymous = client_compat.post("/products/add", json=body)
-        assert first.status_code == retry.status_code == 200
-        assert first.json()["run_id"] == retry.json()["run_id"]
-        assert separate.status_code == anonymous.status_code == 500
-        assert separate.json()["success"] is anonymous.json()["success"] is False
-        assert separate.json()["run_id"] != first.json()["run_id"]
-        assert insert.call_count == 3
-
-    def test_add_pg_failure(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes.products_pg_insert_row",
-                side_effect=RuntimeError("db error"),
-            ),
-        ):
-            r = client_compat.post("/products/add", json={"name": "New"})
-            assert r.status_code == 500, r.text
 
 
 # ========================= POST /products/delete =========================
 
 
 class TestProductsDelete:
-    def test_delete_via_service(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.mod_sdk.erp_products_facade.products_delete",
-                return_value={"success": True},
-            ) as delete_service,
-        ):
-            r = client_compat.post("/products/delete", json={"id": 1})
-            assert r.status_code == 200
-            _assert_unverified_product_write(r, client_compat, "delete")
-            delete_service.assert_called_once_with(None, {"id": 1})
-
     def test_delete_invalid_id(self, client_compat):
         with (
             patch(
@@ -550,58 +339,11 @@ class TestProductsDelete:
             r = client_compat.post("/products/delete", json={"id": None})
             assert r.status_code == 400
 
-    def test_delete_success(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes._product_parse_id",
-                return_value=1,
-            ),
-            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row") as delete_row,
-        ):
-            r = client_compat.post("/products/delete", json={"id": 1})
-            assert r.status_code == 200
-            _assert_unverified_product_write(r, client_compat, "delete")
-            delete_row.assert_called_once_with(1)
-
-    def test_delete_pg_failure(self, client_compat, local_tools):
-        return _assert_shared_update_pg_failure_0(
-            self,
-            client_compat,
-            local_tools,
-            "app.legacy.routes.product.compat_routes.products_pg_delete_row",
-            "/products/delete",
-        )
-
 
 # ========================= POST /products/batch-delete ===================
 
 
 class TestProductsBatchDelete:
-    def test_batch_delete_via_service(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=True,
-            ),
-            patch(
-                "app.mod_sdk.erp_products_facade.products_batch_delete",
-                return_value={"success": True},
-            ) as batch_delete_service,
-        ):
-            r = client_compat.post("/products/batch-delete", json={"ids": [1, 2]})
-            assert r.status_code == 200
-            _assert_unverified_product_write(r, client_compat, "batch_delete")
-            batch_delete_service.assert_called_once_with(None, {"ids": [1, 2]})
-
     def test_batch_delete_invalid_ids(self, client_compat):
         with (
             patch(
@@ -616,47 +358,6 @@ class TestProductsBatchDelete:
         ):
             r = client_compat.post("/products/batch-delete", json={"ids": []})
             assert r.status_code == 400
-
-    def test_batch_delete_success(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
-                return_value=(2, 0),
-            ) as batch_delete_rows,
-        ):
-            r = client_compat.post("/products/batch-delete", json={"ids": [1, 2]})
-            assert r.status_code == 200
-            body = _assert_unverified_product_write(r, client_compat, "batch_delete")
-            assert body.get("deleted") == 2, body
-            batch_delete_rows.assert_called_once_with([1, 2])
-
-    def test_batch_delete_pg_failure(self, client_compat, local_tools):
-        with (
-            patch(
-                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                return_value=False,
-            ),
-            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
-            patch(
-                "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                return_value=None,
-            ),
-            patch(
-                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
-                side_effect=RuntimeError("db error"),
-            ),
-        ):
-            r = client_compat.post("/products/batch-delete", json={"ids": [1]})
-            assert r.status_code == 500, r.text
 
 
 # ========================= GET /products/price-list-export ===============

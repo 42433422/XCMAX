@@ -171,10 +171,20 @@ def build_employee_gate(
 
         name = str(tool_name or "").strip()
         writes = list_write_tools()
-        if read_only and name in writes:
+        is_write = name in writes
+        if name == "execute_erp_capability":
+            from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+            name = str(args.get("tool_id") or "")
+            spec = get_tool_action_spec(name, str(args.get("action") or ""))
+            if spec is None or not isinstance(args.get("params"), dict):
+                return {"ok": False, "reason": "员工工具缺少已登记的动作契约"}
+            is_write = not spec.read_only
+            args = args["params"]
+        if read_only and is_write:
             return {"ok": False, "reason": f"员工 {employee_id} 为只读，禁止写库工具 {name}"}
 
-        enforce_scope = bool(scope) and name in (writes | {"generate_office_document"})
+        enforce_scope = bool(scope) and (is_write or name == "generate_office_document")
         for raw_path, is_output in _extract_paths(args):
             rel = _normalize_rel(raw_path, workspace_root)
             if not rel:

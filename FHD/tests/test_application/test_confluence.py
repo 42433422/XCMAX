@@ -134,7 +134,7 @@ def test_route_ingests_confluence_page(monkeypatch: pytest.MonkeyPatch) -> None:
         text="页面正文",
     )
     monkeypatch.setattr(confluence, "fetch_page", lambda _pid: page)
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)
@@ -163,7 +163,7 @@ def test_route_maps_confluence_failure_to_400(monkeypatch: pytest.MonkeyPatch) -
         raise DocumentSourceError("未配置 XCAGI_CONFLUENCE_API_TOKEN")
 
     monkeypatch.setattr(confluence, "fetch_page", _boom)
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)
@@ -181,7 +181,7 @@ def test_confluence_source_cannot_be_combined() -> None:
     calls: list[dict] = []
     routes = DocumentRoutes(
         dispatch=lambda: lambda **kwargs: calls.append(kwargs) or JSONResponse({"success": True}),
-        uploads=lambda _get: None,
+        uploads=lambda: None,
     )
     app = FastAPI()
     app.include_router(routes.ingestion)

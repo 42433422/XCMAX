@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from datetime import timedelta
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -60,8 +61,10 @@ def _client(
     from app.application.agent_orchestrator.task_execution_sql_repository import (
         SQLAlchemyTaskExecutionRepository,
     )
+    from app.application.elt.service import EltService
     from app.application.elt.service_uploads import UploadServiceMixin
     from app.db.models.approval import ApprovalRequest
+    from app.db.models.permission import Permission, Role
     from app.db.models.product import Product
     from app.db.models.task_lifecycle import TaskLifecycleRecord
     from app.db.models.user import Session as UserSession
@@ -90,6 +93,14 @@ def _client(
     factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
     monkeypatch.setattr("app.db.HostSessionLocal", factory)
+    monkeypatch.setattr("app.application.elt.service.SessionLocal", factory)
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("FHD_ELT_CENTER_ENABLED", "1")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
+    elt = EltService()
+    monkeypatch.setattr(
+        elt, "_submit_preview", lambda run_id, _tenant, owner: elt._preview_worker(run_id, owner)
+    )
     runs = SQLAlchemyAgentRunRepository(session_factory=factory)
     queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
     set_agent_run_repository_for_tests(runs)
@@ -104,6 +115,11 @@ def _client(
     _build_source_workbook(source, rows=_models("REL"))
     db = factory()
     try:
+        role = Role(name="admin")
+        role.permissions = [
+            Permission(code=code, name=code) for code in ("elt.execute", "product.edit")
+        ]
+        db.add(role)
         user = User(
             username="reliability-owner",
             password="not-a-secret",
@@ -146,28 +162,55 @@ def _client(
         "upload": UploadServiceMixin,
         "approval_model": ApprovalRequest,
         "product_model": Product,
+        "elt": elt,
+        "bodies": {},
     }
 
 
-def _post_task(env: dict, task_id: str, models: list[list[str]] | None = None) -> dict:
+def _task_body(env: dict, task_id: str, models: list[list[str]] | None = None) -> dict:
+    if task_id in env["bodies"]:
+        return env["bodies"][task_id]
     source = env["source"]
     if models is not None:
         from tests.fixtures.cross_module_business import _build_source_workbook
 
         _build_source_workbook(source, rows=models)
+    with tenant_scope(1), env["factory"]() as db:
+        uploaded = env["elt"].save_upload(
+            db,
+            owner_user_id=env["user_id"],
+            file_name="source.xlsx",
+            content_type=None,
+            stream=BytesIO(source.read_bytes()),
+        )
+        db.commit()
+        preview = env["elt"].create_preview(
+            db,
+            owner_user_id=env["user_id"],
+            upload_id=uploaded["upload_id"],
+            target_type="products",
+        )
+    assert preview["status"] == "preview_ready", preview
+    assert preview["preview_revision"]
     body = {
         "task_id": task_id,
         "title": "可靠性导入",
         "message": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入产品库",
-        "tool_id": "products",
-        "action": "batch_create",
+        "tool_id": "elt_import",
+        "action": "execute",
         "params": {
-            "products": [{"name": "placeholder", "unit_price": 1}],
-            "file_path": str(source),
+            "run_id": preview["id"],
+            "preview_revision": preview["preview_revision"],
+            "valid_rows_only": True,
         },
         "runtime_context": {"conversation_id": task_id, "session_id": task_id},
     }
-    response = env["client"].post("/api/agent/tasks", json=body)
+    env["bodies"][task_id] = body
+    return body
+
+
+def _post_task(env: dict, task_id: str, models: list[list[str]] | None = None) -> dict:
+    response = env["client"].post("/api/agent/tasks", json=_task_body(env, task_id, models))
     assert response.status_code == 202, response.text
     return response.json()
 
@@ -208,21 +251,7 @@ def test_create_parks_a_real_queue_row_before_approval(tmp_path, monkeypatch):
         assert _product_models(env) == []
         duplicate = env["client"].post(
             "/api/agent/tasks",
-            json={
-                "task_id": "task-queue-before-approval",
-                "title": "可靠性导入",
-                "message": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入产品库",
-                "tool_id": "products",
-                "action": "batch_create",
-                "params": {
-                    "products": [{"name": "placeholder", "unit_price": 1}],
-                    "file_path": str(env["source"]),
-                },
-                "runtime_context": {
-                    "conversation_id": "task-queue-before-approval",
-                    "session_id": "task-queue-before-approval",
-                },
-            },
+            json=_task_body(env, "task-queue-before-approval"),
         )
         assert duplicate.status_code == 202
         assert duplicate.json()["deduplicated"] is True
@@ -248,21 +277,7 @@ def test_approval_runs_through_one_claim_and_replay_returns_the_body(tmp_path, m
         assert execution.execution_count == 1
         replay = env["client"].post(
             "/api/agent/tasks",
-            json={
-                "task_id": "task-approve-once",
-                "title": "可靠性导入",
-                "message": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入产品库",
-                "tool_id": "products",
-                "action": "batch_create",
-                "params": {
-                    "products": [{"name": "placeholder", "unit_price": 1}],
-                    "file_path": str(env["source"]),
-                },
-                "runtime_context": {
-                    "conversation_id": "task-approve-once",
-                    "session_id": "task-approve-once",
-                },
-            },
+            json=_task_body(env, "task-approve-once"),
         )
         assert replay.status_code == 200, replay.text
         body = replay.json()
@@ -479,21 +494,7 @@ def test_crash_after_commit_replays_the_stored_body_without_a_second_insert(tmp_
         assert _product_models(env) == ["CRASH-1", "CRASH-2"]
         replay = env["client"].post(
             "/api/agent/tasks",
-            json={
-                "task_id": "task-crash-after-commit",
-                "title": "可靠性导入",
-                "message": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入产品库",
-                "tool_id": "products",
-                "action": "batch_create",
-                "params": {
-                    "products": [{"name": "placeholder", "unit_price": 1}],
-                    "file_path": str(env["source"]),
-                },
-                "runtime_context": {
-                    "conversation_id": "task-crash-after-commit",
-                    "session_id": "task-crash-after-commit",
-                },
-            },
+            json=_task_body(env, "task-crash-after-commit"),
         )
         assert replay.status_code == 200
         assert replay.json()["idempotent_replay"] is True

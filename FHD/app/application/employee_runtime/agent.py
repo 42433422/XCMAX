@@ -58,7 +58,10 @@ class EmployeeAgent:
 
     # ---- 钩子：子阶段在后续 Phase 增强（P1 tool_scope/guard、P2 perception） ----
     def _build_agent_tools(
-        self, manifest: dict[str, Any], config: dict[str, Any]
+        self,
+        manifest: dict[str, Any],
+        config: dict[str, Any],
+        runtime_context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """工具解析失败时拒绝全部工具。"""
         try:
@@ -66,7 +69,7 @@ class EmployeeAgent:
                 resolve_employee_tools,
             )
 
-            return resolve_employee_tools(self.employee_id, manifest, config)
+            return resolve_employee_tools(self.employee_id, manifest, config, runtime_context)
         except RECOVERABLE_ERRORS:
             logger.debug("build agent tools denied", exc_info=True)
             return []
@@ -530,7 +533,9 @@ class EmployeeAgent:
                 return chat_result
 
             agent_tools = (
-                self._build_agent_tools(manifest, config) if "agent" in handler_list else None
+                self._build_agent_tools(manifest, config, trusted_context)
+                if "agent" in handler_list
+                else None
             )
             agent_gate = (
                 self._build_agent_gate(manifest, config, workspace_root, trusted_context)
@@ -666,13 +671,13 @@ def restore_codex_employee_gate(
         raise ValueError("原员工当前不可执行")
     config = parse_employee_config_v2(manifest)
     employee = EmployeeAgent(employee_id)
-    tools = employee._build_agent_tools(manifest, config)
+    tools = employee._build_agent_tools(manifest, config, original_runtime_context)
     if _employee_gate_contract(manifest, config, tools) != expected:
         raise ValueError("原员工配置或工具授权契约已变化，不能恢复")
     workspace = original_runtime_context.get("workspace_root")
     if workspace is not None and not isinstance(workspace, str):
         raise ValueError("原员工工作空间绑定无效")
-    gate = employee._build_agent_gate(manifest, config, workspace, input_data)
+    gate = employee._build_agent_gate(manifest, config, workspace, original_runtime_context)
     if gate is None:
         raise ValueError("原员工工具授权门未恢复")
     return _codex_employee_tool_scope(tools, gate)

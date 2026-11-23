@@ -118,7 +118,9 @@ class EmployeeRunner:
                 }.get(state, state)
             error_code = (
                 str(result.get("error_code") or "")
-                if status == "failed" and str(result.get("error_code") or "") in RETRYABLE_CODES
+                if status == "failed"
+                and result.get("retryable") is not False
+                and str(result.get("error_code") or "") in RETRYABLE_CODES
                 else ""
             )
             if failure_retries(attempts, error_code):
@@ -139,10 +141,6 @@ class EmployeeRunner:
             error_code=error_code,
             approver=str(work.user_id) if status == "awaiting_approval" else "",
         )
-        from app.application.employee_runtime.run_ledger import employee_result_validation
-
-        # Project verification only after retry classification and ledger completion.
-        # Keep the original receipt intact; this route has no independent readback.
         response: JsonObject = {
             "success": success,
             "source": "local",
@@ -151,8 +149,10 @@ class EmployeeRunner:
             "data": result,
             "execution_state": "completed" if success else status,
             **{key: value for key, value in pending.items() if key != "run_id"},
-            **employee_result_validation(status=status),
         }
+        from app.application.employee_runtime.run_ledger import employee_result_validation
+
+        response.update(employee_result_validation(status=status))
         if not success:
             response["message"] = error
         return response
@@ -206,19 +206,28 @@ def _settle_receipt(run: AgentRun, result: dict[str, Any]) -> None:
     state = execution_result_pending_state(result) or _payload_status(result)
     terminal = state in {"completed", "failed", "cancelled", "rejected"}
     run.status = _payload_status(result)
-    step, call = run.steps[0], run.tool_calls[0]
-    step.status = "completed" if state == "completed" else "failed" if terminal else "waiting_user"
-    call.status = "completed" if state == "completed" else "failed" if terminal else "running"
-    step.output = call.output = result
-    if terminal:
-        call.finished_at = utc_now_iso()
-        step.finished_at = call.finished_at
+    step = run.steps[0] if len(run.steps) == 1 else None
+    call = run.tool_calls[0] if len(run.tool_calls) == 1 else None
+    if step is not None:
+        step.status = (
+            "completed" if state == "completed" else "failed" if terminal else "waiting_user"
+        )
+        step.output = result
+        if terminal:
+            step.finished_at = utc_now_iso()
+    if call is not None:
+        call.status = "completed" if state == "completed" else "failed" if terminal else "running"
+        call.output = result
+        if terminal:
+            call.finished_at = step.finished_at if step is not None else utc_now_iso()
     if state == "unknown":
         run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
-    run.final_output.update(
-        admin_employee_receipt=result,
-        node_outputs={**run.final_output.get("node_outputs", {}), step.node_id: result},
-    )
+    run.final_output["admin_employee_receipt"] = result
+    if step is not None:
+        run.final_output["node_outputs"] = {
+            **run.final_output.get("node_outputs", {}),
+            step.node_id: result,
+        }
 
 
 def _delegated_result(
@@ -335,6 +344,11 @@ def _receipt(run: AgentRun, *, replay: bool) -> dict[str, Any]:
         result.update(
             requires_reconciliation=True, message="执行结果待核对，请读取原任务，勿重复提交。"
         )
+    from app.application.employee_runtime.run_ledger import employee_result_validation
+
+    # Execution and child reconciliation have finished. This wrapper has no
+    # independent business proof; preserve all original nested child evidence.
+    result.update(employee_result_validation(status="success" if state == "completed" else state))
     return result
 
 
@@ -452,7 +466,38 @@ def execute_admitted_employee(
             "requires_reconciliation": True,
             "retryable": False,
         }
-    state = execution_result_pending_state(result) or _payload_status(result)
+    current = service.get_run(run.run_id)
+    if current is None:
+        result = _receipt(run, replay=False)
+        result.update(success=False, execution_state="unknown", requires_reconciliation=True)
+        return result
+    original_call = run.tool_calls[0]
+    original_step = run.steps[0]
+    original_admission = (
+        len(current.tool_calls) == len(current.steps) == 1
+        and (
+            current.steps[0].step_id,
+            current.steps[0].tool_id,
+            current.steps[0].action,
+            current.steps[0].params,
+        )
+        == (
+            original_step.step_id,
+            original_step.tool_id,
+            original_step.action,
+            original_step.params,
+        )
+        and (
+            current.tool_calls[0].call_id,
+            current.tool_calls[0].step_id,
+            current.tool_calls[0].params,
+        )
+        == (original_call.call_id, original_call.step_id, original_call.params)
+    )
+    run = current
+    previous = copy.deepcopy(current)
+    if not original_admission:
+        result.update(success=False, execution_state="unknown", requires_reconciliation=True)
     child_ids = {
         str(receipt["agent_run_id"])
         for receipt in execution_result_envelopes(result)
@@ -485,16 +530,20 @@ def execute_admitted_employee(
                 run, service.get_run, require_verified_completion=True
             ).get(child_id) or {"execution_state": "unknown"}
             result = _delegated_result(result, child_id, projected)
-    elif result.get("result_valid") is True and result.get("independent_verified") is False:
-        # A valid local envelope is not independent evidence of a business effect.
+    elif result.get("independent_verified") is False and (
+        result.get("result_valid") is True
+        or execution_result_pending_state(result) in {"queued", "blocked"}
+    ):
+        # A local envelope cannot prove completion or a queue without a bound child.
         result.update(success=False, execution_state="unknown", requires_reconciliation=True)
     state = execution_result_pending_state(result) or _payload_status(result)
     _settle_receipt(run, result)
     run.add_event("employee.receipt", "原员工调用回执已返回", {"execution_state": state})
     try:
-        run = service.save_run(run)
+        if service._repo.save_if_unchanged(run, previous):
+            return _receipt(_refresh_receipt(service, run), replay=False)
     except RECOVERABLE_ERRORS:
-        result = _receipt(run, replay=False)
-        result.update(success=False, execution_state="unknown", requires_reconciliation=True)
-        return result
-    return _receipt(_refresh_receipt(service, run), replay=False)
+        pass
+    result = _receipt(service.get_run(run.run_id) or previous, replay=False)
+    result.update(success=False, execution_state="unknown", requires_reconciliation=True)
+    return result

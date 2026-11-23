@@ -62,7 +62,7 @@ describe('sidebarNavigation', () => {
     vi.restoreAllMocks()
   })
 
-  it('employee-workflow maps to employee-workbench host route', async () => {
+  it('employee-workflow maps to the task workbench host route', async () => {
     const router = makeRouter()
     await navigateFromSidebarKey(router, 'employee-workflow')
     expect(router.push).toHaveBeenCalledWith({ name: 'employee-workbench' })

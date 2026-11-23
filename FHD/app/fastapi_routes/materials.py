@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Query, Request
@@ -12,8 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -29,81 +27,18 @@ def _svc():
     return get_material_application_service()
 
 
-def _materials_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "materials-route"
-    ).strip()
-
-
 def _run_materials_agent(
     *,
     request: Request,
     action: str,
     params: dict[str, Any],
     route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("materials") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 materials 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"materials_{action}"
-    user_id = _materials_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 materials.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="materials",
-                action=action,
-                params=dict(params or {}),
-                risk=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute materials.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-        metadata={"source": "materials_route", "route": route_path},
+) -> tuple[dict[str, Any], int]:
+    return run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "materials", "action": action, "params": params},
+        route_path=route_path,
     )
-    runtime_context = {
-        "source": "materials_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_materials_route",
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Materials {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "materials-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
 
 
 @router.post("/api/materials")
@@ -128,23 +63,20 @@ def add_material(request: Request, data: dict[str, Any] = Body(default_factory=d
 
         material_code = data.get("material_code")
         if not isinstance(material_code, str) or not material_code.strip():
-            material_code = f"M-{uuid.uuid4().hex[:10]}"
-
-        data["material_code"] = material_code
+            data.pop("material_code", None)
+        else:
+            data["material_code"] = material_code.strip()
         data["name"] = name_str.strip() if isinstance(name_str, str) else str(name_str)
 
         if "min_stock" not in data and "min_quantity" in data:
             data["min_stock"] = data.get("min_quantity")
 
-        result = _run_materials_agent(
+        result, status = _run_materials_agent(
             request=request,
             action="create",
             params=data,
             route_path="/api/materials",
         )
-        status = 200 if result.get("success") else 400
-        if result.get("error_code") == "tool_exception":
-            status = 500
         return JSONResponse(jsonable_encoder(result), status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("添加原材料失败")
@@ -183,14 +115,13 @@ def update_material(
 ):
     try:
         params = {"id": material_id, **dict(data or {})}
-        result = _run_materials_agent(
+        result, status = _run_materials_agent(
             request=request,
             action="update",
             params=params,
             route_path="/api/materials/{material_id}",
         )
         if not result.get("success"):
-            status = 500 if result.get("error_code") == "tool_exception" else 400
             return JSONResponse(jsonable_encoder(result), status_code=status)
         payload = result.get("data") or {}
         if isinstance(payload, dict):
@@ -212,14 +143,13 @@ def update_material(
 @router.delete("/api/materials/{material_id}")
 def delete_material(request: Request, material_id: int):
     try:
-        result = _run_materials_agent(
+        result, status = _run_materials_agent(
             request=request,
             action="delete",
             params={"id": material_id},
             route_path="/api/materials/{material_id}",
         )
         if not result.get("success"):
-            status = 500 if result.get("error_code") == "tool_exception" else 400
             return JSONResponse(jsonable_encoder(result), status_code=status)
         result["message"] = result.get("message") or "删除成功"
         return JSONResponse(jsonable_encoder(result), status_code=200)
@@ -250,16 +180,13 @@ def batch_delete_materials(
             except (TypeError, ValueError):
                 continue
 
-        result = _run_materials_agent(
+        result, status = _run_materials_agent(
             request=request,
             action="batch_delete",
             params={"ids": valid_ids},
             route_path="/api/materials/batch-delete",
         )
-        if not result.get("success"):
-            status = 500 if result.get("error_code") == "tool_exception" else 400
-            return JSONResponse(jsonable_encoder(result), status_code=status)
-        return JSONResponse(jsonable_encoder(result), status_code=200)
+        return JSONResponse(jsonable_encoder(result), status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("批量删除原材料失败")
         return JSONResponse({"success": False, "message": "批量删除失败"}, status_code=500)

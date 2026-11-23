@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.autonomy.approval_resume import (
+    ApprovalStateError,
     complete_action,
+    get_action_state,
     mark_approval_requested,
     request_action,
     resume_action,
@@ -22,6 +26,164 @@ def _isolate(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl"))
     monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
     reload_autonomy_guard()
+
+
+def test_self_maintenance_resume_keeps_original_approval_and_real_merge_evidence_gate(
+    tmp_path, monkeypatch
+) -> None:
+    _isolate(tmp_path, monkeypatch)
+    repository = Path(__file__).resolve().parents[3]
+    monkeypatch.syspath_prepend(str(repository / "成都修茈科技有限公司/MODstore_deploy"))
+    from modstore_server.maintenance_loop import para_client, workspace
+
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+    monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+
+    def must_not_request_merge(*_args, **_kwargs):
+        pytest.fail("human approval bypassed the original merge evidence gate")
+
+    monkeypatch.setattr(workspace, "_remote_branch_head", must_not_request_merge)
+    monkeypatch.setattr(para_client, "_request_para_task_merge", must_not_request_merge)
+    action_id = "original-maintenance-approval"
+    decision, pending = request_action(
+        "self_maintenance_merge",
+        action_id=action_id,
+        executor_name="self_maintenance_merge",
+        payload={
+            "run_id": "original-loop",
+            "task_id": "original-task",
+            "branch": "original-candidate",
+            "steps": [{"step": "review", "report_excerpt": "review evidence is unavailable"}],
+            "_approval": {"approver": "spoofed-payload-actor"},
+        },
+    )
+    assert decision.risk_level.name == "HIGH" and decision.allowed is False
+    assert pending is not None and pending["state"] == "pending_approval"
+    with pytest.raises(ApprovalStateError, match="approver is required"):
+        resume_action(action_id, approver="")
+    assert get_action_state(action_id)["state"] == "pending_approval"
+
+    result = resume_action(action_id, approver="human-reviewer", approval_id="204")
+    assert result["state"] == "execution_failed"
+    assert result["approver"] == "human-reviewer" and result["approval_id"] == "204"
+    assert result["outcome"]["ok"] is False
+    assert result["outcome"]["reason"] == "missing_structured_review_object"
+    assert result["outcome"]["structured_report_gate"]["ok"] is False
+    assert not result["outcome"].get("merge_requested")
+    with pytest.raises(ApprovalStateError, match="not pending"):
+        resume_action(action_id, approver="human-reviewer", approval_id="204")
+    states = [
+        json.loads(line)["state"] for line in (tmp_path / "approval.jsonl").read_text().splitlines()
+    ]
+    assert states == ["pending_approval", "approved", "execution_failed"]
+
+
+def test_self_maintenance_resume_retains_original_remote_request_receipt(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    _isolate(tmp_path, monkeypatch)
+    repository = Path(__file__).resolve().parents[3]
+    monkeypatch.syspath_prepend(str(repository / "成都修茈科技有限公司/MODstore_deploy"))
+    from modstore_server import autonomy_decision_audit
+    from modstore_server.db.autonomy_decisions import AutonomyDecisionAudit
+    from modstore_server.maintenance_loop import para_client, workspace
+
+    focused = "python3 -m pytest focused.py -q"
+    for key, value in {
+        "XCAGI_FHD_RUNTIME_ROOT": str(repository / "FHD"),
+        "XCAGI_AUTONOMY_DATA_DIR": str(tmp_path / "autonomy"),
+        "MODSTORE_PARA_REPO_URL": "https://github.com/example/repo.git",
+        "MODSTORE_PARA_BRANCH": "main",
+        "MODSTORE_PARA_API_BASE": "http://127.0.0.1:3001",
+        "MODSTORE_AUTO_MERGE_ALLOW_REMOTE": "1",
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND": focused,
+        "MODSTORE_SELF_MAINTENANCE_LEDGER": str(tmp_path / "merge.jsonl"),
+        "MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT": str(tmp_path / "governance.jsonl"),
+    }.items():
+        monkeypatch.setenv(key, value)
+    reports = {
+        "review": {
+            "max_severity": "low",
+            "risk_class": "low",
+            "dimensions": {
+                key: {"status": "pass", "findings": []}
+                for key in ("security", "business_logic", "performance")
+            },
+        },
+        "qa": {
+            "verdict": "PASS",
+            "quality_checks": {
+                key: {"command": command, "exit_code": 0, "status": "passed"}
+                for key, command in {
+                    "black": "python3 -m black --check modman/ modstore_server/ tests/",
+                    "isort": "python3 -m isort --check-only --diff modman/ modstore_server/ tests/",
+                    "source_governance": "python3 scripts/dev/source_governance.py --top 10",
+                }.items()
+            },
+        },
+    }
+    steps = [
+        {
+            "step": name,
+            "report_excerpt": json.dumps(
+                {
+                    "target_branch_available": True,
+                    "blocking_findings": [],
+                    "tested_commands": [{"command": focused, "exit_code": 0, "status": "passed"}],
+                    **report,
+                }
+            ),
+        }
+        for name, report in reports.items()
+    ]
+    requests = []
+    monkeypatch.setattr(
+        workspace,
+        "_remote_branch_head",
+        lambda _repo, branch: "a" * 40 if branch == "main" else "b" * 40,
+    )
+    receipt = {"accepted": True, "task_id": "original-task"}
+    monkeypatch.setattr(
+        para_client, "_request_para_task_merge", lambda **kwargs: requests.append(kwargs) or receipt
+    )
+    engine = create_engine(f"sqlite:///{tmp_path / 'merge-audit.sqlite'}")
+    AutonomyDecisionAudit.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(autonomy_decision_audit, "get_session_factory", lambda: factory)
+    try:
+        request_action(
+            "self_maintenance_merge",
+            action_id="original-merge-request",
+            executor_name="self_maintenance_merge",
+            payload={
+                "run_id": "original-loop",
+                "task_id": "original-task",
+                "branch": "candidate",
+                "steps": steps,
+            },
+        )
+        result = resume_action(
+            "original-merge-request", approver="human-reviewer", approval_id="205"
+        )
+        assert result["state"] == "executed" and result["approver"] == "human-reviewer"
+        assert result["outcome"]["merge_requested"] is True
+        assert result["outcome"]["para_request"] == receipt
+        rows = [json.loads(line) for line in (tmp_path / "merge.jsonl").read_text().splitlines()]
+        assert len(rows) == 1 and rows[0]["status"] == "pending"
+        assert rows[0]["run_id"] == "original-loop" and rows[0]["para_task_id"] == "original-task"
+        assert rows[0]["branch"] == "candidate" and rows[0]["branch_head_sha"] == "b" * 40
+        assert rows[0]["base_head_sha"] == "a" * 40
+        with factory() as db:
+            decision = db.scalar(select(AutonomyDecisionAudit))
+            assert decision.action == "self_maintenance_l1_merge" and decision.decision == "allow"
+        with pytest.raises(ApprovalStateError, match="not pending"):
+            resume_action("original-merge-request", approver="human-reviewer", approval_id="205")
+        assert requests == [{"api_base": "http://127.0.0.1:3001", "task_id": "original-task"}]
+    finally:
+        engine.dispose()
 
 
 def test_request_route_requires_explicit_fresh_retry(tmp_path, monkeypatch) -> None:

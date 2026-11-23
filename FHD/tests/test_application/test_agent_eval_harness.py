@@ -18,9 +18,14 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
 
     assert orchestrator.AgentToolExecutor is original_executor
     assert result["execution_mode"] == "fixture_local"
-    assert result["failed"] == 0, [case for case in result["results"] if not case["passed"]]
-    assert result["passed"] == 123
-    assert len(result["results"]) == 123
+    failures = [
+        {"id": case["id"], "failed_checks": case["failed_checks"]}
+        for case in result["results"]
+        if not case["passed"]
+    ]
+    assert not failures, json.dumps(failures, ensure_ascii=False, indent=2)
+    assert result["passed"] == len(eval_module.load_tasks()) == 123
+    assert len(result["results"]) == len(eval_module.load_tasks())
     assert result["score"] == 1.0
     assert result["coverage"] == {
         "fixture_contract_passed": 123,
@@ -28,15 +33,22 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
         "artifact_integrity_verified": 2,
         "task_admission_verified": 1,
         "read_only_contract": 8,
-        "unverified": 68,
-        "not_exercised": 28,
+        "unverified": 45,
+        "not_exercised": 51,
     }
     dispatch_only = [
         row for row in result["results"] if row["coverage_scope"] == "dispatch_contract_only"
     ]
-    assert len(dispatch_only) == 62
+    assert len(dispatch_only) == 39
     assert all(row["business_goal_expected"] for row in dispatch_only)
     assert all(row["result_coverage"] == "unverified" for row in dispatch_only)
+    denied = [
+        row for row in result["results"] if row["coverage_scope"] == "authorization_contract_only"
+    ]
+    assert len(denied) == 23
+    assert all(row["business_goal_expected"] for row in denied)
+    assert all(row["result_coverage"] == "not_exercised" for row in denied)
+    assert all(row["details"]["run"] is None for row in denied)
     missing_spec = next(
         row
         for row in result["results"]
@@ -269,7 +281,7 @@ def test_route_fixture_uses_real_session_and_restores_auth_boundary() -> None:
         assert client.post("/fixture-write").status_code == 401
 
 
-def test_legacy_shipment_fixture_does_not_admit_enterprise_tenant(monkeypatch) -> None:
+def test_shipment_fixture_does_not_admit_missing_tenant(monkeypatch) -> None:
     from unittest.mock import Mock
 
     from fastapi import FastAPI
@@ -281,10 +293,15 @@ def test_legacy_shipment_fixture_does_not_admit_enterprise_tenant(monkeypatch) -
     app.include_router(shipment_orders.router)
     service = Mock()
     monkeypatch.setattr(shipment_orders, "_svc", lambda: service)
-    with TestClient(app) as client, eval_module._authenticated_route_fixture(client, tenant_id=7):
-        response = client.delete("/api/orders/clear-all")
+    with (
+        TestClient(app) as client,
+        eval_module._authenticated_route_fixture(client, tenant_id=None),
+    ):
+        response = client.delete(
+            "/api/orders/clear-all", headers={"Idempotency-Key": "missing-tenant"}
+        )
     assert response.status_code == 403
-    assert "租户数据隔离" in response.json()["detail"]
+    assert response.json().get("error_code") == "approval_scope_required"
     assert not service.mock_calls
 
 
@@ -301,3 +318,20 @@ def test_eval_route_receipts_do_not_leak_into_later_requests(monkeypatch) -> Non
     assert result["passed"] == len(tasks) > 0
     assert claims == tool_permission._IDEMPOTENCY
     assert owners == tool_permission._LIVE_OWNERS
+
+
+def test_original_medium_document_survives_workspace_review(monkeypatch):
+    task = next(
+        row
+        for row in eval_module.load_tasks()
+        if row["id"] == "generate_office_document_requires_approval_and_records_artifact"
+    )
+    assert task["review_channel"] == "workspace"
+    monkeypatch.setattr(eval_module, "load_tasks", lambda _path: [task])
+    result = run_eval()["results"][0]
+    assert result["passed"], result["failed_checks"]
+    assert result["result_coverage"] == "artifact_integrity_verified"
+    run = result["details"]["run"]
+    assert run["status"] == "completed" and len(run["artifacts"]) == 1
+    assert run["metadata"]["plan"]["nodes"][0]["risk"] == "medium"
+    assert run["metadata"]["plan"]["metadata"]["approval_required_node_ids"] == []

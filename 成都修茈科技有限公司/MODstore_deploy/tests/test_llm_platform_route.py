@@ -151,23 +151,25 @@ def test_platform_only_rejects_explicit_selection(chat_client, selection):
 
 
 @pytest.mark.parametrize(
-    "mode,model,code",
+    "mode,provider,model,code",
     [
-        ("explicit", "mimo-v2.5-asr", "INVALID_CHAT_PREFERENCE"),
-        ("explicit", "gpt-image-1", "INVALID_CHAT_PREFERENCE"),
-        ("byok", "mimo-v2.6-flash", "NO_BYOK_CHAT_MODEL"),
+        ("explicit", "xiaomi", "mimo-v2.5-asr", "INVALID_CHAT_PREFERENCE"),
+        ("explicit", "xiaomi", "gpt-image-1", "INVALID_CHAT_PREFERENCE"),
+        ("byok", "xiaomi", "mimo-v2.6-flash", "NO_BYOK_CHAT_MODEL"),
+        ("byok", "xiaomi", "gpt-image-1", "NO_BYOK_CHAT_MODEL"),
+        ("byok", "retired-provider", "old-model", "INVALID_CHAT_PREFERENCE"),
     ],
 )
 @pytest.mark.parametrize("endpoint", ["resolve-chat-default", "chat", "chat/stream"])
 def test_saved_invalid_route_blocks_http_billing_until_explicit_recovery(
-    database, chat_client, monkeypatch, mode, model, code, endpoint
+    database, chat_client, monkeypatch, mode, provider, model, code, endpoint
 ):
     from modstore_server import llm_api
     from modstore_server.models import User
 
     save("xiaomi", base_url=BASE, model="mimo-v2.6-flash")
     user = database.get(User, 1)
-    before = json.dumps({"mode": mode, "provider": "xiaomi", "model": model})
+    before = json.dumps({"mode": mode, "provider": provider, "model": model})
     user.default_llm_json = before
     database.commit()
     billed = [
@@ -242,3 +244,121 @@ async def test_platform_only_without_platform_never_falls_back_to_owned_key(data
     assert error.value.detail["code"] == "NO_PLATFORM_CHAT_MODEL"
     database.refresh(user)
     assert user.default_llm_json == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform_only", [False, True])
+async def test_empty_gateway_does_not_fall_back_to_legacy_platform(
+    database, monkeypatch, platform_only
+):
+    from modstore_server import llm_api, llm_catalog
+
+    save("openai", model="legacy-chat")
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "synthetic-gateway-key")
+    catalog = AsyncMock(return_value={"models": ["legacy-chat"], "runtime_models": []})
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog)
+
+    with pytest.raises(HTTPException) as error:
+        await llm_api.resolve_default_llm_route(database, 1, platform_only=platform_only)
+
+    assert error.value.detail["code"] == "NO_PLATFORM_CHAT_MODEL"
+    assert "统一网关" in error.value.detail["message"]
+    assert [call.args[1] for call in catalog.await_args_list] == ["litellm"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "runtime_models",
+    [None, ["text-embedding-3-small", "xcmax-kimi-code"], []],
+    ids=["legacy-platform", "gateway-priority", "empty-gateway"],
+)
+async def test_xiaoc_cognition_uses_canonical_platform_route(database, monkeypatch, runtime_models):
+    from modstore_server import llm_catalog, strategic_portfolio_usage, xiaoc_life_runtime
+
+    save("openai", model="gpt-4o-mini")
+    if runtime_models is not None:
+        monkeypatch.setenv("LITELLM_MASTER_KEY", "synthetic-gateway-key")
+    catalog = AsyncMock(
+        return_value={
+            "models": ["text-embedding-3-small", "xcmax-kimi-code"],
+            "runtime_models": runtime_models,
+        }
+    )
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog)
+    monkeypatch.setattr(keys, "resolve_credentials", Mock(side_effect=AssertionError("BYOK read")))
+    admission = AsyncMock(return_value=None)
+    monkeypatch.setattr(strategic_portfolio_usage, "planning_admission", admission)
+    ports = xiaoc_life_runtime.CyclePorts({"owner_user_id": 1, "domain": "enterprise", "state": {}})
+    monkeypatch.setattr(ports, "active", lambda: None)
+    blocked = (
+        "platform_model_not_configured"
+        if runtime_models == []
+        else "platform_quota_unknown_or_exhausted"
+    )
+    with pytest.raises(xiaoc_life_runtime.LifeBlocked, match=blocked):
+        await ports.decide({})
+
+    if runtime_models == []:
+        admission.assert_not_awaited()
+    else:
+        expected = (
+            ("openai", "gpt-4o-mini") if runtime_models is None else ("litellm", "xcmax-kimi-code")
+        )
+        admission.assert_awaited_once_with(*expected, owner_user_id=1)
+    assert [call.args[1] for call in catalog.await_args_list] == (
+        [] if runtime_models is None else ["litellm"]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("runtime_models", [["text-embedding-3-small", "xcmax-kimi-code"], []])
+async def test_scaffold_uses_gateway_chat_catalog_and_preserves_empty_runtime_catalog(
+    database, monkeypatch, runtime_models
+):
+    from modstore_server import llm_catalog, mod_scaffold_runner
+
+    save("xiaomi", model="mimo-v2.6-flash")
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "synthetic-gateway-key")
+    catalog = AsyncMock(
+        return_value={
+            "models": ["text-embedding-3-small", "xcmax-kimi-code"],
+            "runtime_models": runtime_models,
+        }
+    )
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog)
+    provider, model, error = await mod_scaffold_runner.resolve_llm_provider_model_auto(
+        database, SimpleNamespace(id=1), None, None
+    )
+
+    if runtime_models:
+        assert (provider, model, error) == ("litellm", "xcmax-kimi-code", None)
+    else:
+        assert provider is None and model is None and "统一网关" in error
+    assert [call.args[1] for call in catalog.await_args_list] == ["litellm"]
+
+
+@pytest.mark.asyncio
+async def test_scaffold_preserves_explicit_byok_when_gateway_is_configured(database, monkeypatch):
+    from modstore_server import llm_catalog, mod_scaffold_runner
+    from modstore_server.models import User, UserLlmCredential
+
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "synthetic-gateway-key")
+    user = database.get(User, 1)
+    user.default_llm_json = json.dumps(
+        {"mode": "byok", "provider": "xiaomi", "model": "mimo-v2.6-flash"}
+    )
+    database.add(
+        UserLlmCredential(
+            user_id=1,
+            provider="xiaomi",
+            api_key_encrypted=encrypt_secret("synthetic-personal-key"),
+        )
+    )
+    database.commit()
+    catalog = AsyncMock(side_effect=AssertionError("explicit BYOK must not query gateway"))
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog)
+
+    assert await mod_scaffold_runner.resolve_llm_provider_model_auto(
+        database, user, None, None
+    ) == ("xiaomi", "mimo-v2.6-flash", None)
+    catalog.assert_not_awaited()

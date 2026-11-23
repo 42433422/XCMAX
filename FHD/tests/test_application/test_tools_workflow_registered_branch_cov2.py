@@ -258,13 +258,15 @@ class TestMaterialsRouter:
                 "batch_delete", {"ids": [1, 2]}, _ctx(), "normal", ""
             )
             assert result["success"] is False
+            assert result["execution_state"] == "unknown"
             assert result["outcome"] == "unknown"
-            assert result["reconciliation_required"] and result["retryable"] is False
+            assert result["retryable"] is False and result["reconciliation_required"] is True
             assert "deleted_count" not in result and "warning" not in result
+        mock_svc.batch_delete_materials.assert_called_once_with([1, 2])
 
     def test_batch_delete_returns_dict(self) -> None:
         mock_svc = MagicMock()
-        mock_svc.batch_delete_materials.return_value = {"success": True}
+        mock_svc.batch_delete_materials.return_value = {"success": True, "deleted_count": 1}
         with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1]}, _ctx(), "normal", ""
@@ -279,7 +281,11 @@ class TestMaterialsRouter:
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1]}, _ctx(), "normal", ""
             )
-            assert result["success"] is True
+            assert result["success"] is False
+            assert result["execution_state"] == "unknown"
+            assert result["retryable"] is False and result["reconciliation_required"] is True
+            assert "deleted_count" not in result
+        mock_svc.batch_delete_materials.assert_called_once_with([1])
 
     def test_export(self) -> None:
         mock_svc = MagicMock()
@@ -442,7 +448,7 @@ class TestShipmentRecordsRouter:
     def test_list_query(self) -> None:
         mock_svc = MagicMock()
         mock_svc.get_shipment_records.return_value = [{"id": 1}]
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=mock_svc):
             result = _registered_router_shipment_records(
                 "list", {"unit": "acme"}, _ctx(), "normal", ""
             )
@@ -729,7 +735,7 @@ class TestDocumentTemplateRouter:
             result = _registered_router_document_template("update", {"id": 1}, _ctx(), "normal", "")
             assert result["http_status_code"] == 400
 
-    def test_delete_with_base_dir(self) -> None:
+    def test_delete_ignores_untrusted_base_dir(self) -> None:
         with patch(
             "app.legacy.routes.document_templates_compat.run_archive_template_delete"
         ) as mock_fn:
@@ -737,8 +743,8 @@ class TestDocumentTemplateRouter:
             result = _registered_router_document_template(
                 "delete", {"id": 1}, _ctx(template_base_dir="/tmp"), "normal", ""
             )
-            mock_fn.assert_called_once()
-            assert mock_fn.call_args.kwargs["base_dir"] == "/tmp"
+            assert result["success"] is True
+            mock_fn.assert_called_once_with({"id": 1})
 
     def test_delete_without_base_dir(self) -> None:
         with patch(
@@ -746,7 +752,7 @@ class TestDocumentTemplateRouter:
         ) as mock_fn:
             mock_fn.return_value = ({"success": True}, 200)
             _registered_router_document_template("delete", {"id": 1}, _ctx(), "normal", "")
-            assert mock_fn.call_args.kwargs["base_dir"] is None
+            mock_fn.assert_called_once_with({"id": 1})
 
     def test_unknown_action(self) -> None:
         result = _registered_router_document_template("unknown", {}, _ctx(), "normal", "")
@@ -1367,7 +1373,7 @@ class TestOcrRouter:
             result = _registered_router_ocr("request", {"request_id": "r1"}, _ctx(), "normal", "")
             assert result["success"] is False
 
-    def test_request_success(self) -> None:
+    def test_request_publication_remains_pending(self) -> None:
         with (
             patch("app.fastapi_routes.ocr._get_ocr_service"),
             patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_domain,
@@ -1376,12 +1382,17 @@ class TestOcrRouter:
             result = _registered_router_ocr(
                 "request",
                 {"request_id": "r1", "image_url": "http://x", "ocr_type": "invoice"},
-                _ctx(),
+                _ctx(user_id="7"),
                 "normal",
                 "",
             )
-            assert result["success"] is True
+            assert result["success"] is False
+            assert result["published"] is True and result["execution_state"] == "pending"
+            assert result["retryable"] is False
             assert result["ocr_type"] == "invoice"
+            mock_domain.return_value.emit_ocr_requested.assert_called_once_with(
+                request_id="r1", image_url="http://x", ocr_type="invoice", user_id="7"
+            )
 
     def test_recognize_missing_file_path(self) -> None:
         with patch("app.fastapi_routes.ocr._get_ocr_service"):
@@ -1592,7 +1603,7 @@ class TestExecuteExcelImportRecords:
         assert result["requires_reconciliation"] is True
         assert result["safe_to_retry"] is False
 
-    @pytest.mark.parametrize("entrypoint", ["registered", "generic"])
+    @pytest.mark.parametrize("entrypoint", ["import_records", "execute_import"])
     @pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
     def test_committed_customer_with_failed_receipt_requires_reconciliation(
         self, tmp_path, entrypoint, error_type
@@ -1601,8 +1612,6 @@ class TestExecuteExcelImportRecords:
         from sqlalchemy.orm import Session, sessionmaker
 
         from app.application.customer_crud_mixin import CustomerCrudMixin
-        from app.application.tools.workflow_tools.contracts import ImportServices
-        from app.application.tools.workflow_tools.import_execution import ImportExecutor
         from app.db.models.purchase_unit import PurchaseUnit
 
         engine = create_engine(f"sqlite:///{tmp_path / 'committed-customer.db'}")
@@ -1623,26 +1632,26 @@ class TestExecuteExcelImportRecords:
                 return None
 
         customers, products = CustomerWriter(), MagicMock()
+        records = [{"unit_name": "committed", "product_name": "must-not-write"}]
+        chat = MagicMock()
+        chat._pending_excel_imports = {"original-import": {"records": records}}
         try:
-            if entrypoint == "registered":
-                with (
-                    patch("app.bootstrap.get_customer_app_service", return_value=customers),
-                    patch("app.bootstrap.get_products_service", return_value=products),
-                ):
-                    result = _execute_excel_import_records(
-                        [{"unit_name": "committed", "product_name": "must-not-write"}]
-                    )
-                products.create_product.assert_not_called()
-            else:
-                executor = ImportExecutor(
-                    ImportServices(
-                        customer=lambda: customers,
-                        products=lambda: products,
-                        shipment=MagicMock(),
-                        find_customer=lambda name: None,
-                    )
+            with (
+                patch("app.bootstrap.get_customer_app_service", return_value=customers),
+                patch("app.bootstrap.get_products_service", return_value=products),
+                patch("app.application.get_ai_chat_app_service", return_value=chat),
+            ):
+                result = _registered_router_excel_import(
+                    entrypoint,
+                    {"records": records}
+                    if entrypoint == "import_records"
+                    else {"pending_import_id": "original-import"},
+                    _ctx(),
+                    "normal",
+                    "",
                 )
-                result = executor.customers([{"customer_name": "committed"}], True)
+            products.create_product.assert_not_called()
+            assert chat._pending_excel_imports == {"original-import": {"records": records}}
             with engine.connect() as db:
                 assert db.execute(select(PurchaseUnit.unit_name)).scalars().all() == ["committed"]
             assert result["success"] is False

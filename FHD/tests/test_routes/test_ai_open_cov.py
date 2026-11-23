@@ -26,6 +26,7 @@ from fastapi.testclient import TestClient
 # work fine on Python 3.11 (the project's required version).
 # ---------------------------------------------------------------------------
 import app.fastapi_routes.ai_open as _aiopen_mod
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -35,7 +36,7 @@ _MOCK_MANIFEST_DATA: dict[str, Any] = {
     "name": "AIOPEN",
     "version": "1.0.0",
     "tagline": "test tagline",
-    "tools": [{"name": "api_call", "description": "d", "inputSchema": {}}],
+    "tools": [{"name": "operation_call", "description": "d", "inputSchema": {}}],
 }
 _MOCK_RUN = MagicMock()
 _MOCK_RUN.run_id = "run-123"
@@ -66,7 +67,6 @@ def _all_mocks(**extra: Any):
             ...
     """
     defaults = {
-        "verify_api_key": True,
         "authorize_api_key": {"ok": True},
         "aiopen_manifest": _MOCK_MANIFEST_DATA,
         "invoke_tool": AsyncMock(return_value={"success": True, "message": "ok"}),
@@ -81,9 +81,7 @@ def _all_mocks(**extra: Any):
         },
         "build_mcp_install_bundle": {"install_url": ""},
         "format_tool_result_text": "ok",
-        "openclaw_chat_proxy": ({"success": True, "message": "ok"}, 200),
         "create_chat_trace_run": MagicMock(return_value=_MOCK_RUN),
-        "attach_chat_trace_run": {"success": True, "message": "ok"},
         "AIOPEN_STATE": _AIOPEN_STATE_DICT,
         "aiopen_cursor_hub": _HUB_MOCK,
     }
@@ -92,7 +90,6 @@ def _all_mocks(**extra: Any):
     # Attributes whose value is a *return value* (the attribute is a callable
     # in the real module, so we must wrap the value in a MagicMock).
     _wrap_as_return: set[str] = {
-        "verify_api_key",
         "authorize_api_key",
         "revoke_api_key",
         "list_api_keys",
@@ -101,8 +98,6 @@ def _all_mocks(**extra: Any):
         "build_mcp_install_bundle",
         "generate_api_key",
         "format_tool_result_text",
-        "openclaw_chat_proxy",
-        "attach_chat_trace_run",
         "create_chat_trace_run",
     }
 
@@ -153,26 +148,26 @@ def client():
 # ===========================================================================
 
 
-def test_trace_control_result_early_return_run_id():
+def test_trace_control_result_early_return_run_id(trusted_actor):
     """If payload from generate_api_key already has run_id, tracing is skipped."""
     with _all_mocks(
         generate_api_key={"key": "k", "label": "", "run_id": "existing-run"},
     ):
         c = _make_client()
-        resp = c.post("/api/aiopen/keys", json={"label": "test"})
+        resp = c.post("/api/aiopen/keys", json={"label": "test"}, headers=trusted_actor().headers)
     assert resp.status_code == 200
     body = resp.json()
     # Payload returned unchanged – still has the pre-existing run_id.
     assert body.get("run_id") == "existing-run"
 
 
-def test_trace_control_result_early_return_agent_run_id():
+def test_trace_control_result_early_return_agent_run_id(trusted_actor):
     """If payload already has agent_run_id, _trace_aiopen_control_result returns early."""
     with _all_mocks(
         generate_api_key={"key": "k", "label": "", "agent_run_id": "agent-42"},
     ):
         c = _make_client()
-        resp = c.post("/api/aiopen/keys", json={"label": "x"})
+        resp = c.post("/api/aiopen/keys", json={"label": "x"}, headers=trusted_actor().headers)
     assert resp.status_code == 200
     assert resp.json().get("agent_run_id") == "agent-42"
 
@@ -189,12 +184,12 @@ def test_invoke_args_non_dict_defaults_to_empty():
         c = _make_client()
         resp = c.post(
             "/api/aiopen/invoke",
-            json={"tool": "api_call", "args": ["not", "a", "dict"]},
+            json={"tool": "operation_call", "args": ["not", "a", "dict"]},
             headers={"X-AIOPEN-Key": "any"},
         )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["tool"] == "api_call"
+    assert body["tool"] == "operation_call"
 
 
 # ===========================================================================
@@ -210,7 +205,7 @@ def test_invoke_run_id_present_in_response():
             c = _make_client()
             resp = c.post(
                 "/api/aiopen/invoke",
-                json={"tool": "api_call", "args": {}},
+                json={"tool": "operation_call", "args": {}},
                 headers={"X-AIOPEN-Key": "any"},
             )
     body = resp.json()
@@ -225,7 +220,7 @@ def test_invoke_run_id_empty_not_in_response():
             c = _make_client()
             resp = c.post(
                 "/api/aiopen/invoke",
-                json={"tool": "api_call", "args": {}},
+                json={"tool": "operation_call", "args": {}},
                 headers={"X-AIOPEN-Key": "any"},
             )
     body = resp.json()
@@ -267,7 +262,7 @@ def test_mcp_post_tools_call_run_id_in_meta():
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "tools/call",
-                    "params": {"name": "api_call", "arguments": {}},
+                    "params": {"name": "operation_call", "arguments": {}},
                 },
                 headers={"X-AIOPEN-Key": "any"},
             )
@@ -287,7 +282,7 @@ def test_mcp_post_tools_call_no_run_id_no_meta():
                     "jsonrpc": "2.0",
                     "id": 2,
                     "method": "tools/call",
-                    "params": {"name": "api_call", "arguments": {}},
+                    "params": {"name": "operation_call", "arguments": {}},
                 },
                 headers={"X-AIOPEN-Key": "any"},
             )
@@ -344,7 +339,7 @@ def test_mcp_post_body_none_params_defaults(client):
         headers={"X-AIOPEN-Key": "any", "Content-Type": "application/json"},
     )
     # null → body is None (not dict, not list) → parse error path
-    assert resp.status_code in {200, 202, 400}
+    assert resp.status_code == 400
 
 
 # ===========================================================================
@@ -550,54 +545,13 @@ def test_config_base_url_accepted(client):
 
 
 # ===========================================================================
-# 18. aiopen_openclaw_chat – message empty → 400
 #     Lines 531-532
 # ===========================================================================
 
 
-def test_openclaw_chat_empty_message_returns_400(client):
-    """POST /api/aiopen/openclaw/chat with empty message → 400."""
-    resp = client.post("/api/aiopen/openclaw/chat", json={})
-    assert resp.status_code == 400
-    assert resp.json()["success"] is False
-
-
-def test_openclaw_chat_whitespace_message_returns_400(client):
-    """POST /api/aiopen/openclaw/chat with whitespace message → 400."""
-    resp = client.post("/api/aiopen/openclaw/chat", json={"message": "   "})
-    assert resp.status_code == 400
-
-
 # ===========================================================================
-# 19. aiopen_openclaw_chat – proxy returns status != 200 → JSONResponse
 #     Lines 547-549
 # ===========================================================================
-
-
-def test_openclaw_chat_proxy_non_200_returns_json_response():
-    """When openclaw_chat_proxy returns status=503, route must return JSONResponse."""
-    error_payload = {"success": False, "message": "upstream error"}
-    with _all_mocks(
-        openclaw_chat_proxy=(error_payload, 503),
-        attach_chat_trace_run=error_payload,
-    ):
-        c = _make_client()
-        resp = c.post("/api/aiopen/openclaw/chat", json={"message": "hello"})
-    assert resp.status_code == 503
-    assert resp.json()["success"] is False
-
-
-def test_openclaw_chat_proxy_200_returns_dict():
-    """When proxy returns 200, route returns the payload dict directly (not JSONResponse)."""
-    ok_payload = {"success": True, "message": "pong"}
-    with _all_mocks(
-        openclaw_chat_proxy=(ok_payload, 200),
-        attach_chat_trace_run=ok_payload,
-    ):
-        c = _make_client()
-        resp = c.post("/api/aiopen/openclaw/chat", json={"message": "hello"})
-    assert resp.status_code == 200
-    assert resp.json()["success"] is True
 
 
 # ===========================================================================

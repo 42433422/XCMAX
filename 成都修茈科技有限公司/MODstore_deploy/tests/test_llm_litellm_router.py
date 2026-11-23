@@ -37,14 +37,15 @@ def _platform_key(provider: str, key: str = "sk-platform") -> PlatformApiKey:
     )
 
 
-def test_web_installs_the_same_pinned_litellm_as_the_router_extra():
+@pytest.mark.parametrize("package", ["litellm", "openai"])
+def test_web_installs_the_same_pinned_router_dependencies_as_the_router_extra(package):
     project = Path(__file__).resolve().parents[1] / "pyproject.toml"
     extras = tomllib.loads(project.read_text(encoding="utf-8"))["project"]["optional-dependencies"]
-    web_pin = [dependency for dependency in extras["web"] if dependency.startswith("litellm")]
+    web_pin = [dependency for dependency in extras["web"] if dependency.startswith(package)]
     router_pin = [
-        dependency for dependency in extras["llm-router"] if dependency.startswith("litellm")
+        dependency for dependency in extras["llm-router"] if dependency.startswith(package)
     ]
-    assert web_pin == router_pin == [f"litellm=={version('litellm')}"]
+    assert web_pin == router_pin == [f"{package}=={version(package)}"]
 
 
 def test_deployment_maps_openai_compatible_provider():

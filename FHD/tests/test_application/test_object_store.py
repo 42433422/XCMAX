@@ -1,4 +1,4 @@
-"""S3 对象导入：URI 校验、大小限制、桶白名单与路由暂存清理。"""
+"""S3 对象导入：URI 校验、大小限制、桶白名单与账号所有的稳定暂存。"""
 
 from __future__ import annotations
 
@@ -14,6 +14,12 @@ from app.infrastructure.document_parsing.object_store import (
     fetch_object,
     parse_s3_uri,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@pytest.fixture
+def s3_actor(trusted_actor):
+    return trusted_actor(permissions=["dataset.write"])
 
 
 class _Body:
@@ -80,7 +86,9 @@ def test_fetch_object_normalizes_client_error() -> None:
         fetch_object("s3://kb/a.pdf", client=_Client(error=RuntimeError("NoSuchKey")))
 
 
-def _route_client(dispatch_response: JSONResponse | Exception, calls: list[dict]) -> TestClient:
+def _route_client(
+    dispatch_response: JSONResponse | Exception, calls: list[dict], headers=None
+) -> TestClient:
     from app.fastapi_routes.knowledge.document_routes import DocumentRoutes
 
     def _dispatch(**kwargs):
@@ -89,22 +97,22 @@ def _route_client(dispatch_response: JSONResponse | Exception, calls: list[dict]
             raise dispatch_response
         return dispatch_response
 
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, headers=headers, raise_server_exceptions=False)
 
 
 def test_s3_ingest_stages_file_and_keeps_it_when_accepted(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    tmp_path, monkeypatch: pytest.MonkeyPatch, s3_actor
 ) -> None:
     monkeypatch.setattr(
         "app.infrastructure.document_parsing.object_store.fetch_object",
         lambda uri: FetchedObject(bucket="kb", key="a.pdf", filename="a.pdf", data=b"%PDF-1.4"),
     )
-    monkeypatch.setattr("app.utils.path_io.path_utils.get_upload_dir", lambda: str(tmp_path))
+    monkeypatch.setattr("app.utils.path_io.upload_helpers.get_upload_dir", lambda: tmp_path)
     calls: list[dict] = []
-    client = _route_client(JSONResponse({"success": True}), calls)
+    client = _route_client(JSONResponse({"success": True}), calls, s3_actor.headers)
 
     response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/a.pdf"})
 
@@ -116,30 +124,31 @@ def test_s3_ingest_stages_file_and_keeps_it_when_accepted(
     assert params["document_id"] == "s3://kb/a.pdf"
 
 
-def test_s3_ingest_removes_staged_file_when_ingest_rejects(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+def test_s3_ingest_retains_immutable_input_when_ingest_rejects(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, s3_actor
 ) -> None:
     monkeypatch.setattr(
         "app.infrastructure.document_parsing.object_store.fetch_object",
         lambda uri: FetchedObject(bucket="kb", key="a.pdf", filename="a.pdf", data=b"x"),
     )
-    monkeypatch.setattr("app.utils.path_io.path_utils.get_upload_dir", lambda: str(tmp_path))
+    monkeypatch.setattr("app.utils.path_io.upload_helpers.get_upload_dir", lambda: tmp_path)
     calls: list[dict] = []
     client = _route_client(
         JSONResponse({"success": False, "error_code": "dataset_ingest_failed"}, status_code=200),
         calls,
+        s3_actor.headers,
     )
 
     response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/a.pdf"})
 
     assert response.status_code == 200
-    assert not Path(calls[0]["params"]["file_path"]).exists()
+    assert Path(calls[0]["params"]["file_path"]).read_bytes() == b"x"
 
 
-def test_s3_ingest_rejects_unsupported_extension(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.utils.path_io.path_utils.get_upload_dir", lambda: str(tmp_path))
+def test_s3_ingest_rejects_unsupported_extension(tmp_path, monkeypatch, s3_actor) -> None:
+    monkeypatch.setattr("app.utils.path_io.upload_helpers.get_upload_dir", lambda: tmp_path)
     calls: list[dict] = []
-    client = _route_client(JSONResponse({"success": True}), calls)
+    client = _route_client(JSONResponse({"success": True}), calls, s3_actor.headers)
 
     response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/run.exe"})
 
@@ -166,44 +175,42 @@ def staged_objects(tmp_path, monkeypatch):
         "app.infrastructure.document_parsing.object_store.fetch_object",
         lambda _uri: FetchedObject(bucket="kb", key="a.pdf", filename="a.pdf", data=b"private"),
     )
-    monkeypatch.setattr("app.utils.path_io.path_utils.get_upload_dir", lambda: str(tmp_path))
+    monkeypatch.setattr("app.utils.path_io.upload_helpers.get_upload_dir", lambda: tmp_path)
     return tmp_path
 
 
-def test_s3_staging_rejects_symlink_escape(staged_objects, tmp_path):
+def test_s3_staging_rejects_symlink_escape(staged_objects, tmp_path, s3_actor):
     outside = tmp_path.parent / f"{tmp_path.name}-outside"
     outside.mkdir()
-    target = staged_objects / "knowledge"
+    target = staged_objects / "capability-inputs" / "knowledge"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.symlink_to(outside, target_is_directory=True)
     calls = []
-    with _route_client(JSONResponse({"success": True}), calls) as client:
+    with _route_client(JSONResponse({"success": True}), calls, s3_actor.headers) as client:
         response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/a.pdf"})
-    assert response.status_code == 400 and "目录无效" in response.json()["detail"]
+    assert response.status_code == 400 and response.json()["detail"] == "对象暂存失败"
     assert not list(outside.iterdir()) and calls == []
 
 
-def test_s3_staging_ignores_dataset_named_paths(staged_objects, tmp_path):
+def test_s3_staging_ignores_dataset_named_paths(staged_objects, tmp_path, s3_actor):
     outside = tmp_path.parent / f"{tmp_path.name}-outside"
     outside.mkdir()
     legacy_dataset_path = staged_objects / "knowledge" / "kb"
     legacy_dataset_path.parent.mkdir(parents=True)
     legacy_dataset_path.symlink_to(outside, target_is_directory=True)
     calls = []
-    with _route_client(JSONResponse({"success": True}), calls) as client:
+    with _route_client(JSONResponse({"success": True}), calls, s3_actor.headers) as client:
         response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/a.pdf"})
 
     assert response.status_code == 200
     staged = Path(calls[0]["params"]["file_path"])
-    assert staged.parent == staged_objects / "knowledge"
+    assert staged.parent.parent == staged_objects / "capability-inputs" / "knowledge"
     assert staged.read_bytes() == b"private"
     assert not list(outside.iterdir())
 
 
 @pytest.mark.parametrize("dataset_id", ["..", "../outside", "/absolute", "\\..\\escape"])
-def test_s3_dataset_names_cannot_escape_upload_root(staged_objects, dataset_id):
-    from fastapi import Request
-
+def test_s3_dataset_names_cannot_escape_upload_root(staged_objects, dataset_id, s3_actor):
     from app.fastapi_routes.knowledge.document_routes import DocumentRoutes
     from app.fastapi_routes.knowledge.schemas import DatasetDocumentIngestRequest
 
@@ -214,21 +221,21 @@ def test_s3_dataset_names_cannot_escape_upload_root(staged_objects, dataset_id):
         saved.append(Path(kwargs["params"]["file_path"]))
         return JSONResponse({"success": True})
 
-    routes = DocumentRoutes(dispatch=lambda: dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: dispatch, uploads=lambda: None)
     response = routes.ingest_dataset_document(
         dataset_id,
         DatasetDocumentIngestRequest(s3_uri="s3://kb/a.pdf"),
-        Request({"type": "http", "headers": []}),
+        s3_actor.request,
     )
     assert response.status_code == 200
-    assert saved[0].parent == staged_objects / "knowledge"
+    assert saved[0].parent.parent == staged_objects / "capability-inputs" / "knowledge"
     assert saved[0].read_bytes() == b"private"
 
 
 @pytest.mark.parametrize("key", ["folder/report.PDF", "folder/../../report.pdf"])
-def test_s3_staging_uses_generated_names_and_canonical_extension(staged_objects, key):
+def test_s3_staging_reuses_content_digest_and_canonical_extension(staged_objects, key, s3_actor):
     calls = []
-    with _route_client(JSONResponse({"success": True}), calls) as client:
+    with _route_client(JSONResponse({"success": True}), calls, s3_actor.headers) as client:
         for dataset_id in ("first", "second"):
             response = client.post(
                 f"/datasets/{dataset_id}/documents", json={"s3_uri": f"s3://kb/{key}"}
@@ -236,30 +243,30 @@ def test_s3_staging_uses_generated_names_and_canonical_extension(staged_objects,
             assert response.status_code == 200
 
     paths = [Path(call["params"]["file_path"]) for call in calls]
-    assert paths[0] != paths[1]
+    assert paths[0] == paths[1]
     for path in paths:
-        assert path.parent == staged_objects / "knowledge"
+        assert path.parent.parent == staged_objects / "capability-inputs" / "knowledge"
         assert path.suffix == ".pdf"
         assert path.name != "report.pdf"
         assert path.read_bytes() == b"private"
 
 
-def test_s3_dispatch_failure_cleans_only_owned_file(staged_objects):
+def test_s3_dispatch_failure_preserves_inputs_for_original_task_recovery(staged_objects, s3_actor):
     existing = staged_objects / "knowledge" / "kb" / "existing.pdf"
     existing.parent.mkdir(parents=True)
     existing.write_bytes(b"previous accepted input")
     calls = []
-    with _route_client(RuntimeError("dispatch failed"), calls) as client:
+    with _route_client(RuntimeError("dispatch failed"), calls, s3_actor.headers) as client:
         response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/a.pdf"})
     assert response.status_code == 500
-    assert not Path(calls[0]["params"]["file_path"]).exists()
+    assert Path(calls[0]["params"]["file_path"]).read_bytes() == b"private"
     assert existing.read_bytes() == b"previous accepted input"
 
 
-def test_s3_pending_ingestion_keeps_owned_file(staged_objects):
+def test_s3_pending_ingestion_keeps_owned_file(staged_objects, s3_actor):
     calls = []
     with _route_client(
-        JSONResponse({"success": False, "agent_status": "waiting_user"}), calls
+        JSONResponse({"success": False, "agent_status": "waiting_user"}), calls, s3_actor.headers
     ) as client:
         response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/a.pdf"})
     assert response.status_code == 200

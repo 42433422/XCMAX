@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import ai_assistant as ai_routes_mod
 from app.fastapi_routes import inventory as inventory_routes
 from app.fastapi_routes import materials as materials_routes
@@ -20,6 +21,7 @@ from app.fastapi_routes import purchase as purchase_routes
 from app.fastapi_routes import reports as report_routes
 from app.fastapi_routes.domains.customer import routes as customer_compat_router
 from app.fastapi_routes.domains.customer import routes as customer_routes
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
@@ -129,7 +131,10 @@ def mock_report_svc(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 @pytest.fixture
 def mock_material_svc() -> MagicMock:
     svc = MagicMock()
-    svc.create_material.return_value = {"success": True, "data": {"id": 54, "name": "铜线"}}
+    svc.create_material.return_value = {
+        "success": True,
+        "data": {"id": 54, "name": "铜线"},
+    }
     svc.get_all_materials.return_value = {
         "success": True,
         "data": [{"id": 54, "name": "铜线"}],
@@ -143,26 +148,29 @@ def mock_material_svc() -> MagicMock:
 
 
 @pytest.fixture
-def inventory_client(mock_inventory_svc: MagicMock, trusted_actor, local_tools) -> TestClient:
+def capability_runs(monkeypatch):
+    repository = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
+    return repository
+
+
+@pytest.fixture
+def inventory_client(
+    mock_inventory_svc: MagicMock, trusted_actor, request, capability_runs
+) -> TestClient:
     app = FastAPI()
     app.include_router(inventory_routes.router)
-    actor = trusted_actor(
-        permissions=[
-            f"tool.inventory.{action}"
-            for action in (
-                "create_storage_location",
-                "update_storage_location",
-                "create_warehouse",
-                "update_warehouse",
-                "delete_warehouse",
-                "stock_in",
-                "stock_out",
-                "transfer",
-                "query_transactions",
-            )
-        ]
+    return TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={
+            **trusted_actor(role="admin").headers,
+            "Idempotency-Key": request.node.name,
+        },
     )
-    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
 
 
 @pytest.fixture
@@ -178,10 +186,19 @@ def materials_client(mock_material_svc: MagicMock, monkeypatch: pytest.MonkeyPat
 
 
 @pytest.fixture
-def purchase_client(mock_purchase_svc: MagicMock) -> TestClient:
+def purchase_client(
+    mock_purchase_svc: MagicMock, trusted_actor, request, capability_runs
+) -> TestClient:
     app = FastAPI()
     app.include_router(purchase_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={
+            **trusted_actor(role="admin").headers,
+            "Idempotency-Key": request.node.name,
+        },
+    )
 
 
 @pytest.fixture
@@ -215,7 +232,7 @@ def ops_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 @pytest.fixture
-def customer_client(monkeypatch: pytest.MonkeyPatch, request) -> TestClient:
+def customer_client(monkeypatch: pytest.MonkeyPatch, request, capability_runs) -> TestClient:
     actor = None
     if any(action in request.node.name for action in ("create", "update", "delete")):
         actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
@@ -247,7 +264,14 @@ def customer_client(monkeypatch: pytest.MonkeyPatch, request) -> TestClient:
     )
     app = FastAPI()
     app.include_router(customer_compat_router.router)
-    return TestClient(app, headers=actor.headers if actor else {}, raise_server_exceptions=False)
+    return TestClient(
+        app,
+        headers={
+            **(actor.headers if actor else {}),
+            "Idempotency-Key": request.node.name,
+        },
+        raise_server_exceptions=False,
+    )
 
 
 @pytest.fixture
@@ -350,13 +374,17 @@ def test_inventory_locations_crud(
         params={"warehouse_id": 1, "status": "active"},
     )
     assert listed.status_code == 200
-    assert (
-        inventory_client.post("/api/inventory/locations", json={"code": "A-01"}).status_code == 200
-    )
-    assert (
-        inventory_client.put("/api/inventory/locations/10", json={"status": "full"}).status_code
-        == 200
-    )
+    for method, path, data in (
+        ("POST", "/api/inventory/locations", {"code": "A-01"}),
+        ("PUT", "/api/inventory/locations/10", {"status": "full"}),
+    ):
+        response = inventory_client.request(
+            method, path, json=data, headers={"Idempotency-Key": f"locations-{method}"}
+        )
+        assert response.status_code == 202, response.text
+        assert response.json()["success"] is False and response.json()["approval_request_id"]
+    mock_inventory_svc.create_storage_location.assert_not_called()
+    mock_inventory_svc.update_storage_location.assert_not_called()
     mock_inventory_svc.get_storage_locations.assert_called_once_with(
         warehouse_id=1, status="active"
     )
@@ -370,25 +398,35 @@ def test_inventory_warehouses_lifecycle(
         == 200
     )
     assert inventory_client.get("/api/inventory/warehouses/3").status_code == 200
-    assert (
-        inventory_client.post("/api/inventory/warehouses", json={"name": "主仓"}).status_code == 200
-    )
-    assert (
-        inventory_client.put("/api/inventory/warehouses/3", json={"name": "副仓"}).status_code
-        == 200
-    )
-    assert inventory_client.delete("/api/inventory/warehouses/3").status_code == 200
+    for method, path, data in (
+        ("POST", "/api/inventory/warehouses", {"name": "主仓"}),
+        ("PUT", "/api/inventory/warehouses/3", {"name": "副仓"}),
+        ("DELETE", "/api/inventory/warehouses/3", None),
+    ):
+        response = inventory_client.request(
+            method, path, json=data, headers={"Idempotency-Key": f"warehouses-{method}"}
+        )
+        assert response.status_code == 202, response.text
+        assert response.json()["success"] is False and response.json()["approval_request_id"]
+    mock_inventory_svc.create_warehouse.assert_not_called()
+    mock_inventory_svc.update_warehouse.assert_not_called()
+    mock_inventory_svc.delete_warehouse.assert_not_called()
 
 
 def test_inventory_in_without_unit_price(
-    inventory_client: TestClient, mock_inventory_svc: MagicMock, local_tools
+    inventory_client: TestClient,
+    mock_inventory_svc: MagicMock,
+    local_tools,
+    capability_runs,
 ) -> None:
     r = inventory_client.post(
         "/api/inventory/in",
         json={"product_id": 1, "warehouse_id": 2, "quantity": 3},
     )
-    assert r.status_code == 200
-    assert mock_inventory_svc.inventory_in.call_args.kwargs["unit_price"] is None
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False and r.json()["approval_request_id"]
+    assert capability_runs.get(r.json()["run_id"]).steps[0].params["unit_price"] is None
+    mock_inventory_svc.inventory_in.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -402,36 +440,41 @@ def test_materials_create_missing_name_400(materials_client: TestClient) -> None
 
 
 def test_materials_create_maps_min_quantity(
-    materials_client: TestClient, mock_material_svc: MagicMock, local_tools
+    materials_client: TestClient, mock_material_svc: MagicMock, monkeypatch
 ) -> None:
+    admission = MagicMock(
+        return_value=({"success": False, "execution_state": "waiting_approval"}, 202)
+    )
+    monkeypatch.setattr(materials_routes, "_run_materials_agent", admission)
     r = materials_client.post(
         "/api/materials",
         json={"name": "树脂", "min_quantity": 12, "material_code": "R-54"},
     )
-    assert r.status_code == 400
-    assert r.json()["error_code"] == "result_verification_inconclusive"
-    assert r.json()["retryable"] is False
-    mock_material_svc.create_material.assert_called_once()
-    payload = mock_material_svc.create_material.call_args[0][0]
+    assert r.status_code == 202
+    payload = admission.call_args.kwargs["params"]
     assert payload["min_stock"] == 12
+    mock_material_svc.create_material.assert_not_called()
 
 
-def test_materials_create_service_failure_400(
+def test_materials_create_requires_session_before_service_failure(
     materials_client: TestClient, mock_material_svc: MagicMock, local_tools
 ) -> None:
-    mock_material_svc.create_material.return_value = {"success": False, "message": "duplicate"}
+    mock_material_svc.create_material.return_value = {
+        "success": False,
+        "message": "duplicate",
+    }
     r = materials_client.post("/api/materials", json={"name": "重复项"})
-    assert r.status_code == 400
-    assert r.json()["message"] == "duplicate"
+    assert r.status_code == 401
+    mock_material_svc.create_material.assert_not_called()
 
 
-def test_materials_create_exception_500(
+def test_materials_create_requires_session_before_service_exception(
     materials_client: TestClient, mock_material_svc: MagicMock, local_tools
 ) -> None:
     mock_material_svc.create_material.side_effect = RuntimeError("db locked")
     r = materials_client.post("/api/materials", json={"name": "异常项"})
-    assert r.status_code == 500
-    assert r.json()["message"] == "工具执行失败"
+    assert r.status_code == 401
+    mock_material_svc.create_material.assert_not_called()
 
 
 def test_materials_list_injects_count(
@@ -452,17 +495,24 @@ def test_materials_batch_delete_non_dict_400(materials_client: TestClient) -> No
     assert r.status_code == 422 or r.status_code == 400
 
 
-def test_materials_batch_delete_service_error_requires_reconciliation(
-    materials_client: TestClient, mock_material_svc: MagicMock, local_tools
+def test_materials_batch_delete_adapter_never_reports_partial_exception_as_success(
+    monkeypatch, mock_material_svc: MagicMock
 ) -> None:
+    from app.domain.shared_services.tools_workflow_erp_master import (
+        _registered_router_materials,
+    )
+
+    monkeypatch.setattr(
+        "app.application.get_material_application_service", lambda: mock_material_svc
+    )
     mock_material_svc.batch_delete_materials.side_effect = RuntimeError("partial fail")
-    r = materials_client.post("/api/materials/batch-delete", json={"ids": [1, 2]})
+    result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "test", "")
+    assert result["success"] is False and result["execution_state"] == "unknown"
+    assert result["outcome"] == "unknown"
+    assert result["error_code"] == "material_delete_outcome_unknown"
+    assert result["retryable"] is False and result["reconciliation_required"] is True
+    assert "deleted_count" not in result
     mock_material_svc.batch_delete_materials.assert_called_once_with([1, 2])
-    assert r.status_code == 400
-    assert r.json()["success"] is False
-    assert r.json()["outcome"] == "unknown"
-    assert r.json()["reconciliation_required"] and r.json()["retryable"] is False
-    assert "deleted_count" not in r.json()
 
 
 def test_materials_export_file_success(
@@ -539,43 +589,149 @@ def test_customers_match_field_only(
 
 def test_customers_create_empty_name_400(customer_client: TestClient) -> None:
     with (
-        patch.object(customer_routes, "_customers_write_raise"),
-        patch.object(customer_routes, "_customer_body_name_contact", return_value=("", "", "", "")),
+        patch.object(
+            customer_routes,
+            "_customer_body_name_contact",
+            return_value=("", "", "", ""),
+        ),
     ):
         r = customer_client.post("/customers", json={"unit_name": ""})
     assert r.status_code == 400
 
 
-def test_customers_update_default_path(customer_client: TestClient, local_tools) -> None:
-    service = MagicMock()
-    service.update.return_value = {"success": True, "data": {"id": 1, "unit_name": "新名称"}}
-    with (
-        patch(
-            "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
-            return_value=False,
-        ),
-        patch.object(customer_routes, "_customers_write_raise"),
-        patch.object(
-            customer_routes,
-            "_customer_body_name_contact",
-            return_value=("新名称", "张三", "13900000000", "上海"),
-        ),
-        patch("app.application.get_customer_app_service", return_value=service),
-    ):
-        r = customer_client.put("/customers/1", json={"unit_name": "新名称"})
-    assert r.status_code == 200
-    assert r.json()["data"]["unit_name"] == "新名称"
-    assert r.json()["success"] is False
-    assert r.json()["error_code"] == "result_verification_inconclusive"
-    service.update.assert_called_once_with(
+def test_customers_update_normalizes_fields_for_the_shared_entry(monkeypatch) -> None:
+    from starlette.requests import Request
+
+    request = Request({"type": "http", "method": "PUT", "path": "/customers/1", "headers": []})
+    entry = MagicMock(return_value=({"success": False, "state": "waiting_approval"}, 202))
+    monkeypatch.setattr(customer_routes, "_run_customers_agent", entry)
+    response = customer_routes.customers_update(
+        request,
         1,
         {
-            "customer_name": "新名称",
+            "unit_name": "新名称",
             "contact_person": "张三",
-            "contact_phone": "13900000000",
+            "contact_phone": "",
+            "address": "上海",
+        },
+    )
+    assert response.status_code == 202
+    entry.assert_called_once_with(
+        request=request,
+        action="update",
+        route_path="/customers/{customer_id}",
+        params={
+            "id": 1,
+            "customer_name": "新名称",
+            "unit_name": "新名称",
+            "contact_person": "张三",
+            "contact_phone": "",
             "contact_address": "上海",
         },
     )
+
+
+@pytest.fixture
+def approved_owned_customers(monkeypatch, tmp_path, trusted_actor, capability_runs, local_tools):
+    """Use real owned rows and grants across the HTTP/canonical capability boundary."""
+    actor = trusted_actor(tenant_id=7, role="admin")
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "customer-claims.sqlite"))
+    monkeypatch.setattr("app.application.customer_app_service.get_customers_session", actor.factory)
+    app = FastAPI()
+    app.state.agent_runs = capability_runs
+    app.include_router(customer_routes.router)
+    raw_client = TestClient(app, raise_server_exceptions=False)
+    return (
+        ApprovedCapabilityClient(raw_client, capability_runs, actor),
+        actor,
+        capability_runs,
+    )
+
+
+def test_customers_create_owned_row_after_approval_and_read_original_receipt(
+    approved_owned_customers,
+) -> None:
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    client, actor, repository = approved_owned_customers
+    body = {"unit_name": "Owned customer", "contact_phone": "13900000000"}
+    headers = {"Idempotency-Key": "owned-customer-create"}
+    response = client.post("/customers", json=body, headers=headers)
+    assert response.status_code == 200, response.text
+    receipt = response.json()
+    assert receipt["success"] is True
+    run = repository.get(receipt["run_id"])
+    assert run.status == "completed" and len(run.tool_calls) == 1
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is True
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        row = db.query(PurchaseUnit).filter_by(unit_name="Owned customer").one()
+        assert row.tenant_id == actor.tenant_id
+        assert row.contact_phone == body["contact_phone"]
+        customer_id = row.id
+    repeated = client.post("/customers", json=body, headers=headers)
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["run_id"] == run.run_id
+    assert len(repository.get(run.run_id).tool_calls) == 1
+    conflict = client.post("/customers", json={**body, "contact_phone": "changed"}, headers=headers)
+    assert conflict.status_code == 409, conflict.text
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        assert db.query(PurchaseUnit).filter_by(unit_name="Owned customer").count() == 1
+        assert db.get(PurchaseUnit, customer_id).contact_phone == body["contact_phone"]
+
+
+def test_customers_update_owned_row_preserves_version_and_foreign_rows(
+    approved_owned_customers,
+) -> None:
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    client, actor, repository = approved_owned_customers
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        owned = PurchaseUnit(tenant_id=actor.tenant_id, unit_name="Owned before")
+        db.add(owned)
+        db.flush()
+        owned_id, original_version = owned.id, owned.version
+    with tenant_scope(actor.tenant_id + 1), actor.factory.begin() as db:
+        foreign = PurchaseUnit(tenant_id=actor.tenant_id + 1, unit_name="Foreign before")
+        db.add(foreign)
+        db.flush()
+        foreign_id = foreign.id
+    body = {"unit_name": "Owned after", "expected_version": original_version}
+    headers = {"Idempotency-Key": "owned-customer-update"}
+    response = client.put(f"/customers/{owned_id}", json=body, headers=headers)
+    assert response.status_code == 200, response.text
+    run = repository.get(response.json()["run_id"])
+    assert run.steps[0].params["expected_version"] == original_version
+    assert run.status == "completed" and len(run.tool_calls) == 1
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is True
+    repeated = client.put(f"/customers/{owned_id}", json=body, headers=headers)
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["run_id"] == run.run_id
+    stale = client.put(
+        f"/customers/{owned_id}",
+        json={"unit_name": "Stale overwrite", "expected_version": original_version},
+        headers={"Idempotency-Key": "owned-stale-update"},
+    )
+    assert stale.status_code == 202, stale.text
+    assert stale.json()["success"] is False
+    assert stale.json()["error_code"] == "version_conflict"
+    assert stale.json()["retryable"] is False
+    foreign_response = client.put(
+        f"/customers/{foreign_id}",
+        json={"unit_name": "Foreign overwrite", "expected_version": original_version},
+        headers={"Idempotency-Key": "owned-foreign-update"},
+    )
+    assert foreign_response.status_code == 202, foreign_response.text
+    assert foreign_response.json()["success"] is False
+    assert foreign_response.json()["retryable"] is False
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        saved = db.get(PurchaseUnit, owned_id)
+        assert saved.unit_name == "Owned after" and saved.version == original_version + 1
+    with tenant_scope(actor.tenant_id + 1), actor.factory() as db:
+        assert db.get(PurchaseUnit, foreign_id).unit_name == "Foreign before"
+    assert len(repository.get(run.run_id).tool_calls) == 1
 
 
 def test_customers_delete_default_path(
@@ -584,23 +740,22 @@ def test_customers_delete_default_path(
     actor = trusted_actor(tenant_id=7, role="admin")
     customer_client.headers.update(actor.headers)
     service = MagicMock()
-    service.batch_delete.return_value = {"success": True, "deleted_count": 1, "message": "已删除"}
+    service.batch_delete.return_value = {
+        "success": True,
+        "deleted_count": 1,
+        "message": "已删除",
+    }
     with (
         patch(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
             return_value=False,
         ),
-        patch.object(customer_routes, "_customers_write_raise"),
         patch("app.application.get_customer_app_service", return_value=service),
     ):
         r = customer_client.delete("/customers/2")
-    assert r.status_code == 200
-    assert r.json()["success"] is False
-    assert r.json()["error_code"] == "result_verification_inconclusive"
-    assert r.json()["retryable"] is False
-    assert r.json()["deleted_count"] == 1
-    service.batch_delete.assert_called_once()
-    assert service.batch_delete.call_args.args[0] == [2]
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False and r.json()["approval_request_id"]
+    service.batch_delete.assert_not_called()
 
 
 def test_customers_batch_delete_rejects_invalid_atomically(
@@ -610,7 +765,6 @@ def test_customers_batch_delete_rejects_invalid_atomically(
     customer_client.headers.update(actor.headers)
     service = MagicMock()
     with (
-        patch.object(customer_routes, "_customers_write_raise"),
         patch("app.application.get_customer_app_service", return_value=service),
     ):
         body = customer_client.post(
@@ -623,8 +777,7 @@ def test_customers_batch_delete_rejects_invalid_atomically(
 
 
 def test_customers_batch_delete_empty_ids_400(customer_client: TestClient) -> None:
-    with patch.object(customer_routes, "_customers_write_raise"):
-        r = customer_client.post("/customers/batch-delete", json={"ids": []})
+    r = customer_client.post("/customers/batch-delete", json={"ids": []})
     assert r.status_code == 400
 
 
@@ -684,7 +837,11 @@ def test_purchase_inbounds_order_filter(
 
 
 def test_purchase_approve_custom_approver(
-    purchase_client: TestClient, mock_purchase_svc: MagicMock, local_tools, trusted_actor
+    purchase_client: TestClient,
+    mock_purchase_svc: MagicMock,
+    local_tools,
+    capability_runs,
+    trusted_actor,
 ) -> None:
     actor = trusted_actor(role="admin")
     purchase_client.headers.update(actor.headers)
@@ -692,10 +849,10 @@ def test_purchase_approve_custom_approver(
         "/api/purchase/orders/5/approve",
         params={"approver": "manager-p54"},
     )
-    assert r.status_code == 200
-    assert r.json()["success"] is False
-    assert r.json()["error_code"] == "result_verification_inconclusive"
-    mock_purchase_svc.approve_purchase_order.assert_called_once_with(5, "manager-p54")
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False and r.json()["approval_request_id"]
+    assert capability_runs.get(r.json()["run_id"]).steps[0].params["approver"] == "manager-p54"
+    mock_purchase_svc.approve_purchase_order.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -796,7 +953,11 @@ def test_report_inventory_transactions_filters(
 def test_report_purchase_date_range(report_client: TestClient, mock_report_svc: MagicMock) -> None:
     r = report_client.get(
         "/api/report/purchase",
-        params={"start_date": "2026-04-01", "end_date": "2026-04-30", "group_by": "month"},
+        params={
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-30",
+            "group_by": "month",
+        },
     )
     assert r.status_code == 200
     assert mock_report_svc.get_purchase_report.call_args.kwargs["group_by"] == "month"

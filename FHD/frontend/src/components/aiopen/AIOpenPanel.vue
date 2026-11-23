@@ -159,6 +159,7 @@
               <button class="btn btn-primary btn-sm" type="button" :disabled="openclawSending" @click="sendToOpenclaw">发送</button>
             </div>
             <div class="aiopen-result">{{ openclawResult }}</div>
+            <a v-if="openclawTaskId" :href="`/workspaces/${encodeURIComponent(openclawTaskId)}`">查看任务与审批</a>
             <div class="aiopen-row aiopen-row-auth">
               <select v-model="openclawWsAuthMode" class="aiopen-select">
                 <option value="token">token</option>
@@ -267,6 +268,7 @@ const {
   openclawWsUrl,
   openclawWsAuthMode,
   openclawGatewayToken,
+  openclawTaskId,
   wsConnected,
   wsConnecting,
   wsStatusText,

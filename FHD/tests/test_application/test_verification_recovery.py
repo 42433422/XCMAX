@@ -702,3 +702,129 @@ def test_api_mixed_receipts_only_observes_completed_action_without_requeue(api, 
     assert safe_continuation_error(result) == ""
     assert len(readback) == 1
     assert not queued
+
+
+@pytest.mark.parametrize("storage", ["sql", "memory"])
+@pytest.mark.parametrize("effect", ["original_step", "unbound_dispatch"])
+@pytest.mark.parametrize("acknowledged_pending", [False, True])
+@pytest.mark.parametrize("run_state", ["running", "blocked"])
+def test_unknown_queue_settles_only_exact_verified_pending_effects(
+    tmp_path, monkeypatch, readback, storage, effect, acknowledged_pending, run_state
+):
+    from app.application.agent_orchestrator import run_repository, task_execution_repository
+    from app.domain.task_lifecycle.adapters import execution_requeue_allowed
+
+    engine = None
+    if storage == "sql":
+        engine = create_engine(f"sqlite:///{tmp_path / 'settlement.sqlite'}")
+        factory = sessionmaker(bind=engine)
+        repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+        queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    else:
+        repository = InMemoryAgentRunRepository()
+        queue = task_execution_repository.InMemoryTaskExecutionRepository()
+        monkeypatch.setattr(run_repository, "get_agent_run_repository", lambda: repository)
+        monkeypatch.setattr(
+            task_execution_repository, "get_task_execution_repository", lambda: queue
+        )
+    run = _run(status=run_state)
+    run.metadata["execution"] = {"state": "active" if run_state == "running" else "idle"}
+    if acknowledged_pending:
+        run.steps[0].output = {
+            "success": False,
+            "execution_state": "pending",
+            "request_id": "original",
+        }
+        run.tool_calls[0].output = copy.deepcopy(run.steps[0].output)
+        spec = ToolActionSpecV2(
+            tool_id=run.steps[0].tool_id,
+            action=run.steps[0].action,
+            read_only=True,
+            idempotent=True,
+            output_schema={
+                "type": "object",
+                "required": ["success"],
+                "properties": {"success": {"type": "boolean"}},
+            },
+        )
+        freeze_verification_contract(
+            run, run.steps[0], run.tool_calls[0], spec, run.metadata["runtime_context"]
+        )
+        bind_execution_receipt(run.tool_calls[0])
+        run.metadata.update(non_retryable=True, recovery={"state": "result_pending"})
+    repository.save(run)
+    queue.enqueue(run)
+    queue.claim("old-worker", lease_seconds=60)
+    key = run.steps[0].step_id if effect == "original_step" else "unbound-dispatch"
+    queue.mark_open_effect(run.run_id, key)
+    queue.finish(run.run_id, "old-worker", "failed", error_code="needs_verification")
+    before = queue.get(run.run_id)
+    assert before.state == "unknown"
+    original = repository.get(run.run_id)
+    try:
+        result = reverify_run(repository, run.run_id)
+        after = queue.get(run.run_id)
+        assert result.run_id == run.run_id
+        assert result.steps[0].attempt_count == 1
+        assert result.tool_calls[0].call_id == original.tool_calls[0].call_id
+        assert result.tool_calls[0].output == original.tool_calls[0].output
+        assert after.execution_count == before.execution_count
+        assert len(readback) == 1
+        if effect == "original_step" and (acknowledged_pending or run_state == "blocked"):
+            assert after.state == "blocked"
+            assert after.last_error_code == "result_verified"
+            assert queue.lifecycle(run.run_id)["effects"] == []
+            assert verification_can_finalize(result)
+            assert execution_requeue_allowed(after.state)
+        else:
+            assert after.state == "unknown"
+            assert queue.lifecycle(run.run_id)["effects"] == [key]
+            assert not verification_can_finalize(result)
+            assert not execution_requeue_allowed(after.state, retryable=True)
+    finally:
+        if engine is not None:
+            engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "unsettled", ["reserved", "unknown_model", "model_reconciliation", "non_retryable"]
+)
+def test_completed_receipt_readback_keeps_unsettled_costs_and_effects(
+    tmp_path, readback, unsettled
+):
+    engine = create_engine(f"sqlite:///{tmp_path / 'unsettled.sqlite'}")
+    factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    run = _run()
+    if unsettled == "reserved":
+        run.metadata["reserved_cost_units"] = 3
+    elif unsettled == "unknown_model":
+        run.metadata["codex_runtime"] = {"model_requests": {"original": {"state": "unknown"}}}
+    elif unsettled == "model_reconciliation":
+        run.metadata["codex_runtime"] = {"model_reconciliation_required": True}
+    else:
+        run.metadata["non_retryable"] = True
+        run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
+    repository.save(run)
+    queue.enqueue(run)
+    queue.claim("old-worker", lease_seconds=60)
+    queue.mark_open_effect(run.run_id, run.steps[0].step_id)
+    queue.finish(run.run_id, "old-worker", "blocked")
+    original_queue = queue.get(run.run_id).to_dict()
+    original_effects = queue.lifecycle(run.run_id)
+    original = repository.get(run.run_id)
+    try:
+        result = reverify_run(repository, run.run_id, require_stopped_queue=True)
+        assert result.metadata["verification"]["accepted"] is True
+        assert not verification_can_finalize(result)
+        assert result.tool_calls[0].output == original.tool_calls[0].output
+        assert result.tool_calls[0].cost_units == original.tool_calls[0].cost_units
+        assert result.steps[0].attempt_count == 1
+        assert queue.get(run.run_id).to_dict() == original_queue
+        assert queue.lifecycle(run.run_id) == original_effects
+        for key in ("reserved_cost_units", "codex_runtime", "non_retryable", "recovery"):
+            assert result.metadata.get(key) == original.metadata.get(key)
+        assert len(readback) == 1
+    finally:
+        engine.dispose()

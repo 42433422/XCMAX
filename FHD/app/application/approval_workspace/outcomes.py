@@ -102,7 +102,9 @@ def run_execution_receipt(run: Any) -> JsonObject:
     }
     success = state == "completed"
     code, message = canonical_workflow_outcome(success=success)
-    if state == "unknown":
+    if preflight_rejected:
+        message = str(getattr(run, "error", "") or message)
+    elif state == "unknown":
         code, message = (
             "outcome_unknown",
             "业务结果尚未确认；请核对原任务，勿重复提交。",
@@ -126,6 +128,7 @@ def run_execution_receipt(run: Any) -> JsonObject:
         "message": message,
         "nodes_executed": len([step for step in run.steps if step.status == "completed"]),
         "nodes_total": len(run.steps),
+        **({"execution_started": False} if preflight_rejected else {}),
         **({"requires_reconciliation": True, "retryable": False} if unknown else {}),
     }
 

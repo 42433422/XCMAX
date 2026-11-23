@@ -31,6 +31,9 @@ from pathlib import Path
 # 脚本在 FHD/scripts/dev/ 下 → parents[3] = XCMAX/（仓根）
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FHD_ROOT = REPO_ROOT / "FHD"
+sys.path.insert(0, str(FHD_ROOT))
+
+from scripts.dev.benchmark_evidence import recorded_provenance
 
 METRICS_DIR = FHD_ROOT / "metrics"
 OUTPUT_DOC = FHD_ROOT / "docs" / "CLAIMED_VS_ACTUAL.md"
@@ -100,15 +103,6 @@ def _fail_under_from_pyproject() -> int | None:
     return None
 
 
-def _status_for(actual: float, floor: float | None, target: float | None) -> str:
-    """actual>=target 🟢 / floor<=actual<target 🟡 / actual<floor 🔴。"""
-    if target is not None and actual >= target:
-        return ST_GREEN
-    if floor is not None and actual >= floor:
-        return ST_YELLOW
-    return ST_RED
-
-
 def _fmt_pct(v) -> str:
     if v is None:
         return "n/a"
@@ -165,81 +159,49 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
 
     rows: list[list[str]] = []
 
-    # --- 覆盖率：后端行 ---
-    be_line = head.get("backend_line_pct")
-    be_line_floor = floors.get("backend_line")
-    be_line_target = targets.get("backend_line_pct")
-    if be_line is not None:
-        rows.append(
-            [
-                "后端行覆盖率",
-                f"≥{_fmt_pct(be_line_target)}（目标）",
-                _fmt_pct(be_line),
-                "coverage-dual-summary.json#committed_head.backend_line_pct",
-                _status_for(be_line, be_line_floor, be_line_target),
-            ]
-        )
+    provenance = recorded_provenance(head)
+    rows.append(
+        [
+            "覆盖率证据范围",
+            "当前版本需独立验证",
+            f"采集 {provenance['captured_at'] or '未知'} / 来源 SHA {provenance['source_sha'] or '未知'}；"
+            "仅该采样版本，本版未验证",
+            "coverage-dual-summary.json#committed_head",
+            ST_YELLOW,
+        ]
+    )
+    for label, field, threshold, kind in (
+        ("后端行", "backend_line_pct", targets.get("backend_line_pct"), "目标"),
+        ("后端分支", "backend_branch_pct", targets.get("backend_branch_pct"), "目标"),
+        ("前端行", "frontend_line_pct", targets.get("frontend_line_pct"), "目标"),
+        ("前端分支", "frontend_branch_pct", targets.get("frontend_branch_pct"), "目标"),
+        ("前端函数", "frontend_function_pct", floors.get("frontend_functions"), "floor"),
+    ):
+        if head.get(field) is not None:
+            rows.append(
+                [
+                    f"{label}覆盖率（历史样本）",
+                    f"≥{_fmt_pct(threshold)}（{kind}）",
+                    _fmt_pct(head[field]),
+                    f"coverage-dual-summary.json#committed_head.{field}",
+                    ST_YELLOW,
+                ]
+            )
 
-    # --- 后端分支 ---
-    be_branch = head.get("backend_branch_pct")
-    if be_branch is not None:
-        rows.append(
-            [
-                "后端分支覆盖率",
-                f"≥{_fmt_pct(targets.get('backend_branch_pct'))}（目标）",
-                _fmt_pct(be_branch),
-                "coverage-dual-summary.json#committed_head.backend_branch_pct",
-                _status_for(
-                    be_branch, floors.get("backend_branch"), targets.get("backend_branch_pct")
-                ),
-            ]
-        )
-
-    # --- 前端行 ---
-    fe_line = head.get("frontend_line_pct")
-    if fe_line is not None:
-        rows.append(
-            [
-                "前端行覆盖率",
-                f"≥{_fmt_pct(targets.get('frontend_line_pct'))}（目标）",
-                _fmt_pct(fe_line),
-                "coverage-dual-summary.json#committed_head.frontend_line_pct",
-                _status_for(
-                    fe_line, floors.get("frontend_lines"), targets.get("frontend_line_pct")
-                ),
-            ]
-        )
-
-    # --- 前端分支 ---
-    fe_branch = head.get("frontend_branch_pct")
-    if fe_branch is not None:
-        rows.append(
-            [
-                "前端分支覆盖率",
-                f"≥{_fmt_pct(targets.get('frontend_branch_pct'))}（目标）",
-                _fmt_pct(fe_branch),
-                "coverage-dual-summary.json#committed_head.frontend_branch_pct",
-                _status_for(
-                    fe_branch, floors.get("frontend_branches"), targets.get("frontend_branch_pct")
-                ),
-            ]
-        )
-
-    # --- 前端函数 ---
-    fe_func = head.get("frontend_function_pct")
-    if fe_func is not None:
-        fe_func_floor = floors.get("frontend_functions")
-        # 无独立 target，复用 floor 作为达标线
-        status = ST_GREEN if (fe_func_floor is not None and fe_func >= fe_func_floor) else ST_RED
-        rows.append(
-            [
-                "前端函数覆盖率",
-                f"≥{_fmt_pct(fe_func_floor)}（floor）",
-                _fmt_pct(fe_func),
-                "coverage-dual-summary.json#committed_head.frontend_function_pct",
-                status,
-            ]
-        )
+    benchmark = _read_json(METRICS_DIR / "benchmark_run_mode.json")
+    provenance = recorded_provenance(benchmark)
+    rows.append(
+        [
+            "真实模型任务验收",
+            "当前版本需绑定 SHA 与原始任务凭据",
+            f"本版未验证；历史状态 {benchmark.get('status', '未知')} / "
+            f"模型实测标记 {benchmark.get('llm_verified', '未知')} / "
+            f"采集 {provenance['captured_at'] or '未知'} / 来源 SHA {provenance['source_sha'] or '未知'}；"
+            f"{benchmark.get('reason', '单独的模式标记不替代原始任务验收')}",
+            "benchmark_run_mode.json",
+            ST_YELLOW,
+        ]
+    )
 
     # --- pyproject fail_under 交叉校验后端行 floor ---
     be_line_floor_val = floors.get("backend_line")
@@ -262,13 +224,11 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
         if hist_be is not None:
             rows.append(
                 [
-                    f"覆盖率趋势（最新 {hist_date}）",
-                    "趋势上行",
+                    f"覆盖率趋势（历史 {hist_date}）",
+                    "保留历史采样，不代表当前版本",
                     f"后端行 {hist_be}% / 前端行 {hist.get('frontend_lines')}%",
                     "coverage-history.jsonl（最后一行）",
-                    _status_for(hist_be, be_line_floor_val, None)
-                    if be_line_floor_val
-                    else ST_GREEN,
+                    ST_YELLOW,
                 ]
             )
 
@@ -389,6 +349,7 @@ def render_doc() -> str:
         "> 本文为「对外声称 vs 实测」对照的**单一事实来源（SSOT）**，"
         "由 `scripts/dev/gen_claimed_vs_actual.py` 从 `metrics/` 自动汇编。"
         "覆盖率唯一数字 SSOT 见 [`metrics/coverage-dual-summary.json`](../metrics/coverage-dual-summary.json)。"
+        "生成时间只表示汇编时间；采样版本和日期取自原始凭据，不能作为当前 HEAD 的测试结果。"
     )
     parts.append("")
     parts.append("## 声称 vs 实测对照表")

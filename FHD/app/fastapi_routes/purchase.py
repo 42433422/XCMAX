@@ -2,7 +2,7 @@
 采购管理 API 路由
 
 来源：从 legacy_inventory.py 中 /api/purchase/* 端点迁出。
-读取端点复用 inventory facade 暴露的 PurchaseService；写入端点通过 AgentOrchestrator
+读取端点复用 inventory facade 暴露的 PurchaseService；写入端点通过统一能力入口
 进入 purchase.* ToolSpecV2 工具后再调用同一服务，不再保留平行 ``*_v2`` 应用服务。
 
 覆盖：
@@ -19,9 +19,9 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, Query, Request
+from fastapi.responses import JSONResponse
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
 logger = logging.getLogger(__name__)
 
@@ -40,69 +40,13 @@ def _run_purchase_agent(
     action: str,
     params: dict[str, Any],
     route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("purchase") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 purchase 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    params = {key: value for key, value in params.items() if key not in {"tenant_id", "tenantId"}}
-    node_id = f"purchase_{action}"
-    runtime_context = request_runtime_context(
-        request,
-        {
-            "source": "purchase_route",
-            "route": route_path,
-            "request_path": str(request.url.path),
-            "route_confirmed": True,
-            "service_source": "fastapi_purchase_route",
-        },
+) -> JSONResponse:
+    result, status = run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "purchase", "action": action, "params": params},
+        route_path=route_path,
     )
-    user_id = str(runtime_context["user_id"])
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 purchase.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="purchase",
-                action=action,
-                params=dict(params or {}),
-                risk=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute purchase.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-        metadata={"source": "purchase_route", "route": route_path},
-    )
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Purchase {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id,
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
+    return JSONResponse(result, status_code=status)
 
 
 # ──────────────────────────── 供应商 ────────────────────────────

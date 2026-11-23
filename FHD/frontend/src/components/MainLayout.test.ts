@@ -11,7 +11,7 @@ vi.mock('./Sidebar.vue', () => ({
     template: `
       <nav class="sidebar-stub">
         <button class="sidebar-chat" type="button" @click="$emit('change-view', 'chat')">智能对话</button>
-        <button class="sidebar-workflow" type="button" @click="$emit('change-view', 'employee-workflow')">员工工作台</button>
+        <button class="sidebar-workflow" type="button" @click="$emit('change-view', 'employee-workflow')">编制工作台</button>
       </nav>
     `,
     props: ['activeView'],

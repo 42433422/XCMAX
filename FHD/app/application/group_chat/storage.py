@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import base64
-import contextlib
 import hashlib
 import json
 import os
 import secrets
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -187,7 +187,7 @@ class GroupChatRepository:
         return rows
 
     @staticmethod
-    def message_cipher(*, data_dir: str | None = None) -> Fernet:
+    def message_cipher(*, data_dir: str | None = None, require_persistent: bool = False) -> Fernet:
         secret = (
             os.environ.get("SECRET_KEY", "").strip()
             or os.environ.get("XCAGI_SECRET_KEY", "").strip()
@@ -208,8 +208,12 @@ class GroupChatRepository:
                 "on",
             }
             if data_dir:
-                secret = GroupChatRepository.desktop_data_dir_secret(data_dir)
-            elif desktop:
+                secret = (
+                    GroupChatRepository.desktop_data_dir_secret(data_dir, require_persistent=True)
+                    if require_persistent
+                    else GroupChatRepository.desktop_data_dir_secret(data_dir)
+                )
+            elif desktop and not require_persistent:
                 secret = GroupChatRepository.process_local_secret()
             else:
                 raise RuntimeError("SECRET_KEY is required for encrypted AI group-chat storage")
@@ -217,7 +221,7 @@ class GroupChatRepository:
         return Fernet(base64.urlsafe_b64encode(digest))
 
     @staticmethod
-    def desktop_data_dir_secret(data_dir: str) -> str:
+    def desktop_data_dir_secret(data_dir: str, *, require_persistent: bool = False) -> str:
         """从数据目录读取/生成持久化随机密钥（0600）。
 
         2026-08-01 前使用「可预测派生密钥」（data_dir 路径字面量 sha256），任何能猜到
@@ -230,13 +234,29 @@ class GroupChatRepository:
                 existing = key_path.read_text(encoding="utf-8").strip()
                 if existing:
                     return existing
+            for path in key_path.parent.glob("*.json"):
+                with path.open("rb") as stream:
+                    if stream.read(7) in {b"enc:v1:", b"fernet:"}:
+                        raise RuntimeError(
+                            "Existing encrypted conversations require their original key"
+                        )
             key_path.parent.mkdir(parents=True, exist_ok=True)
             generated = secrets.token_urlsafe(32)
-            key_path.write_text(generated + "\n", encoding="utf-8")
-            with contextlib.suppress(OSError):
-                os.chmod(key_path, 384)
+            # Dialogue callers hold their shared key lock. mkstemp creates mode
+            # 0600 before any secret bytes are written or published.
+            fd, temporary = tempfile.mkstemp(dir=key_path.parent, prefix=key_path.name)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    stream.write(generated + "\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, key_path)
+            finally:
+                Path(temporary).unlink(missing_ok=True)
             return generated
         except OSError:
+            if require_persistent:
+                raise
             return GroupChatRepository.process_local_secret()
 
     @classmethod

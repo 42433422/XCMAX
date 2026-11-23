@@ -1164,6 +1164,7 @@ def test_approved_elt_revision_cannot_follow_a_changed_preview(elt_runtime):
 def test_legacy_approved_unversioned_elt_task_is_blocked_without_rewriting_params(
     elt_runtime, monkeypatch
 ):
+    from app.application import capability_catalog
     from app.application.agent_orchestrator import tool_spec
     from app.db.models import ShipmentRecord
 
@@ -1178,9 +1179,15 @@ def test_legacy_approved_unversioned_elt_task_is_blocked_without_rewriting_param
     def old_spec(tool, action):
         return legacy if (tool, action) == ("elt_import", "execute") else original(tool, action)
 
+    original_catalog = capability_catalog.build_tool_specs_v2
+
+    def old_catalog():
+        return {**original_catalog(), ("elt_import", "execute"): legacy}
+
     params = {"run_id": preview["id"], "accept_suggested": True}
     with monkeypatch.context() as old_deployment:
         old_deployment.setattr(tool_spec, "get_tool_action_spec", old_spec)
+        old_deployment.setattr(capability_catalog, "build_tool_specs_v2", old_catalog)
         old_deployment.setattr("app.infrastructure.codex.tools.get_tool_action_spec", old_spec)
         pending = state.execute("legacy", "elt_import", "execute", params)
 

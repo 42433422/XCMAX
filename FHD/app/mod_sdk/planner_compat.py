@@ -62,10 +62,11 @@ def intent_test(body: dict[str, Any] | None) -> dict[str, Any] | JSONResponse:
         )
 
 
-def list_planner_tools_registry() -> dict[str, Any]:
+def list_planner_tools_registry(request: Request) -> dict[str, Any]:
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
     from app.mod_sdk.planner_tools import list_planner_tools_registry_detail
 
-    return list_planner_tools_registry_detail()
+    return list_planner_tools_registry_detail(request_runtime_context(request))
 
 
 def run_planner_tool_agent(
@@ -77,19 +78,11 @@ def run_planner_tool_agent(
     return run_tools_execute_agent(request=request, body=body, route_path=route_path)
 
 
-def execute_planner_tool(body: dict[str, Any] | None) -> dict[str, Any]:
-    from app.mod_sdk.planner_tools import execute_planner_tool_from_body
-
-    return execute_planner_tool_from_body(body)
-
-
-def execute_planner_tool_request(
+def execute_planner_tool_for_request(
     request: Request, body: dict[str, Any] | None
 ) -> tuple[dict[str, Any], int]:
-    """Keep Mod HTTP execution on the host's authenticated original-task boundary."""
-    from app.fastapi_routes.tools_execute import run_tools_execute_agent
-
-    return run_tools_execute_agent(
+    """Carry the authenticated Mod request into the host's canonical tool entry."""
+    return run_planner_tool_agent(
         request=request, body=body or {}, route_path=str(request.url.path)
     )
 
@@ -104,7 +97,6 @@ __all__ = [
     "compat_chat_stream_async",
     "intent_test",
     "list_planner_tools_registry",
-    "execute_planner_tool",
+    "execute_planner_tool_for_request",
     "run_planner_tool_agent",
-    "execute_planner_tool_request",
 ]

@@ -1,7 +1,6 @@
 """employee_runtime.tool_scope 能力→工具作用域派生单元测试。
 
-策略：_base_tool_specs 读全局 workflow 工具注册表（I/O 边界），用 monkeypatch 注入
-可控 fake base，专注验证选择逻辑（铁律4 只 mock 边界）。helpers 直接测，无需 mock。
+纯策略直接校验；模型目录使用真实登录身份与权威 ToolSpec，防止跨账号缓存和别名扩权。
 """
 
 from __future__ import annotations
@@ -9,25 +8,7 @@ from __future__ import annotations
 import pytest
 
 from app.application.employee_runtime import tool_scope as ts
-
-FAKE_BASE = {
-    name: {"function": {"name": name}}
-    for name in (
-        "excel_analysis",
-        "excel_schema_understand",
-        "excel_join_compare",
-        "excel_chart_recommend",
-        "generate_office_document",
-        "import_excel_to_database",
-        "products_bulk_import",
-    )
-}
-
-
-@pytest.fixture
-def fake_base(monkeypatch):
-    monkeypatch.setattr(ts, "_base_tool_specs", lambda: dict(FAKE_BASE))
-    return FAKE_BASE
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 class TestExplicitAllowlist:
@@ -104,84 +85,79 @@ class TestIsReadOnly:
 
 
 class TestResolveEmployeeTools:
-    def test_explicit_allowlist_cannot_override_readonly(self, fake_base):
+    def test_requires_real_runtime_actor(self):
+        assert ts.resolve_employee_tools("e", {}, {"tools": ["business_db"]}) == []
+        assert (
+            ts.resolve_employee_tools(
+                "e", {}, {"tools": ["business_db"]}, {"user_id": "1", "tenant_id": "1"}
+            )
+            == []
+        )
+
+    def test_canonical_allowlist_cannot_expand_account_grants(self, trusted_actor):
+        actor = trusted_actor(permissions=["customer.view"])
+        config = {"tools": ["business_db", "customers", "nonexistent"]}
+        names = ts.employee_tool_names("e", {}, config, actor.context)
+        assert names == ["business_db.read", "customers.query"]
+        definition = ts.resolve_employee_tools("e", {}, config, actor.context)[0]
+        branch = definition["function"]["parameters"]["anyOf"][0]
+        assert branch["properties"]["params"]["properties"]["entity"]["enum"] == ["customers"]
+
+    def test_explicit_action_and_readonly_restrict_same_authority(self, trusted_actor):
+        actor = trusted_actor(role="admin", tier="admin")
         config = {
             "tools": [
-                "excel_analysis",
-                "import_excel_to_database",
-                "products_bulk_import",
+                "excel_analysis.read",
+                "excel_analysis.export",
+                "excel_toolkit.view",
+                "generate_office_document",
+                "employee",
             ],
             "workspace_policy": {"read_only": True},
         }
-        assert ts.employee_tool_names("e", {}, config) == ["excel_analysis"]
+        assert ts.employee_tool_names("e", {}, config, actor.context) == [
+            "excel_analysis.read",
+            "excel_toolkit.view",
+        ]
 
-    def test_lifecycle_tools_cannot_override_readonly(self, monkeypatch, fake_base):
+    def test_empty_or_unknown_allowlist_cannot_gain_tools(self, trusted_actor):
+        actor = trusted_actor(role="admin", tier="admin")
+        for allow in ([], ["business_db_read", "products_bulk_import", "excel_chart_recommend"]):
+            assert ts.resolve_employee_tools("e", {}, {"tools": allow}, actor.context) == []
+
+    def test_excel_keyword_selects_only_registered_readonly_actions(self, trusted_actor):
+        actor = trusted_actor(role="admin", tier="admin")
+        names = ts.employee_tool_names(
+            "e",
+            {"employee": {"capabilities": ["Excel 数据分析"]}},
+            {"workspace_policy": {"read_only": True}},
+            actor.context,
+        )
+        assert set(names) == {
+            "excel_analysis.read",
+            "excel_analysis.query",
+            "excel_analysis.statistics",
+            "excel_analysis.structure",
+            "excel_analysis.aggregate",
+            "excel_join_compare.join",
+            "excel_join_compare.diff",
+        }
+
+    def test_unregistered_lifecycle_tools_do_not_expand_model_contract(
+        self, monkeypatch, trusted_actor
+    ):
         from app.application import agent_tool_lifecycle
 
+        actor = trusted_actor(permissions=["customer.view"])
         monkeypatch.setattr(
             agent_tool_lifecycle,
-            "discovery_for_runtime",
-            lambda *_: [FAKE_BASE["products_bulk_import"]],
+            "discovery",
+            lambda *_: [{"function": {"name": "private_tool"}}],
         )
-        config = {
-            "tools": ["excel_analysis", "products_bulk_import"],
-            "workspace_policy": {"read_only": True},
-        }
-        monkeypatch.setattr(
-            ts,
-            "_base_tool_specs",
-            lambda: {"excel_analysis": FAKE_BASE["excel_analysis"]},
+        names = ts.employee_tool_names(
+            "e",
+            {},
+            {"tools": ["business_db", "private_tool"]},
+            actor.context,
         )
-        assert ts.employee_tool_names("e", {}, config) == ["excel_analysis"]
-
-    def test_empty_base_denies_tools(self, monkeypatch):
-        monkeypatch.setattr(ts, "_base_tool_specs", lambda: {})
-        assert ts.resolve_employee_tools("e", {}, {}) == []
-
-    def test_explicit_allowlist_filtered_to_base(self, fake_base):
-        specs = ts.resolve_employee_tools("e", {}, {"tools": ["excel_analysis", "nonexistent"]})
-        names = [s["function"]["name"] for s in specs]
-        assert names == ["excel_analysis"]
-
-    def test_unknown_allowlist_denies_tools(self, fake_base):
-        assert ts.resolve_employee_tools("e", {}, {"tools": ["nope"]}) == []
-
-    def test_excel_keyword_selects_read_tools(self, fake_base):
-        manifest = {"employee": {"capabilities": ["Excel 数据分析"]}}
-        names = ts.employee_tool_names("e", manifest, {})
-        assert "excel_analysis" in names
-
-    def test_chart_keyword_selects_chart_tool(self, fake_base):
-        manifest = {"employee": {"capabilities": ["图表可视化"]}}
-        names = ts.employee_tool_names("e", manifest, {})
-        assert "excel_chart_recommend" in names
-
-    def test_doc_keyword_selects_doc_tool(self, fake_base):
-        manifest = {"employee": {"capabilities": ["报告文档生成"]}}
-        names = ts.employee_tool_names("e", manifest, {})
-        assert "generate_office_document" in names
-
-    def test_import_keyword_not_readonly_selects_write(self, fake_base):
-        manifest = {"employee": {"capabilities": ["批量导入入库"]}}
-        names = ts.employee_tool_names("e", manifest, {})
-        assert "import_excel_to_database" in names
-        assert "products_bulk_import" not in names
-
-    def test_import_keyword_readonly_excludes_write(self, fake_base):
-        manifest = {
-            "employee": {"capabilities": ["批量导入"]},
-            "employee_config_v2": {"workspace_policy": {"read_only": True}},
-        }
-        names = ts.employee_tool_names("e", manifest, {})
-        assert "import_excel_to_database" not in names
-        assert "products_bulk_import" not in names
-
-    def test_no_keywords_uses_fallback(self, fake_base):
-        names = ts.employee_tool_names("e", {"employee": {"capabilities": ["无关词"]}}, {})
-        assert "excel_analysis" in names
-        assert "excel_schema_understand" not in names
-        assert "generate_office_document" in names
-
-    def test_employee_tool_names_empty_when_resolve_none(self, monkeypatch):
-        monkeypatch.setattr(ts, "_base_tool_specs", lambda: {})
-        assert ts.employee_tool_names("e", {}, {}) == []
+        assert names == ["business_db.read"]

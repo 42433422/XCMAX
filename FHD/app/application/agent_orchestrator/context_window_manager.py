@@ -31,6 +31,7 @@ from langgraph.runtime import Runtime
 from pydantic import Field, TypeAdapter
 
 from app.application.agent_orchestrator.run_models import LLMCall
+from app.infrastructure.chat_stream_lifetime import StreamStopped
 from app.infrastructure.llm._vendor.openhands_condenser import (
     get_shortest_prefix_above_token_count,
     tool_call_manipulation_indices,
@@ -467,8 +468,10 @@ class ContextWindowManager:
         )
         calls: list[LLMCall] = []
         batch_count = 0
+        interrupted: StreamStopped | None = None
 
         async def invoke_summary(request):
+            nonlocal interrupted
             self._validate_context(context)
             call = LLMCall(
                 metadata={
@@ -512,6 +515,10 @@ class ContextWindowManager:
                     raise ValueError("empty_summary")
                 call.status = "completed"
                 return AIMessage(content=text)
+            except StreamStopped as exc:
+                interrupted = exc
+                call.status, call.error = "failed", type(exc).__name__
+                raise
             except RECOVERABLE_ERRORS as exc:
                 call.status, call.error = "failed", type(exc).__name__
                 raise
@@ -568,9 +575,15 @@ class ContextWindowManager:
                     summary_runtime,
                 )
             except RECOVERABLE_ERRORS:
+                if interrupted is not None:
+                    raise interrupted
                 if model_limits is not None:
                     model_limits.assert_current()
                 return "", calls[-1] if calls else None
+            if interrupted is not None:
+                # LangChain can convert provider exceptions into summary text;
+                # a user stop must still abort the original conversation.
+                raise interrupted
             if model_limits is not None:
                 # LangChain may turn provider exceptions into an error summary;
                 # a credential change must still abort instead of caching it.

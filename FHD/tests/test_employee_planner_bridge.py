@@ -250,7 +250,7 @@ def test_office_employee_never_reports_success_without_artifact(employee_mods_ro
     assert "输出文件" in data["error"]
 
 
-def test_get_planner_chat_tool_registry_merges_employee_tools(employee_mods_root):
+def test_installed_employee_does_not_grant_unbound_model_discovery(employee_mods_root):
     _write_csv_read_pack(employee_mods_root)
     from app.application.tools.workflow import invalidate_workflow_tool_registry
     from app.mod_sdk.planner_tools import get_planner_chat_tool_registry
@@ -258,7 +258,7 @@ def test_get_planner_chat_tool_registry_merges_employee_tools(employee_mods_root
     invalidate_workflow_tool_registry()
     reg = get_planner_chat_tool_registry()
     names = [item["function"]["name"] for item in reg if item.get("function")]
-    assert "csv-full-read-employee" in names
+    assert names == []
 
 
 def test_legacy_tool_alias_still_resolves(employee_mods_root):

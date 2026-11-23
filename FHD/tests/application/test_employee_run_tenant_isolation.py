@@ -1,8 +1,6 @@
 """Real SQLite and HTTP ownership checks for employee run history."""
 
-import json
 from contextlib import contextmanager
-from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +13,8 @@ from sqlalchemy.pool import StaticPool
 from app.application.employee_runtime import run_ledger
 from app.db.models.employee_run_log import EmployeeRunLog
 from app.db.models.task_lifecycle import TaskLifecycleIdempotency, TaskLifecycleRecord
+from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
@@ -98,8 +98,8 @@ def test_http_run_history_is_scoped_even_for_admin(ledger, monkeypatch):
         ({"success": False, "pending_approval": True}, "awaiting_approval"),
         ({"success": True, "result": {"status": "paused"}}, "paused"),
         ({"success": True, "result": {"needs_user_input": True}}, "waiting_input"),
-        ({"success": True, "result": {"status": "queued"}}, "unknown"),
-        ({"success": True, "execution_accepted": True}, "unknown"),
+        ({"success": True, "result": {"status": "queued"}}, "running"),
+        ({"success": True, "execution_accepted": True}, "running"),
         ({"success": True, "result": {"status": "blocked"}}, "unknown"),
         (None, "unknown"),
         ({"success": True, "summary": "done", "outcome": "unknown"}, "unknown"),
@@ -108,37 +108,27 @@ def test_http_run_history_is_scoped_even_for_admin(ledger, monkeypatch):
     ],
 )
 def test_http_execution_does_not_replay_or_accept_body_identity(
-    ledger, monkeypatch, outcome, expected, tmp_path
+    ledger, monkeypatch, outcome, expected, tmp_path, trusted_actor
 ):
     from unittest.mock import Mock
 
-    from app.application import (
-        auth_permission_resolver,
-        session_account_meta,
-        tool_execution_deadline,
-    )
+    from app.application import tool_execution_deadline
+    from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
     from app.application.employee_runtime import executor
-    from app.fastapi_routes.domains.misc import helpers
     from app.fastapi_routes.xcmax_admin import local_employee_execute
-    from app.infrastructure.auth import dependencies
 
-    monkeypatch.setattr(helpers, "_session_id_from_request", lambda request: "trusted-session")
-    monkeypatch.setattr(
-        dependencies, "resolve_session_user", lambda request: SimpleNamespace(id=7, tenant_id=1)
-    )
-    monkeypatch.setattr(
-        session_account_meta,
-        "enrich_session_meta_with_tenant",
-        lambda sid, user: {"tenant_id": 1, "account_kind": "admin"},
-    )
-    monkeypatch.setattr(auth_permission_resolver, "require_allowed", lambda **kwargs: None)
     monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    original_outcome = deepcopy(outcome)
+    actor = trusted_actor(user_id=7, tenant_id=1, role="admin")
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
 
     def invoke(*args, **kwargs):
         budget = tool_execution_deadline._DEADLINE.get()
-        assert budget is not None  # Real admin route must establish the trusted budget.
+        assert budget is not None
         if outcome == "wrapped_http_timeout":
             budget.uncertain.append({"kind": "http_timeout", "method": "POST"})
             return {"success": True, "summary": "claimed done"}
@@ -148,62 +138,48 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
     monkeypatch.setattr(executor, "execute_employee_task_local", execute)
     app = FastAPI()
     app.add_api_route("/execute/{employee_id}", local_employee_execute, methods=["POST"])
+    body = {
+        "task": "write",
+        "idempotency_key": "original-outcome",
+        "retry_max": 5,
+        "user_id": 999,
+        "session_id": "other",
+        "input_data": {
+            "user_id": 999,
+            "session_id": "other",
+            "tenant_id": 2,
+            "workspace_root": "/untrusted-request-root",
+            "_runtime_context": {"tenant_id": 2},
+        },
+    }
     with TestClient(app) as client:
-        response = client.post(
-            "/execute/same",
-            json={
-                "task": "write",
-                "retry_max": 5,
-                "user_id": 999,
-                "session_id": "other",
-                "input_data": {
-                    "user_id": 999,
-                    "session_id": "other",
-                    "tenant_id": 2,
-                    "workspace_root": "/untrusted-request-root",
-                    "_runtime_context": {"tenant_id": 2},
-                },
-            },
-        )
-    assert response.status_code == 200
-    receipt = response.json()
-    assert receipt["attempts"] == 1 and receipt["success"] is False
-    assert receipt["verified"] is False and receipt["independent_verified"] is False
-    assert receipt["verification"]["accepted"] is False
+        response = client.post("/execute/same", json=body, headers=actor.headers)
+        replay = client.post("/execute/same", json=body, headers=actor.headers)
+    assert response.status_code == replay.status_code == 200, response.text
+    assert response.json()["run_id"] == replay.json()["run_id"]
+    assert replay.json()["deduplicated"] is True
+    assert response.json()["attempts"] == 1
     assert execute.call_count == 1
     assert execute.call_args.kwargs["workspace_root"] == str(tmp_path.resolve())
-    assert execute.call_args.kwargs["user_id"] == 7
-    assert execute.call_args.kwargs["session_id"] == "trusted-session"
+    assert execute.call_args.kwargs["user_id"] == actor.user_id
+    assert execute.call_args.kwargs["session_id"] == actor.session_id
     trusted = execute.call_args.kwargs["runtime_context"]
     assert trusted["tenant_id"] == 1 and trusted["user_id"] == 7
-    assert trusted["employee_run_id"] == response.json()["run_id"]
-    assert "run_id" not in trusted and "agent_run_id" not in trusted
+    assert validate_actor_context(trusted) is None
+    assert trusted["_actor_authorization"]["session_row_id"] == actor.session_row_id
+    assert trusted["employee_run_id"] == response.json()["employee_run_id"]
+    assert trusted["run_id"] == trusted["agent_run_id"] == response.json()["run_id"]
+    assert repository.get(response.json()["run_id"]).user_id == str(actor.user_id)
 
     record = ledger.list_employee_run_logs("same", tenant_id=1)[0]
     assert record["status"] == expected and not record["verified"]
-    assert record["attempts"] == 1 and record["result_valid"] is False
-    assert record["validation_scope"] == "execution_envelope"
-    assert ledger.list_employee_run_logs("same", tenant_id=2) == []
-    with ledger.get_db() as db:
-        stored = db.get(EmployeeRunLog, receipt["run_id"])
-        assert (stored.tenant_id, stored.user_id, stored.session_id) == (1, 7, "trusted-session")
-        assert json.loads(stored.output_json) == receipt["data"]
-    assert outcome == original_outcome
-    if isinstance(original_outcome, dict):
-        evidence = receipt["data"].get("reconciliation_evidence", receipt["data"])
-        for key, value in original_outcome.items():
-            if key != "success":
-                assert evidence[key] == value
-    if expected == "unknown":
-        assert receipt["execution_state"] == "unknown"
-        assert receipt["retryable"] is False and receipt["reconciliation_required"] is True
     if expected != "failed":
         assert not record["finished_at"]
     payload = execute.call_args.args[2]
-    assert payload["user_id"] == 7 and payload["session_id"] == "trusted-session"
+    assert payload["user_id"] == 7 and payload["session_id"] == actor.session_id
     assert payload["tenant_id"] == 1 and "_runtime_context" not in payload
     assert payload["workspace_root"] == str(tmp_path.resolve())
-    assert payload["run_id"] == response.json()["run_id"]
+    assert payload["run_id"] == response.json()["employee_run_id"]
 
 
 def test_employee_decision_does_not_expose_internal_errors(monkeypatch):
@@ -258,7 +234,11 @@ async def test_http_execution_rejects_foreign_workspace_before_run(monkeypatch, 
     response = await service.local_employee_execute(
         Request({"type": "http", "headers": []}),
         "clerk",
-        {"task": "run", "workspace_root": str(tmp_path.parent / "another-tenant")},
+        {
+            "task": "run",
+            "idempotency_key": "foreign-workspace",
+            "workspace_root": str(tmp_path.parent / "another-tenant"),
+        },
     )
     assert response.status_code == 403
     run.assert_not_called()

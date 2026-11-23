@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.domain.browser_policy import locator_strategy
+
 
 class BrowserInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -20,13 +22,7 @@ class BrowserLocator(BrowserInput):
 
     @model_validator(mode="after")
     def unique_strategy(self):
-        if (
-            sum(value is not None for value in (self.role, self.label, self.text, self.selector))
-            != 1
-        ):
-            raise ValueError("exactly one locator strategy is required")
-        if self.name is not None and self.role is None:
-            raise ValueError("name requires role")
+        locator_strategy(self.model_dump(exclude_none=True))
         return self
 
 

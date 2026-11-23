@@ -29,7 +29,10 @@ def _shared_scope_case_0(case_value_1, case_value_2, case_value_3):
                 "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
             },
         ),
-        patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+        patch(
+            "app.neuro_bus.routing.policy_router.build_routing_features",
+            return_value={},
+        ),
         patch(
             "app.neuro_bus.routing.policy_router.predict_with_confidence",
             return_value=(case_value_2, case_value_3),
@@ -81,11 +84,7 @@ from app.infrastructure.mods.mod_manager import (
     import_mod_backend_py,
     is_mods_disabled,
 )
-from app.infrastructure.skills import (
-    SkillRegistry,
-    execute_skill,
-    get_skill_registry,
-)
+from app.infrastructure.skills import SkillRegistry, execute_skill, get_skill_registry
 from app.mod_sdk import industry_seed as industry_seed_mod
 from app.mod_sdk.industry_seed import (
     bundled_industry_seeds_dir,
@@ -133,7 +132,8 @@ def _mock_get_db(mock_db: MagicMock):
 def print_client(monkeypatch) -> TestClient:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repo,
     )
     app = FastAPI()
     app.state.agent_runs = repo
@@ -193,7 +193,10 @@ class TestSessionServiceCreateSession:
 
         with (
             pytest.raises(RuntimeError, match="db down"),
-            patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.session_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             SessionService().create_session(user_id=42)
 
@@ -357,39 +360,51 @@ class TestPrintRoutesPrinters:
 
 class TestPrintRoutesSaveSelection:
     def test_save_selection_invalid_document_printer(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
-            r = print_client.put("/api/print/printer-selection", json={"document_printer": "P2"})
-        assert r.status_code == 400
-        assert "发货单打印机" in r.json()["message"]
-
-    def test_save_selection_invalid_label_printer(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
-            r = print_client.put("/api/print/printer-selection", json={"label_printer": "P2"})
-        assert r.status_code == 400
-        assert "标签打印机" in r.json()["message"]
-
-    def test_save_selection_success(self, print_client: TestClient, local_tools):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
-            svc.return_value.save_printer_selection.return_value = {"success": True}
-            svc.return_value.classify_printers.return_value = {"doc": "P1"}
-            r = print_client.put(
-                "/api/print/printer-selection",
-                json={"document_printer": "P1", "label_printer": "P1"},
-            )
-        _assert_unknown_print(print_client, r, "save_printer_selection")
-        assert r.json()["doc"] == "P1"
-        svc.return_value.save_printer_selection.assert_called_once_with(
-            document_printer="P1", label_printer="P1"
+        from app.domain.shared_services.tools_workflow_workspace import (
+            _registered_router_print,
         )
 
+        with patch("app.services.get_printer_service") as svc:
+            svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
+            result = _registered_router_print(
+                "save_printer_selection",
+                {"document_printer": "P2"},
+                {},
+                "",
+                "",
+            )
+            svc.return_value.save_printer_selection.assert_not_called()
+        assert result["success"] is False
+        assert "发货单打印机" in result["message"]
+
+    def test_save_selection_invalid_label_printer(self, print_client: TestClient):
+        from app.domain.shared_services.tools_workflow_workspace import (
+            _registered_router_print,
+        )
+
+        with patch("app.services.get_printer_service") as svc:
+            svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
+            result = _registered_router_print(
+                "save_printer_selection",
+                {"label_printer": "P2"},
+                {},
+                "",
+                "",
+            )
+            svc.return_value.save_printer_selection.assert_not_called()
+        assert result["success"] is False
+        assert "标签打印机" in result["message"]
+
     def test_save_selection_exception(self, print_client: TestClient, local_tools):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
+        from app.domain.shared_services.tools_workflow_workspace import (
+            _registered_router_print,
+        )
+
+        with patch("app.services.get_printer_service") as svc:
             svc.return_value.get_printers.side_effect = RuntimeError("boom")
-            r = print_client.put("/api/print/printer-selection", json={})
-        assert r.status_code == 500, r.text
+            with pytest.raises(RuntimeError, match="boom"):
+                _registered_router_print("save_printer_selection", {}, {}, "", "")
+            svc.return_value.save_printer_selection.assert_not_called()
 
 
 class TestPrintRoutesDocument:
@@ -404,52 +419,17 @@ class TestPrintRoutesDocument:
         assert r.status_code == 400
         assert "文件不存在" in r.json()["message"]
 
-    def test_print_document_success(self, print_client: TestClient, tmp_path: Path, local_tools):
-        document = tmp_path / "x.pdf"
-        document.write_bytes(b"%PDF")
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-        ):
-            svc.return_value.print_document.return_value = {"success": True}
-            r = print_client.post(
-                "/api/print/document",
-                json={"file_path": str(document), "printer_name": "P1"},
-            )
-        _assert_unknown_print(print_client, r, "print_document")
-        svc.return_value.print_document.assert_called_once_with(str(document), "P1", False)
-
-    def test_print_document_failed_result_returns_400(
-        self, print_client: TestClient, tmp_path: Path
-    ):
-        document = tmp_path / "x.pdf"
-        document.write_bytes(b"%PDF")
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-        ):
-            svc.return_value.print_document.return_value = {
-                "success": False,
-                "message": "printer busy",
-            }
-            r = print_client.post("/api/print/document", json={"file_path": str(document)})
-        assert r.status_code == 400
-
-    def test_print_document_exception(self, print_client: TestClient, tmp_path: Path, local_tools):
-        document = tmp_path / "x.pdf"
-        document.write_bytes(b"%PDF")
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-        ):
-            svc.return_value.print_document.side_effect = RuntimeError("boom")
-            r = print_client.post("/api/print/document", json={"file_path": str(document)})
-        assert r.status_code == 500, r.text
-
 
 class TestPrintRoutesLabel:
     def test_print_label_copies_not_int(self, print_client: TestClient):
         with patch("os.path.exists", return_value=True):
             r = print_client.post(
                 "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "copies": "abc", "require_confirm": False},
+                json={
+                    "file_path": "/tmp/x.pdf",
+                    "copies": "abc",
+                    "require_confirm": False,
+                },
             )
         assert r.status_code == 400
         assert "1-100" in r.json()["message"]
@@ -458,137 +438,20 @@ class TestPrintRoutesLabel:
         with patch("os.path.exists", return_value=True):
             r = print_client.post(
                 "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "copies": 101, "require_confirm": False},
+                json={
+                    "file_path": "/tmp/x.pdf",
+                    "copies": 101,
+                    "require_confirm": False,
+                },
             )
         assert r.status_code == 400
         assert "1-100" in r.json()["message"]
-
-    def test_print_label_require_confirm_cancel(self, print_client: TestClient):
-        print_routes._print_confirm_cache.clear()
-        token = print_routes._create_print_confirm_token({"job": "j1"})
-        with patch("os.path.exists", return_value=True):
-            r = print_client.post(
-                "/api/print/label",
-                json={
-                    "file_path": "/tmp/x.pdf",
-                    "require_confirm": True,
-                    "confirm_action": "cancel",
-                    "confirm_token": token,
-                },
-            )
-        assert r.status_code == 200
-        assert r.json()["status"] == "print_cancelled"
-        assert token not in print_routes._print_confirm_cache
-
-    def test_print_label_require_confirm_no_token(self, print_client: TestClient):
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
-        ):
-            svc.return_value.get_label_printer.return_value = "LabelPrinter"
-            r = print_client.post(
-                "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "require_confirm": True},
-            )
-        assert r.status_code == 200
-        data = r.json()
-        assert data["status"] == "print_confirm_required"
-        assert "confirm_token" in data
-
-    def test_print_label_require_confirm_expired_token(self, print_client: TestClient):
-        with patch("os.path.exists", return_value=True):
-            r = print_client.post(
-                "/api/print/label",
-                json={
-                    "file_path": "/tmp/x.pdf",
-                    "require_confirm": True,
-                    "confirm_token": "dead-token",
-                },
-            )
-        assert r.status_code == 400
-        assert "过期或无效" in r.json()["message"]
-
-    def test_print_label_require_confirm_valid_token(self, print_client: TestClient, local_tools):
-        print_routes._print_confirm_cache.clear()
-        token = print_routes._create_print_confirm_token(
-            {"file_path": "/tmp/x.pdf", "copies": 2, "printer_name": "P1"}
-        )
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
-        ):
-            svc.return_value.print_label.return_value = {"success": True}
-            r = print_client.post(
-                "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "require_confirm": True, "confirm_token": token},
-            )
-        _assert_unknown_print(print_client, r, "print_label")
-        svc.return_value.print_label.assert_called_once_with("/tmp/x.pdf", "P1", 2)
-        assert token not in print_routes._print_confirm_cache
-
-    def test_print_label_no_confirm_failed(self, print_client: TestClient):
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
-        ):
-            svc.return_value.print_label.return_value = {"success": False}
-            r = print_client.post(
-                "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "require_confirm": False},
-            )
-        assert r.status_code == 400
-
-    def test_print_request_identity_and_failure_status(self, print_client: TestClient, local_tools):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.print_label.side_effect = [
-                {"success": True},
-                RuntimeError("offline"),
-                RuntimeError("offline"),
-            ]
-            body = {"file_path": "/tmp/request-scoped.pdf", "require_confirm": False}
-            first = print_client.post(
-                "/api/print/label", json=body, headers={"X-Request-ID": "print-request-1"}
-            )
-            retry = print_client.post(
-                "/api/print/label", json=body, headers={"X-Request-ID": "print-request-1"}
-            )
-            separate = print_client.post(
-                "/api/print/label", json=body, headers={"X-Request-ID": "print-request-2"}
-            )
-            anonymous = print_client.post("/api/print/label", json=body)
-        _assert_unknown_print(print_client, first, "print_label")
-        _assert_unknown_print(print_client, retry, "print_label")
-        assert first.json()["run_id"] == retry.json()["run_id"]
-        assert separate.status_code == anonymous.status_code == 500
-        assert separate.json()["success"] is anonymous.json()["success"] is False
-        assert separate.json().get("status") != "printed"
-        assert anonymous.json().get("status") != "printed"
-        assert svc.return_value.print_label.call_count == 3
-
-    def test_print_label_exception(self, print_client: TestClient, local_tools):
-        with (
-            patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
-        ):
-            svc.return_value.print_label.side_effect = RuntimeError("boom")
-            r = print_client.post(
-                "/api/print/label",
-                json={"file_path": "/tmp/x.pdf", "require_confirm": False},
-            )
-        assert r.status_code == 500, r.text
 
 
 class TestPrintRoutesOtherEndpoints:
     def test_test_printer_post_empty_name(self, print_client: TestClient):
         r = print_client.post("/api/print/test", json={})
         assert r.status_code == 400
-
-    def test_test_printer_post_success(self, print_client: TestClient, local_tools):
-        with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.test_printer.return_value = {"success": True}
-            r = print_client.post("/api/print/test", json={"printer_name": "P1"})
-        _assert_unknown_print(print_client, r, "test")
-        svc.return_value.test_printer.assert_called_once_with("P1")
 
     def test_validate_printer_separation(self, print_client: TestClient):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
@@ -629,83 +492,13 @@ class TestPrintRoutesWorkflowLabel:
         assert r.status_code == 400
         assert "model_number" in r.json()["message"]
 
-    def test_dispatch_idempotency_skips_duplicate(
-        self, print_client: TestClient, local_tools, monkeypatch, tmp_path
-    ):
-        ledger = tmp_path / "print-idempotency.sqlite"
-        monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(ledger))
-        with (
-            patch("app.application.print_app_service.get_print_application_service") as get_svc,
-            patch("app.application.get_product_app_service") as get_prod,
-        ):
-            get_prod.return_value.search_products.return_value = []
-            get_svc.return_value.print_single_label.return_value = {"success": True}
-            body = {"idempotency_key": "key1", "model_number": "M1"}
-            first = print_client.post("/api/print/workflow/label-print/dispatch", json=body)
-            print_routes._print_confirm_cache.clear()
-            again = print_client.post("/api/print/workflow/label-print/dispatch", json=body)
-        original = _assert_unknown_print(print_client, first, "workflow_label_dispatch")
-        repeated = _assert_unknown_print(print_client, again, "workflow_label_dispatch")
-        assert original.tool_calls[0].output == repeated.tool_calls[0].output
-        get_svc.return_value.print_single_label.assert_called_once_with(
-            product_name="M1", model_number="M1", specification=None, unit="个", quantity=1
-        )
-        with sqlite3.connect(ledger) as db:
-            row = db.execute(
-                "SELECT inflight, output_json FROM tool_idempotency WHERE scope_key = ?",
-                ("::print:workflow_label_dispatch:key1",),
-            ).fetchone()
-        assert row is not None and row[0] == 0
-        assert json.loads(row[1]) == original.tool_calls[0].output
-
-    def test_dispatch_lookup_error_still_prints(self, print_client: TestClient, local_tools):
-        with (
-            patch("app.application.print_app_service.get_print_application_service") as get_svc,
-            patch("app.application.get_product_app_service") as get_prod,
-        ):
-            get_prod.return_value.search_products.side_effect = RuntimeError("lookup fail")
-            get_svc.return_value.print_single_label.return_value = {"success": True}
-            r = print_client.post(
-                "/api/print/workflow/label-print/dispatch",
-                json={"idempotency_key": "key2", "model_number": "M1"},
-            )
-        _assert_unknown_print(print_client, r, "workflow_label_dispatch")
-        get_prod.return_value.search_products.assert_called_once_with(
-            keyword="M1", filters={"per_page": 1}
-        )
-        get_svc.return_value.print_single_label.assert_called_once_with(
-            product_name="M1", model_number="M1", specification=None, unit="个", quantity=1
-        )
-
-    def test_dispatch_print_failed(self, print_client: TestClient):
-        with (
-            patch("app.application.print_app_service.get_print_application_service") as get_svc,
-            patch("app.application.get_product_app_service") as get_prod,
-        ):
-            get_prod.return_value.search_products.return_value = []
-            get_svc.return_value.print_single_label.return_value = {
-                "success": False,
-                "message": "no label",
-            }
-            r = print_client.post(
-                "/api/print/workflow/label-print/dispatch",
-                json={"idempotency_key": "key3", "model_number": "M1"},
-            )
-        assert r.status_code == 400
-
-    def test_dispatch_exception(self, print_client: TestClient, local_tools):
-        with patch("app.application.print_app_service.get_print_application_service") as get_svc:
-            get_svc.return_value.print_single_label.side_effect = RuntimeError("boom")
-            r = print_client.post(
-                "/api/print/workflow/label-print/dispatch",
-                json={"idempotency_key": "key4", "model_number": "M1"},
-            )
-        assert r.status_code == 500, r.text
-
 
 class TestPrintRoutesListLabels:
     def test_list_labels_dir_missing(self, print_client: TestClient):
-        with patch("app.utils.path_io.path_utils.get_resource_path", return_value="/no/such/dir"):
+        with patch(
+            "app.utils.path_io.path_utils.get_resource_path",
+            return_value="/no/such/dir",
+        ):
             r = print_client.get("/api/print/list_labels")
         assert r.status_code == 200
         assert r.json()["labels"] == []
@@ -715,7 +508,10 @@ class TestPrintRoutesListLabels:
         labels_dir.mkdir()
         (labels_dir / "order1_第1项.png").write_text("png")
         (labels_dir / "order2.txt").write_text("txt")
-        with patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(labels_dir)):
+        with patch(
+            "app.utils.path_io.path_utils.get_resource_path",
+            return_value=str(labels_dir),
+        ):
             r = print_client.get("/api/print/list_labels")
         data = r.json()
         assert len(data["labels"]) == 1
@@ -726,13 +522,19 @@ class TestPrintRoutesListLabels:
         labels_dir.mkdir()
         for i in range(5):
             (labels_dir / f"order{i}.png").write_text("png")
-        with patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(labels_dir)):
+        with patch(
+            "app.utils.path_io.path_utils.get_resource_path",
+            return_value=str(labels_dir),
+        ):
             r = print_client.get("/api/print/list_labels?limit=2")
         assert len(r.json()["labels"]) == 2
 
     def test_serve_label_image_not_found(self, print_client: TestClient):
         with (
-            patch("app.utils.path_io.path_utils.get_resource_path", return_value="/no/such/dir"),
+            patch(
+                "app.utils.path_io.path_utils.get_resource_path",
+                return_value="/no/such/dir",
+            ),
             patch("os.path.exists", return_value=False),
         ):
             r = print_client.get("/api/print/label/missing.png")
@@ -1083,7 +885,10 @@ class TestDecideProcessorWithPolicy:
                     "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
                 },
             ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.build_routing_features",
+                return_value={},
+            ),
             patch(
                 "app.neuro_bus.routing.policy_router.predict_with_confidence",
                 return_value=(0, 0.9),
@@ -1098,9 +903,15 @@ class TestDecideProcessorWithPolicy:
         with (
             patch.dict(
                 os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": "1",
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
+                },
             ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.build_routing_features",
+                return_value={},
+            ),
             patch(
                 "app.neuro_bus.routing.policy_router.predict_with_confidence",
                 return_value=(-1, 0.0),
@@ -1113,9 +924,15 @@ class TestDecideProcessorWithPolicy:
         with (
             patch.dict(
                 os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": "1",
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
+                },
             ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.build_routing_features",
+                return_value={},
+            ),
             patch(
                 "app.neuro_bus.routing.policy_router.predict_with_confidence",
                 return_value=(99, 0.9),
@@ -1144,7 +961,10 @@ class TestDecideProcessorWithPolicy:
         with (
             patch.dict(
                 os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0"},
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": "1",
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "1.0",
+                },
             ),
             patch(
                 "app.neuro_bus.routing.policy_router.build_routing_features",
@@ -1180,9 +1000,15 @@ class TestDecideProcessorWithPolicy:
         with (
             patch.dict(
                 os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "0.1"},
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": "1",
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "0.1",
+                },
             ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.build_routing_features",
+                return_value={},
+            ),
             patch(
                 "app.neuro_bus.routing.policy_router.predict_with_confidence",
                 return_value=(1, 0.7),
@@ -1205,9 +1031,15 @@ class TestDecideProcessorWithPolicy:
         with (
             patch.dict(
                 os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "0.5"},
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": "1",
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "0.5",
+                },
             ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.build_routing_features",
+                return_value={},
+            ),
             patch(
                 "app.neuro_bus.routing.policy_router.predict_with_confidence",
                 return_value=(2, 0.95),
@@ -1233,9 +1065,15 @@ class TestDecideProcessorWithPolicy:
         with (
             patch.dict(
                 os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "abc"},
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": "1",
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "abc",
+                },
             ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.build_routing_features",
+                return_value={},
+            ),
             patch(
                 "app.neuro_bus.routing.policy_router.predict_with_confidence",
                 return_value=(0, 0.9),
@@ -1252,9 +1090,15 @@ class TestDecideProcessorWithPolicy:
         with (
             patch.dict(
                 os.environ,
-                {"XCAGI_ROUTING_POLICY_ENABLED": "1", "XCAGI_ROUTING_POLICY_CANARY_RATIO": "5.0"},
+                {
+                    "XCAGI_ROUTING_POLICY_ENABLED": "1",
+                    "XCAGI_ROUTING_POLICY_CANARY_RATIO": "5.0",
+                },
             ),
-            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch(
+                "app.neuro_bus.routing.policy_router.build_routing_features",
+                return_value={},
+            ),
             patch(
                 "app.neuro_bus.routing.policy_router.predict_with_confidence",
                 return_value=(0, 0.9),
@@ -1293,7 +1137,13 @@ class TestXcmaxSyncPushOutbox:
 
         mock_db = MagicMock()
         mock_db.get_pending_outbox.return_value = [
-            {"id": 1, "entity_type": "p", "entity_id": "1", "operation": "i", "payload": {}}
+            {
+                "id": 1,
+                "entity_type": "p",
+                "entity_id": "1",
+                "operation": "i",
+                "payload": {},
+            }
         ]
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
@@ -1311,7 +1161,13 @@ class TestXcmaxSyncPushOutbox:
 
         mock_db = MagicMock()
         mock_db.get_pending_outbox.return_value = [
-            {"id": 2, "entity_type": "p", "entity_id": "2", "operation": "i", "payload": {}}
+            {
+                "id": 2,
+                "entity_type": "p",
+                "entity_id": "2",
+                "operation": "i",
+                "payload": {},
+            }
         ]
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),

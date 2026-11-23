@@ -19,11 +19,15 @@ from sqlalchemy.orm import Session
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun
-from app.application.agent_orchestrator.unified_task import UnifiedTaskError
+from app.application.agent_orchestrator.unified_task import (
+    UnifiedTaskError,
+    UnifiedTaskResult,
+    create_unified_task,
+)
 from app.application.elt.errors import EltError
 from app.application.elt.parser_structure import clean_cell_text, detect_table_layout
 from app.application.elt.parsers import parse_file
-from app.application.elt.service_support import MAX_FILE_BYTES
+from app.application.elt.service_support import MAX_FILE_BYTES, load_json
 from app.application.elt.service_uploads import UploadServiceMixin
 from app.application.elt.targets.products import ProductAdapter
 from app.application.employee_runtime.executor import execute_employee_task_local
@@ -35,7 +39,7 @@ from app.application.shipment_excel_elt_security import (
 )
 from app.application.workflow.approval_policy import WorkflowApprovalPolicy
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-from app.db.models.elt import EltUpload
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 from app.utils.logging.audit_logger import audit_log
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -382,10 +386,11 @@ def _approved_products(
     ):
         raise ValueError("审批与任务身份不一致，已阻止写入")
     node = plan.nodes[0]
-    params = {"products": products, "file_path": checkpoint["source_path"]}
+    params = checkpoint.get("elt_params")
     if (
-        node.tool_id != "products"
-        or node.action != "batch_create"
+        node.tool_id != "elt_import"
+        or node.action != "execute"
+        or not isinstance(params, dict)
         or node.params != params
         or checkpoint.get("approval_fingerprint") != _approval_fingerprint(checkpoint, params)
     ):
@@ -429,9 +434,11 @@ def project_rejected_approval(run: AgentRun) -> AgentRun:
     if not db_id:
         return run
     from app.db.models.approval import ApprovalRequest
-    from app.db.session import get_db
+    from app.db.session import get_db, get_host_db
 
-    with get_db() as db:
+    context = run.metadata.get("runtime_context") or {}
+    session = get_host_db if isinstance(context.get("cross_module_checkpoint"), dict) else get_db
+    with session() as db:
         row = db.get(ApprovalRequest, int(db_id))
         status = "" if row is None else str(row.status or "")
         reason = "" if row is None else str(row.rejection_reason or "")
@@ -441,11 +448,109 @@ def project_rejected_approval(run: AgentRun) -> AgentRun:
     return stored or run
 
 
-def is_cross_module_client_task(message: str, params: dict[str, Any] | None) -> bool:
-    """The desktop task API already accepts this business request; no second route."""
-    text = str(message or "")
-    file_path = str((params or {}).get("file_path") or "").strip()
-    return "Excel" in text and "导入" in text and "产品库" in text and bool(file_path)
+def is_cross_module_client_task(request: dict[str, Any]) -> bool:
+    """Only an explicit reviewed ELT execution can select this product transaction."""
+    text = str(request.get("message") or "")
+    return (request.get("tool_id"), request.get("action")) == ("elt_import", "execute") and all(
+        word in text for word in ("Excel", "导入", "产品库")
+    )
+
+
+def _owned_elt_preview(
+    db: Session, params: dict[str, Any], context: dict[str, Any]
+) -> tuple[EltRun, EltUpload, list[EltRunRow]]:
+    """Read the existing ELT authority, preserving its exact preview and actor gates."""
+    from fastapi import HTTPException
+
+    from app.application.elt.preview_confirmation import verify_preview
+    from app.application.elt.service import get_elt_service
+    from app.application.elt.service_execution import _unconfirmed_mappings
+    from app.domain.shared_services.tools_workflow_elt import _elt_enabled
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
+    from app.infrastructure.auth.business_scope_gate import check_owned_business_permission
+
+    try:
+        actor = _bound_actor(context)
+        tenant = check_owned_business_permission(actor, "elt.execute")
+        check_owned_business_permission(actor, "product.edit")
+    except (HTTPException, AgentModAuthorizationError) as exc:
+        raise UnifiedTaskError("导入授权不可用，请核对当前账号的企业产品写入权限") from exc
+    if (
+        not _elt_enabled()
+        or str(tenant) != str(context.get("tenant_id"))
+        or str(actor.id) != str(context.get("user_id"))
+        or tenant != current_tenant_id()
+        or set(params) - {"run_id", "preview_revision", "valid_rows_only", "accept_suggested"}
+        or not params.get("run_id")
+        or not params.get("preview_revision")
+    ):
+        raise UnifiedTaskError("导入需要当前企业账号的单份 ELT 预演编号和确认版本")
+    service = get_elt_service()
+    run = service._owned_run(db, str(params["run_id"]), actor.id)
+    if (
+        run.target_type != "products"
+        or run.status != "preview_ready"
+        or run.rollback_status
+        or (
+            run.operation_token
+            and run.operation_token != getattr(db.info.get("elt_operation_owner"), "token", None)
+        )
+        or run.update_rows
+        or not run.new_rows
+    ):
+        raise UnifiedTaskError("此产品导入仅接受已就绪的新建行预演，请核对原 ELT 任务")
+    if run.error_rows and params.get("valid_rows_only") is not True:
+        raise UnifiedTaskError("预演包含错误行，必须明确确认仅导入正确行")
+    if _unconfirmed_mappings(load_json(run.draft_json, {}).get("field_mappings")) and (
+        params.get("accept_suggested") is not True
+    ):
+        raise UnifiedTaskError("预演字段映射尚未确认")
+    verify_preview(db, run, str(params["preview_revision"]))
+    upload = service._execution_upload(db, run, actor.id)
+    rows = (
+        db.query(EltRunRow)
+        .filter_by(run_id=run.id, tenant_id=tenant, owner_user_id=actor.id)
+        .order_by(EltRunRow.id)
+        .all()
+    )
+    if sum(row.final_action == "new" for row in rows) != run.new_rows or any(
+        row.execution_status or row.final_action == "update" for row in rows
+    ):
+        raise UnifiedTaskError("预演行与执行范围不一致，已阻止写入")
+    return run, upload, rows
+
+
+def create_cross_module_task(**request: Any) -> UnifiedTaskResult:
+    if is_cross_module_client_task(request):
+        with _cross_module_scope(request.get("runtime_context") or {}):
+            return _create_cross_module_task(**request)
+    return create_unified_task(**request)
+
+
+def _create_cross_module_task(**request: Any) -> UnifiedTaskResult:
+    from app.db.session import get_db
+
+    selected = is_cross_module_client_task(request)
+    context = request.get("runtime_context") or {}
+    orchestrator = request["orchestrator"]
+    existing = orchestrator.get_task(
+        user_id=request["user_id"],
+        task_id=request["task_id"],
+        tenant_id=context.get("tenant_id", ""),
+    )
+    if selected and existing is None:
+        try:
+            with get_db() as db:
+                _owned_elt_preview(db, request["params"], context)
+        except EltError as exc:
+            raise UnifiedTaskError("ELT 预演不属于当前账号或内容已经变化，请重新核对") from exc
+    result = create_unified_task(**request)
+    if selected and not result.deduplicated:
+        begin_cross_module_http(
+            orchestrator, result.run, params=request["params"], runtime_context=context
+        )
+        result = UnifiedTaskResult(run=orchestrator.get_run(result.run.run_id) or result.run)
+    return result
 
 
 def _workflow_receipt(
@@ -508,16 +613,27 @@ def begin_cross_module_http(
         or int(user_text) <= 0
     ):
         raise UnifiedTaskError("任务缺少有效账号和租户，已停止写入")
+    from app.db.session import get_db
+
     try:
-        source, source_body = _source_bytes(
-            str(params.get("file_path") or ""), user_id=int(user_text)
-        )
+        with get_db() as db:
+            _preview, upload, rows = _owned_elt_preview(db, params, context)
+            source, source_body = _source_bytes(upload.storage_path, user_id=int(user_text), db=db)
+            cleaned: dict[str, Any] = {"qualifying": [], "anomalies": []}
+            for row in rows:
+                item: dict[str, Any] = {
+                    "data": load_json(row.normalized_json, {}),
+                    "row_number": row.source_row,
+                }
+                if row.final_action == "new":
+                    cleaned["qualifying"].append(item)
+                elif row.final_action == "error":
+                    item["issues"] = load_json(row.validation_json, [])
+                    cleaned["anomalies"].append(item)
     except (ValueError, OSError, EltError) as exc:
         raise UnifiedTaskError("业务文件不可访问或不属于当前账号，请重新上传") from exc
     original_hash = hashlib.sha256(source_body).hexdigest()
-    snapshot = store_spreadsheet(run.run_id, source_body, name=source.name)
-    identified = identify_workbook(artifact_path(run.run_id, snapshot["artifact_id"]))
-    cleaned = slice_and_clean(identified)
+    store_spreadsheet(run.run_id, source_body, name=source.name)
     if not cleaned.get("qualifying"):
         raise RuntimeError("没有可导入的合格行，已停止写入")
     result_path = artifact_path(run.run_id, "cross_module_import")
@@ -536,14 +652,12 @@ def begin_cross_module_http(
         "anomaly_csv": files["anomaly_csv"],
         "qualifying": [dict(row["data"]) for row in cleaned["qualifying"]],
         "anomaly_count": len(cleaned["anomalies"]),
+        "elt_params": dict(params),
     }
     checkpoint["idempotency_key"] = canonical_hash(
         {key: checkpoint[key] for key in ("tenant_id", "user_id", "task_id")}
     )
-    node_params = {
-        "products": checkpoint["qualifying"],
-        "file_path": str(source),
-    }
+    node_params = dict(params)
     checkpoint["approval_fingerprint"] = _approval_fingerprint(checkpoint, node_params)
     context["cross_module_http"] = True
     context["cross_module_checkpoint"] = checkpoint
@@ -553,8 +667,8 @@ def begin_cross_module_http(
         nodes=[
             WorkflowNode(
                 "write",
-                "products",
-                "batch_create",
+                "elt_import",
+                "execute",
                 params=node_params,
                 risk="high",
                 idempotent=False,
@@ -570,19 +684,26 @@ def begin_cross_module_http(
         approval_service=approval,
         require_persistence=True,
     )
-    with tenant_scope(int(tenant_text)):
-        decision = gate.evaluate_plan(plan, runtime_context=context)
-        request_id = decision.approval_request_ids[0] if decision.approval_request_ids else ""
-        if not request_id:
-            created = approval.create_approval_request(
-                plan.plan_id,
-                plan.nodes[0],
-                runtime_context=context,
-                plan=plan,
-                require_persistence=True,
-            )
-            request_id = created.request_id
-        metadata = approval.get_request_metadata(request_id) or {}
+    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+
+    # Approval and task ledgers remain in the host authority; business data stays in the Mod.
+    approval_scope = set_request_active_mod_id("")
+    try:
+        with tenant_scope(int(tenant_text)):
+            decision = gate.evaluate_plan(plan, runtime_context=context)
+            request_id = decision.approval_request_ids[0] if decision.approval_request_ids else ""
+            if not request_id:
+                created = approval.create_approval_request(
+                    plan.plan_id,
+                    plan.nodes[0],
+                    runtime_context=context,
+                    plan=plan,
+                    require_persistence=True,
+                )
+                request_id = created.request_id
+            metadata = approval.get_request_metadata(request_id) or {}
+    finally:
+        reset_request_active_mod_id(approval_scope)
     if not metadata.get("id"):
         raise RuntimeError("审批请求未能持久化，已阻止数据库写入")
     run.metadata["runtime_context"] = context
@@ -631,6 +752,7 @@ def cross_module_ready(run: AgentRun | None) -> bool:
 
 from app.application.agent_orchestrator.cross_module_execution import (
     InjectedTransactionFault,
+    _cross_module_scope,
     drive_cross_module_execution,
     execute_claimed_cross_module,
     load_cross_module_http_result,

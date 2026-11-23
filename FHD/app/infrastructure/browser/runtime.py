@@ -15,10 +15,13 @@ from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin
 from uuid import uuid4
 
-from app.infrastructure.browser.snapshot import redacted_page_snapshot
+from app.domain.browser_policy import canonical_origin, locator_strategy
+from app.domain.browser_policy import receipt_url as _receipt_url
+from app.infrastructure.browser.locators import resolve_locator as _locator
+from app.infrastructure.browser.snapshot import SCREENSHOT_MASK_SELECTOR, redacted_page_snapshot
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, BrowserContext, Page
@@ -33,23 +36,10 @@ class BrowserPolicyError(ValueError):
 
 
 def _origin(url: str) -> str:
-    parsed = urlsplit(url)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or any(ord(char) < 32 for char in url)
-    ):
-        raise BrowserPolicyError("unsupported_browser_destination")
-    host = parsed.hostname.encode("idna").decode("ascii").lower()
-    if ":" in host:
-        host = f"[{host}]"
-    port = parsed.port
-    default = 443 if parsed.scheme == "https" else 80
-    return f"{parsed.scheme}://{host}" + (
-        f":{port}" if port is not None and port != default else ""
-    )
+    try:
+        return canonical_origin(url)
+    except (ValueError, UnicodeError):
+        raise BrowserPolicyError("unsupported_browser_destination") from None
 
 
 def _timeout(deadline: float) -> float:
@@ -57,24 +47,6 @@ def _timeout(deadline: float) -> float:
     if remaining <= 0:
         raise TimeoutError("browser_deadline_exceeded")
     return max(1, remaining * 1000)
-
-
-def _receipt_url(url: str) -> str:
-    """Do not persist redirect query/fragment credentials in the result receipt."""
-    return urlsplit(url)._replace(query="", fragment="").geturl()
-
-
-def _locator(page: Any, spec: dict[str, Any], frame: str | None = None) -> Any:
-    target = page.frame_locator(frame) if frame else page
-    keys = [key for key in ("role", "label", "text", "selector") if spec.get(key)]
-    if len(keys) != 1 or (spec.get("name") is not None and keys[0] != "role"):
-        raise ValueError("browser_locator_requires_one_strategy")
-    key = keys[0]
-    if key == "role":
-        return target.get_by_role(spec[key], name=spec.get("name"), exact=True)
-    if key == "selector":
-        return target.locator(spec[key])
-    return getattr(target, f"get_by_{key}")(spec[key], exact=True)
 
 
 def _validate_checks(checks: Any, *, required: bool = False) -> None:
@@ -90,6 +62,8 @@ def _validate_checks(checks: Any, *, required: bool = False) -> None:
             raise ValueError("invalid_browser_verification")
         if check["kind"] != "url" and not isinstance(check.get("locator"), dict):
             raise ValueError("browser_verification_locator_required")
+        if check["kind"] != "url":
+            locator_strategy(check["locator"])
         if check["kind"] == "visible":
             if check.get("expected", "true") not in {"true", "false"}:
                 raise ValueError("visibility_expectation_requires_boolean_text")
@@ -113,6 +87,7 @@ def _validate(plan: dict[str, Any]) -> None:
             or not isinstance(step.get("locator"), dict)
         ):
             raise ValueError("invalid_browser_action")
+        locator_strategy(step["locator"])
         _validate_checks(step.get("verify", []))
         if step["action"] == "upload":
             files = step.get("files", [])
@@ -383,12 +358,7 @@ async def execute_browser_plan(
                         await page.screenshot(
                             path=path,
                             full_page=False,
-                            mask=[
-                                page.locator(
-                                    "input, select, textarea, [contenteditable], "
-                                    "iframe, frame, object, embed"
-                                )
-                            ],
+                            mask=[page.locator(SCREENSHOT_MASK_SELECTOR)],
                             timeout=min(_timeout(deadline_monotonic), 2000),
                         )
                         result["artifacts"].append(_artifact(path, result["artifacts"]))

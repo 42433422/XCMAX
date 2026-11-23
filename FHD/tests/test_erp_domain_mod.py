@@ -371,7 +371,11 @@ def test_shipment_record_delete_bridge_preserves_authorization(
 
     def execute(**kwargs):
         calls.append((current_tenant_id(), kwargs))
-        return {"success": current_tenant_id() == 1, "message": "isolated result"}
+        return {
+            "success": current_tenant_id() == 1,
+            "message": "isolated result",
+            "http_status_code": 200 if current_tenant_id() == 1 else 404,
+        }
 
     monkeypatch.setattr("app.infrastructure.auth.dependencies.require_permission", permission)
     monkeypatch.setattr(shipment_orders, "_run_shipment_records_agent", execute)

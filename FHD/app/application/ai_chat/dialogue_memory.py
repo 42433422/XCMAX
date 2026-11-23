@@ -341,6 +341,8 @@ def last_assistant_question(
     except RECOVERABLE_ERRORS:
         return None
     for item in reversed(messages):
+        if item.get("role") == "user":
+            return None
         if item.get("role") != "assistant":
             continue
         content = str(item.get("content") or "").strip()

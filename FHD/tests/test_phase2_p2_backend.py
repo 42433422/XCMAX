@@ -40,11 +40,7 @@ from app.infrastructure.payment.order_store import (
     record_checkout_pending,
     update_order_status,
 )
-from app.infrastructure.persistence.compat_db.writes import (
-    _customer_pg_row_select_sql,
-    _products_pg_col_names,
-    products_pg_batch_delete_rows,
-)
+from app.infrastructure.persistence.compat_db.writes import _customer_pg_row_select_sql
 from app.infrastructure.rag.citation_tracker import CitationTracker
 from app.infrastructure.rag.hybrid_retriever import HybridRetriever, RetrievedChunk
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
@@ -380,18 +376,6 @@ def test_alipay_env_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_products_pg_col_names_cached() -> None:
-    eng = MagicMock()
-    insp = MagicMock()
-    insp.get_columns.return_value = [{"name": "id"}, {"name": "unit"}]
-    with (
-        patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng),
-        patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=insp),
-    ):
-        cols = _products_pg_col_names()
-    assert "id" in cols
-
-
 def test_customer_pg_row_select_sql() -> None:
     insp = MagicMock()
     insp.get_columns.return_value = [
@@ -403,23 +387,6 @@ def test_customer_pg_row_select_sql() -> None:
     sql, fields = _customer_pg_row_select_sql(insp)
     assert "unit_name" in sql
     assert "id" in fields
-
-
-def test_products_pg_batch_delete_rows_invalid_ids() -> None:
-    eng = MagicMock()
-    conn = MagicMock()
-    eng.begin.return_value.__enter__ = MagicMock(return_value=conn)
-    eng.begin.return_value.__exit__ = MagicMock(return_value=False)
-    with (
-        patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine", return_value=eng),
-        patch(
-            "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
-            return_value={"id", "mod_id"},
-        ),
-    ):
-        deleted, skipped = products_pg_batch_delete_rows(["abc", "0", ""])
-    assert deleted == 0
-    assert skipped
 
 
 # ---------------------------------------------------------------------------

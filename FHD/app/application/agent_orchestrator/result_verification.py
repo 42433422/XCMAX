@@ -9,6 +9,7 @@ verifier, supply its verdict, or turn an unavailable verifier into a pass.
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -19,7 +20,13 @@ from referencing.exceptions import Unresolvable
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall, utc_now_iso
 from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2
-from app.domain.task_lifecycle.results import execution_result_envelopes, execution_result_error
+from app.domain.task_lifecycle.results import (
+    execution_result_envelopes,
+    execution_result_error,
+    execution_result_outcome_unknown,
+    execution_result_pending_state,
+    execution_result_states,
+)
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 PROTOCOL = "xcagi.result-verification.v1"
@@ -61,6 +68,7 @@ def _scope(run: AgentRun, context: dict[str, Any]) -> dict[str, str]:
             binding.get("mod_id") or context.get("mod_id") or context.get("active_mod_id") or ""
         ),
         "task_id": str(task.get("task_id") or original.get("task_id") or run.run_id),
+        "credential_scope_sha256": canonical_hash(context.get("_credential_authorization") or {}),
     }
 
 
@@ -157,12 +165,24 @@ def freeze_verification_contract(
         from app.application.memory_v2_facade import capture_memory_baseline
 
         contract["memory_baseline"] = capture_memory_baseline(step, context)
-    if (step.tool_id, step.action) == ("elt_import", "execute") and (
-        step.params.get("run_id") or step.params.get("run_ids")
-    ):
+    if (step.tool_id, step.action) == ("elt_import", "preview"):
+        from app.application.elt.preview_verification import capture_preview_inputs
+
+        contract["elt_preview_inputs"] = capture_preview_inputs(step.params, context)
+    if (step.tool_id, step.action) == ("elt_import", "execute"):
+        from app.application.agent_orchestrator.task_background import task_execution_context
         from app.application.elt.preview_confirmation import capture_agent_execution
 
-        contract["elt_execution_baseline"] = capture_agent_execution(step, context)
+        contract["elt_execution_baseline"] = capture_agent_execution(
+            run,
+            step,
+            {
+                **context,
+                "run_id": run.run_id,
+                "step_id": step.step_id,
+                **task_execution_context(run, step),
+            },
+        )
     contract["contract_sha256"] = canonical_hash(contract)
     call.metadata["verification_contract"] = contract
     call.metadata["verification"] = {
@@ -282,13 +302,27 @@ def _evaluate(run, step, call, context, contract) -> dict[str, Any]:
     from app.application.agent_orchestrator.verification_cognition import plan_admission_receipt
     from app.application.agent_orchestrator.verification_kellai import can_observe_kellai_delivery
 
+    if "_credential_authorization" in context:
+        from app.application.aiopen.service import api_key_permits_execution
+
+        if not api_key_permits_execution(context, step.tool_id, step.action):
+            return {
+                "status": "inconclusive",
+                "code": "verification_credential_denied",
+                "checks": [],
+            }
     delivery_observation = can_observe_kellai_delivery(run, step, call)
     child_admission = (step.tool_id, step.action) == ("enterprise_cognition", "plan") and (
         plan_admission_receipt(call.output)
     )
-    if not delivery_observation and (
-        call.output.get("success") is not True
-        or (execution_result_error(call.output) and not child_admission)
+    pending = pending_execution_receipt(call.output)
+    if (
+        not delivery_observation
+        and not pending
+        and (
+            call.output.get("success") is not True
+            or (execution_result_error(call.output) and not child_admission)
+        )
     ):
         return {"status": "failed", "code": "execution_receipt_not_successful", "checks": []}
     schema = contract.get("output_schema")
@@ -303,7 +337,11 @@ def _evaluate(run, step, call, context, contract) -> dict[str, Any]:
     from app.application.agent_orchestrator.verification_readback import verify_independent_result
 
     evidence: dict[str, Any] = verify_independent_result(
-        run=run, step=step, call=call, output=copy.deepcopy(call.output), context=dict(context)
+        run=run,
+        step=replace(step, params=copy.deepcopy(call.params)),
+        call=call,
+        output=copy.deepcopy(call.output),
+        context=dict(context),
     )
     if not Draft202012Validator(_READBACK_SCHEMA).is_valid(evidence):
         return {"status": "inconclusive", "code": "verification_evidence_invalid", "checks": []}
@@ -326,7 +364,7 @@ def _evaluate(run, step, call, context, contract) -> dict[str, Any]:
             "code": "original_delivery_observed_execution_unsettled",
             "checks": checks,
         }
-    if evidence["code"] == "result_verifier_unavailable" and contract["read_only"]:
+    if evidence["code"] == "result_verifier_unavailable" and contract["read_only"] and not pending:
         if _declared_files(call.output):
             return {"status": "inconclusive", "code": "artifact_verifier_unavailable", "checks": []}
         return {
@@ -346,6 +384,21 @@ def _evaluate(run, step, call, context, contract) -> dict[str, Any]:
 
 def latest_step_call(run: AgentRun, step: AgentStep) -> ToolCall | None:
     return next((call for call in reversed(run.tool_calls) if call.step_id == step.step_id), None)
+
+
+def pending_execution_receipt(output: dict[str, Any]) -> bool:
+    """Only an acknowledged in-flight effect may later acquire independent evidence."""
+    return bool(
+        not execution_result_outcome_unknown(output)
+        and execution_result_pending_state(output)
+        in {"pending", "accepted", "queued", "running", "processing"}
+        and not any(
+            execution_result_states(row) & {"failed", "rejected", "cancelled", "expired"}
+            or row.get("error_code")
+            or row.get("ok") is False
+            for row in execution_result_envelopes(output)
+        )
+    )
 
 
 def _accepted_report_valid(run: AgentRun, step: AgentStep, call: ToolCall) -> bool:
@@ -419,7 +472,7 @@ def step_verification_blocked(run: AgentRun, step: AgentStep) -> bool:
             step.status == "completed"
             and any(item.metadata.get("verification_contract") for item in run.tool_calls)
         )
-    if call.output.get("success") is not True:
+    if call.output.get("success") is not True and not pending_execution_receipt(call.output):
         return False
     if _accepted_report_valid(run, step, call):
         return False
@@ -428,6 +481,53 @@ def step_verification_blocked(run: AgentRun, step: AgentStep) -> bool:
         and step.output == call.output
         and step.params == preview_continuation_params(run, step, call)
     )
+
+
+def verified_step_output(run: AgentRun, step: AgentStep) -> dict[str, Any]:
+    """Project current evidence without rewriting the original execution receipt."""
+    call = latest_step_call(run, step)
+    if step_verification_blocked(run, step):
+        output = copy.deepcopy(step.output)
+        output.update(
+            success=False,
+            retryable=False,
+            verification=copy.deepcopy(call.metadata.get("verification") or {}) if call else {},
+        )
+        if call is not None and pending_execution_receipt(call.output):
+            output["execution_state"] = execution_result_pending_state(call.output)
+        else:
+            output.update(
+                execution_state="unknown",
+                outcome="unknown",
+                reconciliation_required=True,
+                error_code="result_verification_required",
+            )
+        return output
+    if (
+        call is not None
+        and pending_execution_receipt(call.output)
+        and (call.metadata.get("verification") or {}).get("status") == "verified"
+        and not step_verification_blocked(run, step)
+    ):
+        from app.application.agent_orchestrator.verification_cognition import (
+            plan_admission_receipt,
+        )
+
+        # Admitting an original child completes this host operation, while the
+        # child's queued/running business effect remains pending in its own run.
+        if (step.tool_id, step.action) == (
+            "enterprise_cognition",
+            "plan",
+        ) and plan_admission_receipt(call.output):
+            return copy.deepcopy(step.output)
+        return {
+            "success": True,
+            "execution_state": "completed",
+            "message": "原任务已由独立业务证据核验完成",
+            "verification": copy.deepcopy(call.metadata["verification"]),
+            "execution_receipt": copy.deepcopy(call.output),
+        }
+    return copy.deepcopy(step.output)
 
 
 def summarize_verification(run: AgentRun) -> dict[str, Any]:

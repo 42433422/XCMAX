@@ -43,13 +43,18 @@ def test_nonapproval_wait_keeps_identity_and_never_expires_as_rejection(lifecycl
     assert not repo.lifecycle(run.run_id)["approval_requested_at"]
 
 
-def test_lost_completion_is_unknown_and_cannot_be_approved_or_requeued(lifecycle_queue):
+@pytest.mark.parametrize("run_state", ["failed", "blocked"])
+def test_lost_completion_is_unknown_and_cannot_be_approved_or_requeued(lifecycle_queue, run_state):
+    from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+
     repo = lifecycle_queue
     run = AgentRun(user_id="owner", message="write once", status="queued")
     repo.enqueue(run)
     assert repo.claim("worker", lease_seconds=30) is not None
     repo.mark_open_effect(run.run_id, "original-write")
-    uncertain = repo.finish(run.run_id, "worker", "failed", error_code="timeout")
+    run.status = run_state
+    state, code = dispatched_run_state(run)
+    uncertain = repo.finish(run.run_id, "worker", state, error_code=code or "timeout")
     assert uncertain is not None and uncertain.state == "unknown"
     assert uncertain.last_error_code == "needs_verification"
     assert not uncertain.finished_at

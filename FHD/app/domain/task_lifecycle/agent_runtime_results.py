@@ -6,7 +6,10 @@ import copy
 from typing import Any, Literal
 
 from app.domain.task_lifecycle.agent_runtime_contract import goal_report_coverage
-from app.domain.task_lifecycle.results import execution_result_outcome_unknown
+from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
+    execution_result_proven_not_executed,
+)
 
 ClassifiedRunStatus = Literal["blocked", "waiting_user", "running", "failed", "completed"]
 WAITING_STATES = frozenset({"waiting_user", "waiting_approval", "pending_approval", "waiting_auth"})
@@ -35,7 +38,10 @@ def base_runtime_result(run_id: str) -> dict[str, Any]:
 
 def receipt_state(row: dict[str, Any]) -> str:
     receipt = row.get("receipt") or {}
-    if execution_result_outcome_unknown(receipt) or row.get("state") in {"claimed", "unknown"}:
+    if execution_result_outcome_unknown(receipt, include_execution=True) or row.get("state") in {
+        "claimed",
+        "unknown",
+    }:
         return "unknown"
     return str(receipt.get("status") or row.get("state") or "unknown")
 
@@ -146,6 +152,39 @@ def classify_runtime_result(
         report,
     )
     result["goal_coverage"] = coverage
+    # Historic failures only cease to block when their *own* receipt proves
+    # no side effect and the full original goal is independently verified.
+    # A failed write with an unknown effect remains non-replayable.
+    terminal_failures = [
+        row
+        for row in rows
+        if receipt_state(row) in {"cancelled", "rejected"}
+        or (receipt_state(row) == "failed" and row.get("read_only") is not True)
+    ]
+
+    if (
+        any(row.get("read_only") is not True for row in verified_rows)
+        and terminal_failures
+        and not (
+            coverage["completed"]
+            and all(
+                receipt_state(row) == "failed"
+                and execution_result_proven_not_executed(row.get("receipt") or {})
+                for row in terminal_failures
+            )
+        )
+    ):
+        result.update(
+            exit_status="partial",
+            execution_state="partial",
+            reconciliation_required=True,
+            retryable=False,
+            runtime_status=runtime_status,
+            runtime_completed=False,
+            error="部分业务写入已确认，后续操作未完成，须核对原任务回执",
+            output="部分业务写入已确认，后续操作未完成；请核对原任务回执，勿重复提交。",
+        )
+        return "blocked"
     result["verified_operations"] = bool(verified_rows) and all(
         (row.get("receipt") or {}).get("success") is not True or row in verified_rows
         for row in rows

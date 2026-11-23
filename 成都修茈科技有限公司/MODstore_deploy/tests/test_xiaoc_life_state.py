@@ -372,6 +372,48 @@ def test_unknown_finished_cycle_reconciles_once_and_preserves_original_fact(data
     assert original["actual_tokens"] is None and original["status"] == "unknown"
 
 
+def test_reconciled_history_cannot_starve_later_unknown_cycle(database, monkeypatch):
+    from modstore_server import xiaoc_life_reconciliation as reconcile
+
+    monkeypatch.setattr(reconcile, "get_session_factory", lambda: database)
+    configure()
+    with database() as session:
+        for index in range(100):
+            event_id = f"cycle:historical-{index}"
+            store._event(
+                session,
+                event_id,
+                kind="enterprise",
+                status="unknown",
+                summary="Original uncertain call",
+                evidence_refs=[],
+                actual_tokens=None,
+            )
+            store._event(
+                session,
+                "reconciled:" + event_id,
+                kind="reconciliation",
+                status="verified",
+                summary="Original receipt recovered",
+                evidence_refs=[event_id],
+                actual_tokens=0,
+            )
+        session.commit()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    finish(claim, actual_tokens=None)
+    assert store.read_state()["budget"]["reserved_tokens"] == 200
+
+    assert reconcile.reconcile_usage() == {"resolved": 1, "waiting": 0}
+    assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 0}
+    state = store.read_state()
+    assert state["budget"]["reserved_tokens"] == state["budget"]["used_tokens"] == 0
+    assert state["unknown_usage"] is False
+    with database() as session:
+        original = session.get(XiaoCLifeEvent, "cycle:" + claim["cycle_id"])
+        assert original.actual_tokens is None and original.status == "unknown"
+        assert session.get(XiaoCLifeEvent, "reconciled:" + original.id) is not None
+
+
 @pytest.mark.parametrize(
     "field,value", [("domain", "exploration"), ("owner_user_id", 8), ("reserved_tokens", 9999)]
 )

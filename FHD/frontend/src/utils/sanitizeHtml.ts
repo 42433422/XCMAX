@@ -75,9 +75,6 @@ const CHAT_BUBBLE_CONFIG: Config = {
 /** AI 气泡：Markdown → HTML 后再消毒；允许代码块复制按钮与图片等 Markdown 产物 */
 const CHAT_MARKDOWN_CONFIG: Config = {
   ...CHAT_BUBBLE_CONFIG,
-  // 生图工具以 data:image 内联返回图片，仅放行常用位图格式。
-  ALLOWED_URI_REGEXP:
-    /^(?:(?:https?|mailto):|data:image\/(?:png|jpeg|webp);base64,|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
   ALLOWED_TAGS: [...(CHAT_BUBBLE_CONFIG.ALLOWED_TAGS as string[]), 'img', 'button'],
   ALLOWED_ATTR: [
     ...(CHAT_BUBBLE_CONFIG.ALLOWED_ATTR as string[]),
@@ -91,6 +88,15 @@ const CHAT_MARKDOWN_CONFIG: Config = {
     'aria-label',
     'role',
   ],
+}
+
+function chatMarkdownImageAttrHook(node: Element, event: UponSanitizeAttributeHookEvent) {
+  if (node.tagName !== 'IMG' || event.attrName !== 'src') return
+  const value = event.attrValue.trim()
+  // DOMPurify's data-URI image exception bypasses ALLOWED_URI_REGEXP.
+  if (/^data:/i.test(value) && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(value)) {
+    event.keepAttr = false
+  }
 }
 
 const SALES_CONTRACT_SANITIZE_CONFIG: Config = {
@@ -145,7 +151,12 @@ export function sanitizeChatBubbleMarkdown(raw: string | undefined | null): stri
   const stripped = stripInternalMarkers(String(raw ?? ''))
   if (!stripped) return ''
   const html = renderMarkdown(stripped)
-  return DOMPurify.sanitize(html, CHAT_MARKDOWN_CONFIG)
+  DOMPurify.addHook('uponSanitizeAttribute', chatMarkdownImageAttrHook)
+  try {
+    return DOMPurify.sanitize(html, CHAT_MARKDOWN_CONFIG)
+  } finally {
+    DOMPurify.removeHook('uponSanitizeAttribute', chatMarkdownImageAttrHook)
+  }
 }
 
 function sanitizedHtmlToPlainText(sanitizedHtml: string): string {

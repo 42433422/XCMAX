@@ -58,7 +58,7 @@ def read_manifest(mod_dir: Path) -> Tuple[Dict[str, Any] | None, str | None]:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
-        return None, f"manifest.json 格式无效（第 {e.lineno} 行，第 {e.colno} 列）"
+        return None, f"manifest.json JSON 无效（第 {e.lineno} 行，第 {e.colno} 列）"
     if not isinstance(data, dict):
         return None, "manifest 根节点须为对象"
     return data, None

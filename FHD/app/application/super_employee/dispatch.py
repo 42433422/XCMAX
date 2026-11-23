@@ -387,10 +387,13 @@ class EmployeeDispatcher:
             except RECOVERABLE_ERRORS as exc:
                 return self._persist_receipt(request, {**receipt, "reason": str(exc)[:500]})
         if (
-            task_id
+            continue_plan
+            and task_id
             and receipt.get("dispatcher") == "para_api"
             and api_url == receipt.get("api_url")
         ):
+            # Readback's MessageSynchronizer refreshes the task once after
+            # recovering its original request acknowledgement above.
             try:
                 with self._remote.client() as client:
                     token = self._remote.token(client, api_url)

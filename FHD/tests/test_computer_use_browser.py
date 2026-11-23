@@ -27,7 +27,9 @@ def browser_api(monkeypatch):
     locator.is_visible.return_value = True
     locator.is_checked.return_value = True
     locator.aria_snapshot.return_value = '- textbox "姓名": 张三'
+    locator.evaluate_all.return_value = ["张三"]
     page = Mock(url="about:blank")
+    page.frames = [page]
     page.goto.side_effect = lambda url, **kwargs: setattr(page, "url", url)
     page.locator.return_value = locator
     page.get_by_label.return_value = locator
@@ -108,7 +110,13 @@ def test_real_locator_actions_and_assertion_are_required_for_success(browser_api
     )
     assert result["success"] is True and result["verified"] is True
     assert result["steps_completed"] == 2
-    assert result["observation"]["aria_snapshot"] == '- textbox "姓名": 张三'
+    assert "张三" not in result["observation"]["aria_snapshot"]
+    assert 'textbox "姓名"' in result["observation"]["aria_snapshot"]
+    assert result["observation"]["form_values_redacted"] is True
+    from app.infrastructure.browser.snapshot import SCREENSHOT_MASK_SELECTOR
+
+    browser_api.page.locator.assert_any_call(SCREENSHOT_MASK_SELECTOR)
+    assert browser_api.page.screenshot.call_args.kwargs["mask"] == [browser_api.locator]
     browser_api.locator.fill.assert_called_once_with("张三", timeout=5000.0)
     browser_api.assertion.to_have_value.assert_called_once_with("张三", timeout=5000.0)
     assert browser_api.playwright.chromium.launch.call_args.kwargs["chromium_sandbox"] is True
@@ -123,6 +131,32 @@ def test_call_success_without_verification_is_not_task_success(browser_api):
     assert result["success"] is False and result["verified"] is False
     assert result["status"] == "needs_verification"
     assert result["observation"]["data_url"].startswith("data:image/jpeg;base64,")
+
+
+def test_snapshot_redacts_values_before_and_after_capture_and_receipt_url(browser_api):
+    browser_api.locator.evaluate_all.side_effect = [["before-secret"], ["after-secret"]]
+    browser_api.locator.aria_snapshot.return_value = (
+        '- paragraph: before-secret after-secret\n- textbox "Token": current-secret'
+    )
+    result = PlaywrightComputer((ORIGIN,)).execute(
+        [{"action": "navigate", "url": ORIGIN + "/form?token=query-secret#fragment-secret"}],
+        VERIFY,
+        lambda: False,
+    )
+    assert result["success"] is True
+    assert result["observation"]["url"] == ORIGIN + "/form"
+    assert "secret" not in result["observation"]["aria_snapshot"]
+    assert browser_api.locator.evaluate_all.call_count == 2
+
+
+def test_uninspectable_form_values_never_return_unmasked_observation(browser_api):
+    browser_api.locator.evaluate_all.return_value = None
+    result = PlaywrightComputer((ORIGIN,)).execute([NAVIGATE], VERIFY, lambda: False)
+    assert result["success"] is False and result["verified"] is False
+    assert result["error_code"] == "computer_observation_unavailable"
+    assert "observation" not in result
+    browser_api.page.screenshot.assert_not_called()
+    browser_api.context.close.assert_called_once()
 
 
 def test_failed_verification_retains_observation_and_releases_context(browser_api):

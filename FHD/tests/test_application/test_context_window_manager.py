@@ -518,3 +518,23 @@ class TestContextCompressionResult:
         assert r.tokens_saved == 0
         assert r.summary_llm_call is None
         assert r.compression_latency_ms == 0.0
+
+
+@pytest.mark.asyncio
+async def test_summary_cancellation_signal_survives_langchain_error_text():
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowManager
+    from app.infrastructure.chat_stream_lifetime import StreamStopped
+
+    manager, provider = ContextWindowManager(token_budget=800), _make_provider()
+    stopped = StreamStopped()
+    provider.chat_completion.side_effect = stopped
+    with pytest.raises(StreamStopped) as error:
+        await manager._summarize_messages(
+            to_summarize=[{"role": "user", "content": "原历史必须保留"}],
+            user_id="u1",
+            trace_id="cancel",
+            provider=provider,
+            budget=800,
+            max_tokens=40,
+        )
+    assert error.value is stopped and provider.chat_completion.await_count == 1

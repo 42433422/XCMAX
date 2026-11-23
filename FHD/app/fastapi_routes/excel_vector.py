@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
-from pathlib import Path
 from typing import Any, cast
-from uuid import uuid4
 
 from fastapi import APIRouter, Body, Request, UploadFile
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.application import get_excel_vector_ingest_app_service, get_excel_vector_search_app_service
-from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
+from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_io.path_utils import get_upload_dir
+from app.utils.path_io.upload_helpers import save_upload_bytes
 
 logger = logging.getLogger(__name__)
 _EXCEL_VECTOR_UNAVAILABLE = "Excel 向量服务暂时不可用，请稍后重试"
@@ -28,74 +28,24 @@ __all__ = [
 ]
 
 
-def _excel_vector_user_id(request: Request | None) -> str:
-    if request is None:
-        return "excel-vector-route"
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or request.headers.get("X-Workspace-Id")
-        or "excel-vector-route"
-    ).strip()
-
-
 def _run_excel_vector_agent(
     *,
-    request: Request | None,
+    request: Request,
     action: str,
-    node_id: str,
-    message: str,
     params: dict[str, Any],
-) -> Any:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
-    plan = PlanGraph(
-        plan_id=f"excel_vector_{action}",
-        intent=f"excel_vector_{action}",
-        todo_steps=["通过 AgentOrchestrator 执行 Excel 向量工具"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="excel_vector_index",
-                action=action,
-                params=dict(params or {}),
-                risk="low",
-                idempotent=True,
-                description="Execute Excel vector indexing/query through the unified Agent runtime.",
-            )
-        ],
-        risk_level="low",
-        metadata={
-            "source": "excel_vector_route",
-            "route": "/api/excel/vector",
-        },
+) -> tuple[dict[str, Any], int]:
+    return run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "excel_vector_index", "action": action, "params": params},
+        route_path=str(request.url.path),
     )
-    return AgentOrchestrator().start_run_from_plan(
-        user_id=_excel_vector_user_id(request),
-        message=message,
-        plan=plan,
-        runtime_context={
-            "source": "excel_vector_route",
-            "route_action": action,
-            "request_path": str(getattr(getattr(request, "url", None), "path", "") or ""),
-        },
-    )
-
-
-def _excel_vector_status(payload: dict[str, Any]) -> int:
-    if payload.get("success"):
-        return 200
-    if str(payload.get("error_code") or "") == "excel_vector_exception":
-        return 500
-    return 400
 
 
 @router.post("/ingest")
 async def ingest_excel_vector(request: Request):
     upload_file: UploadFile | None = None
     file_path = ""
-    cleanup_path: Path | None = None
+    context = request_runtime_context(request)
     try:
         payload: dict[str, Any] = {}
 
@@ -110,10 +60,17 @@ async def ingest_excel_vector(request: Request):
                         {"success": False, "message": "只支持 .xlsx/.xls 文件"}, status_code=400
                     )
                 suffix = ".xls" if str(upload_file.filename).lower().endswith(".xls") else ".xlsx"
-                cleanup_path = Path(get_upload_dir()).resolve() / f"vector_{uuid4().hex}{suffix}"
-                file_path = str(cleanup_path)
                 body = await upload_file.read()
-                await run_in_threadpool(cleanup_path.write_bytes, body)
+                scope = ":".join(
+                    str(context.get(key) or "") for key in ("user_id", "tenant_id", "mod_id")
+                )
+                owner = hashlib.sha256(scope.encode()).hexdigest()
+                # Content identity is stable across network retries; retained inputs
+                # remain available while the canonical task is awaiting approval.
+                filename = hashlib.sha256(body).hexdigest() + suffix
+                file_path = await run_in_threadpool(
+                    save_upload_bytes, body, subdir=f"excel-vector/{owner}", filename=filename
+                )
                 payload = {
                     k: v for k, v in form.items() if k != "excel_file" and isinstance(v, str)
                 }
@@ -136,20 +93,16 @@ async def ingest_excel_vector(request: Request):
         index_name = str(payload.get("index_name") or "").strip() or None
         index_id = str(payload.get("index_id") or "").strip() or None
 
-        run = await run_in_threadpool(
+        result, status = await run_in_threadpool(
             _run_excel_vector_agent,
             request=request,
             action="execute",
-            node_id="excel_vector_ingest",
-            message=f"Excel vector ingest: {index_name or index_id or file_path}",
             params={
                 "file_path": file_path,
                 "index_name": index_name or "",
                 "index_id": index_id or "",
             },
         )
-        result = _agent_node_output(run, "excel_vector_ingest")
-        status = _excel_vector_status(result)
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("Excel 向量化 ingest 失败")
@@ -158,11 +111,6 @@ async def ingest_excel_vector(request: Request):
             status_code=500,
         )
     finally:
-        if cleanup_path is not None:
-            try:
-                cleanup_path.unlink(missing_ok=True)
-            except OSError:
-                logger.warning("清理 Excel 向量上传临时文件失败")
         if upload_file is not None:
             try:
                 await upload_file.close()
@@ -176,15 +124,11 @@ def query_excel_vector(request: Request, data: dict[str, Any] = Body(default_fac
         index_id = str(data.get("index_id") or "").strip()
         query_text = str(data.get("query") or "").strip()
         top_k = int(data.get("top_k", 5))
-        run = _run_excel_vector_agent(
+        result, status = _run_excel_vector_agent(
             request=request,
             action="query",
-            node_id="excel_vector_query",
-            message=f"Excel vector query: {query_text}",
             params={"index_id": index_id, "query": query_text, "top_k": top_k},
         )
-        result = _agent_node_output(run, "excel_vector_query")
-        status = _excel_vector_status(result)
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS:
         logger.exception("Excel 向量 query 失败")
@@ -194,26 +138,14 @@ def query_excel_vector(request: Request, data: dict[str, Any] = Body(default_fac
 
 
 @router.get("/indexes")
-def list_excel_vector_indexes():
-    try:
-        search_service = get_excel_vector_search_app_service()
-        return JSONResponse(search_service.list_indexes())
-    except RECOVERABLE_ERRORS:
-        logger.exception("获取向量索引失败")
-        return JSONResponse(
-            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
-        )
+def list_excel_vector_indexes(request: Request):
+    result, status = _run_excel_vector_agent(request=request, action="list", params={})
+    return JSONResponse(result, status_code=status)
 
 
 @router.delete("/indexes/{index_id}")
-def delete_excel_vector_index(index_id: str):
-    try:
-        search_service = get_excel_vector_search_app_service()
-        result = search_service.delete_index(index_id=index_id)
-        status = 200 if result.get("success") else 404
-        return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS:
-        logger.exception("删除向量索引失败")
-        return JSONResponse(
-            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
-        )
+def delete_excel_vector_index(request: Request, index_id: str):
+    result, status = _run_excel_vector_agent(
+        request=request, action="delete", params={"index_id": index_id}
+    )
+    return JSONResponse(result, status_code=status)

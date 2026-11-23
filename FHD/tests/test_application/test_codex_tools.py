@@ -38,7 +38,7 @@ def bridge_setup(trusted_actor, monkeypatch, tmp_path):
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    actor = trusted_actor(permissions=["product.view", "tool.customers.create", "customer.view"])
+    actor = trusted_actor(permissions=["customer.edit", "customer.view"])
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     run = AgentRun(user_id=str(actor.user_id), message="执行企业任务", status="running")
     run.metadata["runtime_context"] = actor.context
@@ -71,7 +71,7 @@ def test_authority_arguments_and_unbound_tools_never_publish_tasks(bridge_setup)
                 "execute_action",
                 {
                     "call_id": "attack",
-                    "tool_id": "products",
+                    "tool_id": "customers",
                     "action": "query",
                     "params": params,
                 },
@@ -167,7 +167,7 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
         grant.mcp_token,
         "execute_action",
         {
-            "tool_id": "products",
+            "tool_id": "customers",
             "action": "query",
             "params": {"keyword": "first"},
             "call_id": "first",
@@ -183,7 +183,7 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
         renewed.mcp_token,
         "execute_action",
         {
-            "tool_id": "products",
+            "tool_id": "customers",
             "action": "query",
             "params": {"keyword": "second"},
             "call_id": "second",
@@ -192,7 +192,7 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
     assert second["verified"] is True and second["run_id"] != first["run_id"]
     snapshot = reopened.receipt_snapshot(run.run_id)
     assert len(snapshot) == 2 and all(row["receipt"]["verified"] for row in snapshot)
-    assert dispatched == [("products", "query", "first"), ("products", "query", "second")]
+    assert dispatched == [("customers", "query", "first"), ("customers", "query", "second")]
 
 
 def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_setup, monkeypatch):
@@ -212,7 +212,7 @@ def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_set
     )
     args = {
         "call_id": "read",
-        "tool_id": "products",
+        "tool_id": "customers",
         "action": "query",
         "params": {"keyword": "fixture"},
     }
@@ -230,7 +230,7 @@ def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_set
     replay = _invoke(reopened, setup.grant.mcp_token, "execute_action", args)
     assert replay["run_id"] == receipt["run_id"]
     assert replay["verified"] is True
-    assert calls == [("products", "query")]
+    assert calls == [("customers", "query")]
 
 
 def test_lost_claim_without_child_cannot_be_replayed(bridge_setup):
@@ -313,7 +313,7 @@ def test_request_input_is_durable_and_blocks_additional_actions(bridge_setup):
             "execute_action",
             {
                 "call_id": "read",
-                "tool_id": "products",
+                "tool_id": "customers",
                 "action": "query",
                 "params": {},
             },
@@ -327,7 +327,7 @@ def test_employee_gate_cannot_be_lost_or_override_actor_permissions(bridge_setup
         setup.run.run_id,
         lambda run, metadata: metadata["runtime_config"].update(gate_required=True),
     )
-    args = {"call_id": "gated", "tool_id": "products", "action": "query", "params": {}}
+    args = {"call_id": "gated", "tool_id": "customers", "action": "query", "params": {}}
     with pytest.raises(CodexBindingError) as error:
         _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     assert error.value.code == "gate_required"
@@ -390,7 +390,7 @@ def test_waiting_approval_blocks_new_business_actions(bridge_setup):
             "execute_action",
             {
                 "call_id": "second",
-                "tool_id": "products",
+                "tool_id": "customers",
                 "action": "query",
                 "params": {},
             },
@@ -441,7 +441,7 @@ def test_revoke_after_child_is_saved_prevents_dispatch(bridge_setup, monkeypatch
             "execute_action",
             {
                 "call_id": "read",
-                "tool_id": "products",
+                "tool_id": "customers",
                 "action": "query",
                 "params": {},
             },

@@ -521,7 +521,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "action": waiting_step.action,
             "approved_by": str(approved_by or ""),
             "approval_request_id": str(approval_request_id or ""),
-            "plan_sha256": approval_plan_sha256,
+            **({"plan_sha256": approval_plan_sha256} if approval_plan_sha256 else {}),
         }
         if plan.metadata.get("durable_elt_batch") is True and (
             waiting_step.tool_id,
@@ -954,14 +954,18 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             run.add_event("workflow.conversation_rejected", error, {"execution_started": False})
             self._repo.save(run)
             return
-        from app.application.agent_orchestrator.result_verification import verification_blocked
+        from app.application.agent_orchestrator.result_verification import (
+            project_verification,
+            verification_blocked,
+            verified_step_output,
+        )
 
         if verification_blocked(run):
             run.status, run.error = "blocked", "独立结果核验尚未通过，请先核验原执行回执"
             self._repo.save(run)
             return
         node_outputs: dict[str, Any] = {
-            step.node_id: dict(step.output or {})
+            step.node_id: verified_step_output(run, step)
             for step in run.steps
             if step.status == "completed"
         }
@@ -1455,7 +1459,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 if run.metadata.get("non_retryable"):
                     terminal = _verified_catalog_terminal(run, step)
                     if terminal is None:
+                        from app.domain.task_lifecycle.results import execution_result_pending_state
+
                         run.status, run.error = "blocked", step.error
+                        pending = execution_result_pending_state(step.output)
+                        if pending and pending != "unknown":
+                            return {**step.output, "success": False, "execution_state": pending}
                         return {
                             "success": False,
                             "outcome": "unknown",
@@ -1468,8 +1477,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     stopped_for_interaction = True
                     return {"success": True, "requires_confirmation": True}
                 if step.status == "completed":
-                    node_outputs[step.node_id] = dict(step.output or {})
-                    return dict(step.output or {"success": True})
+                    node_outputs[step.node_id] = verified_step_output(run, step)
+                    return verified_step_output(run, step)
                 if self._prepare_repair_or_retry(run, step, runtime_context=runtime_context):
                     if not sync_step_plan(step, "受控修复后的参数已写回完整计划"):
                         return {
@@ -1520,8 +1529,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     max_retries=0,
                     parallel=parallel,
                 )
-        except (ValueError, RuntimeError) as exc:
-            run.status, run.error = "blocked", f"计划图校验或执行失败：{exc}"
+        except (ValueError, RuntimeError):
+            logger.exception("agent workflow graph rejected run_id=%s", run.run_id)
+            run.status, run.error = "blocked", "计划图校验或执行失败"
             run.add_event("workflow.graph_rejected", run.error, {"run_id": run.run_id})
             self._repo.save(run)
             return
@@ -1575,6 +1585,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 "repair_count": run.metadata.get("repair_count", 0),
             }
             self._append_llm_summary_to_final_output(run)
+            self._repo.save(run)
             self._remember_run_outcome_for(run)
             self._repo.save(run)
             return
@@ -1588,6 +1599,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
         if self._apply_requested_control(run):
             return
+        verification = project_verification(run)
+        if verification["accepted"] is not True:
+            run.status, run.error = "blocked", "独立结果核验尚未通过，请先核验原执行回执"
+            _mark_prior_effects_for_reconciliation(run, "result_verification_required")
+            run.final_output["node_outputs"] = {
+                step.node_id: verified_step_output(run, step)
+                for step in run.steps
+                if step.status == "completed"
+            }
+            self._repo.save(run)
+            return
         run.status = "completed"
         self._ingest_confirmed_plan_artifacts(run)
         self._refresh_run_cost_metadata(run)
@@ -1599,11 +1621,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "cost_units_total": run.metadata["cost_units_total"],
             "ai_cost_units_total": run.metadata["ai_cost_units_total"],
             "repair_count": run.metadata.get("repair_count", 0),
-            "verification": copy.deepcopy(run.metadata.get("verification") or {}),
+            "verification": copy.deepcopy(verification),
         }
         self._append_llm_summary_to_final_output(run)
-        self._remember_run_outcome_for(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)
+        self._repo.save(run)
+        self._remember_run_outcome_for(run)
 
     def _mark_budget_exceeded(
         self,

@@ -418,7 +418,10 @@ async function processGenericFiles(files, progressBar, progressText, progressPer
         try {
           const importForm = new FormData()
           importForm.append('file', file)
-          const importResp = await fetch(customersImportUrl, { method: 'POST', body: importForm })
+          const importResp = await fetch(customersImportUrl, {
+            method: 'POST', body: importForm,
+            headers: { 'Idempotency-Key': `customers-import:${uploadSessionId}:${i}` },
+          })
           const rawText = await importResp.text()
           if (uploadSessionId !== activeUploadSessionId) return
           let importData = null
@@ -470,6 +473,8 @@ async function processGenericFiles(files, progressBar, progressText, progressPer
                 }, 500)
               }
             }
+          } else if (importResp.status === 202) {
+            appendUploadMessage(`⏳ ${importData.message || '导入任务等待审批或结果核验'}${importData.task_id ? `（任务 ${importData.task_id}）` : ''}，请查看原任务，勿重复导入。`)
           } else {
             appendUploadMessage(`❌ 导入失败：${importData.message || '格式不符合或缺少「单位名称」列'}`)
           }

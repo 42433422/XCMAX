@@ -252,7 +252,8 @@ def test_revoked_life_claim_cannot_create_retort(reflection, change):
         assert session.scalar(select(func.count()).select_from(RetortEvolutionRun)) == 0
 
 
-def test_original_owner_and_request_binding_cannot_be_replaced(reflection):
+@pytest.mark.parametrize("template_id", ["restore", ""])
+def test_original_owner_and_request_binding_cannot_be_replaced(reflection, template_id):
     _, claim, goal, *_ = reflection
     linked = evolution.propose(claim, goal)
     with pytest.raises(LifePolicyError, match="责任人"):
@@ -260,10 +261,11 @@ def test_original_owner_and_request_binding_cannot_be_replaced(reflection):
     with pytest.raises(LifePolicyError, match="binding"):
         life._merge([linked], [{**linked, "retort_request_id": "changed"}], "id", 100)
     finish(claim, linked)
-    with pytest.raises(LifePolicyError, match="原管理员"):
+    with pytest.raises(LifePolicyError, match="原授权任务"):
         life.update_settings(
             LifeUpdate(
-                expected_revision=life.read_state()["revision"], policy={"daily_cycle_limit": 8}
+                expected_revision=life.read_state()["revision"],
+                policy={"daily_cycle_limit": 8, "retort_template_id": template_id},
             ),
             actor_user_id=8,
         )
@@ -364,26 +366,10 @@ def test_approved_life_retort_reuses_original_workspace_lease_without_another_mo
     assert len([call for call in calls if call[0] == "POST"]) == 1
 
 
-def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_next_prompt(
-    reflection,
-):
-    factory, claim, goal, calls, _ = reflection
-    linked = evolution.propose(claim, goal)
-    finish(claim, linked)
-    life.update_settings(
-        LifeUpdate(expected_revision=life.read_state()["revision"], paused=True), actor_user_id=7
-    )
+def verified_delivery(factory, request_id):
     with factory() as session:
-        row = session.get(RetortEvolutionRun, linked["retort_request_id"])
+        row = session.get(RetortEvolutionRun, request_id)
         row.status = "completed"
-        row.snapshot_json = json.dumps(
-            {"status": "completed", "delivery": {"status": "deployment_verified"}}
-        )
-        session.commit()
-    assert evolution.reconcile() == 1
-    assert life.read_state()["goals"][0]["status"] == "evolution_evidence_incomplete"
-    with factory() as session:
-        row = session.get(RetortEvolutionRun, linked["retort_request_id"])
         protocol = json.loads(row.protocol_json)
         verification = {
             "status": "checks_passed",
@@ -414,6 +400,27 @@ def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_
             }
         )
         session.commit()
+
+
+def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_next_prompt(
+    reflection,
+):
+    factory, claim, goal, calls, _ = reflection
+    linked = evolution.propose(claim, goal)
+    finish(claim, linked)
+    life.update_settings(
+        LifeUpdate(expected_revision=life.read_state()["revision"], paused=True), actor_user_id=7
+    )
+    with factory() as session:
+        row = session.get(RetortEvolutionRun, linked["retort_request_id"])
+        row.status = "completed"
+        row.snapshot_json = json.dumps(
+            {"status": "completed", "delivery": {"status": "deployment_verified"}}
+        )
+        session.commit()
+    assert evolution.reconcile() == 1
+    assert life.read_state()["goals"][0]["status"] == "evolution_evidence_incomplete"
+    verified_delivery(factory, linked["retort_request_id"])
     assert evolution.reconcile() == 1
     assert evolution.reconcile() == 0
     state = life.read_state()
@@ -436,6 +443,54 @@ def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_
     unknown = life.read_state()["goals"][0]
     assert unknown["status"] == "evolution_evidence_incomplete"
     assert unknown["evolution_outcome"]["metrics"]["terminal_verified"] is False
+
+
+@pytest.mark.parametrize("terminal_verified", [False, True])
+def test_owner_handoff_requires_original_retort_terminal_without_transferring_authority(
+    reflection, terminal_verified
+):
+    from modstore_server.db.identity import User
+
+    factory, claim, goal, calls, _ = reflection
+    linked = evolution.propose(claim, goal)
+    finish(claim, linked)
+    with factory() as session:
+        for uid in (8, 9):
+            user = session.get(User, uid)
+            if user is None:
+                user = User(id=uid, username=f"next-admin-{uid}", password_hash="unused")
+                session.add(user)
+            user.is_admin = True
+        session.get(User, 7).is_admin = False
+        session.commit()
+    # A terminal-looking life projection cannot substitute for the original row.
+    life._mutate(
+        lambda data, _session: data["goals"][0].update(status="evolution_delivery_verified")
+    )
+    if terminal_verified:
+        verified_delivery(factory, linked["retort_request_id"])
+        evolution.reconcile()
+    for uid in (8, 9):
+        update = LifeUpdate(
+            expected_revision=life.read_state()["revision"], policy={"retort_template_id": ""}
+        )
+        if not terminal_verified:
+            with pytest.raises(LifePolicyError, match="原"):
+                life.update_settings(update, actor_user_id=uid)
+            assert life.read_state()["owner_user_id"] == 7
+            continue
+        state = life.update_settings(update, actor_user_id=uid)
+        assert state["owner_user_id"] == uid
+        assert state["goals"][0]["evolution_owner_user_id"] == 7
+        assert state["goals"][0]["status"] == "evolution_delivery_verified"
+        assert evolution.pending_budget(state, "reflection") is None
+        assert evolution.reconcile() == 0
+        assert life.read_state()["goals"][0]["evolution_outcome"]["metrics"]["terminal_verified"]
+        with pytest.raises(LifePolicyError, match="原"):
+            evolution.private_source(linked["retort_request_id"])
+        with factory() as session:
+            assert session.get(RetortEvolutionRun, linked["retort_request_id"]).user_id == 7
+    assert not [call for call in calls if call[0] == "POST"]
 
 
 def test_rejected_effect_requires_actual_rollback_receipt(reflection):

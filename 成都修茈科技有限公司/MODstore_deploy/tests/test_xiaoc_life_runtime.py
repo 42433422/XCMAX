@@ -66,6 +66,7 @@ class Store:
 @pytest.fixture
 def ports(monkeypatch):
     from modstore_server import (
+        llm_api,
         strategic_portfolio_usage,
         strategy_planner,
         xiaoc_life_reconciliation,
@@ -88,7 +89,12 @@ def ports(monkeypatch):
             "domains": {"status": "unrated", "domains": []},
         },
     )
-    monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "test-model"))
+
+    async def route(_db, user_id, *, platform_only):
+        assert user_id == 17 and platform_only is True
+        return {"provider": "test", "model": "test-model"}
+
+    monkeypatch.setattr(llm_api, "resolve_default_llm_route", route)
 
     async def admission(_provider, _model, *, owner_user_id):
         assert owner_user_id == 17
@@ -470,9 +476,11 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
 
     import modstore_server.strategic_company_resources as company
     from modstore_server import (
+        llm_api,
         llm_chat_proxy,
         llm_key_resolver,
         llm_quota_monitor,
+        models,
         strategic_portfolio,
         strategic_portfolio_usage,
         strategy_planner,
@@ -515,6 +523,7 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     for module in (
         db_base,
+        models,
         xiaoc_life_store,
         xiaoc_life_reconciliation,
         strategic_portfolio,
@@ -599,7 +608,12 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
             "repo": {"status": "ok", "numeric_signals": {"failures": 1}},
         },
     )
-    monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "model"))
+
+    async def route(_db, user_id, *, platform_only):
+        assert user_id == 17 and platform_only is True
+        return {"provider": "test", "model": "model"}
+
+    monkeypatch.setattr(llm_api, "resolve_default_llm_route", route)
     monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "test-only-key")
 
     async def quota(**kwargs):

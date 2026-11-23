@@ -73,7 +73,12 @@ function bindUiEvents() {
     const apiBase = typeof API_BASE !== 'undefined' ? API_BASE : ''
     const form = new FormData()
     form.append('file', file)
-    fetch(apiBase + '/api/customers/import', { method: 'POST', body: form })
+    const requestKey = 'customers-import:' + (crypto.randomUUID
+      ? crypto.randomUUID()
+      : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''))
+    fetch(apiBase + '/api/customers/import', {
+      method: 'POST', body: form, headers: { 'Idempotency-Key': requestKey },
+    })
       .then(function (r) {
         return r.text().then(function (text) {
           try {
@@ -98,6 +103,8 @@ function bindUiEvents() {
           }
           alert(msg)
           if (typeof loadCustomers === 'function') loadCustomers()
+        } else if (_r.status === 202) {
+          alert((data.message || '导入任务等待审批或结果核验') + (data.task_id ? '\n任务：' + data.task_id : '') + '\n请查看原任务，勿重复导入。')
         } else {
           alert('导入失败：' + (data.message || '未知错误') + (_r.status === 500 ? '（服务器 500，请查看控制台或后端日志）' : ''))
         }
@@ -315,7 +322,6 @@ function switchView(view) {
   document.getElementById('view-' + view).classList.add('active')
 
   if (view === 'products') loadProducts()
-  if (view === 'tools') loadTools()
   if (view === 'materials') {
     loadMaterials()
     loadLowStock()

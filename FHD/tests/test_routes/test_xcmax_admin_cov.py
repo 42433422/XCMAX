@@ -32,6 +32,8 @@ from app.fastapi_routes.xcmax_admin import (
     _to_float,
     _to_int,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_routes.test_admin_employee_admission import admin_employee as admin_employee
 
 
 @_shared_scope_contextmanager
@@ -1173,44 +1175,27 @@ class TestLocalEndpoints:
                 stack.enter_context(cm)
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
-                json={"task": "run", "input_data": "not-a-dict"},
+                json={
+                    "task": "run",
+                    "input_data": "not-a-dict",
+                    "idempotency_key": "invalid-input",
+                },
             )
         assert resp.status_code == 400
 
-    def test_local_employee_execute_success(self, client: TestClient):
-        with ExitStack() as stack:
-            for cm in _local_employee_execute_session_patches():
-                stack.enter_context(cm)
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.executor.execute_employee_task_local",
-                    return_value={"success": True, "output": "done"},
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
-                    return_value=(True, "ok"),
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
-                    return_value="run-1",
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
-                    return_value=None,
-                )
-            )
-            resp = client.post(
-                "/api/xcmax/local/employees/emp1/execute",
-                json={"task": "run_report"},
-            )
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+    def test_local_employee_execute_success(self, client: TestClient, admin_employee):
+        entry = admin_employee
+        resp = client.post(
+            "/api/xcmax/local/employees/emp1/execute",
+            json={"task": "run_report", "idempotency_key": "admin-cov"},
+            headers=entry.actor.headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is False
+        assert resp.json()["execution_state"] == "unknown"
+        assert resp.json()["run_id"] == resp.json()["agent_run_id"]
+        entry.invocation.assert_called_once()
+        assert entry.repository.get(resp.json()["run_id"]).user_id == str(entry.actor.user_id)
 
 
 # ---------------------------------------------------------------------------

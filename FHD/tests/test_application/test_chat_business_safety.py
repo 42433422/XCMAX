@@ -13,11 +13,11 @@ import pytest
 from fastapi import Request
 
 from app.application import chat_business_safety as safety
-from app.application import chat_business_safety_attendance as attendance_safety
-from app.application import chat_business_safety_leave as leave_safety
-from app.application import chat_business_safety_output as output_safety
-from app.application import chat_business_safety_personnel as personnel_safety
 from app.application import planner_compat_service as planner_compat
+from app.domain.app_pure import chat_business_safety_attendance as attendance_safety
+from app.domain.app_pure import chat_business_safety_leave as leave_safety
+from app.domain.app_pure import chat_business_safety_output as output_safety
+from app.domain.app_pure import chat_business_safety_personnel as personnel_safety
 from app.domain.app_pure.chat_business_safety_core import BusinessActorIdentity, BusinessChatIntent
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 

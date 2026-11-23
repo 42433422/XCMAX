@@ -238,6 +238,7 @@ def preserve_run_evidence(
     from app.application.agent_orchestrator.verification_integrity import (
         preserve_verification_receipts,
         unchanged_receipt_observation,
+        verified_pending_settlement,
     )
 
     preserve_verification_receipts(run, previous)
@@ -258,9 +259,13 @@ def preserve_run_evidence(
                 )
             return
     old = previous.metadata
-    if old.get("non_retryable"):
+    settled_pending = allow_planning_replacement and verified_pending_settlement(run, previous)
+    if old.get("non_retryable") and not settled_pending:
         run.metadata["non_retryable"] = True
-    recovery = {**copy.deepcopy(old.get("recovery") or {}), **(run.metadata.get("recovery") or {})}
+    recovery = {
+        **({} if settled_pending else copy.deepcopy(old.get("recovery") or {})),
+        **(run.metadata.get("recovery") or {}),
+    }
     if (old.get("recovery") or {}).get("state") == "manual_reconciliation_required":
         recovery["state"] = "manual_reconciliation_required"
     if recovery:
@@ -376,6 +381,14 @@ def preserve_run_evidence(
     run.events = list(events.values())
     if not allow_safe_retry and (
         (previous.status in terminal and run.status != previous.status)
+        or (
+            previous.status == "unknown"
+            and run.status != previous.status
+            and (
+                old.get("non_retryable")
+                or (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+            )
+        )
         or (
             previous.status in {"paused", "blocked"}
             and run.status in {"queued", "planning", "running", "retrying"}

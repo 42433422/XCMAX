@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-11-22 05:45 UTC",
+  "generated_at": "2026-11-22 21:21 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -357,7 +357,13 @@
       "frontend_statements": 92,
       "source": "pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json"
     },
-    "quality_gate": {
+    "provenance": {
+      "source_sha": "92505cab6",
+      "captured_at": "2026-07-25T11:34:00Z",
+      "scope": "recorded_source_only",
+      "current_source_status": "UNVERIFIED"
+    },
+    "recorded_quality_gate": {
       "status": "passed",
       "reason": "2026-09-01（D2-5）coverage_ramp stub 82 个清零迁出后，总口径与真实行为口径合一：floor 自行为口径 line 78 / branch 69 起步，只升不降（ADR-0005）",
       "backend_line_floor": 78,

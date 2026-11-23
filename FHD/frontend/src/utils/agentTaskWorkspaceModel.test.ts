@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentRun } from '@/api/agentRuns'
+import type { AgentRun, AgentTaskSummary } from '@/api/agentRuns'
 import { activeRunIdOfTask, conversationIdOfTask, groupAgentRunsIntoTasks, taskSummariesToTaskItems } from './agentTaskWorkspaceModel'
 
 function run(overrides: Partial<AgentRun> = {}): AgentRun {
@@ -260,6 +260,36 @@ describe('groupAgentRunsIntoTasks', () => {
       command_id: 'taskcmd-1',
       status: 'requested',
     })
+  })
+
+  it.each(['metadata-only', 'current-run-history'])('keeps %s uncertain receipts out of completion without replay controls', (source) => {
+    const summary: AgentTaskSummary = {
+      task_id: 'uncertain-summary', user_id: '7', title: '原回执待核对', source: 'agent', task_type: 'agent',
+      status: 'completed', attempt: 1, run_count: 1, active_run_id: 'run-1',
+      metadata: source === 'metadata-only' ? { reconciliation_required: true } : {},
+      runs: source === 'current-run-history' ? [run({ final_output: { reconciliation_required: true } })] : undefined,
+      progress: { percent: 100, stage: '任务完成' } as AgentTaskSummary['progress'],
+      capabilities: { approve: true, pause: true, resume: true, cancel: true, retry: true, evidence: true },
+    }
+    const [item] = taskSummariesToTaskItems([summary])
+    expect(item.status).toBe('blocked')
+    expect(item.stage).toBe('结果待核对，请查看原任务回执')
+    expect(item.progress).toBe(100)
+    expect(item.payload).toMatchObject({
+      rawRunStatus: 'unknown',
+      capabilities: { approve: false, pause: false, resume: false, cancel: false, retry: false, evidence: true },
+    })
+  })
+
+  it('does not let a prior uncertain run override the verified current run', () => {
+    const [item] = taskSummariesToTaskItems([{
+      task_id: 'reconciled-summary', user_id: '7', title: '已核验结果', source: 'agent', task_type: 'agent',
+      status: 'completed', attempt: 2, run_count: 2, active_run_id: 'run-2',
+      metadata: { reconciliation_required: false },
+      runs: [run({ final_output: { reconciliation_required: true } }), run({ run_id: 'run-2' })],
+    }])
+    expect(item.status).toBe('success')
+    expect(item.payload?.rawRunStatus).toBe('completed')
   })
 
   it('uses canonical server progress when a lightweight snapshot has no run payload', () => {

@@ -5,7 +5,8 @@ import agentRunsApi from '@/api/agentRuns'
 import { downloadBlob } from '@/utils'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
-import type { AgentRunResponse, AgentVerificationReport, AgentVerificationStatus } from '@/api/agentRuns'
+import type { AgentRunResponse, AgentTaskSummary, AgentVerificationReport, AgentVerificationStatus } from '@/api/agentRuns'
+import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 
 vi.mock('@/utils', () => ({ downloadBlob: vi.fn() }))
 
@@ -268,6 +269,54 @@ describe('AgentTaskRuntimePanel', () => {
     expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
     expect(wrapper.get('.agent-result-summary').classes()).toContain('agent-result-summary--unverified')
   })
+
+  it('keeps a metadata-only uncertain task summary pending reconciliation in the runtime panel', () => {
+    const [projected] = taskSummariesToTaskItems([{
+      task_id: 'task-unknown',
+      status: 'completed',
+      active_run_id: 'run-unknown',
+      metadata: { reconciliation_required: true, business_result: { summary: '订单创建成功' } },
+    } as AgentTaskSummary])
+    const wrapper = mountTask(projected)
+
+    expect(projected.payload?.rawRunStatus).toBe('unknown')
+    expect(wrapper.get('.agent-result-summary').text()).toContain('结果待核对')
+    expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
+    expect(wrapper.get('.agent-result-summary').classes()).toContain('agent-result-summary--unverified')
+    expect(wrapper.find('.agent-verification-action').exists()).toBe(false)
+  })
+
+  it('does not use an older accepted verification to certify a currently uncertain run', () => {
+    const source = verificationTask('verified')
+    const wrapper = mountTask({
+      ...source,
+      payload: {
+        ...source.payload,
+        rawRunStatus: 'unknown',
+        finalOutput: { ...source.payload.finalOutput, business_result: { summary: '订单创建成功' } },
+      },
+    })
+
+    expect(wrapper.get('.agent-result-verification').attributes('data-status')).toBe('inconclusive')
+    expect(wrapper.get('.agent-result-summary').text()).toContain('结果待核对')
+    expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
+    expect(wrapper.find('.agent-verification-action').exists()).toBe(false)
+  })
+
+  it.each(['failed', 'inconclusive', 'pending', 'not_verified'] as const)(
+    'does not certify a contradictory accepted %s report', (status) => {
+      const source = verificationTask(status)
+      source.payload.finalOutput.verification.accepted = true
+      const wrapper = mountTask({
+        ...source,
+        payload: { ...source.payload, finalOutput: { ...source.payload.finalOutput, business_result: { summary: '订单创建成功' } } },
+      })
+
+      expect(wrapper.get('.agent-result-summary').text()).toContain('结果尚未完成核验')
+      expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
+      expect(wrapper.get('.agent-result-summary').classes()).toContain('agent-result-summary--unverified')
+    },
+  )
 
   it('does not claim a saved receipt while execution has only frozen a pending contract', () => {
     const source = verificationTask('pending')

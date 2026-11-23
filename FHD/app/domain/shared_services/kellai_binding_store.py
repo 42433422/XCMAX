@@ -136,7 +136,7 @@ def start_pairing(
         raise ValueError("授权范围无效")
     if not set(DEFAULT_SCOPES).issubset(selected):
         raise ValueError("客来来模块需要客户档案与会话只读权限")
-    if set(selected) - set(DEFAULT_SCOPES) and actor is None:
+    if actor is None:
         raise ValueError("请先登录 XCMAX 企业账号，再申请渠道或发送权限")
     with _LOCK:
         state = _read()

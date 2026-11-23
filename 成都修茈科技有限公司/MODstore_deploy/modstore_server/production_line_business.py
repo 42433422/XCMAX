@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -269,6 +270,8 @@ def _value_fact(db, step_id, scope, owner_id, number):
             for row in rows
             if row.receipt_kind == "first_use"
             and row.occurred_at >= delivery.occurred_at
+            and row.artifact_id == scope.artifact_id
+            and _receipt_evidence(row).get("artifact_sha256") == scope.artifact_sha256
             and _receipt_evidence(row).get("success") is True
             and _receipt_evidence(row).get("business_output") is True
         ]
@@ -282,6 +285,7 @@ def _value_fact(db, step_id, scope, owner_id, number):
             if (
                 row.receipt_kind != "outcome"
                 or row.occurred_at < chosen[-1].occurred_at
+                or row.artifact_id != scope.artifact_id
                 or evidence.get("artifact_sha256") != scope.artifact_sha256
                 or any(
                     evidence.get(key) != agreed.get(key)
@@ -290,7 +294,10 @@ def _value_fact(db, step_id, scope, owner_id, number):
             ):
                 continue
             measured, target = evidence.get("measured_value"), evidence.get("target")
-            if isinstance(measured, (int, float)) and isinstance(target, (int, float)):
+            if all(
+                type(value) in (int, float) and math.isfinite(value)
+                for value in (measured, target, evidence.get("baseline"))
+            ):
                 if (agreed.get("comparison") == "ge" and measured >= target) or (
                     agreed.get("comparison") == "le" and measured <= target
                 ):

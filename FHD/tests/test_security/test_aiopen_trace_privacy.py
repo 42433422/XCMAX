@@ -58,7 +58,7 @@ def test_tool_trace_omits_arguments_results_and_unknown_tool_names(tool, audit):
     record = payload["data"]["legacy_tool_records"][0]
     assert record["output"]["success"] is False and record["output"]["status_code"] == 403
     assert record["params"] == {"payload_redacted": True, "argument_count": 2}
-    assert record["action"] == ("unknown_tool" if tool == PRIVATE else tool)
+    assert record["action"] == (tool if tool == "ui_snapshot" else "unknown_tool")
     assert context["user_id"] == "existing-actor"
 
 

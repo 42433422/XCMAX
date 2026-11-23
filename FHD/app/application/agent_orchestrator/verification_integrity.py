@@ -55,6 +55,7 @@ def unchanged_receipt_observation(previous, current) -> dict | None:
 def preserve_verification_receipts(run: AgentRun, previous: AgentRun) -> None:
     from app.application.agent_orchestrator.result_verification import (
         PROTOCOL,
+        pending_execution_receipt,
         preview_continuation_params,
     )
 
@@ -78,9 +79,8 @@ def preserve_verification_receipts(run: AgentRun, previous: AgentRun) -> None:
     prior_ids = {call.call_id for call in previous.tool_calls}
     missing = []
     for old in protected:
-        successful = (
-            bool(old.metadata.get("verification_output_sha256"))
-            and old.output.get("success") is True
+        successful = bool(old.metadata.get("verification_output_sha256")) and (
+            old.output.get("success") is True or pending_execution_receipt(old.output)
         )
         if successful and any(
             call.step_id == old.step_id and call.call_id not in prior_ids for call in run.tool_calls
@@ -133,7 +133,12 @@ def preserve_verification_receipts(run: AgentRun, previous: AgentRun) -> None:
             for key in ("step_id", "node_id", "tool_id", "action")
         ) or canonical_hash(call.params) != canonical_hash(old.params):
             raise ValueError("frozen verification call identity or parameters cannot change")
-        for key in ("verification_contract", "attempt_count"):
+        if (
+            "continued_from_call_id" in call.metadata
+            and "continued_from_call_id" not in old.metadata
+        ):
+            raise ValueError("frozen verification continuation identity cannot change")
+        for key in ("verification_contract", "attempt_count", "continued_from_call_id"):
             if key not in old.metadata:
                 continue
             if key in call.metadata and canonical_hash(call.metadata[key]) != canonical_hash(
@@ -158,3 +163,28 @@ def preserve_verification_receipts(run: AgentRun, previous: AgentRun) -> None:
         call.finished_at, call.duration_ms = old.finished_at, old.duration_ms
         call.metadata["verification_output_sha256"] = digest
     run.tool_calls = missing + run.tool_calls
+
+
+def verified_pending_settlement(run: AgentRun, previous: AgentRun) -> bool:
+    """A frozen accepted effect can settle only through bound independent evidence."""
+    from app.application.agent_orchestrator.result_verification import (
+        pending_execution_receipt,
+        summarize_verification,
+    )
+
+    return bool(
+        (previous.metadata.get("recovery") or {}).get("state") == "result_pending"
+        and not run.metadata.get("non_retryable")
+        and not run.metadata.get("recovery")
+        and {call.call_id for call in run.tool_calls}
+        == {call.call_id for call in previous.tool_calls}
+        and {step.step_id for step in run.steps} == {step.step_id for step in previous.steps}
+        and all(step.status in {"completed", "skipped"} for step in run.steps)
+        and any(pending_execution_receipt(call.output) for call in run.tool_calls)
+        and summarize_verification(run).get("accepted") is True
+        and all(
+            (call.metadata.get("verification") or {}).get("status") == "verified"
+            for call in run.tool_calls
+            if pending_execution_receipt(call.output)
+        )
+    )

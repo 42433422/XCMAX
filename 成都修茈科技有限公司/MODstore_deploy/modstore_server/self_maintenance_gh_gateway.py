@@ -362,6 +362,13 @@ class GhActionsDeploymentGateway:
         manifest = self.fetch_release_identity(environment).require_complete("release_manifest")
         if manifest.git_sha != merge_sha:
             raise DeploymentReceiptError("release_manifest_sha_mismatch")
+        if environment == "staging":
+            if not manifest.artifact_sha256:
+                raise DeploymentReceiptError("staging_manifest_missing_artifact_sha256")
+            inputs = {
+                "release_sha": merge_sha,
+                "release_artifact_sha256": manifest.artifact_sha256,
+            }
         existing = self._find_dispatch(environment, merge_sha, action_id, controller_sha)
         if existing is not None:
             return self._bind_dispatch(binding, existing)

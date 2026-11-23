@@ -1,6 +1,5 @@
 import type { Ref } from 'vue'
 import { extractAgentRunId, type useAgentRunEventSync } from '../useAgentRunEvents'
-import type { useChatDbTokenGate } from '../useChatDbTokenGate'
 import type { useChatExcelContext } from '../useChatExcelContext'
 import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
@@ -34,7 +33,7 @@ import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatF
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
+import { isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -53,10 +52,7 @@ export interface ChatOrchestrationRemoteRoundDeps {
   retainConversationMessages?: ChatMessagesApi['retainConversationMessages']
   ttsEnabled: Ref<boolean>
   chatSessionActivity: ReturnType<typeof useChatSessionActivity>
-  pendingDbWriteChatRetryMessages: Ref<string[] | null>
-  plannerWriteUnlockResumeDraft: Ref<string>
   chatRequest: ReturnType<typeof useChatRequest>
-  handleChatRequiresToken: ReturnType<typeof useChatDbTokenGate>['handleChatRequiresToken']
   resolveExcelAnalysisContextForRequest: ReturnType<typeof useChatExcelContext>['resolveExcelAnalysisContextForRequest']
   multimodalPendingCount: ReturnType<typeof useChatExcelContext>['multimodalPendingCount']
   stateSteps: Ref<Array<{ node_id: string; status: 'succeeded' | 'failed'; output_summary: string }>>
@@ -88,10 +84,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     applyPlainTextToMessageIndex,
     ttsEnabled,
     chatSessionActivity,
-    pendingDbWriteChatRetryMessages,
-    plannerWriteUnlockResumeDraft,
     chatRequest,
-    handleChatRequiresToken,
     resolveExcelAnalysisContextForRequest,
     multimodalPendingCount,
     stateSteps,
@@ -140,7 +133,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}),
       ...(execution ? { execution } : {}),
       ...(businessResult ? { businessResult } : {}),
-      ...(runtimeContinuation ? { runtimeContinuation, workflowAction: runtimeExecutionState(payload) } : {}),
+      ...(runtimeContinuation ? { runtimeContinuation } : {}),
       ...(approvalCard ? { approvalCard } : {}),
     }
     if (receipt.status === 'saved' && receiptIds.length) {
@@ -163,20 +156,28 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     return Object.keys(extras).length ? extras : undefined
   }
 
+  function isUnfinishedResponse(value: unknown): boolean {
+    const payload = asPlannerPayload(value)
+    const isRuntime = payload.runtime === 'codex' || asRecord(payload.data).runtime === 'codex'
+    // A rejected runtime admission is terminal for this round, even when its parent is retained.
+    // Canonical state keeps reconciliation and authorization waits ahead of the runtime envelope.
+    if (isRuntime && ['blocked', 'reply_completed'].includes(plannerExecutionState(payload))) return false
+    return isUnfinishedPlannerResponse(payload)
+  }
+
   function conversationStatus(payload: ChatPlannerPayload): ChatConversationStatus {
     const activeTurn = readActiveChatTurn(payload)
     if (activeTurn) return ['waiting_approval', 'paused'].includes(activeTurn.status) ? 'waiting' : 'review'
     if (requiresTurnReconciliation(payload)) return 'review'
     if (isRuntimeWaiting(payload) || payload.requires_token || parseApprovalCardFromPayload(payload)?.status === 'pending') return 'waiting'
     if (['waiting_user', 'waiting_approval', 'waiting_input', 'waiting_auth', 'paused'].includes(plannerExecutionState(payload))) return 'waiting'
-    if (isUnfinishedPlannerResponse(payload)) return 'review'
+    if (isUnfinishedResponse(payload)) return 'review'
     if (['cancelled', 'interrupted'].includes(plannerExecutionState(payload))) return 'stopped'
     return payload.success === false ? 'error' : 'ready'
   }
 
   function observeModelOutcome(text: string, payload?: ChatPlannerPayload) {
-    if (payload && isRuntimeWaiting(payload)) return
-    if (isUnfinishedPlannerResponse(payload)) return
+    if (isUnfinishedResponse(payload)) return
     const execution = readChatExecution(payload)
     if (execution?.effect === 'preview') return
     const outcome = modelOutcomeFromText(text)
@@ -241,10 +242,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     }
     const addRoundMessage = async (text: string, extras?: UiChatMessageExtras) => {
       if (round.isActive()) addMessage(text, 'ai', { turnId: requestScope.turnId, ...extras }, { speak: ttsEnabled.value })
-    }
-    if (round.isActive() && !opts?.fromWriteUnlock) {
-      pendingDbWriteChatRetryMessages.value = null
-      plannerWriteUnlockResumeDraft.value = ''
     }
     const primaryText = remoteMessages[0] || ''
     const continuingRuntime = Boolean(pendingRuntimeRunId(requestScope.messages, requestScope.sessionId))
@@ -543,7 +540,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           streamMessage.workflowAction = String(wrap.execution_state || asRecord(data.data).status || data.status
             || data.action || (wrap.success === false ? 'failed' : 'completed'))
         }
-        if (isUnfinishedPlannerResponse(wrap)) return
+        if (isUnfinishedResponse(wrap)) return
         if (wrap.task) {
           showTaskConfirm(wrap.task)
           emitAssistantPush({
@@ -573,7 +570,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             if (ev.type === 'done') {
               doneResult = ev.result
               receivedDone = true
-              awaitingAuthorization = false
             } else if (ev.type === 'error') {
               sseError = String(ev.message || '流式接口错误')
               sseOutcomeUnknown = Boolean(ev.requires_reconciliation || ev.execution_outcome === 'unknown')
@@ -642,7 +638,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } else if (ev.type === 'done') {
             doneResult = ev.result
             receivedDone = true
-            awaitingAuthorization = false
           } else if (ev.type === 'error') {
             consumeRoute(ev.route_metadata)
             streamRunId = ev.run_id || streamRunId
@@ -662,12 +657,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               cancelStreamFrame()
               applyStreamText(streamPlain)
             }
-            if (!round.isActive()) return
-            handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
-            const upTok = String(tokenName || '').toUpperCase()
-            if (upTok.includes('WRITE') || /写入|导入|入库|二级|数据库写入|DB_WRITE/i.test(String(tokenDesc || ''))) {
-              plannerWriteUnlockResumeDraft.value = streamPlain
-            }
           }
         }
         plannerEventHandler = handlePlannerEventRef
@@ -680,8 +669,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (roundResult.error && !receivedDone) throw roundResult.error
         // 请求已成功送出并拿到流：本轮工件 id 用毕即清，避免串到下一轮。
         completeArtifacts()
-        if (awaitingAuthorization) {
+        if (awaitingAuthorization && plannerExecutionState(doneResult) !== 'unknown') {
           round.setStatus('waiting')
+          if (canUpdateStream() && streamMessage) {
+            streamMessage.workflowAction = 'waiting_auth'
+            delete streamMessage.streamingShell
+          }
           if (streamRunId) syncStreamRun({ run_id: streamRunId })
           return
         }
@@ -720,7 +713,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             const result = await aiChatRound.resume(requestScope.turnId, replayController.signal)
             if (result.text) streamPlain = result.text
             // The replayed terminal receipt is authoritative even if the socket closes afterward.
-            resumed = !sseError && receivedDone && !awaitingAuthorization && isOwnerCurrent()
+            resumed = !sseError && receivedDone
+              && (!awaitingAuthorization || plannerExecutionState(doneResult) === 'unknown') && isOwnerCurrent()
           } catch {
             resumed = false
           } finally {
@@ -892,9 +886,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const receipt = data.batch && Array.isArray(data.results) ? data.results[data.results.length - 1] : data
     recordChatModelRoute(requestScope.sessionId, receipt?.route_metadata, identity)
     const showUnfinished = async (part: ChatPlannerPayload) => {
-      const failed = part.success === false && runtimeExecutionState(part) === 'blocked'
       const text = String(part.response || part.message || '原任务尚未完成，请在任务工作区核对进度。')
-      await addRoundMessage(failed ? `处理失败: ${text}` : text, responseExtras(part, failed))
+      await addRoundMessage(text, responseExtras(part))
       if (!round.isActive()) return
       syncTaskFromChatResponse(part, primaryText)
       await syncAgentRunFromPayload(part, primaryText, isOwnerCurrent)
@@ -906,14 +899,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (activeTurn) deps.observeActiveTurn?.(activeTurn)
     }
     if (data.batch && Array.isArray(data.results)) {
-      if (data.success || results.some((part) => isUnfinishedPlannerResponse(part) || isRuntimeWaiting(part))) {
+      if (data.success || results.some(isUnfinishedResponse) || results.some(part => runtimeContinuationFromPayload(part))) {
         for (const part of results) {
-          if (isUnfinishedPlannerResponse(part) || isRuntimeWaiting(part)) {
+          if (isUnfinishedResponse(part)) {
             await showUnfinished(part)
           } else if (part && part.success) {
-            if (part.requires_token) {
-              handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
-            }
             await addRoundMessage(part.response || '', responseExtras(part))
             attachBusinessResultToLastAiMessage(part)
             if (!round.isActive()) return
@@ -940,7 +930,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           attachWorkflowTraceToLastAiMessage(lastOk)
           attachApprovalCardToLastAiMessage(lastOk)
         }
-        if (results.some(isUnfinishedPlannerResponse)) return
+        if (results.some(isUnfinishedResponse)) return
         const lastTask = [...results].reverse().find((p) => p.task)
         if (lastTask?.task) {
           showTaskConfirm(lastTask.task)
@@ -970,15 +960,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       return
     }
 
-    if (isUnfinishedPlannerResponse(data) || isRuntimeWaiting(data)) {
+    if (isUnfinishedResponse(data)) {
       await showUnfinished(data)
       return
     }
 
     if (data.success) {
-      if (data?.requires_token) {
-        handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
-      }
       await addRoundMessage(data.response || '', responseExtras(data))
       observeModelOutcome(String(data.response || data.message || ''), data)
       if (!round.isActive()) return

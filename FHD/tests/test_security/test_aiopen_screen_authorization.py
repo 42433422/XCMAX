@@ -17,13 +17,13 @@ from app.application.aiopen import service
 from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
 from app.domain.aiopen.principal import ScreenPrincipal
 from app.fastapi_routes import ai_open, aiopen_access_dependency
-from app.fastapi_routes.ai_qclaw import router as legacy_router
 from app.infrastructure.aiopen.cursor_hub import AiOpenCursorHub
 from app.infrastructure.aiopen.principal_context import (
     current_screen_principal,
     screen_principal_scope,
 )
 from app.middleware.csrf import CSRFMiddleware
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 ALICE = ScreenPrincipal("alice", "tenant-a")
 BOB = ScreenPrincipal("bob", "tenant-a")
@@ -43,9 +43,9 @@ class Screen:
         )
 
 
-async def seed(hub):
+async def seed(hub, alice_owner=ALICE):
     # The foreign screen deliberately connects first.
-    for session_id, owner in [("bob", BOB), ("other-tenant", OTHER_TENANT), ("alice", ALICE)]:
+    for session_id, owner in [("bob", BOB), ("other-tenant", OTHER_TENANT), ("alice", alice_owner)]:
         await hub.connect(
             session_id,
             Screen(hub, session_id),
@@ -142,9 +142,11 @@ def test_registry_requires_complete_server_binding_and_honors_revocation():
 
 
 @pytest.fixture
-def client(monkeypatch):
+def client(monkeypatch, trusted_actor):
+    actor = trusted_actor(user_id=17, role="admin", tier="admin")
+    owner = ScreenPrincipal(str(actor.user_id), str(actor.tenant_id))
     hub = AiOpenCursorHub()
-    asyncio.run(seed(hub))
+    asyncio.run(seed(hub, owner))
     state = RuntimeState({"runtime_keys": {"legacy-fixture": {"label": "old"}}})
     keys = ApiKeyRegistry(state, lambda: "env-fixture", lambda count: "issued-fixture", lambda: 0)
     monkeypatch.setattr(service, "_keys", keys)
@@ -157,11 +159,6 @@ def client(monkeypatch):
     monkeypatch.setitem(service.AIOPEN_STATE, "remote_control_enabled", True)
     app = FastAPI()
     app.include_router(ai_open.router)
-    app.dependency_overrides[ai_open.require_admin_user] = lambda: SimpleNamespace(
-        id="alice",
-        tenant_id="tenant-a",
-        is_active=True,
-    )
     with TestClient(app) as http:
         created = http.post(
             "/api/aiopen/keys",
@@ -171,10 +168,11 @@ def client(monkeypatch):
                 "user_id": "bob",
                 "tenant_id": "tenant-b",
             },
+            headers=actor.headers,
         )
         assert created.status_code == 200
         key = created.json()["key"]
-        assert keys.resolve_principal(key) == ALICE
+        assert keys.resolve_principal(key) == owner
         yield http, key, hub
 
 
@@ -244,7 +242,6 @@ def test_client_key_is_session_owned_revocable_and_scope_limited(monkeypatch, tm
     app = FastAPI()
     app.add_middleware(CSRFMiddleware)
     app.include_router(ai_open.router)
-    app.include_router(legacy_router)
     accounts = {p: owner for p, owner in (("a", ALICE), ("b", BOB), ("other", OTHER_TENANT))}
 
     def logged_in(request: Request):
@@ -293,18 +290,23 @@ def test_client_key_is_session_owned_revocable_and_scope_limited(monkeypatch, tm
             if index == 1:
                 assert result["serverInfo"]["name"] == "AIOPEN"
             elif index == 2:
-                assert len(result["tools"]) == 18
+                assert len(result["tools"]) == len(service.TOOL_DEFINITIONS)
+                assert "api_call" not in {tool["name"] for tool in result["tools"]}
             else:
                 show = result["content"][0]["text"]
                 assert "alice" in show and "bob" not in show and "other-tenant" not in show
         forbidden = {"tool": "chat", "args": {"message": "blocked"}}
         assert http.post("/api/aiopen/invoke", headers=headers, json=forbidden).status_code == 403
-        for path in (
-            "/api/aiopen/loop/verify",
-            "/api/aiopen/openclaw/chat",
-            "/api/ai/qclaw/openclaw/chat",
-        ):
-            assert http.post(path, headers=headers, json={"message": "blocked"}).status_code == 401
+        for path in ("/api/aiopen/loop/verify",):
+            rejected = http.post(path, headers=headers, json={"message": "blocked"})
+            assert rejected.status_code == 403
+            assert rejected.json()["code"] == "AIOPEN_SCOPE_DENIED"
+        assert (
+            http.post(
+                "/api/aiopen/openclaw/chat", headers=headers, json={"message": "blocked"}
+            ).status_code
+            == 404
+        )
         for account in ("b", "other"):
             http.cookies.set("session", account)
             assert not http.get("/api/aiopen/client").json()["has_active_key"]

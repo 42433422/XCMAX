@@ -14,19 +14,52 @@ def test_manifest_products_via_service():
     assert data.get("config", {}).get("products_via_service") is True
 
 
-@pytest.mark.parametrize("action", ["list", "delete"])
-def test_products_service_dispatch(monkeypatch, action):
+def test_products_read_service_dispatch(monkeypatch):
     from unittest.mock import Mock
 
     from app.mod_sdk import erp_products_facade as pf
 
     service = Mock()
     service.get_products.return_value = {"success": True, "data": [], "total": 0}
-    service.delete_product.return_value = {"success": True}
+    monkeypatch.setattr(pf, "_service", lambda: service)
+    out = pf.products_list(None)
+    assert out["success"] and out["execution_path"] == "products_service"
+
+
+@pytest.mark.parametrize(
+    "method,action,body",
+    [
+        ("products_add", "create", {"name": "P1"}),
+        ("products_update", "update", {"id": 42, "name": "P2"}),
+        ("products_delete", "delete", {"id": 42}),
+        ("products_batch_delete", "batch_delete", {"ids": [42]}),
+    ],
+)
+def test_products_write_facade_only_submits_canonical_contract(monkeypatch, method, action, body):
+    from unittest.mock import Mock
+
+    from starlette.requests import Request
+
+    from app.mod_sdk import erp_products_facade as pf
+
+    request = Request(
+        {"type": "http", "method": "POST", "path": "/products/command", "headers": []}
+    )
+    entry = Mock(return_value=({"success": False, "state": "waiting_approval"}, 202))
+    service = Mock()
     monkeypatch.setattr(pf, "_service", lambda: service)
     monkeypatch.setattr(pf, "_write_gate", lambda request: None)
-    out = pf.products_list(None) if action == "list" else pf.products_delete(None, {"id": 42})
-    assert out["success"] and out["execution_path"] == "products_service"
+    monkeypatch.setattr("app.fastapi_routes.tools_execute.run_tools_execute_agent", entry)
+    response = getattr(pf, method)(request, body)
+    assert response.status_code == 202
+    assert service.mock_calls == []
+    assert entry.call_count == 1
+    submitted = entry.call_args.kwargs
+    assert submitted["request"] is request
+    assert set(submitted) == {"request", "body", "route_path"}
+    assert submitted["body"]["tool_id"] == "products"
+    assert submitted["body"]["action"] == action
+    assert all(submitted["body"]["params"][key] == value for key, value in body.items())
 
 
 def test_domain_handlers_products_list_uses_service(monkeypatch):

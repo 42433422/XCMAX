@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -233,6 +233,24 @@ test('legacy startup entry shares successful report-only sandbox and native rece
   assert.equal(current.calls()[0].sandbox, 'read-only');
   assert.equal(git(current.remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/devfleet'), '');
 });
+
+test('installed compatibility agent preserves complete startup dependencies and native receipts',
+  { ...native, timeout: 90000 }, async t => {
+    const target = mkdtempSync(join(tmpdir(), 'para-installed-contract-'));
+    t.after(() => rmSync(target, { recursive: true, force: true }));
+    execFileSync('bash', [join(directory, 'install_e2e_agent.sh')], {
+      cwd: target, encoding: 'utf8', timeout: 45000,
+      env: { PATH: process.env.PATH, E2E_AGENT_DEST_DIR: target },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const current = await worker(t, { mode: 'success', reportOnly: true, managed: true,
+      entry: relative(directory, join(target, 'e2e-agent.mjs')) });
+    assert.equal((await current.terminal()).status, 'completed');
+    assert.equal(current.receipt().thread_id, 'original-fixture-thread');
+    assert.equal(current.calls()[0].sandbox, 'read-only');
+    assert.equal(current.calls().filter(row => !row.probe).length, 1);
+    assert.equal(git(current.remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/devfleet'), '');
+  });
 
 test('only probes may select another model, then the selected real task executes once', native, async t => {
   const current = await worker(t, { mode: 'probe-selection', managed: true, env: { DEVFLEET_CODEX_MODEL_PROBE: '1' } });

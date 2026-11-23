@@ -54,7 +54,8 @@
         <div class="card-header">3. 确认提交打印</div>
         <p>提交打印队列后仍需现场核对出纸结果。Windows 需要已安装的 Adobe PDF 打印程序；也可下载后手动打印。</p>
         <button :disabled="!canConfirm" @click="preparePrint">{{ job.status === 'failed' ? '重新确认打印' : '准备打印' }}</button>
-        <button v-if="['submitting', 'outcome_unknown'].includes(job.status)" :disabled="busy" @click="refreshStatus">刷新任务状态</button>
+        <button v-if="['waiting_approval', 'submitting', 'outcome_unknown'].includes(job.status)" :disabled="busy" @click="refreshStatus">刷新任务状态</button>
+        <RouterLink v-if="job.task_id" :to="`/workspaces/${encodeURIComponent(job.task_id)}`">查看执行与审批任务</RouterLink>
         <div v-if="confirmation" role="dialog" aria-label="确认打印标签">
           <p>{{ confirmation.confirm_prompt }}</p>
           <button :disabled="busy" @click="submitPrint">确认并提交打印</button>
@@ -201,10 +202,11 @@ async function preparePrint() {
 async function submitPrint() {
   if (!job.value || !confirmation.value || busy.value) return
   const token = confirmation.value.confirm_token
+  const requestId = confirmation.value.request_id
   confirmation.value = null
   busy.value = true; error.value = ''
   job.value = { ...job.value, status: 'submitting', message: '正在提交打印队列，请勿重复提交' }
-  try { job.value = (await printApi.submitLabelJob(job.value.id, token)).job }
+  try { job.value = (await printApi.submitLabelJob(job.value.id, token, requestId)).job }
   catch (e) { error.value = `提交结果待确认：${message(e)}。请刷新任务状态并检查打印队列。` }
   finally { busy.value = false }
 }

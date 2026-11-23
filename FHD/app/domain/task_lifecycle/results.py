@@ -96,8 +96,14 @@ _EXECUTION_ENVELOPE_KEYS = frozenset(
 )
 
 
-def execution_result_envelopes(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
-    """Walk only result envelopes; business rows in items/sheets are not run states."""
+def execution_result_envelopes(
+    data: dict[str, Any], *, include_execution: bool = False
+) -> Iterator[dict[str, Any]]:
+    """Walk result envelopes; authoritative receipt readers include execution summaries.
+
+    Ordinary control replies may embed a separate unfinished workflow summary.
+    Business rows in items/sheets are never interpreted as run states.
+    """
     pending: list[tuple[dict[str, Any], dict[str, Any] | None]] = [(data, None)]
     seen: set[int] = set()
     while pending:
@@ -137,6 +143,8 @@ def execution_result_envelopes(data: dict[str, Any]) -> Iterator[dict[str, Any]]
                 "chat_payload",
             )
         ]
+        if include_execution:
+            children.append((current.get("execution"), None))
         for key in ("outputs", "node_outputs"):
             outputs = current.get(key)
             if isinstance(outputs, dict):
@@ -258,14 +266,59 @@ def execution_result_error(data: dict[str, Any]) -> str:
     return ""
 
 
-def execution_result_outcome_unknown(data: dict[str, Any]) -> bool:
+def execution_result_outcome_unknown(
+    data: dict[str, Any], *, include_execution: bool = False
+) -> bool:
     """Distinguish uncertain effects from ordinary pending or approval states."""
     return any(
         execution_result_states(result) & _UNKNOWN_STATES
         or result.get("reconciliation_required") is True
         or result.get("requires_reconciliation") is True
         or result.get("outcome_unknown") is True
-        for result in execution_result_envelopes(data)
+        for result in execution_result_envelopes(data, include_execution=include_execution)
+    )
+
+
+def execution_result_proven_not_executed(data: dict[str, Any]) -> bool:
+    """An explicit failed receipt must consistently attest that no effect occurred."""
+    execution = data.get("execution")
+    if not (
+        data.get("success") is False
+        and isinstance(execution, dict)
+        and execution.get("outcome") == "not_executed"
+        and execution.get("committed") is False
+    ):
+        return False
+    return not execution_result_outcome_unknown(data, include_execution=True) and all(
+        not execution_result_states(row)
+        - {"failed", "cancelled", "rejected", "expired", "not_started", "not_executed"}
+        and not any(
+            row.get(flag)
+            for flag in (
+                "success",
+                "ok",
+                "verified",
+                "execution_accepted",
+                "accepted",
+                "pending_approval",
+                "requires_token",
+                "needs_user_input",
+                "requires_user_decision",
+            )
+        )
+        and ("committed" not in row or row["committed"] is False)
+        and row.get("effect") in (None, "none")
+        and (
+            "execution" not in row
+            or (
+                isinstance(row["execution"], dict)
+                and row["execution"].get("outcome") == "not_executed"
+                and row["execution"].get("committed") is False
+            )
+        )
+        and row.get("in_flight", 0) == 0
+        and row.get("unknown", 0) == 0
+        for row in execution_result_envelopes(data, include_execution=True)
     )
 
 
@@ -284,6 +337,19 @@ def execution_result_pending_state(data: dict[str, Any]) -> str:
     states = set().union(
         *(execution_result_states(row) for row in execution_result_envelopes(data))
     )
+    # The orchestration may be blocked precisely because an acknowledged effect
+    # is still pending independent readback. Keep that known effect state rather
+    # than presenting the stopped graph as a failed request or a new unknown.
+    for row in execution_result_envelopes(data):
+        report = row.get("verification")
+        if (
+            isinstance(report, dict)
+            and report.get("protocol") == "xcagi.result-verification.v1"
+            and report.get("accepted") is False
+            and row.get("execution_state")
+            in {"pending", "accepted", "queued", "running", "processing"}
+        ):
+            return str(row["execution_state"])
     pending = next(
         (
             state
@@ -345,65 +411,18 @@ def normalize_execution_result(data: dict[str, Any]) -> dict[str, Any]:
     if error:
         result.update(success=False, message=error)
     if requires_reconciliation:
-        result.update(
-            success=False,
-            outcome="unknown",
-            retryable=False,
-            reconciliation_required=True,
-        )
+        result.update(success=False, retryable=False)
+        # A confirmed wait is still unfinished; independent uncertain evidence
+        # continues to override it and retain the original readback fence.
+        if execution_result_outcome_unknown(data) or execution_result_wait_reason(data) not in {
+            "authorization",
+            "approval",
+            "input",
+        }:
+            result.update(outcome="unknown", reconciliation_required=True)
     return result
 
 
 def execution_result_awaits_approval(data: dict[str, Any]) -> bool:
     """Keep known approval/credential waits distinct from successful execution."""
     return execution_result_wait_reason(data) in {"approval", "authorization"}
-
-
-def agent_node_output(run: Any, node_id: str, *, include_run_error: bool = True) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    for call in reversed(getattr(run, "tool_calls", []) or []):
-        if str(getattr(call, "node_id", "")) != node_id:
-            continue
-        metadata = getattr(call, "metadata", {}) or {}
-        verification = metadata.get("verification") or {}
-        status = verification.get("status")
-        if (
-            metadata.get("verification_contract")
-            and verification.get("accepted") is False
-            and status in {"failed", "inconclusive"}
-            and output.get("success") is True
-        ):
-            # The HTTP projection must not promote a raw tool receipt rejected
-            # by its host verifier. The original receipt stays on the run.
-            output.update(
-                success=False,
-                error_code=f"result_verification_{status}",
-                message="工具结果尚未通过独立核验，请核对原操作结果，勿重复提交。",
-                verification_code=str(verification.get("code") or ""),
-                retryable=False,
-                reconciliation_required=True,
-                outcome="unknown",
-            )
-        break
-    if (
-        include_run_error
-        and not output.get("success")
-        and getattr(run, "error", False)
-        and not output.get("message")
-    ):
-        output["message"] = getattr(run, "error", False)
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output

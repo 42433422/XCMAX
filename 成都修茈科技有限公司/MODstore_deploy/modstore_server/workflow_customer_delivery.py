@@ -30,6 +30,7 @@ from modstore_server.workflow_sandbox_state import workflow_graph_fingerprint
 START_EVENT = "workflow.execution.feedback_started"
 CLAIM_EVENT = "workflow.customer.delivery_started"
 PRODUCED_EVENT = "workflow.customer.delivery_produced"
+COMPLETION_PROTOCOL = "workflow.customer.graph-return.v1"
 ARTIFACT_SOURCE = "native_direct_python_workflow_output"
 MAX_ARTIFACT_BYTES = 64_000_000
 SNAPSHOT_STORAGE = "private_workflow_snapshot_v1"
@@ -206,6 +207,7 @@ def prepare_customer_delivery(
     edges = db.scalars(select(WorkflowEdge).where(WorkflowEdge.workflow_id == workflow.id)).all()
     ordered = _serial_employees(list(nodes), list(edges))
     common = {
+        "completion_protocol": COMPLETION_PROTOCOL,
         "execution_id": int(execution.id),
         "workflow_id": int(workflow.id),
         "user_id": owner,
@@ -322,6 +324,10 @@ def _stored_contract(db: Any, execution_id: int) -> tuple[Any, dict[str, Any], d
         event.event_name != START_EVENT
         or event.aggregate_id != str(execution_id)
         or event.producer != "modstore-python"
+        or (
+            "completion_protocol" in contract
+            and contract["completion_protocol"] != COMPLETION_PROTOCOL
+        )
         or digest(unsigned) != contract.get("contract_sha256")
         or contract.get("execution_id") != execution.id
         or contract.get("user_id") != execution.user_id
@@ -543,6 +549,13 @@ def _load_node_receipt(
     produced = records[PRODUCED_EVENT]
     if (
         any(produced.get(key) != value for key, value in _node_identity(node).items())
+        or (
+            ("completion_protocol" in node or "completion_protocol" in produced)
+            and (
+                node.get("completion_protocol") != COMPLETION_PROTOCOL
+                or produced.get("completion_protocol") != COMPLETION_PROTOCOL
+            )
+        )
         or not isinstance(produced.get("artifacts"), list)
         or not produced["artifacts"]
     ):
@@ -727,6 +740,7 @@ def record_customer_delivery_node(*, execution_id: int, node_id: int, output: di
                 _snapshot_artifact(contract, artifact)
                 for artifact in _native_artifacts(contract, result, verify_files=False)
             ],
+            "completion_protocol": COMPLETION_PROTOCOL,
             "native_result_sha256": digest(result),
             "node_output": deepcopy(output),
             "node_output_sha256": digest(output),
@@ -749,7 +763,14 @@ def record_customer_delivery_node(*, execution_id: int, node_id: int, output: di
 
 
 def load_completed_delivery(db: Any, execution_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read sealed completion facts; later workspace files cannot erase history.
+
+    Download/acceptance and unfinished graph finalization separately verify
+    the private original snapshot, or current bytes for an older unsnapshotted receipt.
+    """
     from modstore_server.workflow_customer_finalization import (
+        RETURNED_EVENT,
+        _legacy_completed_return,
         _load_return,
         _original_delivery,
         _utc,
@@ -758,15 +779,19 @@ def load_completed_delivery(db: Any, execution_id: int) -> tuple[dict[str, Any],
     execution, binding, contract = _stored_contract(db, execution_id)
     if execution.status != "completed" or execution.completed_at is None:
         raise ValueError("workflow customer delivery has not actually completed")
-    returned = _load_return(db, execution_id)
+    produced = load_produced_delivery(db, contract, verify_files=False)
+    returned = (
+        _load_return(db, execution_id)
+        if _event(db, f"{RETURNED_EVENT}:{execution_id}") is not None
+        else _legacy_completed_return(db, execution, binding, contract, produced)
+    )
     _original_delivery(db, returned, verify_files=False)
     if (
         execution.output_data != returned.output_json
         or execution.error_message not in (None, "")
         or _utc(execution.completed_at) != _utc(returned.completed_at)
     ):
-        raise ValueError("workflow completion differs from its original graph return")
-    produced = load_produced_delivery(db, contract, verify_files=False)
+        raise ValueError("workflow customer completion differs from its original graph return")
     required_delivery_artifacts(contract, produced)
     return binding, produced
 

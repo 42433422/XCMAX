@@ -17,6 +17,106 @@ from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, pla
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
+def _approve_and_execute(orchestrator, run, actor):
+    """Approve the frozen step with its actual actor-bound grant, then dispatch it."""
+    from app.application.agent_orchestrator.approval_grant import (
+        consume_approval_grant,
+        issue_approval_grant,
+    )
+
+    grant = issue_approval_grant(run, principal_id=str(actor.user_id))
+    assert grant is not None
+    claims = consume_approval_grant(grant["grant"], run=run, principal_id=str(actor.user_id))
+    staged = orchestrator.stage_approved_run(
+        run.run_id,
+        approved_by=str(actor.user_id),
+        approved_step_id=claims["step_id"],
+        runtime_context=actor.context,
+        authenticated_actor_binding=actor.principal.actor_authorization,
+        approval_claims=claims,
+    )
+    assert staged is not None and staged.status == "queued"
+    return orchestrator.execute_dispatched_run(run.run_id)
+
+
+@pytest.fixture
+def native_preview(tmp_path):
+    """Real owned upload, rows and published preview; only dispatch is substituted."""
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from app.application.elt.preview_confirmation import publish_preview
+    from app.application.elt.service_history import HistoryServiceMixin
+    from app.db.models.elt import EltRun, EltRunRow, EltUpload
+    from app.domain.shared_services.tools_workflow_elt import _summary
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    def receipt(actor, *, executable=False, file_name="宗南.xlsx", **overrides):
+        path = tmp_path / file_name
+        path.write_bytes(b"name,weight\nvalid,5\ninvalid,\n")
+        upload_id = hashlib.sha256(file_name.encode()).hexdigest()[:32]
+        with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+            upload = db.get(EltUpload, upload_id)
+            if upload is None:
+                upload = EltUpload(
+                    id=upload_id,
+                    tenant_id=actor.tenant_id,
+                    owner_user_id=actor.user_id,
+                    file_name=path.name,
+                    suffix=".xlsx",
+                    storage_path=str(path),
+                    size_bytes=path.stat().st_size,
+                    sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                    expires_at=datetime.now(UTC) + timedelta(days=1),
+                )
+                db.add(upload)
+                db.flush()
+            native = EltRun(
+                id=uuid4().hex,
+                tenant_id=actor.tenant_id,
+                owner_user_id=actor.user_id,
+                upload_id=upload.id,
+                file_sha256=upload.sha256,
+                target_type="customers",
+                status="preview_ready",
+                stage="preview_ready",
+                total_rows=2,
+                new_rows=1,
+                error_rows=1,
+            )
+            db.add(native)
+            db.flush()
+            for row, action in ((2, "new"), (18, "error")):
+                db.add(
+                    EltRunRow(
+                        run_id=native.id,
+                        tenant_id=actor.tenant_id,
+                        owner_user_id=actor.user_id,
+                        source_row=row,
+                        source_sheet="宗南",
+                        final_action=action,
+                        normalized_json='{"name":"owned preview row"}',
+                        after_json='{"name":"owned preview row"}' if action == "new" else "{}",
+                    )
+                )
+            publish_preview(db, native)
+            data = _summary(HistoryServiceMixin().run_dict(native))
+        data.update(executable=executable, mapping_pending=[])
+        return {
+            "success": True,
+            "preview": True,
+            "data": data,
+            "requires_user_decision": not executable,
+            "question": "预演完成：第18行（宗南）数据未通过校验，仅继续有效行？"
+            if not executable
+            else "",
+            "resume_params": {"valid_rows_only": True} if not executable else {},
+            **overrides,
+        }
+
+    return receipt
+
+
 @pytest.fixture
 def preview_evidence(trusted_actor, tmp_path):
     from app.application.elt.preview_confirmation import publish_preview
@@ -299,7 +399,10 @@ def test_fresh_approval_does_not_authorize_unproposed_preview_parameters(preview
     assert run.status == "waiting_user"
     original = copy.deepcopy(run.tool_calls[0])
     run.steps[0].params.update(extra)
-    apply_approved_step(run, run.steps[0], approved_by=str(actor.user_id))
+    from app.application.agent_orchestrator.approval_grant import ApprovalGrantError
+
+    with pytest.raises(ApprovalGrantError, match="续跑参数尚未绑定到当前完整计划"):
+        apply_approved_step(run, run.steps[0], approved_by=str(actor.user_id))
     orchestrator._execute_ready_steps(
         run, runtime_context=actor.context, approved_step_id=run.steps[0].step_id
     )

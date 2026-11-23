@@ -54,7 +54,10 @@ class CodexBindingError(ValueError):
 
 def _identity(run: AgentRun) -> str:
     context = run.metadata.get("runtime_context") or {}
-    return canonical_digest({"owner": run.user_id, **{k: context.get(k) for k in _IDENTITY_FIELDS}})
+    identity = {"owner": run.user_id, **{k: context.get(k) for k in _IDENTITY_FIELDS}}
+    if "_credential_authorization" in context:
+        identity["_credential_authorization"] = context["_credential_authorization"]
+    return canonical_digest(identity)
 
 
 @dataclass(frozen=True)
@@ -154,6 +157,15 @@ class CodexBindingStore:
             metadata.get("identity_digest") and metadata["identity_digest"] != _identity(run)
         ):
             raise CodexBindingError("owner_changed", "运行绑定的账号、租户或能力范围已变化")
+        if "_credential_authorization" in context:
+            from app.application.aiopen.service import api_key_execution_context_current
+
+            try:
+                credential_current = api_key_execution_context_current(context)
+            except OSError as exc:
+                raise CodexBindingError("owner_changed", "原调用凭据无法核验") from exc
+            if not credential_current:
+                raise CodexBindingError("owner_changed", "原调用凭据已撤销、过期或授权范围已变化")
         if context.get("session_id") or context.get("conversation_id"):
             if type(context.get("_conversation_revision")) is not int:
                 raise CodexBindingError("conversation_changed", "会话运行缺少可信历史版本")
@@ -388,6 +400,19 @@ class CodexBindingStore:
             if prior is not None:
                 calls[call_id] = copy.deepcopy(prior)
                 return
+            # Existing calls above only read their durable receipt. New work must
+            # wait until the model that proposed it has a settled usage receipt.
+            model_calls = (metadata.get("model_requests") or {}).values()
+            if metadata.get("model_reconciliation_required") or any(
+                item.get("state") == "unknown" for item in model_calls
+            ):
+                raise CodexBindingError(
+                    "reconciliation_required", "原模型计量结果尚待核对，未创建业务任务"
+                )
+            if any(item.get("state") == "reserved" for item in model_calls):
+                raise CodexBindingError(
+                    "call_in_progress", "原模型请求尚未结束，请先等待其计量回执"
+                )
             if any((c.get("receipt") or {}).get("pending_approval") for c in calls.values()):
                 raise CodexBindingError("waiting_user", "请先处理原业务任务的审批")
             if any(

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app.infrastructure.aiopen.principal_context import current_execution_context
+
 from .catalog_builder import entity_schema, find_operation, get_catalog
 
 CATALOG_URI = "xcmax://catalog/operations"
@@ -15,7 +17,7 @@ _JSON = "application/json"
 
 
 def list_resources(app: Any) -> list[dict[str, Any]]:
-    catalog = get_catalog(app)
+    catalog = get_catalog(app, current_execution_context())
     return [
         {
             "uri": CATALOG_URI,
@@ -62,7 +64,7 @@ def read_resource(app: Any, uri: str) -> dict[str, Any]:
     """读取资源；未知或缺失时抛 ``ValueError``（由协议层转 JSON-RPC 错误）。"""
     target = str(uri or "").strip()
     if target == CATALOG_URI:
-        catalog = get_catalog(app)
+        catalog = get_catalog(app, current_execution_context())
         return _contents(
             target,
             {
@@ -78,7 +80,7 @@ def read_resource(app: Any, uri: str) -> dict[str, Any]:
     if not value:
         raise ValueError(f"资源缺少标识：{target}")
     if kind == "operation":
-        entry = find_operation(get_catalog(app), value)
+        entry = find_operation(get_catalog(app, current_execution_context()), value)
         if entry is None:
             raise ValueError(f"目录中不存在 operation：{value}")
         return _contents(target, entry)

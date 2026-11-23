@@ -160,7 +160,7 @@ jobs:
       - name: Run mypy type checking
         run: |
           # 与 pyproject.toml 的开发工具版本一致。
-          pip install mypy==2.4.0 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
+          pip install mypy==2.4.1 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
           mypy --no-error-summary
 
       - name: Run tests with coverage (global floor — ratchet)

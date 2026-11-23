@@ -7,7 +7,6 @@ import uuid
 from typing import Any, cast
 
 from app.domain.product.entities import TRIVIAL_MEASURE_UNITS
-from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -17,8 +16,9 @@ def _materials_delete_unknown(ids: list[int], runtime_context: dict) -> dict:
     return {
         "success": False,
         "message": "删除结果暂时无法核实，请核对原任务和原材料记录，勿重复提交。",
-        "error_code": "materials_delete_outcome_unknown",
+        "error_code": "material_delete_outcome_unknown",
         "outcome": "unknown",
+        "execution_state": "unknown",
         "reconciliation_required": True,
         "retryable": False,
         "data": {"material_ids": ids},
@@ -33,37 +33,20 @@ def _materials_delete_unknown(ids: list[int], runtime_context: dict) -> dict:
 def _registered_router_products(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    if str(runtime_context.get("service_source") or "") == "fastapi_product_compat_route":
-        import importlib
+    if action == "import_price_list_template":
+        from app.application.product_app_service import import_price_list_template
 
-        route_module = str(
-            runtime_context.get("route_module") or "app.legacy.routes.product.compat_routes"
-        )
-        # Waiting Agent runs can contain the retired implementation's module name.
-        if route_module in {
-            "app.legacy.routes.product.compat_routes_part01",
-            "app.fastapi_routes.xcagi_compat_product",
-        }:
-            route_module = "app.legacy.routes.product.compat_routes"
-        module = importlib.import_module(route_module)
-        execute_action = module._execute_products_compat_action
-        return dict(execute_action(action, params) or {})
-    is_fastapi_product_route = (
-        str(runtime_context.get("service_source") or "") == "fastapi_product_route"
-    )
-    if is_fastapi_product_route:
-        from app.fastapi_routes.domains.product import routes as product_routes
+        return import_price_list_template(params, runtime_context)
+    from app.services import get_products_service
 
-        svc = product_routes._svc()
-    else:
-        from app.services import get_products_service
-
-        svc = get_products_service()
+    svc = get_products_service()
     explicit_measure_unit = str(params.get("unit") or params.get("measure_unit") or "").strip()
     legacy_unit_name = str(params.get("unit_name") or "").strip()
     legacy_measure_unit = legacy_unit_name if legacy_unit_name in TRIVIAL_MEASURE_UNITS else ""
     measure_unit = explicit_measure_unit or legacy_measure_unit or "个"
-    model_number = str(params.get("model_number") or "").strip().upper()
+    model_number = (
+        str(params.get("model_number") or params.get("product_code") or "").strip().upper()
+    )
     product_name = str(params.get("product_name") or params.get("name") or "").strip()
     keyword = str(params.get("keyword") or product_name or model_number or "").strip()
     if action == "query":
@@ -109,9 +92,6 @@ def _registered_router_products(
                 break
         return {"success": True, "exists": exists, "matched_count": len(rows)}
     if action == "create":
-        if str(runtime_context.get("service_source") or "") == "fastapi_product_route":
-            payload = dict(params or {})
-            return cast("dict[Any, Any]", svc.create_product(payload))
         name_or_model = str(params.get("name_or_model") or product_name or model_number).strip()
         if not name_or_model:
             return {"success": False, "message": "缺少 name_or_model"}
@@ -120,7 +100,8 @@ def _registered_router_products(
             price = float(price)
         except RECOVERABLE_ERRORS:
             price = 0.0
-        create_result = svc.create_product(
+        payload = dict(params)
+        payload.update(
             {
                 "name": name_or_model,
                 "product_name": name_or_model,
@@ -132,14 +113,17 @@ def _registered_router_products(
                 "unit": measure_unit,
             }
         )
+        create_result = svc.create_product(payload)
         if create_result.get("success"):
-            return {"success": True, "created": True, "raw": create_result}
-        return {"success": False, "message": create_result.get("message") or "创建失败"}
+            return {**create_result, "success": True, "created": True, "raw": create_result}
+        return {
+            **create_result,
+            "success": False,
+            "message": create_result.get("message") or "创建失败",
+        }
     if action == "update":
         product_id = int(params.get("id") or 0)
         payload = {k: v for k, v in params.items() if k != "id"}
-        if is_fastapi_product_route:
-            return cast("dict[Any, Any]", svc.update_product(product_id, payload))
         if "product_name" in payload and "name" not in payload:
             payload["name"] = payload.pop("product_name")
         if "unit_price" in payload and "price" not in payload:
@@ -179,11 +163,7 @@ def _registered_router_products(
                 skipped.append(raw_id)
         if not ids:
             return {"success": False, "message": "ids 须包含有效数字", "skipped": skipped}
-        batch_delete = getattr(svc, "batch_delete_products", None)
-        if callable(batch_delete):
-            result = dict(batch_delete(ids) or {})
-        else:
-            result = dict(svc.batch_delete(ids) or {})
+        result = dict(svc.batch_delete_products(ids) or {})
         if skipped:
             result["skipped"] = list(result.get("skipped") or []) + skipped
         return result
@@ -202,26 +182,16 @@ def _registered_router_products(
                 ids.append(product_id)
         if not ids:
             return {"success": True, "message": "产品列表为空，无需清理", "deleted_count": 0}
-        batch_delete = getattr(svc, "batch_delete_products", None)
-        result = dict(
-            (batch_delete(ids) if callable(batch_delete) else svc.batch_delete(ids)) or {}
-        )
-        result.setdefault("deleted_count", len(ids))
-        return result
+        return dict(svc.batch_delete_products(ids) or {})
     return {"success": False, "message": f"未注册的 products 动作: {action}"}
 
 
 def _registered_router_materials(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    if str(runtime_context.get("service_source") or "") == "fastapi_materials_route":
-        from app.fastapi_routes import materials as materials_route
+    from app.application import get_material_application_service
 
-        svc = materials_route._svc()
-    else:
-        from app.application import get_material_application_service
-
-        svc = get_material_application_service()
+    svc = get_material_application_service()
     if action in ("list", "query"):
         result = svc.get_all_materials(
             search=str(params.get("search") or params.get("keyword") or "").strip(),
@@ -251,46 +221,53 @@ def _registered_router_materials(
             result.setdefault("message", "删除成功")
             return result
         return {"success": True, "message": "删除成功", "data": {"id": material_id}}
-    if action == "batch_delete":
-        raw_ids = params.get("ids") or params.get("material_ids") or []
-        ids = [int(x) for x in raw_ids if str(x).strip()]
+    if action in {"batch_delete", "clear"}:
+        if action == "clear":
+            listed = svc.get_all_materials(page=1, per_page=100000)
+            if isinstance(listed, dict) and listed.get("success") is False:
+                return listed
+            rows = listed.get("data") if isinstance(listed, dict) else None
+            if (
+                not isinstance(listed, dict)
+                or listed.get("success") is not True
+                or not isinstance(rows, list)
+            ):
+                return {
+                    "success": False,
+                    "message": "读取原材料列表失败",
+                    "execution_state": "not_started",
+                }
+            ids = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    material_id = int(row.get("id") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if material_id > 0:
+                    ids.append(material_id)
+            if not ids:
+                return {"success": True, "message": "原材料列表为空，无需清理", "deleted_count": 0}
+        else:
+            raw_ids = params.get("ids") or params.get("material_ids") or []
+            ids = [int(x) for x in raw_ids if str(x).strip()]
+        delete_receipt: dict[str, Any] | None
         try:
-            result = svc.batch_delete_materials(ids)
+            delete_receipt = svc.batch_delete_materials(ids)
         except RECOVERABLE_ERRORS as err:
-            logger.error("批量删除原材料时 service 执行异常：%s", err)
-            return _materials_delete_unknown(ids, runtime_context)
-        if isinstance(result, dict):
-            result.setdefault("success", True)
-            if result["success"] is True and not execution_result_outcome_unknown(result):
-                result.setdefault("deleted_count", len(ids))
-            return result
-        return {"success": True, "message": f"已删除 {len(ids)} 条记录", "deleted_count": len(ids)}
-    if action == "clear":
-        listed = svc.get_all_materials(page=1, per_page=100000) or {}
-        rows = listed.get("data") if isinstance(listed, dict) else None
-        ids = []
-        for row in rows if isinstance(rows, list) else []:
-            if not isinstance(row, dict):
-                continue
-            try:
-                material_id = int(row.get("id") or 0)
-            except (TypeError, ValueError):
-                continue
-            if material_id > 0:
-                ids.append(material_id)
-        if not ids:
-            return {"success": True, "message": "原材料列表为空，无需清理", "deleted_count": 0}
-        try:
-            result = svc.batch_delete_materials(ids)
-        except RECOVERABLE_ERRORS as err:
-            logger.error("清空原材料时 service 执行异常：%s", err)
-            return _materials_delete_unknown(ids, runtime_context)
-        if isinstance(result, dict):
-            result.setdefault("success", True)
-            if result["success"] is True and not execution_result_outcome_unknown(result):
-                result.setdefault("deleted_count", len(ids))
-            return result
-        return {"success": True, "message": f"已清空 {len(ids)} 条记录", "deleted_count": len(ids)}
+            logger.error("原材料 %s 执行异常：%s", action, err)
+            delete_receipt = None
+        if isinstance(delete_receipt, dict) and (
+            delete_receipt.get("success") is False
+            or (
+                delete_receipt.get("success") is True
+                and type(delete_receipt.get("deleted_count")) is int
+                and 0 <= delete_receipt["deleted_count"] <= len(ids)
+            )
+        ):
+            return delete_receipt
+        return _materials_delete_unknown(ids, runtime_context)
     if action == "export":
         return cast(
             "dict[Any, Any]",

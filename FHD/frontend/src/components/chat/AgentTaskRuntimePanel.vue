@@ -47,7 +47,7 @@
       <p v-if="verificationMessage" role="status" aria-live="polite">{{ verificationMessage }}</p>
       <p v-if="verificationError" role="alert">{{ verificationError }}</p>
     </section>
-    <div v-if="resultSummary" class="agent-result-summary" :class="{ 'agent-result-summary--unverified': verification && !verification.accepted }">
+    <div v-if="resultSummary" class="agent-result-summary" :class="{ 'agent-result-summary--unverified': rawRunStatus === 'unknown' || (verification && !verificationAccepted) }">
       <strong>业务结果</strong>
       <p>{{ resultSummary }}</p>
     </div>
@@ -159,16 +159,19 @@ const verification = computed(() => {
   const report = payload.value.finalOutput?.verification
   return report && typeof report === 'object' && !Array.isArray(report) ? report as AgentVerificationReport : null
 })
+const rawRunStatus = computed(() => String(payload.value.rawRunStatus || props.task.status))
+const verificationAccepted = computed(() => rawRunStatus.value !== 'unknown' &&
+  verification.value?.accepted === true && ['verified', 'not_required'].includes(verification.value.status),
+)
 const verificationStatus = computed<AgentVerificationStatus>(() => {
   const status = verification.value?.status
-  if (!status || !(status in verificationLabels)) return 'not_verified'
-  if (['verified', 'not_required'].includes(status) && verification.value?.accepted !== true) return 'inconclusive'
+  if (!status || !Object.prototype.hasOwnProperty.call(verificationLabels, status)) return 'not_verified'
+  if (['verified', 'not_required'].includes(status) && !verificationAccepted.value) return 'inconclusive'
   return status
 })
 const includesArtifactIntegrity = computed(() => Array.isArray(verification.value?.steps) && verification.value.steps.some((step) =>
   Array.isArray(step?.checks) && step.checks.some((check) => check?.evidence?.verification_scope === 'artifact_integrity'),
 ))
-const rawRunStatus = computed(() => String(payload.value.rawRunStatus || props.task.status))
 const canReverify = computed(() => Boolean(
   runId.value && ['blocked', 'failed'].includes(rawRunStatus.value) &&
   verification.value?.protocol === 'xcagi.result-verification.v1' &&
@@ -242,7 +245,8 @@ async function downloadArtifact(artifact: AgentArtifact): Promise<void> {
 const resultSummary = computed(() => {
   const output = payload.value.finalOutput
   if (!output || typeof output !== 'object') return ''
-  if (verification.value && verification.value.accepted !== true) return '结果尚未完成核验。'
+  if (rawRunStatus.value === 'unknown') return '结果待核对，请核对原始回执后再确认。'
+  if (verification.value && !verificationAccepted.value) return '结果尚未完成核验。'
   const businessResult =
     output.business_result && typeof output.business_result === 'object' ? (output.business_result as Record<string, unknown>) : null
   const projectedSummary = businessResult?.summary

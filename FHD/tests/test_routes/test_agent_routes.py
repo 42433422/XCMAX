@@ -27,11 +27,16 @@ from app.application.agent_orchestrator.task_execution_repository import (
     set_task_execution_repository_for_tests,
 )
 from app.fastapi_routes.domains.agent.agent_routes import router
-from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from app.infrastructure.auth.agent_principal import (
+    AgentPrincipal,
+    require_agent_principal,
+)
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant(trusted_actor) -> None:
+def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant(
+    trusted_actor,
+) -> None:
     actor = trusted_actor(user_id=17, tenant_id=7)
     request = actor.request
     request.state.tutorial_active = True
@@ -107,7 +112,10 @@ def test_empty_tenant_task_feeds_exclude_scoped_tasks(path):
     repo = get_agent_run_repository()
     repo.save_task(
         AgentTask(
-            task_id="private-task", user_id="u1", tenant_id="other", title="private tenant result"
+            task_id="private-task",
+            user_id="u1",
+            tenant_id="other",
+            title="private tenant result",
         )
     )
     repo.save_task(AgentTask(task_id="public-task", user_id="u1", title="own unscoped task"))
@@ -178,7 +186,8 @@ def test_unified_task_deduplication_rejects_different_mod_scope(second_mod):
 
 
 @pytest.mark.parametrize(
-    "method,suffix", [("GET", ""), ("GET", "/events"), ("POST", "/cancel"), ("POST", "/pause")]
+    "method,suffix",
+    [("GET", ""), ("GET", "/events"), ("POST", "/cancel"), ("POST", "/pause")],
 )
 @pytest.mark.parametrize("other_mod", ["mod-b", ""])
 def test_run_access_rejects_cross_mod_scope(method, suffix, other_mod):
@@ -308,19 +317,12 @@ def _drain_background_run(run_id: str) -> AgentRun:
         recovered=claimed.recovery_count > 0,
     )
     assert run is not None
-    state = {
-        "completed": "completed",
-        "failed": "failed",
-        "blocked": "failed",
-        "cancelled": "cancelled",
-        "paused": "paused",
-    }.get(run.status, "blocked")
-    queue.finish(
-        run_id,
-        "route-test-worker",
-        state,
-        error_code="needs_verification" if run.status == "blocked" else "",
+    from app.application.agent_orchestrator.task_execution_models import (
+        dispatched_run_state,
     )
+
+    state, error_code = dispatched_run_state(run)
+    queue.finish(run_id, "route-test-worker", state, error_code=error_code)
     return run
 
 
@@ -459,12 +461,21 @@ def test_get_and_list_historical_agent_run(local_tools, trusted_actor, monkeypat
     assert events_response.status_code == 200
     events_payload = events_response.json()
     assert events_payload["count"] == len(run["events"])
-    assert any(event["event_type"] == "run.completed" for event in events_payload["data"])
     assert events_payload["data"][-1]["event_type"] == "run.observed"
-    events = events_payload["data"]
-    assert sum(event["event_type"] == "run.completed" for event in events) == 1
-    observation = next(event for event in reversed(events) if event["event_type"] == "run.observed")
-    assert observation["data"]["status"] == "completed"
+    assert events_payload["data"][-1]["data"]["status"] == "completed"
+    assert sum(event["event_type"] == "run.completed" for event in events_payload["data"]) == 1
+    assert [event["event_type"] for event in events_payload["data"][-2:]] == [
+        "run.completed",
+        "run.observed",
+    ]
+    observed = events_payload["data"][-1]["data"]
+    assert observed["status"] == "completed" and observed["phase"] == "execution"
+    assert observed["duration_scope"] == "active"
+    assert observed["phase_duration_ms"] >= 0
+    assert round(observed["phase_duration_ms"], 3) <= observed["duration_ms"]
+    assert observed["duration_ms"] == run["metadata"]["active_duration_ms"]
+    assert observed["trace_id"] == run["trace_id"]
+    assert observed["run_id"] == run["run_id"]
 
     first_event_id = events_payload["data"][0]["event_id"]
     tail_response = client.get(
@@ -479,6 +490,11 @@ def test_get_and_list_historical_agent_run(local_tools, trusted_actor, monkeypat
     assert stream_response.headers["content-type"].startswith("text/event-stream")
     assert "event: run.completed" in stream_response.text
     assert "event: stream.closed" in stream_response.text
+    assert (
+        stream_response.text.index("event: run.completed\n")
+        < stream_response.text.rindex("event: run.observed\n")
+        < stream_response.text.index("event: stream.closed\n")
+    )
 
     list_response = client.get("/api/agent/runs", params={"user_id": "u1"})
     assert list_response.status_code == 200
@@ -534,7 +550,14 @@ def test_record_observed_tool_rejects_write_or_unknown_tools() -> None:
 
 
 @pytest.mark.parametrize(
-    "case", ["deep_unknown", "late_unknown", "nested_failure", "missing_success", "nonbool_success"]
+    "case",
+    [
+        "deep_unknown",
+        "late_unknown",
+        "nested_failure",
+        "missing_success",
+        "nonbool_success",
+    ],
 )
 def test_observed_receipt_classification_survives_sql_storage_and_bounded_view(trusted_actor, case):
     from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
@@ -712,12 +735,12 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
             f"/api/agent/runs/{run_id}/continue",
             json={"approval_grant": grant},
         )
-        assert finished.status_code == 409
-        assert finished.json()["message"] == "任务已结束，不能审批通过后执行"
+        assert finished.status_code == 403
+        assert "approval_grant" in finished.json()["message"]
         execution = get_task_execution_repository().get(run_id)
         assert execution is not None
-        assert execution.state == "failed"
-        assert execution.last_error_code == "needs_verification"
+        # The adapter ran once, but its bare success flag cannot prove the effect.
+        assert execution.state == "unknown"
         assert execution.execution_count == 2
         execute.assert_called_once()
 
@@ -746,7 +769,9 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
             _drain_background_run(run_id)
             grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
             monkeypatch.setattr(
-                approval_grant, "_consumption_repository", lambda: unavailable_repository
+                approval_grant,
+                "_consumption_repository",
+                lambda: unavailable_repository,
             )
             with patch("app.fastapi_routes.domains.agent.agent_routes._enqueue_run") as enqueue:
                 rejected = owner.post(
@@ -781,7 +806,9 @@ def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(
     from sqlalchemy.orm import sessionmaker
 
     from app.application.agent_orchestrator.approval_grant import issue_approval_grant
-    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.run_sql_repository import (
+        SQLAlchemyAgentRunRepository,
+    )
     from app.application.agent_orchestrator.task_execution_sql_repository import (
         SQLAlchemyTaskExecutionRepository,
     )
@@ -799,7 +826,12 @@ def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(
         message="approve",
         status="waiting_user",
         steps=[
-            AgentStep(node_id="node", tool_id="sales", action="create_order", status="waiting_user")
+            AgentStep(
+                node_id="node",
+                tool_id="sales",
+                action="create_order",
+                status="waiting_user",
+            )
         ],
     )
     previous_binding = {
@@ -938,7 +970,8 @@ def test_resume_rejects_tenant_change_without_control_command():
 )
 @pytest.mark.parametrize("is_admin", [False, True])
 @pytest.mark.parametrize(
-    "actor,tenant", [("owner", "tenant-b"), ("other", "tenant-a"), ("other", "tenant-b")]
+    "actor,tenant",
+    [("owner", "tenant-b"), ("other", "tenant-a"), ("other", "tenant-b")],
 )
 def test_run_scope_rejects_other_owner_or_tenant_even_for_admin(
     method, path, is_admin, actor, tenant
@@ -955,7 +988,7 @@ def test_run_scope_rejects_other_owner_or_tenant_even_for_admin(
     response = _client(actor, tenant_id=tenant, is_admin=is_admin).request(
         method.upper(),
         f"/api/agent/runs/{run.run_id}{path}",
-        json={"step_id": "private-step", "parameters": {}} if method == "post" else None,
+        json=({"step_id": "private-step", "parameters": {}} if method == "post" else None),
     )
     assert response.status_code == 403
     assert response.json()["message"] == "无权访问该 agent run"
@@ -1134,7 +1167,10 @@ def test_retry_agent_run_preserves_original_plan_and_task_identity() -> None:
         response = client.post(
             f"/api/agent/runs/{original.run_id}/retry",
             json={
-                "runtime_context": {"task_id": "other-task", "conversation_id": "other-chat"},
+                "runtime_context": {
+                    "task_id": "other-task",
+                    "conversation_id": "other-chat",
+                },
             },
         )
         replay = client.post(f"/api/agent/runs/{original.run_id}/retry", json={})
@@ -1165,7 +1201,9 @@ def test_retry_does_not_expose_internal_validation_exception() -> None:
     repository = get_agent_run_repository()
     run = repository.save(AgentRun(user_id="owner", message="retry", status="failed"))
     with patch.object(
-        AgentOrchestrator, "retry_run", side_effect=ValueError("sqlite secret-path internal-table")
+        AgentOrchestrator,
+        "retry_run",
+        side_effect=ValueError("sqlite secret-path internal-table"),
     ):
         response = _client("owner").post(f"/api/agent/runs/{run.run_id}/retry", json={})
     assert response.status_code == 409
@@ -1452,7 +1490,9 @@ def test_task_center_stream_emits_tenant_scoped_snapshot() -> None:
     }
 
 
-@pytest.mark.parametrize("error_code", ["needs_verification", "retries_exhausted"])
+@pytest.mark.parametrize(
+    "error_code", ["needs_verification", "retries_exhausted", "worker_incomplete_state"]
+)
 @pytest.mark.parametrize("run_status", ["running", "completed"])
 def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
     tmp_path, error_code, run_status
@@ -1462,7 +1502,9 @@ def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.run_sql_repository import (
+        SQLAlchemyAgentRunRepository,
+    )
     from app.application.agent_orchestrator.task_execution_sql_repository import (
         SQLAlchemyTaskExecutionRepository,
     )
@@ -1491,8 +1533,13 @@ def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
     task_before = runs.get_task(user_id="u1", task_id="recovery-projection").to_dict()
     queued = queue.enqueue(run)
     now = datetime.fromisoformat(queued.available_at)
-    assert queue.claim("expired-worker", lease_seconds=1, now=now.isoformat()) is not None
-    if error_code == "needs_verification":
+    lease_seconds = 30 if error_code == "worker_incomplete_state" else 1
+    assert (
+        queue.claim("expired-worker", lease_seconds=lease_seconds, now=now.isoformat()) is not None
+    )
+    if error_code == "worker_incomplete_state":
+        assert queue.finish(run.run_id, "expired-worker", "unknown", error_code=error_code)
+    elif error_code == "needs_verification":
         queue.mark_open_effect(run.run_id, "unconfirmed-next-write")
     else:
         for attempt in range(1, DEFAULT_MAX_ATTEMPTS):
@@ -1505,15 +1552,20 @@ def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
                 is not None
             )
     assert (
-        queue.claim("replacement", lease_seconds=1, now=(now + timedelta(seconds=20)).isoformat())
+        queue.claim(
+            "replacement",
+            lease_seconds=1,
+            now=(now + timedelta(seconds=20)).isoformat(),
+        )
         is None
     )
-    assert queue.get(run.run_id).last_error_code == error_code
+    settled_code = "needs_verification" if error_code == "worker_incomplete_state" else error_code
+    assert queue.get(run.run_id).last_error_code == settled_code
     expected = (
         "completed"
         if run_status == "completed"
-        else "blocked"
-        if error_code == "needs_verification"
+        else "unknown"
+        if settled_code == "needs_verification"
         else "failed"
     )
     client = _client()
@@ -1535,15 +1587,16 @@ def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
     assert run_response["capabilities"]["retry"] is False
     for payload in (task, listing, snapshot):
         assert payload["status"] == payload["progress"]["status"] == expected
-        assert payload["execution"]["last_error_code"] == error_code
+        assert payload["execution"]["last_error_code"] == settled_code
         assert payload["metadata"]["business_result"] == before["final_output"]["business_result"]
         assert payload["progress"]["completed_units"] == 1
-        assert payload["attention_state"] == (
-            "result_unread" if expected == "completed" else expected
+        assert (
+            payload["attention_state"]
+            == {"completed": "result_unread", "unknown": "blocked", "failed": "failed"}[expected]
         )
     assert task["active_run"]["status"] == task["runs"][0]["status"] == expected
     assert task["capabilities"]["retry"] is False
-    if expected == "blocked":
+    if expected == "unknown":
         assert (
             run_response["data"]["metadata"]["recovery"]["state"]
             == "manual_reconciliation_required"
@@ -1682,7 +1735,10 @@ def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, m
     response = _client().get(artifact.uri)
     assert response.status_code == 200
     workbook = load_workbook(BytesIO(response.content), read_only=True, data_only=True)
-    assert list(workbook.active.values) == [("product_name", "amount"), ("产品甲", 125.5)]
+    assert list(workbook.active.values) == [
+        ("product_name", "amount"),
+        ("产品甲", 125.5),
+    ]
     workbook.close()
     assert _client("someone-else").get(artifact.uri).status_code in {403, 404}
     artifact_path(run.run_id, artifact.artifact_id).write_bytes(b"corrupt")
@@ -1741,7 +1797,12 @@ def test_generated_shipment_download_contains_real_business_cells(
             with factory() as db:
                 db.add(PurchaseUnit(unit_name="下载测试客户"))
                 db.add(
-                    Product(name="下载测试产品", model_number="9803", price=25, specification="12")
+                    Product(
+                        name="下载测试产品",
+                        model_number="9803",
+                        price=25,
+                        specification="12",
+                    )
                 )
                 db.commit()
             run = AgentRun(user_id="u1", message="生成发货单", status="completed")
@@ -1779,7 +1840,10 @@ def test_generated_shipment_download_contains_real_business_cells(
                 assert [sheet[cell].value for cell in totals] == [3, 36, 900]
             finally:
                 workbook.close()
-            assert _client("another-user").get(run.artifacts[0].uri).status_code in {403, 404}
+            assert _client("another-user").get(run.artifacts[0].uri).status_code in {
+                403,
+                404,
+            }
     finally:
         engine.dispose()
 
@@ -1794,7 +1858,10 @@ def test_create_task_internal_failure_returns_stable_public_message() -> None:
             "/api/agent/tasks", json={"task_id": "task-error", "title": "执行任务"}
         )
     assert response.status_code == 503
-    assert response.json() == {"success": False, "message": "Agent 服务暂时不可用，请稍后重试"}
+    assert response.json() == {
+        "success": False,
+        "message": "Agent 服务暂时不可用，请稍后重试",
+    }
 
 
 def test_workspace_executor_location_is_admin_only(monkeypatch, tmp_path):
@@ -1808,7 +1875,9 @@ def test_workspace_executor_location_is_admin_only(monkeypatch, tmp_path):
 
 
 def test_employee_workspace_cannot_spoof_execution_location(monkeypatch, tmp_path):
-    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.fastapi_routes.domains.agent.route_support import (
+        authenticated_runtime_context,
+    )
 
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     result = authenticated_runtime_context(
@@ -1833,11 +1902,14 @@ def test_employee_workspace_cannot_spoof_execution_location(monkeypatch, tmp_pat
 def test_enterprise_cannot_claim_admin_employee_workspace():
     from fastapi import HTTPException
 
-    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.fastapi_routes.domains.agent.route_support import (
+        authenticated_runtime_context,
+    )
 
     with pytest.raises(HTTPException) as error:
         authenticated_runtime_context(
-            {"source": "admin_employee_workspace"}, AgentPrincipal(user_id="17", is_admin=False)
+            {"source": "admin_employee_workspace"},
+            AgentPrincipal(user_id="17", is_admin=False),
         )
     assert error.value.status_code == 403
 

@@ -23,6 +23,7 @@ from app.fastapi_routes.admin_control.employee_backend import (
 )
 from app.fastapi_routes.admin_control.employee_execution import EmployeeExecution
 from app.fastapi_routes.admin_control.employee_run import EmployeeRunner
+from app.infrastructure.auth.agent_mod_scope import validate_actor_context
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -67,7 +68,8 @@ def admin_employee(monkeypatch, trusted_actor):
 
     invocation = Mock(side_effect=execute)
     monkeypatch.setattr(
-        "app.application.employee_runtime.executor.execute_employee_task_local", invocation
+        "app.application.employee_runtime.executor.execute_employee_task_local",
+        invocation,
     )
     monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
 
@@ -79,10 +81,14 @@ def admin_employee(monkeypatch, trusted_actor):
         )
         app = FastAPI()
         app.add_api_route(
-            "/employees/{employee_id}/execute", service.local_employee_execute, methods=["POST"]
+            "/employees/{employee_id}/execute",
+            service.local_employee_execute,
+            methods=["POST"],
         )
         app.add_api_route(
-            "/employees/{employee_id}/runs", service.local_employee_runs, methods=["GET"]
+            "/employees/{employee_id}/runs",
+            service.local_employee_runs,
+            methods=["GET"],
         )
         return TestClient(app, headers=actor.headers)
 
@@ -99,6 +105,65 @@ def admin_employee(monkeypatch, trusted_actor):
             "idempotency_key": "stable-request",
         },
     )
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [
+        {},
+        {"idempotency_key": None},
+        {"idempotency_key": ""},
+        {"idempotency_key": " "},
+        {"idempotency_key": 1},
+        {"idempotency_key": "x" * 161},
+        {"idempotency_key": "one", "turn_id": "another"},
+        {"input_data": {"idempotency_key": "untrusted-nested-key"}},
+    ],
+)
+def test_admin_missing_or_invalid_request_key_creates_no_run_or_effect(admin_employee, identity):
+    entry = admin_employee
+    with entry.client() as client:
+        response = client.post("/employees/clerk/execute", json={"task": "write", **identity})
+    assert response.status_code == 400, response.text
+    assert response.json()["error_code"] == "task_identity_required"
+    assert response.json()["execution_state"] == "not_started"
+    assert response.json()["success"] is response.json()["retryable"] is False
+    entry.invocation.assert_not_called()
+    with entry.factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
+        assert db.query(EmployeeRunLog).count() == 0
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 0
+        )
+
+
+@pytest.mark.parametrize("source", ["header", "turn_id"])
+def test_admin_key_sources_enter_same_authenticated_admission(admin_employee, source):
+    entry = admin_employee
+    body = {"task": "observe effect"}
+    headers = {}
+    if source == "header":
+        headers["Idempotency-Key"] = "same-key"
+    else:
+        body["turn_id"] = "same-key"
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=body, headers=headers)
+        replay = client.post("/employees/clerk/execute", json=body, headers=headers)
+    assert first.status_code == replay.status_code == 200
+    assert first.json()["run_id"] == replay.json()["run_id"]
+    assert replay.json()["deduplicated"] is True and replay.json()["success"] is False
+    assert replay.json()["execution_state"] == "unknown"
+    assert replay.json()["requires_reconciliation"] is True
+    assert replay.json()["retryable"] is False
+    assert replay.json()["verified"] is replay.json()["independent_verified"] is False
+    assert replay.json()["verification"]["accepted"] is False
+    assert replay.json()["verification"]["code"] == "result_verifier_unavailable"
+    context = entry.repository.get(first.json()["run_id"]).metadata["runtime_context"]
+    assert validate_actor_context(context) is None
+    assert context["_actor_authorization"]["session_row_id"] == entry.actor.session_row_id
+    assert context["user_id"] == str(entry.actor.user_id)
+    entry.invocation.assert_called_once()
 
 
 def test_concurrent_admin_requests_execute_once_and_reopen_original_receipt(
@@ -154,6 +219,9 @@ def test_concurrent_admin_requests_execute_once_and_reopen_original_receipt(
 
 def test_admin_marker_collision_rejects_generic_task_without_mutation(admin_employee, monkeypatch):
     from app.application.agent_orchestrator import AgentRun
+    from app.application.agent_orchestrator.approval_grant import (
+        authorization_scope_hash,
+    )
     from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
     from app.application.agent_orchestrator.task_context import apply_task_context
 
@@ -164,7 +232,9 @@ def test_admin_marker_collision_rejects_generic_task_without_mutation(admin_empl
     def publish_after_generic_collision(**kwargs):
         context = {**kwargs["runtime_context"], "source": "unified_task_api"}
         generic = AgentRun(
-            user_id=kwargs["run"].user_id, message="original generic task", status="running"
+            user_id=kwargs["run"].user_id,
+            message="original generic task",
+            status="running",
         )
         generic.metadata["runtime_context"] = context
         generic.metadata["execution_authorization_scope"] = authorization_scope_hash(context)
@@ -174,7 +244,13 @@ def test_admin_marker_collision_rejects_generic_task_without_mutation(admin_empl
         )
         generic.steps = [step]
         generic.tool_calls = [
-            ToolCall(step.step_id, step.node_id, step.tool_id, step.action, params=step.params)
+            ToolCall(
+                step.step_id,
+                step.node_id,
+                step.tool_id,
+                step.action,
+                params=step.params,
+            )
         ]
         created = publish(**{**kwargs, "run": generic, "runtime_context": context})
         assert not created.deduplicated
@@ -212,7 +288,115 @@ def test_admin_marker_collision_rejects_generic_task_without_mutation(admin_empl
         )
 
 
-@pytest.mark.parametrize("change", ["employee", "task", "input", "approval"])
+@pytest.mark.parametrize("binding", ["current", "upstream", "legacy_missing"])
+def test_atomic_publication_cannot_rebind_an_existing_authorization(admin_employee, binding):
+    from app.application.agent_orchestrator import AgentOrchestrator, AgentRun
+    from app.application.agent_orchestrator.approval_grant import (
+        authorization_scope_hash,
+    )
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.task_context import apply_task_context
+    from app.application.agent_orchestrator.unified_task import UnifiedTaskConflictError
+
+    entry = admin_employee
+    service = AgentOrchestrator(repository=entry.repository)
+    context = {**entry.actor.context, "task_id": "scope-publication"}
+    params = {"employee_id": "clerk", "task": "observe effect"}
+
+    def candidate():
+        run = AgentRun(user_id="17", message="publish without dispatch", status="running")
+        run.metadata["runtime_context"] = dict(context)
+        apply_task_context(run, context)
+        run.steps = [AgentStep("employee", "employee", "execute", params=params)]
+        return run
+
+    def publish(run):
+        return employee_run.publish_task_run(
+            orchestrator=service,
+            run=run,
+            tool_id="employee",
+            action="execute",
+            params=params,
+            risk="high",
+            idempotent=False,
+            runtime_context=context,
+        )
+
+    original = candidate()
+    scope = authorization_scope_hash(
+        {**context, "employee_tool_allowlist": ["other"]} if binding == "upstream" else context
+    )
+    original.metadata["execution_authorization_scope"] = scope
+    if binding == "upstream":
+        # A mismatched presealed scope must fail before its first publication,
+        # as well as when someone later attempts to reuse an existing task.
+        with pytest.raises(UnifiedTaskConflictError):
+            publish(original)
+        with entry.factory() as db:
+            assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
+        entry.invocation.assert_not_called()
+        return
+    assert not publish(original).deduplicated
+    if binding == "legacy_missing":
+        with entry.factory.begin() as db:
+            record = db.get(AgentRunRecord, original.run_id)
+            stored = json.loads(record.payload_json)
+            stored["metadata"].pop("execution_authorization_scope")
+            record.payload_json = json.dumps(stored)
+        scope = None
+    if binding == "current":
+        replay = publish(candidate())
+        assert replay.deduplicated and replay.run.run_id == original.run_id
+    else:
+        with pytest.raises(UnifiedTaskConflictError):
+            publish(candidate())
+    assert (
+        entry.repository.get(original.run_id).metadata.get("execution_authorization_scope") == scope
+    )
+    with entry.factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
+    assert entry.invocation.call_count == 0
+
+
+@pytest.mark.parametrize("source", ["none", "empty", "unsealed", "forged"])
+@pytest.mark.parametrize(
+    "tool_id,action", [("employee", "execute"), ("catalog_products_v1", "append_price")]
+)
+def test_atomic_publication_requires_explicit_trusted_authorization(
+    admin_employee, source, tool_id, action
+):
+    from app.application.agent_orchestrator import AgentOrchestrator, AgentRun
+    from app.application.agent_orchestrator.task_context import apply_task_context
+    from app.application.agent_orchestrator.unified_task import UnifiedTaskConflictError
+
+    entry = admin_employee
+    context = {**entry.actor.context, "task_id": "unbound-publication"}
+    run = AgentRun(user_id="17", message="untrusted publication", status="running")
+    run.metadata["runtime_context"] = dict(context)
+    apply_task_context(run, context)
+    supplied = None if source == "none" else {} if source == "empty" else dict(context)
+    if source == "unsealed":
+        supplied.pop("_actor_authorization")
+    elif source == "forged":
+        supplied["_actor_authorization"] = {"user_id": 17, "tenant_id": 7}
+    with pytest.raises(UnifiedTaskConflictError):
+        employee_run.publish_task_run(
+            orchestrator=AgentOrchestrator(repository=entry.repository),
+            run=run,
+            tool_id=tool_id,
+            action=action,
+            params={"employee_id": "clerk", "task": "observe effect"},
+            risk="high",
+            idempotent=False,
+            runtime_context=supplied,
+        )
+    assert "execution_authorization_scope" not in run.metadata
+    with entry.factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
+    assert entry.invocation.call_count == 0
+
+
+@pytest.mark.parametrize("change", ["employee", "task", "input", "approval", "tier"])
 def test_admin_request_key_rejects_changed_execution(admin_employee, change):
     entry = admin_employee
     with entry.client() as client:
@@ -224,10 +408,17 @@ def test_admin_request_key_rejects_changed_execution(admin_employee, change):
             body["task"] = "different action"
         elif change == "input":
             body["input_data"] = {"value": 2}
+        elif change == "tier":
+            from app.db.models.user import User
+
+            with entry.factory.begin() as db:
+                db.get(User, entry.actor.user_id).tier = "free"
         else:
             body["approval_token"] = "different-token"
         response = client.post(f"/employees/{employee}/execute", json=body)
-    assert response.status_code == 409, response.text
+    assert response.status_code == (403 if change == "tier" else 409), response.text
+    if change == "tier":
+        assert response.json()["detail"] == "employee_invoke_denied"
     assert entry.invocation.call_count == 1
 
 
@@ -247,13 +438,17 @@ def test_admin_recovery_rechecks_full_trusted_scope(admin_employee, monkeypatch,
         trusted_context = employee_execution._trusted_context
         if change == "workspace_root":
             monkeypatch.setattr(
-                "app.infrastructure.workspace.workspace_root", lambda: Path("/new-server-root")
+                "app.infrastructure.workspace.workspace_root",
+                lambda: Path("/new-server-root"),
             )
         else:
             monkeypatch.setattr(
                 employee_execution,
                 "_trusted_context",
-                lambda *args: {**trusted_context(*args), change: "changed-trusted-scope"},
+                lambda *args: {
+                    **trusted_context(*args),
+                    change: "changed-trusted-scope",
+                },
             )
         repeated = client.post("/employees/clerk/execute", json=entry.body)
         read = client.get("/employees/clerk/runs", params={"idempotency_key": "stable-request"})
@@ -344,7 +539,9 @@ def test_admin_recovery_rechecks_live_tool_permission(admin_employee, trusted_ac
     _assert_original_employee_effect(entry, original, task)
 
 
-def test_admin_recovery_cannot_backfill_missing_historical_authorization(admin_employee):
+def test_admin_recovery_cannot_backfill_missing_historical_authorization(
+    admin_employee,
+):
     entry = admin_employee
     with entry.client() as client:
         first = client.post("/employees/clerk/execute", json=entry.body).json()
@@ -387,11 +584,16 @@ def _assert_original_employee_effect(entry, original, task):
 
 
 @pytest.mark.parametrize(
-    "state", ["queued", "waiting_approval", "waiting_input", "paused", "blocked", "unknown"]
+    "state",
+    ["queued", "waiting_approval", "waiting_input", "paused", "blocked", "unknown"],
 )
 def test_admin_pending_receipt_is_not_reexecuted_or_completed(admin_employee, state):
     entry = admin_employee
-    entry.state.output = {"success": True, "summary": "pending", "execution_state": state}
+    entry.state.output = {
+        "success": True,
+        "summary": "pending",
+        "execution_state": state,
+    }
     with entry.client() as client:
         first = client.post("/employees/clerk/execute", json=entry.body).json()
         repeated = client.post("/employees/clerk/execute", json=entry.body).json()
@@ -423,13 +625,95 @@ def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_emplo
     assert entry.invocation.call_count == 1
 
 
+@pytest.mark.parametrize("code", ["timeout", "upstream_unavailable", "rate_limited"])
+@pytest.mark.parametrize(
+    "marker,status",
+    [
+        ({"retryable": False}, "failed"),
+        ({"outcome": "unknown"}, "unknown"),
+        ({"reconciliation_required": True}, "unknown"),
+    ],
+)
+def test_admin_employee_explicit_no_retry_preserves_original_effect(
+    admin_employee, monkeypatch, code, marker, status
+):
+    entry = admin_employee
+    entry.state.output = {
+        "success": False,
+        "error": "original invocation refused replay",
+        "error_code": code,
+        **marker,
+    }
+    monkeypatch.setattr(employee_run.time, "sleep", lambda _: None)
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        repeated = client.post("/employees/clerk/execute", json=entry.body).json()
+        read = client.get(
+            "/employees/clerk/runs", params={"idempotency_key": "stable-request"}
+        ).json()
+    assert entry.invocation.call_count == 1
+    assert first["run_id"] == repeated["run_id"] == read["run_id"]
+    assert first["attempts"] == read["attempts"] == 1
+    assert not first["success"] and not repeated["success"] and not read["success"]
+    assert read["retryable"] is False
+    with entry.factory() as db:
+        row = db.query(EmployeeRunLog).one()
+        assert row.status == status and row.attempts == 1
+        assert json.loads(row.output_json) == read["data"]
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
+
+
+@pytest.mark.parametrize("code", ["timeout", "upstream_unavailable", "rate_limited"])
+def test_admin_employee_safe_retry_reuses_original_run_without_replaying_effect(
+    admin_employee, monkeypatch, code
+):
+    entry = admin_employee
+    dispatch = entry.invocation.side_effect
+
+    def fail_before_dispatch(*args, **kwargs):
+        if entry.invocation.call_count < 3:
+            return {
+                "success": False,
+                "error": "temporarily unavailable before dispatch",
+                "error_code": code,
+                "retryable": True,
+                "execution_status": "not_started",
+            }
+        return dispatch(*args, **kwargs)
+
+    entry.invocation.side_effect = fail_before_dispatch
+    monkeypatch.setattr(employee_run.time, "sleep", lambda _: None)
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        repeated = client.post("/employees/clerk/execute", json=entry.body).json()
+    assert entry.invocation.call_count == 3
+    assert first["run_id"] == repeated["run_id"]
+    assert first["attempts"] == repeated["attempts"] == 3
+    # A completed local execution remains unverified until independent readback.
+    assert not first["success"] and first["execution_state"] == "unknown"
+    with entry.factory() as db:
+        row = db.query(EmployeeRunLog).one()
+        assert row.status == "success" and row.attempts == 3 and row.verified == 0
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
+
+
 def test_admin_read_is_owner_tenant_mod_scoped_and_runtime_input_is_untrusted(
     admin_employee, trusted_actor
 ):
     entry = admin_employee
     forged = {
         **entry.body,
-        "input_data": {"value": 1, "mod_id": "forged", "runtime_context": {"tenant_id": 999}},
+        "input_data": {
+            "value": 1,
+            "mod_id": "forged",
+            "runtime_context": {"tenant_id": 999},
+        },
     }
     with entry.client() as client:
         first = client.post("/employees/clerk/execute", json=forged)
@@ -502,7 +786,8 @@ def test_admin_reads_current_exact_child_receipt_without_reexecution(
     monkeypatch.setattr("app.db.SessionLocal", entry.factory)
     monkeypatch.setattr("app.application.customer_app_service.get_customers_session", entry.factory)
     monkeypatch.setattr(
-        "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", lambda: False
+        "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
+        lambda: False,
     )
     service = AgentOrchestrator(repository=entry.repository)
 
@@ -607,7 +892,9 @@ def test_admin_reads_current_exact_child_receipt_without_reexecution(
 
                 parent.tool_calls.append(ToolCall("extra", "extra", "write", "apply"))
             else:
-                from app.application.agent_orchestrator.run_audit_scope import attach_child_result
+                from app.application.agent_orchestrator.run_audit_scope import (
+                    attach_child_result,
+                )
 
                 other = AgentRun(user_id="17", message="another child", status="running")
                 other.metadata["runtime_context"] = {

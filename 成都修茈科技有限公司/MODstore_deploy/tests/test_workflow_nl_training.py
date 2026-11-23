@@ -15,6 +15,7 @@ from threading import Thread
 from uuid import uuid4
 
 import pytest
+from cryptography.fernet import Fernet
 
 from modstore_server import capability_trainer as trainer
 from modstore_server import workflow_nl_graph as generator
@@ -47,6 +48,7 @@ GOOD_GRAPH = {
 
 @pytest.fixture
 def workflow_training(setup, tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
     token = "workflow-training-" + "s" * 32
     monkeypatch.setenv(
         "MODSTORE_PARA_DISPATCH_TOKEN_SHA256", hashlib.sha256(token.encode()).hexdigest()

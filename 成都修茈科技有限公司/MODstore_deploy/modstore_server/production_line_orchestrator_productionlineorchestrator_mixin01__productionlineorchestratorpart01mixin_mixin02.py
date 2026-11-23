@@ -16,96 +16,94 @@ class __ProductionLineOrchestratorPart01MixinPart02Mixin:
     async def _step_auto_test(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
+        from modstore_server.production_line_sources import observe_source_step
+        from modstore_server.production_line_employee import dispatch_employee_step
 
-        out = plan_and_dispatch(
+        observed = observe_source_step("P3", context)
+        if observed["result"]["status"] == "completed":
+            return observed
+        return dispatch_employee_step(
+            "P3",
+            "test-qa-runner",
             "运行全站测试套件：pytest+vitest+Playwright E2E+覆盖率门禁；报告失败项并尝试自动修复。",
             context,
-            target_employee_id="test-qa-runner",
-            created_by_user_id=0,
-            include_dependencies=True,
         )
-        return {"step": "P3", "result": out}
 
     async def _step_build_and_package(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        step = self.get_step("P4")
-        assert step
-        return self._skipped_step_result(step, "构建打包已由 CI 工作流自动完成")
+        from modstore_server.production_line_sources import observe_source_step
+
+        return observe_source_step("P4", context)
 
     async def _step_auto_release(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
+        from modstore_server.production_line_employee import (
+            dispatch_employee_step,
+            observe_published_step,
+        )
 
         strategy = _facade().os.environ.get("XCAGI_DEPLOY_STRATEGY", "canary").strip().lower()
-        out = plan_and_dispatch(
+        observed = observe_published_step("P5", context)
+        if observed["result"]["status"] == "completed":
+            return {**observed, "strategy": strategy}
+        out = dispatch_employee_step(
+            "P5",
+            "deploy-release-officer",
             f"执行自动发布：GitHub Release+更新元数据+{strategy}策略部署到K8s；先部署到staging验证，再推进到production。",
             context,
-            target_employee_id="deploy-release-officer",
-            created_by_user_id=0,
-            include_dependencies=True,
         )
-        return {"step": "P5", "result": out, "strategy": strategy}
+        return {**out, "strategy": strategy}
 
     async def _step_push_updates(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
+        from modstore_server.production_line_employee import (
+            dispatch_employee_step,
+            observe_published_step,
+        )
 
-        out = plan_and_dispatch(
+        observed = observe_published_step("P6", context)
+        if observed["result"]["status"] == "completed":
+            return observed
+        return dispatch_employee_step(
+            "P6",
+            "push-update-context-officer",
             "推送更新：生成electron-updater元数据+Ed25519签名+Mod索引更新+上传发布SKU。",
             context,
-            target_employee_id="push-update-context-officer",
-            created_by_user_id=0,
-            include_dependencies=True,
         )
-        return {"step": "P6", "result": out}
 
     async def _step_runtime_monitor(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
+        from modstore_server.production_line_employee import dispatch_employee_step
 
-        out = plan_and_dispatch(
+        return dispatch_employee_step(
+            "P7",
+            "log-monitor-incident",
             "运行时监控：采集日志+异常检测+告警摘要+熔断状态检查；发现问题触发自动修复。",
             context,
-            target_employee_id="log-monitor-incident",
-            created_by_user_id=0,
-            include_dependencies=True,
         )
-        return {"step": "P7", "result": out}
 
     async def _step_auto_purify(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
+        from modstore_server.production_line_employee import dispatch_employee_step
 
-        out = plan_and_dispatch(
+        return dispatch_employee_step(
+            "P8",
+            "daily-orchestrator",
             "自动净化：CVE扫描+依赖更新+技术债清理+过期文件清理+安全审计；低风险自动修复，高风险提交审批。",
             context,
-            target_employee_id="daily-orchestrator",
-            created_by_user_id=0,
-            include_dependencies=True,
         )
-        return {"step": "P8", "result": out}
 
     async def _step_version_evolution(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        # 版本递增唯一入口是 release_train（每日摘要落库后 bump_release_train），
-        # 这里不再自行改版本文件，避免两套版本语义互相覆盖。
-        from modstore_server.release_train import snapshot_public
+        from modstore_server.production_line_sources import observe_source_step
 
-        return {
-            "step": "P9",
-            "result": {
-                "skipped": True,
-                "reason": "release_train_owns_version",
-                "state": snapshot_public(),
-            },
-        }
+        return observe_source_step("P9", context)
 
     async def _step_ai_self_driven(
         self, context: _facade().Dict[str, _facade().Any]

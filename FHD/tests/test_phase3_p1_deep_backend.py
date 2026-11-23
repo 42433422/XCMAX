@@ -21,7 +21,6 @@ from openpyxl import Workbook
 from app.application.tools.workflow import (
     execute_workflow_tool,
     handle_excel_analysis,
-    run_natural_language_pandas,
 )
 from app.infrastructure.documents.price_list_export import (
     _format_price_cell,
@@ -32,11 +31,7 @@ from app.infrastructure.documents.price_list_export import (
     build_price_list_docx_bytes,
     build_price_list_template_preview_json,
 )
-from app.infrastructure.persistence.compat_db.writes import (
-    _customer_pg_insert,
-    products_pg_delete_row,
-    products_pg_update_row,
-)
+from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -150,120 +145,15 @@ def _bypass_native_planner_tools(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_execute_workflow_tool_json_string_args() -> None:
     raw = execute_workflow_tool("excel_chart_recommend", "{}")
     out = json.loads(raw)
-    assert "suggestions" in out
+    assert out["error_code"] == "unknown_tool"
+    assert out["execution_status"] == "not_started"
 
 
 def test_execute_workflow_tool_invalid_json_args() -> None:
     raw = execute_workflow_tool("excel_chart_recommend", "not-json")
     out = json.loads(raw)
-    assert "suggestions" in out
-
-
-def test_execute_workflow_tool_excel_join_missing_files(tmp_path) -> None:
-    raw = execute_workflow_tool(
-        "excel_join_compare",
-        {"action": "join", "file_paths": ["a.xlsx", "b.xlsx"]},
-        workspace_root=str(tmp_path),
-    )
-    out = json.loads(raw)
-    assert out["success"] is False
-
-
-def test_execute_workflow_tool_excel_join_success(tmp_path) -> None:
-    p1 = _write_xlsx(tmp_path / "a.xlsx", [["id", "val"], [1, 10]])
-    p2 = _write_xlsx(tmp_path / "b.xlsx", [["id", "extra"], [1, "x"]])
-    d1 = pd.DataFrame({"id": [1], "val": [10]})
-    d2 = pd.DataFrame({"id": [1], "extra": ["x"]})
-    with patch("app.application.tools.workflow.pd.read_excel", side_effect=[d1, d2]):
-        raw = execute_workflow_tool(
-            "excel_join_compare",
-            {"action": "join", "file_paths": [str(p1), str(p2)], "join_keys": ["id"]},
-            workspace_root=str(tmp_path),
-        )
-    out = json.loads(raw)
-    assert out["action"] == "join"
-    assert out["row_count"] == 1
-
-
-def test_execute_workflow_tool_excel_diff_with_keys(tmp_path) -> None:
-    p1 = _write_xlsx(tmp_path / "a.xlsx", [["id", "v"], [1, 1]])
-    p2 = _write_xlsx(tmp_path / "b.xlsx", [["id", "v"], [1, 2], [2, 3]])
-    d1 = pd.DataFrame({"id": [1], "v": [1]})
-    d2 = pd.DataFrame({"id": [1, 2], "v": [2, 3]})
-    with patch("app.application.tools.workflow.pd.read_excel", side_effect=[d1, d2]):
-        raw = execute_workflow_tool(
-            "excel_join_compare",
-            {
-                "action": "diff",
-                "file_path_a": str(p1),
-                "file_path_b": str(p2),
-                "key_columns": ["id"],
-            },
-            workspace_root=str(tmp_path),
-        )
-    out = json.loads(raw)
-    assert out["action"] == "diff"
-    assert "only_in_right" in out
-
-
-def test_execute_workflow_tool_excel_diff_no_keys(tmp_path) -> None:
-    p1 = _write_xlsx(tmp_path / "a.xlsx", [["x"], [1]])
-    p2 = _write_xlsx(tmp_path / "b.xlsx", [["x"], [2]])
-    with patch(
-        "app.application.tools.workflow.pd.read_excel",
-        side_effect=[pd.DataFrame({"x": [1]}), pd.DataFrame({"x": [2]})],
-    ):
-        raw = execute_workflow_tool(
-            "excel_join_compare",
-            {"action": "diff", "file_path_a": str(p1), "file_path_b": str(p2)},
-            workspace_root=str(tmp_path),
-        )
-    out = json.loads(raw)
-    assert out["row_count"] == 1
-
-
-def test_execute_workflow_tool_excel_unknown_action() -> None:
-    raw = execute_workflow_tool("excel_join_compare", {"action": "unknown"})
-    out = json.loads(raw)
-    assert out["success"] is False
-
-
-def test_execute_workflow_tool_excel_prophet_insufficient_data() -> None:
-    raw = execute_workflow_tool("excel_prophet", {"periods": 3})
-    out = json.loads(raw)
-    assert out["action"] == "forecast"
-    assert len(out["future_forecast"]) == 3
-
-
-def test_execute_workflow_tool_excel_prophet_with_file(tmp_path) -> None:
-    p = _write_xlsx(tmp_path / "sales.xlsx", [["month", "amt"], [1, 10], [2, 20], [3, 30]])
-    with patch(
-        "app.application.tools.workflow._read_excel_dataframe",
-        return_value=pd.DataFrame({"amt": [10, 20, 30]}),
-    ):
-        raw = execute_workflow_tool(
-            "excel_prophet",
-            {"file_path": str(p), "value_column": "amt", "periods": 2},
-            workspace_root=str(tmp_path),
-        )
-    out = json.loads(raw)
-    assert out["model"] == "linear_regression"
-    assert len(out["future_forecast"]) == 2
-
-
-def test_execute_workflow_tool_excel_schema_understand(tmp_path) -> None:
-    p = _write_xlsx(tmp_path / "t.xlsx", [["产品", "单价"], ["漆", 99]])
-    with patch(
-        "app.application.tools.workflow._read_excel_dataframe",
-        return_value=pd.DataFrame({"产品": ["漆"], "单价": [99]}),
-    ):
-        raw = execute_workflow_tool(
-            "excel_schema_understand",
-            {"file_path": str(p)},
-            workspace_root=str(tmp_path),
-        )
-    out = json.loads(raw)
-    assert out.get("success") is True or "columns" in out or "snapshot" in out
+    assert out["error_code"] == "unknown_tool"
+    assert out["execution_status"] == "not_started"
 
 
 def test_handle_excel_analysis_read_query_aggregate(tmp_path) -> None:
@@ -320,13 +210,6 @@ def test_handle_excel_analysis_unsupported_action(tmp_path) -> None:
         workspace_root=str(tmp_path),
     )
     assert out["success"] is False
-
-
-def test_run_natural_language_pandas_fallback() -> None:
-    df = pd.DataFrame({"qty": [1, 2, 3]})
-    out = run_natural_language_pandas(df, "求和")
-    assert out["row_count"] == 3
-    assert "records" in out
 
 
 # ---------------------------------------------------------------------------
@@ -559,31 +442,6 @@ def _parse_qty(v):
 
 def _parse_active(v):
     return bool(v) if v is not None else True
-
-
-def test_products_pg_update_row_no_engine() -> None:
-    with patch(
-        "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
-        return_value=None,
-    ):
-        with pytest.raises(Exception):
-            products_pg_update_row(
-                1,
-                {"name": "x"},
-                parse_price=_parse_price,
-                parse_quantity=_parse_qty,
-                parse_is_active=_parse_active,
-            )
-
-
-@patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine")
-def test_products_pg_delete_row_mocked(mock_eng: MagicMock) -> None:
-    eng = MagicMock()
-    conn = MagicMock()
-    eng.begin.return_value.__enter__ = MagicMock(return_value=conn)
-    eng.begin.return_value.__exit__ = MagicMock(return_value=False)
-    mock_eng.return_value = eng
-    products_pg_delete_row(1)
 
 
 @patch("app.infrastructure.persistence.compat_db.writes._customer_pg_fetch_by_id")

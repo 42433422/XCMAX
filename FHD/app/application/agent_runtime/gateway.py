@@ -74,6 +74,7 @@ _CONTEXT_COMPARISON = (
     "active_mod_id",
     "_actor_authorization",
     "_mod_authorization",
+    "_credential_authorization",
     "session_id",
     "conversation_id",
     "_conversation_revision",

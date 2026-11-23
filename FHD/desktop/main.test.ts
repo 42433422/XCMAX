@@ -810,10 +810,14 @@ describe('main — startup failure notice stays non-blocking', () => {
 })
 
 describe('main — desktop CSP defense-in-depth injection', () => {
-  it('injects fallback CSP for a trusted local mainFrame without an existing CSP', async () => {
+  it.each<Record<string, string[]>>([
+    {},
+    { 'Content-Security-Policy': ['', ' \t'] },
+    { 'Content-Security-Policy-Report-Only': ["script-src 'none'"] },
+  ])('injects fallback CSP for a trusted local mainFrame without an enforced CSP: %j', async responseHeaders => {
     const { resolveDesktopCspInjection } = await import('./main.js')
     const csp = resolveDesktopCspInjection({
-      responseHeaders: {},
+      responseHeaders,
       resourceType: 'mainFrame',
       url: 'http://127.0.0.1:17500/',
     })
@@ -826,14 +830,22 @@ describe('main — desktop CSP defense-in-depth injection', () => {
     expect(csp).toContain("frame-ancestors 'self'")
   })
 
-  it.each(['Content-Security-Policy', 'content-security-policy'])('preserves an existing %s header', async (header) => {
+  it.each<Record<string, string[]>>([
+    { 'Content-Security-Policy': ["default-src 'self'; media-src 'self' data:"] },
+    { 'content-security-policy': ["default-src 'self'; media-src 'self' data:"] },
+    { 'Content-Security-Policy': ["script-src 'nonce-response-only'"] },
+    { 'content-security-policy': ["script-src 'none'", "frame-ancestors 'none'"] },
+    { 'Content-Security-Policy': [''], 'CONTENT-SECURITY-POLICY': ["script-src 'none'"] },
+  ])('preserves every existing enforced policy without replacing it with fallback: %j', async responseHeaders => {
     const { resolveDesktopCspInjection } = await import('./main.js')
+    const original = structuredClone(responseHeaders)
     const csp = resolveDesktopCspInjection({
-      responseHeaders: { [header]: ["default-src 'self'; media-src 'self' data:"] },
+      responseHeaders,
       resourceType: 'mainFrame',
       url: 'http://127.0.0.1:17500/',
     })
     expect(csp).toBeNull()
+    expect(responseHeaders).toEqual(original)
   })
 
   it('does not inject for sub-resources (non-mainFrame)', async () => {

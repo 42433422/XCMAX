@@ -538,10 +538,17 @@ function toolAvailable(tool) {
 
 function runToolOnce(tool, taskDir, prompt, log, reportOnly, workspaceGrant, runAgent = runOpenCodeAgent,
   signal = agentShutdown.signal, onReceipt) {
-  if (tool === 'opencode') return runAgent(taskDir, prompt, {
-    env: workspaceGrant?.modelEnv || toolEnv(prompt, tool),
-    timeoutMs: Math.min(toolCommandTimeoutMs, workspaceGrant?.timeoutMs ?? Infinity), reportOnly, log,
-  });
+  if (tool === 'opencode') {
+    const remainingMs = workspaceGrant ? Date.parse(workspaceGrant.deadline) - Date.now() : Infinity;
+    if (workspaceGrant && (!Number.isFinite(remainingMs) || remainingMs <= 0)) {
+      throw Object.assign(new Error('workspace_phase_deadline_expired'),
+        { stderr: 'workspace_phase_deadline_expired', executionStarted: false });
+    }
+    return runAgent(taskDir, prompt, {
+      env: workspaceGrant?.modelEnv || toolEnv(prompt, tool),
+      timeoutMs: Math.min(toolCommandTimeoutMs, workspaceGrant?.timeoutMs ?? Infinity, remainingMs), reportOnly, log,
+    });
+  }
   if (tool === 'trae') return runTraeAgent(taskDir, prompt, log);
   if (tool === 'claude_code') return runClaudeAgent(taskDir, prompt, log);
   if (tool === 'cursor') return runCursorAgent(taskDir, prompt, log);
@@ -1505,7 +1512,16 @@ export async function handleTask(ws, task, { runAgent = runOpenCodeAgent, isAvai
   await checkTaskControl(task);
   if (hasExecutor) {
     ({ toolError, toolOutput } = await runToolFallbackChain({
-      ws, task, taskDir, prompt: executionPrompt, plan, requestedTool, baseHead, reportOnly, workspaceGrant, runAgent,
+      ws,
+      task,
+      taskDir,
+      prompt: executionPrompt,
+      plan,
+      requestedTool,
+      baseHead,
+      reportOnly,
+      workspaceGrant,
+      runAgent,
     }));
   } else if (requestedTool || devTool || reportOnly) {
     toolError = 'requested_executor_unavailable';

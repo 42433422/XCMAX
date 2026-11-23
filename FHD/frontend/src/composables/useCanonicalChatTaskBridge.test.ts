@@ -15,6 +15,43 @@ const bridge = () => useCanonicalChatTaskBridge({ sessionId: ref('session'), cre
 beforeEach(() => { vi.resetAllMocks() })
 
 describe('canonical task receipts', () => {
+  it('declines an API-only card without inventing a task identity or making a request', async () => {
+    const card: ShipmentTask = { type: 'custom', api_url: '/api/unregistered', method: 'POST', payload: {} }
+    const api = bridge()
+    expect(api.hasCanonicalTarget(card)).toBe(false)
+    expect(await api.stageCanonicalTask(card)).toBeNull()
+    expect(await api.executeCanonicalTask(card)).toBeNull()
+    expect(card).not.toHaveProperty('agentTaskId')
+    expect(agentRunsApi.createTask).not.toHaveBeenCalled()
+    expect(agentRunsApi.getRun).not.toHaveBeenCalled()
+    expect(agentRunsApi.continueRun).not.toHaveBeenCalled()
+  })
+
+  it('only reads a legacy original run when its capability contract is missing', async () => {
+    vi.mocked(agentRunsApi.getRun).mockResolvedValue({ ...receipt('waiting_user'), approval: { grant: 'real-grant' } })
+    const card: ShipmentTask = { type: 'custom', agentRunId: 'original-run', api_url: '/api/unregistered' }
+    const api = bridge()
+    expect(api.hasCanonicalTarget(card)).toBe(true)
+    const result = await api.executeCanonicalTask(card)
+    expect(await result!.json()).toMatchObject({ run_id: 'original-run', success: false, execution_state: 'waiting_user' })
+    expect(agentRunsApi.getRun).toHaveBeenCalledExactlyOnceWith('original-run')
+    expect(agentRunsApi.createTask).not.toHaveBeenCalled()
+    expect(agentRunsApi.continueRun).not.toHaveBeenCalled()
+    expect(card).not.toHaveProperty('agentTaskId')
+  })
+
+  it('does not translate a retired import capability into another execution alias', async () => {
+    vi.mocked(agentRunsApi.createTask).mockRejectedValue(new Error('unknown_tool'))
+    const card: ShipmentTask = {
+      type: 'custom', payload: { tool_id: 'import_excel_to_database', action: 'execute', params: {} },
+    }
+    await expect(bridge().executeCanonicalTask(card)).rejects.toThrow('unknown_tool')
+    expect(agentRunsApi.createTask).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      tool_id: 'import_excel_to_database', action: 'execute',
+    }))
+    expect(agentRunsApi.continueRun).not.toHaveBeenCalled()
+  })
+
   it('deduplicates concurrent preview and confirmation and reads the original run thereafter', async () => {
     let resolve!: (value: AgentRunResponse) => void
     vi.mocked(agentRunsApi.createTask).mockReturnValue(new Promise(done => { resolve = done }))

@@ -349,7 +349,6 @@ class TestCliReplyBodyBoundary:
         assert "cli answer" in result or isinstance(result, str)
 
     def test_cli_execution_oserror(self, tmp_path, monkeypatch):
-
         monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "1")
         svc = _make_svc(tmp_path, cli_runner=_error_runner(OSError("boom")))
         with (
@@ -359,6 +358,8 @@ class TestCliReplyBodyBoundary:
             svc._cli_reply_body("你好", {})
         assert error.value.receipt["error_code"] == "cli_launch_failed"
         assert "boom" not in str(error.value)
+        assert "boom" not in error.value.body
+        assert "boom" not in str(error.value.event())
 
 
 # ─────────────── _direct_reply_body 边界 ─────────────────────────

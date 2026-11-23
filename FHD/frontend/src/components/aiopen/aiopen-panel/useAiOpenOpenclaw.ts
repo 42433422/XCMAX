@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { safeJsonRequest } from '@/utils/safeJsonRequest'
 import type { AiOpenPanelState } from './useAiOpenPanelState'
 
-// AIOpenPanel 的 OpenClaw HTTP / WebSocket 通道逻辑（与拆分前逐字一致）
+// OpenClaw messages use the same approved capability task as other tools.
 export function useAiOpenOpenclaw(state: AiOpenPanelState) {
   const { panelAvailable, clientMode, openclawBase, openclawMessage, openclawSending, openclawResult } = state
 
@@ -13,6 +13,8 @@ export function useAiOpenOpenclaw(state: AiOpenPanelState) {
   const wsConnecting = ref(false)
   const wsStatusText = ref('')
   let wsClient: WebSocket | null = null
+  const openclawTaskId = ref('')
+  let pendingRequest: { body: string; requestId: string } | null = null
 
   const saveOpenclawBase = async () => {
     if (!panelAvailable.value || clientMode.value) return
@@ -26,16 +28,28 @@ export function useAiOpenOpenclaw(state: AiOpenPanelState) {
 
   const sendToOpenclaw = async () => {
     if (!panelAvailable.value || clientMode.value) return
+    const params = { message: openclawMessage.value.trim(), gateway_url: openclawBase.value.trim().replace(/\/+$/, '') }
+    const body = JSON.stringify(params)
+    if (!pendingRequest || pendingRequest.body !== body) {
+      pendingRequest = { body, requestId: crypto.randomUUID() }
+      openclawTaskId.value = ''
+    } else if (openclawTaskId.value) {
+      openclawResult.value = '请查看原任务进度并处理审批，勿重复发送。'
+      return
+    }
     openclawSending.value = true
     openclawResult.value = ''
     try {
-      const result = await safeJsonRequest('/api/aiopen/openclaw/chat', {
+      const result = await safeJsonRequest('/api/tools/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: openclawMessage.value, source: 'aiopen' }),
+        body: JSON.stringify({ tool_id: 'openclaw', action: 'chat', params, request_id: pendingRequest.requestId }),
       })
-      const d = result?.data as { success?: boolean } | null
-      openclawResult.value = result.ok && d?.success ? '发送成功' : (result.message || '失败')
+      const d = result?.data as { success?: boolean; execution_state?: string; pending_approval?: boolean; task_id?: string; message?: string } | null
+      openclawTaskId.value = d?.task_id || ''
+      openclawResult.value = d?.message || result.message || (d?.pending_approval
+        ? '等待审批，请查看原任务。'
+        : result.ok && d?.success && d.execution_state === 'completed' ? '业务结果已核验' : '结果待核对，请查看原任务，勿重复发送。')
     } catch (err) {
       openclawResult.value = String((err as Error)?.message || err)
     } finally {
@@ -80,6 +94,7 @@ export function useAiOpenOpenclaw(state: AiOpenPanelState) {
     openclawWsUrl,
     openclawWsAuthMode,
     openclawGatewayToken,
+    openclawTaskId,
     wsConnected,
     wsConnecting,
     wsStatusText,

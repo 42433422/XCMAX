@@ -16,8 +16,9 @@ def limited(code=429, retry_after=None):
     return HTTPError("https://example.invalid/source", code, "blocked", headers, None)
 
 
-def test_retry_after_and_success():
-    fetch = Mock(side_effect=[limited(retry_after="30"), b"real bytes"])
+@pytest.mark.parametrize("code", [429, 503])
+def test_retry_after_and_success(code):
+    fetch = Mock(side_effect=[limited(code, retry_after="30"), b"real bytes"])
     sleep = Mock()
     assert retry_throttled_fetch(fetch, sleep=sleep)("same-path") == b"real bytes"
     assert fetch.call_count == 2
@@ -25,26 +26,22 @@ def test_retry_after_and_success():
     sleep.assert_called_once_with(30)
 
 
-@pytest.mark.parametrize("code", [401, 403, 404, 500])
-def test_other_errors_are_not_retried(code):
-    fetch, sleep = Mock(side_effect=limited(code)), Mock()
+@pytest.mark.parametrize(
+    ("code", "retry_after"),
+    [(code, None) for code in (401, 403, 404, 500)] + [(429, "600"), (503, "600")],
+)
+def test_terminal_errors_are_not_retried(code, retry_after):
+    fetch, sleep = Mock(side_effect=limited(code, retry_after=retry_after)), Mock()
     with pytest.raises(HTTPError):
         retry_throttled_fetch(fetch, sleep=sleep)("path")
     assert fetch.call_count == 1
     sleep.assert_not_called()
 
 
-def test_exhaustion_stays_failure():
-    fetch, sleep = Mock(side_effect=limited()), Mock()
+@pytest.mark.parametrize("code", [429, 503])
+def test_exhaustion_stays_failure(code):
+    fetch, sleep = Mock(side_effect=limited(code)), Mock()
     with pytest.raises(HTTPError):
         retry_throttled_fetch(fetch, sleep=sleep)("path")
     assert fetch.call_count == 3
     assert [call.args for call in sleep.call_args_list] == [(15,), (30,)]
-
-
-def test_long_retry_after_fails_without_early_retry():
-    fetch, sleep = Mock(side_effect=limited(retry_after="600")), Mock()
-    with pytest.raises(HTTPError):
-        retry_throttled_fetch(fetch, sleep=sleep)("path")
-    assert fetch.call_count == 1
-    sleep.assert_not_called()

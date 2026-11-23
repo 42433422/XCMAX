@@ -24,6 +24,16 @@ beforeEach(() => {
 })
 
 describe('authApi', () => {
+  it('offline login uses the local endpoint with a freshly supplied password and csrf', async () => {
+    await authApi.offlineLogin('known-local-user', 'retyped-password')
+    expect(primeCsrfCookie).toHaveBeenCalledOnce()
+    expect(apiMock.post).toHaveBeenCalledExactlyOnceWith(
+      '/api/auth/offline-login',
+      { username: 'known-local-user', password: 'retyped-password', account_kind: 'enterprise' },
+      { timeoutMs: 30_000, signal: expect.any(AbortSignal) },
+    )
+  })
+
   it('login primes csrf and posts credentials', async () => {
     await authApi.login('u', 'p')
     expect(primeCsrfCookie).toHaveBeenCalled()

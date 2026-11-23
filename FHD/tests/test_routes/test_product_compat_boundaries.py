@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from unittest.mock import Mock
 
 import pytest
@@ -10,11 +9,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from fastapi.testclient import TestClient
 
-from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
 from app.legacy.routes.product import compat_routes as routes
 
-PUBLIC_MODULE = "app.legacy.routes.product.compat_routes"
-RETIRED_MODULE = f"{PUBLIC_MODULE}_part01"
 MUTATIONS = [
     ("create", "/products/add", {"product_name": "Widget", "unit": "个"}),
     ("update", "/products/update", {"id": 7, "name": "Updated"}),
@@ -26,10 +22,12 @@ MUTATIONS = [
 @pytest.fixture
 def product_client(monkeypatch):
     monkeypatch.setattr(
-        "app.infrastructure.auth.business_scope_gate.resolve_product_sku", lambda: "generic"
+        "app.infrastructure.auth.business_scope_gate.resolve_product_sku",
+        lambda: "generic",
     )
     monkeypatch.setattr(
-        "app.infrastructure.auth.business_scope_gate.resolve_session_user", lambda _request: None
+        "app.infrastructure.auth.business_scope_gate.resolve_session_user",
+        lambda _request: None,
     )
     app = FastAPI()
     app.include_router(routes.router)
@@ -66,7 +64,9 @@ def test_mod_denial_precedes_validation_and_agent(
 def test_write_gate_http_denial_stops_before_mod_gate(product_client, monkeypatch):
     monkeypatch.setattr(routes, "_products_compat_via_service_enabled", lambda: False)
     monkeypatch.setattr(
-        routes, "_products_write_raise", Mock(side_effect=HTTPException(403, "write denied"))
+        routes,
+        "_products_write_raise",
+        Mock(side_effect=HTTPException(403, "write denied")),
     )
     mod_gate = Mock()
     agent = Mock()
@@ -205,102 +205,3 @@ def test_preview_denial_does_not_resolve_or_build_template(product_client, monke
     assert response.json() == {"detail": "hidden"}
     read_gate.assert_called_once()
     preview.assert_not_called()
-
-
-@pytest.fixture
-def agent_repository(monkeypatch, tmp_path, local_tools):
-    repo = InMemoryAgentRunRepository()
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
-    )
-    monkeypatch.setattr(
-        "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled", lambda: False
-    )
-    monkeypatch.setattr(routes, "_products_write_raise", lambda _request: None)
-    monkeypatch.setattr(routes, "_business_mod_json_block", lambda: None)
-    monkeypatch.setattr(routes, "products_pg_insert_row", Mock(return_value=7))
-    monkeypatch.setattr(routes, "products_pg_update_row", Mock())
-    monkeypatch.setattr(routes, "products_pg_delete_row", Mock())
-    monkeypatch.setattr(routes, "products_pg_batch_delete_rows", Mock(return_value=(2, [])))
-    return repo
-
-
-@pytest.mark.parametrize("action,path,payload", MUTATIONS)
-def test_public_executor_is_resolved_by_actual_agent_tool_chain(
-    product_client, agent_repository, monkeypatch, action, path, payload
-):
-    execute = Mock(return_value={"success": True, "executed_action": action})
-    monkeypatch.setattr(routes, "_execute_products_compat_action", execute)
-    response = product_client.post(path, json=payload, headers={"X-User-Id": "compat-user"})
-    assert response.status_code == 200
-    execute.assert_called_once()
-    assert execute.call_args.args[0] == action
-    assert response.json()["executed_action"] == action
-    run = agent_repository.get(response.json()["run_id"])
-    assert run is not None and run.status == "blocked"
-    assert response.json()["success"] is False
-    assert response.json()["verification_code"] == "result_verifier_unavailable"
-    assert response.json()["retryable"] is False
-    assert run.tool_calls[0].output == {"success": True, "executed_action": action}
-    observed = dict(run.metadata["runtime_context"])
-    observed.pop("context_summary", None)
-    observed.pop("untrusted_sources", None)
-    assert observed == {
-        "source": "product_compat_route",
-        "route": path,
-        "request_path": path,
-        "user_id": "compat-user",
-        "route_confirmed": True,
-        "service_source": "fastapi_product_compat_route",
-        "route_module": PUBLIC_MODULE,
-    }
-    assert "step.approved" in {event.event_type for event in run.events}
-    routes.products_pg_insert_row.assert_not_called()
-    routes.products_pg_update_row.assert_not_called()
-    routes.products_pg_delete_row.assert_not_called()
-    routes.products_pg_batch_delete_rows.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    "retired_module", [RETIRED_MODULE, "app.fastapi_routes.xcagi_compat_product"]
-)
-def test_historical_waiting_run_resumes_without_retired_module(
-    product_client, agent_repository, monkeypatch, retired_module
-):
-    with monkeypatch.context() as pause:
-        pause.setattr(AgentOrchestrator, "continue_run", lambda *args, **kwargs: None)
-        response = product_client.post(
-            "/products/delete", json={"id": 7}, headers={"X-User-Id": "compat-user"}
-        )
-    run = agent_repository.get(response.json()["run_id"])
-    assert run is not None and run.status == "waiting_user"
-    context = {**run.metadata["runtime_context"], "route_module": retired_module, "trace": "kept"}
-    run.metadata["runtime_context"] = context
-    agent_repository.save(run)
-    real_import = importlib.import_module
-
-    def import_active(name, package=None):
-        if name == retired_module:
-            raise ModuleNotFoundError("retired product implementation", name=name)
-        return real_import(name, package)
-
-    monkeypatch.setattr(importlib, "import_module", import_active)
-    execute = Mock(return_value={"success": True, "resumed": True})
-    monkeypatch.setattr(routes, "_execute_products_compat_action", execute)
-    resumed = AgentOrchestrator().continue_run(
-        run.run_id, approved_by="compat-reviewer", approved_step_id="products_delete_compat"
-    )
-    assert resumed is not None and resumed.status == "blocked"
-    assert resumed.tool_calls[0].metadata["verification"]["code"] == "result_verifier_unavailable"
-    assert resumed.tool_calls[0].output == {"success": True, "resumed": True}
-    execute.assert_called_once_with("delete", {"id": 7})
-    resumed_context = dict(resumed.metadata["runtime_context"])
-    resumed_context.pop("context_summary", None)
-    resumed_context.pop("untrusted_sources", None)
-    assert resumed_context == context
-    approval = next(event for event in resumed.events if event.event_type == "step.approved")
-    assert approval.data["approved_by"] == "compat-reviewer"
-    assert approval.data["node_id"] == "products_delete_compat"

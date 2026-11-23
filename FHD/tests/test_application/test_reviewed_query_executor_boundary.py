@@ -123,11 +123,11 @@ def test_product_tenant_permission_is_enterprise_only(
     trusted_actor, dispatch_calls, monkeypatch, sku
 ):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", sku)
-    actor = trusted_actor(permissions=["tool.products.exists", "product.view"])
-    result = execute(actor, tool="products", action="exists")
+    actor = trusted_actor(permissions=["product.view"])
+    result = execute(actor, tool="business_db", action="read", params={"entity": "products"})
     if sku == "enterprise":
         assert result["success"] is True
-        assert dispatch_calls == [("products", "exists", 7)]
+        assert dispatch_calls == [("business_db", "read", 7)]
     else:
         assert result["error_code"] == "tool_permission_denied" and "exists" not in result
         assert dispatch_calls == []
@@ -136,12 +136,11 @@ def test_product_tenant_permission_is_enterprise_only(
 def test_tenantless_product_denied_without_invented_data_scope(trusted_actor, dispatch_calls):
     actor = trusted_actor(tenant_id=None, role="admin", tier="admin", permissions=["product.view"])
     with tenant_scope(99):
-        result = execute(actor, tool="products", action="exists")
+        result = execute(actor, tool="business_db", action="read", params={"entity": "products"})
         assert current_tenant_id() == 99
     assert result["error_code"] == "tool_permission_denied"
-    assert (
-        result["outcome"] == "unknown" and result["retryable"] is False and "exists" not in result
-    )
+    assert result["outcome"] == "denied" and result["retryable"] is False and "exists" not in result
+    assert result["reason"] == "owned_tenant_required"
     assert dispatch_calls == []
 
 
@@ -158,7 +157,7 @@ def test_customer_query_uses_view_permission_and_only_owned_tenant(trusted_actor
     with actor.factory.begin() as db:
         db.add_all([PurchaseUnit(unit_name=f"owned-{i:02}", tenant_id=7) for i in range(21)])
         db.add(PurchaseUnit(unit_name="foreign", tenant_id=8))
-    result = execute(actor, tool="customers", action="query")
+    result = execute(actor, tool="business_db", action="read", params={"entity": "customers"})
     assert result["success"] is True
     assert result["total"] == 21
     assert len(result["data"]) == 20
@@ -208,14 +207,30 @@ def test_unknown_import_evidence_stays_unknown_in_public_chat(output):
 
 def test_customer_query_denies_without_view_permission(trusted_actor, dispatch_calls):
     actor = trusted_actor(role="no-customer", permissions=[])
-    result = execute(actor, tool="customers", action="query")
+    result = execute(actor, tool="business_db", action="read", params={"entity": "customers"})
     assert result["error_code"] == "tool_permission_denied"
     assert dispatch_calls == []
 
 
 def test_customer_query_rejects_client_tenant_override(trusted_actor, dispatch_calls):
     actor = trusted_actor(permissions=["customer.view"])
-    result = execute(actor, tool="customers", action="query", params={"tenant_id": 8})
+    result = execute(
+        actor,
+        tool="business_db",
+        action="read",
+        params={"entity": "customers"},
+        context={**actor.context, "tenant_id": "8"},
+    )
+    assert result["error_code"] == "tool_identity_required"
+    assert result["reason"] == "actor_binding_rejected"
+    assert dispatch_calls == []
+
+
+def test_product_query_rejects_client_identity_params(trusted_actor, dispatch_calls):
+    actor = trusted_actor(permissions=["product.view"])
+    result = execute(
+        actor, tool="business_db", action="read", params={"entity": "products", "tenant_id": 8}
+    )
     assert result["error_code"] == "tool_identity_override"
     assert dispatch_calls == []
 

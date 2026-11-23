@@ -92,7 +92,7 @@ def market_scan(monkeypatch):
         ("release_planning", "release_planning", "telemetry_release_planning_failed", 1),
     ],
 )
-def test_scan_failure_keeps_database_diagnostics_on_server(
+def test_scan_failure_keeps_error_class_without_private_database_diagnostics(
     scan_client,
     telemetry_secret,
     market_scan,
@@ -123,7 +123,8 @@ def test_scan_failure_keeps_database_diagnostics_on_server(
 
     assert response.status_code == 200
     assert diagnostic not in response.text
-    assert diagnostic in caplog.text
+    assert diagnostic not in caplog.text
+    assert "SQLAlchemyError" in caplog.text
     assert operations == ["telemetry_backlog", "release_planning"]
     assert response.json() == {
         "ok": False,
@@ -195,3 +196,62 @@ def test_disabled_scan_keeps_original_skipped_response(scan_client, telemetry_se
     assert response.status_code == 200
     assert response.json() == {"ok": True, "skipped": True}
     scanner.assert_not_called()
+
+
+@pytest.mark.parametrize("stage", ["ingest", "planning"])
+def test_scan_reports_failed_stage_without_internal_error_text(
+    telemetry_secret, monkeypatch, stage, caplog
+):
+    from fastapi import FastAPI
+
+    from modstore_server import telemetry_backlog_loop as loop
+    from modstore_server.telemetry_internal_api import router
+
+    monkeypatch.setenv("XCAGI_TELEMETRY_BACKLOG_ENABLED", "1")
+    for name in (
+        "_scan_employee_execution_metrics",
+        "_scan_coverage_trend",
+        "_scan_ci_failure_rate",
+        "_scan_market_signals",
+        "_scan_auto_merge_metrics",
+        "_scan_security_scan_metrics",
+        "_scan_coverage_ratchet_gap",
+        "_scan_workflow_drift",
+    ):
+        monkeypatch.setattr(loop, name, lambda *args, **kwargs: [])
+    kind = "market_signal" if stage == "planning" else "coverage_drop"
+    monkeypatch.setattr(loop, "_scan_coverage_trend", lambda: [{"type": kind, "payload": {}}])
+
+    def fail(*args, **kwargs):
+        raise ValueError("private-token-sentinel /private/database/path")
+
+    monkeypatch.setattr(
+        loop,
+        "ingest_telemetry_signal",
+        fail if stage == "ingest" else lambda **kwargs: {"ok": True},
+    )
+    monkeypatch.setattr(loop, "plan_release_candidate_from_market", fail)
+    app = FastAPI()
+    app.include_router(router)
+    response = TestClient(app).post(
+        "/api/internal/telemetry/scan", headers={"X-Telemetry-Secret": telemetry_secret}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False and data["signals_failed"] == 1
+    assert data["signals_ingested"] == int(stage == "planning")
+    assert data["errors"] == [
+        {
+            "type": "release_planning" if stage == "planning" else kind,
+            "error": (
+                "telemetry_release_planning_failed"
+                if stage == "planning"
+                else "telemetry_signal_ingest_failed"
+            ),
+        }
+    ]
+    assert "private-token-sentinel" not in response.text
+    assert "/private/database/path" not in response.text
+    assert "private-token-sentinel" not in caplog.text
+    assert "/private/database/path" not in caplog.text
+    assert "ValueError" in caplog.text

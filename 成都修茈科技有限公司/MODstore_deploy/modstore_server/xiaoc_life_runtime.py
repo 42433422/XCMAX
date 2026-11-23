@@ -385,18 +385,24 @@ class CyclePorts:
         self.active()
         if state.get("portfolio") or state.get("evolution"):
             return {}
-        from modstore_server.services.llm import (
-            chat_dispatch_via_platform_only,
-            resolve_platform_bench_llm,
-        )
+        from fastapi import HTTPException
+
+        from modstore_server.llm_api import resolve_default_llm_route
+        from modstore_server.models import get_session_factory
+        from modstore_server.services.llm import chat_dispatch_via_platform_only
         from modstore_server.strategic_portfolio_usage import (
             planning_admission,
             planning_usage_scope,
         )
 
-        provider, model = resolve_platform_bench_llm()
-        if not provider or not model:
-            raise LifeBlocked("platform_model_not_configured")
+        try:
+            with get_session_factory()() as session:
+                route = await resolve_default_llm_route(
+                    session, self.claim["owner_user_id"], platform_only=True
+                )
+        except HTTPException as exc:
+            raise LifeBlocked("platform_model_not_configured") from exc
+        provider, model = route["provider"], route["model"]
         admission = await planning_admission(
             provider, model, owner_user_id=self.claim["owner_user_id"]
         )

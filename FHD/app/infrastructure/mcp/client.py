@@ -19,7 +19,6 @@ from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextvars import copy_context
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Coroutine, TypeVar
 
@@ -79,18 +78,17 @@ def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) ->
     timeout = remaining_invocation_seconds(timeout)
     if timeout <= 0 or not math.isfinite(timeout):
         raise McpClientError("MCP 调用预算已耗尽", retryable=False)
+    deadline = time.monotonic() + timeout
 
     async def bounded() -> T:
-        from anyio import fail_after
+        import anyio
 
-        # The pool may have queued this call. Do not grant a fresh full timeout
-        # when the worker eventually starts under the captured caller scope.
-        remaining = remaining_invocation_seconds(timeout)
+        # Queued calls retain the original deadline. AnyIO cancellation preserves
+        # the official SDK's shielded transport/process teardown on its owner task.
+        remaining = remaining_invocation_seconds(deadline - time.monotonic())
         if remaining <= 0:
             raise McpClientError("MCP 调用预算已耗尽", retryable=False)
-        # Cancel the operation without interrupting the SDK's shielded cleanup;
-        # the caller's future timeout still bounds its synchronous wait.
-        with fail_after(remaining):
+        with anyio.fail_after(remaining):
             return await coro_factory()
 
     def run() -> T:
@@ -486,9 +484,15 @@ def call_tool(
         "server": config.name,
         "content": text,
         "message": (text or "MCP 工具未返回有效的完成结果") if error_code else "",
-        **({"structuredContent": deepcopy(structured)} if structured is not None else {}),
-        **({"resultType": result_type} if result_type != "complete" else {}),
         **evidence,
+        # Keep the public wire aliases while retaining the session's normalized
+        # JSON evidence and content blocks for durable browser receipts.
+        **(
+            {"structuredContent": copy.deepcopy(evidence["structured_content"])}
+            if structured is not None
+            else {}
+        ),
+        **({"resultType": result_type} if result_type != "complete" else {}),
         **({"session_id": session_id} if session_id else {}),
         **({"error_code": error_code, **uncertain} if error_code else {}),
     }

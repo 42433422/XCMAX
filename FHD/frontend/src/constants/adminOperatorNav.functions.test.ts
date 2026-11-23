@@ -41,11 +41,8 @@ describe('adminOperatorNav constants and functions', () => {
       expect(ADMIN_OPERATOR_VISIBLE_CORE_KEYS).toBeInstanceOf(Set)
     })
 
-    it('includes the three independent employee surfaces and graph aliases', () => {
-      expect([...ADMIN_OPERATOR_VISIBLE_CORE_KEYS].sort()).toEqual([
-        'employee-workflow', 'employee-workbench', 'workflow-employee-space',
-        'workflow-employee-stitch-full', 'duty-roster-graph',
-      ].sort())
+    it('is empty', () => {
+      expect(ADMIN_OPERATOR_VISIBLE_CORE_KEYS.size).toBe(0)
     })
   })
 

@@ -85,11 +85,13 @@ def verified_plan_admission(step, output: dict, context: dict) -> bool:
 
 def normalize_tool_execution_result(step, output: dict, context: dict) -> dict:
     """Apply the common result contract after checking this host admission kind."""
+    from app.application.agent_orchestrator.result_verification import pending_execution_receipt
     from app.domain.task_lifecycle.results import normalize_execution_result
 
     return (
         output
-        if verified_plan_admission(step, output, context)
+        if pending_execution_receipt(output)
+        or verified_plan_admission(step, output, context)
         or _original_employee_delegation(step, output, context)
         else normalize_execution_result(output)
     )

@@ -17,6 +17,19 @@ afterEach(() => {
 })
 
 describe('api transport stability', () => {
+  it.each([undefined, 'original-durable-key'])('keeps execution identity after session refresh: %s', async (idempotencyKey) => {
+    registerSessionRefresh(async () => true)
+    const transport = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(401, { message: 'expired' }))
+      .mockResolvedValueOnce(jsonResponse(200, { success: true }))
+    vi.stubGlobal('fetch', transport)
+    await api.post('/api/tools/execute', { tool_id: 'ocr', action: 'request' }, { idempotencyKey })
+    const identities = transport.mock.calls.map(([, init]) => new Headers(init.headers).get('Idempotency-Key'))
+    expect(identities).toHaveLength(2)
+    expect(identities[0]).toBeTruthy()
+    expect(identities[0]).toBe(identities[1])
+    if (idempotencyKey) expect(identities[0]).toBe(idempotencyKey)
+  })
   it('sends a request id and classifies a dropped connection as server unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new TypeError('Failed to fetch')
