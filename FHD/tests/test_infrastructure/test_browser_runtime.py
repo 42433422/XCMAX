@@ -376,7 +376,10 @@ def _computer_observation(origin, executable):
         },
         lambda: False,
     )
-    assert result["success"] and result["verified"], result
+    assert result["success"] and result["verified"], json.dumps(
+        {key: result.get(key) for key in ("status", "error_code", "message", "steps_completed")},
+        ensure_ascii=False,
+    )
     return result["observation"]
 
 

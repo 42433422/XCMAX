@@ -1,5 +1,5 @@
 {
-  "lines": 2709321,
+  "lines": 2709324,
   "updated": "2026-11-24",
-  "note": "保留最新集成53f0752cf4的业务及恢复测试、501aa514训练封印与67904da9商务历史，按用户修复附件问题及既有PR闭环授权显式登记。本轮复用SQLAlchemy/filelock/DOMPurify：生产胶水净增4行、迁移37行、回归765行、异常门禁及原CI步骤24行、README/CHANGELOG4行，共834行；392个不同用例与生产类型检查通过，包含501aa后的真实账号审批库存复验，后续53f仅改无关测试。原计数器从2708487实测至2709321，不预留额度、不删无关代码、不改结构/覆盖率/安全门槛；门禁登记不代表人工架构批准、完整CI或生产验收通过。"
+  "note": "browser contract diagnostics: preserve the original real Chromium success, verification and privacy assertions while serializing only safe failure metadata instead of truncated dict repr; measured +3 test lines over eae0453, with no production behavior, retries, timeouts or gate changes"
 }
