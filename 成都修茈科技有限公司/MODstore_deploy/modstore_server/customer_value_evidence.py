@@ -86,8 +86,8 @@ def _release_bound_receipts(
 
     publications = desktop_publications()
     latest: dict[tuple[int, str], UpdateInstallationReceipt] = {}
-    for row in installations:  # Query is newest first, including failures/other versions.
-        latest.setdefault((int(row.user_id), str(row.installation_id)), row)
+    for installation in installations:  # Query is newest first, including failures/other versions.
+        latest.setdefault((int(installation.user_id), str(installation.installation_id)), installation)
     installed = [
         row
         for row in latest.values()

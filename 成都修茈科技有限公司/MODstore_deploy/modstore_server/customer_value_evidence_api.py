@@ -25,7 +25,7 @@ def customer_value_evidence(
     return {
         "ok": True,
         "data": build_customer_value_evidence(
-            window_days=window_days, **({"release_sha": release_sha} if release_sha else {})
+            window_days=window_days, release_sha=release_sha or ""
         ),
     }
 
