@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 import httpx
+from fastapi import HTTPException
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.customer_ticket_github import github
@@ -202,11 +203,17 @@ def collect_execution(request_id):
         }
     if run.get("status") == "completed":
         if run.get("conclusion") != "success":
-            return {
+            result = {
                 "status": "failed",
                 "reason": "github_run_failed",
                 "run_id": run["id"],
             }
+            if run.get("conclusion") == "failure":
+                report = archive_failed_verification(request_id, protocol, effects, run)
+                if report:
+                    result["target_sha"] = report["target_sha"]
+                    result["failed_verification_sha256"] = report["evidence_digest"]
+            return result
         state = worker_status(request_id)
         if not state["finished"] or state["conclusion"] != "success" or not state.get("target_sha"):
             return {"status": "failed", "reason": "employee_receipt_incomplete"}
@@ -387,6 +394,70 @@ def slot_finished(request_id):
         )
         == "completed"
     )
+
+
+def archive_failed_verification(request_id, protocol, effects, run):
+    """Retain an already-produced failed comparison, with no acceptance authority."""
+    from modstore_server.integrations.repository_packages import load_repository_module
+
+    if (
+        run.get("status") != "completed"
+        or run.get("conclusion") != "failure"
+        or run.get("id") != effects.get("run_id")
+        or run.get("run_attempt") != 1
+        or run.get("head_sha") != protocol["source_sha"]
+        or run.get("path") != f".github/workflows/{WORKFLOW}"
+    ):
+        return None
+    previous = effects.get("failed_verification")
+    if previous and previous.get("run_id") == str(run["id"]):
+        return previous
+    try:
+        worker = worker_status(request_id)
+        target = worker.get("target_sha")
+        if (
+            worker.get("finished") is not True
+            or worker.get("conclusion") != "success"
+            or not isinstance(target, str)
+            or not re.fullmatch(r"[0-9a-f]{40}", target)
+            or worker.get("request_id") != request_id
+            or worker.get("run_id") != run["id"]
+        ):
+            return None
+        repo = protocol["repository"]
+        artifacts = github(
+            "GET", f"/repos/{repo}/actions/runs/{run['id']}/artifacts"
+        ).get("artifacts", [])
+        matches = [
+            a for a in artifacts
+            if a.get("name") == f"retort-verification-{request_id}" and not a.get("expired")
+        ]
+        if len(matches) != 1:
+            return None
+        artifact = matches[0]
+        with tempfile.TemporaryDirectory(prefix="retort-failed-evidence-") as directory:
+            root = Path(directory)
+            _download_artifact(repo, artifact["id"], root, artifact.get("digest", ""))
+            bundle = json.loads((root / "verification.json").read_text())
+            contract = load_repository_module("retort_engine.evolution_contract")
+            report = contract.inspect_bundle(
+                protocol, bundle, root, run_id=str(run["id"]), target_sha=target
+            )
+            report["evidence_archive"] = _retain_artifact(request_id, artifact["digest"], root)
+        # A failed workflow never becomes an accepted verification, even if
+        # all recorded checks returned zero. Keep the report on a separate key.
+        report.update(
+            status="workflow_failed",
+            artifact_id=artifact["id"],
+            artifact_digest=artifact["digest"],
+            workflow_conclusion="failure",
+        )
+    except (HTTPException, httpx.HTTPError, OSError, ValueError, zipfile.BadZipFile):
+        # Evidence may be absent when a workflow fails before the comparison.
+        # Preserve the failure; absence of evidence is not a verified result.
+        return None
+    _save(request_id, failed_verification=report)
+    return report
 
 
 def verify_execution(request_id, state):
