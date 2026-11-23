@@ -21,9 +21,6 @@ def test_parallel_prechecked_reads_cannot_double_spend_one_unit(monkeypatch):
         action_spec=get_tool_action_spec,
         validate=validate_tool_call,
         refresh_budget=refresh_ai_budget_metadata,
-        repair_enabled=lambda *args: False,
-        repair_limit=lambda *args: 0,
-        request_repair=lambda *args: {},
     )
     usage = RunUsageLedger(dependencies)
     monkeypatch.setattr(usage, "record_tool_usage_entry", lambda *args: True)

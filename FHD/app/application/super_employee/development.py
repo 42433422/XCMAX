@@ -6,7 +6,6 @@ import logging
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -15,6 +14,7 @@ from typing import Any
 from app.domain.app_pure.git_workspace_manager import GitWorkspaceManager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .cli import CliExecutionError
 from .common import _relay_wt_lock
 from .profiles import SuperEmployeeToolProfile
 from .protocols import DevelopmentPorts, WorktreePorts
@@ -66,20 +66,29 @@ class DevelopmentWorkflow:
     def prepare_persistent_worktree(
         self, base_cwd: str, wt_path: str, branch: str
     ) -> tuple[str, str] | None:
-        """复用同一个 worktree：重置为 base 干净基线 + 开新任务分支；不存在则建一次。"""
+        """仅复用已确认干净的 worktree，保留尚待核对的改动及原分支。"""
         try:
             head = self._worktrees.git(base_cwd, "rev-parse", "HEAD", timeout=15)
             base_ref = (head.stdout or "").strip() or "HEAD"
             wt = Path(wt_path)
             if (wt / ".git").exists():
-                self._worktrees.git(wt_path, "reset", "--hard", base_ref, timeout=120)
-                self._worktrees.git(wt_path, "clean", "-fdx", timeout=300)
+                state = self._worktrees.git(
+                    wt_path, "status", "--porcelain", "--untracked-files=all", timeout=30
+                )
+                if state.returncode != 0 or state.stdout.strip():
+                    failure = CliExecutionError(
+                        self._p.display_tool,
+                        "workspace_unavailable" if state.returncode != 0 else "workspace_dirty",
+                        stage="workspace",
+                        started=False,
+                        stderr=state.stderr or state.stdout or "无法确认 worktree 干净状态",
+                    )
+                    self._preserve_workspace(failure, wt_path, "")
+                    failure.receipt["requested_branch"] = branch
+                    raise failure
                 r = self._worktrees.git(wt_path, "checkout", "-B", branch, base_ref, timeout=120)
                 if r.returncode != 0:
-                    self._worktrees.git(
-                        base_cwd, "worktree", "remove", "--force", wt_path, timeout=120
-                    )
-                    shutil.rmtree(wt_path, ignore_errors=True)
+                    return None
             if not (wt / ".git").exists():
                 wt.parent.mkdir(parents=True, exist_ok=True)
                 self._worktrees.git(base_cwd, "worktree", "prune", timeout=30)
@@ -90,6 +99,8 @@ class DevelopmentWorkflow:
                     logger.warning("持久 worktree 创建失败: %s", (r.stderr or r.stdout)[:300])
                     return None
             return (wt_path, branch)
+        except CliExecutionError:
+            raise
         except RECOVERABLE_ERRORS:
             logger.warning("持久 worktree 准备异常", exc_info=True)
             return None
@@ -121,6 +132,8 @@ class DevelopmentWorkflow:
             st = self._worktrees.git(
                 cwd, "status", "--porcelain", "--untracked-files=all", timeout=30
             )
+            if st.returncode != 0:
+                return False, "无法读取待验证改动：" + (st.stderr or st.stdout)[:300]
             for ln in st.stdout.splitlines():
                 if not ln.strip():
                     continue
@@ -130,8 +143,8 @@ class DevelopmentWorkflow:
                 path = path.strip().strip('"')
                 if path:
                     changed.append(path)
-        except RECOVERABLE_ERRORS:
-            changed = []
+        except RECOVERABLE_ERRORS as exc:
+            return False, f"无法读取待验证改动：{str(exc)[:300]}"
         py = [f for f in changed if f.endswith(".py")]
         if py:
             import py_compile
@@ -179,14 +192,28 @@ class DevelopmentWorkflow:
         branch_hint = GitWorkspaceManager.safe_context_branch(context)
         prepared = self._coding.prepare(base_cwd, text, branch_hint)
         if not prepared:
-            if branch_hint:
-                return f"❌ 选中的工作分支不可用：{branch_hint}\n我没有在运行中的工程根直接写入。请刷新分支列表后重新选择，或改为自动新建分支。"
+            base_path = Path(base_cwd).resolve()
+            git_marker = any((path / ".git").exists() for path in (base_path, *base_path.parents))
+            if branch_hint or git_marker or self._worktrees.is_git_repo(base_cwd):
+                failure = CliExecutionError(
+                    self._p.display_tool,
+                    "workspace_unavailable",
+                    stage="workspace",
+                    started=False,
+                )
+                failure.receipt.update({"workspace": base_cwd, "branch": branch_hint})
+                raise failure
             return self._coding.run_once(
                 cli_path, self._coding.work_prompt(text, base_cwd), base_cwd
             )
         wt_path, branch = prepared
+        body, stage = "", "cli"
+        execution_started = False
+        completed = False
         try:
             body = self._coding.run_once(cli_path, self._coding.work_prompt(text, wt_path), wt_path)
+            execution_started = True
+            stage = "verification"
             ok, vmsg = self._coding.verify(wt_path)
             try:
                 max_fix = max(1, int(os.environ.get("XCMAX_DEV_LOOP_MAX_FIX") or "3"))
@@ -195,12 +222,67 @@ class DevelopmentWorkflow:
             attempt = 0
             while not ok and attempt < max_fix:
                 attempt += 1
-                self._coding.run_once(cli_path, self._coding.fix_prompt(vmsg, wt_path), wt_path)
+                stage = "cli"
+                body = self._coding.run_once(
+                    cli_path, self._coding.fix_prompt(vmsg, wt_path), wt_path
+                )
+                stage = "verification"
                 ok, vmsg = self._coding.verify(wt_path)
+            if not ok:
+                raise CliExecutionError(
+                    self._p.display_tool,
+                    "verification_failed",
+                    stage=stage,
+                    partial_text=body,
+                    stderr=vmsg,
+                )
+            stage = "publication"
             pushed, pmsg = self._coding.commit(wt_path, branch, text)
-            status = "✅" if ok and pushed else "⚠️" if pushed else "❌"
-            tail = f"\n\n— — — 闭环结果 {status} — — —\n分支：{branch}\n验证：{('通过' if ok else '未通过')}（{vmsg[:200]}）\n推送：{pmsg[:200]}"
+            if not pushed:
+                raise CliExecutionError(
+                    self._p.display_tool,
+                    "publication_failed",
+                    stage=stage,
+                    partial_text=body,
+                    stderr=pmsg,
+                )
+            completed = True
+            tail = f"\n\n— — — 闭环结果 ✅ — — —\n分支：{branch}\n验证：通过（{vmsg[:200]}）\n推送：{pmsg[:200]}"
             base = body.strip() or f"{self._p.display_tool} 已完成开发任务。"
             return base + tail
+        except CliExecutionError as cli_failure:
+            if execution_started:
+                cli_failure.receipt.update(
+                    {
+                        "execution_started": True,
+                        "execution_state": "failed",
+                        "outcome": "unknown",
+                        "partial_text": cli_failure.receipt.get("partial_text") or body,
+                    }
+                )
+            self._preserve_workspace(cli_failure, wt_path, branch)
+            raise
+        except RECOVERABLE_ERRORS as exc:
+            failure = CliExecutionError(
+                self._p.display_tool,
+                f"{stage}_failed",
+                stage=stage,
+                partial_text=body,
+                stderr=str(exc),
+            )
+            self._preserve_workspace(failure, wt_path, branch)
+            raise failure from exc
         finally:
-            self._coding.remove(base_cwd, wt_path)
+            if completed:
+                self._coding.remove(base_cwd, wt_path)
+
+    @staticmethod
+    def _preserve_workspace(failure: CliExecutionError, wt_path: str, branch: str) -> None:
+        failure.receipt.update(
+            {
+                "workspace": wt_path,
+                "branch": branch,
+                "workspace_preserved": True,
+                "reconciliation_required": True,
+            }
+        )

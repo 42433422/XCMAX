@@ -81,13 +81,6 @@ export async function parseChatStreamErrorResponse(res: Response, onRouteMetadat
 }
 
 export const chatApi = {
-  generateImage(prompt: string, clientRequestId: string) {
-    return api.post<{ images: string[]; model: string; billed: boolean; charge_amount: string }>(
-      '/api/conversation/image',
-      { prompt, client_request_id: clientRequestId },
-      withMarketAuthorization({ timeoutMs: 185_000, retry: false }),
-    )
-  },
   getModelStatus(): Promise<{ ok: boolean; provider: string; model: string } & Partial<ChatModelRoute>> {
     return api.get('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })
   },

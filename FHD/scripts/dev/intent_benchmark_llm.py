@@ -15,8 +15,8 @@ from typing import Any
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.application.workflow.planner_llm_gateway import request_planner_completion
 from app.domain.shared_services.deepseek_intent_service import INTENT_DESCRIPTIONS, SLOT_DEFINITIONS
+from app.infrastructure.llm.client import get_llm_client, require_api_key, resolve_chat_model
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
@@ -53,9 +53,9 @@ def predict(text: str) -> dict:
     if evidence is not None:
         evidence["attempted"] += 1
     try:
-        payload = request_planner_completion(
-            ai_service=None,
-            context=None,
+        require_api_key()
+        response = get_llm_client().chat.completions.create(
+            model=resolve_chat_model(),
             temperature=0.0,
             messages=[
                 {
@@ -75,6 +75,7 @@ def predict(text: str) -> dict:
                 {"role": "user", "content": text},
             ],
         )
+        payload = response.model_dump() if hasattr(response, "model_dump") else response
         if not isinstance(payload, dict) or not payload.get("choices"):
             raise RuntimeError("configured model unavailable or returned no completion")
         message = payload["choices"][0].get("message") or {}

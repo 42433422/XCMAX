@@ -22,6 +22,7 @@ Python-callable surface.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
@@ -336,7 +337,8 @@ def create_app(
         try:
             patch = ProjectPatch.from_dict(patch_dict)
         except BOUNDARY_ERRORS as exc:
-            raise HTTPException(400, detail=f"invalid patch: {exc}") from exc
+            logging.getLogger(__name__).exception("Invalid project patch")
+            raise HTTPException(400, detail="invalid patch") from exc
         result = _resolve_coder().apply_patch(patch, root=root, dry_run=dry_run)
         return result.to_dict()
 

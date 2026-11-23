@@ -18,6 +18,42 @@ def _success(**fields: Any) -> dict[str, Any]:
 
 
 _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
+    ("desktop_automation", "computer_execute"): [
+        _sample(
+            "verify_browser_page",
+            {
+                "request_id": "computer-example-1",
+                "target": "browser",
+                "steps": [{"action": "navigate", "url": "https://example.com/"}],
+                "verification": {"kind": "url", "expected": "https://example.com/"},
+            },
+            _success(executed=True, verified=True, request_id="computer-example-1"),
+        )
+    ],
+    ("browser", "observe"): [
+        _sample(
+            "read_approved_site",
+            {"url": "https://example.com"},
+            _success(outcome="observed", verified=False, snapshot="- heading: Example"),
+        )
+    ],
+    ("browser", "execute"): [
+        _sample(
+            "submit_and_read_receipt",
+            {
+                "url": "https://example.com/orders",
+                "steps": [{"action": "click", "locator": {"role": "button", "name": "提交"}}],
+                "verify": [
+                    {"kind": "text", "locator": {"selector": "#receipt"}, "expected": "提交成功"}
+                ],
+            },
+            _success(
+                outcome="succeeded",
+                verified=True,
+                verification=[{"kind": "text", "status": "passed"}],
+            ),
+        )
+    ],
     ("sales", "create_order"): [
         _sample(
             "confirmed_named_order",
@@ -291,7 +327,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             _success(
                 message="employee run accepted",
                 employee_id="quote-agent",
-                data={"status": "accepted"},
+                data={"status": "accepted", "execution_status": "accepted"},
             ),
         )
     ],
@@ -308,6 +344,13 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                 employee_id="quote-agent",
                 data={"result": {"summary": "当前客户账户上下文"}},
             ),
+        )
+    ],
+    ("elt_import", "execute"): [
+        _sample(
+            "execute_reviewed_preview",
+            {"run_id": "sample-preview", "preview_revision": "a" * 64},
+            _success(data={"run_id": "sample-preview", "status": "completed", "executed_rows": 1}),
         )
     ],
     ("excel_import", "execute_import"): [
@@ -1024,7 +1067,6 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
         _sample(
             "propose_memory_v2_candidate",
             {
-                "user_id": "tenant-a",
                 "memory_type": "preference",
                 "key": "favorite_customer",
                 "value": "ACME Trading",
@@ -1045,7 +1087,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "confirm"): [
         _sample(
             "confirm_memory_v2_candidate",
-            {"user_id": "tenant-a", "memory_id": "mem_1"},
+            {"memory_id": "mem_1"},
             _success(
                 memory={"memory_id": "mem_1", "status": "active", "eligible_for_planner": True}
             ),
@@ -1054,7 +1096,7 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "reject"): [
         _sample(
             "reject_memory_v2_candidate",
-            {"user_id": "tenant-a", "memory_id": "mem_1", "reason": "not useful"},
+            {"memory_id": "mem_1", "reason": "not useful"},
             _success(memory={"memory_id": "mem_1", "status": "rejected"}),
         )
     ],
@@ -1062,7 +1104,6 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
         _sample(
             "correct_memory_v2_record",
             {
-                "user_id": "tenant-a",
                 "memory_id": "mem_1",
                 "key": "favorite_customer",
                 "value": "ACME Trading Ltd.",
@@ -1080,8 +1121,46 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ("memory_v2", "delete"): [
         _sample(
             "delete_memory_v2_record",
-            {"user_id": "tenant-a", "memory_id": "mem_1", "reason": "user removed memory"},
+            {"memory_id": "mem_1", "reason": "user removed memory"},
             _success(memory={"memory_id": "mem_1", "status": "deleted"}),
         )
     ],
 }
+
+
+_SPECIAL_TOOL_CONTRACTS.update(
+    {
+        ("excel_analysis", "aggregate"): [
+            {
+                "name": "workbook_aggregate_contract",
+                "input": {
+                    "file_path": "sample.xlsx",
+                    "metrics": [{"column": "amount", "op": "sum"}],
+                },
+                "output": {"success": True},
+            }
+        ],
+        ("excel_join_compare", "join"): [
+            {
+                "name": "workbook_join_contract",
+                "input": {"file_paths": ["left.xlsx", "right.xlsx"], "join_keys": ["id"]},
+                "output": {"success": True, "action": "join", "row_count": 1},
+            }
+        ],
+        ("excel_join_compare", "diff"): [
+            {
+                "name": "workbook_diff_contract",
+                "input": {
+                    "file_path_a": "left.xlsx",
+                    "file_path_b": "right.xlsx",
+                    "key_columns": ["id"],
+                },
+                "output": {
+                    "success": True,
+                    "action": "diff",
+                    "rows_with_value_changes": {"count": 1},
+                },
+            }
+        ],
+    }
+)

@@ -69,11 +69,12 @@ async def test_bound_snapshot_survives_rotation_and_returns_actual_receipt(
 
     async def dispatch(provider, **kwargs):
         dispatched.append((provider, kwargs["model"], kwargs["api_key"], kwargs["base_url"]))
-        return {"ok": True, "content": "synthetic answer", "usage": {}}
+        return {"ok": True, "content": "synthetic answer", "usage": {}, "finish_reason": "length"}
 
     async def dispatch_stream(provider, **kwargs):
         await dispatch(provider, **kwargs)
         yield {"type": "delta", "delta": "synthetic answer"}
+        yield {"type": "finish", "finish_reason": "length"}
 
     monkeypatch.setattr(llm_billed_once, "chat_dispatch", dispatch)
     monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch_stream)
@@ -107,6 +108,7 @@ async def test_bound_snapshot_survives_rotation_and_returns_actual_receipt(
     else:
         receipt = await llm_billed_chat.run_billed_llm_chat(**args)
     assert receipt["route_state"] == "completed"
+    assert receipt["finish_reason"] == "length"
     assert all(receipt[key] == value for key, value in route.public_metadata().items())
     assert dispatched == [(route.provider, route.model, route.api_key, route.base_url)]
     assert "synthetic-before-key" not in json.dumps(receipt)
@@ -252,6 +254,58 @@ def failed_billed_case(monkeypatch):
         route_snapshot=route,
     )
     return route, args, wallet
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", ["", " \n ", "最终答复"])
+async def test_billed_chat_never_publishes_reasoning_as_final_content(
+    monkeypatch, failed_billed_case, content
+):
+    from modstore_server.llm_litellm_router import _normalize_response
+
+    route, args, wallet = failed_billed_case
+    saved = Mock(return_value=11)
+    monkeypatch.setattr(llm_billed_once, "save_success_log", saved)
+    monkeypatch.setattr(llm_billed_once, "calculate_charge", lambda *args: Decimal(".01"))
+    monkeypatch.setattr(
+        llm_billed_once, "usage_from_response", lambda *args: SimpleNamespace(total_tokens=2)
+    )
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=content, reasoning_content="不应作为正文的推理"),
+                finish_reason="stop",
+            )
+        ],
+        usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        model=route.model,
+        _hidden_params={},
+    )
+
+    async def dispatch(provider, **kwargs):
+        return _normalize_response(
+            response,
+            provider=provider,
+            model=kwargs["model"],
+            forbid_reasoning_fallback=kwargs.get("forbid_reasoning_fallback", False),
+        )
+
+    monkeypatch.setattr(llm_billed_once, "chat_dispatch", dispatch)
+    if content.strip():
+        receipt = await llm_billed_chat.run_billed_llm_chat(**args)
+        assert receipt["content"] == "最终答复"
+        assert receipt["finish_reason"] == "stop"
+        assert "不应作为正文的推理" not in json.dumps(receipt, ensure_ascii=False)
+        wallet.settle.assert_awaited_once()
+        saved.assert_called_once()
+    else:
+        with pytest.raises(HTTPException) as error:
+            await llm_billed_chat.run_billed_llm_chat(**args)
+        assert error.value.status_code == 502
+        assert error.value.detail["route_state"] == "failed"
+        assert "未输出正文" in error.value.detail["message"]
+        wallet.settle.assert_not_awaited()
+        saved.assert_not_called()
 
 
 def _frame(frame):

@@ -1,41 +1,12 @@
-"""Deterministic SQL denial and fail-closed model planning contracts."""
+"""Direct SQL refusal policy does not invent executable business nodes."""
 
-from unittest.mock import Mock, patch
-
-from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
 
-def test_explicit_sql_execution_is_rejected_before_model_planning():
-    model = Mock(side_effect=AssertionError("SQL execution requests must stop before the model"))
-    with (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch("app.application.workflow.planner.request_planner_completion", model),
-    ):
-        planner = LLMWorkflowPlanner(completion=model)
-        plan = planner.plan("owner", "执行 DELETE FROM customers", {}, {})
-
+def test_explicit_sql_policy_returns_no_executable_nodes():
+    plan = rejected_sql_plan("执行 DELETE FROM customers", "policy-case")
     assert plan.nodes == []
     assert plan.metadata["refusal_code"] == "raw_sql_execution_not_supported"
-    model.assert_not_called()
-
-
-def test_unavailable_model_never_synthesizes_a_business_tool_plan():
-    with patch("app.application.workflow.planner.get_ai_conversation_service"):
-        planner = LLMWorkflowPlanner()
-    with patch.object(planner, "_plan_with_llm", return_value=None):
-        plan = planner.plan(
-            "owner",
-            "查一下客户列表",
-            {"customers": {"actions": {"query": {"risk": "low", "idempotent": True}}}},
-            {},
-        )
-
-    assert [(node.tool_id, node.action) for node in plan.nodes] == [("clarify", "ask")]
-    assert plan.nodes[0].params["planning_rejected"] is True
-    assert plan.nodes[0].params["target_node_id"] == ""
-    assert plan.metadata["planning_rejected"] is True
-    assert plan.metadata["planning_unavailable"] is True
 
 
 def test_raw_sql_policy_does_not_misclassify_business_requests():

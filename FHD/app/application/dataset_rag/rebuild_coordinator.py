@@ -32,6 +32,149 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 REBUILD_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
 
+def capture_agent_rebuild(step: Any, context: dict[str, Any]) -> dict[str, Any]:
+    """Freeze existing job identities before an admission or cancellation."""
+    from app.application.dataset_rag.document_lifecycle import agent_ingest_read_repository
+    from app.infrastructure.auth.agent_mod_scope import agent_dataset_access_context
+
+    try:
+        access = agent_dataset_access_context(context)
+        dataset = _clean_key(str(step.params.get("dataset_id") or ""), default="default")
+        tenant, denied = _resolve_tenant_for_access(
+            access,
+            str(step.params.get("tenant_id") or ""),
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset,
+        )
+        if denied:
+            return {}
+        state = agent_ingest_read_repository().read_rebuild_state(dataset)
+        if state is None:
+            return {}
+        jobs = {key: job.to_dict() for key, job in state.rebuild_jobs.items()}
+        return {
+            "dataset_id": dataset,
+            "tenant_id": tenant,
+            "job_ids": sorted(jobs),
+            "original_job": jobs.get(str(step.params.get("job_id") or "")),
+        }
+    except RECOVERABLE_ERRORS:
+        return {}
+
+
+def verify_agent_rebuild(
+    step: Any, call: Any, output: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    """Observe the original persisted job; never start workers or rebuild an index."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.tool_permission import (
+        _fingerprint,
+        _reread_claim,
+        idempotency_scope_key,
+    )
+    from app.application.agent_orchestrator.verification_readback import _report
+    from app.application.dataset_rag.document_lifecycle import agent_ingest_read_repository
+    from app.infrastructure.auth.agent_mod_scope import agent_dataset_access_context
+
+    source = "dataset_rebuild_store"
+    access = agent_dataset_access_context(context)
+    dataset = _clean_key(str(step.params.get("dataset_id") or ""), default="default")
+    if _ensure_dataset_permission(access, DATASET_READ_PERMISSION, dataset_id=dataset):
+        return _report("inconclusive", "result_read_permission_unavailable", source)
+    key = idempotency_scope_key(context, step.tool_id, step.action, step.params)
+    receipt = _reread_claim(key, durable_read_only=True)
+    if receipt is None or receipt.get("inflight") or not isinstance(receipt.get("output"), dict):
+        return _report("inconclusive", "result_receipt_unavailable", source)
+    if receipt.get("fingerprint") != _fingerprint(step.params, context) or canonical_hash(
+        receipt["output"]
+    ) != canonical_hash(output):
+        return _report("failed", "result_receipt_mismatch", source)
+    contract = call.metadata.get("verification_contract") or {}
+    repository = agent_ingest_read_repository()
+    if canonical_hash(str(repository.storage_path)) != contract.get("dataset_store_sha256"):
+        return _report("failed", "result_scope_mismatch", source)
+    baseline = contract.get("rebuild_baseline") or {}
+    returned = output.get("job")
+    if not isinstance(returned, dict) or not isinstance(returned.get("job_id"), str):
+        return _report("failed", "result_rebuild_identity_mismatch", source)
+    job_id = returned["job_id"]
+    if baseline.get("dataset_id") != dataset or not isinstance(baseline.get("job_ids"), list):
+        return _report("inconclusive", "result_rebuild_baseline_unavailable", source)
+    state = repository.read_rebuild_state(dataset)
+    job = state.rebuild_jobs.get(job_id) if state is not None else None
+    if job is None:
+        return _report("inconclusive", "result_rebuild_job_unavailable", source)
+    actual = job.to_dict()
+    if (
+        job.tenant_id != baseline.get("tenant_id")
+        or _ensure_tenant_allowed(access, job.tenant_id, dataset_id=dataset, operation="verify")
+        or any(
+            returned.get(field) != actual[field]
+            for field in (
+                "job_id",
+                "dataset_id",
+                "tenant_id",
+                "created_at",
+                "metadata_filter",
+                "max_attempts",
+            )
+        )
+    ):
+        return _report("failed", "result_rebuild_identity_mismatch", source)
+    admission = False
+    if step.action == "rebuild_index":
+        if job_id in baseline["job_ids"] or job.metadata_filter != dict(
+            step.params.get("metadata_filter") or {}
+        ):
+            return _report("failed", "result_rebuild_identity_mismatch", source)
+        admission = returned.get("status") in {"queued", "running"}
+        if not admission and (
+            returned.get("status") != "completed"
+            or job.status != "completed"
+            or not job.completed_at
+            or job.attempt_count < 1
+            or any(returned.get(field) != value for field, value in actual.items())
+        ):
+            return _report("failed", "result_rebuild_state_mismatch", source)
+    else:
+        original = baseline.get("original_job")
+        if (
+            step.action != "cancel_rebuild"
+            or job_id != step.params.get("job_id")
+            or not isinstance(original, dict)
+            or any(
+                original.get(field) != actual[field]
+                for field in (
+                    "job_id",
+                    "dataset_id",
+                    "tenant_id",
+                    "created_at",
+                    "metadata_filter",
+                    "max_attempts",
+                )
+            )
+            or returned.get("status") != "cancelled"
+            or job.status != "cancelled"
+            or not job.cancelled_at
+        ):
+            return _report("failed", "result_rebuild_state_mismatch", source)
+    return _report(
+        "verified",
+        "result_verified",
+        source,
+        dataset_id=dataset,
+        task_id=job_id,
+        tenant_id=job.tenant_id,
+        current_child_status=job.status,
+        scope="task_admission" if admission else "rebuild_job_state",
+        admission_verified=admission,
+        business_effect_verified=not admission,
+        job_sha256=canonical_hash(actual),
+        receipt_sha256=canonical_hash(receipt["output"]),
+    )
+
+
 def _empty_rebuild_queue_summary(
     max_concurrent_jobs: int, *, worker_enabled: bool
 ) -> dict[str, Any]:

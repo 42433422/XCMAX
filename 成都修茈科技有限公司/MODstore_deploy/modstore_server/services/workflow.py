@@ -44,9 +44,11 @@ class InProcessWorkflowEngineClient(WorkflowEngineClient):
         input_data: Optional[Dict[str, Any]] = None,
         user_id: int = 0,
     ) -> Dict[str, Any]:
-        from modstore_server.workflow_engine import execute_workflow
+        from modstore_server.workflow_event_runner import run_recorded_workflow
 
-        return execute_workflow(workflow_id, input_data or {}, user_id=user_id)
+        return run_recorded_workflow(
+            workflow_id=workflow_id, input_data=input_data or {}, user_id=user_id
+        )
 
     def validate_workflow(self, workflow_id: int) -> List[str]:
         from modstore_server.workflow_engine import validate_workflow

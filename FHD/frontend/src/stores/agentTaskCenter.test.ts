@@ -1,4 +1,10 @@
-vi.mock('@/utils/authenticatedEventStream', () => ({ AuthenticatedEventStream: class { constructor(url: string) { return new EventSource(url) } } }))
+vi.mock('@/utils/authenticatedEventStream', () => ({
+  AuthenticatedEventStream: class {
+    constructor(url: string) {
+      return new EventSource(url)
+    }
+  },
+}))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -45,9 +51,18 @@ const task = {
 }
 
 const fileProgress: AgentTaskProgress = {
-  basis: 'files', percent: 62, completed_units: 13, settled_units: 13, total_units: 21,
-  current_unit: 14, stage: '结果待核对', detail: '13/21 份已完成 · 已确认写入 141 行',
-  status: 'blocked', attempt: 1, indeterminate: false, updated_at: '2026-11-19T12:00:00Z',
+  basis: 'files',
+  percent: 62,
+  completed_units: 13,
+  settled_units: 13,
+  total_units: 21,
+  current_unit: 14,
+  stage: '结果待核对',
+  detail: '13/21 份已完成 · 已确认写入 141 行',
+  status: 'blocked',
+  attempt: 1,
+  indeterminate: false,
+  updated_at: '2026-11-19T12:00:00Z',
 }
 const stepProgress: AgentTaskProgress = { ...fileProgress, basis: 'steps', percent: 99, stage: '已阻断' }
 
@@ -117,7 +132,7 @@ describe('agent task center store', () => {
     expect(apiMock.getRun).toHaveBeenCalledWith('run-1')
     expect(apiMock.continueRun).toHaveBeenCalledWith('run-1', { approval_grant: 'grant-1' })
     expect(apiMock.listTasks).toHaveBeenCalledTimes(2)
-    expect(apiMock.getTask).toHaveBeenCalledTimes(3)
+    expect(apiMock.getTask).toHaveBeenCalledTimes(4)
   })
 
   it('preserves verified file progress across coarse snapshots for the same run only', async () => {
@@ -159,7 +174,9 @@ describe('agent task center store', () => {
     connection.emit('task.snapshot', [{ ...task, status: 'blocked', progress: fileProgress }])
     expect(store.tasks[0].progress).toEqual(laterProgress)
 
-    connection.emit('task.snapshot', [{ ...task, active_run_id: 'run-2', status: 'completed', attention_state: 'result_unread', progress: stepProgress }])
+    connection.emit('task.snapshot', [
+      { ...task, active_run_id: 'run-2', status: 'completed', attention_state: 'result_unread', progress: stepProgress },
+    ])
 
     expect(connection.url).toBe('/api/agent/tasks/events/stream')
     expect(store.connected).toBe(true)
@@ -215,7 +232,10 @@ describe('agent task center store', () => {
       success: true,
       data: [{ ...task, status: 'completed', attention_state: 'result_unread', unread_count: 1, progress: fileProgress }],
     })
-    apiMock.markTaskRead.mockResolvedValueOnce({ success: true, data: { ...task, attention_state: '', unread_count: 0, progress: stepProgress } })
+    apiMock.markTaskRead.mockResolvedValueOnce({
+      success: true,
+      data: { ...task, attention_state: '', unread_count: 0, progress: stepProgress },
+    })
     await store.refresh()
     await store.openTask('task-1')
     expect(store.unreadCount).toBe(1)
@@ -235,10 +255,18 @@ describe('agent task center store', () => {
       listeners = new Map<string, () => void>()
       onerror: (() => void) | null = null
       closed = false
-      constructor(public url: string) { FakeEventSource.instances.push(this) }
-      addEventListener(type: string, listener: () => void): void { this.listeners.set(type, listener) }
-      emit(type: string): void { this.listeners.get(type)?.() }
-      close(): void { this.closed = true }
+      constructor(public url: string) {
+        FakeEventSource.instances.push(this)
+      }
+      addEventListener(type: string, listener: () => void): void {
+        this.listeners.set(type, listener)
+      }
+      emit(type: string): void {
+        this.listeners.get(type)?.()
+      }
+      close(): void {
+        this.closed = true
+      }
     }
     vi.stubGlobal('EventSource', FakeEventSource)
     const store = useAgentTaskCenterStore()
@@ -265,11 +293,6 @@ describe('agent task center store', () => {
 
   it('handles refresh and detail failures without losing durable state', async () => {
     const store = useAgentTaskCenterStore()
-    store.loading = true
-    await store.refresh()
-    expect(apiMock.listTasks).not.toHaveBeenCalled()
-
-    store.loading = false
     apiMock.listTasks.mockRejectedValueOnce(new Error('任务加载失败'))
     await store.refresh()
     expect(store.error).toBe('任务加载失败')
@@ -314,6 +337,7 @@ describe('agent task center store', () => {
       active_run: undefined,
       runs: undefined,
     }
+    apiMock.getTask.mockResolvedValueOnce({ success: true, data: store.selectedTask })
     await store.control('pause')
     expect(apiMock.pauseRun).not.toHaveBeenCalled()
     expect(store.error).toBe('工作区当前没有可控制的运行')
@@ -352,13 +376,14 @@ describe('agent task center store', () => {
 
     apiMock.getTask.mockResolvedValueOnce({ success: true })
     await store.controlTask('missing-task', 'cancel')
-    expect(store.error).toBe('工作区任务不存在')
+    expect(store.error).toContain('工作区任务不存在')
     expect(apiMock.cancelRun).not.toHaveBeenCalled()
   })
 
   it('fails closed when approval has no grant and ignores missing runs', async () => {
     const store = useAgentTaskCenterStore()
     store.selectedTask = { ...task, active_run_id: undefined, active_run: undefined, runs: [] }
+    apiMock.getTask.mockResolvedValueOnce({ success: true, data: store.selectedTask })
     await store.control('pause')
     expect(apiMock.pauseRun).not.toHaveBeenCalled()
     expect(store.error).toBe('工作区当前没有可控制的运行')
@@ -442,7 +467,11 @@ describe('agent task center store', () => {
 it.each(['scope', 'selection'])('discards detail response after %s changes', async (change) => {
   setActivePinia(createPinia())
   let resolve!: (value: unknown) => void
-  apiMock.getTask.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  apiMock.getTask.mockReturnValueOnce(
+    new Promise((r) => {
+      resolve = r
+    }),
+  )
   const store = useAgentTaskCenterStore()
   const pending = store.openTask('old-task')
   if (change === 'scope') store.restartForScope()
@@ -458,7 +487,11 @@ it('does not submit an approval fetched before a scope switch', async () => {
   vi.clearAllMocks()
   apiMock.getTask.mockResolvedValue({ success: true, data: task })
   let resolve!: (value: unknown) => void
-  apiMock.getRun.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  apiMock.getRun.mockReturnValueOnce(
+    new Promise((r) => {
+      resolve = r
+    }),
+  )
   const store = useAgentTaskCenterStore()
   await store.openTask('task-1')
   const pending = store.control('approve')
@@ -469,16 +502,170 @@ it('does not submit an approval fetched before a scope switch', async () => {
   expect(store.actionPending).toBe('')
 })
 
-it.each(['scope', 'run'])('does not apply an old read receipt after the %s changes', async change => {
+it.each(['scope', 'run'])('does not apply an old read receipt after the %s changes', async (change) => {
   setActivePinia(createPinia())
   let resolve!: (value: unknown) => void
-  apiMock.markTaskRead.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  apiMock.markTaskRead.mockReturnValueOnce(
+    new Promise((r) => {
+      resolve = r
+    }),
+  )
   const store = useAgentTaskCenterStore()
   const pending = store.markTaskRead('task-1')
   if (change === 'scope') store.restartForScope()
-  store.tasks = [{ ...task, ...(change === 'run' ? { active_run_id: 'run-2' } : {}), title: 'new snapshot', attention_state: 'result_unread' }]
+  store.tasks = [
+    { ...task, ...(change === 'run' ? { active_run_id: 'run-2' } : {}), title: 'new snapshot', attention_state: 'result_unread' },
+  ]
   resolve({ success: true, data: { ...task, title: 'old scope', attention_state: '' } })
   await pending
   expect(store.tasks[0].title).toBe('new snapshot')
   expect(store.tasks[0].attention_state).toBe('result_unread')
+})
+
+describe('shared office stream consistency', () => {
+  class Stream {
+    static current: Stream
+    listeners = new Map<string, (event: MessageEvent) => void>()
+    onerror: (() => void) | null = null
+    constructor() {
+      Stream.current = this
+    }
+    addEventListener(type: string, listener: (event: MessageEvent) => void) {
+      this.listeners.set(type, listener)
+    }
+    emit(value: unknown) {
+      this.listeners.get('task.snapshot')?.(new MessageEvent('task.snapshot', { data: JSON.stringify(value) }))
+    }
+    close() {}
+  }
+  let store: ReturnType<typeof useAgentTaskCenterStore>
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    vi.stubGlobal('EventSource', Stream)
+    apiMock.listTasks.mockResolvedValue({ success: true, data: [task] })
+    apiMock.getTaskRuntime.mockResolvedValue({ success: true, data: { running: true, max_workers: 4, active_count: 1 } })
+    apiMock.getTask.mockResolvedValue({ success: true, data: task })
+    store = useAgentTaskCenterStore()
+  })
+  afterEach(() => {
+    store.stop()
+    vi.unstubAllGlobals()
+  })
+
+  it('does not let slow HTTP erase newer stream tasks or regress a later attempt', async () => {
+    let resolve!: (value: unknown) => void
+    apiMock.listTasks.mockReturnValueOnce(
+      new Promise((r) => {
+        resolve = r
+      }),
+    )
+    store.start()
+    const done = { ...task, status: 'completed', updated_at: '2026-11-22T01:00:02Z', metadata: { employee_id: 'worker' } }
+    Stream.current.emit([done, { ...done, task_id: 'new-task' }])
+    resolve({ success: true, data: [{ ...task, updated_at: '2026-11-22T01:00:00Z' }] })
+    await vi.waitFor(() => expect(store.loading).toBe(false))
+    expect(store.tasks.map((row) => [row.task_id, row.status])).toEqual([
+      ['task-1', 'completed'],
+      ['new-task', 'completed'],
+    ])
+    Stream.current.emit([{ ...done, active_run_id: 'run-2', attempt: 2, status: 'running' }])
+    Stream.current.emit([done])
+    expect(store.tasks[0]).toMatchObject({ attempt: 2, active_run_id: 'run-2', status: 'running' })
+  })
+
+  it('retains explicit worker identity through old lightweight snapshots and marks disconnect stale', async () => {
+    apiMock.listTasks.mockResolvedValueOnce({
+      success: true,
+      data: [{ ...task, active_run: { ...task.active_run, steps: [{ tool_id: 'employee', params: { employee_id: 'printer' } }] } }],
+    })
+    store.start()
+    await vi.waitFor(() => expect(store.loading).toBe(false))
+    Stream.current.emit([{ ...task, active_run: null, runs: [] }])
+    expect(store.tasks[0].metadata?.employee_id).toBe('printer')
+    expect(store.stale).toBe(false)
+    expect(store.lastVerifiedAt).toBeGreaterThan(0)
+    Stream.current.onerror?.()
+    expect(store.stale).toBe(true)
+    expect(store.tasks).toHaveLength(1)
+  })
+
+  it('rejects a structurally invalid snapshot without clearing known tasks', async () => {
+    store.start()
+    await vi.waitFor(() => expect(store.loading).toBe(false))
+    Stream.current.emit({ tasks: [] })
+    expect(store.tasks).toHaveLength(1)
+    expect(store.stale).toBe(true)
+    Stream.current.emit([task])
+    expect(store.stale).toBe(false)
+  })
+
+  it('checks failed control envelopes and performs a new read after an in-flight pre-action read', async () => {
+    apiMock.pauseRun.mockResolvedValueOnce({ success: false, message: '暂停被拒绝' })
+    await store.controlTask('task-1', 'pause')
+    expect(store.error).toBe('暂停被拒绝')
+    expect(apiMock.listTasks).not.toHaveBeenCalled()
+    let resolve!: (value: unknown) => void
+    apiMock.listTasks
+      .mockReturnValueOnce(
+        new Promise((r) => {
+          resolve = r
+        }),
+      )
+      .mockResolvedValueOnce({ success: true, data: [{ ...task, status: 'paused' }] })
+    apiMock.pauseRun.mockResolvedValueOnce({ success: true, data: task.active_run })
+    const beforeAction = store.refresh()
+    const action = store.controlTask('task-1', 'pause')
+    await vi.waitFor(() => expect(apiMock.pauseRun).toHaveBeenCalledTimes(2))
+    resolve({ success: true, data: [task] })
+    await Promise.all([beforeAction, action])
+    expect(apiMock.listTasks).toHaveBeenCalledTimes(2)
+    expect(store.tasks[0].status).toBe('paused')
+    expect(store.stale).toBe(false)
+  })
+
+  it('does not treat command acknowledgement as a completed state transition', async () => {
+    apiMock.getTask.mockResolvedValue({ success: true, data: { ...task, status: 'running' } })
+    apiMock.listTasks.mockResolvedValue({ success: true, data: [{ ...task, status: 'running' }] })
+    apiMock.pauseRun.mockResolvedValueOnce({ success: true, data: { ...task.active_run, status: 'paused' } })
+    await store.controlTask('task-1', 'pause')
+    expect(store.tasks[0].status).toBe('running')
+    apiMock.getTask.mockResolvedValueOnce({ success: false, message: '状态读取失败' })
+    await store.controlTask('task-1', 'pause')
+    expect(apiMock.pauseRun).toHaveBeenCalledOnce()
+    expect(store.stale).toBe(true)
+  })
+
+  it('discards responses from the first visit after an A to B to A account switch', async () => {
+    let resolve!: (value: unknown) => void
+    apiMock.listTasks.mockReturnValueOnce(
+      new Promise((r) => {
+        resolve = r
+      }),
+    )
+    const oldRequest = store.refresh()
+    store.restartForScope()
+    store.restartForScope()
+    apiMock.listTasks.mockResolvedValueOnce({ success: true, data: [] })
+    await store.refresh()
+    resolve({ success: true, data: [{ ...task, title: 'first A session' }] })
+    await oldRequest
+    expect(store.tasks).toEqual([])
+    expect(store.stale).toBe(false)
+  })
+
+  it('does not downgrade a valid stream snapshot after an older HTTP request fails', async () => {
+    let reject!: (error: unknown) => void
+    apiMock.listTasks.mockReturnValueOnce(
+      new Promise((_resolve, r) => {
+        reject = r
+      }),
+    )
+    store.start()
+    Stream.current.emit([task])
+    reject(new Error('old request timeout'))
+    await vi.waitFor(() => expect(store.loading).toBe(false))
+    expect(store.stale).toBe(false)
+    expect(store.error).toBe('')
+  })
 })

@@ -9,6 +9,8 @@ from app.db.models.task_lifecycle import TaskLifecycleIdempotency, TaskLifecycle
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.employee_run_log import EmployeeRunLog
+from app.db.models.enterprise_cognition import EnterpriseEventCursor, EnterpriseStateProjection
+from app.db.models.enterprise_goal import EnterpriseGoalBinding
 from app.db.models.neuro_event_log import NeuroEventLog
 from app.db.models.butler_profile import ButlerUserProfile
 from app.db.models.im import (
@@ -122,6 +124,9 @@ __all__ = [
     "AiCircleComment",
     "AiEmployeeProfile",
     "EmployeeRunLog",
+    "EnterpriseEventCursor",
+    "EnterpriseStateProjection",
+    "EnterpriseGoalBinding",
     "ImConversation",
     "ImConversationMember",
     "ImCustomerServiceAutomationState",

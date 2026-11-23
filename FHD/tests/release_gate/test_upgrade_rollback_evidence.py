@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import yaml
 
 
 def _module():
@@ -68,14 +74,19 @@ def _evidence(sha: str):
     }
 
 
-def test_real_server_and_three_desktop_targets_pass() -> None:
+def test_well_formed_claims_do_not_prove_real_server_or_desktop_acceptance() -> None:
     mod = _module()
     sha = "a" * 40
     evidence = _evidence(sha)
     evidence["desktops"]["macos"]["os_version"] = "26.3"
     evidence["desktops"]["windows10"]["os_version"] = "10.0.19045"
     evidence["desktops"]["windows11"]["os_version"] = "11.0.26100"
-    assert mod.verify(evidence, release_sha=sha)["passed"] is True
+    evidence["verification_scope"] = "measured_native_acceptance"  # Caller cannot self-certify.
+    result = mod.verify(evidence, release_sha=sha)
+    assert result["structural_passed"] is True
+    assert result["passed"] is False
+    assert result["verification_scope"] == "submitted_claims"
+    assert result["blockers"] == ["independent_native_measurements_missing"]
 
 
 def test_customer_device_or_synthetic_rollback_cannot_pass() -> None:
@@ -91,3 +102,77 @@ def test_customer_device_or_synthetic_rollback_cannot_pass() -> None:
     assert result["passed"] is False
     assert "server_real_production_rollback_missing" in result["blockers"]
     assert "windows11_real_controlled_device_missing" in result["blockers"]
+
+
+def test_published_rollback_step_executes_from_its_workflow_directory(tmp_path) -> None:
+    repo = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load(
+        (repo / ".github/workflows/fhd-upgrade-rollback-evidence.yml").read_text()
+    )
+    step = next(item for item in workflow["jobs"]["verify"]["steps"] if "run" in item)
+    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    evidence = _evidence(sha)
+    for target, version in (
+        ("macos", "26.3"),
+        ("windows10", "10.0.19045"),
+        ("windows11", "11.0.26100"),
+    ):
+        evidence["desktops"][target]["os_version"] = version
+    result = subprocess.run(
+        ["bash", "-c", step["run"]],
+        cwd=repo / workflow["defaults"]["run"]["working-directory"],
+        env={
+            **os.environ,
+            "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+            "RUNNER_TEMP": str(tmp_path),
+            "RELEASE_SHA": sha,
+            "EVIDENCE_JSON": json.dumps(evidence),
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    registered = json.loads((tmp_path / "upgrade-rollback-verification.json").read_text())
+    assert registered["structural_passed"] is True
+    assert registered["passed"] is False
+    # Registering inputs is useful, but the release consumer must retain failure.
+    verify = subprocess.run(
+        [
+            sys.executable,
+            str(repo / "FHD/scripts/release/verify_upgrade_rollback_evidence.py"),
+            "--evidence",
+            str(tmp_path / "upgrade-rollback-raw.json"),
+            "--release-sha",
+            sha,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert verify.returncode == 1
+    assert json.loads(verify.stdout)["verification_scope"] == "submitted_claims"
+
+
+def test_readback_preflight_runs_without_checkout_and_rejects_invalid_sha(
+    tmp_path,
+) -> None:
+    repo = Path(__file__).resolve().parents[3]
+    for path in (
+        repo / "FHD/.github/workflows/release-convergence-readback.yml",
+        repo / ".github/workflows/fhd-release-convergence-readback.yml",
+    ):
+        workflow = yaml.safe_load(path.read_text())
+        job = workflow["jobs"]["readback"]
+        step = job["steps"][0]
+        defaults = job.get("defaults", workflow.get("defaults", {}))
+        cwd = step.get("working-directory", defaults.get("run", {}).get("working-directory", "."))
+        result = subprocess.run(
+            ["bash", "-c", step["run"]],
+            cwd=tmp_path / cwd,
+            env={**os.environ, "ADMIN_TOKEN": "fixture-only", "RELEASE_SHA": "invalid"},
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr

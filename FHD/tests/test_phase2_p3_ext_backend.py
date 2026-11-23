@@ -12,7 +12,6 @@ import pytest
 
 from app.application.ai_chat_app_service import (
     AIChatApplicationService,
-    _skip_pro_excel_deterministic_import,
 )
 from app.application.tools.workflow import (
     _import_customers_preview_or_execute,
@@ -69,19 +68,6 @@ def test_read_excel_dataframe_passes_header(mock_read: MagicMock, tmp_path) -> N
 # ---------------------------------------------------------------------------
 # ai_chat_app_service helpers
 # ---------------------------------------------------------------------------
-
-
-def test_skip_pro_excel_deterministic_import_context() -> None:
-    assert _skip_pro_excel_deterministic_import({"excel_import_ai_decides": True}) is True
-    assert (
-        _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True})
-        is False
-    )
-
-
-def test_skip_pro_excel_deterministic_import_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT", "1")
-    assert _skip_pro_excel_deterministic_import({}) is True
 
 
 def test_ai_chat_service_instantiation() -> None:

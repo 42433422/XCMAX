@@ -25,6 +25,10 @@ def should_use_base_database_for_path(path: str) -> bool:
     p = (path or "").split("?")[0] or ""
     if not p.startswith("/api/"):
         return False
+    # Cognition reads the authenticated Mod's business authorities. Enterprise
+    # account-management endpoints continue to use the host database.
+    if p == "/api/enterprise/cognition":
+        return False
     if p.startswith("/api/mod/"):
         return False
     return any(p.startswith(prefix) for prefix in HOST_BASE_DB_API_PREFIXES)

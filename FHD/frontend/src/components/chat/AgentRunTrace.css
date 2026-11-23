@@ -68,8 +68,12 @@
 .art-status-pill.is-running {
   color: var(--art-blue);
 }
-.art-status-pill.is-waiting {
+.art-status-pill.is-waiting,
+.art-status-pill.is-paused {
   color: var(--art-amber);
+}
+.art-status-pill.is-cancelled {
+  color: var(--art-muted);
 }
 .art-status-pill.is-failed,
 .art-status-pill.is-blocked {

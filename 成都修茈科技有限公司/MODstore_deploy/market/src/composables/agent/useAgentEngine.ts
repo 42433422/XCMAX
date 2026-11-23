@@ -1,5 +1,6 @@
 import { useRouter, useRoute } from 'vue-router'
 import { useAgentStore } from '../../stores/agent'
+import { useAuthStore } from '../../stores/auth'
 import { skillRegistry } from '../../utils/agent/agentSkillRegistry'
 import { useActionExecutor } from './useActionExecutor'
 import { usePageAnalyzer } from './usePageAnalyzer'
@@ -7,6 +8,7 @@ import { serializeVisibleDom } from '../../utils/agent/pageSerializer'
 import type { AgentContext, AgentMessage, LLMResponse, LLMToolCall } from '../../types/agent'
 import { api } from '../../api'
 import { getMarketPageKnowledge, getStructuredPageSummary } from '../../content/siteKnowledge'
+import { checkXiaoCLifeAction, minimumSkillLevel } from './xiaocLifeActionGuard'
 
 let _msgId = 0
 function nextId() {
@@ -21,10 +23,18 @@ function makeAssistantMsg(content: string, isLoading = false): AgentMessage {
   return { id: nextId(), role: 'assistant', content, timestamp: Date.now(), isLoading }
 }
 
+interface AgentTurn {
+  conversationId: number | null
+  signal: AbortSignal
+  isCurrent: () => boolean
+  updateReply: (patch: Partial<AgentMessage>) => void
+}
+
 export function useAgentEngine() {
   const _router = useRouter()
   const route = useRoute()
   const agentStore = useAgentStore()
+  const auth = useAuthStore()
   const executor = useActionExecutor()
   const { getPageContext } = usePageAnalyzer()
 
@@ -35,14 +45,29 @@ export function useAgentEngine() {
   ): Promise<void> {
     const text = userText.trim()
     const uploaded = typeof opts?.imageDataUrl === 'string' ? opts.imageDataUrl.trim() : ''
-    if (!text && !uploaded && !opts?.withScreenshot) return
+    if ((!text && !uploaded && !opts?.withScreenshot) || agentStore.isLoading) return
+    const history = agentStore.messages.filter((message) => !message.isLoading && !message.isError).slice(-12)
+    const generation = agentStore.conversationGeneration
+    const owner = auth.user?.id
+    const controller = new AbortController()
+    agentStore.requestController = controller
     agentStore.isLoading = true
     agentStore.setMode('thinking')
 
     const displayText = text || (uploaded || opts?.withScreenshot ? '[图片]' : '')
-    if (!opts?.skipUserInsert) {
-      agentStore.addMessage(makeUserMsg(displayText))
-      agentStore.addMessage(makeAssistantMsg('…', true))
+    if (opts?.skipUserInsert && history.at(-1)?.role === 'user' && history.at(-1)?.content === displayText) history.pop()
+    if (!opts?.skipUserInsert) agentStore.addMessage(makeUserMsg(displayText))
+    const existingReply = opts?.skipUserInsert ? agentStore.messages.at(-1) : undefined
+    const reply = existingReply?.role === 'assistant' && existingReply.isLoading ? existingReply : makeAssistantMsg('…', true)
+    if (reply !== existingReply) agentStore.addMessage(reply)
+    const isCurrent = () => generation === agentStore.conversationGeneration && owner === auth.user?.id && !controller.signal.aborted
+    const turn: AgentTurn = {
+      conversationId: agentStore.currentConversationId,
+      signal: controller.signal,
+      isCurrent,
+      updateReply: (patch) => {
+        if (isCurrent()) agentStore.updateMessage(reply.id, patch)
+      },
     }
 
     try {
@@ -53,53 +78,61 @@ export function useAgentEngine() {
         pageTitle: document.title,
         pageSummary: getStructuredPageSummary({ routeName, domExcerpt }),
         userMessage: text || displayText,
-        history: agentStore.messages.slice(-12),
+        history,
       }
 
       // 有附图时跳过离线技能，直接走 LLM vision
       if (!uploaded && !opts?.withScreenshot) {
         const matchedSkill = skillRegistry.matchByIntent(context)
-        if (matchedSkill && !agentStore.currentConversationId) {
-          const result = await matchedSkill.execute(context)
-          agentStore.updateLastMessage({
-            content: result.assistantReply || result.message,
-            isLoading: false,
-          })
-          agentStore.setMode('idle')
-          agentStore.isLoading = false
-          return
+        if (matchedSkill && !turn.conversationId) {
+          const blocked = await checkXiaoCLifeAction(minimumSkillLevel(matchedSkill.id))
+          if (!isCurrent()) return
+          if (!blocked) {
+            const result = await matchedSkill.execute(context)
+            if (!isCurrent()) return
+            turn.updateReply({ content: result.assistantReply || result.message, isLoading: false, isError: !result.success })
+            agentStore.setMode(result.success ? 'idle' : 'error')
+            return
+          }
+          // An unavailable action does not prevent L1 from answering with advice.
         }
       }
 
       // Phase 3+: LLM brain
-      await callLLMBrain(context, {
+      await callLLMBrain(context, turn, {
         withScreenshot: opts?.withScreenshot ?? false,
         imageDataUrl: uploaded || null,
       })
     } catch (e: unknown) {
+      if (!isCurrent()) return
       const msg = e instanceof Error ? e.message : String(e)
-      agentStore.updateLastMessage({ content: `出错了：${msg}`, isLoading: false })
+      turn.updateReply({ content: `出错了：${msg}`, isLoading: false, isError: true })
       agentStore.setMode('error')
     } finally {
-      agentStore.isLoading = false
-      if (agentStore.mode === 'thinking') agentStore.setMode('idle')
+      if (isCurrent()) {
+        agentStore.requestController = null
+        agentStore.isLoading = false
+        if (agentStore.mode === 'thinking') agentStore.setMode('idle')
+      }
     }
   }
 
-  async function callLLMBrain(context: AgentContext, opts: { withScreenshot: boolean; imageDataUrl?: string | null }) {
+  async function callLLMBrain(context: AgentContext, turn: AgentTurn, opts: { withScreenshot: boolean; imageDataUrl?: string | null }) {
     let screenshotDataUrl: string | null =
       typeof opts.imageDataUrl === 'string' && opts.imageDataUrl.trim() ? opts.imageDataUrl.trim() : null
     if (!screenshotDataUrl && opts.withScreenshot) {
       try {
         const { captureViewport } = await import('../../utils/agent/screenshotCapture')
-        const captured = await captureViewport()
-        if (captured.ok && captured.kind === 'image' && captured.dataUrl) {
-          screenshotDataUrl = captured.dataUrl
+        const captured = await captureViewport({ signal: turn.signal, autoTextFallback: false })
+        if (!captured.ok || captured.kind !== 'image' || !captured.dataUrl?.startsWith('data:image/')) {
+          throw new Error('Missing screenshot')
         }
+        screenshotDataUrl = captured.dataUrl
       } catch {
-        // fallback: no screenshot
+        throw new Error('页面截图未取得，请重新截图或上传图片后再发送。')
       }
     }
+    if (!turn.isCurrent()) return
 
     // 构建 messages 列表
     const systemMsg = {
@@ -124,49 +157,44 @@ export function useAgentEngine() {
 
     const messages = [systemMsg, ...historyMsgs, userApiMsg]
 
-    let response: LLMResponse
-    try {
-      response = (await api.agentButlerChat({
+    const response = (await api.agentButlerChat(
+      {
         messages,
-        conversation_id: agentStore.currentConversationId,
+        conversation_id: turn.conversationId,
         page_context: context.pageSummary,
-      })) as LLMResponse
-    } catch {
-      // 降级：关键词匹配兜底
-      const fallbackSkill = skillRegistry.matchByIntent(context)
-      if (fallbackSkill) {
-        const result = await fallbackSkill.execute(context)
-        agentStore.updateLastMessage({
-          content: result.assistantReply || result.message,
-          isLoading: false,
-        })
-      } else {
-        agentStore.updateLastMessage({
-          content: '我暂时无法连接到 AI 大脑，请稍后再试。您也可以直接告诉我要去哪个页面。',
-          isLoading: false,
-        })
-      }
-      return
+      },
+      turn.signal,
+    )) as LLMResponse
+    if (!turn.isCurrent()) return
+    if (!response || response.success === false) {
+      throw new Error(response?.message || '未收到有效回复，请重试本轮对话。')
     }
 
-    if (response.conversation_id) {
-      agentStore.currentConversationId = response.conversation_id
-    }
+    const tools = Array.isArray(response.tool_calls) ? response.tool_calls : []
+    const replyText = typeof response.text === 'string' ? response.text.trim() : ''
+    if (!tools.length && !replyText) throw new Error('未收到有效回复，请重试本轮对话。')
+    if (response.conversation_id) agentStore.currentConversationId = response.conversation_id
 
     // 处理 tool_calls
-    if (response.tool_calls?.length) {
-      await handleToolCalls(response.tool_calls, context)
+    if (tools.length) {
+      await handleToolCalls(tools, context, turn)
     } else {
-      agentStore.updateLastMessage({ content: response.text || '好的。', isLoading: false })
+      turn.updateReply({ content: replyText, isLoading: false })
     }
   }
 
-  async function handleToolCalls(toolCalls: LLMToolCall[], _context: AgentContext) {
+  async function handleToolCalls(toolCalls: LLMToolCall[], _context: AgentContext, turn: AgentTurn) {
     const firstTool = toolCalls[0]
+    const blocked = await checkXiaoCLifeAction(toolCalls.length > 1 ? 3 : 2)
+    if (!turn.isCurrent()) return
+    if (blocked) {
+      turn.updateReply({ content: blocked.message, isLoading: false, isError: true })
+      return
+    }
     const name = firstTool.name
     const args = firstTool.args as Record<string, unknown>
 
-    agentStore.updateLastMessage({ content: `正在执行：${name}…`, isLoading: true })
+    turn.updateReply({ content: `正在执行：${name}…`, isLoading: true })
     agentStore.setMode('operating')
 
     let result
@@ -203,18 +231,22 @@ export function useAgentEngine() {
             userMessage: '',
             history: agentStore.messages.slice(-6),
           }
-          result = await skill.execute(ctx, args)
+          const blockedSkill = await checkXiaoCLifeAction(minimumSkillLevel(skill.id))
+          if (!turn.isCurrent()) return
+          result = blockedSkill ?? (await skill.execute(ctx, args))
         } else {
           result = { success: false, message: `未知工具：${name}` }
         }
       }
     }
 
-    agentStore.updateLastMessage({
+    if (!turn.isCurrent()) return
+    turn.updateReply({
       content: result.assistantReply || result.message,
       isLoading: false,
+      isError: !result.success,
     })
-    agentStore.setMode('idle')
+    agentStore.setMode(result.success ? 'idle' : 'error')
   }
 
   function buildSystemPrompt(context: AgentContext): string {

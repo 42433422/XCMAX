@@ -1,7 +1,7 @@
 """工作流定义 CRUD + 运行管理应用服务。
 
 提供 ``WorkflowDefinition`` 的完整生命周期管理（创建/更新/查询/删除/启停）以及
-``WorkflowRun`` 的启动/查询/取消。``LLMWorkflowPlanner`` 可通过 ``persist=True``
+``WorkflowRun`` 的启动/查询/取消。正式工作流可通过 ``persist=True``
 将生成的 ``PlanGraph`` 持久化为 ``WorkflowDefinition``。
 """
 

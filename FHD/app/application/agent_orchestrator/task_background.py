@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any, cast
 
-from app.application.agent_orchestrator.artifact_attachment import ArtifactAttachmentMixin
+from app.application.agent_orchestrator.artifact_attachment import (
+    ArtifactAttachmentMixin,
+)
 from app.application.agent_orchestrator.budget import apply_ai_budget_metadata
 from app.application.agent_orchestrator.run_lifecycle import (
     RunLifecycleMixin,
@@ -26,10 +29,15 @@ def task_execution_context(run: AgentRun, step: Any) -> dict[str, Any]:
     runtime = runtime if isinstance(runtime, dict) else {}
     tenant = str(runtime.get("tenant_id") or task_context.get("tenant_id") or "")
     tenant_part = f":{tenant}" if tenant else ""
+    preview_part = ""
+    if (step.tool_id, step.action) == ("elt_import", "preview"):
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+        preview_part = f":preview:{canonical_hash(step.params)}"
     return {
         "task_id": str(task_context.get("task_id") or ""),
         "task_attempt": int(task_context.get("attempt") or 1),
-        "idempotency_key": f"agent:{run.run_id}{tenant_part}:{step.step_id}",
+        "idempotency_key": f"agent:{run.run_id}{tenant_part}:{step.step_id}{preview_part}",
         **(
             {"business_action_id": f"agent:{run.run_id}:{step.step_id}"}
             if step.tool_id == "catalog_products_v1"
@@ -45,10 +53,31 @@ def apply_approved_step(
     *,
     approved_by: str,
     runtime_context: dict[str, Any] | None = None,
+    approval_claims: dict[str, Any] | None = None,
 ) -> None:
     """Apply an already validated approval without performing storage I/O."""
+    from app.application.agent_orchestrator.approval_grant import _params_hash
+
     context = merge_runtime_context(run, runtime_context)
     run.metadata["runtime_context"] = context
+    from app.application.agent_orchestrator.approval_grant import (
+        approval_receipt_claims,
+    )
+
+    receipt = run.metadata.get("approval_receipt")
+    receipt = (
+        dict(receipt)
+        if isinstance(receipt, dict) and receipt.get("step_id") == step.step_id
+        else {}
+    )
+    receipt.update(
+        step_id=step.step_id,
+        tool_id=step.tool_id,
+        action=step.action,
+        approved_by=str(approved_by or ""),
+        **approval_receipt_claims(run, step, claims=approval_claims),
+    )
+    run.metadata["approval_receipt"] = receipt
     apply_ai_budget_metadata(run, context)
     step.status = "pending"
     run.status = "queued"
@@ -63,6 +92,9 @@ def apply_approved_step(
         "step.approved",
         f"步骤 {step.node_id} 已确认继续",
         {
+            "task_id": str((run.metadata.get("task_context") or {}).get("task_id") or run.run_id),
+            "params_sha256": _params_hash(step),
+            "plan_sha256": str(run.metadata.get("plan_sha256") or ""),
             "step_id": step.step_id,
             "node_id": step.node_id,
             "tool_id": step.tool_id,
@@ -89,14 +121,28 @@ class BackgroundTaskExecutionMixin:
     _repo: Any
 
     def stage_clarification_answer(
-        self, run_id: str, *, step_id: str, parameters: dict[str, Any], requested_by: str
+        self,
+        run_id: str,
+        *,
+        step_id: str,
+        parameters: dict[str, Any],
+        requested_by: str,
+        queue: Any = None,
+        parent_snapshot: AgentRun | None = None,
     ) -> AgentRun | None:
-        from app.application.agent_orchestrator.clarification import apply_clarification_answer
+        from app.application.agent_orchestrator.clarification import (
+            apply_clarification_answer,
+        )
 
         run = self._repo.get(run_id)
         if run is None:
             return None
-        apply_clarification_answer(run, step_id=step_id, parameters=parameters)
+        if str(requested_by or "") != run.user_id:
+            return None
+        previous = copy.deepcopy(run)
+        apply_clarification_answer(
+            run, step_id=step_id, parameters=parameters, answered_by=requested_by
+        )
         run.status = "queued"
         run.metadata["dispatch"] = {
             "state": "queued",
@@ -105,7 +151,47 @@ class BackgroundTaskExecutionMixin:
             "queued_at": utc_now_iso(),
         }
         run.add_event("task.queued", "已补充信息，任务等待继续执行")
-        return cast("AgentRun", self._repo.save(run))
+        if queue is not None:
+            from app.application.agent_orchestrator.run_sql_repository import (
+                SQLAlchemyAgentRunRepository,
+            )
+            from app.application.agent_orchestrator.task_execution_sql_repository import (
+                SQLAlchemyTaskExecutionRepository,
+            )
+            from app.db.models.agent import AgentTaskExecutionRecord
+            from app.domain.task_lifecycle.adapters import LEASED_STATES, execution_requeue_allowed
+
+            if not isinstance(self._repo, SQLAlchemyAgentRunRepository) or not isinstance(
+                queue, SQLAlchemyTaskExecutionRepository
+            ):
+                return None
+            queue._ensure_schema()
+            with self._repo.transaction() as db:
+                with queue.transaction(read_only=True) as queue_db:
+                    if db.get_bind() is not queue_db.get_bind():
+                        return None
+                execution = db.get(AgentTaskExecutionRecord, run_id, with_for_update=True)
+                if execution is not None and (
+                    execution.state in LEASED_STATES
+                    or not execution_requeue_allowed(str(execution.state))
+                ):
+                    return None
+                if parent_snapshot is not None and (
+                    parent_snapshot.user_id != run.user_id
+                    or (run.metadata.get("runtime_context") or {}).get("parent_run_id")
+                    != parent_snapshot.run_id
+                    or not self._repo.save_if_unchanged_in_session(
+                        db, parent_snapshot, copy.deepcopy(parent_snapshot)
+                    )
+                ):
+                    return None
+                if not self._repo.save_if_unchanged_in_session(db, run, previous):
+                    return None
+                queue.enqueue_in_session(db, run, requested_by=requested_by)
+            return cast("AgentRun", self._repo.get(run_id))
+        if not self._repo.save_if_unchanged(run, previous):
+            return None
+        return cast("AgentRun", self._repo.get(run_id))
 
     def stage_run_for_dispatch(
         self,
@@ -114,7 +200,12 @@ class BackgroundTaskExecutionMixin:
         requested_by: str = "",
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
-        if run is None or run.status not in {"planning", "running", "queued", "retrying"}:
+        if run is None or run.status not in {
+            "planning",
+            "running",
+            "queued",
+            "retrying",
+        }:
             return cast("AgentRun | None", run)
         run.status = "queued"
         run.error = ""
@@ -139,6 +230,8 @@ class BackgroundTaskExecutionMixin:
         approved_step_id: str,
         runtime_context: dict[str, Any] | None = None,
         authenticated_binding: dict[str, Any] | None = None,
+        authenticated_actor_binding: dict[str, Any] | None = None,
+        approval_claims: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None:
@@ -146,12 +239,23 @@ class BackgroundTaskExecutionMixin:
         step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if step is None:
             return cast("AgentRun | None", self._repo.save(run))
-        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+        from app.application.agent_orchestrator.session_renewal import (
+            renew_approval_session,
+        )
 
         renew_approval_session(
-            run, principal_id=approved_by, authenticated_binding=authenticated_binding
+            run,
+            principal_id=approved_by,
+            authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
         )
-        apply_approved_step(run, step, approved_by=approved_by, runtime_context=runtime_context)
+        apply_approved_step(
+            run,
+            step,
+            approved_by=approved_by,
+            runtime_context=runtime_context,
+            approval_claims=approval_claims,
+        )
         return cast("AgentRun | None", self._repo.save(run))
 
     def stage_resume_run(
@@ -161,18 +265,22 @@ class BackgroundTaskExecutionMixin:
         requested_by: str = "",
         runtime_context: dict[str, Any] | None = None,
         authenticated_binding: dict[str, Any] | None = None,
+        authenticated_actor_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None or run.status != "paused":
             return cast("AgentRun | None", run)
         if requires_retry_reconciliation(run):
             raise ValueError("任务执行结果尚需人工核对，不能恢复执行")
-        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+        from app.application.agent_orchestrator.session_renewal import (
+            renew_approval_session,
+        )
 
         renew_approval_session(
             run,
             principal_id=requested_by,
             authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
             operation="resume",
         )
         control = run.metadata.get("control")
@@ -215,6 +323,21 @@ class BackgroundTaskExecutionMixin:
         if run is None:
             return None
         if requires_retry_reconciliation(run):
+            from app.application.agent_orchestrator.result_verification import verification_blocked
+
+            if (
+                recovered
+                and verification_blocked(run)
+                and run.status in {"queued", "running", "retrying"}
+            ):
+                run.status, run.error = "blocked", "原执行回执已保存，等待独立结果核验"
+                run.metadata["execution"] = {
+                    **(run.metadata.get("execution") or {}),
+                    "state": "idle",
+                    "finished_at": utc_now_iso(),
+                }
+                run.add_event("verification.recovery_parked", run.error)
+                return cast("AgentRun | None", self._repo.save(run))
             return cast("AgentRun | None", run)
         if run.status not in {"queued", "running", "retrying"}:
             return cast("AgentRun | None", run)
@@ -246,21 +369,32 @@ class BackgroundTaskExecutionMixin:
 
     def fail_dispatched_run(self, run_id: str) -> AgentRun | None:
         run = self._repo.get(run_id)
-        if run is None or run.status in {"completed", "failed", "cancelled"}:
+        if run is None or run.status in {"completed", "failed", "cancelled", "rejected"}:
             return cast("AgentRun | None", run)
-        run.status = "failed"
+        previous = copy.deepcopy(run)
+        run.status = "blocked"
         run.error = _WORKER_EXECUTION_FAILED
+        recovery = run.metadata.get("recovery")
+        run.metadata["recovery"] = {
+            **(recovery if isinstance(recovery, dict) else {}),
+            "state": "manual_reconciliation_required",
+            "reason": _WORKER_EXECUTION_FAILED,
+        }
+        run.metadata["non_retryable"] = True
         run.add_event(
             "task.worker_failed",
-            "后台执行失败",
-            {"error_code": _WORKER_EXECUTION_FAILED},
+            "执行工作线程已退出，原业务结果待核对，禁止自动重放",
+            {"error_code": _WORKER_EXECUTION_FAILED, "execution_state": "unknown"},
         )
-        return cast("AgentRun | None", self._repo.save(run))
+        self._repo.save_if_unchanged(run, previous)
+        return cast("AgentRun | None", self._repo.get(run_id))
 
     def _prepare_expired_execution_recovery(self, run: AgentRun) -> bool:
         if requires_retry_reconciliation(run):
             return False
-        from app.application.agent_orchestrator.elt_checkpoint_recovery import checkpoint_step
+        from app.application.agent_orchestrator.elt_checkpoint_recovery import (
+            checkpoint_step,
+        )
         from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
         running_steps = [step for step in run.steps if step.status == "running"]
@@ -306,7 +440,11 @@ class BackgroundTaskExecutionMixin:
         run.error = ""
         run.add_event(
             "task.worker_recovered",
-            "已重新领取原导入任务，核对文件回执" if approved_elt else "幂等任务从过期执行租约恢复",
+            (
+                "已重新领取原导入任务，核对文件回执"
+                if approved_elt
+                else "幂等任务从过期执行租约恢复"
+            ),
             {
                 "error_code": _WORKER_LEASE_EXPIRED,
                 "step_ids": [step.step_id for step in running_steps],

@@ -15,7 +15,7 @@ def seed_admin(
     logger: Logger,
     prepare_profile: Callable[[Engine], None],
 ) -> None:
-    from sqlalchemy import text
+    from sqlalchemy import DateTime, bindparam, text
 
     from app.utils.security.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
@@ -37,7 +37,7 @@ def seed_admin(
         conn.execute(
             text(
                 "\n                INSERT INTO users (\n                    username, password, display_name, email, role,\n                    is_active, mfa_enabled, tier, industry_id, created_at,\n                    failed_login_attempts, email_verified\n                )\n                VALUES (\n                    :username, :password, :display_name, :email, 'admin',\n                    TRUE, FALSE, 'admin', :industry_id, :now,\n                    0, FALSE\n                )\n                "
-            ),
+            ).bindparams(bindparam("now", type_=DateTime())),
             {
                 "username": username,
                 "password": hp,

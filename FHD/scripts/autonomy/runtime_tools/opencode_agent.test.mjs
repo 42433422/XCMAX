@@ -1,13 +1,26 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { assertLinuxWorkloadIsolation, assertOpenCodeHost, isOpenCodeReady, openCodeSandboxEntry, runOpenCodeAgent } from './opencode_agent.mjs';
+import { assertLinuxWorkloadIsolation, assertMaskedCredential, assertPrivateKeyUnreadable, assertOpenCodeHost, isOpenCodeReady, openCodeSandboxEntry, runOpenCodeAgent } from './opencode_agent.mjs';
 
 const sandbox = process.env.PARA_TEST_SANDBOX_ENTRY;
+
+test('workload refuses raw credentials or a readable proxy private key', () => {
+  const digest = createHash('sha256').update('fixture-key').digest('hex');
+  assert.doesNotThrow(() => assertMaskedCredential('xcmax-placeholder-test', digest));
+  for (const value of [undefined, '', 'fixture-key']) {
+    assert.throws(() => assertMaskedCredential(value, digest), /non_exportable/);
+  }
+  assert.throws(() => assertMaskedCredential('placeholder', ''), /non_exportable/);
+  assert.throws(() => assertPrivateKeyUnreadable(fileURLToPath(import.meta.url)), /private_key_readable/);
+  assert.throws(() => assertPrivateKeyUnreadable(undefined), /boundary_missing/);
+  assert.doesNotThrow(() => assertPrivateKeyUnreadable(join(tmpdir(), 'missing-xcmax-control-key', 'ca.key')));
+});
 
 test('Linux admission requires Ubuntu 22.04, unrestricted user namespaces and a non-root caller', () => {
   const host = { platform: 'linux', release: 'ID=ubuntu\nVERSION_ID="22.04"\n', restricted: false, uid: 1000, euid: 1000 };
@@ -85,6 +98,9 @@ test(process.env.PARA_TEST_OPENCODE_HOST === 'unsupported'
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
+assert.ok(process.env.OPENCODE_API_KEY);
+assert.match(process.env.OPENCODE_API_KEY, /^xcmax-placeholder-/, 'model receives only a useless placeholder');
+assert.notEqual(process.env.OPENCODE_API_KEY, 'fixture-model-key');
 assert.equal(process.env.DEVFLEET_DEVICE_TOKEN, undefined);
 assert.equal(process.env.PATH, ${JSON.stringify(process.env.PATH)});
 for (const name of ['BASH_ENV', 'ENV', 'LD_PRELOAD', 'NODE_OPTIONS', 'NODE_PATH']) assert.equal(process.env[name], undefined);

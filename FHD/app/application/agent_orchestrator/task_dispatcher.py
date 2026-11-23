@@ -16,6 +16,7 @@ from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
+from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
 from app.application.agent_orchestrator.task_execution_repository import (
     AgentTaskExecution,
     TaskExecutionRepository,
@@ -24,17 +25,24 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_open_effect: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+_open_effect: contextvars.ContextVar[tuple[object, str, str] | None] = contextvars.ContextVar(
     "task_open_effect", default=None
 )
 
 
 def note_open_effect(run_id: str, effect_id: str) -> None:
     """Record a side effect only while a worker is inside a real tool call."""
-    repo = _open_effect.get()
+    claim = _open_effect.get()
+    if claim is None:
+        return
+    repo, claimed_run_id, owner_id = claim
     marker = getattr(repo, "mark_open_effect", None)
     if marker is not None:
-        marker(run_id, effect_id)
+        effect = effect_id if run_id == claimed_run_id else f"child:{run_id}:{effect_id}"
+        if marker(claimed_run_id, effect, owner_id=owner_id) is False:
+            from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+
+            raise WorkerLeaseLost("worker lease expired before opening a side effect")
 
 
 @dataclass
@@ -83,6 +91,9 @@ class AgentTaskDispatcher:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._coordinator: threading.Thread | None = None
+        self._outcome_worker: threading.Thread | None = None
+        self._last_outcome_recovery = float("-inf")
+        self._codex_resume_cursor: dict[str, str] = {}
 
     @property
     def instance_id(self) -> str:
@@ -113,6 +124,8 @@ class AgentTaskDispatcher:
             if remaining <= 0:
                 break
             worker.join(timeout=remaining)
+        if self._outcome_worker is not None:
+            self._outcome_worker.join(timeout=max(0.0, deadline - time.monotonic()))
 
     def notify(self) -> None:
         self._wake.set()
@@ -150,6 +163,7 @@ class AgentTaskDispatcher:
 
     def _dispatch_available(self) -> None:
         self._prune_and_heartbeat()
+        self._recover_outcomes()
         while not self._stop.is_set() and self._active_count() < self._max_workers:
             owner_id = f"{self._instance_id}:{uuid.uuid4().hex}"
             execution = self._execution_repo.claim(
@@ -172,6 +186,49 @@ class AgentTaskDispatcher:
                     last_heartbeat=time.monotonic(),
                 )
             worker.start()
+
+    def _recover_outcomes(self) -> None:
+        """Reconcile evidence independently so readback cannot delay worker leases."""
+        now = time.monotonic()
+        if (
+            self._stop.is_set()
+            or (self._outcome_worker is not None and self._outcome_worker.is_alive())
+            or now - self._last_outcome_recovery < 30.0
+        ):
+            return
+        self._last_outcome_recovery = now
+
+        def recover() -> None:
+            from app.application.agent_orchestrator.verification_recovery import (
+                reconcile_pending_verifications,
+            )
+            from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
+            from app.infrastructure.codex.receipt_projection import resume_ready_codex_runs
+
+            try:
+                reconcile_pending_verifications(
+                    repository=self._run_repo, stopped=self._stop.is_set
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("original result verification remains pending", exc_info=True)
+            try:
+                reconcile_pending_outcomes(repository=self._run_repo, stopped=self._stop.is_set)
+            except RECOVERABLE_ERRORS:
+                logger.warning("enterprise outcome reconciliation remains pending", exc_info=True)
+            try:
+                resume_ready_codex_runs(
+                    repository=self._run_repo,
+                    stopped=self._stop.is_set,
+                    cursor=self._codex_resume_cursor,
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("original Codex continuation remains pending", exc_info=True)
+            self._wake.set()
+
+        self._outcome_worker = threading.Thread(
+            target=recover, name=f"{self._instance_id}-outcomes", daemon=True
+        )
+        self._outcome_worker.start()
 
     def _active_count(self) -> int:
         with self._active_lock:
@@ -203,6 +260,11 @@ class AgentTaskDispatcher:
         from contextlib import nullcontext
 
         from app.application.agent_orchestrator.business_write_guard import worker_claim_scope
+        from app.application.agent_orchestrator.cross_module_chain import (
+            InjectedTransactionFault,
+            cross_module_ready,
+            execute_claimed_cross_module,
+        )
         from app.application.agent_orchestrator.elt_checkpoint_recovery import (
             EltCheckpointWorkerExited,
         )
@@ -220,16 +282,34 @@ class AgentTaskDispatcher:
         error_code = ""
         state = "failed"
         abandon = False
-        effect_token = _open_effect.set(self._execution_repo)
+        codex_run = False
+        effect_token = _open_effect.set((self._execution_repo, execution.run_id, owner_id))
         try:
             orchestrator = self._orchestrator_factory(repository)
             preview = self._run_repo.get(execution.run_id)
-            from app.application.agent_orchestrator.cross_module_chain import (
-                InjectedTransactionFault,
-                cross_module_ready,
-                execute_claimed_cross_module,
-            )
+            if preview is not None and preview.metadata.get("runtime_type") == "codex":
+                from app.infrastructure.codex.queued_runtime import execute_queued_runtime
 
+                codex_run = True
+                if not isinstance(self._run_repo, SQLAlchemyAgentRunRepository):
+                    raise RuntimeError("queued Codex execution requires durable SQL storage")
+                with worker_claim_scope(self._run_repo, execution, owner_id):
+                    result = execute_queued_runtime(self._run_repo, execution, owner_id)
+                state = {
+                    "completed": "succeeded",
+                    "waiting_user": "waiting_approval",
+                    "waiting_approval": "waiting_approval",
+                    "running": "waiting_approval",
+                    "paused": "waiting_approval",
+                    "cancelled": "cancelled",
+                }.get(str(result.get("execution_state") or ""), "failed")
+                if state == "failed":
+                    error_code = (
+                        "needs_verification"
+                        if result.get("reconciliation_required")
+                        else str(result.get("error_code") or "codex_request_failed")
+                    )
+                return
             if preview is not None and cross_module_ready(preview):
                 try:
                     request_id = str(preview.metadata.get("approval_request_id") or "")
@@ -264,22 +344,7 @@ class AgentTaskDispatcher:
             if run is None:
                 error_code = "worker_run_unavailable"
             else:
-                state = {
-                    "completed": "succeeded",
-                    "succeeded": "succeeded",
-                    "failed": "failed",
-                    "timed_out": "timed_out",
-                    "cancelled": "cancelled",
-                    "paused": "waiting_approval",
-                    "waiting_approval": "waiting_approval",
-                    "blocked": "failed",
-                    "waiting_user": "waiting_approval",
-                    "rejected": "rejected",
-                }.get(run.status, "failed")
-                if run.status == "blocked":
-                    error_code = "needs_verification"
-                elif state == "failed" and run.status != "failed":
-                    error_code = "worker_incomplete_state"
+                state, error_code = dispatched_run_state(run)
         except EltCheckpointWorkerExited:
             abandon = True
             try:
@@ -305,18 +370,31 @@ class AgentTaskDispatcher:
             logger.exception("agent task worker failed for run %s", execution.run_id)
             error_code = "worker_execution_failed"
             try:
-                self._orchestrator_factory(repository).fail_dispatched_run(execution.run_id)
+                if codex_run:
+                    error_code = "needs_verification"
+                else:
+                    failed_run = self._orchestrator_factory(repository).fail_dispatched_run(
+                        execution.run_id
+                    )
+                    if failed_run is not None:
+                        state, error_code = dispatched_run_state(failed_run)
             except RECOVERABLE_ERRORS:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:
             _open_effect.reset(effect_token)
             if not abandon:
-                self._execution_repo.finish(
+                finished = self._execution_repo.finish(
                     execution.run_id,
                     owner_id,
                     state,
                     error_code=error_code,
                 )
+                if finished is not None and finished.state == "succeeded":
+                    from app.application.enterprise_cognition.outcomes import (
+                        recover_terminal_outcome,
+                    )
+
+                    recover_terminal_outcome(execution.run_id, repository=self._run_repo)
             with self._active_lock:
                 self._active.pop(execution.run_id, None)
             self._wake.set()

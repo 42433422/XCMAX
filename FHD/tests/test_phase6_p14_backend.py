@@ -85,7 +85,6 @@ class _ConversationHost(AIConversationService):
         self.online_intent_service = MagicMock()
         self.offline_intent_service = MagicMock()
         self.unified_recognizer = MagicMock()
-        self.task_agent = MagicMock()
         self.llm_adapter = None
         self.modstore_adapter = None
         self.api_key = ""

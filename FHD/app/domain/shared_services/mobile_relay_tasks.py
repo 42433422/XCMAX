@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import uuid
 from dataclasses import dataclass
@@ -10,8 +12,9 @@ from typing import Any, cast
 
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 
-from app.application.mobile_relay_ports import TaskPorts
+from app.application.mobile_relay_ports import RelayTaskConflict, TaskPorts
 from app.domain.shared_services.mobile_relay_utils import _json_dumps, _row_dict, _utc_now
 
 ENVELOPE_ALG = "x25519-hkdf-sha256-aesgcm"
@@ -35,6 +38,48 @@ def is_e2ee_error(value: Any) -> bool:
     return isinstance(value, dict) and value.get("e2ee_error") is True
 
 
+def _request_task_id(user_id: int, relay_id: str, client_request_id: str) -> str:
+    if (
+        not client_request_id
+        or client_request_id != client_request_id.strip()
+        or len(client_request_id) > 160
+    ):
+        raise ValueError("client_request_id must contain 1 to 160 non-padded characters")
+    identity = json.dumps(
+        ["relay-request-v1", int(user_id), relay_id.strip(), client_request_id],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return "rk1_" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:60]
+
+
+def _same_request(
+    task: dict[str, Any],
+    *,
+    user_id: int,
+    relay_id: str,
+    client_request_id: str,
+    kind: str,
+    payload: dict[str, Any] | None,
+) -> None:
+    if (
+        task.get("created_by_user_id") != int(user_id)
+        or task.get("relay_id") != relay_id.strip()
+        or task.get("client_request_id") != client_request_id
+        or task.get("kind") != kind
+    ):
+        raise RelayTaskConflict("relay request identity is already bound to another task")
+    original = task.get("payload") or {}
+    if original and (
+        not is_e2ee_envelope(original)
+        or json.dumps(original, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        != json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    ):
+        raise RelayTaskConflict("relay request identity is already bound to another ciphertext")
+    # An erased envelope cannot establish a new request. Return the original
+    # status/tombstone without changing its ciphertext or allowing another claim.
+
+
 @dataclass(frozen=True, eq=False)
 class RelayTaskQueue:
     ports: TaskPorts
@@ -46,42 +91,89 @@ class RelayTaskQueue:
         relay_id: str,
         kind: str,
         payload: dict[str, Any] | None = None,
+        client_request_id: str | None = None,
     ) -> dict[str, Any] | None:
         if not self.ports.desktop_belongs_to_user(user_id=user_id, relay_id=relay_id):
             return None
         # 桌面端已登记公钥时必须走端到端加密；旧版未登记公钥的执行端暂时保持兼容。
-        if self.ports.desktop_public_key(user_id=user_id, relay_id=relay_id) and not (
-            is_e2ee_envelope(payload)
-        ):
+        encrypted = is_e2ee_envelope(payload)
+        if (
+            client_request_id is not None
+            or self.ports.desktop_public_key(user_id=user_id, relay_id=relay_id)
+        ) and not encrypted:
             raise ValueError("relay payload must be end-to-end encrypted")
-        task_id = uuid.uuid4().hex
+        task_id = (
+            _request_task_id(user_id, relay_id, client_request_id)
+            if client_request_id is not None
+            else uuid.uuid4().hex
+        )
         now = _utc_now()
         safe_kind = (kind or "codex.invoke").strip()[:64] or "codex.invoke"
-        with self.ports.database() as db:
-            self.ports.ensure_tables(db)
-            db.execute(
-                text(
-                    """
-                    INSERT INTO mobile_relay_tasks (
-                        task_id, relay_id, kind, payload_json, status,
-                        result_json, created_by_user_id, created_at, updated_at
-                    ) VALUES (
-                        :task_id, :relay_id, :kind, :payload_json, 'queued',
-                        '{}', :created_by_user_id, :created_at, :updated_at
-                    )
-                    """
-                ),
-                {
-                    "task_id": task_id,
-                    "relay_id": relay_id.strip(),
-                    "kind": safe_kind,
-                    "payload_json": _json_dumps(payload or {}),
-                    "created_by_user_id": int(user_id),
-                    "created_at": now,
-                    "updated_at": now,
-                },
+        try:
+            with self.ports.database() as db:
+                self.ports.ensure_tables(db)
+                inserted = db.execute(
+                    text(
+                        """
+                        INSERT INTO mobile_relay_tasks (
+                            task_id, relay_id, kind, payload_json, status,
+                            result_json, created_by_user_id, client_request_id,
+                            created_at, updated_at
+                        ) SELECT
+                            :task_id, relay_id, :kind, :payload_json, 'queued',
+                            '{}', :created_by_user_id, :client_request_id,
+                            :created_at, :updated_at
+                        FROM mobile_relay_desktops
+                        WHERE relay_id = :relay_id AND mobile_user_id = :created_by_user_id
+                          AND status = 'paired'
+                          AND (desktop_public_key = '' OR :encrypted = 1)
+                        """
+                    ),
+                    {
+                        "task_id": task_id,
+                        "relay_id": relay_id.strip(),
+                        "kind": safe_kind,
+                        "payload_json": _json_dumps(payload or {}),
+                        "created_by_user_id": int(user_id),
+                        "client_request_id": client_request_id or "",
+                        "encrypted": int(encrypted),
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                )
+                if cast(CursorResult[Any], inserted).rowcount != 1:
+                    return None
+        except IntegrityError:
+            if client_request_id is None:
+                raise
+            original = self.ports.get_task(user_id=user_id, task_id=task_id)
+            if original is None:
+                raise
+            _same_request(
+                original,
+                user_id=user_id,
+                relay_id=relay_id,
+                client_request_id=client_request_id,
+                kind=safe_kind,
+                payload=payload,
             )
+            return original
         return self.ports.get_task(user_id=user_id, task_id=task_id)
+
+    def get_task_by_request(
+        self, *, user_id: int, relay_id: str, client_request_id: str
+    ) -> dict[str, Any] | None:
+        task = self.get_task(
+            user_id=user_id,
+            task_id=_request_task_id(user_id, relay_id, client_request_id),
+        )
+        return (
+            task
+            if task
+            and task.get("relay_id") == relay_id.strip()
+            and task.get("client_request_id") == client_request_id
+            else None
+        )
 
     def get_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
         with self.ports.database() as db:
@@ -93,6 +185,7 @@ class RelayTaskQueue:
                         SELECT t.* FROM mobile_relay_tasks t
                         JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
                         WHERE t.task_id = :task_id
+                          AND t.created_by_user_id = :user_id
                           AND d.mobile_user_id = :user_id
                           AND d.status = 'paired'
                         """
@@ -105,7 +198,7 @@ class RelayTaskQueue:
             return _row_dict(row) if row else None
 
     def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
-        """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
+        """Only an unclaimed task can be cancelled without a desktop receipt."""
         now = _utc_now()
         with self.ports.database() as db:
             self.ports.ensure_tables(db)
@@ -116,6 +209,7 @@ class RelayTaskQueue:
                         SELECT t.* FROM mobile_relay_tasks t
                         JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
                         WHERE t.task_id = :task_id
+                          AND t.created_by_user_id = :user_id
                           AND d.mobile_user_id = :user_id
                           AND d.status = 'paired'
                         """
@@ -134,18 +228,37 @@ class RelayTaskQueue:
                 text(
                     """
                     UPDATE mobile_relay_tasks
-                    SET status = 'cancelled',
-                        completed_at = :now,
+                    SET status = CASE WHEN status = 'queued' THEN 'cancelled' ELSE 'unknown' END,
+                        completed_at = CASE WHEN status = 'queued' THEN :now ELSE NULL END,
                         updated_at = :now
-                    WHERE task_id = :task_id AND status IN ('queued', 'running')
+                    WHERE task_id = :task_id AND created_by_user_id = :user_id
+                      AND status IN ('queued', 'running')
+                      AND EXISTS (
+                        SELECT 1 FROM mobile_relay_desktops d
+                        WHERE d.relay_id = mobile_relay_tasks.relay_id
+                          AND d.mobile_user_id = :user_id AND d.status = 'paired'
+                      )
                     """
                 ),
-                {"task_id": task_id.strip(), "now": now},
+                {"task_id": task_id.strip(), "user_id": int(user_id), "now": now},
             )
-            return _row_dict(row)
+            updated = (
+                db.execute(
+                    text(
+                        "SELECT t.* FROM mobile_relay_tasks t "
+                        "JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id "
+                        "WHERE t.task_id = :task_id AND t.created_by_user_id = :user_id "
+                        "AND d.mobile_user_id = :user_id AND d.status = 'paired'"
+                    ),
+                    {"task_id": task_id.strip(), "user_id": int(user_id)},
+                )
+                .mappings()
+                .first()
+            )
+            return _row_dict(updated) if updated else None
 
     def _purge_expired(self, db) -> None:
-        """终态任务只保留短周期密文；排队任务最多 7 天，避免云端长期堆积。"""
+        """Expire ciphertext while retaining stable request identities and confirmed outcomes."""
         try:
             hours = max(1, int(os.environ.get("XCAGI_RELAY_RETENTION_HOURS") or "24"))
         except (TypeError, ValueError):
@@ -155,12 +268,43 @@ class RelayTaskQueue:
         queued_cutoff = (current - timedelta(days=7)).isoformat()
         db.execute(
             text(
-                "DELETE FROM mobile_relay_tasks WHERE status != 'queued' AND updated_at < :cutoff"
+                "DELETE FROM mobile_relay_tasks WHERE client_request_id = '' "
+                "AND status IN ('completed', 'failed', 'cancelled') AND updated_at < :cutoff"
             ),
             {"cutoff": cutoff},
         )
         db.execute(
-            text("DELETE FROM mobile_relay_tasks WHERE status = 'queued' AND created_at < :cutoff"),
+            text(
+                "UPDATE mobile_relay_tasks SET payload_json = '{}', result_json = '{}' "
+                "WHERE client_request_id <> '' "
+                "AND status IN ('completed', 'failed', 'cancelled') AND updated_at < :cutoff"
+            ),
+            {"cutoff": cutoff},
+        )
+        # Erase expired ciphertext without losing the only address for an
+        # unresolved execution. Clearing payloads never authorizes replay.
+        db.execute(
+            text(
+                "UPDATE mobile_relay_tasks SET status = 'unknown', payload_json = '{}', "
+                "result_json = '{}', completed_at = NULL, updated_at = :now "
+                "WHERE status NOT IN ('queued', 'completed', 'failed', 'cancelled') "
+                "AND updated_at < :cutoff"
+            ),
+            {"cutoff": cutoff, "now": current.isoformat()},
+        )
+        db.execute(
+            text(
+                "UPDATE mobile_relay_tasks SET status = 'cancelled', payload_json = '{}', "
+                "result_json = '{}', completed_at = :now, updated_at = :now "
+                "WHERE client_request_id <> '' AND status = 'queued' AND created_at < :cutoff"
+            ),
+            {"cutoff": queued_cutoff, "now": current.isoformat()},
+        )
+        db.execute(
+            text(
+                "DELETE FROM mobile_relay_tasks WHERE client_request_id = '' "
+                "AND status = 'queued' AND created_at < :cutoff"
+            ),
             {"cutoff": queued_cutoff},
         )
 
@@ -179,7 +323,7 @@ class RelayTaskQueue:
             )
             if not desktop:
                 return None
-            # 加密前提下只保留短周期密文：终态任务按 TTL 删除，排队任务最长保留 7 天。
+            # Short ciphertext retention must not erase a stable request's replay fence.
             self._purge_expired(db)
             db.execute(
                 text(
@@ -191,10 +335,8 @@ class RelayTaskQueue:
                 ),
                 {"now": now, "relay_id": relay_id.strip()},
             )
-            # 孤儿回收：执行端中途死会把任务永久卡在 running（poll 只发 queued，无人再认领）。
-            # 每次 poll 先把本 relay claimed_at 超 TTL 的 running 重置回 queued，活 relay 自动重认领，
-            # 根治『永久卡 running』。同一 relay 仍在跑的任务由执行端 _INFLIGHT 去重，不会重复执行；
-            # 真完成时 complete 覆盖 queued 态，无副作用。
+            # A missing desktop receipt cannot prove that a side effect did not happen.
+            # Keep the same task addressable; process-local _INFLIGHT is not a replay fence.
             try:
                 stale_ttl = max(60, int(os.environ.get("XCAGI_RELAY_RUNNING_TTL_SEC") or "900"))
             except (TypeError, ValueError):
@@ -208,7 +350,7 @@ class RelayTaskQueue:
                 text(
                     """
                     UPDATE mobile_relay_tasks
-                    SET status = 'queued', claimed_at = NULL, updated_at = :now
+                    SET status = 'unknown', updated_at = :now
                     WHERE relay_id = :relay_id AND status = 'running'
                       AND claimed_at IS NOT NULL AND claimed_at < :stale_before
                     """
@@ -221,29 +363,48 @@ class RelayTaskQueue:
                         """
                         SELECT * FROM mobile_relay_tasks
                         WHERE relay_id = :relay_id AND status = 'queued'
+                          AND created_by_user_id = :user_id
                         ORDER BY created_at ASC
                         LIMIT :limit
                         """
                     ),
-                    {"relay_id": relay_id.strip(), "limit": max(1, min(20, int(max_tasks)))},
+                    {
+                        "relay_id": relay_id.strip(),
+                        "user_id": desktop.get("mobile_user_id"),
+                        "limit": max(1, min(20, int(max_tasks))),
+                    },
                 )
                 .mappings()
                 .all()
             )
-            tasks = [_row_dict(row) for row in rows]
-            for task in tasks:
-                db.execute(
+            tasks = []
+            for row in rows:
+                task = _row_dict(row)
+                claimed = db.execute(
                     text(
                         """
                         UPDATE mobile_relay_tasks
                         SET status = 'running', claimed_at = :now, updated_at = :now
                         WHERE task_id = :task_id AND status = 'queued'
+                          AND created_by_user_id = :user_id
+                          AND EXISTS (
+                            SELECT 1 FROM mobile_relay_desktops d
+                            WHERE d.relay_id = mobile_relay_tasks.relay_id
+                              AND d.mobile_user_id = :user_id AND d.status = 'paired'
+                          )
                         """
                     ),
-                    {"task_id": task["task_id"], "now": now},
+                    {
+                        "task_id": task["task_id"],
+                        "now": now,
+                        "user_id": desktop.get("mobile_user_id"),
+                    },
                 )
+                if cast(CursorResult[Any], claimed).rowcount != 1:
+                    continue
                 task["status"] = "running"
                 task["claimed_at"] = now
+                tasks.append(task)
         return {
             "desktop": self.ports.public_desktop(desktop),
             "tasks": tasks,
@@ -260,13 +421,13 @@ class RelayTaskQueue:
         result: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         now = _utc_now()
-        requested_status = (status or "completed").strip().lower()
+        requested_status = (status or "unknown").strip().lower()
         if requested_status == "done":
             requested_status = "completed"
         final_status = (
             requested_status
-            if requested_status in {"completed", "failed", "blocked", "cancelled"}
-            else "completed"
+            if requested_status in {"completed", "failed", "blocked", "cancelled", "unknown"}
+            else "unknown"
         )
         with self.ports.database() as db:
             self.ports.ensure_tables(db)
@@ -285,21 +446,24 @@ class RelayTaskQueue:
                     UPDATE mobile_relay_tasks
                     SET status = :status,
                         result_json = :result_json,
-                        completed_at = :now,
+                        completed_at = :completed_at,
                         updated_at = :now
                     WHERE task_id = :task_id AND relay_id = :relay_id
+                      AND status NOT IN ('completed', 'failed', 'cancelled')
                     """
                 ),
                 {
                     "status": final_status,
                     "result_json": _json_dumps(result or {}),
                     "now": now,
+                    "completed_at": now
+                    if final_status in {"completed", "failed", "cancelled"}
+                    else None,
                     "task_id": task_id.strip(),
                     "relay_id": relay_id.strip(),
                 },
             )
-            if cast(CursorResult[Any], updated).rowcount != 1:
-                return None
+            changed = cast(CursorResult[Any], updated).rowcount == 1
             row = (
                 db.execute(
                     text(
@@ -311,6 +475,12 @@ class RelayTaskQueue:
                 .first()
             )
             task_row = _row_dict(row) if row else None
+            if not changed:
+                return (
+                    task_row
+                    if task_row and task_row.get("status") in {"completed", "failed", "cancelled"}
+                    else None
+                )
         # 终态主动推送创建者手机（FCM + 离线队列轮询补发）——在 DB 事务收尾后再发，
         # 不让推送网络耗时拖住 complete 回写。此前任务完成只写库，手机要等下次打开
         # App 轮询才知道结果，"超级员工干完活"对老板完全无感。

@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application import approval_workspace_app_service as approval_svc
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.db.db_base import Base
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalStatus
 from app.fastapi_routes import approval as approval_routes
@@ -61,10 +62,15 @@ def mock_shipment_svc() -> MagicMock:
 def shipment_client(
     mock_shipment_svc: MagicMock, monkeypatch: pytest.MonkeyPatch, trusted_actor
 ) -> TestClient:
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
     monkeypatch.setattr(
         shipment_routes, "get_shipment_application_service_core", lambda: mock_shipment_svc
     )
     app = FastAPI()
+    app.state.agent_runs = repo
     app.include_router(shipment_routes.router)
     return TestClient(
         app, raise_server_exceptions=False, headers=trusted_actor(tenant_id=None).headers
@@ -400,9 +406,23 @@ def test_shipment_generate_success(
         "order_number": "ACCEPT-42",
     }
     r = shipment_client.post("/api/shipment/generate", json=payload)
-    assert r.status_code == 200
-    assert r.json()["file_path"] == "/tmp/p41.xlsx"
+    assert r.status_code == 500, r.text
+    output = r.json()
+    assert output["success"] is False and output["outcome"] == "unknown"
+    assert output["agent_status"] == "blocked"
+    assert output["error_code"] == "result_verification_inconclusive"
+    assert output["verification_code"] == "result_verifier_unavailable"
+    assert output["reconciliation_required"] is True and output["retryable"] is False
+    assert output["file_path"] == "/tmp/p41.xlsx"
     mock_shipment_svc.generate_shipment_document.assert_called_once_with(**payload)
+    run = shipment_client.app.state.agent_runs.get(output["run_id"])
+    assert run.status == "blocked" and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert (call.tool_id, call.action) == ("shipment_orders", "generate")
+    assert call.output == mock_shipment_svc.generate_shipment_document.return_value
+    assert call.metadata["verification"]["accepted"] is False
+    assert run.steps[0].attempt_count == 1
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
 
 
 def test_shipment_orders_latest_alias(
@@ -430,7 +450,11 @@ def test_compat_customer_get_not_found(compat_customer_client: TestClient) -> No
     assert r.status_code == 404
 
 
-def test_compat_customer_update_via_service(compat_customer_client: TestClient) -> None:
+def test_compat_customer_update_via_service(
+    compat_customer_client: TestClient, trusted_actor, monkeypatch
+) -> None:
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(role="admin")
     with (
         patch(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
@@ -444,8 +468,9 @@ def test_compat_customer_update_via_service(compat_customer_client: TestClient) 
         r = compat_customer_client.put(
             "/customers/2",
             json={"unit_name": "乙公司"},
+            headers=actor.headers,
         )
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     upd.assert_called_once()
 
 
@@ -470,13 +495,20 @@ def test_legacy_tools_execute_route(tools_client: TestClient) -> None:
     with patch(
         "app.application.facades.tools_facade.run_archive_tools_execute",
         return_value=({"success": True, "tool": "excel_analysis"}, 200),
-    ):
+    ) as legacy_execute:
         r = tools_client.post(
             "/api/tools/execute",
             json={"tool_id": "excel_analysis", "params": {}},
         )
-    assert r.status_code == 200
-    assert r.json()["tool"] == "excel_analysis"
+    assert r.status_code == 400
+    assert r.json() == {
+        "success": False,
+        "error_code": "tool_contract_unavailable",
+        "message": "工具或动作未登记，未执行",
+        "retryable": False,
+        "execution_status": "not_started",
+    }
+    legacy_execute.assert_not_called()
 
 
 def test_compat_tools_list_role_filter(tools_client: TestClient) -> None:

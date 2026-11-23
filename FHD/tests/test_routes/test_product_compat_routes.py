@@ -8,7 +8,26 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.legacy.routes.product.compat_routes import router
+
+
+def _assert_unverified_product_write(response, client, action):
+    body = response.json()
+    assert body["success"] is False and body["agent_status"] == "blocked"
+    assert body["error_code"] == "result_verification_inconclusive"
+    assert body["verification_code"] == "result_verifier_unavailable"
+    assert body["retryable"] is False and body["reconciliation_required"] is True
+    run = client.app.state.agent_runs.get(body["run_id"])
+    assert run is not None and run.status == "blocked" and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert call.tool_id == "products" and call.action == action
+    assert call.cost_units == 2 and call.output["success"] is True
+    assert call.metadata["verification"]["accepted"] is False
+    events = {event.event_type for event in run.events}
+    assert {"step.approved", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
+    return body
 
 
 def _assert_shared_update_pg_failure_0(
@@ -39,7 +58,15 @@ def app_compat():
 
 @pytest.fixture
 def client_compat(app_compat):
-    with TestClient(app_compat, raise_server_exceptions=False) as c:
+    repo = InMemoryAgentRunRepository()
+    app_compat.state.agent_runs = repo
+    with (
+        TestClient(app_compat, raise_server_exceptions=False) as c,
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
         yield c
 
 
@@ -315,7 +342,7 @@ class TestProductsUpdate:
         ):
             r = client_compat.post("/products/update", json={"id": 1, "name": "Updated"})
             assert r.status_code == 200
-            assert r.json()["success"] is True
+            _assert_unverified_product_write(r, client_compat, "update")
             update_service.assert_called_once_with(None, {"id": 1, "name": "Updated"})
 
     def test_update_invalid_id(self, client_compat):
@@ -349,7 +376,7 @@ class TestProductsUpdate:
                 "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
-            patch("app.legacy.routes.product.compat_routes.products_pg_update_row"),
+            patch("app.legacy.routes.product.compat_routes.products_pg_update_row") as update_row,
             patch(
                 "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
@@ -358,7 +385,8 @@ class TestProductsUpdate:
         ):
             r = client_compat.post("/products/update", json={"id": 1, "name": "Updated"})
             assert r.status_code == 200
-            assert r.json()["success"] is True
+            _assert_unverified_product_write(r, client_compat, "update")
+            update_row.assert_called_once()
 
     def test_update_business_mod_blocked(self, client_compat):
         with (
@@ -402,7 +430,7 @@ class TestProductsAdd:
         ):
             r = client_compat.post("/products/add", json={"name": "New"})
             assert r.status_code == 200
-            assert r.json()["success"] is True
+            _assert_unverified_product_write(r, client_compat, "create")
             add_service.assert_called_once_with(
                 None,
                 {"name": "New", "product_name": "New", "name_or_model": "New", "unit_name": "个"},
@@ -504,7 +532,7 @@ class TestProductsDelete:
         ):
             r = client_compat.post("/products/delete", json={"id": 1})
             assert r.status_code == 200
-            assert r.json()["success"] is True
+            _assert_unverified_product_write(r, client_compat, "delete")
             delete_service.assert_called_once_with(None, {"id": 1})
 
     def test_delete_invalid_id(self, client_compat):
@@ -537,11 +565,12 @@ class TestProductsDelete:
                 "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
-            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row"),
+            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row") as delete_row,
         ):
             r = client_compat.post("/products/delete", json={"id": 1})
             assert r.status_code == 200
-            assert r.json()["success"] is True
+            _assert_unverified_product_write(r, client_compat, "delete")
+            delete_row.assert_called_once_with(1)
 
     def test_delete_pg_failure(self, client_compat, local_tools):
         return _assert_shared_update_pg_failure_0(
@@ -570,7 +599,7 @@ class TestProductsBatchDelete:
         ):
             r = client_compat.post("/products/batch-delete", json={"ids": [1, 2]})
             assert r.status_code == 200
-            assert r.json()["success"] is True
+            _assert_unverified_product_write(r, client_compat, "batch_delete")
             batch_delete_service.assert_called_once_with(None, {"ids": [1, 2]})
 
     def test_batch_delete_invalid_ids(self, client_compat):
@@ -602,13 +631,13 @@ class TestProductsBatchDelete:
             patch(
                 "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(2, 0),
-            ),
+            ) as batch_delete_rows,
         ):
             r = client_compat.post("/products/batch-delete", json={"ids": [1, 2]})
             assert r.status_code == 200
-            body = r.json()
-            assert body["success"] is True
+            body = _assert_unverified_product_write(r, client_compat, "batch_delete")
             assert body.get("deleted") == 2, body
+            batch_delete_rows.assert_called_once_with([1, 2])
 
     def test_batch_delete_pg_failure(self, client_compat, local_tools):
         with (

@@ -27,6 +27,7 @@ class UnifiedTaskPlanMixin:
         plan: PlanGraph,
         runtime_context: dict[str, Any] | None = None,
         auto_execute: bool = True,
+        persist: bool = True,
     ) -> AgentRun:
         raise NotImplementedError
 
@@ -113,6 +114,11 @@ class UnifiedTaskPlanMixin:
     def save_run(self, run: AgentRun) -> AgentRun:
         return cast("AgentRun", self._repo.save(run))
 
+    def create_task_run(self, run: AgentRun, *, initial_only: bool = True) -> tuple[AgentRun, bool]:
+        return cast(
+            "tuple[AgentRun, bool]", self._repo.create_task_run(run, initial_only=initial_only)
+        )
+
     def start_task_from_plan(
         self,
         *,
@@ -120,6 +126,7 @@ class UnifiedTaskPlanMixin:
         message: str,
         plan: PlanGraph,
         runtime_context: dict[str, Any] | None = None,
+        persist: bool = True,
     ) -> AgentRun:
         """Create a durable task at a real approval checkpoint."""
         run = self.start_run_from_plan(
@@ -128,6 +135,7 @@ class UnifiedTaskPlanMixin:
             plan=plan,
             runtime_context=runtime_context,
             auto_execute=False,
+            persist=persist,
         )
         if run.status != "running":
             return cast("AgentRun", run)
@@ -153,7 +161,7 @@ class UnifiedTaskPlanMixin:
                 "action": step.action,
             },
         )
-        return cast("AgentRun", self._repo.save(run))
+        return cast("AgentRun", self._repo.save(run)) if persist else run
 
     @staticmethod
     def _plan_snapshot(plan: PlanGraph) -> dict[str, Any]:

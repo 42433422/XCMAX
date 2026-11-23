@@ -177,6 +177,18 @@ JSON 结构：
 只输出 JSON，不要其它文字。"""
 
 
+CUSTOMER_DELIVERY_REQUIREMENTS = """
+【真实客户文件交付约束，仅适用于本次 workflow_customer_accepted_outcome 场景】
+本次图必须使用已授权目录中的原生 direct_python 文件员工，形成 start -> employee -> ... -> end 的无条件串行链。
+每个 employee 必须有明确的 input_mapping、真实任务和 retry_count=0；不以占位员工、Skill、条件分支或重试代替这条已支持的交付链。
+逐一依据用户明确要求的必交成果，在真正生成该文件的 employee.config 中填写 customer_deliverables：精确的工作区相对输出路径数组。
+例如用户明确需要两个文件时，将两个文件分别声明在其实际生成节点；仅供内部转换的中间文件对应 []，不要求客户逐个验收中间结果。
+不得把所有中间文件默认列为必交，也不得仅凭“主员工”或“最后节点”推测交付范围。范围不足时保留缺口，不能编造客户要求或伪称验收完成；运行合同会拒绝缺少必验声明的多员工图。
+路径必须是员工实际会产出的固定相对路径，不含通配符、模板变量或 ..。批准后的声明会冻结，全部必验文件都须有原始业务结果与客户验收证据。
+下游文件输入可使用 {{nodes.上游节点名.output.字段}}，但字段必须指向同次执行中已实际生成的上游文件；output_mapping 不得覆盖 employee_result、employee_id、task、nodes。
+"""
+
+
 def _catalog_lines(db: Session, user: User, max_items: int = 40) -> str:
     try:
         rows = get_default_employee_client().list_employees() or []

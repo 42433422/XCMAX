@@ -17,6 +17,23 @@ def _client(actor) -> TestClient:
     return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
 
 
+def _assert_published_ocr_is_unverified(payload, run) -> None:
+    """Mock publication checks dispatch; it does not prove downstream OCR delivery."""
+    assert payload["success"] is False
+    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["verification_code"] == "result_verifier_unavailable"
+    assert payload["outcome"] == "unknown"
+    assert payload["retryable"] is False and payload["reconciliation_required"] is True
+    assert len(run.tool_calls) == 1
+    assert run.tool_calls[0].output["success"] is True
+    assert run.tool_calls[0].output["published"] is True
+    report = run.tool_calls[0].metadata["verification"]
+    assert report["status"] == "inconclusive" and report["accepted"] is False
+    assert report["code"] == "result_verifier_unavailable"
+    assert all(check["status"] != "passed" for check in report["checks"])
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+
+
 def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
     tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
@@ -51,16 +68,20 @@ def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    # The OCR event is published, but this write has no independent verifier.
+    # The run stays blocked so the route does not claim a completed receipt.
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
     assert payload["event"] == "ocr.requested"
     assert payload["agent_run_id"] == payload["run_id"]
+    assert payload["agent_status"] == "blocked"
 
     run = repo.get(payload["run_id"])
     assert run is not None
+    _assert_published_ocr_is_unverified(payload, run)
+    ocr_domain.emit_ocr_requested.assert_called_once()
     assert run.user_id == "17"
-    assert run.status == "completed"
+    assert run.status == "blocked"
     assert run.intent == "tools_execute_ocr_request"
     assert run.tool_calls[0].tool_id == "ocr"
     assert run.tool_calls[0].action == "request"
@@ -102,14 +123,16 @@ def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
     assert payload["agent_run_id"] == payload["run_id"]
+    assert payload["agent_status"] == "blocked"
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.status == "completed"
+    _assert_published_ocr_is_unverified(payload, run)
+    ocr_domain.emit_ocr_requested.assert_called_once()
+    assert run.status == "blocked"
     assert run.intent == "tools_execute_ocr_request"
     assert run.tool_calls[0].tool_id == "ocr"
     assert run.tool_calls[0].action == "request"

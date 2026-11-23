@@ -25,6 +25,10 @@ def _step(action="read", **params):
 
 class FixtureExecutor(AgentToolExecutor):
     def execute(self, step, *, runtime_context):
+        if step.action == "trace_context":
+            from app.neuro_bus.tracer import get_trace_context
+
+            return {"success": True, "pid": os.getpid(), **get_trace_context()}
         if step.action in {"route_receipt", "route_receipt_async"}:
             from app.infrastructure.llm.client import get_llm_client
 
@@ -42,28 +46,12 @@ class FixtureExecutor(AgentToolExecutor):
                 **({"unserializable": object()} if step.params.get("invalid_result") else {}),
             }
         if step.action == "llm":
-            from app.application.agent_orchestrator.repair_advisor import request_llm_repair
-            from app.application.agent_orchestrator.run_models import AgentRun
-            from app.application.employee_runtime.agent_loop import run_employee_agent_loop
-            from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
-            from app.application.workflow.planner_llm_gateway import request_planner_completion
+            from app.infrastructure.llm.client import get_llm_client, resolve_chat_model
 
-            planner = request_planner_completion(ai_service=None, context={}, messages=[])
-            agent = run_employee_agent_loop(
-                employee_id="fixture", system_prompt="test", task="test", tools=[]
+            result = get_llm_client().chat.completions.create(
+                model=resolve_chat_model(), messages=[]
             )
-            cognition = _run_async(_chat_completion([]))
-            repair = request_llm_repair(
-                AgentRun(user_id="owner", message="test"),
-                AgentStep(node_id="repair", tool_id="customers", action="query", params={}),
-                {},
-            )
-            return {
-                "success": agent["ok"],
-                "planner_model": planner["model"],
-                "cognition_model": cognition["model"],
-                "critic_model": repair["llm_call"].model,
-            }
+            return {"success": bool(result.choices), "model": result.model}
         if step.tool_id == "business_db":
             return {"success": True, "business_verification": {"verified": True, "record_id": 42}}
         if step.action == "typed_result":
@@ -73,6 +61,8 @@ class FixtureExecutor(AgentToolExecutor):
             return {"success": True, "price": Decimal("99.50"), "date": date(2026, 10, 21)}
         if step.action == "invalid_result":
             return {"success": True, "live_object": object()}
+        if step.action == "raised_error":
+            raise RuntimeError("password=do-not-export-this-secret")
         if step.action == "hang":
             script = (
                 "import os,time,json;from pathlib import Path;"
@@ -114,6 +104,26 @@ assert "app.db.models" not in sys.modules
         check=True,
         timeout=5,
     )
+
+
+def test_spawn_restores_the_attempt_trace_without_leaking_into_caller():
+    from app.neuro_bus.tracer import get_trace_context
+
+    before = get_trace_context()
+    context = {
+        "trace_id": "a" * 32,
+        "span_id": "b" * 16,
+        "request_id": "request-worker",
+        "trace_flags": "00",
+        "trace_state": "vendor=opaque",
+    }
+    result = execute_with_tool_deadline(
+        FixtureExecutor(), _step("trace_context"), runtime_context=context, timeout_seconds=10
+    )
+    assert result["success"] is True
+    assert result["pid"] != os.getpid()
+    assert all(result[key] == value for key, value in context.items())
+    assert get_trace_context() == before
 
 
 @pytest.mark.parametrize("budget", [2, 8])
@@ -237,7 +247,7 @@ def test_follow_up_memory_never_queries_database_or_infers_an_unverified_record(
 
 
 @pytest.mark.parametrize("client_kind", ["openai", "modstore"])
-def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_credentials(
+def test_spawned_non_agent_model_call_keeps_each_requests_model_and_credentials(
     monkeypatch, client_kind
 ):
     import threading
@@ -328,9 +338,7 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
                     client.close()
             assert result == {
                 "success": True,
-                "planner_model": owner,
-                "cognition_model": owner,
-                "critic_model": owner,
+                "model": owner,
             }
 
         try:
@@ -339,9 +347,7 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
         finally:
             server.shutdown()
             thread.join()
-    assert sorted(seen) == [
-        (f"Bearer fake-{owner}", owner) for owner in ["owner-a", "owner-b"] for _ in range(4)
-    ]
+    assert sorted(seen) == [(f"Bearer fake-{owner}", owner) for owner in ["owner-a", "owner-b"]]
 
 
 def test_default_adapter_refuses_unserializable_or_expired_start_without_dispatch():
@@ -369,7 +375,8 @@ def test_idempotency_payload_encodes_decimal_prices():
     assert json.loads(encoded) == {"price": 100.0, "quantity": 2}
 
 
-def test_real_adapter_transports_database_scalars_and_reports_unsupported_result():
+@pytest.mark.parametrize("failure_action", ["invalid_result", "raised_error"])
+def test_real_adapter_transports_database_scalars_and_reports_unsupported_result(failure_action):
     executor = FixtureExecutor()
     result = execute_with_tool_deadline(
         executor,
@@ -382,13 +389,15 @@ def test_real_adapter_transports_database_scalars_and_reports_unsupported_result
     started = time.monotonic()
     invalid = execute_with_tool_deadline(
         executor,
-        _step("invalid_result"),
+        _step(failure_action),
         runtime_context={},
         timeout_seconds=20,
     )
     assert time.monotonic() - started < 10
     assert invalid["outcome"] == "unknown" and invalid["retryable"] is False
     assert "tool_result_transport_failed" in str(invalid)
+    assert "exception_hint" not in str(invalid)
+    assert "do-not-export-this-secret" not in str(invalid)
 
 
 @pytest.mark.parametrize("cleanup_error", [FileNotFoundError, PermissionError])

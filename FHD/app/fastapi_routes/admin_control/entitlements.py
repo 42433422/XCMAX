@@ -231,4 +231,6 @@ class AccountEntitlements:
             }
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("sync_current_entitlements failed: %s", exc)
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+            return JSONResponse(
+                {"success": False, "message": "当前账号权益同步失败"}, status_code=500
+            )

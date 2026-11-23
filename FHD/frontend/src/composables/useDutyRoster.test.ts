@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { ref, type Ref } from 'vue'
+
+const owner = vi.hoisted(() => ({ scope: null as unknown as Ref<string> }))
+vi.mock('@/utils/productReadAccountScope', () => ({ productReadScopeKey: () => owner.scope.value }))
 
 const getDutyRosterMock = vi.fn()
 vi.mock('@/api/system', () => ({
@@ -15,6 +19,7 @@ describe('useDutyRoster', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
     getDutyRosterMock.mockReset()
+    owner.scope = ref('account-a')
     // 重置模块级单例 state
     vi.resetModules()
     const mod = await import('./useDutyRoster')
@@ -118,6 +123,31 @@ describe('useDutyRoster', () => {
     const callCountAfterFirst = getDutyRosterMock.mock.calls.length
     await roster.ensureLoaded()
     expect(getDutyRosterMock.mock.calls.length).toBe(callCountAfterFirst)
+  })
+
+  it('clears cached admin employees on account change and rejects the old admin\'s late response', async () => {
+    const adminData = { areas: { ops: { label: '市场营销部', ids: ['admin-employee'] } },
+      departments: { ops: {} }, employee_labels: { 'admin-employee': '管理员工' }, all_planned_ids: ['admin-employee'] }
+    const tenantData = { areas: {}, departments: {}, employee_labels: {}, all_planned_ids: [] }
+    getDutyRosterMock.mockResolvedValueOnce({ data: adminData })
+    const roster = useDutyRoster()
+    await roster.ensureLoaded()
+    expect(roster.allPlannedIds.value.has('admin-employee')).toBe(true)
+
+    let resolveOld!: (value: unknown) => void
+    getDutyRosterMock.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve }))
+    const oldRefresh = roster.refresh()
+    getDutyRosterMock.mockResolvedValueOnce({ data: tenantData })
+    owner.scope.value = 'account-b'
+    expect(roster.allPlannedIds.value.size).toBe(0)
+    expect(roster.departments.value).toEqual({})
+    await roster.ensureLoaded()
+    resolveOld({ data: adminData })
+    expect(await oldRefresh).toBeNull()
+    expect(roster.allPlannedIds.value.size).toBe(0)
+    expect(roster.employeeLabels.value).toEqual({})
+    expect(roster.error.value).toBeNull()
+    expect(getDutyRosterMock).toHaveBeenCalledTimes(3)
   })
 
   it('handles response without data field', async () => {

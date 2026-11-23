@@ -84,7 +84,10 @@ def is_planner_mod_on_disk() -> bool:
 
 def is_planner_mod_installed() -> bool:
     try:
-        from app.infrastructure.mods.mod_manager import get_mod_manager, is_mods_disabled
+        from app.infrastructure.mods.mod_manager import (
+            get_mod_manager,
+            is_mods_disabled,
+        )
 
         if is_mods_disabled():
             return False
@@ -191,7 +194,9 @@ def _with_owned_upload_path(
     file_path = str(args.get("file_path") or "").strip()
     if not file_path:
         return args
-    from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
+    from app.application.tools.workflow_spreadsheet_scope import (
+        resolve_owned_upload_path,
+    )
 
     resolved = resolve_owned_upload_path(file_path, runtime_context)
     return {**args, "file_path": resolved} if resolved != file_path else args
@@ -205,38 +210,9 @@ def execute_planner_workflow_tool(
     db_write_token: str | None = None,
     runtime_context: dict[str, Any] | None = None,
 ) -> str:
-    """里程碑 F：优先 Mod 原生 handler，其余委托宿主 workflow。"""
-    from app.mod_sdk.planner_native_tools import try_execute_native_planner_tool
-
+    """Use the host's single extension dispatch chain, preserving authorization."""
     if name == "import_excel_to_database":
         args = _with_owned_upload_path(args, runtime_context)
-
-    native_raw, native_mod = try_execute_native_planner_tool(
-        name,
-        args,
-        workspace_root,
-        db_write_token=db_write_token,
-    )
-    if native_raw is not None:
-        logger.debug("planner tool native mod=%s tool=%s", native_mod, name)
-        return native_raw
-
-    try:
-        from app.domain.app_pure.employee_pack_runner import try_execute_employee_planner_tool
-
-        emp_raw = try_execute_employee_planner_tool(
-            name,
-            args,
-            workspace_root,
-            db_write_token=db_write_token,
-            runtime_context=runtime_context,
-        )
-        if emp_raw is not None:
-            logger.debug("planner tool employee pack tool=%s", name)
-            return emp_raw
-    except RECOVERABLE_ERRORS:
-        logger.debug("employee planner tool dispatch skipped", exc_info=True)
-
     from app.application.tools.workflow import execute_workflow_tool
 
     raw = execute_workflow_tool(
@@ -316,9 +292,9 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
         # completed task merely because dispatch itself returned normally.
         "success": tool_success,
         "tool_name": name,
-        "result": raw
-        if tool_success
-        else '{"success": false, "error_code": "planner_tool_failed"}',
+        "result": (
+            raw if tool_success else '{"success": false, "error_code": "planner_tool_failed"}'
+        ),
         "execution_path": execution_path,
         "mod_id": handler_mod,
         "delegate": "host.workflow" if execution_path != "mod_native" else None,

@@ -11,28 +11,12 @@ from fastapi.responses import JSONResponse
 
 from app.application.knowledge.protocols import AgentRuntime, RecallMerger
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, normalize_workflow_risk
+from app.domain.task_lifecycle.results import agent_node_output
 from app.fastapi_routes.knowledge.serialization import _public_dataset_payload
 
 
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", False) and (not output.get("message")):
-        output["message"] = getattr(run, "error", False)
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return cast("dict[str, Any]", _public_dataset_payload(output))
+    return cast("dict[str, Any]", _public_dataset_payload(agent_node_output(run, node_id)))
 
 
 def _dataset_agent_user_id(request: Request, params: dict[str, Any]) -> str:
@@ -81,6 +65,25 @@ class DatasetAgent:
                 {"success": False, "message": f"未注册的 Dataset/RAG 动作: {action}"},
                 status_code=400,
             )
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+        from app.application.dataset_rag.access_policy import (
+            _coerce_access_context,
+            _ensure_dataset_permission,
+        )
+
+        spec = get_tool_action_spec("dataset_rag", action)
+        if spec is not None and spec.permission in {
+            "dataset.read",
+            "dataset.write",
+            "dataset.admin",
+        }:
+            denied = _ensure_dataset_permission(
+                _coerce_access_context(access_payload),
+                spec.permission,
+                dataset_id=str(data.get("dataset_id") or "default"),
+            )
+            if denied is not None:
+                return JSONResponse(_public_dataset_payload(denied), status_code=403)
         node_id = f"dataset_rag_{action}"
         user_id = self._actor(request, data)
         request_key = str(request.headers.get("Idempotency-Key") or "").strip()
@@ -135,6 +138,13 @@ class DatasetAgent:
                 runtime_context["dataset_tenant_id"] = access_payload["tenant_id"]
             runtime_context["dataset_permissions"] = list(access_payload.get("permissions") or [])
             runtime_context["dataset_admin"] = bool(access_payload.get("is_admin"))
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        if resolve_session_user(request) is not None:
+            from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+            runtime_context = request_runtime_context(request, runtime_context)
+            user_id = str(runtime_context["user_id"])
         finished = False
         try:
             orchestrator = self._runtime()
@@ -167,10 +177,10 @@ class DatasetAgent:
                     claim_key,
                     {"success": False, "outcome": "unknown", "reconciliation_required": True},
                 )
-        if run.status in {"waiting_user", "blocked"}:
-            status_code = 202
-        elif payload.get("error_code") == "dataset_permission_denied":
+        if payload.get("error_code") == "dataset_permission_denied":
             status_code = 403
+        elif run.status in {"waiting_user", "blocked"}:
+            status_code = 202
         elif payload.get("error_code") == "tool_exception":
             status_code = 500
         else:

@@ -52,16 +52,6 @@
     </nav>
     <div class="sidebar-menu-bottom" role="navigation" aria-label="系统">
       <button
-        v-if="hasLocalWorkspace()"
-        class="menu-item"
-        type="button"
-        data-view="local-workspace"
-        @click="router.push({ name: 'local-workspace' })"
-      >
-        <span class="menu-item-icon" aria-hidden="true"><i class="fa fa-hdd-o"></i></span>
-        <span>本地工作区</span>
-      </button>
-      <button
         class="menu-item"
         type="button"
         :class="{
@@ -161,7 +151,6 @@ import { useIndustryStore } from '@/stores/industry'
 import { useSidebarLayoutStore } from '@/stores/sidebarLayout'
 import { useModsStore } from '@/stores/mods'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
-import { hasLocalWorkspace } from '@/api/localWorkspace'
 import { SETTINGS_MENU_ITEM, sidebarLayoutSeedKeys } from '@/constants/coreMenuCatalog'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
@@ -184,8 +173,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['change-view'])
-const router = useRouter()
 
+const router = useRouter()
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
 const modsStore = useModsStore()
@@ -348,8 +337,12 @@ function onMenuItemKeydown(event, key) {
 onMounted(async () => {
   const root = document.getElementById('app')
   // Prefetch steals the six HTTP/1 connections from the page that is still starting.
-  if (!root || root.dataset.startupReady === 'true') prefetchShellRouteChunks(router)
-  else window.addEventListener('xcagi:startup-ready', () => prefetchShellRouteChunks(router), { once: true })
+  // Sidebar can be mounted without a router (component tests, embedded shells).
+  // Never schedule prefetch with an undefined router.
+  if (router) {
+    if (!root || root.dataset.startupReady === 'true') prefetchShellRouteChunks(router)
+    else window.addEventListener('xcagi:startup-ready', () => prefetchShellRouteChunks(router), { once: true })
+  }
   startHealthPolling()
   window.addEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
   sidebarLayoutStore.initialize(sidebarLayoutSeedKeys())

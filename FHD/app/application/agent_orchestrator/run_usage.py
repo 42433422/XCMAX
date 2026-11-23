@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, LLMCall, ToolCall
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.runtime_dependencies import RuntimeDependencies
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -214,95 +214,6 @@ class RunUsageLedger:
             run.metadata.get("llm_cost_units_total") or 0
         )
         self.dependencies.refresh_budget(run)
-
-    def record_repair_llm_call(
-        self, run: AgentRun, step: AgentStep, advice: dict[str, Any]
-    ) -> bool:
-        call = advice.get("llm_call")
-        if not isinstance(call, LLMCall):
-            return True
-        call.metadata = {
-            **dict(call.metadata or {}),
-            "run_id": run.run_id,
-            "step_id": step.step_id,
-            "node_id": step.node_id,
-            "tool_id": step.tool_id,
-            "action": step.action,
-            "repair_attempt": len(step.repair_history) + 1,
-        }
-        run.llm_calls.append(call)
-        run.add_event(
-            "llm.completed" if call.status == "completed" else "llm.failed",
-            "LLM 修复建议已生成" if call.status == "completed" else "LLM 修复建议生成失败",
-            {
-                "llm_call_id": call.call_id,
-                "provider_id": call.provider_id,
-                "provider": call.provider,
-                "model": call.model,
-                "total_tokens": call.total_tokens,
-                "cost_units": call.cost_units,
-                "source": "agent_orchestrator.llm_repair",
-            },
-        )
-        if call.status == "failed":
-            self.refresh_llm_metadata(run)
-            return False
-        try:
-            from app.infrastructure.billing.model_usage import record_model_usage
-
-            entry = record_model_usage(
-                run_id=run.run_id,
-                user_id=run.user_id,
-                provider_id=call.provider_id,
-                provider=call.provider,
-                model=call.model,
-                prompt_tokens=call.prompt_tokens,
-                completion_tokens=call.completion_tokens,
-                total_tokens=call.total_tokens,
-                cost_units=call.cost_units,
-                billing_status=call.billing_status,
-                billing_source=call.billing_source,
-                source="agent_orchestrator.llm_repair",
-                usage_key=f"{run.run_id}:{step.step_id}:{step.attempt_count}:llm_repair",
-                metadata=call.metadata,
-            )
-            call.metadata["usage_ledger"] = {
-                "usage_id": entry.get("usage_id"),
-                "usage_key": entry.get("usage_key"),
-                "status": "recorded",
-            }
-            call.billing_status = str(entry.get("billing_status") or call.billing_status)
-            call.billing_source = str(entry.get("billing_source") or call.billing_source)
-            call.metadata["wallet_debit"] = entry.get("wallet_debit")
-            self.refresh_model_usage_metadata(run, entry)
-            billing_event = (
-                "billing.debited"
-                if call.billing_status == "debited"
-                else "billing.insufficient_balance"
-                if call.billing_status == "insufficient_balance"
-                else "billing.recorded"
-            )
-            run.add_event(
-                billing_event,
-                "LLM 修复模型用量已记录",
-                {
-                    "llm_call_id": call.call_id,
-                    "usage_id": entry.get("usage_id"),
-                    "cost_units": call.cost_units,
-                    "billing_status": call.billing_status,
-                    "billing_source": call.billing_source,
-                    "source": "agent_orchestrator.llm_repair",
-                },
-            )
-        except RECOVERABLE_ERRORS as exc:
-            call.metadata["usage_ledger"] = {"status": "failed", "message": str(exc)}
-            run.add_event(
-                "billing.record_failed",
-                "LLM 修复模型用量记录失败",
-                {"llm_call_id": call.call_id, "error": str(exc)},
-            )
-        self.refresh_llm_metadata(run)
-        return call.billing_status != "insufficient_balance"
 
     @staticmethod
     def refresh_model_usage_metadata(run: AgentRun, entry: dict[str, Any]) -> None:

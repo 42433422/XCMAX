@@ -23,11 +23,7 @@ from app.application.agent_orchestrator.clarification import (
 )
 from app.application.agent_orchestrator.compensation import plan_parallel_enabled
 from app.application.agent_orchestrator.param_references import refuse_unresolved_step
-from app.application.agent_orchestrator.repair_advisor import (
-    is_llm_repair_enabled,
-    llm_repair_attempt_limit,
-    request_llm_repair,
-)
+from app.application.agent_orchestrator.run_knowledge import RunKnowledge
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
@@ -36,7 +32,6 @@ from app.application.agent_orchestrator.run_models import (
     ToolCall,
     utc_now_iso,
 )
-from app.application.agent_orchestrator.run_planning import RunPlanning
 from app.application.agent_orchestrator.run_repair import RunRepair
 from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
@@ -247,9 +242,6 @@ def _runtime_dependencies() -> RuntimeDependencies:
         action_spec=lambda tool, action: get_tool_action_spec(tool, action),
         validate=lambda tool, action, params: validate_tool_call(tool, action, params),
         refresh_budget=lambda run: refresh_ai_budget_metadata(run),
-        repair_enabled=lambda run, context: is_llm_repair_enabled(run, context),
-        repair_limit=lambda run, step, context: llm_repair_attempt_limit(run, step, context),
-        request_repair=lambda run, step, context: request_llm_repair(run, step, context),
     )
 
 
@@ -270,7 +262,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         }
         self._tool_executor = tool_executor or AgentToolExecutor()
         runtime = dependencies if dependencies is not None else _runtime_dependencies()
-        self._planning = RunPlanning(self._repo)
+        self._knowledge = RunKnowledge(self._repo)
         self._usage = RunUsageLedger(runtime)
         self._repair = RunRepair(self._repo, self._usage, runtime)
         self._step_execution = StepExecution(
@@ -288,35 +280,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     def _ingest_artifact_to_dataset(run: AgentRun, artifact: Any) -> None:
         ingest_artifact_to_dataset(run, artifact)
 
-    def start_run(
-        self,
-        *,
-        user_id: str,
-        message: str,
-        runtime_context: dict[str, Any] | None = None,
-        auto_execute: bool = True,
-    ) -> AgentRun:
-        run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
-        run.metadata["persistence"] = dict(self._repository_status)
-        run.metadata["runtime_context"] = dict(runtime_context or {})
-        apply_task_context(run, runtime_context)
-        run.add_event("run.created", "Agent run 已创建")
-        self._repo.save(run)
-        try:
-            plan = self._plan(run, runtime_context=dict(runtime_context or {}))
-            self._apply_plan(run, plan)
-            apply_ai_budget_metadata(run, dict(plan.metadata or {}), dict(runtime_context or {}))
-            self._repo.save(run)
-            if auto_execute:
-                self._execute_with_durable_lease(run, runtime_context=dict(runtime_context or {}))
-            return cast("AgentRun", self._repo.save(run))
-        except RECOVERABLE_ERRORS:
-            logger.exception("agent run start failed")
-            run.status = "failed"
-            run.error = _INTERNAL_RUN_ERROR
-            run.add_event("run.failed", "Agent run 失败", {"error_code": _INTERNAL_RUN_ERROR})
-            return cast("AgentRun", self._repo.save(run))
-
     def start_run_from_plan(
         self,
         *,
@@ -325,9 +288,25 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         plan: PlanGraph,
         runtime_context: dict[str, Any] | None = None,
         auto_execute: bool = True,
+        persist: bool = True,
     ) -> AgentRun:
+        if auto_execute and not persist:
+            raise ValueError("未持久化的任务不能执行")
+
+        def checkpoint(value: AgentRun) -> AgentRun:
+            return cast("AgentRun", self._repo.save(value)) if persist else value
+
         context = dict(runtime_context or {})
+        from app.application.agent_orchestrator.approval_grant import (
+            authorization_scope_hash,
+        )
         from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+        scope = dict(context)
+        if not isinstance(scope.get("_actor_authorization"), dict):
+            scope["user_id"] = str(user_id or "")
+        authorization_scope = authorization_scope_hash(scope)
 
         plan = copy.deepcopy(plan)
         self._apply_approval_risk_policy(plan)
@@ -344,13 +323,19 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             }
         )
         run_id = f"run_{idempotency_key[:32]}"
-        existing = self._repo.get(run_id)
-        if existing is not None:
+
+        def replay(existing: AgentRun) -> AgentRun:
+            # The immutable execution key already binds the original plan hash;
+            # a validated planning answer may replace the current plan in this run.
             if (
                 existing.user_id == str(user_id or "")
                 and existing.plan_id == str(plan.plan_id or "")
-                and existing.metadata.get("plan_sha256") == plan_sha256
                 and existing.metadata.get("execution_idempotency_key") == idempotency_key
+                and existing.metadata.get("execution_authorization_scope") == authorization_scope
+                and all(
+                    actor_tool_denial(step.tool_id, step.action, scope, step.params) is None
+                    for step in existing.steps
+                )
             ):
                 return cast("AgentRun", existing)
             logger.error("plan idempotency collision; refusing to start run_id=%s", run_id)
@@ -363,12 +348,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 "执行幂等键发生冲突，已拒绝启动",
                 {"plan_id": str(plan.plan_id or ""), "execution_started": False},
             )
-            return cast("AgentRun", self._repo.save(conflict))
+            return checkpoint(conflict)
+
+        existing = self._repo.get(run_id)
+        if existing is not None:
+            return replay(existing)
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""), run_id=run_id)
         run.metadata["persistence"] = dict(self._repository_status)
         run.metadata["runtime_context"] = context
         run.metadata["plan_sha256"] = plan_sha256
         run.metadata["execution_idempotency_key"] = idempotency_key
+        run.metadata["execution_authorization_scope"] = authorization_scope
         apply_task_context(run, runtime_context)
         run.add_event("run.created", "Agent run 已创建")
         run.add_event(
@@ -381,19 +371,27 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 "source": "provided_plan",
             },
         )
+        admitted = False
         try:
             self._apply_plan(run, plan, stable_step_ids=True)
             apply_ai_budget_metadata(run, dict(plan.metadata or {}), dict(runtime_context or {}))
-            self._repo.save(run)
+            if persist:
+                published, admitted = self._repo.create_task_run(run, initial_only=False)
+                if not admitted:
+                    return replay(published)
+                run = published
             if auto_execute:
                 self._execute_with_durable_lease(run, runtime_context=dict(runtime_context or {}))
-            return cast("AgentRun", self._repo.save(run))
+            return checkpoint(run)
         except RECOVERABLE_ERRORS:
             logger.exception("agent run from plan failed")
             run.status = "failed"
             run.error = _INTERNAL_RUN_ERROR
             run.add_event("run.failed", "Agent run 失败", {"error_code": _INTERNAL_RUN_ERROR})
-            return cast("AgentRun", self._repo.save(run))
+            if persist and not admitted:
+                published, created = self._repo.create_task_run(run, initial_only=False)
+                return published if created else replay(published)
+            return checkpoint(run)
 
     def continue_run(
         self,
@@ -511,7 +509,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         waiting_step.status = "pending"
         run.status = "running"
         run.error = ""
+        from app.application.agent_orchestrator.approval_grant import (
+            approval_receipt_claims,
+        )
+
         run.metadata["approval_receipt"] = {
+            **approval_receipt_claims(run, waiting_step),
             "task_id": str((context or {}).get("task_id") or run.run_id),
             "step_id": waiting_step.step_id,
             "tool_id": waiting_step.tool_id,
@@ -670,6 +673,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             parameters=parameters,
             confirmed=confirmed,
             allowed_fields=allowed_fields,
+            answered_by=answered_by,
         )
         run.metadata["runtime_context"] = context
         apply_ai_budget_metadata(run, context)
@@ -717,74 +721,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         if not self._repo.save_if_unchanged(run, previous):
             return None
         if not confirmed:
-            return cast("AgentRun", self._repo.get(run_id))
-        self._execute_with_durable_lease(run, runtime_context=context)
-        return cast("AgentRun", self._repo.save(run))
-
-    def continue_planning_clarification(
-        self,
-        run_id: str,
-        *,
-        answered_by: str,
-        clarification_step_id: str,
-        expected_plan_sha256: str,
-        expected_snapshot_sha256: str,
-        plan: PlanGraph,
-        answer: str,
-        runtime_context: dict[str, Any],
-    ) -> AgentRun | None:
-        """Replace only a pristine planning question, using the existing run CAS and lease."""
-        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
-        from app.application.agent_orchestrator.clarification import is_planning_clarification
-        from app.application.agent_orchestrator.runtime_context import merge_runtime_context
-        from app.application.workflow.workflow_types import plan_fingerprint
-
-        run = self._repo.get(run_id)
-        if run is None or run.user_id != answered_by or not str(answer).strip():
-            return None
-        waiting = find_waiting_step(run, approved_step_id=clarification_step_id)
-        previous_plan = plan_from_dict(run.metadata.get("plan"))
-        if (
-            waiting is None
-            or not is_planning_clarification(run, waiting)
-            or previous_plan is None
-            or plan_fingerprint(previous_plan) != expected_plan_sha256
-            or canonical_hash(run.to_dict()) != expected_snapshot_sha256
-            or plan.metadata.get("planning_rejected")
-        ):
-            return None
-        context = merge_runtime_context(run, runtime_context)
-        if self._preflight_resume_plan(run, context):
-            return None
-        previous = copy.deepcopy(run)
-        replacement = copy.deepcopy(plan)
-        replacement.plan_id = run.plan_id
-        self._apply_plan(run, replacement, stable_step_ids=True)
-        if replacement.metadata.get("response_mode") == "reply":
-            from app.application.agent_orchestrator.reply_plan import valid_reply_plan
-
-            if not valid_reply_plan(run, replacement):
-                return None
-        elif self._preflight_resume_plan(run, context):
-            return None
-        run.metadata["runtime_context"] = context
-        run.metadata["plan_sha256"] = plan_fingerprint(replacement)
-        run.final_output, run.error = {}, ""
-        apply_ai_budget_metadata(run, context)
-        run.add_event(
-            "run.clarification_resumed",
-            "已将用户答复绑定原任务并重新核对执行计划",
-            {
-                "kind": "planning_scope",
-                "step_id": clarification_step_id,
-                "question": str(waiting.params.get("question") or ""),
-                "answer": str(answer),
-                "previous_plan_sha256": expected_plan_sha256,
-                "plan_sha256": run.metadata["plan_sha256"],
-            },
-        )
-        if not self._repo.save_if_unchanged(run, previous):
-            return None
+            stored = cast("AgentRun", self._repo.get(run_id))
+            self._release_browser_run_resources(stored)
+            return stored
         self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun", self._repo.save(run))
 
@@ -814,7 +753,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "审批已拒绝，未执行工具",
             dict(run.metadata["approval_decision"]),
         )
-        return cast("AgentRun | None", self._repo.save(run))
+        stored = cast("AgentRun", self._repo.save(run))
+        self._release_browser_run_resources(stored)
+        return stored
 
     def note_approval_timeout(self, run_id: str) -> AgentRun | None:
         """An expired approval window does not approve or execute the step."""
@@ -900,7 +841,16 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         limit: int = 50,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]:
+        if status is not None:
+            return self._repo.list_recent(
+                user_id=user_id,
+                limit=limit,
+                matches=matches,
+                runtime_scope=runtime_scope,
+                status=status,
+            )
         if runtime_scope is not None:
             return self._repo.list_recent(
                 user_id=user_id, limit=limit, matches=matches, runtime_scope=runtime_scope
@@ -918,7 +868,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         run.intent = plan.intent
         plan_metadata = dict(plan.metadata or {})
         run.metadata["plan"] = plan_to_dict(plan)
-        self._attach_memory_recall(run, plan_metadata.get("memory_recall"))
         from app.application.workflow.workflow_types import step_plan_nodes
 
         nodes, graph_error = step_plan_nodes(plan)
@@ -937,7 +886,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         if graph_error:
             run.status = "blocked"
             run.error = graph_error
-            run.add_event("planner.blocked", graph_error)
+            run.add_event("workflow.graph_rejected", run.error)
             return
         self._apply_repair_policy(run, plan_metadata)
         self._attach_artifacts_from_payload(run, plan_metadata, source="plan.metadata")
@@ -1005,6 +954,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             run.add_event("workflow.conversation_rejected", error, {"execution_started": False})
             self._repo.save(run)
             return
+        from app.application.agent_orchestrator.result_verification import verification_blocked
+
+        if verification_blocked(run):
+            run.status, run.error = "blocked", "独立结果核验尚未通过，请先核验原执行回执"
+            self._repo.save(run)
+            return
         node_outputs: dict[str, Any] = {
             step.node_id: dict(step.output or {})
             for step in run.steps
@@ -1064,14 +1019,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 self._repo.save(run)
                 return
-        from app.application.agent_orchestrator.reply_plan import execute_reply_plan
         from app.application.workflow.planning_graph_policy import validate_required_params
         from app.application.workflow.workflow_types import validate_plan_graph
         from app.application.workflow_registry_app import get_workflow_tool_registry
 
-        if execute_reply_plan(run, plan, runtime_context):
-            self._repo.save(run)
-            return
         registry = get_workflow_tool_registry()
         plan_error = validate_plan_graph(plan) or validate_required_params(plan, registry)
         if plan_error:
@@ -1320,17 +1271,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 stopped_for_interaction = True
                 return {"success": True, "requires_confirmation": True}
             original_params = copy.deepcopy(step.params)
-            if (
-                step.status == "waiting_user"
-                and isinstance(step.output, dict)
-                and isinstance(step.output.get("resume_params"), dict)
-                and approved in {step.step_id, step.node_id}
-            ):
-                # 用户确认后重跑暂停步骤时带上工具要求的续跑参数（如「仅写入正确行」）。
-                step.params.update(
-                    {str(key): value for key, value in step.output["resume_params"].items()}
-                )
-                step.output.pop("resume_params", None)
             if refuse_unresolved_step(run, step, outputs):
                 stopped_for_interaction = True
                 return dict(
@@ -1381,6 +1321,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 self._repo.save(run)
                 return dict(step.output)
+            from app.application.agent_orchestrator.approval_grant import (
+                approval_scope_matches,
+            )
+
             if not self._can_auto_execute(step) and not (
                 approved and approved in {step.step_id, step.node_id}
             ):
@@ -1416,6 +1360,31 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 return denial
             while True:
+                if approved in {
+                    step.step_id,
+                    step.node_id,
+                } and not approval_scope_matches(run, step):
+                    step.status = run.status = "waiting_user"
+                    run.error = step.error = "审批后的身份范围、参数或工具契约已变化，请重新审批"
+                    if not any(
+                        call.step_id == step.step_id and call.output.get("success") is True
+                        for call in run.tool_calls
+                    ):
+                        step.output = {
+                            "success": False,
+                            "error_code": "approval_scope_changed",
+                            "retryable": False,
+                            "message": run.error,
+                        }
+                    (run.metadata.get("dispatch") or {}).pop("approved_step_id", None)
+                    run.add_event("approval.scope_changed", run.error, {"step_id": step.step_id})
+                    self._repo.save(run)
+                    stopped_for_interaction = True
+                    return {
+                        "success": True,
+                        "requires_approval": True,
+                        "step_id": step.step_id,
+                    }
                 budget = budget_exceeded_payload(
                     run,
                     additional_cost_units=self._step_cost_units(step),
@@ -1425,6 +1394,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     self._mark_budget_exceeded(run, step, budget, node_outputs=outputs)
                     return {"success": False, "error_code": "budget_exceeded", "message": run.error}
                 self._execute_step(run, step, runtime_context=runtime_context, node_outputs=outputs)
+                from app.application.agent_orchestrator.result_verification import (
+                    step_verification_blocked,
+                )
+
+                if step_verification_blocked(run, step):
+                    stopped_for_interaction = True
+                    return {
+                        "success": False,
+                        "error_code": "result_verification_required",
+                        "message": run.error,
+                    }
                 decision = (
                     step.output.get("question")
                     if isinstance(step.output, dict)
@@ -1436,6 +1416,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     # 后续依赖步骤保持未执行，避免把守卫当成「异常」。
                     step.status = "waiting_user"
                     run.status = "waiting_user"
+                    from app.application.agent_orchestrator.result_verification import (
+                        latest_step_call,
+                        preview_continuation_params,
+                    )
+
+                    receipt = latest_step_call(run, step)
+                    proposed = preview_continuation_params(run, step, receipt) if receipt else None
+                    if proposed is not None:
+                        step.params = proposed
+                        if not sync_step_plan(step, "已核实预演续跑参数，请用户确认当前提案"):
+                            return {"success": False, "error_code": "plan_node_binding_invalid"}
                     run.final_output = {
                         "clarification": {
                             "step_id": step.step_id,
@@ -1595,6 +1586,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 run.add_event(
                     "step.skipped", step.error, {"step_id": step.step_id, "node_id": step.node_id}
                 )
+        if self._apply_requested_control(run):
+            return
         run.status = "completed"
         self._ingest_confirmed_plan_artifacts(run)
         self._refresh_run_cost_metadata(run)
@@ -1606,6 +1599,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "cost_units_total": run.metadata["cost_units_total"],
             "ai_cost_units_total": run.metadata["ai_cost_units_total"],
             "repair_count": run.metadata.get("repair_count", 0),
+            "verification": copy.deepcopy(run.metadata.get("verification") or {}),
         }
         self._append_llm_summary_to_final_output(run)
         self._remember_run_outcome_for(run)
@@ -1680,18 +1674,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         run.add_event("observation.recorded", f"记录 {step.node_id} 执行观察", observation)
         return observation
 
-    def _plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
-        return self._planning.plan(run, runtime_context=runtime_context)
-
-    def _recall_knowledge_for_run(self, run: AgentRun, *, context: dict[str, Any]) -> None:
-        return self._planning.recall_knowledge_for_run(run, context=context)
-
-    _attach_memory_recall = staticmethod(RunPlanning.attach_memory_recall)
-
     def _remember_run_outcome_for(self, run: AgentRun) -> None:
-        return self._planning.remember_run_outcome_for(run)
+        return self._knowledge.remember_run_outcome_for(run)
 
-    _run_outcome_summary = staticmethod(RunPlanning.run_outcome_summary)
+    _run_outcome_summary = staticmethod(RunKnowledge.run_outcome_summary)
 
     def _record_tool_usage_entry(self, run: AgentRun, tool_call: ToolCall) -> bool:
         return self._usage.record_tool_usage_entry(run, tool_call)
@@ -1713,11 +1699,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     def _refresh_run_cost_metadata(self, run: AgentRun) -> None:
         return self._usage.refresh_run_cost_metadata(run)
 
-    def _record_repair_llm_call(
-        self, run: AgentRun, step: AgentStep, advice: dict[str, Any]
-    ) -> bool:
-        return self._usage.record_repair_llm_call(run, step, advice)
-
     _refresh_model_usage_metadata = staticmethod(RunUsageLedger.refresh_model_usage_metadata)
 
     def _refresh_llm_metadata(self, run: AgentRun) -> None:
@@ -1737,15 +1718,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         runtime_context: dict[str, Any],
     ) -> bool:
         return self._repair.prepare_repair_or_retry(run, step, runtime_context=runtime_context)
-
-    def _prepare_llm_repair_or_retry(
-        self,
-        run: AgentRun,
-        step: AgentStep,
-        *,
-        runtime_context: dict[str, Any],
-    ) -> bool:
-        return self._repair.prepare_llm_repair_or_retry(run, step, runtime_context=runtime_context)
 
     _coerce_positive_int = staticmethod(RunRepair.coerce_positive_int)
 

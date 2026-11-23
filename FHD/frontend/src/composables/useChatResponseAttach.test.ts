@@ -119,16 +119,22 @@ describe('useChatResponseAttach', () => {
               retryable: false,
               recovery_hint: '请审批后重试',
               duration_ms: 12,
+              trace_id: 'trace-a',
+              run_id: 'run-a',
+              error_code: 'approval_required',
             },
+            { node_id: 'missing-duration', success: false, tool_id: 'business_db', action: 'write' },
           ],
         },
       },
     })
-    expect(messages.value[1].nodeResults?.length).toBe(1)
+    expect(messages.value[1].nodeResults?.length).toBe(2)
     expect(messages.value[1].workflowAction).toBe('workflow_done')
     expect(messages.value[1].nodeResults?.[0].retryable).toBe(false)
     expect(messages.value[1].nodeResults?.[0].recovery_hint).toBe('请审批后重试')
     expect(messages.value[1].nodeResults?.[0].duration_ms).toBe(12)
+    expect(messages.value[1].nodeResults?.[0]).toMatchObject({ trace_id: 'trace-a', run_id: 'run-a', error_code: 'approval_required' })
+    expect(messages.value[1].nodeResults?.[1].duration_ms).toBeUndefined()
   })
 
   it('syncTaskFromChatResponse queues workflow confirmation', () => {

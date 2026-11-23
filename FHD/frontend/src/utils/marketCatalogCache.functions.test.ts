@@ -58,6 +58,28 @@ describe('marketCatalogCache – writeMarketCatalogCache + readMarketCatalogCach
     expect(typeof entry!.fetchedAt).toBe('number')
   })
 
+  it('sessionStorage 只保存公开目录字段，不写入 tab 或下载定位符', () => {
+    const key = buildMarketCatalogCacheKey('office')
+    const items = [{
+      id: 'mod-1',
+      name: 'Mod 1',
+      download_url: 'https://example.test/mod-1.zip',
+      catalog_base_url: 'https://example.test/catalog',
+      package_file: 'mod-1.zip',
+      artifact: 'sha-artifact',
+    }] as never[]
+    writeMarketCatalogCache(key, 'office', items)
+    const raw = sessionStorage.getItem(`xcagi_market_catalog_v1:test-tenant:${key}`)
+    expect(raw).toBeTruthy()
+    const stored = JSON.parse(String(raw)) as Record<string, unknown>
+    expect(stored).not.toHaveProperty('tab')
+    expect(stored.items).toEqual([{ id: 'mod-1', name: 'Mod 1' }])
+    // in-memory still keeps the live catalog entry including the tab
+    const entry = readMarketCatalogCache(key)
+    expect(entry!.tab).toBe('office')
+    expect(entry!.items[0]).toMatchObject({ id: 'mod-1', download_url: 'https://example.test/mod-1.zip' })
+  })
+
   it('写入空 items 数组也能读取', () => {
     const key = buildMarketCatalogCacheKey('office')
     writeMarketCatalogCache(key, 'office', [])

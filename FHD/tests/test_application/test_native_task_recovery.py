@@ -8,7 +8,9 @@ import os
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from multiprocessing.connection import wait
@@ -131,7 +133,9 @@ def _repositories(actor):
     )
 
 
-def _finish_with_startup(monkeypatch, repository, queue, execute, run_id):
+def _finish_with_startup(
+    monkeypatch, repository, queue, execute, run_id, *, expected_status="completed"
+):
     dispatcher = task_dispatcher.AgentTaskDispatcher(
         execution_repository=queue,
         run_repository=repository,
@@ -153,8 +157,10 @@ def _finish_with_startup(monkeypatch, repository, queue, execute, run_id):
         }:
             time.sleep(0.02)
         stored = repository.get(run_id)
-        assert stored.status == "completed", stored.to_dict()
-        assert queue.get(run_id).state == "succeeded"
+        assert stored.status == expected_status, stored.to_dict()
+        assert queue.get(run_id).state == (
+            "succeeded" if expected_status == "completed" else expected_status
+        )
         return stored
     finally:
         dispatcher.stop()
@@ -615,7 +621,17 @@ os._exit(23)
         finally:
             set_agent_run_repository_for_tests(None)
     else:
-        stored = _finish_with_startup(monkeypatch, repository, queue, execute, run.run_id)
+        # This executor proves the original approval/lease transfer and returns
+        # only an execution count. It creates no native import/source receipt.
+        stored = _finish_with_startup(
+            monkeypatch, repository, queue, execute, run.run_id, expected_status="blocked"
+        )
+        assert stored.steps[0].output == {"success": True, "data": {"executed_rows": 1}}
+        assert (
+            stored.tool_calls[-1].metadata["verification"]["code"] == "result_verifier_unavailable"
+        )
+        with pytest.raises(ValueError, match="人工核对"):
+            AgentOrchestrator(repository=repository).retry_run(run.run_id)
     assert (
         approved.metadata["approval_receipt"].items() <= stored.metadata["approval_receipt"].items()
     )
@@ -627,8 +643,12 @@ os._exit(23)
 def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     trusted_actor, monkeypatch, tmp_path, cleanup_verified
 ):
+    # Collection can prepend another project's tests package; spawn imports afresh.
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
     from app.application.agent_orchestrator import tool_process
-    from app.application.agent_orchestrator.approval_grant import _params_hash
+    from app.application.agent_orchestrator.approval_grant import (
+        approval_receipt_claims,
+    )
     from app.application.agent_orchestrator.elt_checkpoint_recovery import ELT_CHECKPOINT_PROTOCOL
     from app.application.workflow.workflow_types import plan_fingerprint
 
@@ -675,10 +695,10 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
             "tool_id": step.tool_id,
             "action": step.action,
             "approved_by": run.user_id,
-            "params_sha256": _params_hash(step),
             "plan_sha256": plan_fingerprint(plan),
         },
     )
+    run.metadata["approval_receipt"].update(approval_receipt_claims(run, step))
     repository.save(run)
     queue.enqueue(run)
     old = queue.claim("old", lease_seconds=60)
@@ -716,7 +736,8 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
         assert stored.status == "blocked", stored.steps[0].output
         assert stored.steps[0].output["error_code"] == "tool_worker_exited"
         assert stored.steps[0].output["reconciliation_evidence"]["cleanup_unresolved"] is True
-        assert queue.get(run.run_id).state == "failed"
+        assert queue.get(run.run_id).state == "unknown"
+        assert not queue.get(run.run_id).finished_at
         with sqlite3.connect(fixture) as db:
             assert db.execute("select file from elt_checkpoint_test").fetchall() == [(1,)]
         return
@@ -734,7 +755,14 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     assert new.run_id == old.run_id and new.execution_count == old.execution_count + 1
     dispatcher._execute_claim(new, "replacement")
     stored = repository.get(run.run_id)
-    assert stored.status == "completed" and queue.get(run.run_id).state == "succeeded"
+    # cleanup_verified refers to reaping the exited process, not import-result
+    # verification. The synthetic table below proves exact-once fixture writes;
+    # its bare count cannot certify a real ELT business result.
+    assert stored.status == "blocked" and queue.get(run.run_id).state == "blocked"
+    assert stored.tool_calls[-1].metadata["verification"]["code"] == "result_verifier_unavailable"
+    assert queue.claim("third-worker", lease_seconds=60, run_id=run.run_id) is None
+    with pytest.raises(ValueError, match="人工核对"):
+        AgentOrchestrator(repository=repository).retry_run(run.run_id)
     assert stored.steps[0].output == {"success": True, "data": {"executed_rows": 2}}
     with sqlite3.connect(fixture) as db:
         assert db.execute("select file from elt_checkpoint_test order by file").fetchall() == [
@@ -791,13 +819,37 @@ def test_concurrent_retry_preserves_completed_write_and_atomically_requeues_same
     ]
 
 
-@pytest.mark.parametrize("condition", ["unknown", "plan_changed", "write_pending", "live_lease"])
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "unknown",
+        "nested_unknown",
+        "nested_timeout",
+        "completed_unknown",
+        "completed_failure",
+        "plan_changed",
+        "write_pending",
+        "live_lease",
+    ],
+)
 def test_retry_rejects_unverified_original_state_without_queue_changes(trusted_actor, condition):
     actor = trusted_actor(role="admin")
     repository, queue = _repositories(actor)
     run = _run(actor, status="failed", completed_write=True)
     if condition == "unknown":
         run.steps[1].output = {"success": False, "outcome": "unknown"}
+    elif condition in {"nested_unknown", "nested_timeout"}:
+        run.steps[1].output = {
+            "success": True,
+            "result": {
+                "execution_status": "unknown" if condition == "nested_unknown" else "timeout"
+            },
+        }
+    elif condition in {"completed_unknown", "completed_failure"}:
+        child = (
+            {"outcome_unknown": True} if condition == "completed_unknown" else {"success": False}
+        )
+        run.steps[0].output["result"] = {"outputs": [{"output": child}]}
     elif condition == "plan_changed":
         run.steps[1].params["keyword"] = "new business intent"
     elif condition == "write_pending":
@@ -894,6 +946,111 @@ def test_unknown_checkpoint_version_fails_before_tool_dispatch(trusted_actor):
     stored = service.execute_dispatched_run(run.run_id)
     assert stored.status == "blocked" and "版本" in stored.error
     assert calls == []
+
+
+@pytest.fixture(params=["sqlite", "postgres"])
+def receipt_fence_repositories(request, tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    admin = None
+    schema = "receipt_fence_" + uuid.uuid4().hex
+    if request.param == "postgres":
+        url = os.environ.get("XCAGI_TEST_AGENT_POSTGRES_URL")
+        if not url:
+            pytest.skip("requires CI PostgreSQL service")
+        admin = create_engine(url)
+        with admin.begin() as db:
+            db.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    else:
+        engine = create_engine(f"sqlite:///{tmp_path / 'receipt-fence.db'}")
+    factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+    repository._ensure_schema()
+    try:
+        yield repository, SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+    finally:
+        engine.dispose()
+        if admin is not None:
+            with admin.begin() as db:
+                db.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+            admin.dispose()
+
+
+@pytest.mark.parametrize("terminal", ["completed", "blocked"])
+@pytest.mark.parametrize("context_change", ["untrusted_sources", "session_row_id"])
+def test_late_context_update_cannot_erase_terminal_or_unknown_receipt(
+    receipt_fence_repositories, terminal, context_change
+):
+    repository, late_writer = receipt_fence_repositories
+    run = AgentRun(user_id="receipt-owner", message="original request", status="running")
+    run.metadata["task_context"] = {"task_id": "receipt-task", "attempt": 1}
+    run.metadata["runtime_context"] = {
+        "tenant_id": "receipt-tenant",
+        "_mod_authorization": {"mod_id": "receipt-mod"},
+        "_actor_authorization": {"user_id": "receipt-owner", "session_row_id": 1},
+    }
+    repository.save(run)
+    stale = late_writer.get(run.run_id)
+    stale.final_output = {"answer": "stale"}
+    if context_change == "untrusted_sources":
+        stale.metadata["runtime_context"][context_change] = [
+            {"source": "tool_output", "text": "observation"}
+        ]
+    else:
+        stale.metadata["runtime_context"]["_actor_authorization"][context_change] = 2
+    terminal_committed = threading.Event()
+
+    def save_late():
+        assert terminal_committed.wait(10)
+        return late_writer.save(stale)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(save_late)
+        run.status = terminal
+        run.final_output = {"answer": "authoritative"}
+        if terminal == "blocked":
+            run.metadata.update(
+                non_retryable=True, recovery={"state": "manual_reconciliation_required"}
+            )
+        try:
+            repository.save(run)
+        finally:
+            terminal_committed.set()
+        assert result.result(timeout=10).status == terminal
+    saved = repository.get(run.run_id)
+    assert saved.status == terminal
+    assert saved.final_output["answer"] == "authoritative"
+    task = repository.get_task(
+        user_id=run.user_id, task_id="receipt-task", tenant_id="receipt-tenant"
+    )
+    assert (task.active_run_id, task.status, task.attempt) == (run.run_id, terminal, 1)
+    if terminal == "blocked":
+        assert saved.metadata["non_retryable"] is True
+        assert saved.metadata["recovery"]["state"] == "manual_reconciliation_required"
+
+
+@pytest.mark.parametrize("changed", ["user_id", "tenant_id", "mod_id"])
+def test_existing_run_identity_cannot_change_with_context(receipt_fence_repositories, changed):
+    repository, late_writer = receipt_fence_repositories
+    run = AgentRun(user_id="original-owner", message="bound request", status="running")
+    run.metadata["runtime_context"] = {
+        "tenant_id": "original-tenant",
+        "_mod_authorization": {"mod_id": "original-mod"},
+    }
+    repository.save(run)
+    original = repository.get(run.run_id).to_dict()
+    modified = late_writer.get(run.run_id)
+    if changed == "user_id":
+        modified.user_id = "other-owner"
+    elif changed == "tenant_id":
+        modified.metadata["runtime_context"]["tenant_id"] = "other-tenant"
+    else:
+        modified.metadata["runtime_context"]["_mod_authorization"]["mod_id"] = "other-mod"
+    with pytest.raises(ValueError, match="run identity"):
+        late_writer.save(modified)
+    assert repository.get(run.run_id).to_dict() == original
 
 
 @pytest.mark.skipif(

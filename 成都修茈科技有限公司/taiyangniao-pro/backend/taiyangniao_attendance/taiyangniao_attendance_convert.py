@@ -34,6 +34,15 @@ BOUNDARY_ERRORS = (Exception,)
 logger = logging.getLogger(__name__)
 
 
+def _public_conversion_error(exc: Exception) -> str:
+    messages = {
+        "missing 每日统计 sheet": "missing 每日统计 sheet",
+        "未能在前若干行内找到考勤表表头（需要同时包含 ‘姓名’ 与 ‘日期/考勤日期’）": "未能在前若干行内找到考勤表表头（需要同时包含 ‘姓名’ 与 ‘日期/考勤日期’）",
+        "明细表过短：缺少模板首个人员 6 行块": "明细表过短：缺少模板首个人员 6 行块",
+    }
+    return messages.get(str(exc), "考勤转换失败，请检查输入文件和模板")
+
+
 def _filter_records_to_template_roster(
     records: list[AttendanceDayRecord],
     template_profiles: dict[str, TemplateEmployeeProfile],
@@ -663,7 +672,7 @@ def convert_attendance_records(
         }
     except BOUNDARY_ERRORS as exc:
         logger.exception("Attendance conversion from record list failed")
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": _public_conversion_error(exc)}
     finally:
         _clear_attendance_policy()
 
@@ -772,6 +781,6 @@ def convert_attendance_file(
         }
     except BOUNDARY_ERRORS as exc:
         logger.exception("Attendance conversion failed")
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": _public_conversion_error(exc)}
     finally:
         _clear_attendance_policy()

@@ -512,17 +512,28 @@ class TestKittenWebSearchExtra:
         old = web_search_mod._rate_buckets.copy()
         web_search_mod._rate_buckets.clear()
         try:
-            with patch.dict(
-                os.environ,
-                {"WEB_SEARCH_PROVIDER": "tavily", "TAVILY_API_KEY": "key"},
-                clear=False,
+            with (
+                patch.dict(
+                    os.environ,
+                    {"WEB_SEARCH_PROVIDER": "tavily", "TAVILY_API_KEY": "key"},
+                    clear=False,
+                ),
+                patch.object(
+                    web_search_mod,
+                    "_tavily_search",
+                    new_callable=AsyncMock,
+                    return_value=[
+                        WebSearchHit(title="Test", url="https://example.com", snippet="Result")
+                    ],
+                ) as search,
             ):
                 # Exhaust rate limit
                 for _ in range(web_search_mod._RATE_MAX_PER_USER):
-                    await kitten_web_search("test", user_key="limited-user")
+                    assert (await kitten_web_search("test", user_key="limited-user"))["success"]
                 result = await kitten_web_search("test", user_key="limited-user")
             assert result["success"] is False
             assert "频繁" in result["message"]
+            assert search.await_count == web_search_mod._RATE_MAX_PER_USER
         finally:
             web_search_mod._rate_buckets = old
 

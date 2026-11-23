@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { useWorkflowEmployeeDesks, type WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
 
@@ -18,6 +18,7 @@ const emit = defineEmits<{
 
 const wfEmp = useWorkflowAiEmployeesStore()
 const { statusLine, isBusy } = useWorkflowEmployeeDesks()
+const selectedRow = computed(() => props.desks.find(row => row.empId === props.selectedEmpId))
 
 const listRef = ref<HTMLElement | null>(null)
 
@@ -30,13 +31,13 @@ watch(
   async (id) => {
     if (!id || !listRef.value) return
     await nextTick()
-    const el = listRef.value.querySelector(`[data-emp-id="${id}"]`) as HTMLElement | null
+    const el = [...listRef.value.querySelectorAll<HTMLElement>('[data-emp-id]')].find(row => row.dataset.empId === id)
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   },
 )
 
 function progressWidth(row: WorkflowEmployeeDeskRow): string {
-  if (!row.enabled) return '0%'
+  if (!row.enabled && row.snapshot?.authority !== 'task-center') return '0%'
   const p = row.snapshot?.progressPct
   const n = typeof p === 'number' && Number.isFinite(p) ? Math.max(0, Math.min(100, p)) : 0
   return `${n}%`
@@ -46,7 +47,22 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
 <template>
   <aside class="wfe-inspector" :class="{ 'wfe-inspector--pixel': pixelSkin }" role="complementary" aria-label="工作流员工列表与开关">
     <h3 class="wfe-inspector-h">员工与状态</h3>
-    <p class="wfe-inspector-lead">开关与副窗「一键托管」一致；进度来自任务面板同步的快照。</p>
+    <p class="wfe-inspector-lead">一键托管控制自动接单；任务进度与工作台同步，暂停、审批和结果在工作台处理。</p>
+
+    <section v-if="selectedRow" class="wfe-inspector-task" aria-label="选中员工的任务">
+      <strong>{{ selectedRow.shortName }}</strong>
+      <span>{{ statusLine(selectedRow) }}</span>
+      <router-link
+        v-if="selectedRow.taskId"
+        :to="{ name: 'employee-workbench', query: { employee: selectedRow.empId, task: selectedRow.taskId } }"
+        class="wfe-inspector-link"
+      >{{ selectedRow.tasks?.[0]?.title || '查看当前任务' }}</router-link>
+      <span v-else>当前可见任务中暂无该员工的记录</span>
+      <div class="wfe-inspector-task-actions">
+        <router-link :to="{ name: 'employee-workbench', query: { employee: selectedRow.empId } }" class="wfe-inspector-link">任务与结果</router-link>
+        <router-link :to="{ name: 'employee-workbench', query: { employee: selectedRow.empId, compose: '1' } }" class="wfe-inspector-link">派发任务</router-link>
+      </div>
+    </section>
 
     <div ref="listRef" class="wfe-inspector-list" role="list">
       <div
@@ -89,7 +105,7 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
     </div>
 
     <p v-if="!hideWorkspaceLink" class="wfe-inspector-foot">
-      <router-link :to="{ name: 'workflow-employee-space', hash: '#ews-workflow-monitor' }" class="wfe-inspector-link">
+      <router-link :to="{ name: 'workflow-employee-space', query: { employee: selectedEmpId || undefined }, hash: '#ews-workflow-monitor' }" class="wfe-inspector-link">
         在员工空间查看工位像素实况
       </router-link>
     </p>
@@ -122,6 +138,21 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
   line-height: 1.5;
   color: #6b7280;
 }
+
+.wfe-inspector-task {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #334155;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.wfe-inspector-task-actions { display: flex; flex-wrap: wrap; gap: 16px; }
 
 .wfe-inspector-list {
   display: flex;

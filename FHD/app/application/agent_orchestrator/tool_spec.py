@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
 
 # Re-export tool data for existing callers.
@@ -55,13 +57,46 @@ class ToolActionSpecV2:
     contract_samples: list[dict[str, Any]] = field(default_factory=list)
     version: str = "2"
     read_only: bool = False
+    read_only_if_unset: list[str] = field(default_factory=list)
     owner_mod_id: str = ""
+
+    @property
+    def schema_digest(self) -> str:
+        """Bind discovery and dispatch to the same host-owned action contract."""
+        contract = {
+            key: value
+            for key, value in self.to_dict().items()
+            if key not in {"description", "contract_samples", "test_fixtures"}
+        }
+        return hashlib.sha256(
+            json.dumps(
+                contract, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+        ).hexdigest()
+
+    def is_read_only_call(self, params: dict[str, Any]) -> bool:
+        """Resolve host-declared effects from the validated call, before dispatch."""
+        if self.read_only:
+            return True
+        return (
+            bool(self.read_only_if_unset)
+            and _validate_schema_payload(self.input_schema, params, subject="工具参数")[0]
+            and all(
+                params.get(key) is None or params.get(key) == "" for key in self.read_only_if_unset
+            )
+        )
 
     @property
     def receipt_permission(self) -> str:
         """Keep action-level audit identity without changing the real RBAC gate."""
-        if self.tool_id == "document_template" or (
-            self.tool_id == "materials" and self.permission == "material.edit"
+        if (
+            self.tool_id == "document_template"
+            or (self.tool_id == "materials" and self.permission == "material.edit")
+            or (
+                self.tool_id in {"shipment_records", "shipment_orders"}
+                and self.permission == "shipment.edit"
+                and self.action != "clear"
+            )
         ):
             return f"tool.{self.tool_id}.{self.action}"
         return self.permission
@@ -86,6 +121,7 @@ class ToolActionSpecV2:
             "idempotent": self.idempotent,
             "version": self.version,
             "read_only": self.read_only,
+            "read_only_if_unset": list(self.read_only_if_unset),
             "owner_mod_id": self.owner_mod_id,
             "required_params": self.required_params,
             "availability": self.availability,
@@ -161,7 +197,10 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "elt.read"
     if tool_id in {"template_preview", "document_template"}:
         return "elt.template.manage"
-    if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
+    if (
+        tool_id == "excel_analysis"
+        and action in {"read", "structure", "query", "aggregate", "statistics"}
+    ) or tool_id == "excel_join_compare":
         return "tool.excel_analysis.read"
     fixed = PERMISSION_OVERRIDES.get(tool_id)
     if fixed is not None:
@@ -212,6 +251,7 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
         input_schema = tool.get("inputSchema")
         if not isinstance(input_schema, dict):
             input_schema = {"type": "object", "properties": {}}
+        input_schema = deepcopy(input_schema)
         raw_required = input_schema.get("required")
         required = list(raw_required) if isinstance(raw_required, list) else []
         required_params = [str(item) for item in required]
@@ -253,20 +293,59 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
                     "output": {"success": True, "uploaded": ["sample.txt"]},
                 }
             ]
-        specs[("aiopen", action)] = ToolActionSpecV2(
+        registered = specs.get(("aiopen", action))
+        prior = registered or ToolActionSpecV2(
             tool_id="aiopen",
             action=action,
-            description=str(tool.get("description") or f"AIOPEN {action}"),
-            input_schema=deepcopy(input_schema),
-            output_schema=deepcopy(output_schema),
             risk=risk,
             permission=_special_permission("aiopen", action),
             cost_units=_cost_units("aiopen", action, risk),
             timeout_seconds=30,
             retry=dict(DEFAULT_RETRY),
             idempotent=idempotent,
+            # RoutePolicy.catalog only reads the local whitelist. Other low-risk
+            # AIOPEN actions still need their own explicit side-effect review.
+            read_only=action == "api_catalog",
             required_params=required_params,
             availability="aiopen",
+        )
+        description = str(tool.get("description") or f"AIOPEN {action}")
+        if (
+            registered is not None
+            and action.startswith("ui_")
+            and prior.risk == "high"
+            and not prior.read_only
+        ):
+            if "session_id" not in required_params:
+                required_params.append("session_id")
+            input_schema["required"] = list(required_params)
+            properties = input_schema.setdefault("properties", {})
+            properties["session_id"] = {
+                **properties.get("session_id", {}),
+                "type": "string",
+                "minLength": 1,
+                "pattern": r"[\s\S]*\S[\s\S]*",
+                "description": "必须显式指定已绑定的屏幕会话，后续 ui_verify 使用完全相同的 session_id。",
+            }
+            from app.application.aiopen.agent_bridge import screen_verification_schema
+
+            properties["verification"] = screen_verification_schema()
+            description += (
+                " Agent 写入要求：显式提供非空 session_id。动态动作必须提供同会话 verification"
+                "（aiopen.ui_verify 参数），与动作一并审批冻结，宿主执行后独立回读；点击、上传的预期结果"
+                "在执行前必须尚未成立。确定性多步计划也可通过 depends_on/next 无条件连接同会话后续"
+                " ui_verify，计划不得包含 branches。页面核验仅证明可见状态，不代表外部业务已完成。"
+            )
+            for sample in fixture:
+                sample["input"]["session_id"] = "screen-session-1"
+        # The registry owns authority/retries; wire definitions only supply the
+        # schema and guidance. Do not downgrade a high-risk registered UI write.
+        specs[("aiopen", action)] = replace(
+            prior,
+            description=description,
+            input_schema=deepcopy(input_schema),
+            output_schema=deepcopy(output_schema),
+            required_params=required_params,
             contract_samples=deepcopy(fixture),
         )
 
@@ -283,9 +362,13 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
     global _TOOL_SPECS_CACHE
     if _TOOL_SPECS_CACHE is not None:
         return _TOOL_SPECS_CACHE
+    from app.application.agent_orchestrator.tool_spec_data.input_schemas import (
+        workbook_input_schemas,
+    )
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
+    input_schemas = {**_SPECIAL_INPUT_SCHEMAS, **workbook_input_schemas()}
     specs: dict[tuple[str, str], ToolActionSpecV2] = {}
     for tool_id, tool_meta in registry.items():
         actions = tool_meta.get("actions") if isinstance(tool_meta, dict) else None
@@ -299,31 +382,66 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             required = action_meta.get("required_params")
             required_params = [str(x) for x in required] if isinstance(required, list) else []
             risk = _risk_value(action_meta.get("risk"))
-            input_schema = _SPECIAL_INPUT_SCHEMAS.get(
+            declared_input = action_meta.get("input_schema")
+            declared_output = action_meta.get("output_schema")
+            input_schema = input_schemas.get(
                 (str(tool_id), normalized_action),
-                _schema_from_required(required_params),
+                declared_input
+                if isinstance(declared_input, dict)
+                else _schema_from_required(required_params),
             )
             output_schema = _SPECIAL_OUTPUT_SCHEMAS.get(
                 (str(tool_id), normalized_action),
-                _DEFAULT_OUTPUT_SCHEMA,
+                declared_output if isinstance(declared_output, dict) else _DEFAULT_OUTPUT_SCHEMA,
             )
             contract_samples = _SPECIAL_TOOL_CONTRACTS.get(
                 (str(tool_id), normalized_action),
                 _default_fixture(str(tool_id), normalized_action, input_schema, output_schema),
             )
+            conditional_reads = action_meta.get("read_only_if_unset")
+            description = str(action_meta.get("description") or tool_description)
+            if str(tool_id) in {"excel_analysis", "excel_join_compare"}:
+                description += (
+                    " file_path 可直接使用当前账号的上传 ID/文件名或同原任务已核验产物 URI；"
+                    "宿主按账号、租户和原文件哈希读取。read 返回 has_more 时用 next_offset 继续读取。"
+                )
+            if (str(tool_id), normalized_action) == ("employee", "execute"):
+                from app.domain.workbook_write_contract import WORKBOOK_WRITER
+
+                description += (
+                    f" Excel 模板写入使用已安装受信员工 {WORKBOOK_WRITER}，"
+                    "input.template_path 为当前账号上传 ID/文件名或同原任务已核验产物 URI；"
+                    "input.plan 按下方精确 schema 提交，经过原审批、真实写出和独立 QC。"
+                    "公式按文本保存，不能宣称数值已重算。先用 employee.list 查看可用员工。"
+                )
             spec = ToolActionSpecV2(
                 tool_id=str(tool_id),
                 action=normalized_action,
-                description=tool_description,
+                description=description,
                 input_schema=deepcopy(input_schema),
                 output_schema=deepcopy(output_schema),
                 risk=risk,
-                permission=_special_permission(str(tool_id), normalized_action),
+                permission=str(
+                    action_meta.get("permission")
+                    or _special_permission(str(tool_id), normalized_action)
+                ),
                 cost_units=_cost_units(str(tool_id), normalized_action, risk),
                 timeout_seconds=int(action_meta.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                 retry=dict(action_meta.get("retry") or DEFAULT_RETRY),
                 idempotent=bool(action_meta.get("idempotent", False)),
-                read_only=action_meta.get("read_only") is True,
+                read_only=(
+                    action_meta.get("read_only") is True
+                    or (
+                        str(tool_id) == "dataset_rag"
+                        and normalized_action in DATASET_RAG_READ_ACTIONS
+                    )
+                ),
+                read_only_if_unset=(
+                    list(conditional_reads)
+                    if isinstance(conditional_reads, list)
+                    and all(isinstance(key, str) and key for key in conditional_reads)
+                    else []
+                ),
                 required_params=required_params,
                 availability=str(
                     action_meta.get("availability") or tool_meta.get("availability") or "shared"
@@ -603,9 +721,9 @@ def _validate_schema_payload(
                         subject=f"{subject}.{key}[{index}]",
                         allow_references_from=allow_references_from,
                         allow_missing_fields=allow_missing_fields,
-                        path_prefix=f"{path_prefix}.{key}[{index}]"
-                        if path_prefix
-                        else f"{key}[{index}]",
+                        path_prefix=(
+                            f"{path_prefix}.{key}[{index}]" if path_prefix else f"{key}[{index}]"
+                        ),
                     )
                     if not nested_ok:
                         return False, nested_message
@@ -650,8 +768,12 @@ def _validate_input_schema_with_references(
     allow_references_from: set[str] | frozenset[str] | None,
     allow_missing_fields: set[str] | frozenset[str] | None = None,
 ) -> tuple[bool, str]:
-    from app.application.agent_orchestrator.param_references import unresolved_placeholders
+    from app.application.agent_orchestrator.param_references import (
+        host_reference_params,
+        unresolved_placeholders,
+    )
 
+    params = host_reference_params(spec.tool_id, spec.action, params)[0]
     has_references = bool(unresolved_placeholders(params))
     if has_references and allow_references_from is None:
         return False, "参数含有尚未解析的前序结果引用"

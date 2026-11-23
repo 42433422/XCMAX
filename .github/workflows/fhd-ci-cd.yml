@@ -2,7 +2,7 @@
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: CI/CD Pipeline
 run-name: >-
-  CI/CD ${{ github.event_name == 'workflow_dispatch' && inputs.release_sha || github.sha }}
+  CI/CD ${{ github.event_name == 'workflow_dispatch' && inputs.release_sha || github.sha }}${{ inputs.delivery_request_id && format(' [delivery:{0}]', inputs.delivery_request_id) || '' }}
 
 on:
   push:
@@ -36,11 +36,6 @@ on:
         required: false
         default: false
         type: boolean
-      dispatch_evolution:
-        description: "Run the independent Evolution workflow after CVM upload"
-        required: false
-        default: true
-        type: boolean
       push_image_tar:
         description: "Also push the optional 600MB+ offline image archive"
         required: false
@@ -48,6 +43,11 @@ on:
         type: boolean
       release_sha:
         description: "Exact 40-character SHA to build/deploy; required when push_to_cvm=true"
+        required: false
+        default: ""
+        type: string
+      delivery_request_id:
+        description: "Original post-merge CI request identity; retained across observation retries"
         required: false
         default: ""
         type: string
@@ -85,6 +85,49 @@ defaults:
     working-directory: FHD
 
 jobs:
+  browser-agent-integration:
+    name: Browser Agent real MCP integration
+    # Use the existing sandbox-capable browser acceptance host; never disable Chromium's sandbox.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      XCAGI_BROWSER_MCP_LIVE: "1"
+      XCAGI_SKIP_INTENT_LLM: "1"
+      PYTHONPATH: ${{ github.workspace }}/FHD
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+      - name: Install original backend and pinned browser runtime
+        run: |
+          uv sync --frozen --extra server-api --extra dev
+          npm --prefix scripts/autonomy/runtime_tools/browser_mcp_deps ci --ignore-scripts
+          cd scripts/autonomy/runtime_tools/browser_mcp_deps
+          npx --no-install playwright install --with-deps chromium
+      - name: Verify real browser continuity, isolation and failed readback
+        run: |
+          uv run --no-sync pytest \
+            tests/test_application/test_browser_mcp_live.py \
+            tests/test_application/test_browser_tool_process.py \
+            tests/test_application/test_browser_agent_loop.py \
+            tests/test_application/test_browser_goal_contract.py \
+            tests/test_application/test_mcp_browser_contract.py \
+            tests/test_infrastructure/test_mcp_persistent_sessions.py \
+            -q -o addopts= --junitxml=browser-agent-results.xml
+      - name: Retain browser acceptance results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: browser-agent-integration
+          path: FHD/browser-agent-results.xml
+          if-no-files-found: warn
   agent-postgres-transactions:
     name: Agent PostgreSQL transactions
     runs-on: ubuntu-latest
@@ -115,21 +158,61 @@ jobs:
       - name: Install test dependencies
         working-directory: FHD
         run: uv sync --frozen --extra server-api --extra dev
-      - name: Verify PostgreSQL approval, resume, and cross-module execution transactions
+      - name: Verify joint admission, authorization, recovery, and PostgreSQL transactions
         working-directory: FHD
         run: |
           test -n "$XCAGI_TEST_AGENT_POSTGRES_URL"
-          uv run --no-sync pytest tests/test_application/test_native_task_recovery.py tests/test_application/test_approval_session_renewal.py tests/test_application/test_cross_module_execution_transactions.py tests/test_application/test_approval_persistence.py::test_guarded_delete_serializes_concurrent_writes tests/test_application/test_approval_persistence.py::test_only_one_concurrent_reviewer_can_claim_approval -q -o addopts= --junitxml=agent-postgres-results.xml
+          uv run --no-sync pytest \
+            tests/test_application/test_agent_task_admission.py \
+            tests/test_application/test_task_execution_repository.py \
+            tests/test_application/test_task_dispatcher.py \
+            tests/test_application/test_agent_loop.py \
+            tests/application/test_employee_runtime_write_approval.py \
+            tests/test_application/test_native_task_recovery.py \
+            tests/test_application/test_approval_session_renewal.py \
+            tests/test_application/test_cross_module_execution_transactions.py \
+            tests/test_application/test_approval_persistence.py::test_guarded_delete_serializes_concurrent_writes \
+            tests/test_application/test_approval_persistence.py::test_only_one_concurrent_reviewer_can_claim_approval \
+            tests/test_application/test_super_employee_dispatch_recovery.py \
+            tests/test_routes/test_admin_employee_admission.py \
+            tests/test_routes/test_mobile_super_employee_receipts.py \
+            tests/test_services/test_mobile_relay_request_identity.py \
+            -q -o addopts= --junitxml=agent-postgres-results.xml
+      - name: Verify backup snapshot counts on the disposable PostgreSQL service
+        working-directory: FHD
+        env:
+          FHD_TEST_PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          test -n "$FHD_TEST_PG_CONTAINER"
+          uv run --no-sync pytest tests/release_gate/test_postgres_backup_snapshot.py -q -o addopts= --junitxml=postgres-backup-snapshot-results.xml
+          uv run --no-sync python - <<'PY'
+          import xml.etree.ElementTree as ET
+          report = ET.parse("postgres-backup-snapshot-results.xml")
+          assert len(report.findall(".//testcase")) >= 5 and not report.findall(".//skipped"), "native backup scenarios must execute"
+          PY
       - name: Retain transaction test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: agent-postgres-transactions
-          path: FHD/agent-postgres-results.xml
+          path: |
+            FHD/agent-postgres-results.xml
+            FHD/postgres-backup-snapshot-results.xml
           if-no-files-found: warn
-  # Guard against temporary scripts in business directories
+  # Share one runner checkout for the cheap guard, change classification, and shard plan.
   guard-temp-scripts:
     runs-on: ubuntu-latest
+    outputs:
+      valid: ${{ steps.paths.outputs.valid }}
+      source_sha: ${{ steps.paths.outputs.source_sha }}
+      backend: ${{ steps.paths.outputs.backend }}
+      backend_skip: ${{ steps.paths.outputs.backend_skip }}
+      frontend: ${{ steps.paths.outputs.frontend }}
+      frontend_skip: ${{ steps.paths.outputs.frontend_skip }}
+      macos: ${{ steps.paths.outputs.macos }}
+      windows: ${{ steps.paths.outputs.windows }}
+      backend_matrix: ${{ steps.plan.outputs.matrix }}
+      backend_total: ${{ steps.plan.outputs.total }}
     steps:
       - name: Validate explicit CVM release inputs
         if: github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true
@@ -190,29 +273,9 @@ jobs:
           printf '%s\n' "${ADDED_FILES}" | python3 scripts/ci/guard_temp_scripts.py --added-from-stdin
           echo "✅ Temporary script location guard passed."
 
-  classify:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
-    outputs:
-      valid: ${{ steps.paths.outputs.valid }}
-      source_sha: ${{ steps.paths.outputs.source_sha }}
-      backend: ${{ steps.paths.outputs.backend }}
-      backend_skip: ${{ steps.paths.outputs.backend_skip }}
-      frontend: ${{ steps.paths.outputs.frontend }}
-      frontend_skip: ${{ steps.paths.outputs.frontend_skip }}
-      macos: ${{ steps.paths.outputs.macos }}
-      windows: ${{ steps.paths.outputs.windows }}
-      backend_matrix: ${{ steps.plan.outputs.matrix }}
-      backend_total: ${{ steps.plan.outputs.total }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.release_sha || github.sha }}
-          fetch-depth: 1
       - name: Classify all changed paths and bind the tested source
         id: paths
+        working-directory: .
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -226,6 +289,7 @@ jobs:
             --source-sha "$EXPECTED_SOURCE_SHA" --report FHD/classification.json
       - name: Plan backend partitions
         id: plan
+        working-directory: .
         env:
           SHARD_TOTAL: ${{ inputs.backend_shards || '8' }}
         run: python FHD/scripts/ci/backend_shards.py plan --total "$SHARD_TOTAL"
@@ -238,10 +302,10 @@ jobs:
 
   backend-quality:
     # SSOT runs alongside tests; aggregate gates still require every guard to succeed.
-    needs: [guard-temp-scripts, classify]
+    needs: [guard-temp-scripts]
     runs-on: ubuntu-latest
     outputs:
-      skip: ${{ needs.classify.outputs.backend_skip }}
+      skip: ${{ needs.guard-temp-scripts.outputs.backend_skip }}
     services:
       redis:
         image: redis:7-alpine
@@ -261,16 +325,16 @@ jobs:
           fetch-depth: 1
 
       - name: Skip notice (no backend-relevant changes)
-        if: needs.classify.outputs.backend_skip == 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip == 'true'
         run: echo "No backend-relevant path changes; backend-test satisfied without running the suite."
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Set up cached uv installer
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -282,17 +346,17 @@ jobs:
             FHD/packages/**/pyproject.toml
 
       - name: Install dependencies
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: |
           set -euo pipefail
           pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
           [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin" 'openai-codex==0.171.0'
           uv pip check --system --python "$(command -v python)"
 
       - name: Set up the real private Mod frontend compiler
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -300,82 +364,82 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install runtime Mod compiler dependencies
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         working-directory: FHD/frontend
         run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
 
       - name: Verify requirements lock is in sync
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: |
           python scripts/dev/check_requirements_lock.py
 
       - name: Validate coverage SSOT metadata
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: python scripts/ci/check_coverage_ssot.py
 
       - name: Run Ruff lint
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: ruff check app/ tests/
 
       - name: Run Ruff format check
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: ruff format --check app/ tests/
 
       - name: Run mypy type checking
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: mypy app/ --no-error-summary
 
       - name: Type/SQL debt ratchet
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: |
           python scripts/dev/count_type_debt.py --max-type-ignore 0 --max-mypy-disable 0 --max-noqa 222 --max-ts-nocheck 0 --max-any 99999
           python scripts/dev/count_raw_sql.py
 
       - name: "[观察期] Schema drift check（模型 vs 迁移链）"
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         continue-on-error: true
         run: python scripts/dev/check_schema_drift.py
 
       - name: Big files ratchet (巨文件只减不增)
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: python scripts/dev/count_big_files.py
 
       - name: Route integrity tests
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python -m pytest tests/test_routes/test_route_registry.py tests/test_routes/test_registry_unit.py tests/test_routes/test_route_golden.py -x -q
 
       - name: Intent benchmark ratchet (golden set 只升不降)
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/intent_benchmark.py --check
 
       - name: Coverage floor guard (下调必须有 ADR)
-        if: github.event_name == 'pull_request' && needs.classify.outputs.backend_skip != 'true'
+        if: github.event_name == 'pull_request' && needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: |
           # PR checkout 是 merge commit，工作区==HEAD，必须对比目标分支才能识别下调。
           git fetch --depth=1 origin "${{ github.base_ref }}"
           python scripts/dev/guard_coverage_floor.py --base FETCH_HEAD
 
       - name: coverage_ramp stub quota (只减不增)
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: python scripts/dev/count_coverage_ramp_stubs.py --check
 
       - name: test-bloat gate (P1-2 测试膨胀门禁)
-        if: needs.classify.outputs.backend_skip != 'true'
+        if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: python scripts/dev/test_bloat_report.py --check
 
 
   backend-test-shard:
-    needs: [guard-temp-scripts, classify]
-    if: needs.classify.outputs.backend == 'true'
+    needs: [guard-temp-scripts]
+    if: needs.guard-temp-scripts.outputs.backend == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 8
-      matrix: ${{ fromJSON(needs.classify.outputs.backend_matrix) }}
+      matrix: ${{ fromJSON(needs.guard-temp-scripts.outputs.backend_matrix) }}
     services:
       redis:
         image: redis:7-alpine
@@ -383,7 +447,7 @@ jobs:
         options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       BACKEND_SHARD_INDEX: ${{ matrix.shard }}
-      BACKEND_SHARD_TOTAL: ${{ needs.classify.outputs.backend_total }}
+      BACKEND_SHARD_TOTAL: ${{ needs.guard-temp-scripts.outputs.backend_total }}
       BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
       BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
       XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
@@ -466,13 +530,13 @@ jobs:
           retention-days: 7
 
   backend-test:
-    needs: [guard-temp-scripts, ssot-drift-gate, classify, backend-quality, backend-test-shard]
+    needs: [guard-temp-scripts, ssot-drift-gate, backend-quality, backend-test-shard, agent-postgres-transactions]
     if: always()
     runs-on: ubuntu-latest
     outputs:
-      skip: ${{ needs.classify.outputs.backend_skip }}
+      skip: ${{ needs.guard-temp-scripts.outputs.backend_skip }}
     env:
-      BACKEND_SHARD_TOTAL: ${{ needs.classify.outputs.backend_total }}
+      BACKEND_SHARD_TOTAL: ${{ needs.guard-temp-scripts.outputs.backend_total }}
       BACKEND_TIMINGS_FILE: metrics/backend_test_timings.json
       BACKEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
@@ -481,23 +545,23 @@ jobs:
         env:
           GUARD: ${{ needs.guard-temp-scripts.result }}
           SSOT: ${{ needs.ssot-drift-gate.result }}
-          CLASSIFY: ${{ needs.classify.result }}
-          VALID: ${{ needs.classify.outputs.valid }}
-          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          VALID: ${{ needs.guard-temp-scripts.outputs.valid }}
+          SOURCE_SHA: ${{ needs.guard-temp-scripts.outputs.source_sha }}
           EXPECTED_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
           QUALITY: ${{ needs.backend-quality.result }}
           SHARDS: ${{ needs.backend-test-shard.result }}
-          SHOULD_RUN: ${{ needs.classify.outputs.backend }}
-          SKIP: ${{ needs.classify.outputs.backend_skip }}
+          AGENT_TRANSACTIONS: ${{ needs.agent-postgres-transactions.result }}
+          SHOULD_RUN: ${{ needs.guard-temp-scripts.outputs.backend }}
+          SKIP: ${{ needs.guard-temp-scripts.outputs.backend_skip }}
         run: |
           set -euo pipefail
           test "$GUARD" = success
           test "$SSOT" = success
-          test "$CLASSIFY" = success
           test "$VALID" = true
           test -n "$SOURCE_SHA"
           test "$SOURCE_SHA" = "$EXPECTED_SOURCE_SHA"
           test "$QUALITY" = success
+          test "$AGENT_TRANSACTIONS" = success
           case "$SHOULD_RUN:$SKIP" in
             false:true) test "$SHARDS" = skipped ;;
             true:false) test "$SHARDS" = success ;;
@@ -520,7 +584,7 @@ jobs:
           fi
           python3 FHD/scripts/dev/check_business_contract_evidence.py floor --floor "${floor}"
       - name: Record business contract as not applicable when backend tests are not required
-        if: needs.classify.outputs.backend != 'true'
+        if: needs.guard-temp-scripts.outputs.backend != 'true'
         run: |
           test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
           python3 scripts/dev/check_business_contract_evidence.py ci-gate \
@@ -530,17 +594,17 @@ jobs:
             --backend skipped \
             --evidence-out business-contract-evidence.json
       - uses: actions/setup-python@v7
-        if: needs.classify.outputs.backend == 'true'
+        if: needs.guard-temp-scripts.outputs.backend == 'true'
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - uses: actions/download-artifact@v8
-        if: needs.classify.outputs.backend == 'true'
+        if: needs.guard-temp-scripts.outputs.backend == 'true'
         with:
           pattern: backend-shard-${{ github.run_attempt }}-*
           path: FHD/shards
       - name: Verify complete same-source evidence before installing report tools
         id: verify
-        if: needs.classify.outputs.backend == 'true'
+        if: needs.guard-temp-scripts.outputs.backend == 'true'
         run: |
           test "$(git rev-parse HEAD)" = "$BACKEND_SOURCE_SHA"
           python scripts/ci/backend_shards.py verify shards \
@@ -553,19 +617,19 @@ jobs:
             --backend ran \
             --evidence-out business-contract-evidence.json
       - name: Install the verified coverage version
-        if: needs.classify.outputs.backend == 'true'
+        if: needs.guard-temp-scripts.outputs.backend == 'true'
         env:
           COVERAGE_VERSION: ${{ steps.verify.outputs.coverage_version }}
         run: python -m pip install "coverage==$COVERAGE_VERSION"
       - name: Combine coverage and enforce full and behavior ratchets
-        if: needs.classify.outputs.backend == 'true'
+        if: needs.guard-temp-scripts.outputs.backend == 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: |
           python scripts/ci/backend_shard_aggregate.py shards \
             --artifact-prefix "backend-shard-${GITHUB_RUN_ATTEMPT}-"
       - uses: actions/upload-artifact@v4
-        if: always() && needs.classify.outputs.backend == 'true'
+        if: always() && needs.guard-temp-scripts.outputs.backend == 'true'
         with:
           name: backend-combined-${{ github.run_attempt }}
           path: |
@@ -579,7 +643,7 @@ jobs:
           retention-days: 7
 
   frontend-quality:
-    needs: [guard-temp-scripts, classify]
+    needs: [guard-temp-scripts]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -587,35 +651,35 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 1
       - name: Skip notice (no frontend-relevant changes)
-        if: needs.classify.outputs.frontend_skip == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend_skip == 'true'
         run: echo "No frontend-relevant path changes; classification is retained by the aggregate gate."
       - name: Set up Node.js
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: FHD/frontend/package-lock.json
       - name: Install dependencies
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
       - name: Run ESLint including test assertion guards
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: npx eslint src/ "tests/**/*.test.{js,ts}"
       - name: Frontend coverage stub ratchet
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         run: python scripts/dev/count_frontend_coverage_stubs.py --check
       - name: Verify native shard and coverage contracts
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: node --test ../tests/test_ci/frontend_shards.test.mjs
       - name: Frontend ts-any ratchet gate
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         run: python ../scripts/dev/count_ts_any.py --check
       - name: Run vue-tsc
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: |
           set +e
@@ -625,8 +689,8 @@ jobs:
           fi
 
   frontend-test-shard:
-    needs: [guard-temp-scripts, classify]
-    if: needs.classify.outputs.frontend == 'true'
+    needs: [guard-temp-scripts]
+    if: needs.guard-temp-scripts.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -664,11 +728,11 @@ jobs:
           retention-days: 7
 
   frontend-test:
-    needs: [guard-temp-scripts, ssot-drift-gate, classify, frontend-quality, frontend-test-shard]
+    needs: [guard-temp-scripts, ssot-drift-gate, frontend-quality, frontend-test-shard]
     if: always()
     runs-on: ubuntu-latest
     outputs:
-      skip: ${{ needs.classify.outputs.frontend_skip }}
+      skip: ${{ needs.guard-temp-scripts.outputs.frontend_skip }}
     env:
       FRONTEND_SHARD_TOTAL: "4"
       FRONTEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
@@ -678,19 +742,17 @@ jobs:
         env:
           GUARD: ${{ needs.guard-temp-scripts.result }}
           SSOT: ${{ needs.ssot-drift-gate.result }}
-          CLASSIFY: ${{ needs.classify.result }}
-          VALID: ${{ needs.classify.outputs.valid }}
-          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          VALID: ${{ needs.guard-temp-scripts.outputs.valid }}
+          SOURCE_SHA: ${{ needs.guard-temp-scripts.outputs.source_sha }}
           EXPECTED_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
           QUALITY: ${{ needs.frontend-quality.result }}
           SHARDS: ${{ needs.frontend-test-shard.result }}
-          SHOULD_RUN: ${{ needs.classify.outputs.frontend }}
-          SKIP: ${{ needs.classify.outputs.frontend_skip }}
+          SHOULD_RUN: ${{ needs.guard-temp-scripts.outputs.frontend }}
+          SKIP: ${{ needs.guard-temp-scripts.outputs.frontend_skip }}
         run: |
           set -euo pipefail
           test "$GUARD" = success
           test "$SSOT" = success
-          test "$CLASSIFY" = success
           test "$VALID" = true
           test -n "$SOURCE_SHA"
           test "$SOURCE_SHA" = "$EXPECTED_SOURCE_SHA"
@@ -705,30 +767,30 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 1
       - uses: actions/setup-node@v7
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: FHD/frontend/package-lock.json
       - name: Install dependencies for native Vitest report merging
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: bash ../scripts/ci/npm_ci_with_network_retry.sh --no-audit --no-fund
       - uses: actions/download-artifact@v8
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         with:
           pattern: frontend-shard-${{ github.run_attempt }}-*
           path: FHD/frontend/shards
       - name: Verify all shards and merge native Vitest coverage
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: node ../scripts/ci/frontend_shards.mjs merge shards
       - name: Frontend coverage ratchet gate
-        if: needs.classify.outputs.frontend == 'true'
+        if: needs.guard-temp-scripts.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
       - name: Upload merged JUnit report
-        if: always() && needs.classify.outputs.frontend == 'true'
+        if: always() && needs.guard-temp-scripts.outputs.frontend == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit-${{ github.run_id }}
@@ -736,7 +798,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Upload frontend coverage and partition summary
-        if: always() && needs.classify.outputs.frontend == 'true'
+        if: always() && needs.guard-temp-scripts.outputs.frontend == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage-${{ github.run_attempt }}
@@ -752,7 +814,7 @@ jobs:
   vitest:
     name: Vitest (173 文件 · jsdom)
     needs: frontend-test
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require the verified frontend result
@@ -763,7 +825,7 @@ jobs:
 
   frontend-smoke:
     needs: frontend-test
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require the verified frontend result
@@ -779,8 +841,8 @@ jobs:
 
   # Run mock contracts once here; e2e.yml retains the real API + strict-build path.
   frontend-e2e:
-    needs: [guard-temp-scripts, classify]
-    if: needs.classify.outputs.backend == 'true' || needs.classify.outputs.frontend == 'true'
+    needs: [guard-temp-scripts]
+    if: needs.guard-temp-scripts.outputs.backend == 'true' || needs.guard-temp-scripts.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -978,8 +1040,8 @@ jobs:
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
-    needs: [classify, pack-verify]
-    if: needs.classify.outputs.backend == 'true'
+    needs: [guard-temp-scripts, pack-verify]
+    if: needs.guard-temp-scripts.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1051,8 +1113,8 @@ jobs:
 
   # FHD 服务器 API 发布包（tarball + manifest；不含生产 SSH 部署）
   pack-verify:
-    needs: [guard-temp-scripts, classify]
-    if: needs.classify.outputs.backend == 'true' || needs.classify.outputs.frontend == 'true'
+    needs: [guard-temp-scripts]
+    if: needs.guard-temp-scripts.outputs.backend == 'true' || needs.guard-temp-scripts.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1097,7 +1159,7 @@ jobs:
 
   docker-build-fhd-api-pr:
     name: Build candidate FHD API image
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, security-scan, container-scan, pack-verify, arch-fitness]
     if: >-
       github.event_name != 'schedule' &&
       !(github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v')) &&
@@ -1136,7 +1198,7 @@ jobs:
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
     name: Publish FHD API image
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, security-scan, container-scan, pack-verify, arch-fitness]
     if: >-
       github.event_name != 'schedule' && github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v')) &&
@@ -1303,7 +1365,7 @@ jobs:
     # Keep the existing branch-protection context tied to actual work on PRs.
     name: docker-build-fhd-api
     needs: [backend-test, docker-build-fhd-api-pr, docker-build-fhd-api]
-    if: always() && github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true'
+    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -1439,41 +1501,13 @@ jobs:
             echo "::warning::CVM push failed with status ${status}; keeping main CI green. Use workflow_dispatch with push_to_cvm=true for a strict retry."
           fi
 
-  # Bot-token workflow_dispatch does not reliably emit a downstream workflow_run
-  # event. Dispatch Evolution with the repository PAT only after the exact CVM
-  # release and DR receipt have succeeded.
-  dispatch-evolution-after-cvm:
-    needs: [cvm-push-release]
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main' &&
-      inputs.push_to_cvm == true &&
-      inputs.dispatch_evolution == true &&
-      needs.cvm-push-release.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: Dispatch Evolution Orchestrator after exact production receipt
-        working-directory: .
-        env:
-          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
-        run: |
-          set -euo pipefail
-          test -n "${GH_TOKEN:-}"
-          gh workflow run fhd-evolution-orchestrator.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref main \
-            -f force_run=false
-
   # Docker Build & Push（全仓镜像）已于 2026-07-20 退役：推 <repo>:sha-xxx 无人引用，
   # 实际制品由 docker-build-fhd-api（GHCR fhd-api 镜像）与 pack-verify（tarball）承担。
   # 2026-08-01 移除残留 job 定义（无下游 needs，branch protection 未引用）。
 
   release-verify:
     name: release-verify
-    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, pack-verify, arch-fitness]
     if: needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -1536,9 +1570,9 @@ jobs:
 
   desktop-build-smoke:
     name: desktop-build-smoke
-    needs: [frontend-test, classify]
+    needs: [frontend-test, guard-temp-scripts]
     # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
-    if: needs.classify.outputs.macos != 'false'
+    if: needs.guard-temp-scripts.outputs.macos != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1557,9 +1591,9 @@ jobs:
 
   desktop-test:
     name: desktop-test
-    needs: [frontend-test, classify]
+    needs: [frontend-test, guard-temp-scripts]
     # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
-    if: needs.classify.outputs.macos != 'false'
+    if: needs.guard-temp-scripts.outputs.macos != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1579,9 +1613,9 @@ jobs:
 
   desktop-windows-release-script-smoke:
     name: desktop-windows-release-script-smoke
-    needs: [guard-temp-scripts, classify]
+    needs: [guard-temp-scripts]
     # Windows 发布脚本及原生文件边界相关改动运行；分类器统一维护触发范围。
-    if: needs.classify.outputs.windows != 'false'
+    if: needs.guard-temp-scripts.outputs.windows != 'false'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

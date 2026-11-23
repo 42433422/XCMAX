@@ -105,6 +105,7 @@ class ShipmentDocumentWorkflowMixin:
         status_filter: str | None = None,
         layout_owner_user_id: int | None = None,
         layout_tenant_id: int | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         导出出货记录为 Excel 文件。
@@ -260,7 +261,6 @@ class ShipmentDocumentWorkflowMixin:
                 for sheet in list(wb.sheetnames):
                     if sheet != used_sheet and len(wb.sheetnames) > 1:
                         wb.remove(wb[sheet])
-                wb.save(file_path)
             else:
                 wb = Workbook()
                 ws = wb.active
@@ -331,15 +331,34 @@ class ShipmentDocumentWorkflowMixin:
                         "",
                     ]
                 )
-                wb.save(file_path)
+            artifacts = []
+            context = runtime_context or {}
+            if context.get("run_id"):
+                from io import BytesIO
 
-            return {
+                from app.application.agent_orchestrator.artifact_files import (
+                    artifact_path,
+                    store_scoped_run_file,
+                )
+
+                content = BytesIO()
+                wb.save(content)
+                artifact = store_scoped_run_file(content.getvalue(), name=filename, context=context)
+                artifacts.append(artifact)
+                file_path = str(artifact_path(context["run_id"], artifact["artifact_id"]))
+            else:
+                wb.save(file_path)
+            wb.close()
+            result: dict[str, Any] = {
                 "success": True,
                 "file_path": str(file_path),
                 "filename": filename,
                 "count": len(records),
                 "template_used": template_path or "",
             }
+            if artifacts:
+                result["artifacts"] = artifacts
+            return result
         except RECOVERABLE_ERRORS:
             logger.exception("导出出货记录失败")
             return {

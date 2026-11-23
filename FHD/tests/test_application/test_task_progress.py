@@ -104,6 +104,71 @@ def test_task_from_run_persists_progress_for_lightweight_stream_snapshots() -> N
     assert task.to_dict()["progress"]["detail"] == "步骤 two"
 
 
+def test_task_snapshot_projects_explicit_employee_identity_without_runtime_credentials() -> None:
+    run = AgentRun(
+        user_id="owner",
+        message="打印标签",
+        status="running",
+        steps=[
+            AgentStep(
+                node_id="print",
+                tool_id="employee",
+                action="execute",
+                params={"employee_id": "label-print"},
+            )
+        ],
+    )
+    run.metadata["runtime_context"] = {"_actor_authorization": {"private": "secret"}}
+    snapshot = task_from_run(run).to_dict()
+    assert snapshot["metadata"]["employee_id"] == "label-print"
+    assert "_actor_authorization" not in snapshot["metadata"]
+    run.steps = []
+    run.metadata["runtime_context"]["employee_id"] = "receiver"
+    run.metadata["runtime_context"]["parent_task_id"] = "original-task"
+    run.metadata["task_context"] = {"parent_run_id": "parent-run"}
+    snapshot = task_from_run(run).to_dict()
+    assert snapshot["metadata"]["employee_id"] == "receiver"
+    assert snapshot["metadata"]["parent_run_id"] == "parent-run"
+    assert snapshot["metadata"]["parent_task_id"] == "original-task"
+    run.metadata.clear()
+    assert task_from_run(run).metadata["employee_id"] == ""
+
+
+def test_employee_snapshot_preserves_serial_and_parallel_assignment_status() -> None:
+    run = AgentRun(
+        user_id="owner",
+        message="两个员工协作",
+        status="running",
+        steps=[
+            AgentStep(
+                node_id="one",
+                tool_id="employee",
+                action="execute",
+                status="completed",
+                params={"employee_id": "first"},
+            ),
+            AgentStep(
+                node_id="two",
+                tool_id="employee",
+                action="execute",
+                status="running",
+                params={"employee_id": "second"},
+            ),
+        ],
+    )
+    metadata = task_from_run(run).metadata
+    assert metadata["employee_id"] == "second"
+    assert [(row["employee_id"], row["status"]) for row in metadata["employee_assignments"]] == [
+        ("first", "completed"),
+        ("second", "running"),
+    ]
+    run.steps[0].status = "running"
+    assert task_from_run(run).metadata["employee_id"] == ""
+    run.status = "completed"
+    run.final_output = {"outcome": "unknown", "reconciliation_required": True}
+    assert task_from_run(run).metadata["reconciliation_required"] is True
+
+
 @pytest.fixture
 def elt_progress_engine():
     from app.db.db_base import Base

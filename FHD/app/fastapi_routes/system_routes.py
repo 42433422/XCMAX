@@ -23,7 +23,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from app.infrastructure.auth.dependencies import require_admin_user, require_identified_user
+from app.infrastructure.auth.dependencies import get_logged_in_user, require_admin_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ def _is_platform_admin(user: Any) -> bool:
     return (
         str(getattr(user, "tier", "") or "").strip().lower() == "admin"
         and str(getattr(user, "role", "") or "").strip().lower() == "admin"
+        and getattr(user, "tenant_id", None) is None
     )
 
 
@@ -256,7 +257,7 @@ async def get_industry_presets():
 
 @router.get("/workflow-employee-catalog")
 async def get_workflow_employee_catalog(
-    user: Any = Depends(require_identified_user),
+    user: Any = Depends(get_logged_in_user),
 ):
     """工作流员工目录（配置 + 扫描 mods 目录）。
 
@@ -311,7 +312,7 @@ async def get_employee_registry_rules():
 
 @router.get("/duty-roster")
 async def get_duty_roster(
-    user: Any = Depends(require_identified_user),
+    user: Any = Depends(get_logged_in_user),
 ):
     """编制矩阵 SSOT 派生（替代前端硬编码 yuangonDutyRoster.ts）。
 

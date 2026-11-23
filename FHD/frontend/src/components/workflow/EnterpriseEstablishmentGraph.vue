@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, watch } from 'vue'
+import { computed, nextTick, shallowRef, watch } from 'vue'
 import { VueFlow, useVueFlow, type Edge, type Node } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -32,8 +32,25 @@ const INNER_COLS = 2
 const GROUP_GAP_X = 36
 const GROUP_GAP_Y = 32
 
-const flowGraph = computed(() => buildGraph())
-const flowNodes = computed(() => flowGraph.value.nodes)
+const flowGraph = shallowRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] })
+const flowNodes = computed(() => {
+  const rows = new Map(props.desks.map(row => [row.empId, row]))
+  return flowGraph.value.nodes.map(node => {
+    const row = rows.get(String(node.data?.empId || ''))
+    if (!row) return node
+    const busy = props.isBusy(row)
+    const selected = props.selectedEmpId === row.empId
+    const color = String(node.data?.zoneColor || '')
+    return { ...node, data: { ...node.data, enabled: row.enabled, busy, selected,
+      taskState: row.snapshot?.officeState, stale: row.snapshot?.stale,
+      statusLine: row.snapshot?.stage || '等待任务状态同步', taskTitle: row.snapshot?.hintLine,
+    }, style: { ...node.style as Record<string, string>,
+      border: selected ? `2px solid ${color}` : '1px solid rgba(148, 163, 184, 0.55)',
+      background: row.enabled ? (busy ? 'linear-gradient(180deg, #eff6ff 0%, #fff 100%)' : '#fff') : '#f8fafc',
+      boxShadow: selected ? `0 0 0 2px ${color}33` : '0 1px 2px rgba(15,23,42,0.06)',
+    } }
+  })
+})
 const flowEdges = computed(() => flowGraph.value.edges)
 
 const { fitView } = useVueFlow({ id: 'enterprise-establishment-graph' })
@@ -57,7 +74,7 @@ function buildGraph(): { nodes: Node[]; edges: Edge[] } {
     slotsByZone.set(z.id, [])
   }
   for (const row of props.desks) {
-    const zid = resolveEnterpriseOrgLayer(row.empId, row.shortName, row.panelTitle)
+    const zid = resolveEnterpriseOrgLayer(row.empId, row.shortName, row.panelTitle, row.enterpriseLayer)
     const list = slotsByZone.get(zid) ?? slotsByZone.get('management')!
     list.push({ empId: row.empId, row })
   }
@@ -106,8 +123,6 @@ function buildGraph(): { nodes: Node[]; edges: Edge[] } {
     }
 
     for (const slot of slots) {
-      const busy = props.isBusy(slot.row)
-      const enabled = slot.row.enabled
       rawNodes.push({
         id: zoneNodeId(zone.id, slot.empId),
         type: 'default',
@@ -117,9 +132,6 @@ function buildGraph(): { nodes: Node[]; edges: Edge[] } {
         position: { x: 0, y: 0 },
         data: {
           empId: slot.empId,
-          enabled,
-          busy,
-          selected: props.selectedEmpId === slot.empId,
           zoneColor: color,
         },
         style: {
@@ -127,11 +139,8 @@ function buildGraph(): { nodes: Node[]; edges: Edge[] } {
           minWidth: `${NODE_W}px`,
           maxWidth: `${NODE_W}px`,
           borderRadius: '8px',
-          border: props.selectedEmpId === slot.empId ? `2px solid ${color}` : '1px solid rgba(148, 163, 184, 0.55)',
-          background: enabled ? (busy ? 'linear-gradient(180deg, #eff6ff 0%, #fff 100%)' : '#fff') : '#f8fafc',
           padding: '8px 10px',
           fontSize: '0.82rem',
-          boxShadow: props.selectedEmpId === slot.empId ? `0 0 0 2px ${color}33` : '0 1px 2px rgba(15,23,42,0.06)',
         },
       })
     }
@@ -211,16 +220,10 @@ async function scheduleFit() {
 }
 
 watch(
-  () => props.desks.map((d) => `${d.empId}:${d.enabled}:${d.snapshot?.visuallyBusy}`).join('|'),
-  () => scheduleFit(),
+  () => props.desks.map(d => `${d.empId}:${d.shortName}:${resolveEnterpriseOrgLayer(d.empId, d.shortName, d.panelTitle, d.enterpriseLayer)}`).join('|'),
+  () => { flowGraph.value = buildGraph(); void scheduleFit() },
+  { immediate: true },
 )
-
-watch(
-  () => props.selectedEmpId,
-  () => scheduleFit(),
-)
-
-onMounted(() => scheduleFit())
 </script>
 
 <template>
@@ -263,11 +266,12 @@ onMounted(() => scheduleFit())
             <span
               class="ewg-node-dot"
               :class="{
-                'ewg-node-dot--on': data?.enabled,
+                'ewg-node-dot--on': data?.enabled && !data?.stale,
                 'ewg-node-dot--busy': data?.busy,
               }"
             />
           </span>
+          <span v-if="!data?.placeholder" class="ewg-node-task" :data-state="data?.taskState" :title="data?.taskTitle">{{ data?.statusLine }}</span>
         </div>
       </template>
     </VueFlow>
@@ -343,11 +347,18 @@ onMounted(() => scheduleFit())
 
 .ewg-node-inner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   width: 100%;
   box-sizing: border-box;
 }
+
+.ewg-node-task { flex-basis: 100%; color: #64748b; font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ewg-node-task[data-state='working'], .ewg-node-task[data-state='reading'] { color: #2563eb; }
+.ewg-node-task[data-state='waiting'] { color: #b45309; }
+.ewg-node-task[data-state='error'] { color: #dc2626; }
+.ewg-node-task[data-state='done'] { color: #047857; }
 
 .ewg-node-inner--selected {
   filter: brightness(1.02);

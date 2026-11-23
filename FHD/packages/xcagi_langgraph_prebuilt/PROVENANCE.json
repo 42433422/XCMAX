@@ -13,7 +13,20 @@
   "verify_script": "verify_vendor.py",
   "fetch_time_utc": "2026-08-10T00:00:00Z",
   "verification": {
-    "method": "在线取回远端 tag 1.2.10 并 rev-parse，其解析 commit 须等于锁定 SHA 41341457342327166d72fc11952ab28fb61ec0bf，再对该 commit 的 libs/prebuilt + LICENSE 做字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
-    "note": "吸收源取自 langgraph 仓库 tag 1.2.10 @ commit 41341457342327166d72fc11952ab28fb61ec0bf 的 libs/prebuilt/langgraph/prebuilt + LICENSE，字节级一致。langgraph-prebuilt 1.1.0 与 xcagi_langgraph_core 声明的 langgraph-prebuilt>=1.1.0,<1.2.0 匹配。"
-  }
+    "method": "Locked upstream tag and commit + UPSTREAM_MANIFEST.sha256, reverse and forward replay of local patches, installed MANIFEST.sha256, and MIT LICENSE verification",
+    "note": "The runtime remains upstream langgraph-prebuilt 1.1.0 at tag 1.2.10 plus the existing exception-boundary aliases recorded below. This repair records pre-existing main changes; it does not introduce runtime changes or change the package version."
+  },
+  "upstream_sha256_manifest": "UPSTREAM_MANIFEST.sha256",
+  "upstream_manifest_sha256": "2400c426b621d795c55014efa1ff51c755966135d5605edca8c6f6d328282964",
+  "local_patches": [
+    {
+      "path": "patches/existing-exception-boundaries.patch.b64",
+      "sha256": "6028b5cd19a6b375a0c3df6a2aaf66ab35de1a3e4052d589b1e7a5976477c5d4",
+      "description": "Record the existing _exception_policy.py and five ToolNode Exception handlers using BOUNDARY_ERRORS. The alias is (Exception,), so the existing catch behavior is preserved; this is provenance repair, not a new security fix. Stored base64-encoded to preserve exact patch context whitespace, following the Postgres provenance format.",
+      "origin_commit": "ac2d54fc10b3c608b43a1cde138032c6ab086bcc",
+      "origin_commit_subject": "fix: close full-repository audit findings",
+      "observed_main_commit": "ce5a491e1836a5516c773e6461da4fa027097ae9",
+      "evidence": "GitHub path history identifies the origin commit for _exception_policy.py; both runtime files are byte-identical to observed_main_commit. The module docstring describes auditable exception families. The pinned upstream tool_node.py SHA-256 matches UPSTREAM_MANIFEST.sha256."
+    }
+  ]
 }

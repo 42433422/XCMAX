@@ -6,6 +6,7 @@ import sys
 from typing import Any
 
 from fastapi import Body, Query, Request
+from fastapi.responses import JSONResponse
 
 
 def _facade() -> Any:
@@ -225,6 +226,10 @@ def shipment_orders_delete(request: Request, order_number: str):
         route_path="/api/shipment/orders/{order_number}",
     )
     if not result.get("success"):
+        if result.get("reconciliation_required") is True:
+            # Preserve the original run and non-retryable unknown outcome after
+            # dispatch; a detail-only exception would discard that evidence.
+            return JSONResponse(result, status_code=400)
         raise _facade().HTTPException(status_code=400, detail=result.get("message", "删除失败"))
     result["message"] = f"订单 {order_number} 已删除"
     return result

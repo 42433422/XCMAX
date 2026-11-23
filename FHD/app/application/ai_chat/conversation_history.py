@@ -194,6 +194,16 @@ def persist_chat_turn(
         or inner.get("run_id")
         or inner.get("agent_run_id"),
     }
+    if context.get("_execution_identity") and context.get("execution_tool"):
+        summary["execution_identity"] = str(context["_execution_identity"])
+        summary["execution_tool"] = str(context["execution_tool"])
+        dispatch = response_data.get("dispatch")
+        if isinstance(dispatch, dict):
+            summary["dispatch"] = {
+                key: str(dispatch[key])
+                for key in ("request_id", "task_id", "status")
+                if dispatch.get(key) is not None
+            }
     from app.application.agent_orchestrator.business_harness import (
         extract_payload_business_result,
     )
@@ -209,6 +219,15 @@ def persist_chat_turn(
         "attachments": inner_payload.get("attachments"),
         "businessResult": extract_payload_business_result(response_data),
     }
+    continuation = response_data.get("runtime_context_update")
+    if response_data.get("runtime") == "codex" and isinstance(continuation, dict):
+        ui_payload["runtimeContinuation"] = {
+            "runId": continuation.get("agent_runtime_run_id"),
+            "status": str(
+                continuation.get("status") or response_data.get("execution_state") or status
+            ),
+            "sessionId": session_id,
+        }
     ui_payload = {key: value for key, value in ui_payload.items() if value not in (None, "", [])}
     harness_metadata = {
         "protocol": context.get("business_harness_protocol") or "xcagi.business-harness.v1",
@@ -218,6 +237,9 @@ def persist_chat_turn(
         "run_id": summary.get("run_id"),
         "recall_bound": True,
     }
+    from app.application.ai_chat.dialogue_memory import conversation_key
+
+    harness_metadata["conversation_key"] = conversation_key(context)
     turn_id = str(context.get("turn_id") or "").strip()
     user_fingerprint = uuid.uuid5(
         uuid.NAMESPACE_URL,

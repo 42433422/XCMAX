@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from modstore_server.api.deps import get_current_user, require_admin
@@ -26,6 +27,86 @@ admin_router = APIRouter(prefix="/api/admin/customer-value", tags=["admin-custom
 # Optional-router loader includes ``open_router`` as the module's second router.
 # The name is legacy loader terminology; this router is still admin-protected.
 open_router = admin_router
+
+
+@router.get("/deliveries")
+def customer_deliveries(
+    order_no: str = Query(min_length=4, max_length=96),
+    customer_goal_id: str = Query(min_length=4, max_length=128),
+    after: int = Query(0, ge=0),
+    workflow_after: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    from modstore_server.strategic_customer_delivery import list_customer_deliveries
+    from modstore_server.workflow_customer_delivery_api import list_workflow_deliveries
+
+    strategic = list_customer_deliveries(
+        user, order_no=order_no, goal_id=customer_goal_id, after=after
+    )
+    workflows = list_workflow_deliveries(
+        user, order_no=order_no, goal_id=customer_goal_id, after=workflow_after
+    )
+    return {
+        "ok": True,
+        **strategic,
+        "items": [*strategic["items"], *workflows["items"]],
+        "workflow_next_cursor": workflows["next_cursor"],
+    }
+
+
+@router.get("/workflow-deliveries")
+def customer_workflow_deliveries(
+    order_no: str = Query(min_length=4, max_length=96),
+    customer_goal_id: str = Query(min_length=4, max_length=128),
+    after: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    from modstore_server.workflow_customer_delivery_api import list_workflow_deliveries
+
+    return {
+        "ok": True,
+        **list_workflow_deliveries(user, order_no=order_no, goal_id=customer_goal_id, after=after),
+    }
+
+
+@router.get("/workflow-deliveries/{execution_id}/{artifact_id}")
+def customer_workflow_delivery_download(
+    execution_id: int,
+    artifact_id: str,
+    order_no: str = Query(min_length=4, max_length=96),
+    customer_goal_id: str = Query(min_length=4, max_length=128),
+    user: User = Depends(get_current_user),
+) -> Response:
+    from modstore_server.workflow_customer_delivery_api import download_workflow_delivery
+
+    return download_workflow_delivery(
+        user,
+        execution_id=execution_id,
+        artifact_id=artifact_id,
+        order_no=order_no,
+        goal_id=customer_goal_id,
+    )
+
+
+@router.get("/deliveries/{decision_id}/{opportunity_id}/{artifact_id}")
+def customer_delivery_download(
+    decision_id: str,
+    opportunity_id: str,
+    artifact_id: str,
+    order_no: str = Query(min_length=4, max_length=96),
+    customer_goal_id: str = Query(min_length=4, max_length=128),
+    user: User = Depends(get_current_user),
+) -> Response:
+    from modstore_server.strategic_customer_delivery import download_customer_delivery
+
+    return download_customer_delivery(
+        user,
+        decision_id=decision_id,
+        opportunity_id=opportunity_id,
+        artifact_id=artifact_id,
+        order_no=order_no,
+        goal_id=customer_goal_id,
+    )
 
 
 class UsageReceiptBody(BaseModel):
@@ -177,6 +258,16 @@ def record_usage_receipt(
     if user.is_admin or not user.is_enterprise:
         raise HTTPException(403, "仅真实企业客户账号可提交使用凭证")
     order = _authoritative_order(body.order_no, int(user.id))
+    occurred_at = _trusted_occurred_at(body.occurred_at)
+    from modstore_server.workflow_customer_delivery_api import validate_workflow_receipt
+
+    validate_workflow_receipt(
+        order=order,
+        goal_id=body.customer_goal_id,
+        artifact_id=body.output_id,
+        artifact_sha256=body.output_sha256,
+        occurred_at=occurred_at,
+    )
     try:
         result = append_customer_value_receipt(
             {
@@ -187,7 +278,7 @@ def record_usage_receipt(
                 "customer_goal_id": body.customer_goal_id,
                 "order_no": body.order_no,
                 "artifact_id": body.output_id,
-                "occurred_at": _trusted_occurred_at(body.occurred_at),
+                "occurred_at": occurred_at,
                 "environment": "production",
                 "evidence": {
                     "artifact_sha256": body.output_sha256.lower(),
@@ -215,6 +306,16 @@ def record_acceptance_receipt(
     if not body.customer_confirmed and not body.signed_document_sha256:
         raise HTTPException(422, "需要客户账号确认或客户签署文件摘要")
     order = _authoritative_order(body.order_no, int(user.id))
+    occurred_at = _trusted_occurred_at(body.occurred_at)
+    from modstore_server.workflow_customer_delivery_api import validate_workflow_receipt
+
+    validate_workflow_receipt(
+        order=order,
+        goal_id=body.customer_goal_id,
+        artifact_id=body.accepted_artifact_id,
+        artifact_sha256=body.artifact_sha256,
+        occurred_at=occurred_at,
+    )
     try:
         result = append_customer_value_receipt(
             {
@@ -227,7 +328,7 @@ def record_acceptance_receipt(
                 "order_no": body.order_no,
                 "artifact_id": body.accepted_artifact_id,
                 "acceptance_id": body.acceptance_id,
-                "occurred_at": _trusted_occurred_at(body.occurred_at),
+                "occurred_at": occurred_at,
                 "environment": "production",
                 "evidence": {
                     "artifact_sha256": body.artifact_sha256.lower(),
@@ -250,6 +351,17 @@ def record_outcome_material(
 ) -> dict[str, Any]:
     _ = _admin
     order = _authoritative_order(body.order_no)
+    occurred_at = _trusted_occurred_at(body.occurred_at)
+    from modstore_server.workflow_customer_delivery_api import validate_workflow_receipt
+
+    validate_workflow_receipt(
+        order=order,
+        goal_id=body.customer_goal_id,
+        artifact_id=body.outcome_id,
+        artifact_sha256=body.artifact_sha256,
+        occurred_at=occurred_at,
+        outcome=body.model_dump(),
+    )
     try:
         result = append_customer_value_receipt(
             {
@@ -260,7 +372,7 @@ def record_outcome_material(
                 "customer_goal_id": body.customer_goal_id,
                 "order_no": body.order_no,
                 "artifact_id": body.outcome_id,
-                "occurred_at": _trusted_occurred_at(body.occurred_at),
+                "occurred_at": occurred_at,
                 "environment": "production",
                 "evidence": {
                     "artifact_sha256": body.artifact_sha256.lower(),

@@ -1,4 +1,4 @@
-"""Coverage for IM routes and AI chat Excel workflow branches."""
+"""Coverage for IM routes."""
 
 from __future__ import annotations
 
@@ -10,27 +10,6 @@ from fastapi.testclient import TestClient
 
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.infrastructure.auth.dependencies import CurrentUser, require_identified_user
-
-
-def _chat_svc() -> AIChatApplicationService:
-    mock_ai = MagicMock()
-
-    async def _chat(*args, **kwargs):
-        return {"success": True, "text": "回复", "action": "followup", "data": {}}
-
-    mock_ai.chat = _chat
-    with (
-        patch(
-            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
-        ),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        svc = AIChatApplicationService()
-        svc.ai_service = mock_ai
-        return svc
-
 
 # ---------------------------------------------------------------------------
 # im_routes — REST surface
@@ -206,68 +185,3 @@ async def test_notify_offline_im_members_skips_when_all_online() -> None:
 # ---------------------------------------------------------------------------
 # ai_chat — pro excel shortcut branches
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("source", ["xcagi-pro", "PRO_MODE", "professional", "basic", ""])
-def test_source_labels_do_not_bypass_model_selection(source):
-    svc = _chat_svc()
-    svc.workflow_planner.plan.return_value = None
-    result = svc._try_handle_dynamic_workflow("u", "解释库存", source, {}, {})
-    svc.workflow_planner.plan.assert_called_once()
-    assert result["success"] is False
-    assert result["data"]["execution_started"] is False
-
-
-def test_excel_cell_looks_like_product_measure_unit() -> None:
-    assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit("件") is True
-    assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit("甲公司") is False
-    assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit("") is False
-
-
-@patch.object(AIChatApplicationService, "_extract_excel_import_records")
-def test_dynamic_workflow_ambiguous_price_columns(
-    mock_extract: MagicMock,
-) -> None:
-    mock_extract.return_value = ([], "ambiguous_price_columns")
-    svc = _chat_svc()
-    ctx = {
-        "excel_import_use_deterministic_shortcut": True,
-        "excel_analysis": {
-            "fields": [{"label": "调价前单价"}, {"label": "调价后单价"}],
-            "summary": "双价列",
-        },
-    }
-    out = svc._try_handle_dynamic_workflow("u", "导入数据库", "pro", ctx, {})
-    assert out is not None
-    assert out["success"] is False
-    assert out["data"]["execution_started"] is False
-    mock_extract.assert_not_called()
-    svc.workflow_planner.plan.assert_called_once()
-    assert (
-        svc.workflow_planner.plan.call_args.kwargs["context"]["excel_analysis"]
-        == ctx["excel_analysis"]
-    )
-
-
-@patch("app.application.get_unit_products_import_app_service")
-def test_dynamic_workflow_unit_import_failure(mock_get: MagicMock) -> None:
-    mock_get.return_value.import_unit_products.return_value = {
-        "success": False,
-        "message": "源库损坏",
-    }
-    svc = _chat_svc()
-    out = svc._try_handle_dynamic_workflow(
-        "u",
-        "导入",
-        "pro",
-        {},
-        {
-            "suggested_use": "unit_products_db",
-            "saved_name": "data.db",
-            "unit_name": "甲公司",
-        },
-    )
-    assert out is not None
-    assert out["success"] is False
-    assert out["data"]["action"] == "workflow_planning_failed"
-    mock_get.return_value.import_unit_products.assert_not_called()

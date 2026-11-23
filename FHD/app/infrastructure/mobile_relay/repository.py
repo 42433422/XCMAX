@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.application.mobile_relay_ports import Database, Projection, Schema
@@ -29,6 +30,30 @@ def _ensure_public_key_column(db: Session) -> None:
             "ADD COLUMN desktop_public_key VARCHAR(256) NOT NULL DEFAULT ''"
         )
     )
+
+
+def _ensure_request_key_column(db: Session) -> None:
+    """Upgrade existing relay rows without changing their legacy task identity."""
+    connection = db.connection()
+    if "client_request_id" in {
+        str(column["name"]) for column in sa_inspect(connection).get_columns("mobile_relay_tasks")
+    }:
+        return
+    try:
+        with db.begin_nested():
+            db.execute(
+                text(
+                    "ALTER TABLE mobile_relay_tasks "
+                    "ADD COLUMN client_request_id VARCHAR(160) NOT NULL DEFAULT ''"
+                )
+            )
+    except DBAPIError:
+        # Another startup may have completed the same additive migration.
+        if "client_request_id" not in {
+            str(column["name"])
+            for column in sa_inspect(connection).get_columns("mobile_relay_tasks")
+        }:
+            raise
 
 
 def ensure_tables(db: Session) -> None:
@@ -66,6 +91,7 @@ def ensure_tables(db: Session) -> None:
                 status VARCHAR(32) NOT NULL DEFAULT 'queued',
                 result_json TEXT NOT NULL DEFAULT '{}',
                 created_by_user_id INTEGER,
+                client_request_id VARCHAR(160) NOT NULL DEFAULT '',
                 created_at VARCHAR(64) NOT NULL,
                 updated_at VARCHAR(64) NOT NULL,
                 claimed_at VARCHAR(64),
@@ -87,6 +113,7 @@ def ensure_tables(db: Session) -> None:
         )
     )
     _ensure_public_key_column(db)
+    _ensure_request_key_column(db)
 
 
 def list_desktops(

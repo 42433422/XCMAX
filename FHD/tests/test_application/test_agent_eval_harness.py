@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -21,6 +22,21 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
     assert result["passed"] == 123
     assert len(result["results"]) == 123
     assert result["score"] == 1.0
+    assert result["coverage"] == {
+        "fixture_contract_passed": 123,
+        "business_effect_verified": 16,
+        "artifact_integrity_verified": 2,
+        "task_admission_verified": 1,
+        "read_only_contract": 8,
+        "unverified": 68,
+        "not_exercised": 28,
+    }
+    dispatch_only = [
+        row for row in result["results"] if row["coverage_scope"] == "dispatch_contract_only"
+    ]
+    assert len(dispatch_only) == 62
+    assert all(row["business_goal_expected"] for row in dispatch_only)
+    assert all(row["result_coverage"] == "unverified" for row in dispatch_only)
     missing_spec = next(
         row
         for row in result["results"]
@@ -30,19 +46,43 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
     assert missing_spec["details"]["publish_call_count"] == 0
 
 
-@pytest.mark.parametrize("invalid_review", ["missing", "foreign_plan"])
-def test_memory_planner_eval_requires_its_explicit_review(monkeypatch, invalid_review) -> None:
+@pytest.mark.parametrize("invalid_review", ["missing", "foreign_goal"])
+def test_memory_runtime_eval_requires_its_explicit_review(monkeypatch, invalid_review) -> None:
     task = next(
         row for row in eval_module.load_tasks() if row["kind"] == "memory_v2_planner_context"
     )
     if invalid_review == "missing":
-        task.pop("goal_review")
+        task.pop("runtime_review")
     else:
-        task["model_response"]["nodes"][0]["params"]["keyword"] = "unrelated"
+        task["runtime_review"]["goals"][0]["source"] = "unrelated"
     monkeypatch.setattr(eval_module, "load_tasks", lambda _path: [task])
     result = run_eval()
     assert result["failed"] == 1
     assert result["results"][0]["passed"] is False
+
+
+@pytest.mark.parametrize("invalid_review", ["missing", "foreign_reply", "foreign_user"])
+def test_owned_attachment_reply_review_is_bound_to_its_explicit_fixture(invalid_review) -> None:
+    from evals.owned_attachment_eval import _scripted_model_response
+
+    task = next(
+        row
+        for row in eval_module.load_tasks()
+        if row["id"] == "multimodal_ocr_artifact_autonomous_plan"
+    )
+    prompt = {
+        "task": "verify_runtime_goal",
+        "original_request": {"text": task["message"]},
+        "response": task["runtime_reply"],
+        "evidence": [],
+    }
+    if invalid_review == "missing":
+        task.pop("runtime_review")
+    elif invalid_review == "foreign_reply":
+        prompt["response"] = "unrelated reply"
+    else:
+        prompt["original_request"]["text"] = "unrelated request"
+    assert _scripted_model_response(task, prompt) is None
 
 
 @pytest.mark.parametrize("fail_task", [False, True])
@@ -125,6 +165,76 @@ def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:
         "score": 1.0,
     }
     assert "must-not-be-printed" not in output
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_agent_eval_junit_preserves_result_identity_without_fixture_payloads(
+    monkeypatch, capsys, tmp_path, failed
+) -> None:
+    secret = "fixture-payload-must-not-be-published"
+    result = {
+        "total": 1,
+        "passed": int(not failed),
+        "failed": int(failed),
+        "score": float(not failed),
+        "results": [
+            {
+                "id": "case<&>",
+                "kind": "offline_contract",
+                "passed": not failed,
+                "failed_checks": [
+                    {
+                        "name": f"context_not_contains:{secret}",
+                        "actual": secret,
+                        "expected": secret,
+                    },
+                    {"name": "task", "actual": secret, "expected": "pass"},
+                ],
+                "details": {"api_key": secret},
+            }
+        ],
+    }
+    identity = {"GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2"}
+    for name, value in identity.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(eval_module, "run_eval", lambda _path: result)
+    report = tmp_path / "reports/junit.xml"
+
+    assert eval_module.main(["--junitxml", str(report)]) == int(failed)
+    output = capsys.readouterr().out
+    assert json.loads(output)["failed"] == int(failed)
+    suite = ET.parse(report).getroot()
+    assert suite.attrib == {
+        "name": "agent_platform_minimum",
+        "tests": "1",
+        "failures": str(int(failed)),
+        "errors": "0",
+    }
+    assert {p.attrib["name"]: p.attrib["value"] for p in suite.findall("properties/property")} == {
+        "execution_mode": "fixture_local",
+        **identity,
+    }
+    case = suite.find("testcase")
+    assert case is not None and case.attrib == {"name": "case<&>", "classname": "offline_contract"}
+    failure = case.find("failure")
+    if failed:
+        assert failure is not None and failure.attrib["message"] == "context_not_contains, task"
+    else:
+        assert failure is None
+    assert secret not in output + report.read_text()
+
+
+def test_agent_eval_crash_cannot_publish_stale_junit(monkeypatch, tmp_path) -> None:
+    report = tmp_path / "junit.xml"
+    report.write_text("evidence from a previous attempt")
+
+    def crash(_path):
+        raise RuntimeError("fixture setup failed")
+
+    monkeypatch.setattr(eval_module, "run_eval", crash)
+    with pytest.raises(RuntimeError, match="fixture setup failed"):
+        eval_module.main(["--junitxml", str(report)])
+    assert not report.exists()
 
 
 def test_route_fixture_uses_real_session_and_restores_auth_boundary() -> None:

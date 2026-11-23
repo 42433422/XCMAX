@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 
 class AgentRunRepository(Protocol):
+    def create_task_run(
+        self, run: AgentRun, *, initial_only: bool = True
+    ) -> tuple[AgentRun, bool]: ...
+
     def save(self, run: AgentRun) -> AgentRun: ...
 
     def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool: ...
@@ -52,6 +56,7 @@ class AgentRunRepository(Protocol):
         mod_id: str | None = None,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]: ...
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
@@ -115,6 +120,25 @@ class InMemoryAgentRunRepository:
         self._commands: dict[str, TaskControlCommand] = {}
         self._lock = threading.RLock()
 
+    def create_task_run(self, run: AgentRun, *, initial_only: bool = True) -> tuple[AgentRun, bool]:
+        """Publish once; False admits an exact attempt/child under its existing task."""
+        with self._lock:
+            if not initial_only:
+                current = self._runs.get(run.run_id)
+                return (
+                    (copy.deepcopy(current), False)
+                    if current is not None
+                    else (self._save(run), True)
+                )
+            key = self._task_key(tenant_id_of_run(run), run.user_id, self._run_task_id(run))
+            task = self._tasks.get(key)
+            if task is not None:
+                current = self._runs.get(task.active_run_id)
+                if current is None:
+                    raise ValueError("任务账本缺少执行记录")
+                return copy.deepcopy(current), False
+            return self._save(run), True
+
     def save(self, run: AgentRun) -> AgentRun:
         return self._save(run)
 
@@ -129,7 +153,13 @@ class InMemoryAgentRunRepository:
             self._save(run, allow_safe_retry=True)
             return True
 
-    def _save(self, run: AgentRun, *, allow_safe_retry: bool = False) -> AgentRun:
+    def _save(
+        self,
+        run: AgentRun,
+        *,
+        allow_safe_retry: bool = False,
+        allow_planning_replacement: bool = False,
+    ) -> AgentRun:
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
         )
@@ -137,7 +167,12 @@ class InMemoryAgentRunRepository:
 
         with self._lock:
             previous = self._runs.get(run.run_id)
-            preserve_run_evidence(run, previous, allow_safe_retry=allow_safe_retry)
+            preserve_run_evidence(
+                run,
+                previous,
+                allow_safe_retry=allow_safe_retry,
+                allow_planning_replacement=allow_planning_replacement,
+            )
             ensure_terminal_business_result(run)
             run.touch()
             self._runs[run.run_id] = copy.deepcopy(run)
@@ -186,7 +221,7 @@ class InMemoryAgentRunRepository:
                 or current.to_dict() != previous.to_dict()
             ):
                 return False
-            self.save(run)
+            self._save(run, allow_planning_replacement=True)
             return True
 
     def save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
@@ -206,11 +241,14 @@ class InMemoryAgentRunRepository:
         mod_id: str | None = None,
         matches: Callable[[AgentRun], bool] | None = None,
         runtime_scope: RunContextScope | None = None,
+        status: str | None = None,
     ) -> list[AgentRun]:
         with self._lock:
             runs = list(self._runs.values())
         if user_id is not None:
             runs = [run for run in runs if run.user_id == user_id]
+        if status is not None:
+            runs = [run for run in runs if run.status == status]
         if tenant_id is not None:
             runs = [run for run in runs if tenant_id_of_run(run) == tenant_id]
         if mod_id is not None:
@@ -291,9 +329,15 @@ class InMemoryAgentRunRepository:
 
     def save_task(self, task: AgentTask) -> AgentTask:
         with self._lock:
-            self._tasks[self._task_key(task.tenant_id, task.user_id, task.task_id)] = copy.deepcopy(
-                task
-            )
+            key = self._task_key(task.tenant_id, task.user_id, task.task_id)
+            current = self._tasks.get(key)
+            if current is not None and (
+                current.active_run_id,
+                current.attempt,
+                current.updated_at,
+            ) != (task.active_run_id, task.attempt, task.updated_at):
+                return copy.deepcopy(current)
+            self._tasks[key] = copy.deepcopy(task)
         return copy.deepcopy(task)
 
     def get_task(

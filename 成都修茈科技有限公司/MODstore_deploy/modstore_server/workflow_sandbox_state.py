@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,8 @@ from modstore_server.models import (
     WorkflowNode,
     WorkflowSandboxRun,
 )
+
+GRAPH_GUARD_FAILED = "workflow_execution_graph_changed_before_start"
 
 
 def _safe_json_loads(raw: Any) -> Any:
@@ -37,6 +39,11 @@ def workflow_graph_fingerprint(db: Session, workflow_id: int) -> str:
         .order_by(WorkflowEdge.id.asc())
         .all()
     )
+    return loaded_graph_fingerprint(nodes, edges)
+
+
+def loaded_graph_fingerprint(nodes, edges) -> str:
+    """Use the exact loaded objects that the executor will retain for this run."""
     payload = {
         "nodes": [
             {
@@ -45,7 +52,7 @@ def workflow_graph_fingerprint(db: Session, workflow_id: int) -> str:
                 "name": str(n.name or ""),
                 "config": _safe_json_loads(n.config),
             }
-            for n in nodes
+            for n in sorted(nodes, key=lambda node: node.id)
         ],
         "edges": [
             {
@@ -54,7 +61,7 @@ def workflow_graph_fingerprint(db: Session, workflow_id: int) -> str:
                 "target_node_id": int(e.target_node_id),
                 "condition": str(e.condition or ""),
             }
-            for e in edges
+            for e in sorted(edges, key=lambda edge: edge.id)
         ],
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -65,9 +72,9 @@ def latest_sandbox_run(
     db: Session,
     workflow_id: int,
     *,
-    user_id: Optional[int] = None,
-    validate_only: Optional[bool] = False,
-) -> Optional[WorkflowSandboxRun]:
+    user_id: int | None = None,
+    validate_only: bool | None = False,
+) -> WorkflowSandboxRun | None:
     q = db.query(WorkflowSandboxRun).filter(WorkflowSandboxRun.workflow_id == workflow_id)
     if user_id is not None:
         q = q.filter(WorkflowSandboxRun.user_id == user_id)
@@ -80,8 +87,8 @@ def sandbox_status_for_workflow(
     db: Session,
     workflow: Workflow,
     *,
-    user_id: Optional[int] = None,
-) -> Dict[str, Any]:
+    user_id: int | None = None,
+) -> dict[str, Any]:
     current_fp = workflow_graph_fingerprint(db, int(workflow.id))
     latest = latest_sandbox_run(db, int(workflow.id), user_id=user_id, validate_only=False)
     latest_fp = str(latest.graph_fingerprint or "") if latest else ""
@@ -113,10 +120,11 @@ def record_workflow_sandbox_run(
     *,
     workflow_id: int,
     user_id: int,
-    report: Dict[str, Any],
+    report: dict[str, Any],
     validate_only: bool,
     mock_employees: bool,
-    graph_fingerprint: Optional[str] = None,
+    graph_fingerprint: str | None = None,
+    commit: bool = True,
 ) -> WorkflowSandboxRun:
     fp = graph_fingerprint or workflow_graph_fingerprint(db, workflow_id)
     row = WorkflowSandboxRun(
@@ -129,7 +137,10 @@ def record_workflow_sandbox_run(
         report_json=json.dumps(report or {}, ensure_ascii=False),
     )
     db.add(row)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(row)
     return row
 
@@ -138,7 +149,7 @@ def validate_workflow_sandbox_ready(
     db: Session,
     *,
     workflow_id: int,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> list[str]:
     q = db.query(Workflow).filter(Workflow.id == int(workflow_id))
     if user_id is not None:

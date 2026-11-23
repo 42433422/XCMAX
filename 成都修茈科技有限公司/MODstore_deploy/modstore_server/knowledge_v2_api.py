@@ -99,7 +99,7 @@ def _ensure_collection(session, coll_id: int) -> KnowledgeCollection:
 
 
 def _service_unavailable(e: Exception) -> HTTPException:
-    return HTTPException(503, str(e))
+    return HTTPException(503, "知识服务暂时不可用，请检查模型与向量服务配置")
 
 
 # ---------------------------------------------------------------------------

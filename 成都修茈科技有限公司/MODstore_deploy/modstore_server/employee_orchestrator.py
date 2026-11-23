@@ -88,7 +88,10 @@ def _record_dispatch_metric(
 
 def _resolve_uid(created_by_user_id: int) -> int:
     from modstore_server.models import User, get_session_factory
+    from modstore_server.xiaoc_life_chat import current_manual_life_scope
 
+    if scope := current_manual_life_scope():
+        return scope["owner_user_id"]
     uid = int(created_by_user_id or 0)
     if uid <= 0:
         sf = get_session_factory()

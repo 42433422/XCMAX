@@ -14,16 +14,7 @@ from app.infrastructure.auth.dependencies import CurrentUser, require_identified
 
 
 def _chat_svc() -> AIChatApplicationService:
-    mock_ai = MagicMock()
-    with (
-        patch(
-            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
-        ),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
+    return AIChatApplicationService()
 
 
 # ---------------------------------------------------------------------------
@@ -65,15 +56,6 @@ def test_inject_excel_vector_service_exception(mock_get: MagicMock) -> None:
     ctx = {"excel_vector_index_id": "idx-3"}
     out = svc._inject_excel_vector_context("问", ctx)
     assert out == ctx
-
-
-def test_excel_analysis_payload_present_grid_only() -> None:
-    ctx = {
-        "excel_analysis": {
-            "preview_data": {"grid_preview": {"rows": [["客户", "产品"], ["甲", "漆"]]}},
-        }
-    }
-    assert AIChatApplicationService._excel_analysis_payload_present(ctx) is True
 
 
 # ---------------------------------------------------------------------------

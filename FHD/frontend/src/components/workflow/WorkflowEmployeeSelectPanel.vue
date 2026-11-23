@@ -85,7 +85,7 @@ const statusHint = computed(() => {
     return '正在加载工作流员工注册表…'
   }
   if (!workflowEmployeeDefs.value.length) {
-    return '当前未加载任何工作流员工 Mod。请从员工商店安装后刷新。'
+    return '当前未加载任何工作流员工。请从「AI 市场 → 员工」安装后刷新。'
   }
   return ''
 })

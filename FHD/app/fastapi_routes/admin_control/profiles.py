@@ -159,7 +159,7 @@ class UserProfiles:
             return {"success": True, "data": result}
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("设置用户 profile 失败: %s", exc)
-            return _invalid(str(exc), 500)
+            return _invalid("用户资料保存失败，请稍后重试", 500)
 
     async def admin_list_user_profiles(self, request: Request):
         """返回本地所有用户的账号体系字段映射（按 username 索引）。
@@ -187,4 +187,4 @@ class UserProfiles:
             }
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("读取用户 profile 列表失败: %s", exc)
-            return _invalid(str(exc), 500)
+            return _invalid("用户资料暂时无法读取", 500)

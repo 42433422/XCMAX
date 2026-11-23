@@ -26,9 +26,11 @@ def _meta(p: ScreenPrincipal) -> dict[str, str]:
 class _Sock:
     def __init__(self) -> None:
         self.sent = ""
+        self.messages: list[dict] = []
 
     async def send_text(self, data: str) -> None:
         self.sent = data
+        self.messages.append(json.loads(data))
 
 
 @pytest.mark.parametrize(
@@ -137,3 +139,86 @@ async def test_disconnected_screen_cannot_leave_pending_command_running():
         await hub.disconnect("screen")
         result = await asyncio.wait_for(work, timeout=1)
     assert result["code"] == "SCREEN_DISCONNECTED"
+
+
+@pytest.mark.asyncio
+async def test_timeout_cancels_exact_command_and_reports_unknown_outcome():
+    hub, socket = AiOpenCursorHub(), _Sock()
+    await hub.connect("owner", socket, _meta(OWNER))
+    with screen_principal_scope(OWNER):
+        result = await hub.dispatch("click", {"ref": "e1"}, timeout=0.01)
+    command, cancellation = socket.messages
+    assert command["timeout_ms"] == 10
+    assert cancellation == {"type": "cancel", "id": command["id"]}
+    assert result == {
+        "success": False,
+        "code": "SCREEN_COMMAND_TIMEOUT",
+        "message": "虚拟光标回执超时（0s），请先读取页面状态确认结果，勿重复写入",
+        "action": "click",
+        "request_id": command["id"],
+        "outcome": "unknown",
+        "retryable": False,
+    }
+    assert not hub._pending
+    assert not hub.handle_client_message(
+        json.dumps({"id": command["id"], "result": {"success": True}}), session_id="owner"
+    )
+
+
+@pytest.mark.asyncio
+async def test_caller_cancellation_reaches_screen_and_releases_pending_receipt():
+    hub, socket = AiOpenCursorHub(), _Sock()
+    await hub.connect("owner", socket, _meta(OWNER))
+    with screen_principal_scope(OWNER):
+        work = asyncio.create_task(hub.dispatch("type", {"text": "private-value"}))
+        await asyncio.sleep(0)
+        work.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await work
+        assert hub.recent_commands()[0]["params"] == {"text": "[REDACTED]"}
+    assert socket.messages[1] == {"type": "cancel", "id": socket.messages[0]["id"]}
+    assert not hub._pending
+    assert not hub._pending_sessions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("receipt", [{}, {"success": "true"}, {"success": 1}, ["done"], None])
+async def test_malformed_receipt_never_becomes_success(receipt):
+    hub, socket = AiOpenCursorHub(), _Sock()
+    await hub.connect("owner", socket, _meta(OWNER))
+    with screen_principal_scope(OWNER):
+        work = asyncio.create_task(hub.dispatch("click", {"ref": "e1"}))
+        await asyncio.sleep(0)
+        request_id = socket.messages[0]["id"]
+        hub.handle_client_message(
+            json.dumps({"id": request_id, "result": receipt}), session_id="owner"
+        )
+        result = await work
+    assert result == {
+        "success": False,
+        "code": "INVALID_SCREEN_RECEIPT",
+        "outcome": "unknown",
+        "session_id": "owner",
+        "request_id": request_id,
+    }
+
+
+@pytest.mark.asyncio
+async def test_receipt_cannot_replace_server_bound_session_or_request_identity():
+    hub, socket = AiOpenCursorHub(), _Sock()
+    await hub.connect("owner", socket, _meta(OWNER))
+    with screen_principal_scope(OWNER):
+        work = asyncio.create_task(hub.dispatch("verify"))
+        await asyncio.sleep(0)
+        request_id = socket.messages[0]["id"]
+        hub.handle_client_message(
+            json.dumps(
+                {
+                    "id": request_id,
+                    "result": {"success": False, "session_id": "foreign", "request_id": "foreign"},
+                }
+            ),
+            session_id="owner",
+        )
+        result = await work
+    assert result == {"success": False, "session_id": "owner", "request_id": request_id}

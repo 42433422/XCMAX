@@ -110,7 +110,8 @@ def _source_tree(tmp_path, source):
 
 
 @pytest.mark.parametrize(
-    "function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"]
+    "function",
+    ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"],
 )
 def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, function):
     source = "# harmless line drift\n\n" + _SOURCE
@@ -120,7 +121,8 @@ def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, functio
 
 
 @pytest.mark.parametrize(
-    "function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"]
+    "function",
+    ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"],
 )
 @pytest.mark.parametrize(
     "old,new",
@@ -131,7 +133,10 @@ def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, functio
         ("src_dir_fd=parent_fd", "src_dir_fd=other_fd"),
         ("stat.S_ISREG(os.fstat(descriptor).st_mode)", "True"),
         ("component != value", "False"),
-        ('return _safe_under_roots(str(file_path or ""), roots)', "return Path(file_path)"),
+        (
+            'return _safe_under_roots(str(file_path or ""), roots)',
+            "return Path(file_path)",
+        ),
         ("os.open(os.sep, directory_flags)", "os.open(os.sep, os.O_RDONLY)"),
         ("path != exports and path.is_relative_to(exports)", "True"),
         (
@@ -167,7 +172,8 @@ def test_missing_or_unparseable_source_preserves_fd_findings(tmp_path, kind):
         if kind == "encoding":
             (root / _SHIPMENT).write_bytes(b"\xff")
     assert keep_result(
-        _finding(uri=_SHIPMENT, line=_fd_line(_SOURCE, "open_elt_input_file")), source_root=tmp_path
+        _finding(uri=_SHIPMENT, line=_fd_line(_SOURCE, "open_elt_input_file")),
+        source_root=tmp_path,
     )
 
 
@@ -213,14 +219,22 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
     assert fingerprint(legacy) != fingerprint(modern)
 
 
-# artifact_files was reviewed 2026-11-13; the other modules were re-reviewed
-# 2026-11-16 on the final PR #3245 sources. These single-component / dir_fd
+# These modules were re-reviewed 2026-11-16 on the final PR #3245 sources.
+# artifact_files and workflow_spreadsheet_scope changed their I/O and may not
+# inherit their former approval.
+# These single-component / dir_fd
 # sinks have guards that CodeQL cannot model.
 _REVIEWED_FILE_SINKS = {
-    "FHD/app/application/agent_orchestrator/artifact_files.py": (73, 96, 97, 105, 107, 129),
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
-    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
-    "FHD/app/application/shipment_excel_elt_security.py": (459, 460, 461, 831, 971, 972, 973),
+    "FHD/app/application/shipment_excel_elt_security.py": (
+        459,
+        460,
+        461,
+        831,
+        971,
+        972,
+        973,
+    ),
     "FHD/app/application/local_file_access/paths.py": (76, 134),
     "FHD/app/application/agent_orchestrator/cross_module_chain.py": (83,),
 }
@@ -265,16 +279,23 @@ def _sink_source_tree(tmp_path, uri, source):
     return tmp_path
 
 
-def test_file_suppression_fails_closed_after_semantic_change(tmp_path):
-    path = "FHD/app/application/agent_orchestrator/artifact_files.py"
+@pytest.mark.parametrize(
+    "path",
+    [
+        "FHD/app/application/agent_orchestrator/artifact_files.py",
+        "FHD/app/application/tools/workflow_spreadsheet_scope.py",
+    ],
+)
+def test_changed_file_io_cannot_reuse_former_suppression(path):
+    import ast
+
     source = (_SCRIPT.parents[2] / path).read_text(encoding="utf-8")
-    changed = source.replace(
-        "if root.is_symlink() or folder.is_symlink() or path.is_symlink():",
-        "if False:",
-    )
-    assert changed != source
-    root = _sink_source_tree(tmp_path, path, changed)
-    assert keep_result(_finding(uri=path, line=73), source_root=root) is True
+    tree = ast.parse(source)
+    reviewed_hash, former_lines = _SCRIPT_NS["_REVIEWED_FILE_SINKS"][path]
+    assert _SCRIPT_NS["_fingerprint"](tree) != reviewed_hash
+    new_calls = {node.lineno for node in ast.walk(tree) if isinstance(node, ast.Call)}
+    for line in former_lines | new_calls:
+        assert keep_result(_finding(uri=path, line=line)) is True
 
 
 @pytest.mark.parametrize(

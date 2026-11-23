@@ -23,11 +23,13 @@ import shutil
 from datetime import datetime
 from hashlib import sha256
 from io import BytesIO
+from pathlib import Path
 from typing import Any, BinaryIO
 
 from app.application.facades.template_facade import document_templates_service as _tpl
+from app.application.template_mutation_receipt import record_template_mutation
 from app.infrastructure.templates.template_discovery import template_path_key
-from app.infrastructure.tenant_scope import current_tenant_id
+from app.infrastructure.tenant_scope import current_tenant_id, owned_tenant_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir
 
@@ -45,9 +47,27 @@ class _UploadLikeFile:
         self.stream = stream
         self.filename = filename
         self.content_type = content_type
+        tenant = owned_tenant_id()
+        self._owned_root = Path(get_app_data_dir()).resolve() if tenant is not None else None
+        self.upload_directory = (
+            str(self._owned_root / "tenants" / str(tenant) / "document_templates")
+            if self._owned_root is not None
+            else ""
+        )
 
     def save(self, dst: str) -> None:
         self.stream.seek(0)
+        if self._owned_root is not None:
+            from app.application.shipment_excel_elt_security import _open_elt_output_under_root
+
+            path = Path(dst)
+            if path.parent != Path(self.upload_directory):
+                raise ValueError(
+                    "template upload must remain in its authenticated tenant directory"
+                )
+            with _open_elt_output_under_root(path, self._owned_root) as output:
+                shutil.copyfileobj(self.stream, output)
+            return
         with open(dst, "wb") as fp:
             shutil.copyfileobj(self.stream, fp)
 
@@ -230,7 +250,8 @@ def run_archive_template_delete(
                         },
                     )
                     marker_id = result.scalar_one()
-                    db.commit()
+                record_template_mutation(db, marker_id, "delete")
+                db.commit()
         except RECOVERABLE_ERRORS:
             return {"success": False, "message": "无法安全删除模板，请稍后重试"}, 503
         return {
@@ -283,6 +304,7 @@ def run_archive_template_delete(
                 ).bindparams(bindparam("updated_at", type_=DateTime())),
                 {"id": db_id, "updated_at": datetime.now(), **tenant_bind},
             )
+            record_template_mutation(db, db_id, "delete")
             db.commit()
         return {
             "success": True,

@@ -32,6 +32,18 @@ def client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+def _assert_unverified_mutation(response):
+    assert response.status_code == 200
+    output = response.json()
+    assert output["success"] is False
+    assert output["agent_status"] == "blocked"
+    assert output["error_code"] == "result_verification_inconclusive"
+    assert output["verification_code"] == "result_verifier_unavailable"
+    assert output["outcome"] == "unknown"
+    assert output["retryable"] is False
+    assert output["reconciliation_required"] is True
+
+
 def _install_lost_parse_price():
     """Temporarily install _parse_price on app.domain.app_pure.excel_imports.
 
@@ -299,10 +311,12 @@ class TestProductsUpdate:
             patch(
                 "app.mod_sdk.erp_products_facade.products_update",
                 return_value={"success": True, "data": {"id": 1}},
-            ),
+            ) as write,
         ):
             r = client.post("/products/update", json={"id": 1, "product_name": "updated"})
-            assert r.json()["success"] is True
+            write.assert_called_once()
+            _assert_unverified_mutation(r)
+            assert r.json()["data"]["id"] == 1
 
     def test_invalid_id(self, client: TestClient):
         _ei = _install_lost_parse_price()
@@ -340,10 +354,11 @@ class TestProductsUpdate:
                     "app.legacy.routes.product.compat_routes._product_parse_id",
                     return_value=1,
                 ),
-                patch("app.legacy.routes.product.compat_routes.products_pg_update_row"),
+                patch("app.legacy.routes.product.compat_routes.products_pg_update_row") as write,
             ):
                 r = client.post("/products/update", json={"id": 1})
-                assert r.json()["success"] is True
+                write.assert_called_once()
+                _assert_unverified_mutation(r)
         finally:
             _remove_lost_parse_price(_ei)
 
@@ -378,10 +393,12 @@ class TestProductsAdd:
             patch(
                 "app.mod_sdk.erp_products_facade.products_add",
                 return_value={"success": True, "data": {"id": 1}},
-            ),
+            ) as write,
         ):
             r = client.post("/products/add", json={"product_name": "new"})
-            assert r.json()["success"] is True
+            write.assert_called_once()
+            _assert_unverified_mutation(r)
+            assert r.json()["data"]["id"] == 1
 
     def test_success(self, client: TestClient, local_tools):
         _ei = _install_lost_parse_price()
@@ -399,10 +416,11 @@ class TestProductsAdd:
                 patch(
                     "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                     return_value=42,
-                ),
+                ) as write,
             ):
                 r = client.post("/products/add", json={"product_name": "new"})
-                assert r.json()["success"] is True
+                write.assert_called_once()
+                _assert_unverified_mutation(r)
                 assert r.json()["data"]["id"] == 42
         finally:
             _remove_lost_parse_price(_ei)
@@ -423,10 +441,11 @@ class TestProductsDelete:
             patch(
                 "app.mod_sdk.erp_products_facade.products_delete",
                 return_value={"success": True},
-            ),
+            ) as write,
         ):
             r = client.post("/products/delete", json={"id": 1})
-            assert r.json()["success"] is True
+            write.assert_called_once()
+            _assert_unverified_mutation(r)
 
     def test_invalid_id(self, client: TestClient):
         with (
@@ -458,10 +477,11 @@ class TestProductsDelete:
                 "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
-            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row"),
+            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row") as write,
         ):
             r = client.post("/products/delete", json={"id": 1})
-            assert r.json()["success"] is True
+            write.assert_called_once()
+            _assert_unverified_mutation(r)
 
 
 # ---------------------------------------------------------------------------
@@ -479,10 +499,12 @@ class TestProductsBatchDelete:
             patch(
                 "app.mod_sdk.erp_products_facade.products_batch_delete",
                 return_value={"success": True, "deleted": 2},
-            ),
+            ) as write,
         ):
             r = client.post("/products/batch-delete", json={"ids": [1, 2]})
-            assert r.json()["success"] is True
+            write.assert_called_once()
+            _assert_unverified_mutation(r)
+            assert r.json()["deleted"] == 2
 
     def test_invalid_ids(self, client: TestClient):
         with (
@@ -528,10 +550,11 @@ class TestProductsBatchDelete:
             patch(
                 "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(2, 0),
-            ),
+            ) as write,
         ):
             r = client.post("/products/batch-delete", json={"ids": [1, 2]})
-            assert r.json()["success"] is True
+            write.assert_called_once()
+            _assert_unverified_mutation(r)
             assert r.json()["deleted"] == 2
 
 

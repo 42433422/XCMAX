@@ -88,6 +88,9 @@ class TestCapabilityText:
 
 
 class TestIsReadOnly:
+    def test_direct_workspace_policy(self):
+        assert ts.is_read_only({}, {"workspace_policy": {"read_only": True}})
+
     def test_actions_agent_workspace(self):
         assert ts.is_read_only({}, {"actions": {"agent": {"workspace": {"read_only": True}}}})
 
@@ -101,6 +104,36 @@ class TestIsReadOnly:
 
 
 class TestResolveEmployeeTools:
+    def test_explicit_allowlist_cannot_override_readonly(self, fake_base):
+        config = {
+            "tools": [
+                "excel_analysis",
+                "import_excel_to_database",
+                "products_bulk_import",
+            ],
+            "workspace_policy": {"read_only": True},
+        }
+        assert ts.employee_tool_names("e", {}, config) == ["excel_analysis"]
+
+    def test_lifecycle_tools_cannot_override_readonly(self, monkeypatch, fake_base):
+        from app.application import agent_tool_lifecycle
+
+        monkeypatch.setattr(
+            agent_tool_lifecycle,
+            "discovery_for_runtime",
+            lambda *_: [FAKE_BASE["products_bulk_import"]],
+        )
+        config = {
+            "tools": ["excel_analysis", "products_bulk_import"],
+            "workspace_policy": {"read_only": True},
+        }
+        monkeypatch.setattr(
+            ts,
+            "_base_tool_specs",
+            lambda: {"excel_analysis": FAKE_BASE["excel_analysis"]},
+        )
+        assert ts.employee_tool_names("e", {}, config) == ["excel_analysis"]
+
     def test_empty_base_denies_tools(self, monkeypatch):
         monkeypatch.setattr(ts, "_base_tool_specs", lambda: {})
         assert ts.resolve_employee_tools("e", {}, {}) == []
@@ -132,7 +165,7 @@ class TestResolveEmployeeTools:
         manifest = {"employee": {"capabilities": ["批量导入入库"]}}
         names = ts.employee_tool_names("e", manifest, {})
         assert "import_excel_to_database" in names
-        assert "products_bulk_import" in names
+        assert "products_bulk_import" not in names
 
     def test_import_keyword_readonly_excludes_write(self, fake_base):
         manifest = {
@@ -146,7 +179,7 @@ class TestResolveEmployeeTools:
     def test_no_keywords_uses_fallback(self, fake_base):
         names = ts.employee_tool_names("e", {"employee": {"capabilities": ["无关词"]}}, {})
         assert "excel_analysis" in names
-        assert "excel_schema_understand" in names
+        assert "excel_schema_understand" not in names
         assert "generate_office_document" in names
 
     def test_employee_tool_names_empty_when_resolve_none(self, monkeypatch):

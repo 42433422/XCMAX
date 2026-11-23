@@ -25,7 +25,8 @@ def pipeline(request):
 def test_compatibility_contexts_follow_the_verified_gate(pipeline, name, result):
     job = pipeline[name]
     assert job["needs"] == "frontend-test"
-    assert job["if"] == "always()"
+    # Still run on upstream failure; a cancelled superseded workflow must release its slot.
+    assert job["if"] == "${{ !cancelled() }}"
     assert job.get("name", name) == (
         "Vitest (173 文件 · jsdom)" if name == "vitest" else "frontend-smoke"
     )
@@ -67,8 +68,16 @@ def test_suite_and_mock_run_once_while_real_e2e_and_hygiene_remain(pipeline):
     assert not (ROOT / ".github/workflows/frontend-unit.yml").exists()
     smoke = yaml.safe_load((ROOT / "FHD/.github/workflows/test.yml").read_text())["jobs"]
     assert "frontend-smoke" not in smoke
-    hygiene_step = next(step for step in smoke["repo-hygiene"]["steps"] if "run" in step)
+    assert "repo-hygiene" not in smoke
+    smoke_steps = smoke["backend-smoke"]["steps"]
+    assert (
+        len([step for step in smoke_steps if step.get("uses", "").startswith("actions/checkout@")])
+        == 1
+    )
+    hygiene_step = next(step for step in smoke_steps if "run" in step)
     assert hygiene_step["run"] == "bash scripts/ci/check_repo_hygiene.sh"
+    assert smoke_steps[1] is hygiene_step
+    assert "if" not in hygiene_step and not hygiene_step.get("continue-on-error", False)
     assert pipeline["frontend-smoke"]["steps"][-1]["run"] == hygiene_step["run"]
     owner = [
         step for step in pipeline["frontend-e2e"]["steps"] if "test:e2e:p0" in step.get("run", "")

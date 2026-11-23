@@ -77,6 +77,59 @@ def reconcile(db, task, client):
         task.para_task_id = found[0]["id"]
         db.commit()
     raw = client.task(task.para_task_id)
+    cancellation_target = json.loads(task.snapshot_json).get("cancellation_target")
+    observed = execution_view(raw)
+    if cancellation_target:
+        observed["cancellation_target"] = cancellation_target
+    if stop_requested and raw.get("status") not in {
+        "completed",
+        "merged",
+        "failed",
+        "cancelled",
+    }:
+        marker = f"[xcmax:{task.id}:{task.attempt_id}]"
+        subs = raw.get("subTasks") or []
+        if (
+            not str(raw.get("title", "")).startswith(marker)
+            or len(subs) != 1
+            or subs[0].get("device_id") != task.device_id
+            or not subs[0].get("id")
+            or type(subs[0].get("attempt_count")) is not int
+            or subs[0]["attempt_count"] != 0
+        ):
+            transition(
+                db,
+                task,
+                "cancel_requested",
+                "cancellation_original_assignment_unverified",
+                snapshot=observed,
+            )
+            return
+        target = {
+            "request_key": marker,
+            "subtask_id": subs[0]["id"],
+            "device_id": task.device_id,
+            "attempt": subs[0]["attempt_count"] + 1,
+        }
+        if cancellation_target and target != cancellation_target:
+            transition(
+                db, task, "cancel_requested", "cancellation_assignment_changed", snapshot=observed
+            )
+            return
+        cancellation_target = target
+        # Persist the exact stop intent before the network mutation. Lost ACKs can
+        # only resend this stop command; they never authorize another execution.
+        transition(
+            db,
+            task,
+            "cancel_requested",
+            "executor_stop_confirmation_required",
+            snapshot={
+                **execution_view(raw),
+                "cancellation_target": target,
+            },
+        )
+        raw = client.cancel_task(task.para_task_id, target)
     status = raw.get("status")
     state = {
         "completed": "execution_completed",
@@ -87,6 +140,24 @@ def reconcile(db, task, client):
     if stop_requested and state == "running":
         state = "cancel_requested"
     reason = "executor_stop_confirmation_required" if state == "cancel_requested" else ""
+    if stop_requested and state == "cancelled":
+        subs = raw.get("subTasks") or []
+        if (
+            not cancellation_target
+            or len(subs) != 1
+            or not all(
+                sub.get("status") == "cancelled"
+                and sub.get("id") == cancellation_target["subtask_id"]
+                and sub.get("device_id") == cancellation_target["device_id"]
+                and (receipt := sub.get("cancellation") or {}).get("status") == "stopped"
+                and receipt.get("task_id") == task.para_task_id
+                and receipt.get("subtask_id") == cancellation_target["subtask_id"]
+                and receipt.get("device_id") == cancellation_target["device_id"]
+                and receipt.get("attempt") == cancellation_target["attempt"]
+                for sub in subs
+            )
+        ):
+            state, reason = "cancel_requested", "executor_stop_confirmation_required"
     if (
         state == "running"
         and raw.get("subTasks")
@@ -101,17 +172,38 @@ def reconcile(db, task, client):
             state = "reconciling"
     if state == "running" and any(s.get("result_pending") for s in raw.get("subTasks", [])):
         state, reason = "reconciling", "executor_result_pending_no_automatic_replay"
-    transition(db, task, state, reason, snapshot=execution_view(raw))
+    snapshot = execution_view(raw)
+    if cancellation_target:
+        snapshot["cancellation_target"] = cancellation_target
+
+    if stop_requested:
+        from modstore_server.mac_control_receipts import (
+            awaiting_cancellation_receipt,
+            confirmed_cancellation,
+        )
+
+        proof = confirmed_cancellation(db, task, raw)
+        if proof:
+            state, reason = "cancelled", "executor_stop_confirmed_usage_not_settled"
+            snapshot["cancellation"] = proof
+        elif awaiting_cancellation_receipt(db, task, raw):
+            state, reason = "cancel_requested", "waiting_for_original_device_stop_receipt"
+    transition(db, task, state, reason, snapshot=snapshot)
 
 
 def _ticket_dispatch_blocked(db, request, *, lock=False):
     if request.get("source") != "employee" or not request.get("ticket_id"):
         return False
-    from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
+    from modstore_server.customer_ticket_intake_review import (
+        intake_dispatch_block_reason,
+    )
     from modstore_server.models_cs import CustomerServiceTicket
 
     ticket = db.get(
-        CustomerServiceTicket, request["ticket_id"], with_for_update=lock, populate_existing=True
+        CustomerServiceTicket,
+        request["ticket_id"],
+        with_for_update=lock,
+        populate_existing=True,
     )
     return (
         ticket is None

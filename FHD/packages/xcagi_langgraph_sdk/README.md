@@ -12,13 +12,17 @@
 （`_async` / `_sync` / `_shared` / `auth` / `encryption` / `stream` / `cache` / `runtime` /
 `schema` / `sse` 等子包）按上游吸收；本地仅在 16 个文件中把 `except Exception/BaseException`
 改为 `_exception_policy.py` 的同义异常族，并删去 `ty: ignore` 注释。
+这些差异已存在于主分支 `ce5a491e1836a5516c773e6461da4fa027097ae9`；本次只将差异
+补记为 `patches/existing-runtime-boundaries.patch.b64` 并修复来源验证链，没有修改 SDK 源码或版本。
+`PROVENANCE.json` 锁定补丁哈希和上游清单哈希，保留官方 0.4.6 的四处 v3 stream 路径编码修复。
 
 - 包名：`langgraph-sdk`
 - 命名空间：`langgraph_sdk`（独立命名空间，不依赖 `langgraph` 核心包）
 - 构建：`hatchling`，wheel 仅包含 `langgraph_sdk`（`include = ["langgraph_sdk"]`）
-- 来源校验：`python verify_vendor.py`（本地清单 + LICENSE + 上游字节比对；在线模式在
+- 来源校验：`python verify_vendor.py`（本地清单 + LICENSE + 补丁双向重放 + 上游字节比对；在线模式在
   `TemporaryDirectory` 作用域内浅克隆上游并取回 tag `sdk==0.4.6`，`rev-parse` 其 commit 须等于锁定 SHA
-  `55b0e36c…43a96`，再对该 commit 做 `git archive` 与本地比对；不依赖固定 `/tmp` 检出，可移植）
+  `55b0e36c…43a96`，再对该 commit 做 `git archive` 与 `UPSTREAM_MANIFEST.sha256` 比对；
+  本地补丁反向重放须还原该上游清单，正向重放须还原当前源码；不依赖固定 `/tmp` 检出）
 - 依赖来源：全部来自 registry（`httpx` / `orjson` / `langchain-protocol` / `langchain-core` /
   `websockets`）。本包**不**依赖 `langgraph` 核心，也不映射任何兄弟包，**无循环 dev 依赖**；
   测试组保持最小（`pytest` / `pytest-asyncio` / `pytest-mock`）

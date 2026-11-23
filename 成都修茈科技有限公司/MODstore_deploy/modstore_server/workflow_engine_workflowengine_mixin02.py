@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import importlib
+import logging
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 def _facade():
@@ -313,13 +316,21 @@ class _WorkflowEnginePart02Mixin:
                     sub_result = self._execute_http_request_node(node, data, branch)
                     results[branch_name] = {"status": "completed", "data": sub_result}
                 except RECOVERABLE_ERRORS as exc:
-                    results[branch_name] = {"status": "failed", "error": str(exc)}
+                    logger.warning("workflow HTTP branch failed: %s", exc)
+                    results[branch_name] = {
+                        "status": "failed",
+                        "error": "http_request_failed",
+                    }
             elif branch_type == "data_transform":
                 try:
                     sub_result = self._execute_data_transform_node(node, data, branch)
                     results[branch_name] = {"status": "completed", "data": sub_result}
                 except RECOVERABLE_ERRORS as exc:
-                    results[branch_name] = {"status": "failed", "error": str(exc)}
+                    logger.warning("workflow transform branch failed: %s", exc)
+                    results[branch_name] = {
+                        "status": "failed",
+                        "error": "data_transform_failed",
+                    }
             else:
                 results[branch_name] = {
                     "status": "skipped",
@@ -376,7 +387,11 @@ class _WorkflowEnginePart02Mixin:
         if not isinstance(sub_input, dict):
             sub_input = {"value": sub_input}
         sub_input["_sub_workflow_depth"] = current_depth
-        sub_result = _facade().execute_workflow(int(sub_workflow_id), sub_input, user_id=user_id)
+        from modstore_server.workflow_event_runner import run_recorded_workflow
+
+        sub_result = run_recorded_workflow(
+            workflow_id=int(sub_workflow_id), input_data=sub_input, user_id=user_id
+        )
         return {
             output_var: sub_result,
             "sub_workflow_id": int(sub_workflow_id),
