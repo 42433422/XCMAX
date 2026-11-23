@@ -167,3 +167,86 @@ def test_late_receipt_registers_one_pending_candidate_in_original_sql_ledger(
         event["id"] for event in again["events"] if event["kind"] == "experience_candidate"
     ] == [candidates[0]["id"]]
     assert again["budget"] == before["budget"]
+
+
+
+def test_original_owner_review_and_revocation_are_idempotent(
+    approved_life_portfolio, monkeypatch, database
+):
+    import json
+    from sqlalchemy import select
+    from modstore_server import strategic_portfolio as portfolio
+    from modstore_server import xiaoc_life_reconciliation as reconciliation
+    from modstore_server import xiaoc_life_store as life
+    from modstore_server.db.strategic import StrategicDecision
+    from modstore_server.db.xiaoc_life import XiaoCLifeEvent
+    from modstore_server.xiaoc_life_experience_review import review_experience
+    from modstore_server.xiaoc_life_policy import LifePolicyError
+
+    decision_id = approved_life_portfolio
+    synthetic = record()
+    with database() as session:
+        row = session.scalar(
+            select(StrategicDecision).where(StrategicDecision.decision_id == decision_id)
+        )
+        proposal = json.loads(row.decision_payload_json)
+        proposal["opportunities"] = synthetic["opportunities"]
+        proposal_hash = digest({k: v for k, v in proposal.items() if k != "proposal_sha256"})
+        proposal["proposal_sha256"] = proposal_hash
+        synthetic["proposal_sha256"] = proposal_hash
+        synthetic["authorization"]["proposal_sha256"] = proposal_hash
+        row.decision_payload_json = json.dumps(proposal)
+        row.execution_result_json = json.dumps(
+            {k: synthetic[k] for k in (
+                "authorization", "proposal_sha256", "plan", "tasks", "reviews",
+                "hypothesis_outcomes",
+            )}
+        )
+        row.status = "executing"
+        session.commit()
+    reconciliation.reconcile_goals()
+    initial = life.read_state()
+    candidate = next(e for e in initial["events"] if e["kind"] == "experience_candidate")
+    args = {
+        "candidate_id": candidate["id"],
+        "candidate_sha256": candidate["details"]["candidate_sha256"],
+        "expected_revision": initial["revision"],
+        "actor_user_id": 7,
+    }
+    assert initial["experience_review_facts"][0]["ref"] == candidate["id"]
+    with pytest.raises(LifePolicyError):
+        review_experience(**{**args, "actor_user_id": 8}, action="confirm")
+    with pytest.raises(LifePolicyError):
+        review_experience(**{**args, "candidate_sha256": "f" * 64}, action="confirm")
+    confirmed = review_experience(**args, action="confirm")
+    assert confirmed["status"] == "confirmed"
+    assert review_experience(**args, action="confirm") == confirmed
+    after = life.read_state()
+    assert after["budget"] == initial["budget"]
+    assert "reviewed_experience" in after["experience_review_facts"][0]
+
+    with pytest.raises(LifePolicyError):
+        review_experience(**{**args, "expected_revision": after["revision"]}, action="reject")
+
+    # A later receipt that cannot reproduce the frozen candidate removes it
+    # from recall even though its historic review remains immutable.
+    with database() as session:
+        row = session.scalar(
+            select(StrategicDecision).where(StrategicDecision.decision_id == decision_id)
+        )
+        saved = json.loads(row.execution_result_json)
+        saved["reviews"][-1]["observation_complete"] = False
+        row.execution_result_json = json.dumps(saved)
+        session.commit()
+    assert not life.read_state()["experience_review_facts"]
+    revoked = review_experience(
+        **{**args, "expected_revision": after["revision"]}, action="revoke"
+    )
+    assert revoked["status"] == "revoked"
+    assert review_experience(**args, action="revoke") == revoked
+    assert not life.read_state()["experience_review_facts"]
+    with database() as session:
+        reviews = list(session.scalars(
+            select(XiaoCLifeEvent).where(XiaoCLifeEvent.kind == "experience_review")
+        ))
+    assert sorted(row.status for row in reviews) == ["confirmed", "revoked"]
