@@ -11,21 +11,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AccountLicensePlansTest {
 
     @Test
-    void publicPlanCopyMatchesTheCustomerCatalogWithoutChangingPrices() {
+    void publicCatalogHasOneBuyoutAndPreservesTrialAndHistoricalMetadata() {
         Map<String, String> expectedNames = Map.of(
                 "saas-personal-free", "个人使用版",
                 "saas-trial-30", "30 天全功能体验",
-                "saas-permanent-starter", "企业启航版",
-                "saas-permanent-growth", "企业成长版",
-                "saas-permanent-max", "集团协同版",
-                "saas-permanent-ultra", "企业旗舰版");
+                "saas-permanent-standard", "XCAGI 软件买断");
         Map<String, BigDecimal> expectedPrices = Map.of(
                 "saas-personal-free", BigDecimal.ZERO,
                 "saas-trial-30", new BigDecimal("99.00"),
-                "saas-permanent-starter", new BigDecimal("49999.00"),
-                "saas-permanent-growth", new BigDecimal("99999.00"),
-                "saas-permanent-max", new BigDecimal("499999.00"),
-                "saas-permanent-ultra", new BigDecimal("999999.00"));
+                "saas-permanent-standard", new BigDecimal("6800.00"));
 
         assertThat(AccountLicensePlans.PLANS.stream()
                 .collect(Collectors.toMap(AccountLicensePlans.Metadata::id, AccountLicensePlans.Metadata::name)))
@@ -36,6 +30,14 @@ class AccountLicensePlansTest {
 
         assertThat(AccountLicensePlans.find("saas-personal-free").orElseThrow().quotaCents())
                 .isEqualTo(500);
+        assertThat(AccountLicensePlans.find("saas-trial-30").orElseThrow().durationDays()).isEqualTo(30);
+        assertThat(AccountLicensePlans.find("saas-trial-30").orElseThrow().quotaCents()).isEqualTo(10000);
+        assertThat(AccountLicensePlans.find("saas-permanent-growth").orElseThrow().price())
+                .isEqualByComparingTo("99999.00");
+        assertThat(AccountLicensePlans.find("saas-permanent-ultra").orElseThrow().accountTier())
+                .isEqualTo("ultra");
+        assertThat(AccountLicensePlans.IDS).contains("saas-permanent-starter", "saas-permanent-growth",
+                "saas-permanent-max", "saas-permanent-ultra");
 
         String publicCopy = AccountLicensePlans.PLANS.stream()
                 .map(plan -> String.join(" ", plan.name(), plan.description(), plan.badge(),

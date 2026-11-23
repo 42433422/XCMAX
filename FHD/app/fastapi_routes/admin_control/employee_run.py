@@ -118,7 +118,12 @@ class EmployeeRunner:
                 }.get(state, state)
             error_code = (
                 str(result.get("error_code") or "")
-                if status == "failed" and str(result.get("error_code") or "") in RETRYABLE_CODES
+                if status == "failed"
+                and all(
+                    receipt.get("retryable") is not False
+                    for receipt in execution_result_envelopes(result)
+                )
+                and str(result.get("error_code") or "") in RETRYABLE_CODES
                 else ""
             )
             if failure_retries(attempts, error_code):

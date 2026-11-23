@@ -209,6 +209,34 @@ class OrderServiceTest {
     @Nested
     class ResolveCheckoutFields {
         @Test
+        void retiredLicensesCannotCreateNewCheckoutEvenWithAnActiveCatalogRow() {
+            for (String suffix : List.of("starter", "growth", "max", "ultra")) {
+                assertThatThrownBy(() -> orderService.resolveCheckoutFields(
+                        Map.of("plan_id", "saas-permanent-" + suffix), user))
+                        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("不再新售");
+            }
+            verifyNoInteractions(planTemplateRepository);
+        }
+
+        @Test
+        void buyoutCheckoutUsesServerPriceAndRejectsDuplicatePermanentPurchase() {
+            PlanTemplate plan = new PlanTemplate();
+            plan.setId(AccountLicensePlans.STANDARD_PLAN_ID);
+            plan.setPrice(new BigDecimal("6800.00"));
+            plan.setActive(true);
+            when(planTemplateRepository.findById(plan.getId())).thenReturn(Optional.of(plan));
+            Map<String, Object> resolved = orderService.resolveCheckoutFields(
+                    Map.of("plan_id", plan.getId(), "total_amount", "0.01"), user);
+            assertThat((BigDecimal) resolved.get("total_amount")).isEqualByComparingTo("6800.00");
+
+            when(entitlementService.hasPermanentLicense(user)).thenReturn(true);
+            for (String planId : List.of(plan.getId(), "saas-trial-30")) {
+                assertThatThrownBy(() -> orderService.resolveCheckoutFields(Map.of("plan_id", planId), user))
+                        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("无需重复");
+            }
+        }
+
+        @Test
         void walletRechargeSetsKindAndAmount() {
             Map<String, Object> req = Map.of("wallet_recharge", true, "total_amount", "50.00");
 
@@ -318,6 +346,33 @@ class OrderServiceTest {
 
     @Nested
     class FulfillOrder {
+        @Test
+        void historicalPaidOrderKeepsSnapshotAmountAndFulfillsOnlyOnce() {
+            Order order = buildPendingOrder("OT-LEGACY", "plan", new BigDecimal("0.01"));
+            order.setPlanId("saas-permanent-growth");
+            PlanTemplate plan = new PlanTemplate();
+            plan.setId(order.getPlanId());
+            plan.setPrice(new BigDecimal("99999.00"));
+            plan.setActive(false);
+            when(orderRepository.findByOutTradeNoForUpdate(order.getOutTradeNo())).thenReturn(Optional.of(order));
+            when(planTemplateRepository.findById(plan.getId())).thenReturn(Optional.of(plan));
+
+            for (int callback = 0; callback < 2; callback++) {
+                orderService.processAlipayNotify(order.getOutTradeNo(), "TRADE_SUCCESS",
+                        "TRADE-LEGACY", "BUYER-LEGACY", new BigDecimal("0.01"));
+            }
+            assertThatThrownBy(() -> orderService.processAlipayNotify(order.getOutTradeNo(), "TRADE_SUCCESS",
+                    "TRADE-LEGACY", "BUYER-LEGACY", new BigDecimal("6800.00")))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("支付金额不匹配");
+
+            assertThat(order.getTotalAmount()).isEqualByComparingTo("0.01");
+            assertThat(order.isFulfilled()).isTrue();
+            verify(walletService, times(1)).recordExternalPayment(order);
+            verify(walletService, times(1)).recordOrderSpend(order);
+            verify(entitlementService, times(1)).activatePlan(user, plan, order.getOutTradeNo());
+            verify(webhookDispatcher, times(1)).publishPaymentPaid(order);
+        }
+
         @Test
         void walletRechargeCreditsBalance() {
             Order order = buildPaidOrder("OT-W1", "wallet", new BigDecimal("50.00"));

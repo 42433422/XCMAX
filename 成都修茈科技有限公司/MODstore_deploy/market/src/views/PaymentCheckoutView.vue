@@ -13,7 +13,7 @@
       </div>
       <div v-else-if="order?.status === 'pending'" class="confirm-banner confirm-banner--hint">
         <strong>等待付款</strong>
-        <span class="confirm-banner-sub"> 完成支付宝付款后返回本页，状态会自动更新。 </span>
+        <span class="confirm-banner-sub"> 完成付款后返回本页，状态会自动更新。 </span>
       </div>
 
       <div v-if="loading" class="loading">
@@ -74,9 +74,9 @@
 
         <!-- 二维码展示（precreate 模式） -->
         <div v-if="qrCode && order.status === 'pending'" class="qr-section">
-          <p class="qr-hint">使用支付宝扫码付款</p>
+          <p class="qr-hint">使用{{ order.pay_type === 'wechat_native' ? '微信' : '支付宝' }}扫码付款</p>
           <div class="qr-wrapper">
-            <img v-if="qrImageUrl" class="qr-img" :src="qrImageUrl" width="280" height="280" alt="支付宝支付二维码" />
+            <img v-if="qrImageUrl" class="qr-img" :src="qrImageUrl" width="280" height="280" :alt="`${order.pay_type === 'wechat_native' ? '微信' : '支付宝'}支付二维码`" />
           </div>
           <p v-if="isExpired" class="qr-expired-hint">
             订单已超时未支付。

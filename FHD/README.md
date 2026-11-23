@@ -34,6 +34,8 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+软件购买继续复用 lockfile 固定的 [Vue 3.5.45](https://github.com/vuejs/core)、[Vue Router 5.5.1](https://github.com/vuejs/router) 与 [Element Plus 2.14.8](https://github.com/element-plus/element-plus)（均为 MIT），沿原组件、登录回跳、订单与支付结果页面展示一个软件买断选项。支付履约复用 [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT）的事务和已有订单幂等机制；独立支付服务沿用 [Spring Boot 4.0.8](https://github.com/spring-projects/spring-boot) 与 [WeChat Pay Java 0.2.17](https://github.com/wechatpay-apiv3/wechatpay-java)（Apache-2.0，版本见 `java_payment_service/pom.xml`）。新增适配只处理标准 SKU、历史授权兼容、固定试用到期和商业条款镜像；定制仍走确认报价后的原订单，AI 仍走原钱包，不新增计费框架。当前价格与交付边界见[账号 SSOT](docs/account_system_ssot.md#221-企业购买形态)；受控测试支付不代表生产验收。
+
 企业 Agent 的固定本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK/App Server 负责唯一通用模型工具循环、会话与事件；XCMAX 负责身份、额度、工具权限、持久任务与独立结果核验。受控工具使用已锁定的 MCP Python SDK `2.3.0`（MIT）；模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。标准服务器、Linux 热更新和桌面依赖均安装固定 SDK/CLI，已移除旧 `codex-runtime` 空 extra。桌面包收集 SDK 模块、CLI 资源及版本元数据，构建门禁实际启动 App Server 并核验协议版本。
 
 CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。
@@ -200,7 +202,9 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 |---|---|---|
 | `customers.create` | 原事务幂等回执、原参数摘要、租户、客户 ID/字段与当前版本 | 无可信原事务回执、对象已变化或读取权限不足时不放行 |
 | `catalog_products_v1.append_price/correct_price` | 原操作、来源绑定和价格账本读回；要求当前状态吻合 | 历史修改成功但当前已变化仍待核对；不重新发布修改 |
-| `reports.export`、`excel_analysis.export`、五类文档生成员工 | 运行归属、文件哈希/字节数、格式与可读结构；报表/Excel 导出的显式表格输入可逐项对照 | 证据标记 `artifact_integrity`；不证明任意文档的业务语义或客户验收，已有生产者标识不得冲突 |
+| `reports.export` | 执行前冻结原租户/Mod 查询摘要，执行后用独立会话回读并逐单元格比对真实 XLSX；工作表、列、行数及原任务/调用均需一致，`order_no` 支持只交付原订单 | 来源变化或权限撤销时保持待核对；显式 `data` 只证明批准表格一致，不能冒充 SQL 对账或客户签收 |
+| `excel_analysis.export`、五类文档生成员工 | 运行归属、文件哈希/字节数、格式与可读结构；显式表格输入可逐项对照 | 证据标记 `artifact_integrity`；不证明任意文档的业务语义或客户验收，已有生产者标识不得冲突 |
+| `sales.execute_closed_loop` | 原批准客户、产品、币种、行金额、交付量、原幂等出库流水及后续库存变动链，与实际账簿和原会计凭证独立核对 | 凭据未知、历史收款缺少可验证会计归属或当前账簿不一致时不放行；账内收款不能代替银行原始到账凭据 |
 | `sales.confirm/cancel/deliver/invoice/payment/credit_note` | 执行前冻结原订单观察，执行后按原租户/Mod 读取订单状态、出库流水、收款分配及平衡分录；非原幂等键的新动作不能借用旧流水 | 需当前订单/账簿读取权限；缺失记录、并发歧义、金额/数量不符仍待核验；证明请求后置状态，不推断因果 |
 | `enterprise_cognition.bind_goal/plan/evaluate` | 原目标哈希、原父子任务准入及冻结观察对应的 MemoryV2 记录 | 方案准入不等于业务完成，待审批子任务不可被核验终结；记忆仍按原确认、拒绝、纠正流程治理 |
 | `employee.execute` 的 clerk 显式 start | 原员工账本中的服务端任务、账号、租户、工作区与创建事件；只核验准入，业务结果保持 pending/success=False | 不覆盖 execute_limit 和其他 continuity 操作；子任务实际执行与业务完成需要各自原始回执 |
@@ -214,6 +218,12 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 企业结果回流复用原 AgentRun 和 SQLAlchemy CAS。调度器在启动及周期检查中发现已完成但尚未记录的经营结果，在独立线程只读核验，按原观察和记忆键恢复 MemoryV2 候选及聊天投影。租约、退避与停止状态均在原任务元数据内，不建立第二个任务账本。权限过期停止读取；结果改善也不等于因果已证实，记忆候选仍遵循原审核、拒绝和更正流程。
 
 复用现有成熟组件，产品侧仅补业务身份、证据适配和完成门禁；通用编排或评测库不掌握 XCMax 的原事务事实，不能直接替代这些适配。
+
+全链路回归沿原审批工作台/队列、SQLAlchemy 会话、报告服务和下载路由执行：不同用户申请与审批，实际写入订单/库存/会计，按原订单导出并经认证 HTTP 下载，然后只读独立核对。`test_business_full_chain_acceptance.py` 还验证越权拒绝、重复审批、重启恢复、无关订单隔离和有效格式但错误金额的文件不能完成任务。此处使用合成输入，B31 仍要求客户原件与人工对账基线，缺失时为 BLOCKED。
+
+审批恢复沿原 SQL 领取事务保存审批人与任务身份；领取前中断可从原审批重试，领取后结果未知则保留待核对并禁止重放。领取与拒绝使用原审批行的条件更新互斥，已领取的执行不能被并发拒绝覆盖。配置审批节点的最后一步先完成原任务领取，再保存原节点决定与审计，避免外层写事务阻塞 SQLite 领取。完成后的审批详情仅允许依据原任务已完成的直接依赖输出展开冻结参数，仍核对完整计划，参数或依赖被改动不能冒充原批准任务。
+
+收款与原幂等请求回读都先核对整组付款及退款凭证；额外凭证、缺失分录或余额不符时拒绝新增业务记录。发票核验同时检查当前有效发票及全部历史发票与贷项的唯一配对、原客户、科目和借贷金额。报表显式传入客户或仓库编号 `0` 仍按该范围查询，不扩大为全部业务数据。以上复用既有 SQLAlchemy 事务、凭证明细合同和参数解析器，无新增账本、依赖或通用执行引擎。
 
 | 来源与固定版本 | 许可证 | 复用决策 |
 |---|---|---|
@@ -231,15 +241,21 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 聊天和员工从当前登录账号的既有模型设置读取运行路由，无需用户创建运行时 JSON 或资格文件。宿主先核验登录身份和原任务归属，再通过既有 `resolve-chat-default?runtime=codex` 取得同一模型的容量、实际上游身份及短期路由快照。账号令牌与路由令牌只保留在内存；私有目录与资格证据按平台、账号和精确路由隔离。恢复任务刷新原路由凭据，模型、容量或配置版本发生变化时保留原任务并提示恢复，不能改用新默认模型。
 
-首次使用自动运行真实资格验收：固定 CLI/App Server 经本机 Responses/MCP 与所选模型交互，在隔离 SQLite 探针中只写一次、独立读回，再强制压缩、关闭进程并恢复同一 thread。验收成功后按精确路由复用；失败或进程中断留下尝试记录，避免每次聊天重复消费。修复配置后可在现有模型设置发起运行验收，或使用 `xcagi-brain --timeout 600 runtime-check --retry`。缺登录、缺容量、缺上游身份或实际协议不兼容时返回具体配置错误，不能生成虚假 PASS。
+桌面安装包在刷新 Mod、恢复或迁移数据库前，复用原打包探针实际初始化固定 CLI；损坏、错版或启动失败不能进入 HTTP 就绪与升级确认，交由既有升级恢复流程处理。此检查不调用模型，也不产生模型资格。登录和工作区初始化、窗口恢复及模型设置变化只刷新验收状态，启动流程与设置页共用同一查询；缺少资格也不会因打开界面发起付费验收。首次主动执行任务前，或用户在设置页明确点击“运行验收”时，才按需进行真实模型验收。切账号、退出或模型设置变化立即清除旧投影，迟到结果不能覆盖新状态。
+
+首次主动执行或明确验收时，固定 CLI/App Server 经本机 Responses/MCP 与所选模型交互，在隔离 SQLite 探针中执行并独立读回第一步，再强制压缩、关闭进程并恢复同一 thread；新进程先核对第一步原回执，再执行依赖它的第二步并独立读回。每步只能写一次，重复、越序、缺读回或审计截断均失败；两轮共用至多 12 次模型调用，每次输出至多 2048 tokens，均受原路由上限约束。资格按精确路由、实际源码 SHA 和平台隔离，摘要绑定原始证据，旧版本证据保留；缺失或变更的证据不能沿用 PASS。证据仍可独立核验的旧单步资格允许同一原路由升级一次。原子尝试记录在模型调用前落盘，已调用失败或进程中断须明确重试；只有明确停在模型调用前的组件预检失败可以自动重新检查。修复配置后可在现有模型设置重新验收，或使用 `xcagi-brain --timeout 600 runtime-check --retry`。缺登录、容量、上游身份或实际协议支持仍返回具体原因，不能生成虚假 PASS。
 
 平台 `/v1/responses` 复用 [LiteLLM](https://github.com/BerriAI/litellm) `1.109.3`（MIT）的 Responses 适配与 [OpenAI Python SDK](https://github.com/openai/openai-python) `3.57.0`（Apache-2.0）、现有 LiteLLM 网关、加密路由快照及请求/钱包账本。协议与事件由成熟 SDK 处理；本地只增加账号隔离、原任务预算、独立验收及一次结算的控制。配置锁复用已锁定的 [filelock](https://github.com/tox-dev/filelock) `4.2.4`（Unlicense），出站连接复用 [HTTPX](https://github.com/encode/httpx) `0.28.1`（BSD-3-Clause）。平台仅在真实上游终态、精确用量和钱包结算均确认后释放终态；本机校验回执并记审计账，不再二次扣费。上游或结算状态未知时保留原请求键，禁止重新付费执行。
 
-部署方仍可显式设置 `XCAGI_AGENT_RUNTIME_CONFIG` 使用原独立网关合同；无效显式配置不会改走账号默认路由。该 JSON 继续包含 `engine=codex`、两种 `surfaces`、绝对私有 `runtime_root`、实际 `qualification_file` 及 `route`；路由必须明确独立 `base_url`、`model`、`response_model`、`provider_id`、`upstream_vendor`、`api_key_env`、容量和调用上限。请求不能选择凭据或引擎。Codex 使用短期模型/工具令牌及本地 MCP/Responses 代理，不继承个人 Codex 配置、ChatGPT 登录或额外插件；仅开启受控业务工具，禁止 shell、文件修改及托管搜索。既有开发超级员工的 Codex CLI 调度保持原路径。
+部署方仍可显式设置 `XCAGI_AGENT_RUNTIME_CONFIG` 使用原独立网关合同；无效显式配置不会改走账号默认路由。该 JSON 包含 `engine=codex`、两种 `surfaces`、绝对私有 `runtime_root`、根目录内的 `qualification_file` 及 `route`；路由明确独立 `base_url`、`model`、`response_model`、`provider_id`、`upstream_vendor`、`api_key_env`、容量和调用上限。请求不能选择凭据或引擎。Codex 使用短期模型/工具令牌及本地 MCP/Responses 代理，不继承个人 Codex 配置、ChatGPT 登录或额外插件；仅开启受控业务工具，禁止 shell、文件修改及托管搜索。既有开发超级员工的 CLI 调度保持原路径。
+
+显式部署的首次资格或旧资格升级由部署方在运行主机执行 `xcagi-brain --json runtime-check --deployment`，使用该主机原有的 `XCAGI_AGENT_RUNTIME_CONFIG` 和其指定的密钥环境变量。该入口在本机复用同一资格探针、配置锁及尝试记录，可能产生模型费用；已有完整资格时只读复用，失败或中断后须修复配置并加 `--retry` 才再次取证。旧证据缺少宿主绑定或可核验摘要时不自动认定升级资格，部署方核对后使用 `--retry` 重新取证。`--deployment` 采用运行配置中的 `turn_timeout_seconds` 与原调用预算，`--timeout` 只影响 HTTP 命令。验收通过后重新读取原配置和新资格，配置漂移继续阻断；原任务按原编号恢复。账号模型设置与不带 `--deployment` 的 HTTP 命令仍只读检查共享部署资格，不能代替部署方写入，也不能沿用旧 PASS 补齐新检查。
 
 Responses 多轮工具协议由固定 SDK 处理：LiteLLM 代理保留真实原生 Responses 流，直连兼容模型使用 LiteLLM 的成熟适配，并在原始 HTTP 响应边界核对实际模型、实际用量和单次请求。适配器自行补出的用量不能作为结算或资格证据；平台聊天接口健康也不代表工具、压缩和恢复验收已通过。已发布的厂商总窗口声明沿用既有模型目录并标明来源（例如 [MiMo V2.6 Flash](https://mimo.mi.com/models/en-US/mimo-v2.6-flash)）；输入上限、输出上限和总窗口保持独立，不能从别名或 max_tokens 猜测总容量。独立配置拒绝 OpenAI/ChatGPT/Azure OpenAI 地址和 OpenAI 上游声明，禁止重定向和通过 `previous_response_id` 借用其他任务的上游会话。任意代理域名本身不能证明上游独立，必须核对网关路由记录和实际出站拒绝证据。宿主出站传输仅允许已绑定的 Responses 地址，在建立连接前拒绝 OpenAI 地址、其他端点和非 POST 请求，并禁用环境代理与重定向；资格证据明确记录范围为 `host_model_egress`，不声称完成操作系统级防火墙隔离。`response_model` 是已验收的单个实际响应 ID，省略时等于请求 `model`；别名解析到快照时须由宿主显式绑定，不能由响应自行扩充允许列表。`gateway_kind=responses` 只发送标准 Responses 字段；明确验收为 `litellm` 时才由宿主下发 `num_retries=0`、`disable_fallbacks=true`，并检查原始 HTTP 两项 attempted-retries/fallbacks 头唯一且均为零。缺头、重复或非零保留未知用量，不结算为一次成功。通用 Responses 没有标准关闭换模参数，上游固定路由仍须实际资格证据；网关计数头是其协议声明，不能替代实际路由验收。
 
-启用凭据采用 `xcmax.runtime-qualification.v1`，必须匹配 `ModelRoute.identity`、`codex_version=0.171.0`、`model_kind=real`，并带实际 `evidence_refs`。`checks` 中 `responses_stream`、`multi_turn_tools`、`openai_network_denied`、`business_receipt_verified`、`upstream_failover_disabled`、`response_model_identity`、`forced_compaction_restart_same_task_no_replay` 均需真实 PASS。除实际上游关闭故障转移与响应模型身份外，还须在同一固定非 OpenAI 路由和版本上强制压缩、重启执行器、恢复原任务，并用持久回执证明未重复执行；不能从固定请求模型或合成测试推定这些证据；旧摘要或缺少新检查的资格文件不可沿用。缺凭据、模型/容量/版本变化、合成模型或缺证据均拒绝启动；不能手填 PASS 代替验收。所有新自然语言任务使用同一 Codex 入口，配置不提供第二执行器。已持久化的正式工作流与审批仍从原任务恢复。引用已有 ELT 预演的执行必须绑定该次预演的精确版本；缺失、过期或批量映射遗漏目标时拒绝写入。历史缺版本的未完成审批保持原参数并要求重新预演、重新审批，已完成回执仍只读恢复。
+启用凭据采用 `xcmax.runtime-qualification.v1`，必须匹配 `ModelRoute.identity`、`codex_version=0.171.0`、`model_kind=real`，并带实际 `evidence_refs`。`checks` 中 `responses_stream`、`multi_turn_tools`、`openai_network_denied`、`business_receipt_verified`、`upstream_failover_disabled`、`response_model_identity`、`forced_compaction_restart_same_task_no_replay`、`multi_step_restart_continuation` 均需真实 PASS。除实际上游关闭故障转移与响应模型身份外，还须在同一固定非 OpenAI 路由和版本上强制压缩、重启执行器、恢复原任务，并用持久回执证明未重复执行及依赖步骤确实完成；不能从固定请求模型或合成测试推定这些证据；旧摘要或缺少新检查的资格文件不可沿用。缺凭据、模型/容量/版本变化、合成模型或缺证据均拒绝启动；不能手填 PASS 代替验收。所有新自然语言任务使用同一 Codex 入口，配置不提供第二执行器。已持久化的正式工作流与审批仍从原任务恢复。引用已有 ELT 预演的执行必须绑定该次预演的精确版本；缺失、过期或批量映射遗漏目标时拒绝写入。历史缺版本的未完成审批保持原参数并要求重新预演、重新审批，已完成回执仍只读恢复。
+
+长期任务继续复用现有 SQLAlchemy 事务和 SQLite/PostgreSQL 唯一键：原子认领幂等键，竞争请求返回同一已提交任务，内容变化拒绝、原事务回滚不消耗键，未知写入不创建新任务。协调器取消时，即使撤销状态存储失败也会尝试中断原生进程；收尾保留原取消信号和 generation 隔离。请求回执提交确认丢失时读回精确原请求，未确认则返回待核对、不重放。模型连接、并发名额及计量收尾使用 Python 标准库 `AsyncExitStack` 和现有 AnyIO 取消屏蔽；存储或连接关闭失败仍释放资源，未知用量继续占用原预算。相关回归位于原 `test_codex_*`、`test_task_execution_repository.py` 与真实 PostgreSQL 事务 CI；真实 CLI 加合成模型的协议回归不等于真实模型验收，生产资格只能由实际路由运行生成。
 
 宿主在首次执行前保存原始请求、约束、附件身份与内容摘要、当前授权范围，形成不可覆盖的 `runtime_goal_contract`；本阶段不生成完整计划或调用模型审计。个人记忆、MemoryV2 和已授权数据集通过原服务实际召回，作为只读上下文记录来源与检索回执；请求自报记忆不构成授权。补答作为持久事件累积，不能用最新一句话替换原目标。附件不完整时先补充信息，已有合同或业务效果不得重建。
 

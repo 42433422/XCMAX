@@ -27,7 +27,10 @@ from modstore_server import (
     cache,
     payment_orders,
 )
-from modstore_server.account_license_plans import public_account_license_plans
+from modstore_server.account_license_plans import (
+    public_account_license_plans,
+    public_commercial_terms,
+)
 from modstore_server.api.deps import _get_current_user
 from modstore_server.api.payment_router import router as router
 from modstore_server.models import (
@@ -104,7 +107,7 @@ def api_payment_plans():
 def api_payment_account_plans():
     """Public XCAGI desktop account licenses; never mixed with VIP/SVIP quota plans."""
 
-    return {"plans": public_account_license_plans()}
+    return {"plans": public_account_license_plans(), "commercial_terms": public_commercial_terms()}
 
 
 @router.get("/my-plan")

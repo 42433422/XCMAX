@@ -17,8 +17,8 @@ def _release_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _identity_file() -> dict[str, Any]:
-    path = _release_root() / ".build-identity.json"
+def _identity_file(root: Path | None = None) -> dict[str, Any]:
+    path = (root or _release_root()) / ".build-identity.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -26,9 +26,11 @@ def _identity_file() -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _desktop_identity_file() -> dict[str, Any]:
+def _desktop_identity_file(*, use_environment: bool = True) -> dict[str, Any]:
     """Read Electron's signed resources, never a userData or working directory copy."""
-    configured = (os.environ.get("XCAGI_DESKTOP_RESOURCES") or "").strip()
+    configured = (
+        (os.environ.get("XCAGI_DESKTOP_RESOURCES") or "").strip() if use_environment else ""
+    )
     if configured:
         resources = Path(configured)
     elif getattr(sys, "frozen", False):
@@ -70,10 +72,10 @@ def _desktop_identity_file() -> dict[str, Any]:
     return {}
 
 
-def _local_git_sha() -> str:
+def _local_git_sha(root: Path | None = None) -> str:
     if getattr(sys, "frozen", False):
         return ""
-    root = _release_root()
+    root = root or _release_root()
     try:
         # FHD 通常是仓库子目录，.git 位于上层 XCMAX。git -C 可以自行向上
         # 解析工作树；不要因为 FHD/.git 不存在就把运行身份错误地报成空值。
@@ -87,6 +89,24 @@ def _local_git_sha() -> str:
     except (OSError, subprocess.TimeoutExpired):
         return ""
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def verified_source_sha() -> str:
+    """Verify actual installed/source metadata before reusing local runtime evidence."""
+    if getattr(sys, "frozen", False):
+        # A stale environment or another installation cannot identify this executable.
+        raw = _desktop_identity_file(use_environment=False).get("git_sha", "")
+    else:
+        source_root = Path(__file__).resolve().parents[1]
+        raw = _local_git_sha(source_root) or _identity_file(source_root).get("git_sha", "")
+    sha = str(raw).strip().lower()
+    if len(sha) != 40 or any(char not in "0123456789abcdef" for char in sha):
+        raise ValueError("Runtime host build identity is unavailable")
+    for name in ("XCAGI_GIT_SHA", "FHD_GIT_SHA", "GIT_SHA"):
+        declared = os.environ.get(name, "").strip().lower()
+        if declared and declared != sha:
+            raise ValueError("Runtime host build identity conflicts with installation")
+    return sha
 
 
 def _stamp(name: str) -> str:

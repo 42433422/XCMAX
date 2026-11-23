@@ -99,7 +99,7 @@ describe('auth router guards', () => {
       fullPath: '/register?source=xcagi-mobile',
     })).resolves.toEqual({
       name: 'account-plans',
-      query: { plan: 'saas-trial-30', source: 'xcagi-mobile' },
+      query: { plan: 'saas-personal-free', source: 'xcagi-mobile' },
     })
   })
 
@@ -117,6 +117,34 @@ describe('auth router guards', () => {
         fullPath: '/admin/database',
       }),
     ).resolves.toEqual({ name: 'home' })
+  })
+
+  it('consumes the original software handoff before continuing with the selected account plan', async () => {
+    const target = '/plans?plan=saas-permanent-standard&source=fhd'
+    const code = 'a'.repeat(43)
+    const exchange = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, access_token: 'access', refresh_token: 'refresh' }) })
+    vi.stubGlobal('fetch', exchange)
+    vi.mocked(api.me).mockResolvedValue({ id: 1, username: 'user' })
+    try {
+      const guard = installAndGetGuard()
+      const query = { plan: 'saas-permanent-standard', source: 'fhd' }
+      await expect(guard({ name: 'plans', path: '/plans', query, hash: `#xcagi_code=${code}`, meta: {}, fullPath: `${target}#xcagi_code=${code}` })).resolves.toEqual({
+        path: '/plans', query, hash: '', replace: true,
+      })
+      expect(exchange).toHaveBeenCalledOnce()
+      expect(JSON.parse(exchange.mock.calls[0][1].body)).toEqual({ code, target, purpose: 'plans' })
+      await expect(guard({ name: 'plans', path: '/plans', query, hash: '', meta: {}, fullPath: target })).resolves.toEqual({
+        name: 'account-plans', query, replace: true,
+      })
+      expect(exchange).toHaveBeenCalledOnce()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('retains ordinary AI membership plans at their existing destination', async () => {
+    const guard = installAndGetGuard()
+    await expect(guard({ name: 'plans', path: '/plans', query: { plan: 'vip' }, hash: '', meta: {}, fullPath: '/plans?plan=vip' })).resolves.toBeUndefined()
   })
 })
 

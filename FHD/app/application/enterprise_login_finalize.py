@@ -143,10 +143,41 @@ async def finalize_enterprise_login(
                         apply_paid_plan_for_user,
                     )
 
-                    if apply_paid_plan_for_user(user_id=int(user_id), plan_id=active_plan_id):
+                    trial_sync = active_plan_id == "saas-trial-30"
+                    personal_sync = (
+                        personal_plan
+                        and bool(market_token)
+                        and not local_demo_market
+                        and market_is_enterprise
+                        and not market_is_admin
+                        and market_user_id is not None
+                        and market_user_id > 0
+                        and market_result.get("account_state") == "active"
+                        and market_result.get("desktop_access") is True
+                    )
+                    if trial_sync or personal_sync:
+                        applied = apply_paid_plan_for_user(
+                            user_id=int(user_id),
+                            plan_id=active_plan_id,
+                            sync_from_market=True,
+                            active_plan_expires_at=market_result.get("active_plan_expires_at"),
+                        )
+                    else:
+                        applied = apply_paid_plan_for_user(
+                            user_id=int(user_id), plan_id=active_plan_id
+                        )
+                    if trial_sync and not applied:
+                        raise TenantIdentityError("体验授权的到期信息未同步，请重新登录后重试")
+                    if personal_sync and not applied:
+                        raise TenantIdentityError("市场免费授权未同步，请重新登录后重试")
+                    if applied:
                         result["personal_plan"] = personal_plan
                         result["account_license_plan_id"] = active_plan_id
-                        result["account_tier"] = str(market_result.get("account_tier") or "normal")
+                        result["account_tier"] = (
+                            "personal"
+                            if personal_plan
+                            else str(market_result.get("account_tier") or "normal")
+                        )
             account_kind = flow._derive_and_heal_account_kind(
                 user_id=user_id,
                 market_is_admin=market_is_admin,

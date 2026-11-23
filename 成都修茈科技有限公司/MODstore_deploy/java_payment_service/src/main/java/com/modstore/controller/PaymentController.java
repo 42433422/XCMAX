@@ -115,7 +115,7 @@ public class PaymentController {
                     return row;
                 })
                 .toList();
-        return Map.of("plans", plans);
+        return Map.of("plans", plans, "commercial_terms", AccountLicensePlans.commercialTerms());
     }
 
     @PostMapping("/sign-checkout")

@@ -42,7 +42,8 @@ class TestDemoPlans:
 
 
 class TestAllPlans:
-    def test_includes_demo_plans(self):
+    def test_includes_demo_plans(self, monkeypatch):
+        monkeypatch.setenv("FHD_DEMO_PAYMENT", "1")
         with patch("app.fastapi_routes.model_payment.list_saas_plans", return_value=[]):
             plans = _all_plans()
             assert len(plans) >= 3

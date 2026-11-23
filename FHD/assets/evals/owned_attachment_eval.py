@@ -47,7 +47,7 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
     """Real SQL admission, MCP, approval and reviewer; scripted external model I/O.
 
     This is explicitly a local fixture, not a real-model qualification or score.
-    It never imports pytest helpers or substitutes business verification results.
+    Shared synthetic evidence does not substitute business verification results.
     """
     import weakref
 
@@ -67,16 +67,12 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
     from app.fastapi_routes.domains.agent.agent_routes import router
     from app.infrastructure.codex.binding import CodexBindingStore
     from app.infrastructure.codex.local_server import LocalRuntimeServer
-    from app.infrastructure.codex.policy import (
-        CODEX_VERSION,
-        QUALIFICATION_CHECKS,
-        ModelRoute,
-        RuntimeSettings,
-    )
+    from app.infrastructure.codex.policy import ModelRoute, RuntimeSettings
     from app.infrastructure.codex.receipt_projection import (
         refresh_codex_receipts,
         resume_ready_codex_runs,
     )
+    from tests.fixtures.codex_qualification import synthetic_qualification
 
     repository = SQLAlchemyAgentRunRepository(session_factory=host_db.HostSessionLocal)
     stack.enter_context(
@@ -113,18 +109,7 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
         max_output_tokens=4000,
     )
     qualification = root / "offline-fixture-qualification.json"
-    qualification.write_text(
-        json.dumps(
-            {
-                "schema": "xcmax.runtime-qualification.v1",
-                "route_identity": route.identity,
-                "codex_version": CODEX_VERSION,
-                "model_kind": "real",
-                "evidence_refs": ["offline-fixture-only; not production qualification"],
-                "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
-            }
-        )
-    )
+    qualification.write_text(json.dumps(synthetic_qualification(route, root)), encoding="utf-8")
     settings = RuntimeSettings(
         route=route, runtime_root=root / "runtime", qualification_file=qualification
     )

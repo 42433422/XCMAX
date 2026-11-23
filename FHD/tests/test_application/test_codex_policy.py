@@ -1,6 +1,7 @@
 import hashlib
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -11,26 +12,16 @@ from app.infrastructure.codex.policy import (
     RuntimePolicyError,
     RuntimeSettings,
     independent_gateway_url,
+    qualification_host_identity,
     runtime_settings,
 )
+from tests.fixtures.codex_qualification import synthetic_qualification
 
 
 def _route(**kwargs):
     return ModelRoute(
         "http://127.0.0.1:8000/v1", "model", "enterprise", "local", 32000, 4000, **kwargs
     )
-
-
-def _synthetic_qualification(route):
-    """Exercise the receipt contract; this fixture is not real route qualification."""
-    return {
-        "schema": "xcmax.runtime-qualification.v1",
-        "route_identity": route.identity,
-        "codex_version": CODEX_VERSION,
-        "model_kind": "real",
-        "evidence_refs": ["synthetic-policy-test-only"],
-        "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
-    }
 
 
 @pytest.mark.parametrize(
@@ -76,11 +67,12 @@ def test_only_real_exact_route_qualification_can_enable_runtime(tmp_path):
     route = _route()
     path = tmp_path / "qualification.json"
     settings = RuntimeSettings(engine="codex", route=route, qualification_file=path)
-    evidence = _synthetic_qualification(route)
+    evidence = synthetic_qualification(route, tmp_path)
     for replacement in (
         {"model_kind": "synthetic"},
         {"route_identity": "another-route"},
         {"codex_version": "0.170.0"},
+        {"host_identity": {}},
         {"checks": {}},
         {"evidence_refs": []},
     ):
@@ -89,6 +81,42 @@ def test_only_real_exact_route_qualification_can_enable_runtime(tmp_path):
             settings.require_qualified()
     path.write_text(json.dumps(evidence))
     assert settings.require_qualified() == route
+
+
+@pytest.mark.parametrize(
+    "defect",
+    ["deleted", "changed", "wrong_binding", "missing_digest", "outside", "symlink", "oversize"],
+)
+def test_pass_requires_the_original_bounded_local_evidence(tmp_path, defect):
+    route = _route()
+    certificate = tmp_path / "qualification.json"
+    receipt = synthetic_qualification(route, tmp_path)
+    evidence = Path(receipt["evidence_refs"][0])
+    if defect == "deleted":
+        evidence.unlink()
+    elif defect == "changed":
+        evidence.write_text(evidence.read_text() + " ")
+    elif defect in {"wrong_binding", "oversize"}:
+        raw = json.loads(evidence.read_text())
+        raw["route_identity"] = "different-route" if defect == "wrong_binding" else route.identity
+        if defect == "oversize":
+            raw["padding"] = "x" * 1_048_577
+        evidence.write_text(json.dumps(raw))
+        receipt["evidence_sha256"][str(evidence)] = hashlib.sha256(
+            evidence.read_bytes()
+        ).hexdigest()
+    elif defect == "missing_digest":
+        receipt.pop("evidence_sha256")
+    elif defect == "outside":
+        certificate = tmp_path / "different-host" / "qualification.json"
+        certificate.parent.mkdir()
+    elif defect == "symlink":
+        actual = evidence.with_name("original.json")
+        evidence.rename(actual)
+        evidence.symlink_to(actual)
+    certificate.write_text(json.dumps(receipt))
+    with pytest.raises(RuntimePolicyError, match="evidence"):
+        RuntimeSettings(route=route, qualification_file=certificate).require_qualified()
 
 
 def test_response_model_defaults_to_request_model_and_alias_binding_is_explicit():
@@ -135,26 +163,16 @@ def test_gateway_protocol_cannot_be_guessed(value):
         _route(gateway_kind=value)
 
 
-@pytest.mark.parametrize(
-    "check",
-    [
-        "responses_stream",
-        "multi_turn_tools",
-        "openai_network_denied",
-        "business_receipt_verified",
-        "upstream_failover_disabled",
-        "response_model_identity",
-        "forced_compaction_restart_same_task_no_replay",
-    ],
-)
+@pytest.mark.parametrize("check", QUALIFICATION_CHECKS)
 @pytest.mark.parametrize("value", [None, "FAIL", "PENDING", True, "pass", {"status": "PASS"}])
 def test_qualification_requires_each_gate_check(tmp_path, check, value):
     route = _route(response_model="model-snapshot")
-    evidence = _synthetic_qualification(route)
+    checks = dict.fromkeys(QUALIFICATION_CHECKS, "PASS")
     if value is None:
-        evidence["checks"].pop(check, None)
+        checks.pop(check, None)
     else:
-        evidence["checks"][check] = value
+        checks[check] = value
+    evidence = synthetic_qualification(route, tmp_path, checks=checks)
     path = tmp_path / "qualification.json"
     path.write_text(json.dumps(evidence))
     with pytest.raises(RuntimePolicyError, match="Exact route"):
@@ -163,7 +181,7 @@ def test_qualification_requires_each_gate_check(tmp_path, check, value):
 
 def test_previous_six_check_receipt_cannot_enable_compaction_recovery(tmp_path):
     route = _route()
-    evidence = _synthetic_qualification(route)
+    evidence = synthetic_qualification(route, tmp_path)
     # A short real-route smoke previously met every gate. It must no longer
     # qualify without the full compaction/restart/same-task/no-replay scenario.
     evidence["checks"] = {
@@ -201,7 +219,9 @@ def test_previous_route_certificate_is_invalid_even_with_new_checks(tmp_path):
     assert route.identity != previous_identity
     path = tmp_path / "qualification.json"
     path.write_text(
-        json.dumps({**_synthetic_qualification(route), "route_identity": previous_identity})
+        json.dumps(
+            {**synthetic_qualification(route, tmp_path), "route_identity": previous_identity}
+        )
     )
     with pytest.raises(RuntimePolicyError, match="Exact route"):
         RuntimeSettings(route=route, qualification_file=path).require_qualified()
@@ -213,7 +233,7 @@ def test_host_configuration_binds_request_alias_to_one_qualified_model(
 ):
     route = _route(response_model="model-snapshot", gateway_kind=gateway_kind)
     certificate = tmp_path / "qualification.json"
-    certificate.write_text(json.dumps(_synthetic_qualification(route)))
+    certificate.write_text(json.dumps(synthetic_qualification(route, tmp_path)))
     config = tmp_path / "runtime.json"
     config.write_text(
         json.dumps(
@@ -249,6 +269,15 @@ def test_vendor_and_capacity_are_not_guessed():
         ModelRoute("https://gateway.test/v1", "model", "proxy", "openai", 32000, 4000)
     with pytest.raises(RuntimePolicyError):
         ModelRoute("https://gateway.test/v1", "model", "proxy", "local", 100, 100)
+
+
+def test_qualification_rejects_unidentified_host_before_admission(tmp_path, monkeypatch):
+    from app import build_identity
+
+    monkeypatch.setattr(build_identity, "_local_git_sha", lambda *_args: "")
+    monkeypatch.setattr(build_identity, "_identity_file", lambda *_args: {"git_sha": "unknown"})
+    with pytest.raises(RuntimePolicyError, match="host build identity"):
+        qualification_host_identity()
 
 
 def test_account_route_renews_credentials_without_rebinding_identity():

@@ -9,15 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
-from modstore_server.customer_delivery_failure import start_failure_message
-from modstore_server.customer_service_api import _visible_ticket_or_404
-from modstore_server.customer_service_delivery_api import _start_custom_delivery_run
-from modstore_server.customer_service_delivery_completion import (
-    complete_delivery_if_ready,
+from modstore_server.customer_delivery_workbench_start import (
+    persist_delivery_update,
+    recover_paid_delivery_start,
 )
+from modstore_server.customer_service_api import _visible_ticket_or_404
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryPaymentCheckoutBody,
-    custom_delivery_commerce_blockers,
     custom_delivery_crm,
     custom_delivery_evidence,
     custom_delivery_pricing_mode,
@@ -26,7 +24,6 @@ from modstore_server.customer_service_orchestrator import audit
 from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import User
 from modstore_server.models_cs import CustomerServiceTicket
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.payment_cs_internal import (
     create_custom_delivery_payment_order,
     find_matching_paid_order,
@@ -44,8 +41,10 @@ async def reconcile_custom_delivery_payment(db: Session, ticket: CustomerService
         return False
     crm = custom_delivery_crm(evidence)
     payment = crm["payment"]
-    if str(payment.get("status") or "") == "paid":
+    if str(payment.get("status") or "") == "refunded":
         return False
+    if str(payment.get("status") or "") == "paid":
+        return await recover_paid_delivery_start(db, ticket)
     order_nos = [str(payment.get("reference") or "").strip()]
     order_nos.extend(
         str(row.get("order_no") or "").strip()
@@ -83,36 +82,18 @@ async def reconcile_custom_delivery_payment(db: Session, ticket: CustomerService
         "updated_at": now,
     }
     evidence["crm"] = crm
-    run_rows = [row for row in evidence.get("runs", []) if isinstance(row, dict)]
-    if not custom_delivery_commerce_blockers(evidence) and not run_rows:
-        try:
-            evidence["runs"] = [
-                await _start_custom_delivery_run(
-                    ticket_id=int(ticket.id),
-                    user_id=int(ticket.user_id),
-                    evidence=evidence,
-                    attempt=1,
-                )
-            ]
-            evidence.pop("start_error", None)
-        except RECOVERABLE_ERRORS as exc:
-            evidence["start_error"] = start_failure_message("payment", type(exc).__name__)
-    complete_delivery_if_ready(ticket, evidence)
-    audit(
+    return await persist_delivery_update(
         db,
+        ticket,
+        evidence,
+        operation="payment",
         event_type="custom_delivery_payment_verified",
-        session_id=int(ticket.session_id),
-        ticket_id=int(ticket.id),
-        actor_type="system",
         detail={
             "order_no": order_no,
             "amount": paid_amount,
             "source": "authoritative_payment_order",
         },
     )
-    ticket.evidence_json = json_dumps(evidence)
-    ticket.updated_at = datetime.now(UTC)
-    return True
 
 
 @router.post("/custom-deliveries/{ticket_id}/payment-checkout")

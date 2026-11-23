@@ -245,6 +245,17 @@ class WalletServiceTest {
     @Nested
     class GrantPlanMembershipTokenAllowance {
         @Test
+        void softwareBuyoutDoesNotMintItsPriceAsAiCredit() {
+            Order order = new Order();
+            order.setUser(user);
+            order.setOrderKind("plan");
+            order.setPlanId(AccountLicensePlans.STANDARD_PLAN_ID);
+            order.setTotalAmount(new BigDecimal("6800.00"));
+            walletService.grantPlanMembershipTokenAllowance(order);
+            verifyNoInteractions(walletRepository, transactionRepository);
+        }
+
+        @Test
         void grantsTokensForPlanOrder() {
             Order order = new Order();
             order.setUser(user);

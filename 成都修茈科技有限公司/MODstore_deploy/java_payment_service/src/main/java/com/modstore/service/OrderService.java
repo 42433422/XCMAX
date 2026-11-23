@@ -133,6 +133,13 @@ public class OrderService {
         if (AccountLicensePlans.PERSONAL_PLAN_ID.equals(planId)) {
             throw new IllegalArgumentException("个人使用版可直接开通");
         }
+        if (AccountLicensePlans.isLegacy(planId)) {
+            throw new IllegalArgumentException("此历史套餐不再新售，已有订单和已购权益保持不变");
+        }
+        if (checkoutUser != null && AccountLicensePlans.isAccountLicense(planId)
+                && entitlementService.hasPermanentLicense(checkoutUser)) {
+            throw new IllegalArgumentException("您已拥有永久软件，无需重复购买或购买体验");
+        }
         if (!planId.isBlank()) {
             PlanTemplate plan = planTemplateRepository.findById(planId)
                     .filter(PlanTemplate::isActive)

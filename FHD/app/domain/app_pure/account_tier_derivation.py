@@ -1,12 +1,4 @@
-"""账号等级（普通/Pro/Max/Ultra）自动派生。
-
-单一真相源 + 自动派生（维度 4）：
-- 真相源：``User.budget_range``（注册时用户选的预算区间）
-- 派生值：``User.account_tier``（注册时由 budget_range 派生写入；仅 ``tier=enterprise`` 有意义）
-
-预算区间的规范展示值与 RegisterView / saas_plans.json 一致（注意中文长连字符 ``–`` U+2013）。
-派生匹配时对连字符与空格做归一化，兼容前端可能传来的短横 ``-`` 等变体。
-"""
+"""账号等级兼容：已授予的旧等级保留，客户自报预算不授予权益。"""
 
 from __future__ import annotations
 
@@ -16,34 +8,10 @@ BUDGET_RANGES: tuple[str, ...] = ("1–5 万", "5–10 万", "10–50 万", "50�
 VALID_ACCOUNT_TIERS: frozenset[str] = frozenset({"normal", "pro", "max", "ultra"})
 DEFAULT_ACCOUNT_TIER = "normal"
 
-# 归一化后的预算 → 账号等级映射
-_NORMALIZED_BUDGET_TO_TIER: dict[str, str] = {
-    "1-5万": "normal",
-    "5-10万": "pro",
-    "10-50万": "max",
-    "50-100万": "ultra",
-    # 旧档位兼容：保持原有 tier 语义，避免存量预算值回退到 normal。
-    "5万以内": "normal",
-    "5-20万": "pro",
-    "20-50万": "max",
-    "50万以上": "ultra",
-}
-
-
-def _normalize_budget(raw: str | None) -> str:
-    """归一化预算字符串：统一连字符、去空格，便于匹配。"""
-    s = str(raw or "").strip()
-    # 各类连字符（全角横线/破折号/中文长连字符）统一成 ASCII '-'
-    for dash in ("－", "—", "–", "~", "～"):
-        s = s.replace(dash, "-")
-    # 去掉普通空格与不间断空格
-    s = s.replace(" ", "").replace(" ", "")
-    return s
-
 
 def derive_account_tier(budget_range: str | None) -> str:
-    """根据预算区间派生账号等级；未知/空值 → ``normal``。"""
-    return _NORMALIZED_BUDGET_TO_TIER.get(_normalize_budget(budget_range), DEFAULT_ACCOUNT_TIER)
+    """兼容注册入口；预算仅作销售线索，新授权统一普通等级。"""
+    return DEFAULT_ACCOUNT_TIER
 
 
 def should_have_account_tier(tier: str | None) -> bool:
